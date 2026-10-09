@@ -1,0 +1,161 @@
+# Módulo: Desenvolvimento agêntico (`/desenvolvimento` + `/integracoes/ia`)
+
+Agentes do **OpenCode** (só ele) trabalham numa tarefa do Go! Sipal do plano ao merge. Cada
+tarefa tem uma **mesa de trabalho**; cada produto do Go! Sipal tem uma **central** que aponta o
+repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex rodam na mesma
+máquina.
+
+Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
+`@opencode/client`) e `src/lib/ai/opencode-events.ts` (eventos normalizados, puro). Modelos em
+`src/lib/db/models/Agentic.ts`.
+
+## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
+
+- Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
+  `agenticSettingsSchema`): **ativa** e o **agente padrão** (agente, modelo `provedor/modelo`,
+  variante) de cada etapa: **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
+  limpeza) e **Pull Request**. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature
+  ativa, exige o OpenCode conectado).
+- Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
+- Card **Centrais de desenvolvimento**: lista (produto, diretório, repositório, mesas, bolinha do
+  último teste) e **Nova central** (produto do Go! Sipal — um por central — e diretório das
+  sessões, caminho absoluto). Criar leva às configurações da central.
+
+### Central (`/integracoes/ia/centrais/[id]`, `agentic_centrals`)
+
+Configuração validada por `centralConfigSchema` (mesmo schema na tela e na API; campos ausentes
+caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alterações?"):
+
+| Aba | Campos |
+|---|---|
+| Geral | ativa, diretório das sessões, pasta dos worktrees (vazio = `<diretório>-worktrees`), mesas executando ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
+| Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
+| Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
+| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
+| Go! Sipal e conclusão | mover para Desenvolvimento ao abrir, iniciar o timer ao abrir (se não houver timer na tarefa), parar o timer ao concluir; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico, plano do Go! Sipal) |
+| Instruções | texto extra anexado às mensagens de cada etapa |
+| Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
+| Mesas | mesas da central com etapa e atalho |
+
+- **Testar central** (`POST /api/agentic/centrals/[id]/test`): pelo `shell` do OpenCode no
+  diretório da central confere `git rev-parse --show-toplevel`, `git ls-remote` das branches base e
+  de destino, `gh auth status`, `docker compose version`, o arquivo do compose e a pasta dos
+  worktrees; mais feature/OpenCode e o vínculo do repositório (aviso). Grava `lastTest`.
+- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas).
+
+## Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`)
+
+- Item próprio no menu. Sem central na URL, abre a primeira. Três colunas:
+  **Centrais** | **Tarefas do produto** | **Mesa de trabalho**.
+- Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
+  está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
+  e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
+  central (Framer Motion, sem deslocamento com movimento reduzido).
+- A partir de `lg`, **Centrais** e **Tarefas** recolhem (botão no cabeçalho de cada uma) para uma
+  faixa estreita de 48 px, e a mesa ocupa o espaço liberado (largura animada, `CollapsiblePane`).
+  Faixa das centrais: um ícone por central (nome na dica), ainda navegável; faixa das tarefas:
+  quantidade filtrada e o código da tarefa aberta. O conteúdo fica montado (rolagem e filtros se
+  mantêm). Estado salvo em `localStorage` (`opex:dev-center-layout:v1`); abaixo de `lg` as
+  colunas ficam empilhadas e sempre abertas.
+- Tarefas: do quadro do Go! Sipal filtradas pelo produto da central (sem rascunhos/arquivadas),
+  ordenadas pelo fluxo; filtros de **nome** (código/título, sem acento), **status** (padrão: tudo
+  menos Em Produção) e **responsável**, persistidos em `localStorage`
+  (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da mesa.
+- Tarefa sem mesa: **Abrir mesa e gerar o plano** (desabilitado com o motivo quando indisponível,
+  central desativada ou tarefa de outro produto).
+- Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
+  etapa e a dica mostra o chip da etapa.
+
+## Mesa de trabalho (`agentic_workbenches`, uma por tarefa)
+
+Uma **única sessão do OpenCode** do início ao fim (criada no diretório da central); cada etapa é
+um **turno** em que o app troca agente/modelo (`switchAgent`/`switchModel`) e envia a mensagem da
+etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflow.ts` +
+`runner.ts`): fechar a tela não para a IA.
+
+```
+planning → plan_review ─┬─ Solicitar correção do plano → planning
+                        └─ Implementar → implementing → building → preview
+preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
+         └─ Aprovar e abrir PR → opening_pr → pr_open
+pr_open ─┬─ revisão "pediu mudanças" com texto → planning (automático)
+         ├─ revisão sem texto → changes_requested (usuário descreve) → planning
+         ├─ merge → finishing (limpeza) → done
+         └─ fechado sem merge → aviso (uma vez)
+done → Reabrir mesa (texto ao planejador) → planning
+```
+
+- `runState`: `idle` | `running` | `failed` | `interrupted`. Ações por etapa em
+  `workbenchActions` (mesma regra na tela e nas rotas): executando só **Parar**; falha/interrupção →
+  **Tentar novamente** (reenvia a mensagem da etapa pedindo para retomar) e, depois do plano,
+  **Voltar ao planejamento**.
+- **Planejamento**: só leitura; o texto do turno vira uma nova **versão do plano** (com o pedido que
+  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`) + link.
+- **Implementação**: a branch (`branchNameFor`) e o caminho do worktree (`worktreePathFor`) são
+  definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
+  sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
+  sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
+- **Build**: emenda automática após a implementação. Porta reservada no banco (índice único) entre
+  **4001 e 4098** pulando portas ocupadas no host (`allocatePreviewPort`); a IA roda
+  `<VAR>=<porta> docker compose -p <produto-código> [-f arquivo] up -d --build` no worktree e
+  termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
+  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia**,
+  **Solicitar correção**, **Aprovar e abrir PR**.
+- **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
+  (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
+  Resposta `{"url", "number"}` (ou a última URL de PR do texto).
+- **Acompanhamento**: rotina `agentic-pr-watch` dos Crons (a cada 2 min, `pr-watch.ts`) consulta o
+  PR no GitHub (repositório tirado da URL do PR). Revisões novas (`id` > `lastReviewId`) com
+  `CHANGES_REQUESTED` viram texto (corpo + comentários de linha) para o planejador.
+- **Conclusão (merge)**: tarefa → **Validação** no Go! Sipal (`commitUrl` = commit do merge no
+  repositório vinculado, `pullRequestUrl`), timer parado (opção), limpeza pela IA (volta a sessão ao
+  diretório da central, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
+  central) e a porta é liberada.
+- Abrir a mesa pode mover a tarefa para Desenvolvimento e iniciar o timer (opções da central);
+  falhas no Go! Sipal viram aviso na mesa, sem interromper.
+- **Permissões e perguntas** do agente aparecem na mesa (`pendingPermissions`/`pendingForms`):
+  Aprovar uma vez / Aprovar sempre / Recusar; formulários desenhados pelos campos do OpenCode
+  (texto, número, sim/não, opções, múltipla escolha) com Responder ou Dispensar.
+- Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
+- **Excluir mesa**: interrompe, apaga a saída e libera a porta; worktree, branch, containers e PR
+  ficam como estão.
+- Custo e tokens acumulados por mesa (`session.step.ended`).
+
+## Saída ao vivo
+
+- `hub.ts` (em memória, `globalThis`): cada evento ganha `seq` por mesa, vai na hora para quem
+  assiste e é gravado em lote em `agentic_events` (textos seguidos viram um documento; saída de
+  ferramenta cortada em 20 mil caracteres guardando o fim). Raciocínio e progresso de ferramenta são
+  só ao vivo.
+- `GET /api/agentic/workbenches/[id]/events` (NDJSON): `reset` + tudo o que foi gravado + ao vivo,
+  `ping` a cada 15 s. Sem buracos: assina, grava o pendente, lê o banco e descarta `seq` repetido.
+  O cliente (`useWorkbenchStream`) reconecta sozinho (3 s; 45 s sem nada = reconectar) e reconstrói
+  com `applyTimelineLine` (`timeline.ts`, puro).
+- Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
+  `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`.
+- Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
+  prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
+  IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
+  **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+
+## APIs (`src/app/api/agentic/`)
+
+| Rota | Uso |
+|---|---|
+| `GET/PUT /settings` | configuração geral |
+| `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches` | centrais |
+| `POST /workbenches` `{centralId, taskId}` | abre a mesa e inicia o plano (409 se já existir) |
+| `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |
+| `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
+| `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
+| `GET /workbenches/[id]/events` | stream NDJSON |
+
+Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (abrir, PR,
+merge, reabrir, excluir).
+
+## Testes
+
+`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, hub, runner com cliente
+falso, acompanhamento do PR, rota de ações, barra de ações) e
+`__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

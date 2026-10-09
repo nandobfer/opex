@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/* Dark mode apenas por classe (ignora prefers-color-scheme). */
+@variant dark (&:where(.dark, .dark *));
+
+/*
+ * Tokens que dependem de variáveis em tempo de execução ficam em `@theme inline`: as classes
+ * (`bg-primary`, `bg-sidebar`...) usam `hsl(var(--primary))` direto, então sobrescrever `--primary`
+ * num contêiner vale para tudo dentro dele.
+ */
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  /* Sidebar (tema escuro, destaque na primária). */
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@theme {
+  /* Cores SEMÂNTICAS fixas (não são de marca). */
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+  --color-danger: #ef4444;
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= --theme(--breakpoint-lg)) {
+    max-width: --theme(--breakpoint-lg);
+  }
+  @media (width >= --theme(--breakpoint-xl)) {
+    max-width: --theme(--breakpoint-xl);
+  }
+  @media (width >= --theme(--breakpoint-2xl)) {
+    max-width: --theme(--breakpoint-2xl);
+  }
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+@layer base {
+  /*
+   * Tema ESCURO fixo do app, com cor primária #8000FF (270 100% 50%). O app não tem tema claro:
+   * `:root` e `.dark` usam os mesmos valores (a classe `dark` fica no <html> para as variantes
+   * `dark:` dos componentes copiados).
+   */
+  :root,
+  .dark {
+    --background: 260 22% 6%;
+    --foreground: 260 20% 96%;
+    --card: 260 20% 9%;
+    --card-foreground: 260 20% 96%;
+    --popover: 260 20% 10%;
+    --popover-foreground: 260 20% 96%;
+    --primary: 270 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 260 16% 15%;
+    --secondary-foreground: 260 20% 96%;
+    --muted: 260 16% 14%;
+    --muted-foreground: 260 10% 66%;
+    --accent: 270 40% 18%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 260 16% 18%;
+    --input: 260 16% 20%;
+    --ring: 270 100% 64%;
+    --sidebar: 260 24% 5%;
+    --sidebar-foreground: 260 14% 90%;
+    --sidebar-primary: 270 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 270 50% 16%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 260 18% 13%;
+    --radius: 0.5rem;
+    /* Paleta dos gráficos, derivada da primária. */
+    --chart-1: #8000ff;
+    --chart-2: #b366ff;
+    --chart-3: #22d3ee;
+    --chart-4: #f472b6;
+    --chart-5: #34d399;
+    --chart-6: #fbbf24;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  button {
+    cursor: pointer;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.45);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.35);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.55);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

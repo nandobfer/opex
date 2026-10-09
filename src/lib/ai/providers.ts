@@ -1,0 +1,71 @@
+/**
+ * Provedores de IA (módulo PURO, usado pela tela e pelo servidor). Cada provedor é uma
+ * integração-filha de "Provedores de IA" (`ai`) no catálogo de integrações.
+ */
+
+import type { IntegrationId } from "@/lib/integrations/catalog"
+
+export const AI_PROVIDER_IDS = ["opencode", "gemini"] as const
+export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
+
+export interface AiProviderDef {
+    readonly id: AiProviderId
+    readonly integrationId: IntegrationId
+    readonly name: string
+    /** Aceita temperatura e máximo de tokens (o OpenCode ignora parâmetros de amostragem). */
+    readonly supportsSampling: boolean
+    /** Sessões rodam com um agente do servidor (OpenCode). */
+    readonly supportsAgent: boolean
+    /** Rótulo da escolha de "variante" do modelo. */
+    readonly variantLabel: string
+}
+
+export const AI_PROVIDERS: readonly AiProviderDef[] = [
+    { id: "opencode", integrationId: "ai_opencode", name: "OpenCode", supportsSampling: false, supportsAgent: true, variantLabel: "Variante" },
+    { id: "gemini", integrationId: "ai_gemini", name: "Gemini", supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio (thinking)" },
+]
+
+export function getAiProvider(id: AiProviderId): AiProviderDef {
+    return AI_PROVIDERS.find((provider) => provider.id === id)!
+}
+
+export function isAiProviderId(value: string): value is AiProviderId {
+    return (AI_PROVIDER_IDS as readonly string[]).includes(value)
+}
+
+export function aiProviderOfIntegration(integrationId: IntegrationId): AiProviderDef | undefined {
+    return AI_PROVIDERS.find((provider) => provider.integrationId === integrationId)
+}
+
+/** Modelo disponível num provedor. */
+export interface AiModelDto {
+    /** Id usado na chamada (OpenCode: `provedor/modelo`; Gemini: `gemini-…`). */
+    id: string
+    name: string
+    /** Variantes aceitas (OpenCode: `variants` do modelo; Gemini: níveis de thinking). */
+    variants: string[]
+    /** Grupo exibido na lista (OpenCode: provedor de origem). */
+    group: string | null
+    contextWindow: number | null
+    /** Sem custo por token (ex.: modelos gratuitos do OpenCode Zen). */
+    free: boolean
+}
+
+/** Agente primário do servidor OpenCode. */
+export interface AiAgentDto {
+    id: string
+    name: string
+    description: string | null
+}
+
+/** Situação de um provedor para escolha nas features. */
+export interface AiProviderStatusDto {
+    id: AiProviderId
+    integrationId: IntegrationId
+    name: string
+    configured: boolean
+    /** Configurado e com o último teste verde ou amarelo. */
+    connected: boolean
+}
+
+export const GEMINI_THINKING_LEVELS = ["low", "medium", "high"] as const
