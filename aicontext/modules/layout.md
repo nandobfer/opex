@@ -12,8 +12,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/page.tsx`: redireciona para `HOME_HREF` (`/tarefas`).
 - `src/app/icon.png`: favicon PNG transparente de 512 × 512, com apenas o símbolo violeta da
   logo Opex para legibilidade em tamanho pequeno. O Next inclui o ícone automaticamente nos
-  metadados de todas as páginas, inclusive login e portal. A logo completa fica em
-  `public/opex-logo.png`.
+  metadados de todas as páginas, inclusive login e portal. O mesmo símbolo é usado como logo da
+  sidebar (topo), em `public/opex-mark.png`; a logo completa fica em `public/opex-logo.png`.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
@@ -32,15 +32,18 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 - `AppLayoutShell`: marca "Opex", `APP_NAV`, "Menu principal".
 - `AppShell`: sidebar (desktop) ou gaveta (< 1024px), `RealtimeStatusBanner` e
-  `<main id="main-content">` com transição de página (Framer Motion). A chave da transição é
+  `<main id="main-content">` com transição de página (Framer Motion). No desktop a sidebar é
+  **sempre recolhida** (68px): não há botão de recolher/expandir. A chave da transição é
   `pageTransitionKey(pathname, persistentHrefs)`: telas com sub-rotas que são a mesma tela
   (`PERSISTENT_PAGE_HREFS`, hoje `/desenvolvimento`) usam o prefixo, então navegar dentro delas não
   anima nem remonta a página — a própria tela anima só o trecho que mudou. Não há cabeçalho: cada página
   tem o próprio título. No celular, o botão "Abrir menu" flutua no canto superior esquerdo
   (`fixed`) e o conteúdo ganha `pt-16`.
 - `AppSidebar` + `sidebar/*`: ver `use-para-atualizar-tema-e-componentes-ui.md`, "Menu lateral".
-- `sidebar/SidebarFooter`: dono do app (`APP_OWNER_NAME`), versão e a ação **Sair**
-  (`LogoutButton`, de `src/features/auth/`), que encerra a sessão e volta para `/login`.
+- `sidebar/SidebarFooter`: no desktop (recolhido) mostra só o avatar do dono (`APP_OWNER_NAME`),
+  que abre um **popover** com a ação **Sair** (`LogoutButton`, de `src/features/auth/`), que encerra
+  a sessão e volta para `/login`; a versão fica na linha inferior da barra. Na gaveta do mobile
+  (expandida) o rodapé mantém o dono, a versão e o "Sair" inline.
 - `navigation.ts`: `APP_NAV` (Tarefas, Minhas horas, Central de desenvolvimento; Sistema › Integrações), `HOME_HREF`,
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 

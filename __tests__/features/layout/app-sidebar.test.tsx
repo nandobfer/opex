@@ -46,8 +46,6 @@ function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; secti
             sections={options.sections ?? SECTIONS}
             navLabel="Menu principal"
             collapsed={options.collapsed ?? false}
-            canCollapse
-            onToggleCollapsed={() => {}}
             badges={options.badges}
             ownerName="Ana Souza"
             version="1.2.3"
@@ -72,13 +70,34 @@ describe("AppSidebar — padrão SideNavigation do DS Sipal", () => {
         expect(screen.getByRole("link", { name: /Integrações/ }).hasAttribute("aria-current")).toBe(false)
     })
 
-    it("rodapé mostra o dono do app com iniciais, a versão e a ação de sair", () => {
-        renderSidebar()
+    it("o topo mostra a logo (símbolo do favicon) no lugar da letra inicial", () => {
+        const { container } = renderSidebar({ collapsed: true })
+        const logo = container.querySelector("img")
+        expect(logo?.getAttribute("src")).toBe("/opex-mark.png")
+        expect(logo?.getAttribute("alt")).toBe("")
+    })
+
+    it("recolhido (desktop): versão no rodapé, avatar abre o popover com Sair e não há botões de recolher/expandir", async () => {
+        renderSidebar({ collapsed: true })
+        expect(document.body.textContent ?? "").toContain("v1.2.3")
+        // Sem botão de logout solto nem botões de toggle.
+        expect(screen.queryByRole("button", { name: "Sair" })).toBeNull()
+        expect(screen.queryByRole("button", { name: "Expandir menu" })).toBeNull()
+        expect(screen.queryByRole("button", { name: "Recolher menu" })).toBeNull()
+
+        fireEvent.click(screen.getByRole("button", { name: "Ana Souza" }))
+        expect(await screen.findByRole("button", { name: "Sair" })).toBeTruthy()
+    })
+
+    it("expandido (mobile): mantém dono, versão e Sair inline, sem botões de toggle", () => {
+        renderSidebar({ collapsed: false })
         const text = document.body.textContent ?? ""
         expect(text).toContain("Ana Souza")
         expect(text).toContain("AS")
         expect(text).toContain("v1.2.3")
         expect(screen.getByRole("button", { name: "Sair" })).toBeTruthy()
+        expect(screen.queryByRole("button", { name: "Expandir menu" })).toBeNull()
+        expect(screen.queryByRole("button", { name: "Recolher menu" })).toBeNull()
     })
 
     it("contador mostra 99+ e anuncia a quantidade para leitor de tela", () => {
