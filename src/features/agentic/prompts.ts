@@ -112,24 +112,28 @@ export function reopenPrompt(config: CentralConfig, ctx: WorkbenchContext, feedb
     ].join("\n") + extra(config, "planning")
 }
 
-export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number): string {
+export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, additionalInfo: string | null = null): string {
     const setup = config.git.setupCommands.trim()
-    return [
-        `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
-        "",
-        "## 1. Worktree (obrigatório antes de editar qualquer arquivo)",
-        `- Se o diretório ${ctx.worktreePath} já for um worktree deste repositório, reutilize-o (é uma nova rodada sobre o mesmo trabalho).`,
-        `- Senão, a partir de ${ctx.sessionDirectory}: \`git fetch origin\` e \`git worktree add -b ${ctx.branch} ${ctx.worktreePath} origin/${config.git.baseBranch}\` (se a branch já existir, use \`git worktree add ${ctx.worktreePath} ${ctx.branch}\`).`,
-        `- MOVA ESTA SESSÃO para ${ctx.worktreePath} com a ferramenta de mover sessão do OpenCode (session_move) e confirme o diretório atual antes de continuar.`,
-        setup ? `- No worktree, rode os comandos de preparo:\n\`\`\`sh\n${setup}\n\`\`\`` : "",
-        "",
-        "## 2. Implementação",
-        "- Siga o plano aprovado e as instruções do projeto (AGENTS.md etc.). Escreva/atualize os testes previstos e rode-os.",
-        "- Pode fazer commits locais; NÃO faça push e NÃO abra Pull Request nesta etapa.",
-        "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
-    ]
-        .filter(Boolean)
-        .join("\n") + extra(config, "implementation")
+    const info = (additionalInfo ?? "").trim()
+    const base =
+        [
+            `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
+            "",
+            "## 1. Worktree (obrigatório antes de editar qualquer arquivo)",
+            `- Se o diretório ${ctx.worktreePath} já for um worktree deste repositório, reutilize-o (é uma nova rodada sobre o mesmo trabalho).`,
+            `- Senão, a partir de ${ctx.sessionDirectory}: \`git fetch origin\` e \`git worktree add -b ${ctx.branch} ${ctx.worktreePath} origin/${config.git.baseBranch}\` (se a branch já existir, use \`git worktree add ${ctx.worktreePath} ${ctx.branch}\`).`,
+            `- MOVA ESTA SESSÃO para ${ctx.worktreePath} com a ferramenta de mover sessão do OpenCode (session_move) e confirme o diretório atual antes de continuar.`,
+            setup ? `- No worktree, rode os comandos de preparo:\n\`\`\`sh\n${setup}\n\`\`\`` : "",
+            "",
+            "## 2. Implementação",
+            "- Siga o plano aprovado e as instruções do projeto (AGENTS.md etc.). Escreva/atualize os testes previstos e rode-os.",
+            "- Pode fazer commits locais; NÃO faça push e NÃO abra Pull Request nesta etapa.",
+            "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
+        ]
+            .filter(Boolean)
+            .join("\n")
+    const withInfo = info ? `${base}\n\n## Informações adicionais\n${info}` : base
+    return withInfo + extra(config, "implementation")
 }
 
 export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number): string {

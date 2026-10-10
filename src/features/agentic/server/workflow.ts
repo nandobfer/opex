@@ -490,14 +490,17 @@ export async function revisePlan(id: string, feedback: string): Promise<Workbenc
     return getWorkbench(id)
 }
 
-export async function implement(id: string): Promise<WorkbenchDto> {
+export async function implement(id: string, additionalInfo?: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "implement")
     const ctx = contextOf(loaded)
+    // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
+    const info = additionalInfo?.trim() || null
+    const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
     await launchTurn(
         loaded,
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1) },
-        { userText: "Plano aprovado: implementar", extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info) },
+        { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
     return getWorkbench(id)
 }

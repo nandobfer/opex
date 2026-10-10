@@ -30,10 +30,12 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect(mocks.revisePlan).toHaveBeenCalledWith('w1', 'Use o componente X')
   })
 
-  it('ações sem corpo e ação desconhecida', async () => {
+  it('implementar aceita texto opcional; ações sem corpo e ação desconhecida', async () => {
     mocks.implement.mockResolvedValue({ id: 'w1' })
-    expect((await call('implement')).status).toBe(200)
-    expect(mocks.implement).toHaveBeenCalledWith('w1')
+    expect((await call('implement', {})).status).toBe(200)
+    expect(mocks.implement).toHaveBeenCalledWith('w1', undefined)
+    expect((await call('implement', { text: 'Use o componente X' })).status).toBe(200)
+    expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X')
     expect((await call('apagar-tudo')).status).toBe(404)
   })
 })

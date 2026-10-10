@@ -56,6 +56,19 @@ describe('ActionBar', () => {
     expect(mocks.mutate).toHaveBeenLastCalledWith({ action: 'revise-plan', text: 'Use o componente X' }, expect.anything())
   })
 
+  it('informações adicionais ao aprovar o plano vão no texto da ação implementar', () => {
+    render(<ActionBar workbench={workbench({})} />)
+    const field = screen.getByLabelText('Informações adicionais (opcional)')
+    fireEvent.change(field, { target: { value: 'Use o componente X' } })
+    fireEvent.click(screen.getByRole('button', { name: /Implementar/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'implement', text: 'Use o componente X' }, expect.anything())
+  })
+
+  it('campo de informações adicionais só aparece na revisão do plano', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    expect(screen.queryByLabelText('Informações adicionais (opcional)')).toBeNull()
+  })
+
   it('prévia pronta: abrir em nova guia, solicitar correção e aprovar', () => {
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
     expect(screen.getByRole('link', { name: /Abrir em nova guia/ }).getAttribute('href')).toBe('http://localhost:4001')
