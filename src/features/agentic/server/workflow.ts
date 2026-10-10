@@ -94,7 +94,7 @@ export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto |
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
     await dbConnect()
     const [docs, positions] = await Promise.all([
-        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
+        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
         buildQueuePositions(),
     ])
     return docs.map((doc) => {
