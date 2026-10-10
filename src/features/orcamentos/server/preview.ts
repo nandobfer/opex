@@ -22,9 +22,10 @@ import {
     parseDraftPreview,
     parseEstimateHours,
 } from "../preview-prompt"
-import type { DraftEstimateDto, DraftPreviewDto } from "../types"
+import type { DraftEstimateDto, DraftPreviewDto, DraftTagDto } from "../types"
 import { findSimilarTasks } from "./similar"
 import { getDraftDoc, saveDraftEstimate, saveDraftPreview, saveDraftTags } from "./portal"
+import { resolveTagViews } from "./tag-views"
 import type { ClienteOrcamentoDoc } from "./token"
 
 /**
@@ -52,7 +53,7 @@ export type BudgetEstimateEvent =
     | { type: "delta"; text: string }
     | { type: "tool"; id: string; name: string; state: "running" | "done" | "error" }
     | { type: "notice"; message: string }
-    | { type: "done"; estimate: DraftEstimateDto }
+    | { type: "done"; estimate: DraftEstimateDto; tags: DraftTagDto[] }
     | { type: "error"; message: string }
 
 type ResolvedSettings = BudgetPreviewSettings & { provider: NonNullable<BudgetPreviewSettings["provider"]>; model: string }
@@ -180,7 +181,7 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
         return
     }
 
-    await saveDraftPreview(prepared.client, prepared.draftId, { ...preview, taskType: preview.taskType ?? null }, `${settings.provider}/${settings.model}`)
+    await saveDraftPreview(prepared.client, prepared.draftId, { ...preview, taskType: preview.taskType ?? null })
     dbg.success(`[orcamentos] prévia do rascunho ${prepared.draftId} concluída`)
     await logUsage("budget-preview", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
     yield { type: "done", preview: { ...preview, taskType: preview.taskType ?? null, tags: [] } }
@@ -270,10 +271,10 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
             hours = parsed
         }
 
-        const estimate = await saveDraftEstimate(prepared.client, prepared.draftId, hours)
+        const estimate = await saveDraftEstimate(prepared.client, prepared.draftId, hours, `${settings.provider}/${settings.model}`)
         dbg.success(`[orcamentos] estimativa do rascunho ${prepared.draftId} concluída (${hours} h)`)
         await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
-        yield { type: "done", estimate }
+        yield { type: "done", estimate, tags: await resolveTagViews(tags) }
     } catch (error) {
         const message = describeAiError(error)
         dbg.error(`[orcamentos] ${message}`)

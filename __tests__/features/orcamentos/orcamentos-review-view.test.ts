@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { selectReviewView, type BudgetReviewState } from "@/features/orcamentos/portal/useBudgetReview"
 import type { OrcamentoDraftDto } from "@/features/orcamentos/types"
 
-const idle: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, notice: null, error: null }
+const idle: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, tags: [], notice: null, error: null }
 
 const persisted: OrcamentoDraftDto = {
     id: "d1",
@@ -12,6 +12,7 @@ const persisted: OrcamentoDraftDto = {
     description: "Ajustar o rodapé",
     correction: null,
     preview: { title: "Corrigir X", taskType: "bugfix", priority: "high", technicalSpec: "## Passos", summary: "Corrige X" },
+    tags: [{ id: "ia", label: "IA" }],
     model: "gemini/pro",
     status: "draft",
     taskId: null,
@@ -25,6 +26,13 @@ describe("selectReviewView (revisão da prévia)", () => {
         expect(view.running).toBe(false)
         expect(view.preview).toEqual(persisted.preview)
         expect(view.estimate).toEqual(persisted.estimate)
+        expect(view.tags).toEqual(persisted.tags)
+    })
+
+    it("ao concluir a estimativa, mostra as tags recebidas pelo stream", () => {
+        const tags = [{ id: "tarefas", label: "Tarefas" }]
+        const view = selectReviewView({ ...idle, tags }, persisted, false)
+        expect(view.tags).toEqual(tags)
     })
 
     it("ao solicitar correção, ignora o cache e mostra skeleton (sem prévia nem estimativa antigas)", () => {

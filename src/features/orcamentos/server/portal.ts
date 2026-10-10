@@ -15,6 +15,7 @@ import { computeClientEstimate, type ClientEstimate } from "../logic"
 import type { ClienteDraftInput } from "../schemas"
 import type { ClientePortalOptionsDto, ClienteRepoDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskEstimateDto, ClienteTaskListDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
 import { clientProjects } from "./clients"
+import { resolveTagViews } from "./tag-views"
 import type { ClienteOrcamentoDoc } from "./token"
 
 /**
@@ -118,8 +119,12 @@ function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
 }
 
 async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise<OrcamentoDraftDto> {
-    const [project, index] = await Promise.all([Project.findById(draft.projectId).lean(), githubRepoIndex()])
     const preview = draftPreview(draft)
+    const [project, index, tags] = await Promise.all([
+        Project.findById(draft.projectId).lean(),
+        githubRepoIndex(),
+        resolveTagViews(preview?.tags ?? []),
+    ])
     const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
     return {
         id: String(draft._id),
@@ -129,6 +134,7 @@ async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise
         description: draft.description,
         correction: draft.correction ?? null,
         preview,
+        tags,
         model: draft.model ?? null,
         status: draft.status,
         taskId: draft.taskId ?? null,
@@ -169,9 +175,9 @@ export async function setDraftCorrection(client: ClienteOrcamentoDoc, id: string
 }
 
 /** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa e as tags. */
-export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: Omit<DraftPreviewDto, "tags">, model: string | null): Promise<OrcamentoDraftDto> {
+export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: Omit<DraftPreviewDto, "tags">): Promise<OrcamentoDraftDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...preview, tags: [] }, estimatedHours: null, model } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...preview, tags: [] }, estimatedHours: null } })
     return getDraft(client, id)
 }
 
@@ -182,10 +188,10 @@ export async function saveDraftTags(client: ClienteOrcamentoDoc, id: string, tag
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { "preview.tags": tags } })
 }
 
-/** Grava a estimativa de horas (H) e devolve o orçamento do cliente (H × fator × custo/hora). */
-export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string, estimatedHours: number): Promise<DraftEstimateDto> {
+/** Grava a estimativa de horas (H) e o modelo que a gerou; devolve o orçamento do cliente (H × fator × custo/hora). */
+export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string, estimatedHours: number, model: string | null): Promise<DraftEstimateDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { estimatedHours } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { estimatedHours, model } })
     return toEstimateDto(computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate))
 }
 

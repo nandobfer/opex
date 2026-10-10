@@ -120,16 +120,20 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
 - **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
   depois da prévia), feature **Estimar prazos** (`estimate-hours`): exige a prévia (409
   `DRAFT_WITHOUT_PREVIEW`); garante as **tags** do rascunho (feature "Tags de tarefas"), pré-busca em
-  `dev_tasks` as **tarefas semelhantes** por tags (fallback por tipo/projeto, `server/similar.ts`,
-  considerando as horas reais apontadas) e faz **uma única chamada** — provedor de texto com o
-  histórico no prompt (valida `{ estimatedHours }`, `parseEstimateHours`) ou **JEV** (um `score` de
-  esforço mapeado para horas). Ao concluir grava as horas e devolve o orçamento
-  (`saveDraftEstimate` → `H × fator × custo/hora`). O rascunho mostra o progresso ("Classificando…",
-  "Buscando tarefas semelhantes…").
+  `dev_tasks` as **tarefas semelhantes** por tags (fallback por tipo/projeto, `server/similar.ts`) —
+  **só tarefas com horas reais apontadas** (`TimeLog`), descartando as sem apontamento — e faz **uma
+  única chamada** ancorada na **mediana** do histórico: provedor de texto (valida
+  `{ estimatedHours }`, `parseEstimateHours`) ou **JEV** (um `score` fracionário de tempo de execução
+  interpolado para horas). Ao concluir grava as horas **e o modelo** que as gerou
+  (`saveDraftEstimate` → `H × fator × custo/hora`) e devolve as **tags** no `done`. O rascunho mostra
+  o progresso ("Classificando…", "Buscando tarefas semelhantes…").
+- A revisão exibe as **tags** da prévia em um card próprio (`PreviewTagsCard`, com os rótulos
+  resolvidos no servidor por `resolveTagViews`).
 - `preview-prompt.ts` (puro): contratos de saída das duas fases
   (`buildBudgetPreviewInstructions`/`buildBudgetEstimateInstructions`), prompts
-  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt` — este último recebe as tarefas
-  semelhantes), parsers e helpers do JEV (`buildJevEstimateQuestions`, `mapJevEstimateScore`).
+  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt` — este último recebe as tarefas semelhantes
+  e a **âncora do histórico**, `estimateAnchor`), parsers e helpers do JEV (`buildJevEstimateQuestions`,
+  `mapJevEstimateScore`).
 - Cada geração grava uma linha em `ai_usage_logs` (`feature: "budget-preview"` na prévia;
   `"estimate-hours"` na estimativa).
 
@@ -171,7 +175,8 @@ pública (`/api/v1/*`).
 - `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
   `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
   `formatHoursLabel`), `schemas.ts`, `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
-  `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa), `components/`
+  `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa; só horas reais),
+  `server/tag-views.ts` (resolve ids de tags em `{ id, label }` para o portal), `components/`
   (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
   — `useBudgetReview` orquestra as duas fases —, páginas e componentes; `portal/components/preview/`
   tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard` e

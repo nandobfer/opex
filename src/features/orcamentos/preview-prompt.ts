@@ -6,9 +6,9 @@ import { draftEstimateSchema, draftPreviewSchema, type DraftPreview } from "./sc
  * Montagem dos prompts do orçamento da tarefa (módulo PURO), em DUAS fases:
  * 1. **Prévia**: a IA lê a descrição do cliente e devolve `title`, `taskType`, `priority`,
  *    `summary` e `technicalSpec`.
- * 2. **Estimativa**: um agente do OpenCode recebe a prévia + o pedido e devolve `estimatedHours`.
- *    O agente roda tools no servidor (consulta ao banco via MCP) e pensa antes de responder — o
- *    histórico de horas não é injetado no prompt.
+ * 2. **Estimativa**: a IA recebe a prévia, o pedido e as tarefas semelhantes (com o **tempo de
+ *    execução observado**) e devolve `{ estimatedHours }` numa única chamada — sem agente; o JEV
+ *    entra como um `score` fracionário interpolado para horas.
  */
 
 export interface BudgetPreviewInput {
@@ -51,13 +51,14 @@ export function buildBudgetPreviewPrompt(input: BudgetPreviewInput): string {
     return parts.filter(Boolean).join("\n\n")
 }
 
-/** Instruções de sistema da estimativa (fase 2 — uma chamada, com o histórico já no prompt). */
+/** Instruções de sistema da estimativa (fase 2 — uma chamada, ancorada no histórico). */
 export function buildBudgetEstimateInstructions(instructions: string): string {
     const contract = [
-        "Você estima o esforço de implementação de uma tarefa, em horas de desenvolvimento, com base no pedido e no histórico de tarefas semelhantes apresentado no prompt.",
-        "Considere a complexidade, o tipo e as horas reais apontadas nas tarefas semelhantes. Seja conservador quando houver incerteza.",
+        "Você estima o TEMPO DE EXECUÇÃO de uma tarefa, em horas, para fins de orçamento.",
+        "Ancore a estimativa nas horas reais apontadas nas tarefas semelhantes: o valor deve ficar próximo da MEDIANA do histórico apresentado.",
+        "Só se afaste da mediana quando a tarefa for claramente maior ou menor que as semelhantes. Não estime pelo tamanho do texto da especificação.",
         "Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente esta chave:",
-        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5).',
+        '- "estimatedHours": número de horas (aceita fração, ex.: 0.5).',
     ].join("\n")
     return `${instructions.trim()}\n\n${contract}`
 }
@@ -84,6 +85,35 @@ function similarSection(similar: readonly EstimateContextTask[]): string {
     return `## Tarefas semelhantes (histórico)\n${lines.join("\n")}`
 }
 
+/** Mediana e faixa das horas reais das tarefas semelhantes (âncora da estimativa). */
+export interface EstimateAnchor {
+    count: number
+    median: number
+    min: number
+    max: number
+}
+
+/** Calcula a mediana/mín/máx das horas reais das tarefas semelhantes; `null` sem horas. */
+export function estimateAnchor(similar: readonly EstimateContextTask[]): EstimateAnchor | null {
+    const hours = similar
+        .map((task) => task.hours)
+        .filter((value): value is number => value != null)
+        .sort((a, b) => a - b)
+    if (hours.length === 0) return null
+    const mid = Math.floor(hours.length / 2)
+    const median = hours.length % 2 === 1 ? hours[mid]! : Math.round(((hours[mid - 1]! + hours[mid]!) / 2) * 100) / 100
+    return { count: hours.length, median, min: hours[0]!, max: hours[hours.length - 1]! }
+}
+
+function anchorSection(anchor: EstimateAnchor | null): string {
+    if (!anchor) return ""
+    return [
+        "## Referência do histórico (tempo de execução observado)",
+        `${anchor.count} tarefa(s) semelhante(s) com horas reais apontadas: mediana ${anchor.median} h (mínimo ${anchor.min} h, máximo ${anchor.max} h).`,
+        "A estimativa deve ficar próxima da mediana, salvo se esta tarefa for claramente maior ou menor.",
+    ].join("\n")
+}
+
 /** Prompt da estimativa: a prévia, o pedido e o histórico de tarefas semelhantes (pré-buscado). */
 export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput, similar: readonly EstimateContextTask[] = []): string {
     const parts = [
@@ -97,44 +127,61 @@ export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPr
         "## Pedido original do cliente",
         clip(input.description),
         input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
+        anchorSection(estimateAnchor(similar)),
         similarSection(similar),
-        "Estime as horas de implementação desta tarefa usando o histórico acima como referência.",
+        "Estime o tempo de execução desta tarefa usando o histórico acima como referência principal.",
     ]
     return parts.filter(Boolean).join("\n\n")
 }
 
-// ── Estimativa via JEV (decisão estruturada: um `score` mapeado para horas) ──
+// ── Estimativa via JEV (decisão estruturada: um `score` fracionário interpolado) ──
 
 export const JEV_ESTIMATE_QUESTION_ID = "estimated_hours"
 
-/** Níveis de esforço (índice = nível; o JEV devolve a posição, que mapeia para horas). */
+/**
+ * Níveis de **tempo de execução**, do menor ao maior (10 níveis = máximo do JEV). Descrevem
+ * situações em minutos/horas para o modelo posicionar o tempo observado.
+ */
 export const JEV_ESTIMATE_LEVELS = [
-    "Até 2 horas (ajuste trivial, poucos arquivos)",
-    "3 a 4 horas (tarefa pequena, escopo claro)",
-    "5 a 8 horas (tarefa média, vários arquivos e testes)",
-    "9 a 16 horas (tarefa grande, integração ou refatoração)",
-    "17 a 32 horas (tarefa muito grande, várias partes)",
-    "Mais de 32 horas (épico, alto risco ou incerteza)",
+    "Até 5 minutos",
+    "5 a 10 minutos",
+    "10 a 20 minutos",
+    "20 a 30 minutos",
+    "30 a 45 minutos",
+    "45 minutos a 1 hora",
+    "1 a 2 horas",
+    "2 a 4 horas",
+    "4 a 8 horas",
+    "Mais de 8 horas",
 ] as const
 
-/** Horas representativas de cada nível (política explícita de mapeamento `score` → horas). */
-export const JEV_ESTIMATE_HOURS = [2, 4, 8, 16, 32, 48] as const
+/** Horas representativas de cada nível (âncoras para a interpolação do `score` fracionário). */
+export const JEV_ESTIMATE_HOURS = [0.05, 0.12, 0.25, 0.42, 0.62, 0.75, 1.5, 3, 6, 12] as const
 
-/** Pergunta `score` única: quanto esforço a tarefa exige, considerando o histórico. */
+/** Pergunta `score` única: a posição da tarefa na escala de tempo de execução observado. */
 export function buildJevEstimateQuestions(): Record<string, JevQuestion> {
     return {
         [JEV_ESTIMATE_QUESTION_ID]: {
             type: "score",
-            instructions: "Quanto esforço de implementação (em horas de desenvolvimento) esta tarefa exige, considerando as tarefas semelhantes apresentadas?",
+            instructions: "Em qual posição da escala de TEMPO DE EXECUÇÃO observado esta tarefa se encaixa, considerando as tarefas semelhantes e a mediana apresentada?",
             criteria: [...JEV_ESTIMATE_LEVELS],
         },
     }
 }
 
-/** Mapeia o `score` do JEV (0..N, pode ser fracionário) para horas, arredondando ao nível mais próximo. */
+/**
+ * Mapeia o `score` do JEV (posição fracionária de 0 a N-1) para horas por **interpolação linear**
+ * entre as âncoras dos níveis — sem arredondar para o teto da faixa (o `score` é a média ponderada
+ * das probabilidades e pode cair entre dois níveis).
+ */
 export function mapJevEstimateScore(score: number): number {
-    const index = Math.max(0, Math.min(JEV_ESTIMATE_HOURS.length - 1, Math.round(score)))
-    return JEV_ESTIMATE_HOURS[index]!
+    const top = JEV_ESTIMATE_HOURS.length - 1
+    const clamped = Math.max(0, Math.min(top, score))
+    const low = Math.floor(clamped)
+    const high = Math.min(top, low + 1)
+    const t = clamped - low
+    const hours = JEV_ESTIMATE_HOURS[low]! + (JEV_ESTIMATE_HOURS[high]! - JEV_ESTIMATE_HOURS[low]!) * t
+    return Math.round(hours * 100) / 100
 }
 
 export const TASK_TYPE_LABEL_LIST = TASK_TYPES.map((type) => TASK_TYPE_LABELS[type])

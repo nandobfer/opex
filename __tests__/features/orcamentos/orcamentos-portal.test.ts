@@ -46,6 +46,7 @@ vi.mock("@/features/tasks/server/service", () => ({
 vi.mock("@/features/tasks/server/columns", () => ({ getBoard: vi.fn(async () => ({ columns: [], layout: [] })) }))
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock("@/features/github/server/lookups", () => ({ listGithubRepos: mocks.listGithubRepos }))
+vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
 
 import { addClientComment, approveDraft, createDraft, getClientOptions, getClientTask, getDraft, listClientTasks, saveDraftEstimate, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
 import type { ClienteOrcamentoDoc } from "@/features/orcamentos/server/token"
@@ -101,20 +102,20 @@ describe("portal do cliente", () => {
 
     it("grava a prévia (sem estimativa) e, ao estimar, calcula H × fator e o faturamento", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        const saved = await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        const saved = await saveDraftPreview(client, draft.id, preview)
         expect(saved.preview).toMatchObject({ title: "Corrigir X" })
         expect(saved.estimate).toBeNull()
 
-        const estimate = await saveDraftEstimate(client, draft.id, 2)
+        const estimate = await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
         expect(estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
         expect((await getDraft(client, draft.id)).estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
     })
 
     it("regravar a prévia (correção) zera a estimativa anterior", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
-        await saveDraftEstimate(client, draft.id, 2)
-        const again = await saveDraftPreview(client, draft.id, { ...preview, title: "Outro título" }, "gemini/pro")
+        await saveDraftPreview(client, draft.id, preview)
+        await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
+        const again = await saveDraftPreview(client, draft.id, { ...preview, title: "Outro título" })
         expect(again.estimate).toBeNull()
     })
 
@@ -126,8 +127,8 @@ describe("portal do cliente", () => {
 
     it("ao aprovar, cria a tarefa na coluna de entrada com a estimativa e marca o rascunho", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
-        await saveDraftEstimate(client, draft.id, 2)
+        await saveDraftPreview(client, draft.id, preview)
+        await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
         mocks.createTaskWithIssue.mockResolvedValue({ id: "t1", code: "APP-1" })
 
         const task = await approveDraft(client, draft.id, "local")
@@ -150,7 +151,7 @@ describe("portal do cliente", () => {
 
     it("permite aprovar sem estimativa (a tarefa nasce sem orçamento)", async () => {
         const draft = await createDraft(client, { projectId, description: "x" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        await saveDraftPreview(client, draft.id, preview)
         mocks.createTaskWithIssue.mockResolvedValue({ id: "t2", code: "APP-2" })
         await approveDraft(client, draft.id, "local")
         const options = mocks.createTaskWithIssue.mock.calls[0][2] as { origin: string; estimate?: unknown }

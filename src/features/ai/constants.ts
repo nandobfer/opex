@@ -69,8 +69,8 @@ export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
 // ── Estimar prazos (tarefas semelhantes já no prompt) ──────────────────────
 
 export const DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS = [
-    "Você estima o esforço (em horas) de uma tarefa de desenvolvimento para fins de orçamento.",
-    "Use as tarefas semelhantes do histórico (horas apontadas, tipo e tags) como referência para embasar a estimativa.",
+    "Você estima o TEMPO DE EXECUÇÃO (em horas) de uma tarefa, para fins de orçamento.",
+    "Use as horas reais apontadas nas tarefas semelhantes como referência principal: a estimativa deve ficar próxima da mediana do histórico.",
+    "Só se afaste da mediana quando a tarefa for claramente maior ou menor que as semelhantes.",
     "Responda em português do Brasil.",
-    "Seja conservador: quando houver incerteza, prefira uma estimativa um pouco maior.",
 ].join("\n")

@@ -26,7 +26,8 @@ e opções na própria aba da página "Provedores de IA".
   texto). Além do catálogo (`GET v1/models`, header `Authorization: Bearer <apiKey>`), expõe
   `askJevSystemOne` (`POST v1/systemone`): envia `state` + `questions` tipadas (`choice`, `score`,
   `noul`) e devolve `answers` tipadas. É usado por "Tags de tarefas" (um `noul` por tag) e por
-  "Estimar prazos" (um `score` de esforço mapeado para horas). Como não gera texto, o JEV continua
+  "Estimar prazos" (um `score` fracionário de **tempo de execução**, interpolado para horas). Como
+  não gera texto, o JEV continua
   **fora** das features de texto (flag `supportsTextGeneration`; ver `AI_TEXT_PROVIDER_IDS`).
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
@@ -172,12 +173,15 @@ e opções na própria aba da página "Provedores de IA".
   `estimateHoursSettingsSchema`: ativa, provedor (texto ou **JEV**), modelo, agente/variante
   (OpenCode), temperatura e máximo de tokens (só provedores que amostram), **quantas tarefas
   semelhantes** considerar (`similarLimit`) e instruções. Regras ao salvar iguais às demais features.
-- Usada na 2ª fase do portal (ver `modules/orcamentos.md`): **uma única chamada** (sem agente/tools).
-  O servidor garante as **tags** do rascunho (feature "Tags de tarefas"), pré-busca tarefas
-  semelhantes por tags (fallback por tipo/projeto) e injeta o histórico no prompt; provedores de
-  texto devolvem `{ estimatedHours }` (validado por `parseEstimateHours`) e o JEV devolve um `score`
-  de esforço mapeado para horas (`JEV_ESTIMATE_HOURS`). O cálculo exibido ao cliente
-  (`H × fator × custo/hora`) é do servidor.
+- Usada na 2ª fase do portal (ver `modules/orcamentos.md`). `H` é o **tempo de execução observado**
+  (não esforço humano), ancorado nas **horas reais apontadas** das tarefas semelhantes: `server/similar.ts`
+  só considera tarefas **com apontamento** (`TimeLog`) e o prompt injeta a **mediana** como âncora
+  (`estimateAnchor`); tarefas sem horas e a estimativa anterior da IA ficam de fora. É uma **única
+  chamada** (sem agente/tools): provedores de texto devolvem `{ estimatedHours }` (validado por
+  `parseEstimateHours`) e o **JEV** responde um `score` de 10 níveis de tempo (posição fracionária de
+  0 a 9) que é **interpolado** para horas entre as âncoras (`mapJevEstimateScore`); `saveDraftEstimate`
+  grava as horas **e o modelo** que as gerou. O cálculo exibido ao cliente (`H × fator × custo/hora`)
+  é do servidor.
 
 ## APIs
 

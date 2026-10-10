@@ -23,6 +23,7 @@ vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: mocks.jev }))
 vi.mock("@/features/ai/server/task-tags", () => ({ generateTagsForInput: mocks.tags }))
 vi.mock("@/features/ai/server/settings", () => ({ loadEstimateHoursSettings: mocks.loadEstimate, availabilityOfEstimateHours: mocks.availability }))
 vi.mock("@/features/orcamentos/server/similar", () => ({ findSimilarTasks: mocks.similar }))
+vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
 vi.mock("@/features/orcamentos/server/portal", () => ({ getDraftDoc: vi.fn(), saveDraftEstimate: mocks.saveEstimate, saveDraftPreview: vi.fn(), saveDraftTags: mocks.saveTags }))
 
 import { DEFAULT_ESTIMATE_HOURS_SETTINGS, type EstimateHoursSettings } from "@/features/ai/schemas"
@@ -65,15 +66,17 @@ describe("runBudgetEstimate (uma chamada, sem agente)", () => {
         expect(mocks.tags).toHaveBeenCalledOnce()
         expect(mocks.saveTags).toHaveBeenCalledWith(expect.anything(), "d1", ["api"])
         expect(mocks.similar).toHaveBeenCalledWith({ tags: ["api"], taskType: "bugfix", projectId: "p1", limit: 5 })
+        expect(mocks.saveEstimate).toHaveBeenCalledWith(expect.anything(), "d1", 7, "gemini/gemini-3-flash")
         expect(events.some((event) => event.type === "notice")).toBe(true)
-        expect(events.find((event) => event.type === "done")).toMatchObject({ type: "done", estimate: { hours: 7 } })
+        const done = events.find((event) => event.type === "done")
+        expect(done).toMatchObject({ type: "done", estimate: { hours: 7 }, tags: [{ id: "api", label: "api" }] })
     })
 
-    it("usa o score do JEV mapeado para horas", async () => {
+    it("usa o score fracionário do JEV interpolado para horas", async () => {
         mocks.jev.mockResolvedValue({ answers: { estimated_hours: { type: "score", score: 2, confidence: 1, legend: {}, probabilities: {} } } })
         const events = await collect(prepared({ settings: settings({ provider: "jev", model: "jev-latest" }) as PreparedBudgetEstimate["settings"] }))
         expect(mocks.jev).toHaveBeenCalledOnce()
-        expect(events.find((event) => event.type === "done")).toMatchObject({ type: "done", estimate: { hours: 8 } })
+        expect(events.find((event) => event.type === "done")).toMatchObject({ type: "done", estimate: { hours: 0.25 } })
     })
 
     it("repassa o erro do provedor sem gravar estimativa", async () => {

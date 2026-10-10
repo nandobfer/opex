@@ -47,6 +47,12 @@ export interface DraftPreviewDto {
     tags: string[]
 }
 
+/** Tag da taxonomia já resolvida para exibição (id + rótulo). */
+export interface DraftTagDto {
+    id: string
+    label: string
+}
+
 /** Rascunho do portal (prévia + estado). */
 export interface OrcamentoDraftDto {
     id: string
@@ -57,6 +63,8 @@ export interface OrcamentoDraftDto {
     description: string
     correction: string | null
     preview: DraftPreviewDto | null
+    /** Tags da prévia já resolvidas (id + rótulo) para exibir na revisão. */
+    tags: DraftTagDto[]
     model: string | null
     status: "draft" | "approved"
     taskId: string | null

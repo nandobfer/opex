@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildBudgetEstimateInstructions, buildBudgetEstimatePrompt, buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, buildJevEstimateQuestions, extractJsonObject, JEV_ESTIMATE_QUESTION_ID, mapJevEstimateScore, parseDraftPreview, parseEstimateHours } from "@/features/orcamentos/preview-prompt"
+import { buildBudgetEstimateInstructions, buildBudgetEstimatePrompt, buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, buildJevEstimateQuestions, estimateAnchor, extractJsonObject, JEV_ESTIMATE_QUESTION_ID, mapJevEstimateScore, parseDraftPreview, parseEstimateHours } from "@/features/orcamentos/preview-prompt"
 import type { DraftPreview } from "@/features/orcamentos/schemas"
 
 const preview: DraftPreview = { title: "Corrigir X", taskType: "bugfix", priority: "high", technicalSpec: "## Passos", summary: "Corrige X" }
@@ -47,19 +47,49 @@ describe("prompt da estimativa (fase 2 — uma chamada com o histórico)", () =>
         const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "x", correction: null }, [])
         expect(prompt).toContain("Nenhuma tarefa semelhante")
     })
+
+    it("inclui a mediana do histórico como âncora", () => {
+        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "x", correction: null }, [
+            { code: "A", title: "a", taskType: null, tags: [], hours: 0.5 },
+            { code: "B", title: "b", taskType: null, tags: [], hours: 0.2 },
+            { code: "C", title: "c", taskType: null, tags: [], hours: 0.4 },
+        ])
+        expect(prompt).toContain("Referência do histórico")
+        expect(prompt).toContain("mediana 0.4 h")
+    })
 })
 
-describe("estimativa via JEV (score → horas)", () => {
-    it("mapeia o score para as horas do nível mais próximo", () => {
-        expect(mapJevEstimateScore(0)).toBe(2)
-        expect(mapJevEstimateScore(2.4)).toBe(8)
-        expect(mapJevEstimateScore(9)).toBe(48)
+describe("âncora do histórico (estimateAnchor)", () => {
+    it("calcula a mediana e a faixa das horas reais", () => {
+        expect(
+            estimateAnchor([
+                { code: "A", title: "a", taskType: null, tags: [], hours: 0.5 },
+                { code: "B", title: "b", taskType: null, tags: [], hours: 0.2 },
+                { code: "C", title: "c", taskType: null, tags: [], hours: 0.4 },
+            ]),
+        ).toEqual({ count: 3, median: 0.4, min: 0.2, max: 0.5 })
     })
 
-    it("monta uma pergunta score com os níveis de esforço", () => {
+    it("sem horas, devolve null", () => {
+        expect(estimateAnchor([])).toBeNull()
+    })
+})
+
+describe("estimativa via JEV (score fracionário → horas)", () => {
+    it("mapeia o score (posição contínua) para horas por interpolação", () => {
+        expect(mapJevEstimateScore(0)).toBe(0.05)
+        expect(mapJevEstimateScore(2)).toBe(0.25)
+        expect(mapJevEstimateScore(9)).toBe(12)
+        expect(mapJevEstimateScore(99)).toBe(12)
+        const mid = mapJevEstimateScore(2.5)
+        expect(mid).toBeGreaterThan(0.25)
+        expect(mid).toBeLessThan(0.42)
+    })
+
+    it("monta uma pergunta score com 10 níveis de tempo de execução", () => {
         const question = buildJevEstimateQuestions()[JEV_ESTIMATE_QUESTION_ID]
         expect(question).toMatchObject({ type: "score" })
-        expect(question.type === "score" && question.criteria.length).toBeGreaterThanOrEqual(2)
+        expect(question.type === "score" && question.criteria.length).toBe(10)
     })
 })
 
