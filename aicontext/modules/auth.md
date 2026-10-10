@@ -26,7 +26,12 @@ Não são integrações: vêm do `.env` (runtime, nunca no bundle), não da tela
 
 ## Sessão
 
-- Cookie `opex_session`, `httpOnly`, `sameSite=lax`, `secure` em produção (HTTPS), `path=/`.
+- Cookie `opex_session`, `httpOnly`, `sameSite=lax`, `path=/` e `secure` **apenas quando a requisição
+  chega por HTTPS de fato** — detectado por `x-forwarded-proto` (proxy que termina TLS) ou pelo
+  protocolo da URL, **nunca** por `NODE_ENV`. Acesso direto por **HTTP** (ex.: prévia em
+  `http://IP:porta`) recebe o cookie **sem** `Secure`: impor `Secure` aí faria o navegador descartar
+  o cookie (fora de `localhost`) e o login não teria efeito. Lógica em
+  `server/cookie.ts` (`isHttpsRequest`/`sessionCookieOptions`), usada no login e no logout.
 - **Cookie de sessão** (sem `maxAge`): expira ao fechar o navegador. O token carrega um teto de
   30 dias (`SESSION_MAX_AGE_SECONDS`) como rede de segurança.
 - Token **stateless**: `base64url(payload).base64url(HMAC-SHA256)`, payload só com `iat`/`exp`
