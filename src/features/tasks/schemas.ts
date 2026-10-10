@@ -41,6 +41,16 @@ export const moveTaskSchema = z.object({
 })
 export type MoveTaskInput = z.infer<typeof moveTaskSchema>
 
+/**
+ * Edita as horas estimadas de uma tarefa do portal (`PATCH /api/tasks/[id]/estimate`). As horas do
+ * cliente e o faturamento são recalculados pelo servidor com o fator e o custo/hora do cliente que
+ * originou a tarefa.
+ */
+export const updateTaskEstimateSchema = z.object({
+    hours: z.number({ error: "Informe as horas" }).min(0, "Mínimo 0").max(10_000, "Máximo 10000"),
+})
+export type UpdateTaskEstimateInput = z.infer<typeof updateTaskEstimateSchema>
+
 /** Coluna (criar/editar). Mesmo schema no formulário e na API. */
 export const columnInputSchema = z.object({
     name: z.string().trim().min(1, "Informe o nome").max(40, "Máximo de 40 caracteres"),

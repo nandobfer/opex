@@ -1,15 +1,17 @@
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AuditLog, type IAuditLog } from "@/lib/db/models/AuditLog"
-import { DevTask, TaskComment, type IDevTask } from "@/lib/db/models/DevTask"
+import { DevTask, TaskComment, type IDevTask, type ITaskEstimate } from "@/lib/db/models/DevTask"
+import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { Project, type IProject } from "@/lib/db/models/Project"
 import { TimeLog } from "@/lib/db/models/TimeLog"
 import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
-import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskInput } from "../schemas"
-import type { ProjectRef, TaskDetailDto, TaskDto, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
+import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
+import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
+import { computeClientEstimate } from "@/features/orcamentos/logic"
 
 /**
  * Tarefas dO Opex — a fonte de verdade. CRUD sobre `dev_tasks`; o código é sequencial por projeto
@@ -28,6 +30,19 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i
 const projectRef = (project: IProject | null): ProjectRef | null =>
     project ? { id: String((project as unknown as { _id: unknown })._id), name: project.name, repo: project.repo, sigla: project.sigla } : null
 
+/** Snapshot da estimativa/orçamento da tarefa no formato do DTO (visões interna e do cliente). */
+function toEstimateDto(estimate: ITaskEstimate): TaskEstimate {
+    return {
+        hours: estimate.hours ?? 0,
+        clientHours: estimate.clientHours ?? 0,
+        billingBrl: estimate.billingBrl ?? 0,
+        factor: estimate.factor ?? 1,
+        hourlyRate: estimate.hourlyRate ?? 0,
+        model: estimate.model ?? null,
+        generatedAt: estimate.generatedAt ? new Date(estimate.generatedAt).toISOString() : null,
+    }
+}
+
 export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject | null): TaskDto {
     return {
         id: String(task._id),
@@ -40,17 +55,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         priority: (task.priority as TaskPriority) ?? "medium",
         archived: task.archived === true,
         project: projectRef(project),
-        estimate: task.estimate
-            ? {
-                  hours: task.estimate.hours ?? 0,
-                  clientHours: task.estimate.clientHours ?? 0,
-                  billingBrl: task.estimate.billingBrl ?? 0,
-                  factor: task.estimate.factor ?? 1,
-                  hourlyRate: task.estimate.hourlyRate ?? 0,
-                  model: task.estimate.model ?? null,
-                  generatedAt: task.estimate.generatedAt ? new Date(task.estimate.generatedAt).toISOString() : null,
-              }
-            : null,
+        estimate: task.estimate ? toEstimateDto(task.estimate) : null,
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
     }
@@ -128,6 +133,18 @@ async function withIssueRefs<T extends TaskDto>(tasks: T[]): Promise<T[]> {
     return refs.size ? tasks.map((task) => (refs.has(task.id) ? { ...task, issue: refs.get(task.id)! } : task)) : tasks
 }
 
+/**
+ * Cliente de orçamento que originou a tarefa: o ativo cujo `projectIds` inclui o repositório dela.
+ * Uma tarefa com estimativa vem de um cliente só; havendo mais de um, usa o atualizado por último.
+ */
+async function resolveProjectClient(projectId: string): Promise<{ name: string; profitFactor: number; hourlyRate: number } | null> {
+    const client = await OrcamentoClient.findOne({ projectIds: projectId, active: { $ne: false } })
+        .sort({ updatedAt: -1 })
+        .lean()
+    if (!client) return null
+    return { name: client.name, profitFactor: Math.max(1, client.profitFactor ?? 1), hourlyRate: Math.max(0, client.hourlyRate ?? 0) }
+}
+
 // ── Consultas ──────────────────────────────────────────────────────────────
 
 export async function listTasks(includeArchived: boolean): Promise<TaskListDto> {
@@ -162,8 +179,10 @@ export async function getTask(id: string): Promise<TaskDetailDto> {
         timeLogsFor(id),
     ])
     const [withIssue] = await withIssueRefs([toTaskDto(task, project)])
+    const estimateClientName = withIssue.estimate ? (await resolveProjectClient(task.projectId))?.name ?? null : null
     return {
         ...withIssue,
+        estimateClientName,
         description: task.description ?? null,
         technicalSpec: task.technicalSpec ?? null,
         comments: comments.map((comment) => ({ id: String(comment._id), content: comment.content, createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : null })),
@@ -351,6 +370,37 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && columnChanged) notifyAgenticQueue([id])
     if (options.origin !== "github" && (columnChanged || GITHUB_SYNCED_FIELDS.some((field) => field in set))) await syncGithubIssue(id)
+}
+
+/**
+ * Edita as horas estimadas de uma tarefa do portal e recalcula as horas do cliente (`H × fator`) e o
+ * faturamento (`horas do cliente × custo/hora`) com o fator e o custo/hora **atuais** do cliente que
+ * originou a tarefa (fallback para o snapshot se o cliente não existir).
+ */
+export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateInput, actorId: string): Promise<TaskEstimate> {
+    assertTaskId(id)
+    await dbConnect()
+    const task = await DevTask.findById(id).lean()
+    if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+    if (!task.estimate) throw new DomainError(409, "A tarefa não tem estimativa para editar", "TASK_WITHOUT_ESTIMATE")
+
+    const client = await resolveProjectClient(task.projectId)
+    const factor = client?.profitFactor ?? Math.max(1, task.estimate.factor ?? 1)
+    const hourlyRate = client?.hourlyRate ?? Math.max(0, task.estimate.hourlyRate ?? 0)
+    const next = computeClientEstimate(input.hours, factor, hourlyRate)
+    const estimate: ITaskEstimate = { ...task.estimate, hours: next.hours, clientHours: next.clientHours, billingBrl: next.billingBrl, factor, hourlyRate }
+
+    await DevTask.updateOne({ _id: id }, { $set: { estimate } })
+    await recordAudit({
+        userId: actorId,
+        entidade: TASK_AUDIT_ENTITY,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { codigo: task.code, horasEstimadas: task.estimate.hours ?? 0, faturamentoEstimado: task.estimate.billingBrl ?? 0 },
+        depois: { codigo: task.code, horasEstimadas: next.hours, faturamentoEstimado: next.billingBrl },
+    })
+    await publishTasksUpdated([id])
+    return toEstimateDto(estimate)
 }
 
 /** Mover a tarefa de coluna (e, opcionalmente, posição). */

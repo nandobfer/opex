@@ -10,7 +10,9 @@ aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
 
 Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
 e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
-real (H).
+real (H). Na **página da tarefa** as horas estimadas são **editáveis**; ao salvar, o servidor
+recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que originou a tarefa (o
+`OrcamentoClient` cujo `projectIds` inclui o repositório). Ver `modules/tasks.md`.
 
 ## Modelo (`src/lib/db/models/Orcamento.ts`)
 
