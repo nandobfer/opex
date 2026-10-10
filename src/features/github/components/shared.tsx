@@ -1,8 +1,9 @@
 "use client"
 
-import { Github } from "lucide-react"
+import { Github, Lock } from "lucide-react"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { cn } from "@/lib/utils"
+import type { GithubRepoLabelData } from "../types"
 
 /** Avatar do GitHub (imagem pública) com inicial como reserva. */
 export function GithubAvatar({ login, avatarUrl, className }: { login: string; avatarUrl?: string | null; className?: string }) {
@@ -30,6 +31,20 @@ export function GithubUserLabel({ login, name, avatarUrl }: { login: string; nam
 }
 
 export { FieldTrigger } from "@/components/ui/field-trigger"
+
+/** Item de repositório do GitHub (padrão único do app): avatar real (fallback inicial) + `owner/repo` + descrição + cadeado quando privado. */
+export function GithubRepoLabel({ repo }: { repo: GithubRepoLabelData }) {
+    return (
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+            <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} />
+            <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{repo.fullName}</span>
+                {repo.description && <span className="block truncate text-xs text-muted-foreground">{repo.description}</span>}
+            </span>
+            {repo.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Privado" />}
+        </span>
+    )
+}
 
 /** Link para abrir a issue no GitHub sem abrir o card/linha. Com `number`, mostra `#N` ao lado do ícone. */
 export function IssueLinkButton({ url, label, number, className }: { url: string; label: string; number?: number; className?: string }) {

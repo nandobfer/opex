@@ -12,9 +12,10 @@ import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_SORT_KEYS, TASK_SORT_LABELS
 import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type TaskFilters } from "../filters"
 import type { TaskDto, TaskOptionsDto } from "../types"
 import type { BoardColumnView } from "../board"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { activeTaskFilterChips } from "../filter-chips"
 import { ColumnBadge } from "./TaskBadges"
-import { RepoLabel } from "./RepoLabel"
 
 interface TaskFiltersBarProps {
     filters: TaskFilters
@@ -34,6 +35,7 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
 
     const repoOptions = useMemo(() => taskRepoOptions(options?.projects ?? [], tasks), [options, tasks])
     const projectById = useMemo(() => new Map(repoOptions.map((option) => [option.value, option.project])), [repoOptions])
+    const repoIndex = useRepoIndex()
 
     const chips = useMemo(() => {
         const ctx = {
@@ -109,7 +111,7 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
                     options={repoOptions.map((option) => ({ value: option.value, label: option.label }))}
                     renderLabel={(option) => {
                         const project = projectById.get(option.value)
-                        return project ? <RepoLabel project={project} /> : option.label
+                        return project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : option.label
                     }}
                     selected={filters.projects}
                     onSelect={set("projects")}

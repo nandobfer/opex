@@ -19,7 +19,8 @@ import type { BoardColumnView } from "../board"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "../constants"
 import { taskFormSchema, type TaskFormValues } from "../schemas"
 import type { ProjectRef, TaskDetailDto } from "../types"
-import { RepoLabel } from "./RepoLabel"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ColumnBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
 
 interface TaskFormProps {
@@ -81,22 +82,23 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
     const [description, projectId, columnId, taskType, priority] = useWatch({ control: form.control, name: ["description", "projectId", "columnId", "taskType", "priority"] })
     const project = useMemo(() => projects.find((item) => item.id === projectId) ?? null, [projects, projectId])
     const column = useMemo(() => columns.find((item) => item.key === columnId) ?? null, [columns, columnId])
+    const repoIndex = useRepoIndex()
 
     const repoField = (
         <Field id="task-repo" label="Repositório" error={errors.projectId?.message}>
             {mode === "edit" ? (
-                <FieldTrigger id="task-repo" placeholder="Repositório" disabled value={project ? <RepoLabel project={project} /> : undefined} />
+                <FieldTrigger id="task-repo" placeholder="Repositório" disabled value={project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : undefined} />
             ) : (
                 <Controller
                     control={form.control}
                     name="projectId"
                     render={({ field }) => (
                         <SearchPicker
-                            trigger={<FieldTrigger id="task-repo" placeholder="Escolha o repositório" invalid={Boolean(errors.projectId)} value={project ? <RepoLabel project={project} /> : undefined} />}
+                            trigger={<FieldTrigger id="task-repo" placeholder="Escolha o repositório" invalid={Boolean(errors.projectId)} value={project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : undefined} />}
                             items={projects}
                             getKey={(item) => item.id}
                             searchKeys={["repo", "name", "sigla"]}
-                            renderItem={(item) => <RepoLabel project={item} />}
+                            renderItem={(item) => <GithubRepoLabel repo={repoLabelOption(item.repo, repoIndex)} />}
                             onPick={(item) => field.onChange(item.id)}
                             matchTriggerWidth
                             searchLabel="Buscar repositório"
