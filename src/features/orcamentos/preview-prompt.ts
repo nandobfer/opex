@@ -16,6 +16,8 @@ export interface BudgetPreviewInput {
     description: string
     /** Texto de correção pedido pelo cliente (some quando não houver). */
     correction: string | null
+    /** Prévia atual, quando há correção: a IA deve ajustar só o que foi pedido. */
+    previousPreview?: DraftPreview | null
 }
 
 const MAX_DESCRIPTION = 20_000
@@ -33,20 +35,43 @@ export function buildBudgetPreviewInstructions(instructions: string): string {
         `- "taskType": um de ${TASK_TYPES.map((type) => `"${type}"`).join(", ")} ou null quando não for possível classificar;`,
         '- "priority": "urgent", "high", "medium" ou "low";',
         '- "technicalSpec": string em Markdown, a especificação técnica do que deve ser feito;',
-        '- "summary": string, um resumo de UMA linha (sem Markdown).',
+        '- "summary": string, um resumo de UMA linha (sem Markdown);',
+        '- "clarity": objeto com a avaliação de clareza da descrição do cliente, com exatamente estas chaves:',
+        '  - "acceptanceCriteria": { "status": "clear" | "vague" | "missing", "detail": string curta ou null } — quão explícitos estão os critérios de aceite (o que define a tarefa como concluída);',
+        '  - "location": { "status": "clear" | "vague" | "missing", "detail": string curta ou null } — quão explícita está a localização (página/tela, rota e parte da interface).',
+        'Use "clear" quando a descrição disser explicitamente, "vague" quando estiver implícito ou incompleto e "missing" quando a descrição não mencionar.',
+        'Na "technicalSpec", inclua sempre as seções "## Critérios de aceite" (o que define a tarefa como concluída) e "## Localização" (página/tela, rota e parte da interface), com o que a descrição permitir; não invente o que não estiver nela.',
     ].join("\n")
     return `${instructions.trim()}\n\n${contract}`
 }
 
+/** Prévia atual, quando há correção: a IA deve ajustar só o que foi pedido, sem refazer tudo. */
+function previousPreviewSection(preview: DraftPreview | null | undefined): string {
+    if (!preview) return ""
+    const lines = [
+        "## Prévia atual (mantenha o que não for pedido para mudar)",
+        `Título: ${preview.title}`,
+        `Tipo: ${preview.taskType ? TASK_TYPE_LABELS[preview.taskType] : "não classificado"}`,
+        `Prioridade: ${TASK_PRIORITY_LABELS[preview.priority]}`,
+        preview.summary ? `Resumo: ${preview.summary}` : "",
+        preview.technicalSpec ? `Especificação técnica:\n${clip(preview.technicalSpec, 12_000)}` : "",
+    ]
+    return lines.filter(Boolean).join("\n")
+}
+
 /** Prompt com a tarefa do cliente (fase 1 — prévia). */
 export function buildBudgetPreviewPrompt(input: BudgetPreviewInput): string {
+    const correcting = Boolean(input.correction && input.previousPreview)
     const parts = [
         "# Novo pedido do cliente",
         `Repositório: ${input.projectName}`,
         "## Descrição do cliente",
         clip(input.description),
         input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
-        "Interprete a descrição e gere a prévia da tarefa (título, tipo, prioridade, resumo e especificação técnica).",
+        previousPreviewSection(correcting ? input.previousPreview : null),
+        correcting
+            ? "Aplique SOMENTE o ajuste pedido sobre a prévia atual: mantenha inalterados título, tipo, prioridade, resumo, especificação e clareza no que não foi solicitado. Só substitua tudo se a correção pedir explicitamente para refazer ou reconsiderar a prévia inteira."
+            : "Interprete a descrição e gere a prévia da tarefa (título, tipo, prioridade, resumo e especificação técnica).",
     ]
     return parts.filter(Boolean).join("\n\n")
 }

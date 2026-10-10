@@ -11,9 +11,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { clientePortalPath } from "../constants"
+import { PREVIEW_CLARITY_DIMENSION_LABELS, selectPreviewClarity } from "../clarity"
 import { useApproveDraft, useClienteDraft, useSetCorrection } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
 import { selectReviewView, useBudgetReview } from "./useBudgetReview"
+import { ClarityCard } from "./components/preview/ClarityCard"
 import { CorrectionCard } from "./components/preview/CorrectionCard"
 import { EstimateCard } from "./components/preview/EstimateCard"
 import { PreviewSpecCard } from "./components/preview/PreviewSpecCard"
@@ -49,6 +51,10 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
     const preview = view.preview
     const estimate = view.estimate
     const isDraft = status === "draft"
+    // A clareza vive só na tela (o stream traz a avaliação; a prévia lida do banco não tem) —
+    // sem avaliação, cai em "aviso" (submissão liberada).
+    const clarity = selectPreviewClarity(preview?.clarity)
+    const missingDimensions = clarity.issues.filter((issue) => issue.status === "missing").map((issue) => PREVIEW_CLARITY_DIMENSION_LABELS[issue.dimension])
 
     useEffect(() => {
         if (startedRef.current) return
@@ -131,15 +137,20 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
                             </CardContent>
                         </Card>
                     ) : preview ? (
-                        <CorrectionCard
-                            value={text}
-                            onChange={setText}
-                            onCorrect={() => void requestCorrection()}
-                            onApprove={() => void approveDraft()}
-                            correcting={correction.isPending}
-                            approving={approve.isPending}
-                            disabled={state.generatingPreview || correction.isPending || approve.isPending}
-                        />
+                        <div className="space-y-4">
+                            <ClarityCard result={clarity} />
+                            <CorrectionCard
+                                value={text}
+                                onChange={setText}
+                                onCorrect={() => void requestCorrection()}
+                                onApprove={() => void approveDraft()}
+                                correcting={correction.isPending}
+                                approving={approve.isPending}
+                                disabled={state.generatingPreview || correction.isPending || approve.isPending}
+                                approveDisabled={!clarity.canApprove}
+                                approveDisabledReason={missingDimensions.length ? `Especifique ${missingDimensions.join(" e ")} para aprovar a tarefa.` : undefined}
+                            />
+                        </div>
                     ) : null}
                 </>
             )}

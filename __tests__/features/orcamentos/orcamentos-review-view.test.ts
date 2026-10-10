@@ -64,4 +64,16 @@ describe("selectReviewView (revisão da prévia)", () => {
         expect(view.running).toBe(false)
         expect(view.estimate).toEqual(newEstimate)
     })
+
+    it("mantém a clareza trazida pelo stream da prévia", () => {
+        const clarity = { acceptanceCriteria: { status: "clear" as const, detail: null }, location: { status: "missing" as const, detail: null } }
+        const streamPreview = { ...persisted.preview!, clarity }
+        const view = selectReviewView({ ...idle, preview: streamPreview, estimating: true }, persisted, false)
+        expect(view.preview?.clarity).toEqual(clarity)
+    })
+
+    it("sem clareza (prévia vinda do banco), o preview não traz a avaliação", () => {
+        const view = selectReviewView(idle, persisted, false)
+        expect(view.preview?.clarity).toBeUndefined()
+    })
 })

@@ -176,8 +176,12 @@ e opções na própria aba da página "Provedores de IA".
   variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
 - Gera **somente a prévia** da tarefa (1ª fase, `parseDraftPreview`): a IA interpreta a **descrição
   enviada pelo cliente** e devolve **JSON validado com Zod** — título, tipo, prioridade,
-  especificação técnica (Markdown) e resumo de 1 linha. Como não há saída estruturada garantida, o
-  JSON é extraído do texto e validado; inválido → evento `error`. Ver `modules/orcamentos.md`.
+  especificação técnica (Markdown) e resumo de 1 linha — mais a avaliação **transitória** de
+  **clareza** (`clarity`: `acceptanceCriteria` e `location`, estados `clear`/`vague`/`missing`), que
+  alimenta o card da revisão e **não** é persistida. A IA escreve as seções **"## Critérios de
+  aceite"** e **"## Localização"** na especificação técnica; na **correção**, o prompt inclui a
+  **prévia atual** e pede ajuste mínimo. Como não há saída estruturada garantida, o JSON é extraído
+  do texto e validado; inválido → evento `error`. Ver `modules/orcamentos.md`.
 
 ## Feature "Estimar prazos" (tarefas semelhantes; provedor configurável)
 

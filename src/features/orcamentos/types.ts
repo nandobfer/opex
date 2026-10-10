@@ -1,6 +1,7 @@
 import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
 import type { ProjectRef, TaskComment, TaskDto } from "@/features/tasks/types"
+import type { PreviewClarityDto } from "./clarity"
 
 /**
  * Repositório do cliente no portal: o projeto (`ProjectRef`) mais os dados do GitHub que o
@@ -45,6 +46,11 @@ export interface DraftPreviewDto {
     summary: string
     /** Tags (ids da taxonomia) geradas pela feature "Tags de tarefas". */
     tags: string[]
+    /**
+     * Avaliação de clareza da IA (transitória): presente só no stream da geração; ausente/`null`
+     * quando a prévia é lida do rascunho, pois **não** é persistida.
+     */
+    clarity?: PreviewClarityDto | null
 }
 
 /** Tag da taxonomia já resolvida para exibição (id + rótulo). */
