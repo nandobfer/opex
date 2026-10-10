@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { endOfDay, parseISO, startOfDay } from "date-fns"
 import { Clock, Loader2, RefreshCw } from "lucide-react"
@@ -16,17 +16,18 @@ import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { formatMinutes } from "@/features/tasks/format"
 import { formatCostUsd } from "../format"
-import { groupTimeLogsByDay } from "../grouping"
+import { groupTimeLogsByDay, groupTimeLogsByTask } from "../grouping"
 import { useTimeLogs } from "../hooks/useTime"
-import { TimeLogItem } from "./TimeLogItem"
+import { TimeLogTaskGroup } from "./TimeLogTaskGroup"
 import { TimerIndicator } from "./TimerIndicator"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 const RANGE_SCHEMA = { from: urlFilterCodecs.string(), to: urlFilterCodecs.string() }
 
 /**
- * Horas agênticas (`/tarefas/horas`): apontamentos das mesas por período (na URL), agrupados por
- * dia. **Somente leitura** — o timer é controlado pela mesa de trabalho; aqui só se consulta.
+ * Horas agênticas (`/tarefas/horas`): apontamentos das mesas por período (na URL), agrupados por dia
+ * e, dentro de cada dia, por task/mesa (grupos expansíveis, recolhidos por padrão). **Somente leitura**
+ * — o timer é controlado pela mesa de trabalho; aqui só se consulta.
  */
 export function TimeLogsPage() {
     const reduceMotion = useReducedMotion()
@@ -47,6 +48,18 @@ export function TimeLogsPage() {
     const pages = useMemo(() => logsQuery.data?.pages ?? [], [logsQuery.data])
     const logs = useMemo(() => pages.flatMap((page) => page.logs), [pages])
     const days = useMemo(() => groupTimeLogsByDay(logs), [logs])
+    const dayGroups = useMemo(() => days.map((day) => ({ day, groups: groupTimeLogsByTask(day.logs) })), [days])
+
+    // Grupos (`dia:task`) abertos manualmente. Começam recolhidos; os que têm período ativo ficam
+    // sempre abertos — a abertura é derivada, sem estado sincronizado em efeito.
+    const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+    const toggleGroup = (key: string) =>
+        setOpenGroups((current) => {
+            const next = new Set(current)
+            if (next.has(key)) next.delete(key)
+            else next.add(key)
+            return next
+        })
     const totalMinutes = pages[0]?.totalMinutes ?? 0
     const totalCostUsd = pages[0]?.totalCostUsd ?? 0
     const total = pages[0]?.total ?? 0
@@ -111,7 +124,7 @@ export function TimeLogsPage() {
                     {view === "empty" && <EmptyState icon={Clock} title="Nenhum apontamento neste período" description="Abra uma mesa de trabalho para o tempo começar a ser registrado." />}
                     {view === "list" && (
                         <div className="space-y-6">
-                            {days.map((day) => (
+                            {dayGroups.map(({ day, groups }) => (
                                 <section key={day.key} aria-label={day.label} className="space-y-2">
                                     <div className="flex items-center justify-between px-1">
                                         <h2 className="text-sm font-semibold">{day.label}</h2>
@@ -119,13 +132,23 @@ export function TimeLogsPage() {
                                             Total: <strong className="font-mono text-foreground">{formatMinutes(day.totalMinutes)}</strong>
                                         </span>
                                     </div>
-                                    <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-2">
+                                    <motion.div variants={listContainer} initial="hidden" animate="visible" className="space-y-2">
                                         <AnimatePresence initial={false}>
-                                            {day.logs.map((log) => (
-                                                <TimeLogItem key={log.id} log={log} />
-                                            ))}
+                                            {groups.map((group) => {
+                                                const key = `${day.key}:${group.key}`
+                                                return (
+                                                    <TimeLogTaskGroup
+                                                        key={key}
+                                                        group={group}
+                                                        open={group.hasActive || openGroups.has(key)}
+                                                        onToggle={() => {
+                                                            if (!group.hasActive) toggleGroup(key)
+                                                        }}
+                                                    />
+                                                )
+                                            })}
                                         </AnimatePresence>
-                                    </motion.ul>
+                                    </motion.div>
                                 </section>
                             ))}
                             {logsQuery.hasNextPage && (
