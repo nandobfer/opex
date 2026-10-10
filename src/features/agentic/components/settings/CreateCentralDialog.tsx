@@ -14,8 +14,9 @@ import { SearchPicker } from "@/components/ui/search-picker"
 import { apiErrorMessage } from "@/lib/api"
 import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
 import type { NamedRef } from "@/features/tasks/types"
-import { centralSettingsPath } from "../../constants"
+import { centralSettingsPath, AGENTIC_CODE_ROOT } from "../../constants"
 import { useCreateCentral } from "../../hooks/useAgentic"
+import { defaultSessionDirectory } from "../../logic"
 import { createCentralSchema, type CreateCentralInput } from "../../schemas"
 import type { CentralDto } from "../../types"
 
@@ -77,6 +78,7 @@ export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCent
                             onPick={(item) => {
                                 form.setValue("projectId", item.id, { shouldDirty: true, shouldValidate: true })
                                 form.setValue("projectName", item.name, { shouldDirty: true, shouldValidate: true })
+                                form.setValue("sessionDirectory", defaultSessionDirectory(AGENTIC_CODE_ROOT, item.name), { shouldDirty: true, shouldValidate: true })
                             }}
                             loading={options.isLoading}
                             matchTriggerWidth
@@ -91,7 +93,7 @@ export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCent
                     <Field id="central-directory" label="Diretório das sessões" error={errors.sessionDirectory?.message}>
                         <Input id="central-directory" placeholder="/home/usuario/code/meu-projeto" className="font-mono" {...form.register("sessionDirectory")} aria-invalid={errors.sessionDirectory ? true : undefined} />
                     </Field>
-                    <p className="-mt-3 text-xs text-muted-foreground">Raiz do repositório (com git e docker compose) onde o planejamento acontece; os worktrees ficam numa pasta irmã.</p>
+                    <p className="-mt-3 text-xs text-muted-foreground">Raiz do repositório (com git e docker compose) onde o planejamento acontece; os worktrees ficam em &lt;diretório&gt;/worktrees.</p>
 
                     <DialogFooter>
                         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={create.isPending}>

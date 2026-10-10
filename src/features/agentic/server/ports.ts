@@ -1,12 +1,11 @@
 import { Socket } from "net"
 import { DomainError } from "@/lib/api/route"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
-import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../constants"
 import { pickPreviewPort } from "../logic"
 
 /**
- * Portas das prévias (4001–4098): reservadas no banco (índice único em `port`) e conferidas no
- * host — uma porta ocupada por outro processo é pulada.
+ * Portas das prévias: faixa configurada na central (padrão 4001–4098), reservadas no banco
+ * (índice único em `port`) e conferidas no host — uma porta ocupada por outro processo é pulada.
  */
 
 /** Algo responde nessa porta? (conexão TCP com tempo curto). */
@@ -26,13 +25,13 @@ export function isPortInUse(host: string, port: number, timeoutMs = 800): Promis
 }
 
 /** Reserva a porta da mesa (mantém a atual, se já tiver uma). */
-export async function allocatePreviewPort(workbenchId: string, host: string, check: (host: string, port: number) => Promise<boolean> = isPortInUse): Promise<number> {
+export async function allocatePreviewPort(workbenchId: string, host: string, range: { min: number; max: number }, check: (host: string, port: number) => Promise<boolean> = isPortInUse): Promise<number> {
     const current = await AgenticWorkbench.findById(workbenchId).select({ port: 1 }).lean()
     if (typeof current?.port === "number") return current.port
     const skipped = new Set<number>()
-    for (let attempt = 0; attempt <= PREVIEW_PORT_MAX - PREVIEW_PORT_MIN; attempt++) {
+    for (let attempt = 0; attempt <= range.max - range.min; attempt++) {
         const reserved = await AgenticWorkbench.find({ port: { $ne: null } }).select({ port: 1 }).lean()
-        const port = pickPreviewPort([...reserved.map((item) => item.port as number), ...skipped])
+        const port = pickPreviewPort([...reserved.map((item) => item.port as number), ...skipped], range.min, range.max)
         if (port === null) break
         if (await check(host, port)) {
             skipped.add(port)
@@ -48,7 +47,7 @@ export async function allocatePreviewPort(workbenchId: string, host: string, che
             skipped.add(port)
         }
     }
-    throw new DomainError(409, `Nenhuma porta livre entre ${PREVIEW_PORT_MIN} e ${PREVIEW_PORT_MAX}: conclua ou exclua mesas antigas`, "NO_FREE_PORT")
+    throw new DomainError(409, `Nenhuma porta livre entre ${range.min} e ${range.max}: conclua ou exclua mesas antigas`, "NO_FREE_PORT")
 }
 
 export async function releasePreviewPort(workbenchId: string): Promise<void> {

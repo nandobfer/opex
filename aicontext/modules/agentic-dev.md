@@ -19,7 +19,8 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - Card **Centrais de desenvolvimento**: lista (projeto, diretório, repositório, mesas, bolinha do
   último teste) e **Nova central** (projeto — repositório vinculado, um por central — e diretório das
-  sessões, caminho absoluto). Criar leva às configurações da central.
+  sessões, caminho absoluto, já sugerido como `<raiz dos repositórios>/<repositório>`). Criar leva às
+  configurações da central.
 
 ### Central (`/integracoes/ia/centrais/[id]`, `agentic_centrals`)
 
@@ -28,10 +29,10 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 | Aba | Campos |
 |---|---|
-| Geral | ativa, diretório das sessões, pasta dos worktrees (vazio = `<diretório>-worktrees`), mesas executando ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
+| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas executando ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
-| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
+| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
 | Colunas e conclusão | coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; timers (iniciar ao abrir, parar ao concluir); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
@@ -94,8 +95,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
   sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
-- **Build**: emenda automática após a implementação. Porta reservada no banco (índice único) entre
-  **4001 e 4098** pulando portas ocupadas no host (`allocatePreviewPort`); a IA roda
+- **Build**: emenda automática após a implementação. Porta reservada no banco (índice único) na
+  faixa configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
+  (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
   (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia**,

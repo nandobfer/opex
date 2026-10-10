@@ -22,7 +22,7 @@ const ctx: WorkbenchContext = {
   productName: 'Portal',
   repo: 'org/app',
   sessionDirectory: '/home/u/app',
-  worktreePath: '/home/u/app-worktrees/go-dev-12',
+  worktreePath: '/home/u/app/worktrees/go-dev-12',
   branch: 'feat/go-dev-12-exportar-relatorio',
   composeProject: 'portal-go-dev-12',
 }
@@ -34,7 +34,7 @@ describe('nomes derivados da tarefa', () => {
 
   it('branch, worktree e projeto do compose seguem a central', () => {
     expect(branchNameFor(config, { code: 'GO-DEV-12', title: 'Exportar relatório' })).toBe('feat/go-dev-12-exportar-relatorio')
-    expect(worktreePathFor(config, 'GO-DEV-12')).toBe('/home/u/app-worktrees/go-dev-12')
+    expect(worktreePathFor(config, 'GO-DEV-12')).toBe('/home/u/app/worktrees/go-dev-12')
     expect(worktreePathFor({ ...config, worktreeRoot: '/wt' }, 'GO-DEV-12')).toBe('/wt/go-dev-12')
     expect(composeProjectFor('Portal Sipal', 'GO-DEV-12')).toBe('portal-sipal-go-dev-12')
   })
@@ -43,7 +43,7 @@ describe('nomes derivados da tarefa', () => {
 describe('mensagens das etapas', () => {
   it('implementação manda criar o worktree e mover a sessão', () => {
     const text = implementPrompt(config, ctx, 2)
-    expect(text).toContain('git worktree add -b feat/go-dev-12-exportar-relatorio /home/u/app-worktrees/go-dev-12 origin/main')
+    expect(text).toContain('git worktree add -b feat/go-dev-12-exportar-relatorio /home/u/app/worktrees/go-dev-12 origin/main')
     expect(text).toContain('session_move')
     expect(text).toContain('versão 2')
   })

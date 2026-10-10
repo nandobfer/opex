@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -23,6 +23,12 @@ describe('pickPreviewPort', () => {
 
   it('faixa esgotada devolve null (nunca sai da faixa)', () => {
     expect(pickPreviewPort(Array.from({ length: 98 }, (_, index) => 4001 + index))).toBeNull()
+  })
+
+  it('respeita a faixa configurada na central', () => {
+    expect(pickPreviewPort([], 5000, 5002)).toBe(5000)
+    expect(pickPreviewPort([5000, 5001], 5000, 5002)).toBe(5002)
+    expect(pickPreviewPort([5000, 5001, 5002], 5000, 5002)).toBeNull()
   })
 })
 
@@ -49,5 +55,34 @@ describe('parseCentralConfig', () => {
     expect(parsed.git.baseBranch).toBe('dev')
     expect(parsed.git.prTargetBranch).toBe('main')
     expect(parsed.cleanup).toEqual({ teardownEnvironment: true, removeWorktree: true, deleteBranch: true })
+  })
+
+  it('preenche a pasta dos worktrees e a faixa de portas quando ausentes', () => {
+    const parsed = parseCentralConfig({ sessionDirectory: '/repo' })
+    expect(parsed.worktreeRoot).toBe('/repo/worktrees')
+    expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
+  })
+
+  it('respeita a pasta dos worktrees e a faixa de portas salvas', () => {
+    const parsed = parseCentralConfig({ sessionDirectory: '/repo', worktreeRoot: '/wt', environment: { previewPortMin: 5000, previewPortMax: 5010 } })
+    expect(parsed.worktreeRoot).toBe('/wt')
+    expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([5000, 5010])
+  })
+
+  it('faixa inválida (final antes da inicial) cai nos padrões', () => {
+    const parsed = parseCentralConfig({ sessionDirectory: '/repo', environment: { previewPortMin: 5000, previewPortMax: 4000 } })
+    expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
+  })
+})
+
+describe('padrões da central', () => {
+  it('worktreeRoot nasce como <diretório das sessões>/worktrees', () => {
+    expect(defaultCentralConfig('/home/u/app').worktreeRoot).toBe('/home/u/app/worktrees')
+    expect(defaultCentralConfig('/').worktreeRoot).toBe('')
+  })
+
+  it('defaultSessionDirectory monta <raiz>/<repositório>', () => {
+    expect(defaultSessionDirectory('/home/burgos/code', 'opex')).toBe('/home/burgos/code/opex')
+    expect(defaultSessionDirectory('/home/burgos/code/', 'opex')).toBe('/home/burgos/code/opex')
   })
 })

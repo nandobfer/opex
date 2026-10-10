@@ -40,7 +40,7 @@ export function branchNameFor(config: CentralConfig, task: { code: string; title
 }
 
 export function worktreePathFor(config: CentralConfig, code: string): string {
-    const root = config.worktreeRoot || `${config.sessionDirectory}-worktrees`
+    const root = config.worktreeRoot || `${config.sessionDirectory}/worktrees`
     return `${root}/${code.toLowerCase()}`
 }
 

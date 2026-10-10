@@ -66,9 +66,12 @@ export const WORKBENCH_STEPS = [
 export const RUN_STATES = ["idle", "running", "failed", "interrupted"] as const
 export type RunState = (typeof RUN_STATES)[number]
 
-/** Faixa de portas das prévias (docker compose). */
+/** Faixa padrão de portas das prévias (docker compose); cada central pode configurar a sua. */
 export const PREVIEW_PORT_MIN = 4001
 export const PREVIEW_PORT_MAX = 4098
+
+/** Raiz dos repositórios na máquina (usada para sugerir o diretório das sessões ao criar uma central). */
+export const AGENTIC_CODE_ROOT = "/home/burgos/code"
 
 export const AGENTIC_AUDIT_CENTRAL = "CentralDesenvolvimento"
 export const AGENTIC_AUDIT_WORKBENCH = "MesaDeTrabalho"

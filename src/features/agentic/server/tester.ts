@@ -67,7 +67,7 @@ export async function testCentral(id: string): Promise<CentralTestOutcome> {
             const found = firstLine(compose)
             add({ label: "Arquivo do compose", status: compose.exitCode === 0 && found ? "ok" : "error", detail: found ? found : file ? `${file} não encontrado` : "nenhum compose.yaml/docker-compose.yml na raiz" })
 
-            const root = config.worktreeRoot || `${dir}-worktrees`
+            const root = config.worktreeRoot || `${dir}/worktrees`
             const writable = await run(`mkdir -p ${shellQuote(root)} && test -w ${shellQuote(root)}`)
             add({ label: "Pasta dos worktrees", status: writable.exitCode === 0 ? "ok" : "error", detail: writable.exitCode === 0 ? root : `sem permissão de escrita em ${root}` })
         }

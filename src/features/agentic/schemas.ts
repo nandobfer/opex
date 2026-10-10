@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, type AgentRole } from "./constants"
+import { AGENT_ROLES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
 
 /** Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa. */
 export const agentConfigSchema = z.object({
@@ -48,7 +48,7 @@ const nameList = z.array(z.string().trim().min(1).max(100)).max(20)
 export const centralConfigSchema = z.object({
     enabled: z.boolean(),
     sessionDirectory: absolutePath,
-    /** Vazio: pasta irmã `<diretório>-worktrees`. */
+    /** Vazio usa `<diretório das sessões>/worktrees`. */
     worktreeRoot: z.union([absolutePath, z.literal("")]),
     maxConcurrent: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1, "Mínimo 1").max(10, "Máximo 10"),
     /** Etapa sem override (`null`) usa o agente padrão da aba. */
@@ -71,6 +71,9 @@ export const centralConfigSchema = z.object({
         previewHost: z.string().trim().min(1, "Informe o endereço").max(200).regex(/^[A-Za-z0-9.-]+$/, "Informe só o host (ex.: localhost ou 192.168.0.64)"),
         healthPath: z.string().trim().max(200).regex(/^(\/.*)?$/, "Comece com /"),
         buildTimeoutMinutes: z.number({ error: "Informe um número" }).int().min(2, "Mínimo 2").max(120, "Máximo 120"),
+        /** Faixa de portas reservadas às prévias das mesas (min/max inclusive). */
+        previewPortMin: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
+        previewPortMax: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
     }),
     columns: z.object({
         /** Coluna de destino ao abrir a mesa (implementação); `null` = não move. */
@@ -91,6 +94,10 @@ export const centralConfigSchema = z.object({
     }),
     include: z.object({ comments: z.boolean(), history: z.boolean() }),
     instructions: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, optionalText(4000)])) as Record<AgentRole, ReturnType<typeof optionalText>>),
+}).superRefine((value, ctx) => {
+    if (value.environment.previewPortMin > value.environment.previewPortMax) {
+        ctx.addIssue({ code: "custom", path: ["environment", "previewPortMax"], message: "A porta final deve ser maior ou igual à inicial" })
+    }
 })
 export type CentralConfig = z.infer<typeof centralConfigSchema>
 export type CentralConfigInput = z.input<typeof centralConfigSchema>
@@ -99,7 +106,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
     return {
         enabled: true,
         sessionDirectory,
-        worktreeRoot: "",
+        worktreeRoot: sessionDirectory === "/" ? "" : `${sessionDirectory.replace(/\/+$/, "")}/worktrees`,
         maxConcurrent: 2,
         agents: { planning: null, implementation: null, build: null, pr: null },
         git: {
@@ -114,7 +121,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20 },
+        environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         columns: { onStart: null, onPr: null, onDone: null },
         timers: { start: true, stopOnDone: true },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },

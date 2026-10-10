@@ -20,11 +20,13 @@ export function resolveAgent(settings: AgenticSettings, central: Pick<CentralCon
 
 /** Configuração salva → validada; campos ausentes (versões antigas) caem nos padrões. */
 export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): CentralConfig {
-    const base = defaultCentralConfig(sessionDirectory)
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<CentralConfig>) : {}
+    const directory = typeof value.sessionDirectory === "string" && value.sessionDirectory.trim() ? value.sessionDirectory : sessionDirectory
+    const base = defaultCentralConfig(directory)
     const merged = {
         ...base,
         ...value,
+        worktreeRoot: value.worktreeRoot?.trim() ? value.worktreeRoot : base.worktreeRoot,
         agents: { ...base.agents, ...value.agents },
         git: { ...base.git, ...value.git },
         environment: { ...base.environment, ...value.environment },
@@ -38,14 +40,17 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
     return parsed.success ? parsed.data : base
 }
 
-/** Menor porta livre da faixa 4001–4098 (`null` = faixa esgotada). */
-export function pickPreviewPort(used: Iterable<number>): number | null {
-    const taken = new Set(used)
-    for (let port = PREVIEW_PORT_MIN; port <= PREVIEW_PORT_MAX; port++) if (!taken.has(port)) return port
-    return null
+/** Diretório das sessões sugerido para um projeto (repositório): `<raiz>/<nome-do-repositório>`. */
+export function defaultSessionDirectory(codeRoot: string, projectName: string): string {
+    return `${codeRoot.replace(/\/+$/, "")}/${projectName.trim()}`
 }
 
-export const isPreviewPort = (port: number) => Number.isInteger(port) && port >= PREVIEW_PORT_MIN && port <= PREVIEW_PORT_MAX
+/** Menor porta livre da faixa (`null` = faixa esgotada). */
+export function pickPreviewPort(used: Iterable<number>, min = PREVIEW_PORT_MIN, max = PREVIEW_PORT_MAX): number | null {
+    const taken = new Set(used)
+    for (let port = min; port <= max; port++) if (!taken.has(port)) return port
+    return null
+}
 
 export type WorkbenchAction =
     | "revise-plan"

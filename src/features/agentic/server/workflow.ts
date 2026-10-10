@@ -296,7 +296,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            const port = await allocatePreviewPort(id, config.environment.previewHost)
+            const port = await allocatePreviewPort(id, config.environment.previewHost, { min: config.environment.previewPortMin, max: config.environment.previewPortMax })
             notice("info", `Porta reservada para a prévia: ${port}`)
             return { stage: "building", text: buildPrompt(config, ctx, port) }
         }
