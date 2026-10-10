@@ -139,7 +139,12 @@ export type CreateCentralInput = z.infer<typeof createCentralSchema>
 export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar").max(8000, "Até 8.000 caracteres") })
 export type FeedbackInput = z.infer<typeof feedbackSchema>
 
-export const startWorkbenchSchema = z.object({ centralId: z.string().regex(/^[a-f0-9]{24}$/i), taskId: z.string().regex(/^[a-f0-9]{24}$/i) })
+export const startWorkbenchSchema = z.object({
+    centralId: z.string().regex(/^[a-f0-9]{24}$/i),
+    taskId: z.string().regex(/^[a-f0-9]{24}$/i),
+    /** Informações adicionais opcionais digitadas ao abrir a mesa; vão no primeiro prompt do planejador. */
+    text: z.string().trim().max(8000, "Até 8.000 caracteres").optional(),
+})
 
 export const permissionReplySchema = z.object({
     decision: z.enum(["once", "always", "reject"]),

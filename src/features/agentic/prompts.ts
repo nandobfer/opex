@@ -55,8 +55,9 @@ function extra(config: CentralConfig, role: AgentRole): string {
 
 const JSON_RULE = "Termine a resposta com um bloco ```json``` contendo SOMENTE o objeto pedido (sem comentários)."
 
-export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMarkdown: string): string {
-    return [
+export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMarkdown: string, additionalInfo: string | null = null): string {
+    const info = (additionalInfo ?? "").trim()
+    const parts = [
         `Você é o agente de PLANEJAMENTO de uma mesa de trabalho dO Opex para a tarefa ${ctx.code} do projeto ${ctx.projectName}.`,
         `O repositório está no diretório atual (${ctx.sessionDirectory}). Leia o código e as instruções do projeto (AGENTS.md, README, docs) antes de planejar.`,
         "NÃO altere arquivos, NÃO crie branches e NÃO execute comandos que modifiquem o repositório nesta etapa.",
@@ -66,7 +67,9 @@ export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMar
         "",
         "---",
         taskMarkdown,
-    ].join("\n") + extra(config, "planning")
+    ]
+    if (info) parts.push("", "## Informações adicionais", info)
+    return parts.join("\n") + extra(config, "planning")
 }
 
 export function revisePlanPrompt(config: CentralConfig, feedback: string): string {
