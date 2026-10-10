@@ -6,7 +6,7 @@ import { ApiToken } from "@/lib/db/models/ApiToken"
 import { dbConnect } from "@/lib/db"
 import { getRawPusherServer } from "@/lib/pusher/server"
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
-import { testAiHub, testGemini, testOpencode } from "@/features/ai/server/testers"
+import { testAiHub, testGemini, testJev, testOpencode } from "@/features/ai/server/testers"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -143,4 +143,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     ai: testAiHub,
     ai_opencode: testOpencode,
     ai_gemini: testGemini,
+    ai_jev: testJev,
 }

@@ -75,9 +75,9 @@ describe('listIntegrations', () => {
   it('lista todas as integrações do catálogo, sem flags de permissão', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(null)
     const items = await listIntegrations()
-    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini'])
+    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_jev'])
     // Provedores de IA são filhos do hub "Provedores de IA" (fora da lista principal na tela).
-    expect(items.filter((item) => item.parent === 'ai').map((item) => item.id)).toEqual(['ai_opencode', 'ai_gemini'])
+    expect(items.filter((item) => item.parent === 'ai').map((item) => item.id)).toEqual(['ai_opencode', 'ai_gemini', 'ai_jev'])
     expect(items.find((item) => item.id === 'ai_gemini')?.configured).toBe(false)
     for (const item of items) {
       expect(item).not.toHaveProperty('canEdit')

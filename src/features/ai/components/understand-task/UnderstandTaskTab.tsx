@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import { isAiTextProviderId, type AiProviderId } from "@/lib/ai/providers"
 import { DEFAULT_UNDERSTAND_TASK_SETTINGS, understandTaskSettingsSchema, type UnderstandTaskSettings } from "../../schemas"
 import { useAiProviderStatuses, useSaveUnderstandTaskSettings, useUnderstandTaskSettings } from "../../hooks/useAi"
 import { IncludeCard } from "./IncludeCard"
@@ -44,8 +45,8 @@ export function UnderstandTaskTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         const saved = await save.mutateAsync(values).catch(() => null)
         if (saved) form.reset(saved.settings)
     })
-    const changeProvider = (next: UnderstandTaskSettings["provider"]) => {
-        if (next === provider) return
+    const changeProvider = (next: AiProviderId) => {
+        if (next === provider || !isAiTextProviderId(next)) return
         form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
         form.setValue("model", null, { shouldDirty: true, shouldValidate: true })
         form.setValue("variant", null, { shouldDirty: true })

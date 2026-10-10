@@ -2,7 +2,7 @@
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
  * Integrações ativas: Pusher, API interna, Crons, GitHub e Provedores de IA (hub `ai`
- * com os provedores `ai_opencode` e `ai_gemini`, que só aparecem dentro do hub).
+ * com os provedores `ai_opencode`, `ai_gemini` e `ai_jev`, que só aparecem dentro do hub).
  * `archflow` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
  * Fonte única dos metadados: nome, descrição, ambiente padrão e campos. É módulo PURO (sem
@@ -17,7 +17,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -465,6 +465,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         publicFields: [],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Google AI Studio (aistudio.google.com/apikey)", required: true }],
     },
+    {
+        id: "ai_jev",
+        name: "JEV",
+        description: "Modelo TypeSafe (JEV) de decisão estruturada, não de geração de texto",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da TypeSafe (console.typesafe.ai/keys)", required: true }],
+    },
 ]
 
 const BY_ID = new Map<string, IntegrationDef>(INTEGRATIONS.map((def) => [def.id, def]))
@@ -490,6 +500,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai: `${INTEGRATIONS_BASE_PATH}/ia`,
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,
+    ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
 }
 
 export function integrationPath(id: IntegrationId): string {

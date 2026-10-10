@@ -92,13 +92,13 @@ export function previewCorrectionPrompt(config: CentralConfig, feedback: string)
     ].join("\n") + extra(config, "planning")
 }
 
-export function prChangesPrompt(config: CentralConfig, prUrl: string, reviews: string): string {
+export function prChangesPrompt(config: CentralConfig, prUrl: string, feedback: string): string {
     return [
-        `A revisão do Pull Request (${prUrl}) pediu mudanças. Volte ao PLANEJAMENTO: analise os comentários abaixo e responda com o plano COMPLETO atualizado para atendê-los.`,
+        `Um comentário ou revisão do Pull Request (${prUrl}) pediu mudanças. Volte ao PLANEJAMENTO: analise os comentários abaixo e responda com o plano COMPLETO atualizado para atendê-los.`,
         "Não altere arquivos nesta etapa.",
         "",
-        "## Comentários da revisão",
-        reviews,
+        "## Comentários do PR",
+        feedback,
     ].join("\n") + extra(config, "planning")
 }
 
@@ -205,15 +205,15 @@ export function extractPrUrl(text: string): { url: string; number: number } | nu
     return last ? { url: last[0], number: Number(last[1]) } : null
 }
 
-/** Revisões que pediram mudanças → texto para o planejador (vazio = sem comentário com o motivo). */
-export function formatReviewFeedback(reviews: { author: string | null; body: string; comments: { path: string | null; line: number | null; body: string }[] }[]): string {
-    return reviews
-        .map((review) => {
+/** Pedidos de mudança do PR (comentários e revisões) → texto para o planejador (vazio = sem texto com o motivo). */
+export function formatPrFeedback(sections: { author: string | null; body: string; comments: { path: string | null; line: number | null; body: string }[] }[]): string {
+    return sections
+        .map((section) => {
             const lines = [
-                review.body.trim() ? review.body.trim() : "",
-                ...review.comments.filter((comment) => comment.body.trim()).map((comment) => `- ${comment.path ? `\`${comment.path}${comment.line ? `:${comment.line}` : ""}\`: ` : ""}${comment.body.trim()}`),
+                section.body.trim() ? section.body.trim() : "",
+                ...section.comments.filter((comment) => comment.body.trim()).map((comment) => `- ${comment.path ? `\`${comment.path}${comment.line ? `:${comment.line}` : ""}\`: ` : ""}${comment.body.trim()}`),
             ].filter(Boolean)
-            return lines.length ? `### ${review.author ? `@${review.author}` : "Revisor"}\n${lines.join("\n")}` : ""
+            return lines.length ? `### ${section.author ? `@${section.author}` : "Revisor"}\n${lines.join("\n")}` : ""
         })
         .filter(Boolean)
         .join("\n\n")

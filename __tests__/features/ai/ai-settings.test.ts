@@ -56,6 +56,12 @@ describe('schema de "Entender tarefas"', () => {
   it('temperatura fora de 0 a 2 é recusada', () => {
     expect(understandTaskSettingsSchema.safeParse(settings({ provider: 'gemini', temperature: 3 })).success).toBe(false)
   })
+
+  it('recusa o JEV: provedor sem geração de texto não é oferecido às features de texto', () => {
+    const result = understandTaskSettingsSchema.safeParse({ ...settings(), provider: 'jev' })
+    expect(result.success).toBe(false)
+    expect(result.error?.issues.some((issue) => issue.path[0] === 'provider')).toBe(true)
+  })
 })
 
 describe('configuração e disponibilidade', () => {

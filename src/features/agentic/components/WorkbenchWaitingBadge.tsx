@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 /**
  * Warning do item da lista de mesas da Central de desenvolvimento: a mesa está **parada aguardando
- * o usuário** (revisão do plano, aprovação da prévia, revisão/merge do PR, permissão ou pergunta
+ * o usuário** (revisão do plano, aprovação da prévia, comentário/revisão/merge do PR, permissão ou pergunta
  * pendente, falha/interrupção). O motivo vai no `title` e no rótulo acessível.
  */
 export function WorkbenchWaitingBadge({ reason, className }: { reason: string; className?: string }) {

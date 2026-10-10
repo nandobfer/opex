@@ -76,6 +76,6 @@ describe('ActionBar', () => {
 
   it('PR com mudanças sem motivo já abre o campo de texto', () => {
     render(<ActionBar workbench={workbench({ stage: 'changes_requested' })} />)
-    expect(screen.getByLabelText('O que a revisão do PR pediu?')).toBeTruthy()
+    expect(screen.getByLabelText('O que o PR pediu?')).toBeTruthy()
   })
 })
