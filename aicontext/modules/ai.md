@@ -51,7 +51,9 @@ e opções na própria aba da página "Provedores de IA".
 - **Exceção — sessões longas**: o desenvolvimento agêntico usa o cliente oficial `@opencode/client`
   (`src/lib/ai/opencode-client.ts` + eventos normalizados em `opencode-events.ts`) porque precisa
   retomar a mesma sessão, trocar agente/modelo entre etapas, responder permissões e perguntas,
-  interromper e executar comandos de verificação. Ver `modules/agentic-dev.md`.
+  interromper e executar comandos de verificação. Ver `modules/agentic-dev.md`. O **refinamento de
+  tarefas** (`modules/refinement.md`) usa o mesmo cliente e o mesmo **runner genérico de turno**
+  (`src/lib/ai/opencode-run.ts`, compartilhado com a mesa).
 
 ## Página `/integracoes/ia`
 
@@ -62,8 +64,8 @@ e opções na própria aba da página "Provedores de IA".
   desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
-  **Orçamentos** e **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em
-  `/integracoes/ia/centrais/[id]`).
+  **Orçamentos**, **Estimar prazos**, **Refinar tarefa** e **Desenvolvimento agêntico**
+  (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
   (estado local, não vão à URL).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
@@ -159,6 +161,23 @@ e opções na própria aba da página "Provedores de IA".
   (`tool`) são retransmitidos ao navegador pela `streamAi`. O cálculo exibido ao cliente
   (`H × fator × custo/hora`) é do servidor.
 
+## Feature "Refinar tarefa" (agente do OpenCode que conduz perguntas)
+
+- Configuração em `ai_feature_settings` (`feature: "task-refinement"`), schema Zod
+  `taskRefinementSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante, instruções
+  ("Restaurar padrão") e o que enviar (comentários, histórico). É **exclusiva do OpenCode** (depende
+  da sessão longa e do sistema de perguntas), como "Estimar prazos". Ativar exige modelo; modelo,
+  variante e agente são conferidos no catálogo do OpenCode.
+- A aba mostra um card **Diretório da sessão**: as sessões são criadas no diretório da **central de
+  desenvolvimento do projeto da tarefa** (Integrações › Provedores de IA › Desenvolvimento agêntico),
+  nunca no diretório da integração OpenCode; lista as centrais com seus diretórios.
+- Regras ao salvar iguais às demais features. Auditoria `FeatureIA` e evento `ai-feature-updated`.
+- **Entrada** (`src/features/refinement/prompt.ts`, puro): a tarefa inteira em Markdown
+  (`buildUnderstandTaskPrompt`) + um **protocolo fixo** acrescentado às instruções que garante que a
+  especificação cubra **critérios de aceite**, **localização da mudança** (rotas/URLs, telas,
+  módulos, integrações, arquivos) e **casos de borda**, e que o agente reescreva a especificação a
+  cada rodada sob o título exato `## Especificação técnica`. Ver `modules/refinement.md`.
+
 ## APIs
 
 | Rota | Descrição |
@@ -169,6 +188,7 @@ e opções na própria aba da página "Provedores de IA".
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
+| `GET/PUT /api/ai/features/task-refinement` | Configuração de "Refinar tarefa" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 
@@ -181,5 +201,7 @@ estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, 
 `task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
 substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os
 hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
-`estimate-hours-settings` cobre a configuração de "Estimar prazos"). A feature "Orçamentos" é
-coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).
+`estimate-hours-settings` cobre a configuração de "Estimar prazos";
+`task-refinement-settings` cobre a configuração de "Refinar tarefa"). A feature "Orçamentos" é
+coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o refinamento de tarefas
+em `__tests__/features/refinement/` (ver `modules/refinement.md`).

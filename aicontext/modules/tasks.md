@@ -130,8 +130,9 @@ tarefa.
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
-  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
-  abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
+  **Entender tarefa**, **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
+  **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
+  salvar/cancelar voltam à visão.
 - Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
 ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e **não substitui**
 a descrição.
@@ -153,6 +154,10 @@ preservar o escopo de hooks de cada aba.
   servidor usa o fator e o custo/hora do próprio snapshot.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
+- **Refinar tarefa** (cabeçalho): modal em que um agente do OpenCode faz perguntas (mesmo sistema da
+  mesa) e **reescreve a especificação técnica** da tarefa a cada rodada até ela ficar clara; o agente
+  roda em segundo plano e o refinamento é retomável. Bloqueado quando o projeto não tem uma central
+  de desenvolvimento ativa (ver `modules/refinement.md`).
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
   (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento
@@ -173,4 +178,5 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
 `task-summary-card`, `task-estimate-card` — a estimativa editável é coberta em `tasks-service` e
-`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`.
+`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão **Refinar tarefa** é
+coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).

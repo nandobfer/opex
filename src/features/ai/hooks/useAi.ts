@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { TaskSummarySettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto } from "../types"
+import type { TaskSummarySettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -106,6 +106,20 @@ export function useSaveEstimateHoursSettings() {
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "estimate-hours"), saved)
             toast.success("Configuração de \"Estimar prazos\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const useTaskRefinementSettings = () => useQuery({ queryKey: key("feature", "task-refinement"), queryFn: () => get<TaskRefinementSettingsDto>("/ai/features/task-refinement") })
+
+export function useSaveTaskRefinementSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: TaskRefinementSettings) => unwrapApi((await api.put<ApiResponse<TaskRefinementSettingsDto>>("/ai/features/task-refinement", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "task-refinement"), saved)
+            toast.success("Configuração de \"Refinar tarefa\" salva")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })

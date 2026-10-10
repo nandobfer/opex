@@ -42,7 +42,8 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
 | `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |
 | `modules/integrations.md` | Integrações e agendador | Pusher, API interna (OpenAPI + tokens de sistema), Crons, GitHub; abas na página da integração; Archflow em desenvolvimento |
-| `modules/ai.md` | Provedores de IA | OpenCode e Gemini (Vercel AI SDK), `/integracoes/ia`, features "Entender tarefas", "Resumos de tarefas", "Orçamentos" (prévia) e "Estimar prazos" (agente OpenCode com tools) |
+| `modules/ai.md` | Provedores de IA | OpenCode e Gemini (Vercel AI SDK), `/integracoes/ia`, features "Entender tarefas", "Resumos de tarefas", "Orçamentos" (prévia), "Estimar prazos" (agente OpenCode com tools) e "Refinar tarefa" (aba de configuração) |
+| `modules/refinement.md` | Refinar tarefa | Botão/modal na página da tarefa, sessão longa do OpenCode que faz perguntas e reescreve a especificação técnica, retomada em segundo plano |
 | `modules/orcamentos.md` | Orçamentos | Integração Orçamentos (`/integracoes/orcamentos`), clientes com token, portal público do cliente (`/cliente`), prévia por IA + estimativa por agente OpenCode e criação da tarefa |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |

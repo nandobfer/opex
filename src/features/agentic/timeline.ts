@@ -1,10 +1,9 @@
-import type { WorkbenchStage } from "./constants"
 import type { OpencodeFormDto, OpencodePermissionDto, WorkbenchStreamLine } from "./types"
 
 /** Saída da mesa como a tela desenha (módulo puro: o hook só aplica as linhas do stream). */
 
 export type TimelineItem =
-    | { kind: "turn"; key: string; stage: WorkbenchStage; title: string; agent: string | null; model: string | null; ts: string; end: { outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number } | null }
+    | { kind: "turn"; key: string; stage: string; title: string; agent: string | null; model: string | null; ts: string; end: { outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number } | null }
     | { kind: "user"; key: string; text: string; ts: string }
     | { kind: "text"; key: string; text: string }
     | { kind: "tool"; key: string; id: string; name: string; state: "running" | "done" | "error"; input: string | null; output: string | null; error: string | null }

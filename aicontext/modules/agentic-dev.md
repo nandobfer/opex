@@ -6,8 +6,10 @@ uma tarefa tem uma **mesa de trabalho**; cada **projeto** (repositório vinculad
 rodam na mesma máquina.
 
 Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
-`@opencode/client`) e `src/lib/ai/opencode-events.ts` (eventos normalizados, puro). Modelos em
-`src/lib/db/models/Agentic.ts`.
+`@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
+`src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
+tarefas, ver `modules/refinement.md`). Modelos em `src/lib/db/models/Agentic.ts`; a saída gravada
+(`agentic_events`) também é usada pelo refinamento.
 
 ## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
 
@@ -209,10 +211,10 @@ done → Reabrir mesa (texto ao planejador) → planning
 
 ## Saída ao vivo
 
-- `hub.ts` (em memória, `globalThis`): cada evento ganha `seq` por mesa, vai na hora para quem
+- `hub.ts` (em memória, `globalThis`): cada evento ganha `seq` por execução, vai na hora para quem
   assiste e é gravado em lote em `agentic_events` (textos seguidos viram um documento; saída de
   ferramenta cortada em 20 mil caracteres guardando o fim). Raciocínio e progresso de ferramenta são
-  só ao vivo.
+  só ao vivo. O **refinamento de tarefas** reusa este barramento/coleção (chave = id do refinamento).
 - `GET /api/agentic/workbenches/[id]/events` (NDJSON): `reset` + tudo o que foi gravado + ao vivo,
   `ping` a cada 15 s. Sem buracos: assina, grava o pendente, lê o banco e descarta `seq` repetido.
   O cliente (`useWorkbenchStream`) reconecta sozinho (3 s; 45 s sem nada = reconectar) e reconstrói

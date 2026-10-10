@@ -1,11 +1,11 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "estimar-prazos", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview", "estimate-hours"] as const
+export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview", "estimate-hours", "task-refinement"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -66,3 +66,18 @@ export const DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS = [
     "Investigue o histórico do repositório e do tipo da tarefa, pense no esforço de implementação e responda em português do Brasil.",
     "Seja conservador: quando houver incerteza, prefira uma estimativa um pouco maior.",
 ].join("\n")
+
+// ── Refinar tarefa (agente OpenCode que faz perguntas até a spec ficar clara) ─
+
+export const DEFAULT_TASK_REFINEMENT_INSTRUCTIONS = [
+    "Você é um agente de refinamento técnico que ajuda um desenvolvedor a esclarecer uma tarefa antes de implementá-la.",
+    "Leia a tarefa inteira (descrição, especificação atual, comentários e histórico) e conduza o esclarecimento com perguntas objetivas, uma rodada por vez.",
+    "Não invente requisitos: quando algo não estiver claro, pergunte em vez de supor.",
+    "Escreva em português do Brasil.",
+].join("\n")
+
+/** O que, além dos dados principais, entra na entrada do refinamento. */
+export const REFINEMENT_INCLUDE_LABELS = {
+    comments: { label: "Comentários", description: "Data e texto de cada comentário" },
+    history: { label: "Histórico", description: "Mudanças de coluna, prioridade e campos" },
+} as const

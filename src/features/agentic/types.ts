@@ -152,7 +152,7 @@ export interface QueueItemDto {
 
 /** Linha do stream da mesa (NDJSON). `seq` existe nos eventos gravados; os transitórios não têm. */
 export type WorkbenchEventPayload =
-    | { type: "turn"; stage: WorkbenchStage; title: string; agent: string | null; model: string | null }
+    | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "user"; text: string }
     | { type: "text"; text: string }
     | { type: "reasoning" }

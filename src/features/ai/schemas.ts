@@ -5,6 +5,7 @@ import {
     DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS,
     DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS,
     DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
+    DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
     TASK_SUMMARY_MAX_LENGTH_DEFAULT,
     TASK_SUMMARY_MAX_LENGTH_MAX,
     TASK_SUMMARY_MAX_LENGTH_MIN,
@@ -140,4 +141,34 @@ export const DEFAULT_ESTIMATE_HOURS_SETTINGS: EstimateHoursSettings = {
     agent: null,
     variant: null,
     instructions: DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
+}
+
+/**
+ * Configuração da feature "Refinar tarefa" — agente do OpenCode que lê a tarefa, faz perguntas
+ * (formulários) e reescreve a especificação técnica até ela ficar clara. Exclusiva do OpenCode
+ * (depende de sessão longa e do sistema de perguntas), como "Estimar prazos".
+ */
+export const taskRefinementSettingsSchema = z
+    .object({
+        enabled: z.boolean(),
+        model: z.string().trim().max(200).nullable(),
+        agent: z.string().trim().max(100).nullable(),
+        variant: z.string().trim().max(50).nullable(),
+        instructions: z.string().trim().min(1, "Informe as instruções").max(8000, "Até 8.000 caracteres"),
+        include: z.object({ comments: z.boolean(), history: z.boolean() }),
+    })
+    .superRefine((value, ctx) => {
+        if (!value.enabled) return
+        if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
+    })
+
+export type TaskRefinementSettings = z.infer<typeof taskRefinementSettingsSchema>
+
+export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
+    enabled: false,
+    model: null,
+    agent: null,
+    variant: null,
+    instructions: DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
+    include: { comments: true, history: true },
 }

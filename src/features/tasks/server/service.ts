@@ -456,6 +456,11 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     await Promise.all([DevTask.deleteOne({ _id: id }), TaskComment.deleteMany({ taskId: id }), TimeLog.deleteMany({ taskId: id })])
     const { GithubIssueLink } = await import("@/lib/db/models/Github")
     await GithubIssueLink.updateMany({ taskId: id }, { $unset: { taskId: "" } })
+    // O refinamento de IA da tarefa some junto (melhor esforço, fora da resposta).
+    runAfterResponse("refinement-cleanup", async () => {
+        const { deleteRefinementForTask } = await import("@/features/refinement/server/service")
+        await deleteRefinementForTask(id)
+    })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { codigo: task.code, titulo: task.title } })
     await publishTasksUpdated([id])
 }

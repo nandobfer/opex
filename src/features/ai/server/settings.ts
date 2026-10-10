@@ -11,23 +11,27 @@ import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
 import {
     DEFAULT_BUDGET_PREVIEW_SETTINGS,
     DEFAULT_ESTIMATE_HOURS_SETTINGS,
+    DEFAULT_TASK_REFINEMENT_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
     DEFAULT_UNDERSTAND_TASK_SETTINGS,
     budgetPreviewSettingsSchema,
     estimateHoursSettingsSchema,
+    taskRefinementSettingsSchema,
     taskSummarySettingsSchema,
     understandTaskSettingsSchema,
     type BudgetPreviewSettings,
     type EstimateHoursSettings,
+    type TaskRefinementSettings,
     type TaskSummarySettings,
     type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
 const BUDGET_PREVIEW_FEATURE = "budget-preview"
 const ESTIMATE_HOURS_FEATURE = "estimate-hours"
+const TASK_REFINEMENT_FEATURE = "task-refinement"
 
 /** Campos de provedor comuns a toda feature de IA. */
 type ProviderSettings = {
@@ -224,4 +228,32 @@ export async function saveEstimateHoursSettings(input: EstimateHoursSettings, ac
     const before = await loadEstimateHoursSettings()
     await persistFeature(ESTIMATE_HOURS_FEATURE, next, actorId, before)
     return getEstimateHoursSettings()
+}
+
+// ── Refinar tarefa (agente OpenCode que conduz perguntas até a spec ficar clara) ──
+
+export async function loadTaskRefinementSettings(): Promise<{ settings: TaskRefinementSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(TASK_REFINEMENT_FEATURE, taskRefinementSettingsSchema, DEFAULT_TASK_REFINEMENT_SETTINGS)
+}
+
+/** A feature é exclusiva do OpenCode (depende da sessão longa e do sistema de perguntas). */
+export async function availabilityOfTaskRefinement(settings: TaskRefinementSettings): Promise<AiFeatureAvailability> {
+    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Refinar tarefa"')
+}
+
+export async function getTaskRefinementSettings(): Promise<TaskRefinementSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadTaskRefinementSettings()
+    return { settings, isDefault, availability: await availabilityOfTaskRefinement(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export function normalizeTaskRefinementSettings(input: TaskRefinementSettings): TaskRefinementSettings {
+    return { ...input, agent: input.agent || null, variant: input.variant || null }
+}
+
+export async function saveTaskRefinementSettings(input: TaskRefinementSettings, actorId: string): Promise<TaskRefinementSettingsDto> {
+    const next = normalizeTaskRefinementSettings(input)
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    const before = await loadTaskRefinementSettings()
+    await persistFeature(TASK_REFINEMENT_FEATURE, next, actorId, before)
+    return getTaskRefinementSettings()
 }
