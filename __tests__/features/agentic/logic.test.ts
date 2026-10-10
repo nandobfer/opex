@@ -39,6 +39,7 @@ describe('workbenchActions', () => {
     expect(workbenchActions('changes_requested', 'idle', false)).toEqual(['submit-pr-feedback'])
     expect(workbenchActions('done', 'idle', false)).toEqual(['reopen'])
     expect(workbenchActions('pr_open', 'idle', false)).toEqual([])
+    expect(workbenchActions('build_queued', 'idle', false)).toEqual([])
   })
 
   it('executando só permite parar; falha permite tentar de novo', () => {

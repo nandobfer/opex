@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useDeleteWorkbench } from "../../hooks/useAgentic"
 import type { CentralDto, WorkbenchDto } from "../../types"
+import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", maximumFractionDigits: 2 })
@@ -39,7 +40,11 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                         <Link href={`/tarefas/${workbench.taskId}`} className="font-mono text-sm font-semibold text-primary hover:underline">
                             {workbench.taskCode}
                         </Link>
-                        <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />
+                        {workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
+                            <QueueBadge position={workbench.buildQueuePosition} label="Na fila do build" title="Aguardando a vez do build" />
+                        ) : (
+                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />
+                        )}
                         <span className={cn("flex items-center gap-1 text-[11px]", connected ? "text-emerald-400" : "text-muted-foreground")} title={connected ? "Recebendo a saída ao vivo" : "Reconectando à saída ao vivo"}>
                             <Plug className="h-3 w-3" aria-hidden /> {connected ? "ao vivo" : "reconectando"}
                         </span>

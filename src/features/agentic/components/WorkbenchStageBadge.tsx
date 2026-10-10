@@ -10,6 +10,7 @@ const STAGE_TONE: Record<WorkbenchStage, ToneName> = {
     planning: "primary",
     plan_review: "sky",
     implementing: "primary",
+    build_queued: "sky",
     building: "primary",
     preview: "sky",
     opening_pr: "primary",

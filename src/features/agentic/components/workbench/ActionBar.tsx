@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCheck, ExternalLink, GitPullRequest, Hammer, Loader2, MessageSquareWarning, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
+import { CheckCheck, ExternalLink, GitPullRequest, Hammer, ListOrdered, Loader2, MessageSquareWarning, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -61,6 +61,11 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 {workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
+                    </motion.p>
+                )}
+                {workbench.stage === "build_queued" && (
+                    <motion.p key="build-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.
                     </motion.p>
                 )}
                 {composer && (

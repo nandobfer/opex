@@ -19,6 +19,7 @@ export const WORKBENCH_STAGES = [
     "planning",
     "plan_review",
     "implementing",
+    "build_queued",
     "building",
     "preview",
     "opening_pr",
@@ -35,6 +36,7 @@ export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     planning: "Planejando",
     plan_review: "Plano pronto",
     implementing: "Implementando",
+    build_queued: "Na fila do build",
     building: "Subindo a prévia",
     preview: "Prévia pronta",
     opening_pr: "Abrindo o PR",
@@ -57,7 +59,7 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
 export const WORKBENCH_STEPS = [
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },
     { id: "implement", label: "Implementação", stages: ["implementing"] },
-    { id: "preview", label: "Prévia", stages: ["building", "preview"] },
+    { id: "preview", label: "Prévia", stages: ["build_queued", "building", "preview"] },
     { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested"] },
     { id: "done", label: "Concluída", stages: ["finishing", "done"] },
 ] as const satisfies readonly { id: string; label: string; stages: readonly WorkbenchStage[] }[]
