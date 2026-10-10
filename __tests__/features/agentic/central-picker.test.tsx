@@ -8,7 +8,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
 
-import { CentralPicker, CentralSettingsLink, centralRepoLabel } from '@/features/agentic/components/dev-center/CentralPicker'
+import { CentralPicker, centralRepoLabel } from '@/features/agentic/components/dev-center/CentralPicker'
 import type { CentralDto } from '@/features/agentic/types'
 import type { GithubRepoOption } from '@/features/github/types'
 
@@ -36,10 +36,5 @@ describe('CentralPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'org/app' }))
     fireEvent.click(await screen.findByRole('option', { name: 'org/zip' }))
     expect(onSelect).toHaveBeenCalledWith('zip')
-  })
-
-  it('link de configuração aponta para as configurações da central', () => {
-    render(<CentralSettingsLink centralId="c1" />)
-    expect(screen.getByRole('link', { name: 'Configurar a central' }).getAttribute('href')).toBe('/integracoes/ia/centrais/c1')
   })
 })

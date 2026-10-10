@@ -24,7 +24,7 @@ import type { CentralDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 import { WorkbenchWaitingBadge } from "../WorkbenchWaitingBadge"
-import { CentralPicker, CentralSettingsLink } from "./CentralPicker"
+import { CentralPicker } from "./CentralPicker"
 import { TaskFilters } from "./TaskFilters"
 
 // Estimativa inicial da altura das linhas; cada linha é medida de verdade (o resumo varia de 1 a 2 linhas).
@@ -38,8 +38,9 @@ interface TasksPaneProps {
 }
 
 /**
- * Tarefas do projeto da central, com o seletor da central (repositório) no topo, filtros (nome,
- * coluna) e a etapa da mesa. Coluna sempre expandida (largura fixa a partir de `lg`).
+ * Tarefas do projeto da central: o título e, abaixo dele, o seletor da central (repositório),
+ * a busca por nome e o filtro de colunas, todos ocupando a linha inteira; por fim a lista com a
+ * etapa da mesa. Coluna sempre expandida (largura fixa a partir de `lg`).
  */
 export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: TasksPaneProps) {
     const list = useTaskList(false)
@@ -60,23 +61,16 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: 
     return (
         <Card role="region" aria-label="Lista de tarefas" className="flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0">
             <div className="space-y-2 border-b p-3">
-                <div className="flex items-center gap-1.5">
-                    <div className="min-w-0 flex-1">
-                        <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
-                    </div>
-                    <CentralSettingsLink centralId={central.id} />
-                </div>
+                <h2 className="text-sm font-semibold">
+                    Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
+                </h2>
                 <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold">
-                        Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
-                    </h2>
-                </div>
+                <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
                 <div className="relative">
                     <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
                     <Input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
                 </div>
-                <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} onReset={reset} />
+                <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
             </div>
             {/* Trocar de central anima só a lista; trocar de tarefa não (a lista e a rolagem ficam). */}
             <AnimatePresence mode="wait" initial={false}>
