@@ -25,9 +25,12 @@ function readPrimaryColor(): string | null {
 
 /**
  * Fundo animado da tela de login: partículas conectadas por linhas (receita "links" do
- * particles.js), com as **cores do tema** lidas dos tokens CSS (nada hardcoded) e movimento
- * desligado com `prefers-reduced-motion`. Montado só no cliente (canvas), via `next/dynamic`
- * `ssr: false` em `LoginPage`.
+ * particles.js), com as **cores do tema** lidas dos tokens CSS (nada hardcoded).
+ *
+ * Fica em `z-0` dentro do `main` (que tem `isolate`), para aparecer **acima** do fundo e
+ * **abaixo** do cartão (`z-10`) — nunca com z-index negativo. O container recebe ponteiros
+ * (`pointer-events` padrão) para o hover/clique da receita funcionar; o cartão, acima, continua
+ * clicável. Com `prefers-reduced-motion`, o movimento é desligado (as partículas/links continuam).
  */
 export function LoginParticleBackground() {
     const reducedMotion = useReducedMotion()
@@ -50,18 +53,18 @@ export function LoginParticleBackground() {
                     onClick: { enable: !reducedMotion, mode: "push" },
                 },
                 modes: {
-                    grab: { distance: 160, links: { opacity: 0.35 } },
-                    push: { quantity: 2 },
+                    grab: { distance: 180, links: { opacity: 0.4 } },
+                    push: { quantity: 3 },
                 },
             },
             particles: {
                 color: { value: colors.primary },
-                links: { color: colors.primary, distance: 150, enable: true, opacity: 0.2, width: 1 },
-                move: { enable: !reducedMotion, speed: 0.6, direction: "none", outModes: { default: "out" } },
-                number: { density: { enable: true, width: 1200 }, value: 70 },
-                opacity: { value: { min: 0.15, max: 0.5 } },
+                links: { color: colors.primary, distance: 150, enable: true, opacity: 0.5, width: 1 },
+                move: { enable: !reducedMotion, speed: 1.6, direction: "none", outModes: { default: "out" } },
+                number: { density: { enable: true, width: 1200 }, value: 90 },
+                opacity: { value: { min: 0.2, max: 0.6 } },
                 shape: { type: "circle" },
-                size: { value: { min: 1, max: 2.5 } },
+                size: { value: { min: 1, max: 4 } },
             },
         }
     }, [colors, reducedMotion])
@@ -69,7 +72,7 @@ export function LoginParticleBackground() {
     if (!colors) return null
 
     return (
-        <div className="pointer-events-none absolute inset-0 -z-10 hidden md:block" aria-hidden="true">
+        <div className="absolute inset-0 z-0" aria-hidden="true">
             <ParticlesProvider init={registerPlugins}>
                 <Particles id="opex-login-particles" options={options} className="h-full w-full" />
             </ParticlesProvider>
