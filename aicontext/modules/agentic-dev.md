@@ -101,11 +101,15 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   `/desenvolvimento/[tarefa]` com a mesa aberta). A central efetiva é a do projeto da tarefa
   aberta, senão a salva, senão a primeira; trocar de central limpa a tarefa da URL. Duas colunas:
   **Tarefas do projeto** | **Mesa de trabalho**.
-- O topo da coluna de tarefas traz o **seletor da central** (`SearchPicker`/`CentralPicker`): o
-  gatilho mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado)
-  e a lista é buscada por nome/projeto; ao lado, o atalho das configurações da central, um divisor
-  discreto e a lista de tarefas. O avatar real vem do índice de repositórios do GitHub
-  (`RepoIndexProvider`, montado no layout de `/desenvolvimento`); sem token, cai na inicial.
+- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; o
+  **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
+  mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista
+  é buscada por nome/projeto; a **busca por código/título**; e o **filtro de colunas**
+  (`CadastroMultiSelect`) também em linha inteira; por fim a lista. Não há atalho das configurações
+  da central nem botão de restaurar filtros na coluna (as configurações ficam em Integrações ›
+  Provedores de IA › Centrais e no botão do estado vazio). O avatar real vem do índice de
+  repositórios do GitHub (`RepoIndexProvider`, montado no layout de `/desenvolvimento`); sem token,
+  cai na inicial.
 - Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
   está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
@@ -114,7 +118,9 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   espaço restante); abaixo de `lg` as colunas ficam empilhadas e a coluna ocupa a linha inteira.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
-  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada, com a altura de cada linha
+  `localStorage` (`opex:dev-center-filters:v1`), sem botão de restaurar na própria coluna (limpar
+  pelos filtros persistidos, pelo `localStorage` ou pelo "Limpar filtros" do estado vazio). Lista
+  virtualizada, com a altura de cada linha
   medida dinamicamente; cada item mostra o título e, **abaixo dele, o resumo (`summary`) da tarefa**
   quando houver (texto discreto, com o texto completo na dica e limitado a 2 linhas). Cada tarefa
   mostra a etapa da mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está
