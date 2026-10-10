@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import type { TaskPriority } from "@/features/tasks/constants"
 import { clientePortalPath } from "../constants"
 import { PREVIEW_CLARITY_DIMENSION_LABELS, selectPreviewClarity } from "../clarity"
 import { useApproveDraft, useClienteDraft, useSetCorrection } from "./hooks"
@@ -41,6 +42,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
     const correction = useSetCorrection(draftId)
     const approve = useApproveDraft(draftId)
     const [text, setText] = useState("")
+    const [priorityOverride, setPriorityOverride] = useState<TaskPriority | null>(null)
     const startedRef = useRef(false)
 
     const data = draft.data
@@ -71,6 +73,8 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
         try {
             await correction.mutateAsync(text.trim())
             setText("")
+            // A correção regenera a prévia: descarta a prioridade escolhida sobre a sugestão da IA.
+            setPriorityOverride(null)
             await start()
         } catch {
             // Erro exibido abaixo.
@@ -79,7 +83,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
 
     const approveDraft = async () => {
         try {
-            await approve.mutateAsync()
+            await approve.mutateAsync(priorityOverride ?? undefined)
             router.push(clientePortalPath(token))
         } catch {
             // Erro exibido abaixo.
@@ -113,7 +117,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
                     <div className="grid gap-4 lg:grid-cols-4">
                         <div className="space-y-4 lg:order-2 lg:col-span-1">
                             <RepoMetaCard repo={data.projectRepo} />
-                            <TypePriorityMetaCard taskType={preview?.taskType ?? null} priority={preview?.priority ?? "medium"} loading={!preview && state.generatingPreview} />
+                            <TypePriorityMetaCard taskType={preview?.taskType ?? null} priority={priorityOverride ?? preview?.priority ?? "medium"} loading={!preview && state.generatingPreview} onPriorityChange={setPriorityOverride} updating={approve.isPending} />
                             <PreviewTagsCard tags={view.tags} loading={state.estimating && view.tags.length === 0} />
                             <EstimateCard estimate={estimate} estimating={state.estimating} status={state.estimating ? state.notice : null} error={estimateError} onRetry={() => void retryEstimate()} />
                         </div>

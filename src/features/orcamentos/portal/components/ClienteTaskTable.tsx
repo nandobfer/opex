@@ -7,21 +7,27 @@ import { GithubRepoLabel } from "@/features/github/components/shared"
 import type { GithubRepoLabelData } from "@/features/github/types"
 import { repoLabelFrom } from "@/features/orcamentos/logic"
 import { ArchivedBadge, TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
+import { TaskPriorityMenu } from "@/features/tasks/components/TaskPriorityMenu"
+import type { TaskPriority } from "@/features/tasks/constants"
 import type { BoardColumnView } from "@/features/tasks/board"
 import type { ClienteTaskDto } from "@/features/orcamentos/types"
 import { ClienteEstimateBadge } from "./ClienteEstimateBadge"
 
-/** Tabela somente leitura do portal do cliente; o título abre a página da tarefa. */
+/** Tabela do portal do cliente; o título abre a página da tarefa e a prioridade é editável com `onUpdate`. */
 export function ClienteTaskTable({
     tasks,
     columns,
     repoIndex,
     hrefFor,
+    onUpdate,
+    updating = false,
 }: {
     tasks: readonly ClienteTaskDto[]
     columns: readonly BoardColumnView[]
     repoIndex?: ReadonlyMap<string, GithubRepoLabelData>
     hrefFor: (task: ClienteTaskDto) => string
+    onUpdate?: (task: ClienteTaskDto, change: { priority: TaskPriority }) => void
+    updating?: boolean
 }) {
     const byKey = new Map(columns.map((column) => [column.key, column.label]))
     return (
@@ -53,7 +59,9 @@ export function ClienteTaskTable({
                                 {task.summary && <span className="block line-clamp-1 text-xs text-muted-foreground">{task.summary}</span>}
                             </td>
                             <td className="px-3 py-2 text-xs">{byKey.get(task.columnId) ?? task.columnId}</td>
-                            <td className="px-3 py-2"><TaskPriorityBadge priority={task.priority} /></td>
+                            <td className="px-3 py-2">
+                                {onUpdate ? <TaskPriorityMenu value={task.priority} pending={updating} onChange={(priority) => onUpdate(task, { priority })} /> : <TaskPriorityBadge priority={task.priority} />}
+                            </td>
                             <td className="hidden px-3 py-2 lg:table-cell"><TaskTypeBadge type={task.taskType} /></td>
                             <td className="hidden px-3 py-2 md:table-cell">
                                 {task.project && <span className="inline-flex max-w-[220px]"><GithubRepoLabel repo={repoLabelFrom(task.project.repo, repoIndex)} /></span>}

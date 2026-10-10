@@ -15,7 +15,7 @@ import { TaskSummaryCard } from "@/features/tasks/components/detail/TaskSummaryC
 import { clientePortalPath } from "../constants"
 import { repoLabelIndex } from "../logic"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
-import { useClienteOptions, useClienteTask } from "./hooks"
+import { useClienteOptions, useClienteTask, useSetClienteTaskPriority } from "./hooks"
 import { ClienteTaskSidebar } from "./components/ClienteTaskSidebar"
 import { ClienteTaskTabs, type ClienteTaskTabId } from "./components/ClienteTaskTabs"
 
@@ -33,6 +33,7 @@ function ClienteTaskDetailView({ id }: { id: string }) {
     const { token } = useClientePortal()
     const query = useClienteTask(id)
     const options = useClienteOptions()
+    const priority = useSetClienteTaskPriority()
     const [tab, setTab] = useState<ClienteTaskTabId>("description")
     const task = query.data
     const repoIndex = useMemo(() => repoLabelIndex(options.data?.projects ?? []), [options.data])
@@ -94,7 +95,7 @@ function ClienteTaskDetailView({ id }: { id: string }) {
                                         </CardContent>
                                     </Card>
                                 </div>
-                                <ClienteTaskSidebar task={task} repoIndex={repoIndex} />
+                                <ClienteTaskSidebar task={task} repoIndex={repoIndex} onUpdate={(value) => priority.mutate({ task, priority: value })} updating={priority.isPending} />
                             </div>
                         </div>
                     )}

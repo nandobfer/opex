@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
 import type { BoardColumnView } from "@/features/tasks/board"
 import type { ClienteTaskDto } from "@/features/orcamentos/types"
@@ -26,16 +26,21 @@ const task: ClienteTaskDto = {
     updatedAt: null,
 }
 
-describe("ClienteTaskTable (somente leitura)", () => {
-    it("mostra as horas do cliente e o faturamento, mas nenhum controle de edição", () => {
+describe("ClienteTaskTable", () => {
+    it("sem onUpdate, mostra horas/faturamento e nenhum controle de edição", () => {
         const { container } = render(<ClienteTaskTable tasks={[task]} columns={columns} hrefFor={(item) => `/cliente/tarefa/${item.id}`} />)
         expect(screen.getByText("APP-1")).toBeTruthy()
         expect(screen.getByText("Corrigir X")).toBeTruthy()
         expect(screen.getByText(/20:00/)).toBeTruthy()
         expect(screen.getByText(/800,00/)).toBeTruthy()
-        // Sem botões/seleção: o portal é só leitura.
+        // Sem handler de edição: nenhum botão/seleção.
         expect(container.querySelector("button")).toBeNull()
         expect(container.querySelector('input[type="checkbox"]')).toBeNull()
+    })
+
+    it("com onUpdate, a prioridade vira um menu editável", () => {
+        render(<ClienteTaskTable tasks={[task]} columns={columns} hrefFor={(item) => `/cliente/tarefa/${item.id}`} onUpdate={vi.fn()} />)
+        expect(screen.getByRole("button", { name: "Prioridade: alterar" })).toBeTruthy()
     })
 
     it("o título é um link para a página da tarefa", () => {

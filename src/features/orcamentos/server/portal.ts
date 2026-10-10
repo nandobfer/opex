@@ -7,7 +7,8 @@ import { createTaskWithIssue } from "@/features/github/server/task-issue"
 import { listGithubRepos } from "@/features/github/server/lookups"
 import type { GithubRepoOption } from "@/features/github/types"
 import type { ProjectRef, TaskDetailDto, TaskDto } from "@/features/tasks/types"
-import { addComment, getTask, listTasksForClient } from "@/features/tasks/server/service"
+import type { TaskPriority } from "@/features/tasks/constants"
+import { addComment, getTask, listTasksForClient, updateTask } from "@/features/tasks/server/service"
 import { getBoard } from "@/features/tasks/server/columns"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
 import { DRAFT_AUDIT_ENTITY } from "../constants"
@@ -107,6 +108,16 @@ export async function addClientComment(client: ClienteOrcamentoDoc, id: string, 
     await addComment(id, content, { id: client.name, type: "client", name: client.name })
 }
 
+/**
+ * Edita a prioridade de uma tarefa na visão do cliente (só as que ele solicitou). Reusa o `updateTask`
+ * do núcleo: grava auditoria (`origem: "client"`), publica `tasks-updated` (o dono vê em tempo real)
+ * e empurra a prioridade para a issue do GitHub. O ator da auditoria é o nome do cliente.
+ */
+export async function setClientTaskPriority(client: ClienteOrcamentoDoc, id: string, priority: TaskPriority): Promise<void> {
+    await assertClientTask(client, id)
+    await updateTask(id, { priority }, client.name, { origin: "client" })
+}
+
 export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<ClientePortalOptionsDto> {
     const [projects, board, index] = await Promise.all([clientProjects(client), getBoard(), githubRepoIndex()])
     return { clientName: client.name, projects: projects.map((project) => withGithubData(project, index)), board }
@@ -200,7 +211,7 @@ export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string,
     return toEstimateDto(computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate))
 }
 
-export async function approveDraft(client: ClienteOrcamentoDoc, id: string, actorId: string): Promise<TaskDto> {
+export async function approveDraft(client: ClienteOrcamentoDoc, id: string, actorId: string, priority?: TaskPriority): Promise<TaskDto> {
     await dbConnect()
     const draft = await getDraftDoc(client, id)
     if (draft.status === "approved") throw new DomainError(409, "Este rascunho já foi aprovado", "DRAFT_APPROVED")
@@ -218,7 +229,7 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
         description: draft.description,
         technicalSpec: preview.technicalSpec,
         taskType: (preview.taskType as CreateTaskInput["taskType"]) ?? null,
-        priority: preview.priority as CreateTaskInput["priority"],
+        priority: (priority ?? preview.priority) as CreateTaskInput["priority"],
     }
     const task = await createTaskWithIssue(input, actorId, {
         origin: "client",

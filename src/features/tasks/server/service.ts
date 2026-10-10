@@ -347,7 +347,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
     return toTaskDto(task.toObject(), project)
 }
 
-export async function updateTask(id: string, input: UpdateTaskInput, actorId: string, options: { publish?: boolean; origin?: "opex" | "github" } = {}): Promise<void> {
+export async function updateTask(id: string, input: UpdateTaskInput, actorId: string, options: { publish?: boolean; origin?: "opex" | "github" | "client" } = {}): Promise<void> {
     assertTaskId(id)
     await dbConnect()
     const task = await DevTask.findById(id).lean()
@@ -395,7 +395,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     }
 
     if (Object.keys(set).length === 0) return
-    if (options.origin === "github") after.origem = "github"
+    if (options.origin && options.origin !== "opex") after.origem = options.origin
     await DevTask.updateOne({ _id: id }, { $set: set })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: after })
     if (options.publish !== false) await publishTasksUpdated([id])

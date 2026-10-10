@@ -79,4 +79,11 @@ describe("página da tarefa do cliente", () => {
         expect(screen.queryByText(/Horas apontadas/)).toBeNull()
         expect(screen.queryByText(/Estimativa real/)).toBeNull()
     })
+
+    it("com onUpdate, a prioridade da coluna lateral vira um menu editável", () => {
+        const { rerender } = render(<ClienteTaskSidebar task={task} />)
+        expect(screen.queryByRole("button", { name: "Prioridade: alterar" })).toBeNull()
+        rerender(<ClienteTaskSidebar task={task} onUpdate={() => {}} />)
+        expect(screen.getByRole("button", { name: "Prioridade: alterar" })).toBeTruthy()
+    })
 })

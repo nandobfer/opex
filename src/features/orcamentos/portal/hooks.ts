@@ -1,12 +1,13 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
+import type { TaskPriority } from "@/features/tasks/constants"
 import type { TaskDto } from "@/features/tasks/types"
 import type { ClienteDraftInput } from "../schemas"
-import type { ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskListDto, OrcamentoDraftDto } from "../types"
+import type { ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
 
 /** Consultas e mutações do portal do cliente (axios autenticado pelo token). */
@@ -55,6 +56,42 @@ export function useAddClienteComment(taskId: string) {
     })
 }
 
+interface SetClientePriorityVariables {
+    task: Pick<ClienteTaskDto, "id" | "code">
+    priority: TaskPriority
+}
+
+type PrioritySnapshot = [QueryKey, unknown][]
+
+/**
+ * Edita a prioridade de uma tarefa do cliente (`PATCH /cliente/tasks/[id]`), com resposta otimista:
+ * a lista e o detalhe mudam na hora e revertem se o servidor recusar.
+ */
+export function useSetClienteTaskPriority() {
+    const { api } = useClientePortal()
+    const queryClient = useQueryClient()
+    return useMutation<unknown, unknown, SetClientePriorityVariables, PrioritySnapshot>({
+        mutationFn: async ({ task, priority }) => unwrapApi((await api.patch<ApiResponse<{ id: string }>>(`/cliente/tasks/${task.id}`, { priority })).data),
+        onMutate: async ({ task, priority }) => {
+            await queryClient.cancelQueries({ queryKey: [CLIENTE_QUERY_KEY] })
+            const snapshot: PrioritySnapshot = [...queryClient.getQueriesData({ queryKey: [CLIENTE_QUERY_KEY, "tasks"] }), ...queryClient.getQueriesData({ queryKey: taskKey(task.id) })]
+            const patch = <T extends { id: string; priority: TaskPriority }>(item: T): T => (item.id === task.id ? { ...item, priority } : item)
+            queryClient.setQueriesData<ClienteTaskListDto>({ queryKey: [CLIENTE_QUERY_KEY, "tasks"] }, (data) => (data ? { ...data, tasks: data.tasks.map(patch) } : data))
+            queryClient.setQueryData<ClienteTaskDetailDto>(taskKey(task.id), (data) => (data ? patch(data) : data))
+            return snapshot
+        },
+        onError: (error, _variables, snapshot) => {
+            for (const [key, data] of snapshot ?? []) queryClient.setQueryData(key, data)
+            toast.error(apiErrorMessage(error, "Não foi possível atualizar a prioridade"))
+        },
+        onSuccess: (_data, { task }) => toast.success(`Prioridade de ${task.code} atualizada`),
+        onSettled: (_data, _error, { task }) => {
+            void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "tasks"] })
+            void queryClient.invalidateQueries({ queryKey: taskKey(task.id) })
+        },
+    })
+}
+
 export function useClienteDraft(id: string) {
     const { api } = useClientePortal()
     return useQuery({
@@ -83,7 +120,7 @@ export function useApproveDraft(id: string) {
     const { api } = useClientePortal()
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async () => unwrapApi((await api.post<ApiResponse<TaskDto>>(`/cliente/drafts/${id}/approve`, {})).data),
+        mutationFn: async (priority?: TaskPriority) => unwrapApi((await api.post<ApiResponse<TaskDto>>(`/cliente/drafts/${id}/approve`, priority ? { priority } : {})).data),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "tasks"] })
             void queryClient.invalidateQueries({ queryKey: draftKey(id) })
