@@ -8,7 +8,8 @@ Decisões técnicas do Opex e suas motivações. Em conflito, o `AGENTS.md` prev
 
 App pessoal para gerenciar as tarefas (o Opex é a fonte de verdade) e apontar horas, com
 integrações configuráveis (GitHub, provedores de IA, Archflow e as de infraestrutura: Pusher, API
-interna, Crons). Um único usuário, sem login, rodando localmente ou em Docker.
+interna, Crons). Um único usuário, atrás de um login com senha única, rodando localmente ou em
+Docker (pode ser publicado na internet).
 
 ## Arquitetura
 
@@ -26,16 +27,18 @@ Ver `use-sempre-que-desenvolver.md`, "Estrutura de Arquivos".
 
 ## Decisões Arquiteturais Importantes
 
-### 1. Sem autenticação nem permissões
+### 1. Login por senha única, sem usuários nem permissões
 
-**Decisão**: o app não tem login, usuários, cargos nem empresas. Toda ação é do usuário local
-(`getLocalUser()`, id `local`, nome `APP_OWNER_NAME`).
+**Decisão**: o app tem uma tela de login com **uma senha compartilhada** (`APP_PASSWORD`) e um
+cookie de sessão assinado (`AUTH_SECRET`); não há cadastro, usuários, cargos nem empresas. Toda
+ação continua sendo do usuário local (`getLocalUser()`, id `local`, nome `APP_OWNER_NAME`).
 
-**Motivo**: uso exclusivo do dono, nunca publicado. O core copiado do CRM teve Clerk,
-`@sipal/permissions` e multiempresa removidos.
+**Motivo**: o app passou a ser publicado na internet, então a tela inicial precisa barrar acesso.
+O core copiado do CRM teve Clerk, `@sipal/permissions` e multiempresa removidos, e não foram
+reintroduzidos — só a senha única. Detalhes em `modules/auth.md`.
 
-**Consequência**: o app **não pode** ser exposto à internet. Acesso de outros sistemas só por
-token de sistema da API interna.
+**Consequência**: páginas e APIs internas exigem a sessão (guarda em `src/middleware.ts`); a API
+pública por token de sistema (`/api/v1/*`) e o tick de cron (`/api/routines/*`) seguem liberados.
 
 ### 2. Banco de Dados: MongoDB + Mongoose
 
