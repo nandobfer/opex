@@ -14,6 +14,7 @@ import { TaskTypeBadge } from "../TaskBadges"
 import { TaskTagsBadge } from "../TaskTagsBadge"
 import { TaskPriorityMenu } from "../TaskPriorityMenu"
 import { TaskEstimateCard } from "./TaskEstimateCard"
+import { TaskClientCard } from "./TaskClientCard"
 
 function Row({ icon: Icon, label, children }: { icon: typeof Clock; label: string; children: ReactNode }) {
     return (
@@ -66,6 +67,7 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
                         </dl>
                     </CardContent>
                 </Card>
+                <TaskClientCard task={task} />
                 <TaskEstimateCard task={task} />
             </div>
         </motion.aside>

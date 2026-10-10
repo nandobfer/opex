@@ -18,9 +18,11 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
   resumo de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele
   (detecta desatualização) — ver `modules/ai.md`. `tags` são os **ids** da taxonomia fechada da
   feature "Tags de tarefas" e `tagsSourceHash` é o hash equivalente das tags (ver `modules/ai.md`).
-  `estimate` é o orçamento vindo do portal do cliente
-  (`null` fora dele) e `clientId` é o cliente que **solicitou** a tarefa (`null` fora do portal) — o
-  que define a lista do portal (o cliente só vê as dele). Ver `modules/orcamentos.md`.
+  `clientId` é o cliente de orçamento **da tarefa** — o que a **solicitou** pelo portal ou o que o
+  dono **atribuiu/atualizou na página da tarefa** (`null` = sem cliente) — e é o que define a lista
+  do portal (o cliente só vê as dele). `estimate` é o orçamento (snapshot: horas reais, horas do
+  cliente, fator, custo/hora e faturamento) e existe **se e somente se** houver cliente: adicionar
+  cliente cria a estimativa e remover o cliente zera as duas coisas. Ver `modules/orcamentos.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, authorType, authorName, createdAt }`. A origem
   do comentário (`authorType: "owner" | "client"`) e o nome exibido (`authorName`: o dono vindo de
   `APP_OWNER_NAME`/`getLocalUser()`, ou o nome do cliente no portal) permitem marcar quem comentou;
@@ -50,7 +52,8 @@ semeado na primeira leitura (`ensureBoard`).
   `getTask` (detalhe com comentários, histórico e horas), `getTaskOptions` (projetos), `createTask`
   (gera o código, vai para o fim da coluna; aceita `clientId` do portal e `tags`), `updateTask` (campos; mudar
   de coluna leva ao fim dela), `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga
-  comentários e apontamentos), `addComment` (grava a origem e o nome do autor via
+  comentários e apontamentos), `setTaskClient` (define/troca/remove o cliente da tarefa e recalcula a
+  estimativa), `addComment` (grava a origem e o nome do autor via
   `{ id, type, name }`), `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um
   `tasks-updated`), `listTasksForClient(clientId, includeArchived)` (tarefas que um cliente do portal
   solicitou). Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`.
@@ -73,6 +76,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial) |
 | `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
+| `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove cliente e estimativa) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
@@ -159,13 +163,21 @@ animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, 
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
-- Lateral: prioridade editável, tipo, **tags**, repositório (`GithubRepoLabel`), **estimativa** (ver
-  abaixo), horas apontadas, criada e atualizada.
+- Lateral: prioridade editável, tipo, **tags**, repositório (`GithubRepoLabel`), **cliente** (ver
+  abaixo), **estimativa** (ver abaixo), horas apontadas, criada e atualizada.
+- **Cliente** (`TaskClientCard`, coluna lateral): **adiciona**, **troca** ou **remove** o cliente da
+  tarefa. O seletor lista só clientes **ativos** cujo `projectIds` inclui o repositório da tarefa;
+  remover pede confirmação. Adicionar/trocar grava o `clientId` e **habilita o campo de estimativa**
+  (`useSetTaskClient` → `PATCH /api/tasks/[id]/client`): o servidor recalcula o orçamento com o fator
+  de lucro e o custo/hora do cliente escolhido, **preservando as horas** já estimadas (começando em
+  **0** quando ainda não havia estimativa). Remover zera `clientId` e `estimate` e o campo some.
+  Clientes são cadastrados **apenas** em Integrações › Orçamentos (o card traz o link no estado vazio).
 - **Estimativa** (`TaskEstimateCard`, coluna lateral; só em tarefas que vieram do portal): as
   **horas estimadas** (originais, H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`);
   o **prazo do cliente** (`H × fator`) e o **faturamento estimado** (`horas do cliente × custo/hora`)
   são recalculados com o fator e o custo/hora **atuais** do cliente que originou a tarefa
-  (`resolveProjectClient`: o `OrcamentoClient` ativo cujo `projectIds` inclui o repositório) e
+  (`resolveTaskClient`: o cliente **da tarefa**, o `clientId` gravado; sem ele — dados legados —, o
+  `OrcamentoClient` ativo cujo `projectIds` inclui o repositório) e
   animados com `AnimatedNumber`; mostra também o **cliente** (`estimateClientName`). Salvar grava
   auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`; sem cliente, o
   servidor usa o fator e o custo/hora do próprio snapshot.
@@ -196,7 +208,8 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`, `task-estimate-card` — a estimativa editável, o `clientId` do portal e o autor
+`task-summary-card`, `task-estimate-card`, `task-client-card` — a estimativa editável, o cliente da
+tarefa (adicionar/trocar/remover e as validações) e o autor
 dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
 `__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão
 **Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).

@@ -51,6 +51,13 @@ export const updateTaskEstimateSchema = z.object({
 })
 export type UpdateTaskEstimateInput = z.infer<typeof updateTaskEstimateSchema>
 
+/**
+ * Define, troca ou remove o cliente da tarefa (`PATCH /api/tasks/[id]/client`). `null` remove o
+ * cliente e, com ele, a estimativa (o campo de estimativa some da tarefa).
+ */
+export const setTaskClientSchema = z.object({ clientId: objectId.nullable() })
+export type SetTaskClientInput = z.infer<typeof setTaskClientSchema>
+
 /** Coluna (criar/editar). Mesmo schema no formulário e na API. */
 export const columnInputSchema = z.object({
     name: z.string().trim().min(1, "Informe o nome").max(40, "Máximo de 40 caracteres"),
