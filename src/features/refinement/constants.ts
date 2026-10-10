@@ -19,13 +19,15 @@ export type RefinementAction = (typeof REFINEMENT_ACTIONS)[number]
 
 /**
  * Protocolo do refinamento, sempre aplicado por cima das instruções configuráveis: garante que o
- * agente pergunte (uma rodada por vez), reescreva a especificação completa e cubra critérios de
- * aceite, localização da mudança e casos de borda.
+ * agente pergunte pela ferramenta nativa `question` (uma rodada por vez), reescreva a especificação
+ * completa e cubra critérios de aceite, localização da mudança e casos de borda.
  */
 export const REFINEMENT_PROTOCOL = [
     "Protocolo do refinamento (sempre aplicado):",
-    "1. Faça as perguntas de esclarecimento em rodadas, usando o formulário de perguntas (uma rodada por vez). Não peça permissões nem execute comandos.",
-    "2. Garanta que a especificação cubra, no mínimo: (a) critérios de aceite; (b) localização da mudança — rotas/URLs, telas, módulos, integrações e arquivos envolvidos; (c) casos de borda (edge cases).",
-    `3. Ao final de cada rodada, reescreva a especificação técnica COMPLETA em Markdown sob o título exatamente "${REFINEMENT_SPEC_HEADING}", já incorporando as respostas.`,
-    "4. Continue perguntando e reescrevendo até julgar a especificação totalmente esclarecida. Quando julgar concluído, responda apenas com a especificação final, sem abrir um novo formulário.",
+    "1. Seu único produto é esclarecer e reescrever a especificação técnica desta tarefa. Você NÃO está na etapa de planejamento nem de implementação: não produza planos de execução, não peça para implementar e não altere arquivos.",
+    "2. Para perguntar, use SEMPRE a ferramenta nativa de perguntas do OpenCode, chamada `question` (a que abre um formulário para o usuário responder). Faça uma rodada de perguntas por vez e NUNCA escreva as perguntas como texto na sua resposta.",
+    `3. Depois de cada rodada de respostas, reescreva a especificação técnica COMPLETA em Markdown, sob o título exatamente "${REFINEMENT_SPEC_HEADING}", já incorporando as respostas (não escreva só as diferenças).`,
+    "4. A especificação precisa cobrir, no mínimo: (a) critérios de aceite; (b) localização da mudança — rotas/URLs, telas, módulos, integrações e arquivos envolvidos; (c) casos de borda (edge cases).",
+    "5. Só encerre o turno quando julgar a especificação totalmente esclarecida; nesse caso termine com a especificação final sob o título do item 3 e sem abrir um novo formulário.",
+    "6. Se não conseguir usar a ferramenta `question`, explique o motivo em uma frase e pare, sem listar as perguntas como texto.",
 ].join("\n")

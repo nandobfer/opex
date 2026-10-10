@@ -176,7 +176,9 @@ e opções na própria aba da página "Provedores de IA".
   (`buildUnderstandTaskPrompt`) + um **protocolo fixo** acrescentado às instruções que garante que a
   especificação cubra **critérios de aceite**, **localização da mudança** (rotas/URLs, telas,
   módulos, integrações, arquivos) e **casos de borda**, e que o agente reescreva a especificação a
-  cada rodada sob o título exato `## Especificação técnica`. Ver `modules/refinement.md`.
+  cada rodada sob o título `## Especificação técnica`. O agente **pergunta pela ferramenta nativa
+  `question`** (formulários) e **não** escreve as perguntas como texto; o refinamento só é marcado
+  como esclarecido quando o turno produz a especificação. Ver `modules/refinement.md`.
 
 ## APIs
 

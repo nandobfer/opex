@@ -14,5 +14,5 @@ export function buildRefinementInstructions(settings: Pick<TaskRefinementSetting
 
 export function buildRefinementPrompt(task: TaskDetailDto, include: TaskRefinementSettings["include"]): string {
     const taskMarkdown = buildUnderstandTaskPrompt(task, { comments: include.comments, history: include.history, timeLogs: false })
-    return `${taskMarkdown}\n\n---\nComece lendo a tarefa e faça a primeira rodada de perguntas para esclarecê-la.`
+    return `${taskMarkdown}\n\n---\nComece lendo a tarefa e faça a primeira rodada de perguntas usando a ferramenta de perguntas do OpenCode ("question").`
 }

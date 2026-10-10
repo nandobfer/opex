@@ -167,7 +167,7 @@ export type TaskRefinementSettings = z.infer<typeof taskRefinementSettingsSchema
 export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
     enabled: false,
     model: null,
-    agent: null,
+    agent: "plan",
     variant: null,
     instructions: DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
     include: { comments: true, history: true },

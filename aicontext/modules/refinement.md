@@ -19,7 +19,9 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 - `ai_feature_settings` (`feature: "task-refinement"`), schema `taskRefinementSettingsSchema`:
   ativa, **modelo** e **agente** do OpenCode, variante, instruções e o que enviar (comentários,
   histórico). **Exclusiva do OpenCode** (como "Estimar prazos"), porque depende da sessão longa e
-  dos formulários. Ativar exige modelo; modelo/variante/agente são conferidos no catálogo.
+  dos formulários. Ativar exige modelo; modelo/variante/agente são conferidos no catálogo. O agente
+  padrão é o **`plan`** (somente leitura e com a ferramenta de perguntas habilitada); subagentes como
+  `general` e `explore` **não** conseguem perguntar pela ferramenta nativa e não devem ser usados.
 - A aba traz um card **Diretório da sessão** explicando (e listando as centrais) que a sessão é
   criada no diretório da **central de desenvolvimento do projeto da tarefa** — não no diretório da
   integração OpenCode. Ver `modules/agentic-dev.md`.
@@ -37,31 +39,41 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
 1. Abrir o modal **inicia** o refinamento (idempotente: se já existir, apenas devolve o estado) e
    dispara um **turno** com a tarefa em Markdown + o protocolo.
-2. O agente faz as perguntas pelo **formulário do OpenCode** (mesmos campos da mesa: texto, número,
-   sim/não, opções, múltipla escolha). As perguntas pendentes aparecem no modal para **Responder** ou
+2. O agente faz as perguntas pela **ferramenta nativa de perguntas do OpenCode, `question`** — a
+   mesma que abre um formulário (mesmos campos da mesa: texto, número, sim/não, opções, múltipla
+   escolha). A ferramenta pausa o turno até a resposta. O protocolo **proíbe** o agente de escrever
+   as perguntas como texto. As perguntas pendentes aparecem no modal para **Responder** ou
    **Dispensar**.
 3. O usuário responde; a resposta vai para a **mesma sessão** (`session.form.reply`) e o agente
    continua.
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título
    exato `## Especificação técnica`. O servidor **extrai** esse trecho (`extractTechnicalSpec`,
-   `logic.ts`, puro) e **grava no campo `technicalSpec` da tarefa** (`updateTask`) — a cada rodada e
-   no fim do turno.
-5. O ciclo continua até o agente julgar a especificação esclarecida (encerra o turno sem novo
-   formulário → `resolved`) ou o usuário parar. O protocolo fixo garante que a especificação cubra
-   **critérios de aceite**, **localização da mudança** (rotas/URLs, telas, módulos, integrações) e
-   **casos de borda**.
+   `logic.ts`, puro — tolerante a nível de título, caixa e acento) e **grava no campo `technicalSpec`
+   da tarefa** (`updateTask`) — a cada rodada e no fim do turno.
+5. O ciclo continua até o agente julgar a especificação esclarecida ou o usuário parar. O protocolo
+   fixo garante que a especificação cubra **critérios de aceite**, **localização da mudança**
+   (rotas/URLs, telas, módulos, integrações, arquivos) e **casos de borda**.
+
+**Conclusão (`resolved`)**: um turno só é marcado como esclarecido quando ele termina (`succeeded`)
+**e** o texto do agente traz a especificação técnica — que é então gravada na tarefa. Se o turno
+termina sem a especificação, o refinamento fica `idle` com o aviso *"O agente terminou sem produzir a
+especificação técnica. Use Continuar."* e o modal oferece **Continuar** (o `runState` nunca fica
+"resolvido" sem a especificação).
 
 O texto do agente **não é salvo** na tarefa além da especificação: o diálogo é reconstruído pelos
-eventos gravados (`agentic_events`), como na mesa.
+eventos gravados (`agentic_events`), como na mesa. O turno roda **em segundo plano** com limite de
+**6 h** (o refinamento é guiado pelas respostas do usuário; a mesa usa 3 h); reinício do app no meio
+vira `interrupted` e o usuário retoma com **Continuar**.
 
 ## Estado e ações
 
 - Documento `task_refinements` (um por tarefa): `runState` (`idle`|`running`|`failed`|`interrupted`),
   `resolved`, `error`, `spec` (última especificação gravada), `pendingForms`/`pendingPermissions`,
   `usage`, `sessionId`, `sessionDirectory`, `centralId`, `projectId`.
-- Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar), **continue** (retoma um
-  turno interrompido/falho na mesma sessão) e **restart** (Recomeçar: descarta a conversa e abre uma
-  nova sessão; a especificação já salva na tarefa é mantida).
+- Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar), **continue** (retoma na
+  mesma sessão um turno interrompido, falho ou encerrado sem produzir a especificação) e **restart**
+  (Recomeçar: descarta a conversa e abre uma nova sessão; a especificação já salva na tarefa é
+  mantida).
 - Um refinamento "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser
   lido (`reconcile`), com **Continuar** disponível.
 - Excluir a tarefa apaga o refinamento e a saída gravada (melhor esforço).

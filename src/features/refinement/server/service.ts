@@ -11,6 +11,7 @@ import { loggerFor } from "@/lib/logger"
 import { getLocalUser } from "@/lib/local-user"
 import { parseCentralConfig } from "@/features/agentic/logic"
 import type { FormReplyInput, PermissionReplyInput } from "@/features/agentic/schemas"
+import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import {
     abortWorkbenchRun,
     clearWorkbenchActive,
@@ -39,7 +40,7 @@ import type { RefinementAvailability, TaskRefinementDto, TaskRefinementStateDto 
  */
 
 const log = loggerFor({ module: "refinement" })
-const TURN_TIMEOUT_MS = 60 * 60_000
+const TURN_TIMEOUT_MS = 6 * 60 * 60_000
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -212,19 +213,25 @@ async function executeTurn(id: string, text: string, controller: AbortController
     const client = await getOpencodeClient()
     const sessionId = await ensureSession(client, doc, doc.sessionDirectory ?? central.directory)
     const { hooks, accumulated } = turnHooks(doc)
+    // O runner genérico emite os eventos via `publish`; sem isto a saída não chega ao stream.
+    const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
     log.info({ refinementId: id, agent: settings.agent, model: settings.model }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
     const result = await runAgentTurn(
         client,
         { id, sessionId, stage: REFINEMENT_STAGE_LABEL, title: REFINEMENT_STAGE_LABEL, agent: { agent: settings.agent, model: settings.model, variant: settings.variant }, text, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal },
-        hooks,
+        { ...hooks, publish },
     )
+    const textOut = result.text || accumulated.text
+    const specText = extractTechnicalSpec(textOut)
     await flushWorkbenchEvents(id)
-    await saveSpec(doc.taskId, result.text || accumulated.text).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
-    const runState = result.outcome === "succeeded" ? "idle" : result.outcome === "interrupted" ? "interrupted" : "failed"
-    const resolved = result.outcome === "succeeded"
-    await TaskRefinement.updateOne({ _id: id }, { $set: { runState, resolved, error: result.outcome === "succeeded" ? null : (result.message ?? "O agente não concluiu o refinamento"), lastText: result.text || accumulated.text, pendingForms: [], pendingPermissions: [] } })
-    if (result.outcome === "succeeded") log.info({ refinementId: id, costUsd: result.costUsd }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: concluído`)
-    else log.warn({ refinementId: id, outcome: result.outcome }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: ${result.outcome}`)
+    if (specText) await saveSpec(doc.taskId, textOut).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
+    const succeeded = result.outcome === "succeeded"
+    const resolved = succeeded && specText !== null
+    const runState = succeeded ? "idle" : result.outcome === "interrupted" ? "interrupted" : "failed"
+    const error = succeeded ? (resolved ? null : "O agente terminou sem produzir a especificação técnica. Use Continuar.") : (result.message ?? "O agente não concluiu o refinamento")
+    await TaskRefinement.updateOne({ _id: id }, { $set: { runState, resolved, error, lastText: textOut, pendingForms: [], pendingPermissions: [] } })
+    if (resolved) log.info({ refinementId: id, costUsd: result.costUsd }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: concluído`)
+    else log.warn({ refinementId: id, outcome: result.outcome, resolved }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: ${result.outcome}`)
     await publishRefinement(doc.taskId)
 }
 
@@ -332,7 +339,7 @@ export async function continueRefinement(taskId: string): Promise<TaskRefinement
     const doc = await findByTask(taskId)
     if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
     if (isWorkbenchActive(String(doc._id))) throw new DomainError(409, "O agente já está refinando esta tarefa", "REFINEMENT_BUSY")
-    await launchTurn(String(doc._id), "Retome o refinamento de onde parou: faça as perguntas que faltarem e reescreva a especificação técnica completa.")
+    await launchTurn(String(doc._id), "Retome o refinamento de onde parou: faça as perguntas que faltarem com a ferramenta `question` e reescreva a especificação técnica completa sob o título \"## Especificação técnica\".")
     return getRefinementState(taskId)
 }
 

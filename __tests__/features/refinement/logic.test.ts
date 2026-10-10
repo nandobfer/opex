@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from '@/features/refinement/constants'
-import { extractTechnicalSpec } from '@/features/refinement/logic'
+import { extractTechnicalSpec, refinementWaitingReason } from '@/features/refinement/logic'
 import { buildRefinementInstructions, buildRefinementPrompt } from '@/features/refinement/prompt'
 import { DEFAULT_TASK_REFINEMENT_SETTINGS } from '@/features/ai/schemas'
 import type { TaskDetailDto } from '@/features/tasks/types'
@@ -22,9 +22,57 @@ describe('extractTechnicalSpec', () => {
     expect(extractTechnicalSpec(text)).toBe('especificação')
   })
 
+  it('aceita variantes do título (nível, caixa e acento)', () => {
+    expect(extractTechnicalSpec('### Especificação Técnica\n\nalgo')).toBe('algo')
+    expect(extractTechnicalSpec('## Especificacao tecnica\n\nalgo')).toBe('algo')
+    expect(extractTechnicalSpec('####   ESPECIFICAÇÃO   TÉCNICA\n\nalgo\n\n##### sub\nmais')).toBe('algo\n\n##### sub\nmais')
+  })
+
+  it('não confunde um título de nível superior com a seção', () => {
+    // `### Especificação técnica` termina no próximo `## ` (nível igual ou mais alto).
+    const text = '### Especificação técnica\n\nespecificação\n\n## Outra seção\nignorar'
+    expect(extractTechnicalSpec(text)).toBe('especificação')
+  })
+
   it('sem a seção ou com corpo vazio, devolve null', () => {
     expect(extractTechnicalSpec('texto sem a seção')).toBeNull()
     expect(extractTechnicalSpec(`${REFINEMENT_SPEC_HEADING}\n\n   `)).toBeNull()
+    expect(extractTechnicalSpec('')).toBeNull()
+  })
+})
+
+describe('REFINEMENT_PROTOCOL', () => {
+  it('manda usar a ferramenta de perguntas `question` e não escrever as perguntas como texto', () => {
+    expect(REFINEMENT_PROTOCOL).toContain('`question`')
+    expect(REFINEMENT_PROTOCOL).toContain('NUNCA escreva as perguntas como texto')
+  })
+
+  it('exige a cobertura de aceite, localização e edge cases sob o título canônico', () => {
+    expect(REFINEMENT_PROTOCOL).toContain('critérios de aceite')
+    expect(REFINEMENT_PROTOCOL).toContain('localização da mudança')
+    expect(REFINEMENT_PROTOCOL).toContain('casos de borda')
+    expect(REFINEMENT_PROTOCOL).toContain(REFINEMENT_SPEC_HEADING)
+  })
+})
+
+describe('refinementWaitingReason', () => {
+  const base = { runState: 'idle' as const, pendingPermissions: 0, pendingForms: 0, resolved: false }
+
+  it('não espera nada enquanto o agente trabalha', () => {
+    expect(refinementWaitingReason({ ...base, runState: 'running' })).toBeNull()
+  })
+
+  it('aguardando pergunta/permissão tem prioridade sobre o restante', () => {
+    expect(refinementWaitingReason({ ...base, pendingForms: 1 })).toContain('responder uma pergunta')
+    expect(refinementWaitingReason({ ...base, pendingPermissions: 1 })).toContain('permitir uma ação')
+  })
+
+  it('esclarecido quando resolvido', () => {
+    expect(refinementWaitingReason({ ...base, resolved: true })).toContain('esclarecida')
+  })
+
+  it('parou sem concluir quando ocioso e sem a especificação', () => {
+    expect(refinementWaitingReason(base)).toContain('use Continuar')
   })
 })
 
@@ -57,11 +105,12 @@ describe('buildRefinementPrompt', () => {
     timeLogs: [],
   } as unknown as TaskDetailDto
 
-  it('inclui a tarefa em Markdown e o convite à primeira rodada', () => {
+  it('inclui a tarefa em Markdown e o convite à primeira rodada pela ferramenta de perguntas', () => {
     const prompt = buildRefinementPrompt(task, DEFAULT_TASK_REFINEMENT_SETTINGS.include)
     expect(prompt).toContain('# Tarefa OPX-1: Ajustar login')
     expect(prompt).toContain('Ajustar a tela de login.')
     expect(prompt).toContain('primeira rodada de perguntas')
+    expect(prompt).toContain('question')
   })
 
   it('respeita o que enviar (sem comentários)', () => {

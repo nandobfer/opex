@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
         updateTask: vi.fn(async () => {}),
         recordAudit: vi.fn(async () => {}),
         publishAppEvent: vi.fn(async () => {}),
+        publishWorkbenchEvent: vi.fn(),
         isActive: vi.fn(() => false),
         abort: vi.fn(),
         create: vi.fn(),
@@ -70,7 +71,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
     abortWorkbenchRun: mocks.abort,
     dropWorkbenchEvents: vi.fn(),
     flushWorkbenchEvents: vi.fn(),
-    publishWorkbenchEvent: vi.fn(),
+    publishWorkbenchEvent: mocks.publishWorkbenchEvent,
 }))
 vi.mock('@/features/agentic/logic', () => ({ parseCentralConfig: () => ({ enabled: mocks.centralEnabled, sessionDirectory: '/repo/opex' }) }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(async () => task), updateTask: mocks.updateTask }))
@@ -175,5 +176,34 @@ describe('responder e interromper', () => {
         mocks.isActive.mockReturnValue(true)
         await interruptRefinement('t1')
         expect(mocks.abort).toHaveBeenCalledWith('c'.repeat(24), 'Interrompido pelo usuário')
+    })
+})
+
+describe('turno e conclusão', () => {
+    it('publica a saída do agente no barramento (regressão: o modal ficava vazio)', async () => {
+        mocks.run.mockImplementation(async (_client: unknown, _request: unknown, hooks: { publish?: (event: unknown) => void }) => {
+            hooks.publish?.({ type: 'text', text: 'olá' })
+            return { outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 }
+        })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), { type: 'text', text: 'olá' }))
+    })
+
+    it('turno concluído sem a especificação não marca como esclarecido nem salva', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: 'Só perguntas, sem a seção de especificação técnica.', message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle' }) })))
+        const markedResolved = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { resolved?: boolean } } | undefined)?.$set?.resolved === true)
+        expect(markedResolved).toBe(false)
+        expect(mocks.updateTask).not.toHaveBeenCalled()
+    })
+
+    it('turno concluído com a especificação marca como esclarecido e grava na tarefa', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() =>
+            expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle', resolved: true }) })),
+        )
+        await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
     })
 })

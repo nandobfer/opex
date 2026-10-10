@@ -133,6 +133,9 @@ export function TaskRefinementTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                         </div>
                     </Field>
                     <p className="mt-2 text-xs text-muted-foreground">O protocolo garante que a especificação cubra critérios de aceite, localização da mudança (rotas, telas, módulos, integrações) e casos de borda.</p>
+                    <p className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> O agente pergunta pela ferramenta nativa de perguntas do OpenCode. Use o agente <span className="font-medium">Plan</span> ou outro que a tenha habilitada — os subagentes <span className="font-mono">general</span> e <span className="font-mono">explore</span> não conseguem perguntar.
+                    </p>
                 </CardContent>
             </Card>
 

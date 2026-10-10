@@ -106,7 +106,7 @@ export function RefineTaskDialog({ open, onOpenChange, taskId, taskCode }: Refin
                                         <Square className="h-3.5 w-3.5" aria-hidden /> Parar
                                     </Button>
                                 </motion.span>
-                            ) : (refinement?.runState === "failed" || refinement?.runState === "interrupted") ? (
+                            ) : refinement && !refinement.resolved ? (
                                 <motion.span key="continue" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.15 }}>
                                     <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending} onClick={() => action.mutate("continue")}>
                                         <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Continuar
