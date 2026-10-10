@@ -5,10 +5,10 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   paginate: vi.fn(),
   merged: vi.fn(),
-  changes: vi.fn(),
+  feedback: vi.fn(),
   closed: vi.fn(),
   reopened: vi.fn(),
-  saveReview: vi.fn(),
+  saveCursors: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
@@ -17,20 +17,38 @@ vi.mock('@/features/github/client', () => ({ githubRequest: mocks.request, githu
 vi.mock('@/features/agentic/server/log', () => ({ centralLogger: () => ({ info: vi.fn(), step: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/agentic/server/workflow', () => ({
   handlePrMerged: mocks.merged,
-  handlePrChangesRequested: mocks.changes,
+  handlePrFeedback: mocks.feedback,
   handlePrClosed: mocks.closed,
   handlePrReopened: mocks.reopened,
-  saveLastReviewId: mocks.saveReview,
+  savePrCursors: mocks.saveCursors,
 }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
 
-import { repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
+import { mentionsOpex, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
 
-const workbench = (pr: Record<string, unknown> = {}) => ({ _id: 'w1', centralId: 'c1', taskCode: 'GO-DEV-1', pr: { number: 7, url: 'https://github.com/org/app/pull/7', state: 'open', lastReviewId: 10, ...pr } })
+const workbench = (pr: Record<string, unknown> = {}) => ({
+  _id: 'w1',
+  centralId: 'c1',
+  taskCode: 'GO-DEV-1',
+  pr: { number: 7, url: 'https://github.com/org/app/pull/7', state: 'open', lastReviewId: 10, lastCommentId: 20, ...pr },
+})
+
+/** Roteia `githubPaginate` pelos endpoints do PR (reviews, comentários da conversa, comentários de linha). */
+const respond = (data: { reviews?: unknown[]; issues?: unknown[]; inline?: unknown[]; reviewComments?: Record<number, unknown[]> } = {}) =>
+  mocks.paginate.mockImplementation(async (path: string) => {
+    const reviewComment = /\/reviews\/(\d+)\/comments/.exec(path)
+    if (reviewComment) return data.reviewComments?.[Number(reviewComment[1])] ?? []
+    if (path.includes('/pulls/7/comments')) return data.inline ?? []
+    if (path.includes('/issues/7/comments')) return data.issues ?? []
+    if (path.includes('/reviews?per_page')) return data.reviews ?? []
+    return []
+  })
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.find.mockResolvedValue([workbench()])
+  mocks.request.mockResolvedValue({ state: 'open', merged: false })
+  respond()
 })
 
 describe('watchPullRequests', () => {
@@ -39,41 +57,94 @@ describe('watchPullRequests', () => {
     expect(repoFromPrUrl('https://gitlab.com/x')).toBeNull()
   })
 
+  it('mentionsOpex respeita a fronteira da menção', () => {
+    expect(mentionsOpex('oi @opex, veja isso')).toBe(true)
+    expect(mentionsOpex('@OPEX ajuste o filtro')).toBe(true)
+    expect(mentionsOpex('@opexa não é o mesmo')).toBe(false)
+    expect(mentionsOpex('veja @opex-dev')).toBe(false)
+    expect(mentionsOpex('fale com foo@opex.com')).toBe(false)
+  })
+
   it('PR mergeado conclui a mesa com o commit do merge', async () => {
     mocks.request.mockResolvedValue({ state: 'closed', merged: true, merged_at: '2026-10-09T10:00:00Z', merge_commit_sha: 'abc' })
     await watchPullRequests()
     expect(mocks.request).toHaveBeenCalledWith('/repos/org/app/pulls/7')
     expect(mocks.merged).toHaveBeenCalledWith('w1', { mergedAt: new Date('2026-10-09T10:00:00Z'), mergeCommitSha: 'abc' })
-    expect(mocks.changes).not.toHaveBeenCalled()
+    expect(mocks.feedback).not.toHaveBeenCalled()
   })
 
-  it('revisão nova pedindo mudanças replaneja com os comentários', async () => {
-    mocks.request.mockResolvedValue({ state: 'open', merged: false })
-    mocks.paginate.mockImplementation(async (path: string) =>
-      path.includes('/comments') ? [{ body: 'renomear', path: 'a.ts', line: 3 }] : [{ id: 9, state: 'CHANGES_REQUESTED', body: 'antiga', user: { login: 'x' } }, { id: 12, state: 'CHANGES_REQUESTED', body: 'Ajustar', user: { login: 'ana' } }],
-    )
+  it('comentário novo da conversa com @opex volta ao planejamento', async () => {
+    respond({ issues: [{ id: 25, body: '@opex ajuste o filtro de data', user: { login: 'ana' } }] })
     await watchPullRequests()
-    expect(mocks.saveReview).toHaveBeenCalledWith('w1', 12)
-    expect(mocks.changes).toHaveBeenCalledTimes(1)
-    const feedback = mocks.changes.mock.calls[0]![1] as string
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', expect.objectContaining({ lastCommentId: 25 }))
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    const feedback = mocks.feedback.mock.calls[0]![1] as string
+    expect(feedback).toContain('@ana')
+    expect(feedback).toContain('@opex ajuste o filtro de data')
+  })
+
+  it('comentário novo sem @opex não replaneja, mas avança o cursor', async () => {
+    respond({ issues: [{ id: 25, body: 'comentário comum', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', expect.objectContaining({ lastCommentId: 25 }))
+    expect(mocks.feedback).not.toHaveBeenCalled()
+  })
+
+  it('comentário já visto (id <= cursor) com @opex não replaneja', async () => {
+    respond({ issues: [{ id: 20, body: '@opex de novo', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.feedback).not.toHaveBeenCalled()
+    expect(mocks.saveCursors).not.toHaveBeenCalled()
+  })
+
+  it('comentário de linha com @opex volta ao planejamento com path:line', async () => {
+    respond({ inline: [{ id: 26, body: '@opex renomear', user: { login: 'ana' }, path: 'a.ts', line: 3, pull_request_review_id: 99 }] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    const feedback = mocks.feedback.mock.calls[0]![1] as string
+    expect(feedback).toContain('`a.ts:3`')
+    expect(feedback).toContain('@opex renomear')
+  })
+
+  it('revisão nova pedindo mudanças continua replanejando com os comentários', async () => {
+    respond({
+      reviews: [{ id: 12, state: 'CHANGES_REQUESTED', body: 'Ajustar', user: { login: 'ana' } }],
+      reviewComments: { 12: [{ body: 'renomear', path: 'a.ts', line: 3 }] },
+    })
+    await watchPullRequests()
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', expect.objectContaining({ lastReviewId: 12 }))
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    const feedback = mocks.feedback.mock.calls[0]![1] as string
     expect(feedback).toContain('Ajustar')
     expect(feedback).toContain('`a.ts:3`: renomear')
-    expect(feedback).not.toContain('antiga')
+  })
+
+  it('corpo de revisão com @opex volta ao planejamento mesmo sem CHANGES_REQUESTED', async () => {
+    respond({ reviews: [{ id: 13, state: 'APPROVED', body: 'ok, mas @opex troque o texto', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.feedback.mock.calls[0]![1]).toContain('@opex troque o texto')
   })
 
   it('pedido de mudanças sem texto chega vazio (a mesa pede o texto ao usuário)', async () => {
-    mocks.request.mockResolvedValue({ state: 'open', merged: false })
-    mocks.paginate.mockImplementation(async (path: string) => (path.includes('/comments') ? [] : [{ id: 11, state: 'CHANGES_REQUESTED', body: '', user: null }]))
+    respond({ reviews: [{ id: 12, state: 'CHANGES_REQUESTED', body: '', user: null }] })
     await watchPullRequests()
-    expect(mocks.changes).toHaveBeenCalledWith('w1', '')
+    expect(mocks.feedback).toHaveBeenCalledWith('w1', '')
   })
 
-  it('aprovação ou comentário não replaneja; PR fechado avisa', async () => {
-    mocks.request.mockResolvedValueOnce({ state: 'open', merged: false })
-    mocks.paginate.mockResolvedValue([{ id: 15, state: 'APPROVED', body: 'ok', user: null }])
+  it('PR legado (sem cursor de comentário) não replaneja por comentário antigo e grava a linha de base', async () => {
+    mocks.find.mockResolvedValue([workbench({ lastCommentId: undefined })])
+    respond({ issues: [{ id: 25, body: '@opex ajuste antigo', user: { login: 'ana' } }] })
     await watchPullRequests()
-    expect(mocks.changes).not.toHaveBeenCalled()
-    expect(mocks.saveReview).toHaveBeenCalledWith('w1', 15)
+    expect(mocks.feedback).not.toHaveBeenCalled()
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', expect.objectContaining({ lastCommentId: 25 }))
+  })
+
+  it('aprovação sem @opex não replaneja; PR fechado avisa', async () => {
+    respond({ reviews: [{ id: 15, state: 'APPROVED', body: 'ok', user: null }] })
+    await watchPullRequests()
+    expect(mocks.feedback).not.toHaveBeenCalled()
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', expect.objectContaining({ lastReviewId: 15 }))
 
     mocks.request.mockResolvedValueOnce({ state: 'closed', merged: false })
     await watchPullRequests()

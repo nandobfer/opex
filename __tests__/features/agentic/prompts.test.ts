@@ -7,7 +7,7 @@ import {
   composeProjectFor,
   extractJsonBlock,
   extractPrUrl,
-  formatReviewFeedback,
+  formatPrFeedback,
   implementPrompt,
   planPrompt,
   prPrompt,
@@ -95,10 +95,16 @@ describe('leitura das respostas', () => {
     expect(extractPrUrl('nada')).toBeNull()
   })
 
-  it('formatReviewFeedback junta corpo e comentários; sem texto vira vazio', () => {
-    const text = formatReviewFeedback([{ author: 'ana', body: 'Ajustar nomes', comments: [{ path: 'a.ts', line: 3, body: 'renomear' }] }])
+  it('formatPrFeedback junta corpo e comentários; sem texto vira vazio', () => {
+    const text = formatPrFeedback([
+      { author: 'ana', body: 'Ajustar nomes', comments: [{ path: 'a.ts', line: 3, body: 'renomear' }] },
+      { author: 'bia', body: '@opex ajuste o filtro', comments: [] },
+      { author: 'caio', body: '', comments: [{ path: 'b.ts', line: 1, body: '@opex reordenar' }] },
+    ])
     expect(text).toContain('### @ana')
     expect(text).toContain('`a.ts:3`: renomear')
-    expect(formatReviewFeedback([{ author: 'ana', body: '  ', comments: [] }])).toBe('')
+    expect(text).toContain('### @bia\n@opex ajuste o filtro')
+    expect(text).toContain('`b.ts:1`: @opex reordenar')
+    expect(formatPrFeedback([{ author: 'ana', body: '  ', comments: [] }])).toBe('')
   })
 })
