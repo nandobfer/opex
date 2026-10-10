@@ -22,6 +22,12 @@ export async function repoForProject(projectId: string): Promise<{ repo: string;
     return project ? { repo: project.repo, repoUrl: project.repoUrl } : null
 }
 
+/** Coluna de entrada do vínculo do projeto (usada como destino ao reabrir a mesa quando a central não define "Ao abrir a mesa"). */
+export async function entryColumnForProject(projectId: string): Promise<string | null> {
+    const project = await Project.findById(projectId).select({ entryColumnKey: 1 }).lean().catch(() => null)
+    return project?.entryColumnKey ?? null
+}
+
 async function countsByCentral(): Promise<Map<string, { active: number; running: number }>> {
     const rows = await AgenticWorkbench.aggregate<{ _id: string; active: number; running: number }>([
         { $match: { stage: { $ne: "done" } } },
