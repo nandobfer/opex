@@ -425,7 +425,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             {
                 key: "directory",
                 label: "Diretório das sessões",
-                description: "Pasta (na máquina do OpenCode) em que as sessões do app são criadas; vazio usa a do servidor",
+                description: "Pasta (na máquina do OpenCode, precisa existir) em que as sessões do app são criadas; vazio usa a do servidor",
                 kind: "text",
                 placeholder: "/home/usuario/opex-ia",
             },

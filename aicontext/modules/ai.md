@@ -16,7 +16,8 @@ e opções na própria aba da página "Provedores de IA".
   Catálogo pelas rotas HTTP do servidor — `GET /api/info` (exige versão 2.x), `GET /api/model`
   (modelos habilitados, id `provedor/modelo`, variantes, gratuitos = custo 0) e `GET /api/agent`
   (agentes primários e visíveis). Com diretório configurado, as consultas usam
-  `?location[directory]=`. Em Docker, a URL precisa ser o IP do host, não `127.0.0.1`.
+  `?location[directory]=` — a pasta precisa existir na máquina do OpenCode (senão o servidor
+  responde 404, com mensagem acionável). Em Docker, a URL precisa ser o IP do host, não `127.0.0.1`.
 - **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.
@@ -65,7 +66,7 @@ e opções na própria aba da página "Provedores de IA".
   (OpenCode), variante/raciocínio, temperatura e máximo de tokens (só Gemini), formato (**Seções
   fixas**: Resumo, O que precisa ser feito, Pontos de atenção e riscos, Dúvidas para o solicitante;
   ou **Texto livre**), instruções (prompt de sistema, "Restaurar padrão") e o que enviar
-  (comentários, histórico, apontamentos, plano).
+  (comentários, histórico, apontamentos).
 - Regras ao salvar (`server/settings.ts`): ativa exige provedor e modelo; o provedor escolhido
   precisa estar **conectado** para ativar (409); modelo, variante e agente são conferidos no
   catálogo do provedor (400). Campos que não se aplicam ao provedor são gravados vazios. Auditoria
@@ -74,20 +75,11 @@ e opções na própria aba da página "Provedores de IA".
   agente. Com OpenCode aparece o aviso de que o texto da tarefa vem de terceiros (prefira agente só
   de leitura; o agente é configurável).
 - **Entrada** (`src/features/ai/understand-task.ts`, puro): a tarefa é buscada no servidor
-  (`getTask`) e vira Markdown — código, título, tipo, prioridade, status, produto, pacote,
-  responsável, criador, vínculos, issue, horas, descrição, especificação, contexto, critérios de
-  aceite, nomes dos anexos (conteúdo não é enviado) e, conforme a configuração, plano, comentários,
+  (`getTask`) e vira Markdown — código, tipo, prioridade, projeto, data de criação, issue do GitHub,
+  horas apontadas, descrição, especificação técnica e, conforme a configuração, comentários,
   histórico e apontamentos. Textos longos são cortados.
-- **Rascunhos** (ids `draft-…`, issues do GitHub ainda não enviadas): botão **Entender rascunho**
-  no cabeçalho do rascunho pendente. A entrada (`buildUnderstandDraftPrompt`) vem de
-  `getDraftDetail`: origem `repo#número` e estado, autor, labels, Issue Type, milestone, assignees,
-  campos mapeados (tipo, prioridade, produto, pacote, responsável, coluna), corpo editado, o texto
-  original da issue só quando o rascunho foi editado, a contagem de imagens (o corpo com URLs
-  assinadas, `previewBody`, nunca é enviado) e, com "Comentários" ligado, os comentários da issue.
-  Histórico, apontamentos e plano não se aplicam. Rascunho enviado ou descartado responde 409
-  ("Rascunho já enviado: use a tarefa GO-DEV-…").
-- **Execução**: `POST /api/tasks/[id]/understand` — feature indisponível (409), tarefa/rascunho
-  inexistente (404) ou rascunho enviado/descartado (409) respondem JSON; senão NDJSON (`start`, eventos do `streamAi`, `done`/`error`).
+- **Execução**: `POST /api/tasks/[id]/understand` — feature indisponível (409) ou tarefa
+  inexistente (404) respondem JSON; senão NDJSON (`start`, eventos do `streamAi`, `done`/`error`).
   Fechar a conexão cancela a geração. O texto gerado **não é salvo**; cada geração grava uma linha
   em `ai_usage_logs` (tokens, custo, duração, erro; TTL 90 dias) e logs no debug do hub `ai`.
 - **Modal** (`UnderstandTaskDialog`): inicia ao abrir; Markdown progressivo com cursor animado,
