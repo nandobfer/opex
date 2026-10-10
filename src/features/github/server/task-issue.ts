@@ -1,5 +1,6 @@
 import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
+import { runAfterResponse } from "@/lib/after-response"
 import { Project } from "@/lib/db/models/Project"
 import { assertColumn, createTask } from "@/features/tasks/server/service"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
@@ -56,6 +57,10 @@ export async function createTaskWithIssue(input: CreateTaskInput, actorId: strin
         stateReason: issue.state_reason ?? null,
         issueUpdatedAt: issue.updated_at ? new Date(issue.updated_at) : null,
         origin: "opex",
+    })
+    runAfterResponse("task-summary", async () => {
+        const { generateTaskSummary } = await import("@/features/ai/server/task-summary")
+        await generateTaskSummary(task.id)
     })
     return { ...task, issue: { url: issue.html_url, repo: project.repo, number: issue.number, state: issue.state, notice: null } }
 }

@@ -1,27 +1,49 @@
+import type { ZodType } from "zod"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AiFeatureSetting } from "@/lib/db/models/Ai"
 import { DomainError } from "@/lib/api/route"
+import { runAfterResponse } from "@/lib/after-response"
 import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/catalog"
 import { AiProviderError } from "@/lib/ai/errors"
-import { getAiProvider } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
-import { DEFAULT_UNDERSTAND_TASK_SETTINGS, understandTaskSettingsSchema, type UnderstandTaskSettings } from "../schemas"
-import type { AiFeatureAvailability, UnderstandTaskSettingsDto } from "../types"
+import {
+    DEFAULT_TASK_SUMMARY_SETTINGS,
+    DEFAULT_UNDERSTAND_TASK_SETTINGS,
+    taskSummarySettingsSchema,
+    understandTaskSettingsSchema,
+    type TaskSummarySettings,
+    type UnderstandTaskSettings,
+} from "../schemas"
+import type { AiFeatureAvailability, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
 
-const FEATURE = "understand-task"
+const UNDERSTAND_TASK_FEATURE = "understand-task"
+const TASK_SUMMARY_FEATURE = "task-summary"
 
-/** Configuração salva (validada); inválida ou ausente cai nos valores iniciais. */
-export async function loadUnderstandTaskSettings(): Promise<{ settings: UnderstandTaskSettings; isDefault: boolean; updatedAt: Date | null }> {
-    await dbConnect()
-    const doc = await AiFeatureSetting.findOne({ feature: FEATURE }).lean()
-    if (!doc) return { settings: DEFAULT_UNDERSTAND_TASK_SETTINGS, isDefault: true, updatedAt: null }
-    const parsed = understandTaskSettingsSchema.safeParse({ ...DEFAULT_UNDERSTAND_TASK_SETTINGS, ...doc.settings })
-    return { settings: parsed.success ? parsed.data : DEFAULT_UNDERSTAND_TASK_SETTINGS, isDefault: !parsed.success, updatedAt: doc.updatedAt ?? null }
+/** Campos de provedor comuns a toda feature de IA. */
+type ProviderSettings = {
+    enabled: boolean
+    provider: AiProviderId | null
+    model: string | null
+    agent: string | null
+    variant: string | null
+    temperature: number | null
+    maxOutputTokens: number | null
 }
 
-export async function availabilityOf(settings: UnderstandTaskSettings): Promise<AiFeatureAvailability> {
-    if (!settings.enabled) return { available: false, reason: "\"Entender tarefas\" está desativada em Integrações › Provedores de IA" }
+/** Configuração salva (validada); inválida ou ausente cai nos valores iniciais. */
+async function loadFeature<T>(feature: string, schema: ZodType<T>, defaults: T): Promise<{ settings: T; isDefault: boolean; updatedAt: Date | null }> {
+    await dbConnect()
+    const doc = await AiFeatureSetting.findOne({ feature }).lean()
+    if (!doc) return { settings: defaults, isDefault: true, updatedAt: null }
+    const parsed = schema.safeParse({ ...defaults, ...doc.settings })
+    return { settings: parsed.success ? parsed.data : defaults, isDefault: !parsed.success, updatedAt: doc.updatedAt ?? null }
+}
+
+/** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
+async function availability(settings: Pick<ProviderSettings, "enabled" | "provider" | "model">, featureLabel: string): Promise<AiFeatureAvailability> {
+    if (!settings.enabled) return { available: false, reason: `${featureLabel} está desativada em Integrações › Provedores de IA` }
     if (!settings.provider || !settings.model) return { available: false, reason: "Selecione o provedor e o modelo em Integrações › Provedores de IA" }
     const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
     if (!status?.configured) return { available: false, reason: `${getAiProvider(settings.provider).name} não está configurado` }
@@ -29,13 +51,8 @@ export async function availabilityOf(settings: UnderstandTaskSettings): Promise<
     return { available: true, reason: null }
 }
 
-export async function getUnderstandTaskSettings(): Promise<UnderstandTaskSettingsDto> {
-    const { settings, isDefault, updatedAt } = await loadUnderstandTaskSettings()
-    return { settings, isDefault, availability: await availabilityOf(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
-}
-
 /** Confere no provedor o modelo, a variante e o agente escolhidos. */
-async function assertCatalog(settings: UnderstandTaskSettings): Promise<void> {
+async function assertCatalog(settings: ProviderSettings): Promise<void> {
     if (!settings.provider || !settings.model) return
     const provider = getAiProvider(settings.provider)
     const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
@@ -59,7 +76,7 @@ async function assertCatalog(settings: UnderstandTaskSettings): Promise<void> {
 }
 
 /** Campos que não se aplicam ao provedor escolhido são gravados vazios. */
-export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTaskSettings {
+function normalizeProvider<T extends ProviderSettings>(input: T): T {
     const provider = input.provider ? getAiProvider(input.provider) : null
     return {
         ...input,
@@ -70,19 +87,79 @@ export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTask
     }
 }
 
-export async function saveUnderstandTaskSettings(input: UnderstandTaskSettings, actorId: string): Promise<UnderstandTaskSettingsDto> {
-    const next = normalizeSettings(input)
-    await assertCatalog(next)
-    const before = await loadUnderstandTaskSettings()
-    await AiFeatureSetting.updateOne({ feature: FEATURE }, { $set: { settings: next, updatedAt: new Date(), updatedBy: actorId } }, { upsert: true })
+/** Campos que não se aplicam ao provedor escolhido são gravados vazios (provedor, modelo, amostragem e agente). */
+export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTaskSettings {
+    return normalizeProvider(input)
+}
+
+export function normalizeTaskSummarySettings(input: TaskSummarySettings): TaskSummarySettings {
+    return normalizeProvider(input)
+}
+
+async function persistFeature<T extends ProviderSettings>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
+    await AiFeatureSetting.updateOne({ feature }, { $set: { settings: next, updatedAt: new Date(), updatedBy: actorId } }, { upsert: true })
     await recordAudit({
         userId: actorId,
         entidade: AI_AUDIT_ENTITY,
-        entidadeId: FEATURE,
+        entidadeId: feature,
         acao: before.isDefault ? AcaoAuditoria.CRIAR : AcaoAuditoria.ATUALIZAR,
         antes: before.isDefault ? undefined : before.settings,
         depois: next,
     })
-    await publishAppEvent(AI_FEATURE_UPDATED_EVENT, { feature: FEATURE }).catch(() => undefined)
+    await publishAppEvent(AI_FEATURE_UPDATED_EVENT, { feature }).catch(() => undefined)
+}
+
+// ── Entender tarefas ─────────────────────────────────────────────────────────
+
+export async function loadUnderstandTaskSettings(): Promise<{ settings: UnderstandTaskSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(UNDERSTAND_TASK_FEATURE, understandTaskSettingsSchema, DEFAULT_UNDERSTAND_TASK_SETTINGS)
+}
+
+export async function availabilityOf(settings: UnderstandTaskSettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Entender tarefas"')
+}
+
+export async function getUnderstandTaskSettings(): Promise<UnderstandTaskSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadUnderstandTaskSettings()
+    return { settings, isDefault, availability: await availabilityOf(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export async function saveUnderstandTaskSettings(input: UnderstandTaskSettings, actorId: string): Promise<UnderstandTaskSettingsDto> {
+    const next = normalizeSettings(input)
+    await assertCatalog(next)
+    const before = await loadUnderstandTaskSettings()
+    await persistFeature(UNDERSTAND_TASK_FEATURE, next, actorId, before)
     return getUnderstandTaskSettings()
+}
+
+// ── Resumos de tarefas ───────────────────────────────────────────────────────
+
+export async function loadTaskSummarySettings(): Promise<{ settings: TaskSummarySettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(TASK_SUMMARY_FEATURE, taskSummarySettingsSchema, DEFAULT_TASK_SUMMARY_SETTINGS)
+}
+
+export async function availabilityOfTaskSummary(settings: TaskSummarySettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Resumos de tarefas"')
+}
+
+export async function getTaskSummarySettings(): Promise<TaskSummarySettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadTaskSummarySettings()
+    return { settings, isDefault, availability: await availabilityOfTaskSummary(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+/** Ao ativar a feature, varre as tarefas não concluídas que ainda não têm resumo (em segundo plano). */
+function scheduleTaskSummaryBackfill(): void {
+    runAfterResponse("task-summary-backfill", async () => {
+        const { runTaskSummaryBackfill } = await import("./task-summary")
+        await runTaskSummaryBackfill()
+    })
+}
+
+export async function saveTaskSummarySettings(input: TaskSummarySettings, actorId: string): Promise<TaskSummarySettingsDto> {
+    const next = normalizeTaskSummarySettings(input)
+    await assertCatalog(next)
+    const before = await loadTaskSummarySettings()
+    await persistFeature(TASK_SUMMARY_FEATURE, next, actorId, before)
+    if (next.enabled && !before.settings.enabled) scheduleTaskSummaryBackfill()
+    return getTaskSummarySettings()
 }

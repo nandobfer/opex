@@ -26,7 +26,8 @@ import { TaskColumnMenu } from "./TaskColumnMenu"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
 
 const VIRTUALIZE_ABOVE = 50
-const ROW_HEIGHT = 48
+/** Duas linhas (título + resumo) para a virtualização reservar a altura correta. */
+export const TASK_TABLE_ROW_HEIGHT = 64
 
 /** Sem rolagem horizontal: a tabela ocupa a largura e as colunas menos importantes somem em telas estreitas. */
 export const TASK_TABLE_RESPONSIVE: Partial<Record<TaskTableColumn, string>> = {
@@ -111,7 +112,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     const progress = useWorkbenchProgress()
     const repoIndex = useRepoIndex()
     const virtualize = rows.length > VIRTUALIZE_ABOVE
-    const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: ROW_HEIGHT })
+    const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: TASK_TABLE_ROW_HEIGHT })
     const hasSelection = selection.selected.size > 0
 
     const toggleSort = (column: TaskTableColumn) =>
@@ -179,18 +180,25 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                     )}
                 </td>
                 <td className="max-w-0 px-3 py-2">
-                    <span className="flex items-center gap-2">
-                        <Tooltip delayDuration={300}>
-                            <TooltipTrigger asChild>
-                                <span className="truncate text-sm">{task.title}</span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" align="start" className="max-w-md whitespace-normal break-words text-sm">
-                                {task.title}
-                            </TooltipContent>
-                        </Tooltip>
-                        {task.archived && <ArchivedBadge />}
-                        {task.issue?.notice && <IssueNoticeBadge notice={task.issue.notice} />}
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-2">
+                            <Tooltip delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                    <span className="truncate text-sm">{task.title}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" align="start" className="max-w-md whitespace-normal break-words text-sm">
+                                    {task.title}
+                                </TooltipContent>
+                            </Tooltip>
+                            {task.archived && <ArchivedBadge />}
+                            {task.issue?.notice && <IssueNoticeBadge notice={task.issue.notice} />}
+                        </span>
+                        {task.summary && (
+                            <span className="truncate text-xs text-muted-foreground" title={task.summary}>
+                                {task.summary}
+                            </span>
+                        )}
+                    </div>
                 </td>
                 <td className="px-3 py-2">
                     <TaskColumnMenu task={task} columns={columns} moving={movingId === task.id} onMove={onMove} />
@@ -243,7 +251,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                         {virtualize ? (
                             <>
                                 {padTop > 0 && <tr style={{ height: padTop }} aria-hidden />}
-                                {items.map((item) => row(rows[item.index]!, { height: ROW_HEIGHT }))}
+                                {items.map((item) => row(rows[item.index]!, { height: TASK_TABLE_ROW_HEIGHT }))}
                                 {padBottom > 0 && <tr style={{ height: padBottom }} aria-hidden />}
                             </>
                         ) : (

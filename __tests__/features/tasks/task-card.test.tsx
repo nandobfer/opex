@@ -22,6 +22,7 @@ const task = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   columnId: 'todo',
   order: 0,
   title: 'Tarefa com issue',
+  summary: null,
   taskType: 'feature',
   priority: 'high',
   archived: false,
@@ -61,6 +62,18 @@ describe('TaskCardView: issue no rodapé', () => {
     unmount()
     render(<TaskCardView task={task()} dragging />)
     expect(issueLink()).toBeNull()
+  })
+})
+
+describe('TaskCardView: resumo de IA', () => {
+  it('mostra a linha do resumo quando presente', () => {
+    render(<TaskCardView task={task({ summary: 'Adiciona exportação em CSV' })} />)
+    expect(screen.getByText('Adiciona exportação em CSV')).toBeTruthy()
+  })
+
+  it('sem resumo, não mostra a linha', () => {
+    render(<TaskCardView task={task({ summary: null })} />)
+    expect(screen.queryByText('Adiciona exportação em CSV')).toBeNull()
   })
 })
 

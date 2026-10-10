@@ -12,8 +12,10 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 ## Modelo (`src/lib/db/models/`)
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
-  taskType, priority, archived }`. `code` = `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do
-  projeto com `$inc`).
+  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt }`. `code` =
+  `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o resumo
+  de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele (detecta
+  desatualização) — ver `modules/ai.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, createdAt }`.
 - `TaskBoardColumn` (`task_board_columns`) e `TaskBoardLayout` (`task_board_layout`, documento
   `board` com a ordem).
@@ -40,6 +42,7 @@ semeado na primeira leitura (`ensureBoard`).
   `addComment`, `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um `tasks-updated`).
   Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`. Mudanças de
   coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma central).
+  `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos resumos de IA).
 - `columns.ts` (`COLUMN_AUDIT_ENTITY = "ColunaTarefas"`): `ensureBoard` (semeia o quadro padrão —
   A Fazer / Em Andamento / Concluído — na primeira execução), `getBoard`, `createColumn`,
   `updateColumn`, `deleteColumn` (só vazia, que não seja coluna de entrada de um projeto —
@@ -82,9 +85,11 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; cards com código, tipo, título, repositório (`GithubRepoLabel`), prioridade e "Arquivada".
-- **Tabela** (`TaskTable`): Código, Issue, Título, Coluna ("Mover para…"), Prioridade, Tipo,
-  Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
-  (`usePageVirtualizer`).
+  O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
+  descrição (ver `modules/ai.md`).
+- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** sob o título),
+  Coluna ("Mover para…"), Prioridade, Tipo, Repositório, Atualizada; ordenação por coluna (salva);
+  virtualizada acima de 50; rola com a página (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no
@@ -114,11 +119,15 @@ tarefa.
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
   **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
+- Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
+  fonte discreta) — é **adicional** e **não substitui** a descrição.
 - Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
   formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
 - Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
+- **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
+  (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento
   (`/desenvolvimento/[central]/[tarefa]`); bloqueado quando o projeto não tem central
   (ver `modules/agentic-dev.md`).

@@ -32,6 +32,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         columnId: task.columnId,
         order: task.order,
         title: task.title,
+        summary: task.summary ?? null,
         taskType: (task.taskType as TaskType | null) ?? null,
         priority: (task.priority as TaskPriority) ?? "medium",
         archived: task.archived === true,
@@ -150,6 +151,20 @@ export async function getTaskOptions(): Promise<TaskOptionsDto> {
     await dbConnect()
     const projects = await Project.find().sort({ name: 1 }).lean()
     return { projects: projects.map((project) => projectRef(project)!).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")) }
+}
+
+/**
+ * Colunas de conclusão dos vínculos de projeto (Integrações › GitHub): uma tarefa nelas é
+ * considerada concluída. Usado para varrer só as tarefas não concluídas (ex.: resumos de IA).
+ */
+export async function concludedColumnKeys(): Promise<string[]> {
+    await dbConnect()
+    const keys = (await Project.find({ closedColumnKey: { $ne: null } })
+        .select({ closedColumnKey: 1 })
+        .lean())
+        .map((project) => project.closedColumnKey)
+        .filter((key): key is string => Boolean(key))
+    return [...new Set(keys)]
 }
 
 // ── Mutações ───────────────────────────────────────────────────────────────

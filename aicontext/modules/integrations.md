@@ -167,8 +167,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Rotinas internas são do código** (`DEFAULT_CRON_JOBS`; `withBuiltInJobs` completa a lista
   salva). Hoje: `integrations-health-check` (a cada 5 min, testa todas as integrações) e
   `github-issue-sync` (a cada 2 min, issues dos repositórios vinculados → tarefas — ver
-  `modules/github.md`) e `agentic-pr-watch` (a cada 2 min, acompanha os PRs das
-  mesas de trabalho — ver `modules/agentic-dev.md`). O agendamento das internas é editável na tela; só não se
+  `modules/github.md`), `agentic-pr-watch` (a cada 2 min, acompanha os PRs das
+  mesas de trabalho — ver `modules/agentic-dev.md`) e `ai-task-summary` (a cada 2 min, resumos de
+  IA das tarefas não concluídas — ver `modules/ai.md`). O agendamento das internas é editável na tela; só não se
   removem.
 - Cada rotina é reivindicada atomicamente em `integration_cron_jobs` (lease de 15 min); a
   reivindicação já avança `nextRunAt`. ⚠️ Nunca combine upsert com filtro

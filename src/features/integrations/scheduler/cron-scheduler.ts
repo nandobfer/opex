@@ -1,7 +1,7 @@
 import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
-import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, TASK_SUMMARY_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
@@ -292,6 +292,10 @@ export function registerBuiltInJobs(): void {
         // A fila global do build também é avaliada aqui (reinício, vaga liberada fora do processo).
         await pumpBuildQueue()
         return summary
+    })
+    registerInternalJob(TASK_SUMMARY_JOB_ID, async () => {
+        const { runTaskSummaryBackfill } = await import("@/features/ai/server/task-summary")
+        return runTaskSummaryBackfill()
     })
 }
 
