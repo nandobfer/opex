@@ -14,6 +14,8 @@ vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/
 import { TimerProvider } from '@/features/time/components/TimerProvider'
 import { TimerIndicator } from '@/features/time/components/TimerIndicator'
 import { TimeLogItem } from '@/features/time/components/TimeLogItem'
+import { TimeLogTaskGroup } from '@/features/time/components/TimeLogTaskGroup'
+import type { TimeLogTask } from '@/features/time/grouping'
 import { formatCostUsd, formatTokens } from '@/features/time/format'
 import { activeTimersKey } from '@/features/time/hooks/useTime'
 
@@ -96,5 +98,59 @@ describe('TimeLogItem (Horas agênticas)', () => {
     expect(screen.getByText(/175 tokens/)).toBeTruthy()
     expect(screen.getByText(/0,50/)).toBeTruthy()
     expect(screen.queryAllByRole('button')).toHaveLength(0)
+  })
+})
+
+function GroupHarness({ group }: { group: TimeLogTask }) {
+  const [open, setOpen] = React.useState(false)
+  return <TimeLogTaskGroup group={group} open={open} onToggle={() => setOpen((value) => !value)} />
+}
+
+describe('TimeLogTaskGroup (agrupamento por task/mesa)', () => {
+  const group = (overrides: Partial<TimeLogTask> = {}): TimeLogTask => ({
+    key: A,
+    taskId: A,
+    taskCode: 'OPX-1',
+    taskTitle: 'Primeira',
+    logs: [log({ active: false, endTime: '2026-10-10T10:30:00.000Z', duration: 30 })],
+    totalMinutes: 30,
+    hasActive: false,
+    ...overrides,
+  })
+
+  it('começa recolhido e revela os apontamentos ao clicar no cabeçalho', () => {
+    render(<GroupHarness group={group()} />)
+    const header = screen.getByRole('button', { name: /OPX-1/ })
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('Desenvolvimento agêntico · Implementando')).toBeNull()
+
+    fireEvent.click(header)
+    expect(header.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('Desenvolvimento agêntico · Implementando')).toBeTruthy()
+
+    fireEvent.click(header)
+    expect(header.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('Desenvolvimento agêntico · Implementando')).toBeNull()
+  })
+
+  it('mostra a contagem de apontamentos e o total de minutos no cabeçalho', () => {
+    render(
+      <GroupHarness
+        group={group({
+          logs: [
+            log({ active: false, endTime: '2026-10-10T10:30:00.000Z', duration: 30 }),
+            log({ id: 'd'.repeat(24), active: false, endTime: '2026-10-10T09:15:00.000Z', duration: 15 }),
+          ],
+          totalMinutes: 45,
+        })}
+      />,
+    )
+    expect(screen.getByText('2 apontamentos')).toBeTruthy()
+    expect(screen.getByText('45min')).toBeTruthy()
+  })
+
+  it('sinaliza o grupo com período ativo como "Em execução"', () => {
+    render(<GroupHarness group={group({ logs: [log()], totalMinutes: 0, hasActive: true })} />)
+    expect(screen.getByText('Em execução')).toBeTruthy()
   })
 })

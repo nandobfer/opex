@@ -30,3 +30,38 @@ export function groupTimeLogsByDay(logs: readonly TimeLogDto[]): TimeLogDay[] {
     }
     return [...days.values()]
 }
+
+/** Um grupo de apontamentos de uma mesma task/mesa (dentro de um dia). */
+export interface TimeLogTask {
+    /** Chave do grupo: o `taskId` (uma mesa por tarefa; legados sem mesa usam o mesmo `taskId`). */
+    key: string
+    taskId: string
+    taskCode: string | null
+    taskTitle: string | null
+    logs: TimeLogDto[]
+    /** Minutos dos apontamentos encerrados do grupo. */
+    totalMinutes: number
+    /** O grupo contém algum período ativo (em execução)? */
+    hasActive: boolean
+}
+
+/**
+ * Agrupa os apontamentos de um dia por task/mesa (agrupamento do nível abaixo do dia). Ordena os
+ * grupos pela atividade mais recente do dia e mantém a ordem dos itens (início mais recente primeiro)
+ * dentro de cada grupo. Módulo puro.
+ */
+export function groupTimeLogsByTask(logs: readonly TimeLogDto[]): TimeLogTask[] {
+    const groups = new Map<string, TimeLogTask>()
+    const sorted = [...logs].sort((a, b) => b.startTime.localeCompare(a.startTime))
+    for (const log of sorted) {
+        let group = groups.get(log.taskId)
+        if (!group) {
+            group = { key: log.taskId, taskId: log.taskId, taskCode: log.taskCode, taskTitle: log.taskTitle, logs: [], totalMinutes: 0, hasActive: false }
+            groups.set(log.taskId, group)
+        }
+        group.logs.push(log)
+        group.totalMinutes += log.duration ?? 0
+        if (log.active) group.hasActive = true
+    }
+    return [...groups.values()]
+}
