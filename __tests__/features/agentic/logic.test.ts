@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, reopenTargetColumn, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -140,6 +140,22 @@ describe('workbenchUserWaitReason', () => {
   it('mesa concluída e mesa na fila do build não contam como espera do usuário', () => {
     expect(workbenchUserWaitReason({ ...base, stage: 'done' })).toBeNull()
     expect(workbenchUserWaitReason({ ...base, stage: 'build_queued' })).toBeNull()
+  })
+})
+
+describe('reopenTargetColumn', () => {
+  it('reabrir usa a coluna "Ao abrir a mesa" (desenvolvimento) quando definida', () => {
+    const base = defaultCentralConfig('/x')
+    const config = { ...base, columns: { ...base.columns, onStart: 'doing', onDone: 'done' } }
+    expect(reopenTargetColumn(config, 'todo')).toBe('doing')
+  })
+
+  it('sem "Ao abrir a mesa", cai na coluna de entrada do vínculo', () => {
+    expect(reopenTargetColumn(defaultCentralConfig('/x'), 'todo')).toBe('todo')
+  })
+
+  it('sem destino definido, não move (null)', () => {
+    expect(reopenTargetColumn(defaultCentralConfig('/x'), null)).toBeNull()
   })
 })
 

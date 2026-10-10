@@ -175,9 +175,13 @@ done → Reabrir mesa (texto ao planejador) → planning
   entram como seção própria. Os cursores `lastReviewId`/`lastCommentId` são gravados a cada varredura;
   mesas abertas antes desta rotina (sem `lastCommentId`) fazem uma 1ª varredura só de linha de base,
   sem replanejar por comentários antigos.
-- **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver),
-  a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose down`,
-  `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+- **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
+  é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
+  tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
+  down`, `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+- **Reabrir mesa** (`done` → planejamento): a tarefa é movida para a coluna de desenvolvimento (a
+  mesma "Ao abrir a mesa (implementação)"; sem ela, a coluna de entrada do vínculo) e a issue é
+  **reaberta** (mesma sincronização).
 - **Controle de horas agêntico**: a mesa abre/pausa/retoma/fecha o apontamento da tarefa conforme o
   agente trabalha ou espera o usuário (`timer-sync.ts`; ver `modules/time.md`). Não há controles
   manuais de timer e a central não tem mais as opções de timer.

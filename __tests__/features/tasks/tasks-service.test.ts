@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(),
   publish: vi.fn(),
   notifyQueue: vi.fn(),
+  pushIssues: vi.fn(),
   afterTasks: [] as Promise<unknown>[],
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }>; aggregate: (...args: unknown[]) => Promise<unknown[]> }>,
 }))
@@ -17,6 +18,7 @@ vi.mock('@/lib/pusher/channels', () => ({ appChannel: () => 'private-app', publi
 vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => { mocks.afterTasks.push(task()) } }))
 vi.mock('@/features/agentic/server/queue', () => ({ notifyTasksColumnChanged: mocks.notifyQueue }))
 vi.mock('@/features/github/server/issue-links', () => ({ issueRefsFor: async () => new Map() }))
+vi.mock('@/features/github/server/task-sync', () => ({ pushTasksToIssues: mocks.pushIssues }))
 vi.mock('@/lib/db/models/DevTask', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   mocks.models.devTask = memoryModel()
@@ -63,8 +65,8 @@ const reset = () => {
   mocks.afterTasks.length = 0
 }
 
-const seedProject = async () =>
-  (await mocks.models.project.create({ repo: 'o/go', repoUrl: 'https://github.com/o/go', name: 'go', sigla: 'GO', entryColumnKey: 'todo', enabled: true, taskSeq: 0 }))._id as string
+const seedProject = async (overrides: Record<string, unknown> = {}) =>
+  (await mocks.models.project.create({ repo: 'o/go', repoUrl: 'https://github.com/o/go', name: 'go', sigla: 'GO', entryColumnKey: 'todo', enabled: true, taskSeq: 0, ...overrides }))._id as string
 
 const create = async (projectId: string, overrides: Record<string, unknown> = {}) =>
   createTask({ title: 'Tarefa', projectId, columnId: 'todo', priority: 'high', ...overrides } as never, { actorId: 'local' })
@@ -141,6 +143,45 @@ describe('editar, mover e arquivar', () => {
     await Promise.all(mocks.afterTasks)
     expect(mocks.notifyQueue).toHaveBeenCalledTimes(1)
     expect(mocks.notifyQueue).toHaveBeenCalledWith([a.id])
+  })
+})
+
+describe('sincronização com o GitHub ao mutar a tarefa', () => {
+  it('mover para a coluna de conclusão empurra a tarefa para a issue (fecha)', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const a = await create(pid)
+    mocks.pushIssues.mockClear()
+    await moveTask(a.id, { targetColumn: 'done' }, 'local')
+    expect(mocks.pushIssues).toHaveBeenCalledWith([a.id])
+  })
+
+  it('sair da coluna de conclusão empurra de volta (reabre)', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const a = await create(pid)
+    await moveTask(a.id, { targetColumn: 'done' }, 'local')
+    mocks.pushIssues.mockClear()
+    await moveTask(a.id, { targetColumn: 'todo' }, 'local')
+    expect(mocks.pushIssues).toHaveBeenCalledWith([a.id])
+  })
+
+  it('editar título/prioridade sincroniza; só a especificação técnica não', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    mocks.pushIssues.mockClear()
+    await updateTask(a.id, { title: 'Novo' }, 'local')
+    expect(mocks.pushIssues).toHaveBeenCalledWith([a.id])
+    mocks.pushIssues.mockClear()
+    await updateTask(a.id, { technicalSpec: 'Detalhe interno' }, 'local')
+    expect(mocks.pushIssues).not.toHaveBeenCalled()
+  })
+
+  it('não sincroniza quando a origem é o GitHub (evita eco)', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const a = await create(pid)
+    mocks.pushIssues.mockClear()
+    await moveTask(a.id, { targetColumn: 'done' }, 'system', { origin: 'github' })
+    await updateTask(a.id, { title: 'Vindo do GitHub' }, 'system', { origin: 'github' })
+    expect(mocks.pushIssues).not.toHaveBeenCalled()
   })
 })
 

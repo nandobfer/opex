@@ -34,10 +34,14 @@ O vínculo issue ↔ tarefa é **bidirecional com last-write-wins** ("quem foi a
 vence"). Sincroniza **título, descrição, tipo, prioridade e coluna ↔ aberta/fechada**. O
 `issueUpdatedAt` do vínculo é a marca d'água do último `updated_at` conhecido da issue.
 
-- **Tarefa → issue (imediato)**: editar a tarefa (`PATCH /api/tasks/[id]`), mover
-  (`/api/tasks/[id]/move`) ou aplicar ações em lote (`/api/tasks/bulk`) empurra os campos para a
-  issue (`pushTaskToIssue`). Falha do push **não** derruba a edição: grava um aviso (`notice`) no
-  vínculo e a rotina tenta de novo.
+- **Tarefa → issue (imediato)**: o disparo é **centralizado no serviço de tarefas**
+  (`moveTask`/`updateTask`): mover de coluna ou mudar título/descrição/tipo/prioridade empurra os
+  campos para a issue (`pushTaskToIssue`) — a coluna de conclusão fecha a issue e sair dela reabre.
+  Vale para **qualquer caminho** — as rotas (`PATCH /api/tasks/[id]`, `/api/tasks/[id]/move`,
+  `/api/tasks/bulk`) e a **mesa de trabalho agêntica** (ao abrir, ao abrir o PR, ao concluir e ao
+  reabrir). Mudanças que não refletem na issue (especificação técnica, projeto, arquivar) não
+  empurram, e a sincronização vinda do GitHub (`origin: "github"`) nunca reempurra. Falha do push
+  **não** derruba a mutação: grava um aviso (`notice`) no vínculo e a rotina tenta de novo.
 - **Issue → tarefa (rotina)**: para cada issue alterada desde a última leitura, se ela for mais
   recente que a tarefa, aplica na tarefa (`applyIssueToTask`, reusa `updateTask`/`moveTask` com
   `origin: "github"`); se a tarefa for mais recente, empurra. Mudanças do GitHub entram no Histórico

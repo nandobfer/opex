@@ -3,7 +3,6 @@ import { parseBody, withRoute } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
 import { bulkTasksSchema } from "@/features/tasks/schemas"
 import { runBulkTasks } from "@/features/tasks/server/service"
-import { pushTasksToIssues } from "@/features/github/server/task-sync"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -13,6 +12,5 @@ export const POST = withRoute(async ({ req }) => {
     const body = await parseBody(req, bulkTasksSchema)
     if (!body.ok) return body.response
     const results = await runBulkTasks(body.data, getLocalUser().id)
-    await pushTasksToIssues(results.filter((result) => result.ok).map((result) => result.id))
     return ok({ results })
 })

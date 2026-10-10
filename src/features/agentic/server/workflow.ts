@@ -9,7 +9,7 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
-import { canRun, resolveAgent, type WorkbenchAction } from "../logic"
+import { canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildPrompt,
@@ -30,7 +30,7 @@ import {
 import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
-import { loadCentral, publishAgentic, repoForProject } from "./centrals"
+import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
@@ -107,13 +107,14 @@ interface Loaded {
     doc: IAgenticWorkbench
     config: CentralConfig
     projectName: string
+    projectId: string
     repo: { repo: string; repoUrl: string } | null
 }
 
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
-    return { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
+    return { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
 }
 
 function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
@@ -410,6 +411,21 @@ async function applyStartEffects(id: string, task: TaskDetailDto, config: Centra
     }
 }
 
+/** Efeitos na tarefa ao reabrir a mesa (melhor esforço: falha vira aviso na mesa). */
+async function applyReopenEffects(id: string, loaded: Loaded): Promise<void> {
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const task = await getTask(loaded.doc.taskId)
+    const target = reopenTargetColumn(loaded.config, await entryColumnForProject(loaded.projectId))
+    if (target && target !== task.columnId) {
+        try {
+            await moveTask(task.id, { targetColumn: target }, actorId())
+            notice("info", "Tarefa movida para a coluna de desenvolvimento")
+        } catch (error) {
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+        }
+    }
+}
+
 /**
  * Inicia o turno de build de uma mesa que está aguardando a vez (`build_queued`): reserva a porta
  * da prévia e roda o turno `building`. Devolve `false` quando a mesa já não está mais na fila (o
@@ -456,7 +472,7 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
     await applyStartEffects(id, task, config)
-    const loaded: Loaded = { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
+    const loaded: Loaded = { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
     // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).
     const additionalInfo = text?.trim() || null
     await launchTurn(
@@ -516,6 +532,7 @@ export async function reopen(id: string, feedback: string): Promise<WorkbenchDto
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
+    await applyReopenEffects(id, loaded)
     await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
     return getWorkbench(id)
 }
