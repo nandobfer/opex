@@ -425,7 +425,7 @@ export async function startBuildTurn(id: string): Promise<boolean> {
     return true
 }
 
-export async function startWorkbench(centralId: string, taskId: string): Promise<WorkbenchDto> {
+export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
     await dbConnect()
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
@@ -457,7 +457,13 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
     await prepareHub(id)
     await applyStartEffects(id, task, config)
     const loaded: Loaded = { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
-    await launchTurn(loaded, { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config)) })
+    // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).
+    const additionalInfo = text?.trim() || null
+    await launchTurn(
+        loaded,
+        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo) },
+        { ...(additionalInfo ? { userText: additionalInfo } : {}) },
+    )
     return getWorkbench(id)
 }
 

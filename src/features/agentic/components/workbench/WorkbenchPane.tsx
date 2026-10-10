@@ -1,16 +1,15 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { Info, ListOrdered, Loader2, MousePointerClick, Play } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { MousePointerClick } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
-import { useAgenticSettings, useCentralQueue, useStartWorkbench, useWorkbenchByTask } from "../../hooks/useAgentic"
+import { useWorkbenchByTask } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
+import { StartWorkbench } from "./StartWorkbench"
 import { WorkbenchView } from "./WorkbenchView"
 
 /** Painel da direita: nada selecionado, tarefa sem mesa (abrir) ou a mesa de trabalho. */
@@ -38,48 +37,5 @@ export function WorkbenchPane({ central, taskId }: { central: CentralDto; taskId
                 </motion.div>
             </AnimatePresence>
         </Card>
-    )
-}
-
-function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: string }) {
-    const task = useTaskDetail(taskId)
-    const settings = useAgenticSettings()
-    const queue = useCentralQueue(central.id)
-    const start = useStartWorkbench()
-    const availability = settings.data?.availability
-    const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
-    const otherProject = task.data && task.data.project?.id !== central.projectId
-    const queueItem = queue.data?.find((item) => item.taskId === taskId) ?? null
-
-    return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-            {task.isLoading ? (
-                <Skeleton className="h-16 w-80" />
-            ) : task.data ? (
-                <div className="max-w-xl space-y-1">
-                    <p className="font-mono text-sm font-semibold text-primary">{task.data.code}</p>
-                    <h2 className="text-lg font-semibold">{task.data.title}</h2>
-                </div>
-            ) : (
-                <p className="text-sm text-muted-foreground">{apiErrorMessage(task.error, "Não foi possível carregar a tarefa")}</p>
-            )}
-            <p className="max-w-lg text-sm text-muted-foreground">
-                A mesa começa gerando o plano com o agente de planejamento, no diretório <span className="font-mono text-foreground">{central.config.sessionDirectory}</span>. Você revisa o plano antes de qualquer alteração no código.
-            </p>
-            {queueItem && (
-                <p className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary">
-                    <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Na fila da central — posição {queueItem.position}. A mesa abre quando uma vaga liberar.
-                </p>
-            )}
-            <Button type="button" className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId })}>
-                {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
-                Abrir mesa e gerar o plano
-            </Button>
-            {(blocked || otherProject) && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Info className="h-3.5 w-3.5" aria-hidden /> {otherProject ? `A tarefa não é do projeto ${central.projectName}` : blocked}
-                </p>
-            )}
-        </div>
     )
 }
