@@ -8,8 +8,7 @@ import { WorkbenchWaitingLink } from '@/features/agentic/components/WorkbenchWai
 
 const TASK = 'a'.repeat(24)
 
-const item = (overrides: Partial<InProgressWorkbenchDto> = {}): Pick<InProgressWorkbenchDto, 'centralId' | 'runState' | 'running' | 'waitingFor'> => ({
-  centralId: 'c1',
+const item = (overrides: Partial<InProgressWorkbenchDto> = {}): Pick<InProgressWorkbenchDto, 'runState' | 'running' | 'waitingFor'> => ({
   runState: 'idle',
   running: false,
   waitingFor: 'Aguardando revisão do plano',
@@ -19,9 +18,9 @@ const item = (overrides: Partial<InProgressWorkbenchDto> = {}): Pick<InProgressW
 const link = (name = 'Abrir a mesa de OPX-1 — Aguardando revisão do plano') => screen.getByRole('link', { name })
 
 describe('WorkbenchWaitingLink', () => {
-  it('aponta para a mesa de trabalho (central + tarefa)', () => {
-    render(<WorkbenchWaitingLink taskId={TASK} taskCode="OPX-1" item={item({ centralId: 'c9' })} />)
-    expect(link().getAttribute('href')).toBe(`/desenvolvimento/c9/${TASK}`)
+  it('aponta para a mesa de trabalho (tarefa)', () => {
+    render(<WorkbenchWaitingLink taskId={TASK} taskCode="OPX-1" item={item()} />)
+    expect(link().getAttribute('href')).toBe(`/desenvolvimento/${TASK}`)
     expect(link().getAttribute('title')).toBe('Aguardando revisão do plano')
   })
 

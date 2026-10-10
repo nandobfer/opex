@@ -73,10 +73,10 @@ async function renderPane(workbenches: WorkbenchSummaryDto[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={client}>
-      <TasksPane central={central} activeTaskId={null} collapsed={false} wide onToggle={() => {}} />
+      <TasksPane central={central} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
     </QueryClientProvider>,
   )
-  await screen.findByText('OPE-16')
+  await screen.findAllByText('OPE-16')
   await waitFor(() => expect(client.getQueryData(['agentic', 'workbenches', 'c1'])).toBeDefined())
   return result
 }

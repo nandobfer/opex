@@ -93,5 +93,5 @@ export const AGENTIC_INCLUDE_LABELS = {
 
 /** Rotas da tela. */
 export const DEV_CENTER_PATH = "/desenvolvimento"
-export const workbenchPath = (centralId: string, taskId: string) => `${DEV_CENTER_PATH}/${centralId}/${taskId}`
+export const workbenchPath = (taskId: string) => `${DEV_CENTER_PATH}/${taskId}`
 export const centralSettingsPath = (centralId: string) => `/integracoes/ia/centrais/${centralId}`

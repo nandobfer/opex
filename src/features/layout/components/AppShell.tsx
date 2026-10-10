@@ -26,7 +26,7 @@ interface AppShellProps {
      */
     immersiveHrefs?: readonly string[]
     /**
-     * Telas com sub-rotas (ex.: `/desenvolvimento/[central]/[tarefa]`): navegar dentro delas não
+     * Telas com sub-rotas (ex.: `/desenvolvimento/[tarefa]`): navegar dentro delas não
      * anima nem remonta a página inteira; a própria tela anima o trecho que mudou.
      */
     persistentHrefs?: readonly string[]

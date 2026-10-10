@@ -38,6 +38,8 @@ export interface CentralDto {
     id: string
     projectId: string
     projectName: string
+    /** Sigla do projeto (repositório), ex.: `OPX`; vazia sem projeto vinculado. */
+    sigla: string
     config: CentralConfig
     /** Repositório vinculado ao produto (Integrações › GitHub), ex.: `org/repo`. */
     repo: string | null

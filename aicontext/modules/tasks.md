@@ -156,7 +156,7 @@ preservar o escopo de hooks de cada aba.
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
   (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento
-  (`/desenvolvimento/[central]/[tarefa]`); bloqueado quando o projeto não tem central
+  (`/desenvolvimento/[tarefa]`); bloqueado quando o projeto não tem central
   (ver `modules/agentic-dev.md`).
 
 ## Issue ↔ tarefa (GitHub)

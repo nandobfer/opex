@@ -114,7 +114,7 @@ describe('TaskCardView: mesa aguardando ação', () => {
     mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano', centralId: 'c1' })
     render(<TaskCardView task={task()} />)
     const link = waitingLink()!
-    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${task().id}`)
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/${task().id}`)
   })
 
   it('clicar no motivo abre a mesa e não a tarefa', () => {
@@ -129,7 +129,7 @@ describe('TaskCardView: mesa aguardando ação', () => {
     mocks.progress = () => ({ running: false, runState: 'failed', waitingFor: 'A etapa falhou — use Tentar novamente', centralId: 'c1' })
     render(<TaskCardView task={task()} />)
     const link = waitingLink('OPX-1', 'A etapa falhou — use Tentar novamente')!
-    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${task().id}`)
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/${task().id}`)
     expect(link.className).toContain('text-destructive')
   })
 

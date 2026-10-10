@@ -84,7 +84,7 @@ seletor do formulário, pela tabela, pelo card e pelo painel lateral.
 
 O índice `owner/repo → GithubRepoOption` vem de `useGithubRepoIndex(enabled)` (`hooks/useGithub.ts`,
 sobre `useGithubRepos`, cache 5 min) e é distribuído às telas de tarefas por `RepoIndexProvider`
-(`components/RepoIndexProvider.tsx`, montado no layout de `/tarefas`); `useRepoIndex()` lê o índice e
+(`components/RepoIndexProvider.tsx`, montado nos layouts de `/tarefas` e de `/desenvolvimento`); `useRepoIndex()` lê o índice e
 `repoLabelOption(repo, index)` devolve os dados do GitHub ou, na ausência, os do projeto (inicial).
 
 ## Testes

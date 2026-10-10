@@ -11,14 +11,14 @@ interface WorkbenchWaitingLinkProps {
     taskId: string
     taskCode: string
     /** Mesa em andamento da tarefa (executando ou aguardando ação humana). */
-    item: Pick<InProgressWorkbenchDto, "centralId" | "runState" | "running" | "waitingFor">
+    item: Pick<InProgressWorkbenchDto, "runState" | "running" | "waitingFor">
     className?: string
 }
 
 /**
  * Motivo pelo qual uma mesa de trabalho aguarda o usuário (ou precisa de ação, em falha/interrupção)
  * exibido como link: clicar abre **direto a mesa** que está aguardando a interação
- * (`/desenvolvimento/[central]/[tarefa]`). Usado no card do kanban e na linha da tabela.
+ * (`/desenvolvimento/[tarefa]`). Usado no card do kanban e na linha da tabela.
  *
  * O clique interrompe a propagação para não abrir a tarefa e não iniciar o arraste do card (dnd-kit).
  */
@@ -27,7 +27,7 @@ export function WorkbenchWaitingLink({ taskId, taskCode, item, className }: Work
     const failed = workbenchProgressTone(item) === "failed"
     return (
         <Link
-            href={workbenchPath(item.centralId, taskId)}
+            href={workbenchPath(taskId)}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             title={item.waitingFor}

@@ -25,6 +25,7 @@ const central = (patch: Partial<CentralDto> = {}): CentralDto => ({
   id: 'c1',
   projectId: 'p1',
   projectName: 'Portal',
+  sigla: 'APP',
   config: defaultCentralConfig('/home/u/app'),
   repo: 'org/app',
   repoUrl: null,

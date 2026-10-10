@@ -36,7 +36,7 @@ export function CentralWorkbenchesSection({ centralId }: { centralId: string }) 
                         <AnimatePresence initial={false}>
                             {items.map((item) => (
                                 <motion.li key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                                    <Link href={workbenchPath(centralId, item.taskId)} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
+                                    <Link href={workbenchPath(item.taskId)} className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50">
                                         <span className="font-mono text-xs font-semibold text-primary">{item.taskCode}</span>
                                         <span className="min-w-0 flex-1 truncate text-sm">{item.taskTitle}</span>
                                         <WorkbenchStageBadge stage={item.stage} runState={item.runState} />

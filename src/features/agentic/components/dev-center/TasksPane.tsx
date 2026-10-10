@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ListTodo, Search } from "lucide-react"
+import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
@@ -14,36 +15,37 @@ import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { useTaskList } from "@/features/tasks/hooks/useTasks"
+import { useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { workbenchPath } from "../../constants"
 import { DEFAULT_DEV_CENTER_FILTERS, DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, filterCentralTasks } from "../../dev-center-filters"
-import { PANE_WIDTHS } from "../../dev-center-layout"
 import { useCentralQueue, useCentralWorkbenches } from "../../hooks/useAgentic"
 import { workbenchUserWaitReason } from "../../logic"
 import type { CentralDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 import { WorkbenchWaitingBadge } from "../WorkbenchWaitingBadge"
-import { CollapsiblePane, PaneToggle } from "./CollapsiblePane"
+import { CentralPicker, CentralSettingsLink } from "./CentralPicker"
 import { TaskFilters } from "./TaskFilters"
 
 const ROW_HEIGHT = 64
 
 interface TasksPaneProps {
     central: CentralDto
+    centrals: readonly CentralDto[]
     activeTaskId: string | null
-    collapsed: boolean
-    wide: boolean
-    onToggle: () => void
+    onSelectCentral: (id: string) => void
 }
 
-const LABEL = "lista de tarefas"
-
-/** Tarefas do projeto da central com filtros (nome, coluna) e a etapa da mesa. Recolhível. */
-export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: TasksPaneProps) {
+/**
+ * Tarefas do projeto da central, com o seletor da central (repositório) no topo, filtros (nome,
+ * coluna) e a etapa da mesa. Coluna sempre expandida (largura fixa a partir de `lg`).
+ */
+export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: TasksPaneProps) {
     const list = useTaskList(false)
     const board = useTaskBoard()
     const workbenches = useCentralWorkbenches(central.id)
     const queue = useCentralQueue(central.id)
+    const repoIndex = useRepoIndex()
     const { value: filters, setValue: setFilters, reset } = usePersistentState(DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, DEFAULT_DEV_CENTER_FILTERS)
     const tasks = useMemo(() => filterCentralTasks(list.data?.tasks ?? [], central.projectId, filters), [list.data, central.projectId, filters])
     const columns = useMemo(() => new Map(board.columns.map((column) => [column.key, column])), [board.columns])
@@ -52,36 +54,22 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
     const scrollRef = useRef<HTMLDivElement>(null)
     // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual devolve funções não memorizáveis (padrão do projeto)
     const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, overscan: 8 })
-    const activeCode = list.data?.tasks.find((task) => task.id === activeTaskId)?.code ?? null
     const reduceMotion = useReducedMotion()
 
     return (
-        <CollapsiblePane
-            label={LABEL}
-            width={PANE_WIDTHS.tasks}
-            collapsed={collapsed}
-            wide={wide}
-            className="min-h-[420px] lg:min-h-0"
-            rail={
-                <>
-                    <PaneToggle label={LABEL} collapsed onToggle={onToggle} />
-                    <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] tabular-nums text-muted-foreground" title={`${tasks.length} tarefas com os filtros atuais`}>
-                        {tasks.length}
-                    </span>
-                    {activeCode && (
-                        <span className="mt-1 font-mono text-xs font-semibold text-primary [writing-mode:vertical-rl]" title="Tarefa aberta">
-                            {activeCode}
-                        </span>
-                    )}
-                </>
-            }
-        >
+        <Card role="region" aria-label="Lista de tarefas" className="flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0">
             <div className="space-y-2 border-b p-3">
+                <div className="flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                        <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
+                    </div>
+                    <CentralSettingsLink centralId={central.id} />
+                </div>
+                <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
                 <div className="flex items-center justify-between gap-2">
                     <h2 className="text-sm font-semibold">
                         Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
                     </h2>
-                    {wide && <PaneToggle label={LABEL} collapsed={false} onToggle={onToggle} />}
                 </div>
                 <div className="relative">
                     <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
@@ -125,7 +113,7 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                     return (
                                         <div key={task.id} role="listitem" className="absolute inset-x-0 px-1.5 py-0.5" style={{ height: ROW_HEIGHT, transform: `translateY(${row.start}px)` }}>
                                             <Link
-                                                href={workbenchPath(central.id, task.id)}
+                                                href={workbenchPath(task.id)}
                                                 aria-current={active ? "page" : undefined}
                                                 className={cn("flex h-full flex-col justify-center gap-1 rounded-md px-2.5 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
                                             >
@@ -154,6 +142,6 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                     )}
                 </motion.div>
             </AnimatePresence>
-        </CollapsiblePane>
+        </Card>
     )
 }

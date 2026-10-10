@@ -80,7 +80,7 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   cronômetro quando algum agente executa, ou aviso em warning quando **só** há mesas aguardando ação.
   Clique abre a lista **"Trabalhos em andamento"** (o popover **se dimensiona pelo conteúdo**,
   limitado à largura da viewport, para não quebrar linhas sem necessidade): cada item é um botão que
-  navega para a **mesa de trabalho** (`/desenvolvimento/{central}/{tarefa}`) — ou para a tarefa, em
+  navega para a **mesa de trabalho** (`/desenvolvimento/{tarefa}`) — ou para a tarefa, em
   apontamentos legados sem mesa. As mesas pausadas **não** somem da lista.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)

@@ -33,7 +33,7 @@ describe('WorkbenchButton', () => {
   it('sem mesa: link para a mesa com ícone neutro', () => {
     render(<WorkbenchButton taskId="t1" projectId="p1" />)
     const link = screen.getByRole('link', { name: 'Mesa de trabalho' })
-    expect(link.getAttribute('href')).toBe(workbenchPath('c1', 't1'))
+    expect(link.getAttribute('href')).toBe(workbenchPath('t1'))
     expect(link.className).not.toMatch(/amber|destructive/)
   })
 

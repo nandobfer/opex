@@ -52,7 +52,7 @@ describe('TaskTable: linha aguardando ação', () => {
   it('mostra o motivo como link para a mesa', () => {
     mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano', centralId: 'c1' })
     render(<Table />)
-    expect(waitingLink()!.getAttribute('href')).toBe(`/desenvolvimento/c1/${TASK}`)
+    expect(waitingLink()!.getAttribute('href')).toBe(`/desenvolvimento/${TASK}`)
   })
 
   it('clicar no motivo abre a mesa e não a tarefa', () => {

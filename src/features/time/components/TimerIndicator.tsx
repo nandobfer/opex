@@ -51,7 +51,7 @@ export function TimerIndicator() {
             running: item.running,
             waitingFor: item.waitingFor,
             startTime: byWorkbench.get(item.workbenchId)?.startTime ?? null,
-            href: workbenchPath(item.centralId, item.taskId),
+            href: workbenchPath(item.taskId),
         })
     }
 

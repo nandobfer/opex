@@ -13,8 +13,9 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
-- `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[centralId]/[[...task]]/page.tsx`:
-  Central de desenvolvimento (item próprio no menu; ver `modules/agentic-dev.md`).
+- `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[taskId]/page.tsx` (com `layout.tsx`
+  que distribui o índice de repositórios): Central de desenvolvimento (item próprio no menu; ver
+  `modules/agentic-dev.md`). A central vem do navegador e a tarefa da URL.
 - `src/app/(app)/tarefas/layout.tsx`: `TimerProvider` (timers locais) para as três páginas.
 - Item ativo do menu = o de `href` mais específico que casa com o caminho (`activeNavHref`): em
   `/tarefas/horas` fica "Minhas horas"; em `/tarefas/123`, "Tarefas".
