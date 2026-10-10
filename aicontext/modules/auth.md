@@ -56,8 +56,9 @@ descarta destino externo (open redirect).
 
 ## Sair
 
-`LogoutButton` no rodapé do menu (`SidebarFooter`): chama `POST /api/auth/logout` (apaga o cookie)
-e recarrega para `/login`.
+`LogoutButton` no rodapé do menu (`SidebarFooter`): no desktop fica dentro do **popover** aberto pelo
+avatar do dono; na gaveta do mobile fica inline. Chama `POST /api/auth/logout` (apaga o cookie) e
+recarrega para `/login`.
 
 ## Rate limit
 
@@ -75,4 +76,5 @@ do projeto). O sucesso limpa a chave; a janela deslizante é de 15 min.
 ## Testes
 
 `__tests__/features/auth/`: `session`, `paths`, `paths-basepath`, `auth-service`, `rate-limit`,
-`login-form`, `login-background`, `logout-button`. Layout: `app-sidebar` cobre o "Sair" no rodapé.
+`login-form`, `login-background`, `logout-button`. Layout: `app-sidebar` cobre o "Sair" no popover do
+avatar (desktop) e o "Sair" inline (mobile).

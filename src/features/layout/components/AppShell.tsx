@@ -45,7 +45,7 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
     const pathname = usePathname()
     const reduceMotion = useReducedMotion()
     const immersive = immersiveHrefs.some((href) => isActiveHref(pathname, href))
-    const sidebar = useSidebarState(immersive)
+    const sidebar = useSidebarState()
     const drawerId = useId()
     const drawerRef = useRef<HTMLDivElement>(null)
     const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -65,8 +65,6 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
             sections={sections}
             navLabel={navLabel}
             collapsed={sidebar.collapsed}
-            canCollapse={sidebar.isDesktop}
-            onToggleCollapsed={sidebar.toggleCollapsed}
             onNavigate={sidebar.isDesktop ? undefined : closeMobile}
             onClose={sidebar.isDesktop ? undefined : closeDrawer}
             badges={badges}
