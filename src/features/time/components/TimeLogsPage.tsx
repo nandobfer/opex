@@ -13,6 +13,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { listContainer } from "@/components/motion/presets"
 import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
 import { apiErrorMessage } from "@/lib/api"
 import { formatMinutes } from "@/features/tasks/format"
 import { formatCostUsd } from "../format"
@@ -44,6 +45,10 @@ export function TimeLogsPage() {
         [range.from, range.to],
     )
     const logsQuery = useTimeLogs(query)
+    const { sentinelRef, supported } = useInfiniteScroll({
+        onLoadMore: () => void logsQuery.fetchNextPage(),
+        disabled: !logsQuery.hasNextPage || logsQuery.isFetchingNextPage || logsQuery.isFetchNextPageError,
+    })
 
     const pages = useMemo(() => logsQuery.data?.pages ?? [], [logsQuery.data])
     const logs = useMemo(() => pages.flatMap((page) => page.logs), [pages])
@@ -151,10 +156,23 @@ export function TimeLogsPage() {
                                     </motion.div>
                                 </section>
                             ))}
-                            {logsQuery.hasNextPage && (
+                            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+                            {logsQuery.isFetchingNextPage && (
+                                <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                    <motion.span animate={{ rotate: reduceMotion ? 0 : 360 }} transition={reduceMotion ? { duration: 0 } : { repeat: Infinity, duration: 0.9, ease: "linear" }} className="inline-flex">
+                                        <Loader2 className="h-4 w-4" aria-hidden />
+                                    </motion.span>
+                                    Carregando mais apontamentos…
+                                </div>
+                            )}
+                            {!supported && logsQuery.hasNextPage && (
                                 <div className="flex justify-center">
                                     <Button type="button" variant="outline" onClick={() => void logsQuery.fetchNextPage()} disabled={logsQuery.isFetchingNextPage}>
-                                        {logsQuery.isFetchingNextPage && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}
+                                        {logsQuery.isFetchingNextPage && (
+                                            <motion.span animate={{ rotate: reduceMotion ? 0 : 360 }} transition={reduceMotion ? { duration: 0 } : { repeat: Infinity, duration: 0.9, ease: "linear" }} className="mr-1.5 inline-flex">
+                                                <Loader2 className="h-3.5 w-3.5" aria-hidden />
+                                            </motion.span>
+                                        )}
                                         Carregar mais ({logs.length} de {total})
                                     </Button>
                                 </div>
