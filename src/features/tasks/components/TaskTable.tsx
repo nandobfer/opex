@@ -4,13 +4,14 @@ import { useMemo, type CSSProperties } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { usePageVirtualizer } from "@/hooks/usePageVirtualizer"
 import { RunningClock } from "@/features/time/components/RunningClock"
 import { useTimer } from "@/features/time/components/TimerProvider"
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
+import { WorkbenchWaitingLink } from "@/features/agentic/components/WorkbenchWaitingLink"
 import { workbenchProgressTone } from "@/features/agentic/logic"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, type BoardColumnView } from "../board"
@@ -166,12 +167,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                         {task.code}
                     </span>
                     {running && <RunningClock startTime={running.startTime} className="block text-[10px] font-semibold text-success" />}
-                    {tone && waiting && (
-                        <span className={cn("mt-0.5 flex items-center gap-1 text-[10px] font-medium", tone === "failed" ? "text-destructive" : "text-warning")} title={waiting.waitingFor ?? undefined}>
-                            <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
-                            <span className="truncate">{waiting.waitingFor}</span>
-                        </span>
-                    )}
+                    {waiting && <WorkbenchWaitingLink taskId={task.id} taskCode={task.code} item={waiting} className="mt-0.5" />}
                 </td>
                 <td className={cn("px-2 py-2", hide("issue"))}>
                     {task.issue ? (
