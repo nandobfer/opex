@@ -21,6 +21,7 @@ import type { TaskDto } from "../types"
 import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "./TaskBadges"
+import { EstimateBadge } from "./EstimateBadge"
 import { BULK_BAR_CLEARANCE } from "./TaskBulkBar"
 import { TaskColumnMenu } from "./TaskColumnMenu"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
@@ -191,6 +192,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                                 </TooltipContent>
                             </Tooltip>
                             {task.archived && <ArchivedBadge />}
+                            <EstimateBadge estimate={task.estimate} />
                             {task.issue?.notice && <IssueNoticeBadge notice={task.issue.notice} />}
                         </span>
                         {task.summary && (

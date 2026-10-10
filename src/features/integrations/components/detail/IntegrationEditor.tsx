@@ -12,6 +12,7 @@ import type { IntegrationDetailDto } from "../../types"
 import { buildIntegrationPatch, draftFrom, type Draft } from "./draft"
 import { GithubEditorForm } from "@/features/github/components/GithubEditorForm"
 import { AiEditorForm } from "@/features/ai/components/AiEditorForm"
+import { OrcamentosEditorForm } from "@/features/orcamentos/components/OrcamentosEditorForm"
 import { EditorForm } from "./EditorForm"
 import { ExplorerPane } from "./ExplorerPane"
 import { LogsPanel } from "./LogsPanel"
@@ -100,6 +101,8 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                         onUndo={() => setDraft(draftFrom(data))}
                         onExplore={() => setExploring(true)}
                     />
+                ) : id === "orcamentos" ? (
+                    <OrcamentosEditorForm key="form" def={def} data={data} />
                 ) : (
                     <EditorForm
                         key="form"

@@ -9,17 +9,25 @@ import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
 import {
+    DEFAULT_BUDGET_PREVIEW_SETTINGS,
+    DEFAULT_ESTIMATE_HOURS_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
     DEFAULT_UNDERSTAND_TASK_SETTINGS,
+    budgetPreviewSettingsSchema,
+    estimateHoursSettingsSchema,
     taskSummarySettingsSchema,
     understandTaskSettingsSchema,
+    type BudgetPreviewSettings,
+    type EstimateHoursSettings,
     type TaskSummarySettings,
     type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
+const BUDGET_PREVIEW_FEATURE = "budget-preview"
+const ESTIMATE_HOURS_FEATURE = "estimate-hours"
 
 /** Campos de provedor comuns a toda feature de IA. */
 type ProviderSettings = {
@@ -95,16 +103,15 @@ export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTask
 export function normalizeTaskSummarySettings(input: TaskSummarySettings): TaskSummarySettings {
     return normalizeProvider(input)
 }
-
-async function persistFeature<T extends ProviderSettings>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
+async function persistFeature<T>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
     await AiFeatureSetting.updateOne({ feature }, { $set: { settings: next, updatedAt: new Date(), updatedBy: actorId } }, { upsert: true })
     await recordAudit({
         userId: actorId,
         entidade: AI_AUDIT_ENTITY,
         entidadeId: feature,
         acao: before.isDefault ? AcaoAuditoria.CRIAR : AcaoAuditoria.ATUALIZAR,
-        antes: before.isDefault ? undefined : before.settings,
-        depois: next,
+        antes: before.isDefault ? undefined : (before.settings as Record<string, unknown>),
+        depois: next as Record<string, unknown>,
     })
     await publishAppEvent(AI_FEATURE_UPDATED_EVENT, { feature }).catch(() => undefined)
 }
@@ -162,4 +169,59 @@ export async function saveTaskSummarySettings(input: TaskSummarySettings, actorI
     await persistFeature(TASK_SUMMARY_FEATURE, next, actorId, before)
     if (next.enabled && !before.settings.enabled) scheduleTaskSummaryBackfill()
     return getTaskSummarySettings()
+}
+
+// ── Orçamentos (prévia do portal do cliente) ─────────────────────────────────
+
+export async function loadBudgetPreviewSettings(): Promise<{ settings: BudgetPreviewSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(BUDGET_PREVIEW_FEATURE, budgetPreviewSettingsSchema, DEFAULT_BUDGET_PREVIEW_SETTINGS)
+}
+
+export async function availabilityOfBudgetPreview(settings: BudgetPreviewSettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Orçamentos"')
+}
+
+export async function getBudgetPreviewSettings(): Promise<BudgetPreviewSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadBudgetPreviewSettings()
+    return { settings, isDefault, availability: await availabilityOfBudgetPreview(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export function normalizeBudgetPreviewSettings(input: BudgetPreviewSettings): BudgetPreviewSettings {
+    return normalizeProvider(input)
+}
+
+export async function saveBudgetPreviewSettings(input: BudgetPreviewSettings, actorId: string): Promise<BudgetPreviewSettingsDto> {
+    const next = normalizeBudgetPreviewSettings(input)
+    await assertCatalog(next)
+    const before = await loadBudgetPreviewSettings()
+    await persistFeature(BUDGET_PREVIEW_FEATURE, next, actorId, before)
+    return getBudgetPreviewSettings()
+}
+
+// ── Estimar prazos (agente OpenCode que consulta o banco) ────────────────────
+
+export async function loadEstimateHoursSettings(): Promise<{ settings: EstimateHoursSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(ESTIMATE_HOURS_FEATURE, estimateHoursSettingsSchema, DEFAULT_ESTIMATE_HOURS_SETTINGS)
+}
+
+/** A feature é exclusiva do OpenCode (o agente roda tools no servidor para consultar o banco). */
+export async function availabilityOfEstimateHours(settings: EstimateHoursSettings): Promise<AiFeatureAvailability> {
+    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Estimar prazos"')
+}
+
+export async function getEstimateHoursSettings(): Promise<EstimateHoursSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadEstimateHoursSettings()
+    return { settings, isDefault, availability: await availabilityOfEstimateHours(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export function normalizeEstimateHoursSettings(input: EstimateHoursSettings): EstimateHoursSettings {
+    return { ...input, agent: input.agent || null, variant: input.variant || null }
+}
+
+export async function saveEstimateHoursSettings(input: EstimateHoursSettings, actorId: string): Promise<EstimateHoursSettingsDto> {
+    const next = normalizeEstimateHoursSettings(input)
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    const before = await loadEstimateHoursSettings()
+    await persistFeature(ESTIMATE_HOURS_FEATURE, next, actorId, before)
+    return getEstimateHoursSettings()
 }

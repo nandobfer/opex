@@ -43,6 +43,7 @@ export interface IntegrationConfigMap {
     ai_opencode: { baseUrl?: string; directory?: string; password?: string }
     ai_gemini: { apiKey?: string }
     ai_jev: { apiKey?: string }
+    orcamentos: Record<string, never>
 }
 
 export type SecretSource = "db" | "env" | "none"

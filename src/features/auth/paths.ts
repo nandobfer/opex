@@ -5,6 +5,8 @@
  * Rota pública = acessível sem sessão. São públicas:
  * - a tela de login e as rotas internas de auth (`/login`, `/api/auth/login`, `/api/auth/logout`);
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
+ * - o **portal do cliente** de Orçamentos (`/cliente` e `/api/cliente/*`), autenticado pelo token do
+ *   cliente (`requireClient`);
  * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`.
  *
  * Tudo o mais (páginas e APIs internas) exige o cookie de sessão.
@@ -17,8 +19,8 @@ export type AuthAction = "allow" | "redirect" | "unauthorized"
 /** Rotas liberadas sem sessão (comparação exata). */
 export const PUBLIC_ROUTES: readonly string[] = ["/login", "/api/auth/login", "/api/auth/logout"]
 
-/** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */
-export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines"]
+/** Prefixos de rota liberados sem sessão (API pública por token, portal do cliente e tick de cron). */
+export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/cliente", "/cliente"]
 
 /**
  * Caminho sem o subcaminho público (`BASE_PATH`), com barra inicial e sem barra final.

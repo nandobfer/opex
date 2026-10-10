@@ -14,6 +14,7 @@ import { workbenchProgressTone } from "@/features/agentic/logic"
 import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityIcon, TaskTypeBadge } from "./TaskBadges"
+import { EstimateBadge } from "./EstimateBadge"
 
 /** Seleção do card: checkbox (aparece ao passar o mouse; sempre visível quando há seleção). */
 export interface CardSelection {
@@ -130,6 +131,7 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
             <div data-testid="task-card-footer" className="flex items-center justify-between gap-1.5 border-t pt-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
                     <TaskPriorityIcon priority={task.priority} />
+                    <EstimateBadge estimate={task.estimate} />
                     <TaskTypeBadge type={task.taskType} />
                     {task.archived && <ArchivedBadge />}
                 </div>

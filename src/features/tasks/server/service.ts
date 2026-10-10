@@ -40,6 +40,17 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         priority: (task.priority as TaskPriority) ?? "medium",
         archived: task.archived === true,
         project: projectRef(project),
+        estimate: task.estimate
+            ? {
+                  hours: task.estimate.hours ?? 0,
+                  clientHours: task.estimate.clientHours ?? 0,
+                  billingBrl: task.estimate.billingBrl ?? 0,
+                  factor: task.estimate.factor ?? 1,
+                  hourlyRate: task.estimate.hourlyRate ?? 0,
+                  model: task.estimate.model ?? null,
+                  generatedAt: task.estimate.generatedAt ? new Date(task.estimate.generatedAt).toISOString() : null,
+              }
+            : null,
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
     }
@@ -122,6 +133,18 @@ async function withIssueRefs<T extends TaskDto>(tasks: T[]): Promise<T[]> {
 export async function listTasks(includeArchived: boolean): Promise<TaskListDto> {
     await dbConnect()
     const docs = await DevTask.find(includeArchived ? {} : { archived: { $ne: true } }).sort({ columnId: 1, order: 1 }).lean()
+    const projects = new Map((await Project.find({ _id: { $in: [...new Set(docs.map((task) => task.projectId))] } }).lean()).map((project) => [String(project._id), project]))
+    const tasks = docs.map((task) => toTaskDto(task, projects.get(task.projectId) ?? null))
+    return { tasks: await withIssueRefs(tasks), fetchedAt: new Date().toISOString() }
+}
+
+/** Tarefas dos repositórios de um cliente (portal). SOMENTE servidor. */
+export async function listTasksForProjects(projectIds: string[], includeArchived: boolean): Promise<TaskListDto> {
+    await dbConnect()
+    if (projectIds.length === 0) return { tasks: [], fetchedAt: new Date().toISOString() }
+    const docs = await DevTask.find({ projectId: { $in: projectIds }, ...(includeArchived ? {} : { archived: { $ne: true } }) })
+        .sort({ columnId: 1, order: 1 })
+        .lean()
     const projects = new Map((await Project.find({ _id: { $in: [...new Set(docs.map((task) => task.projectId))] } }).lean()).map((project) => [String(project._id), project]))
     const tasks = docs.map((task) => toTaskDto(task, projects.get(task.projectId) ?? null))
     return { tasks: await withIssueRefs(tasks), fetchedAt: new Date().toISOString() }
@@ -226,8 +249,20 @@ export interface CreateTaskOptions {
     actorId: string
     /** Força a ordem (usado por rotinas). Sem isto, vai para o fim da coluna. */
     order?: number
-    /** Origem da criação (a sincronização marca "github"). */
-    origin?: "opex" | "github"
+    /** Origem da criação (a sincronização marca "github"; o portal do cliente marca "client"). */
+    origin?: "opex" | "github" | "client"
+    /** Estimativa/orçamento vinda do portal do cliente (snapshot). */
+    estimate?: TaskEstimateInput
+}
+
+/** Estimativa gravada na tarefa ao aprovar a prévia do portal. */
+export interface TaskEstimateInput {
+    hours: number
+    clientHours: number
+    billingBrl: number
+    factor: number
+    hourlyRate: number
+    model: string | null
 }
 
 export async function createTask(input: CreateTaskInput, options: CreateTaskOptions): Promise<TaskDto> {
@@ -248,13 +283,14 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         taskType: input.taskType ?? null,
         priority: input.priority ?? "medium",
         archived: false,
+        estimate: options.estimate ? { ...options.estimate, generatedAt: new Date() } : null,
     })
     await recordAudit({
         userId: options.actorId,
         entidade: TASK_AUDIT_ENTITY,
         entidadeId: String(task._id),
         acao: AcaoAuditoria.CRIAR,
-        depois: { codigo: code, titulo: task.title, projeto: project.name, coluna: input.columnId, ...(options.origin === "github" ? { origem: "github" } : {}) },
+        depois: { codigo: code, titulo: task.title, projeto: project.name, coluna: input.columnId, ...(options.origin && options.origin !== "opex" ? { origem: options.origin } : {}) },
     })
     await publishTasksUpdated([String(task._id)])
     notifyAgenticQueue([String(task._id)])

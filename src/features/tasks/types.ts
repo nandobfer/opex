@@ -12,6 +12,20 @@ export interface ProjectRef extends NamedRef {
     sigla: string
 }
 
+/** Estimativa/orçamento da tarefa (portal do cliente). */
+export interface TaskEstimate {
+    /** Horas reais estimadas pela IA (visão interna). */
+    hours: number
+    /** Horas exibidas ao cliente (H × fator). */
+    clientHours: number
+    /** Faturamento em reais. */
+    billingBrl: number
+    factor: number
+    hourlyRate: number
+    model: string | null
+    generatedAt: string | null
+}
+
 /** Tarefa como o quadro e a tabela usam. */
 export interface TaskDto {
     id: string
@@ -30,6 +44,8 @@ export interface TaskDto {
     updatedAt: string | null
     /** Issue do GitHub vinculada (botão "Abrir issue"). */
     issue?: TaskIssueRef | null
+    /** Estimativa/orçamento (portal do cliente) — `null` quando não houver. */
+    estimate: TaskEstimate | null
 }
 
 export interface TaskIssueRef {

@@ -17,7 +17,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev", "orcamentos"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -475,6 +475,15 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         publicFields: [],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave da TypeSafe (console.typesafe.ai/keys)", required: true }],
     },
+    {
+        id: "orcamentos",
+        name: "Orçamentos",
+        description: "Clientes do portal público: repositórios, custo por hora e fator de lucro",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        publicFields: [],
+        secretFields: [],
+    },
 ]
 
 const BY_ID = new Map<string, IntegrationDef>(INTEGRATIONS.map((def) => [def.id, def]))
@@ -501,6 +510,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,
     ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
+    orcamentos: `${INTEGRATIONS_BASE_PATH}/orcamentos`,
 }
 
 export function integrationPath(id: IntegrationId): string {

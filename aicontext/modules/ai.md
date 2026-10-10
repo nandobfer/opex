@@ -61,8 +61,9 @@ e opções na própria aba da página "Provedores de IA".
   `/integracoes/ia/gemini` e `/integracoes/ia/jev` em `ia/[provider]/page.tsx`, provedor
   desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas** e
-  **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
+  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
+  **Orçamentos** e **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em
+  `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
   (estado local, não vão à URL).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
@@ -134,6 +135,30 @@ e opções na própria aba da página "Provedores de IA".
   fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
   `understand-stream.ts`.
 
+## Feature "Orçamentos" (prévia do portal do cliente)
+
+- Configuração em `ai_feature_settings` (`feature: "budget-preview"`), schema Zod
+  `budgetPreviewSettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
+  variante/raciocínio, temperatura e máximo de tokens (só Gemini) e instruções (prompt de sistema).
+  Regras ao salvar iguais às demais features (ativa exige provedor+modelo conectados; modelo,
+  variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
+- Gera **somente a prévia** da tarefa (1ª fase, `parseDraftPreview`): a IA interpreta a **descrição
+  enviada pelo cliente** e devolve **JSON validado com Zod** — título, tipo, prioridade,
+  especificação técnica (Markdown) e resumo de 1 linha. Como não há saída estruturada garantida, o
+  JSON é extraído do texto e validado; inválido → evento `error`. Ver `modules/orcamentos.md`.
+
+## Feature "Estimar prazos" (agente do OpenCode que consulta o banco)
+
+- Configuração em `ai_feature_settings` (`feature: "estimate-hours"`), schema Zod
+  `estimateHoursSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante e instruções.
+  É **exclusiva do OpenCode** (sem provedor nem amostragem): o agente roda as ferramentas no servidor
+  OpenCode (ex.: consulta ao banco via **MCP**) e pensa antes de responder. Ativar exige modelo;
+  modelo, variante e agente são conferidos no catálogo do OpenCode.
+- Usada na 2ª fase do portal (ver `modules/orcamentos.md`): recebe a prévia + o pedido e devolve
+  `{ estimatedHours }` (H), validado por `parseEstimateHours`. Os eventos de ferramenta do agente
+  (`tool`) são retransmitidos ao navegador pela `streamAi`. O cálculo exibido ao cliente
+  (`H × fator × custo/hora`) é do servidor.
+
 ## APIs
 
 | Rota | Descrição |
@@ -142,6 +167,8 @@ e opções na própria aba da página "Provedores de IA".
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
+| `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
+| `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 
@@ -153,4 +180,6 @@ estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, 
 `task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` e
 `task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
 substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os
-hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)").
+hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
+`estimate-hours-settings` cobre a configuração de "Estimar prazos"). A feature "Orçamentos" é
+coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).

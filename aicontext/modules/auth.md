@@ -47,6 +47,8 @@ Rotas liberadas sem sessão:
 
 - `/login`, `/api/auth/login`, `/api/auth/logout`;
 - `/api/v1/*` — API pública por token de sistema (`requireApiToken`);
+- `/cliente` e `/api/cliente/*` — portal do cliente de Orçamentos, autenticado pelo **token do
+  cliente** (`requireClient`, `x-client-token` ou `?t=`; ver `modules/orcamentos.md`);
 - `/api/routines/*` — tick do agendador (token de cron).
 
 `next` é gravado sem o subcaminho público (`normalizePath` remove o `BASE_PATH`), e o formulário
