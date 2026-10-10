@@ -133,8 +133,16 @@ async function assertAvailable(centralId: string, workbenchId: string | null, co
     const availability = await agenticAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? "Desenvolvimento agêntico indisponível", "AGENTIC_UNAVAILABLE")
     if (!config.enabled) throw new DomainError(409, "A central está desativada em Integrações › Provedores de IA", "CENTRAL_DISABLED")
-    const running = await AgenticWorkbench.countDocuments({ centralId, runState: "running", ...(workbenchId ? { _id: { $ne: workbenchId } } : {}) })
-    if (running >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) executando ao mesmo tempo nesta central`, "CENTRAL_BUSY")
+    // O limite é de mesas ABERTAS (não concluídas); a própria mesa não conta ao retomar um turno.
+    const open = await AgenticWorkbench.countDocuments({ centralId, stage: { $ne: "done" }, ...(workbenchId ? { _id: { $ne: workbenchId } } : {}) })
+    if (open >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) abertas ao mesmo tempo nesta central`, "CENTRAL_BUSY")
+}
+
+/** Abre a próxima mesa da fila da central (import dinâmico evita o ciclo estático com `queue.ts`). */
+function pumpQueue(centralId: string): void {
+    void import("./queue")
+        .then((queue) => queue.pumpCentralQueue(centralId))
+        .catch(() => undefined)
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +371,7 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
     await update(doc, { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null })
     publishWorkbenchEvent(String(doc._id), { type: "notice", level: "success", message: "Mesa de trabalho concluída" })
     centralLogger(doc.centralId, doc.taskCode).success("Mesa concluída", { workbenchId: String(doc._id) })
+    pumpQueue(doc.centralId)
 }
 
 // ---------------------------------------------------------------------------
@@ -548,6 +557,7 @@ export async function deleteWorkbench(id: string): Promise<void> {
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage } })
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
+    pumpQueue(doc.centralId)
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(),
   publish: vi.fn(),
+  notifyQueue: vi.fn(),
+  afterTasks: [] as Promise<unknown>[],
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }>; aggregate: (...args: unknown[]) => Promise<unknown[]> }>,
 }))
 
@@ -12,6 +14,8 @@ vi.mock('@/lib/db', () => ({
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', MOVER: 'MOVER', EXCLUIR: 'EXCLUIR' },
 }))
 vi.mock('@/lib/pusher/channels', () => ({ appChannel: () => 'private-app', publishToChannels: mocks.publish }))
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => { mocks.afterTasks.push(task()) } }))
+vi.mock('@/features/agentic/server/queue', () => ({ notifyTasksColumnChanged: mocks.notifyQueue }))
 vi.mock('@/features/github/server/issue-links', () => ({ issueRefsFor: async () => new Map() }))
 vi.mock('@/lib/db/models/DevTask', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
@@ -45,12 +49,18 @@ vi.mock('@/lib/db/models/Github', async () => {
   mocks.models.issueLink = memoryModel()
   return { GithubIssueLink: mocks.models.issueLink, GithubMapping: memoryModel() }
 })
+vi.mock('@/lib/db/models/Agentic', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.central = memoryModel()
+  return { AgenticCentral: mocks.models.central, AgenticWorkbench: memoryModel(), AgenticEvent: memoryModel() }
+})
 
 import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
 import { createTask, deleteTask, getTask, getTaskOptions, listTasks, moveTask, runBulkTasks, setTaskArchived, updateTask } from '@/features/tasks/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
+  mocks.afterTasks.length = 0
 }
 
 const seedProject = async () =>
@@ -120,6 +130,18 @@ describe('editar, mover e arquivar', () => {
     expect(mocks.models.comment.docs).toHaveLength(0)
     await expect(getTask(a.id)).rejects.toMatchObject({ status: 404 })
   })
+
+  it('mover para outra coluna avisa o desenvolvimento agêntico (fila da central)', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await Promise.all(mocks.afterTasks)
+    mocks.afterTasks.length = 0
+    mocks.notifyQueue.mockClear()
+    await moveTask(a.id, { targetColumn: 'doing' }, 'local')
+    await Promise.all(mocks.afterTasks)
+    expect(mocks.notifyQueue).toHaveBeenCalledTimes(1)
+    expect(mocks.notifyQueue).toHaveBeenCalledWith([a.id])
+  })
 })
 
 describe('lote', () => {
@@ -170,5 +192,11 @@ describe('colunas do quadro', () => {
     await expect(deleteColumn('todo', 'local')).rejects.toMatchObject({ status: 409 })
     await deleteColumn('done', 'local')
     expect((await getBoard()).columns.map((c) => c.key)).toEqual(['todo', 'doing'])
+  })
+
+  it('não exclui a coluna da fila de uma central', async () => {
+    await getBoard()
+    await mocks.models.central.create({ projectId: 'p1', projectName: 'go', config: { columns: { queue: 'doing' } } })
+    await expect(deleteColumn('doing', 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMN_QUEUE_IN_USE' })
   })
 })

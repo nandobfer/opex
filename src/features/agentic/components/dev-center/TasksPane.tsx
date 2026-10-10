@@ -17,8 +17,9 @@ import { useTaskList } from "@/features/tasks/hooks/useTasks"
 import { workbenchPath } from "../../constants"
 import { DEFAULT_DEV_CENTER_FILTERS, DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, filterCentralTasks } from "../../dev-center-filters"
 import { PANE_WIDTHS } from "../../dev-center-layout"
-import { useCentralWorkbenches } from "../../hooks/useAgentic"
+import { useCentralQueue, useCentralWorkbenches } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
+import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 import { CollapsiblePane, PaneToggle } from "./CollapsiblePane"
 import { TaskFilters } from "./TaskFilters"
@@ -40,10 +41,12 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
     const list = useTaskList(false)
     const board = useTaskBoard()
     const workbenches = useCentralWorkbenches(central.id)
+    const queue = useCentralQueue(central.id)
     const { value: filters, setValue: setFilters, reset } = usePersistentState(DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, DEFAULT_DEV_CENTER_FILTERS)
     const tasks = useMemo(() => filterCentralTasks(list.data?.tasks ?? [], central.projectId, filters), [list.data, central.projectId, filters])
     const columns = useMemo(() => new Map(board.columns.map((column) => [column.key, column])), [board.columns])
     const stages = useMemo(() => new Map((workbenches.data ?? []).map((item) => [item.taskId, item])), [workbenches.data])
+    const queued = useMemo(() => new Map((queue.data ?? []).map((item) => [item.taskId, item])), [queue.data])
     const scrollRef = useRef<HTMLDivElement>(null)
     // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual devolve funções não memorizáveis (padrão do projeto)
     const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, overscan: 8 })
@@ -110,6 +113,7 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                 {virtualizer.getVirtualItems().map((row) => {
                                     const task = tasks[row.index]!
                                     const workbench = stages.get(task.id)
+                                    const queueItem = queued.get(task.id)
                                     const column = columns.get(task.columnId)
                                     const active = task.id === activeTaskId
                                     return (
@@ -123,7 +127,7 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                                     {column && <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} title={column.label} aria-label={column.label} />}
                                                     <span className="font-mono text-[11px] font-semibold text-primary">{task.code}</span>
                                                     <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{column?.label ?? "Sem coluna"}</span>
-                                                    {workbench && <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />}
+                                                    {workbench ? <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} /> : queueItem && <QueueBadge position={queueItem.position} />}
                                                 </span>
                                                 <span className="truncate text-sm">{task.title}</span>
                                             </Link>

@@ -76,6 +76,8 @@ export const centralConfigSchema = z.object({
         previewPortMax: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
     }),
     columns: z.object({
+        /** Coluna do quadro que, ao receber um card, entra na fila da central e pode abrir a mesa automaticamente; `null` = desligado. */
+        queue: z.string().trim().max(60).nullable(),
         /** Coluna de destino ao abrir a mesa (implementação); `null` = não move. */
         onStart: z.string().trim().max(60).nullable(),
         /** Coluna de destino quando o PR é aberto; `null` = não move. */
@@ -118,7 +120,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             validateCommands: "",
         },
         environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
-        columns: { onStart: null, onPr: null, onDone: null },
+        columns: { queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },
         instructions: { planning: "", implementation: "", build: "", pr: "" },

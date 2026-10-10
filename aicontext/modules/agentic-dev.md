@@ -29,11 +29,11 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 | Aba | Campos |
 |---|---|
-| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas executando ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
+| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
-| Colunas e conclusão | coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
+| Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
@@ -43,6 +43,28 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   de destino, `gh auth status`, `docker compose version`, o arquivo do compose e a pasta dos
   worktrees; mais feature/OpenCode e o vínculo do repositório (aviso). Grava `lastTest`.
 - Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas).
+
+## Fila da central de desenvolvimento
+
+Cada central pode apontar uma **coluna da fila** (`columns.queue`, `null` = desligada; aba "Colunas e
+conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fila para abrir a mesa:
+
+- **Vaga livre** (mesas abertas `< maxConcurrent`) → a mesa é criada **na hora** e o planejamento
+  começa (o mesmo fluxo de "Abrir mesa e gerar o plano").
+- **Sem vaga** → a tarefa **aguarda na fila** e a mesa é criada quando uma mesa conclui (ou é
+  excluída). A ordem é a **dos cards no kanban** (`order`); a posição (1-based) aparece na lista de
+  tarefas e na mesa como "Na fila · #N".
+- O **limite** (`maxConcurrent`, "Mesas abertas ao mesmo tempo", 1–10) conta mesas **não concluídas**
+  (`stage != done`). Uma mesa aberta nunca é bloqueada nos próprios turnos.
+- A fila é **derivada** (`DevTask` do projeto na coluna, não arquivadas e sem mesa) — não há coleção
+  própria. `GET /api/agentic/centrals/[id]/queue` devolve a fila para a tela.
+- **Gatilhos**: mudança de coluna da tarefa (criar/atualizar/mover/lote) avisa a central; concluir
+  ou excluir uma mesa libera a vaga; mudar a config da central reavalia a fila. A rotina interna
+  **`agentic-queue-pump`** (1 min, Crons) cobre reinícios e vagas liberadas fora do processo.
+- Sem OpenCode conectado, ou com a feature/central desativada, a tarefa **permanece na fila** e é
+  iniciada quando ficar disponível. Mover o card para fora da coluna remove a tarefa da fila.
+- Excluir a coluna da fila de uma central é bloqueado (`COLUMN_QUEUE_IN_USE`): troque a coluna na
+  central antes.
 
 ## Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`)
 
@@ -60,9 +82,10 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   colunas ficam empilhadas e sempre abertas.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
-  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da mesa.
+  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da
+  mesa ou, sem mesa, a posição na fila ("Na fila · #N").
 - Tarefa sem mesa: **Abrir mesa e gerar o plano** (desabilitado com o motivo quando indisponível,
-  central desativada ou tarefa de outro projeto).
+  central desativada ou tarefa de outro projeto); em fila, mostra a posição e abre ao liberar a vaga.
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
 
@@ -146,7 +169,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | Rota | Uso |
 |---|---|
 | `GET/PUT /settings` | configuração geral |
-| `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches` | centrais |
+| `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
 | `POST /workbenches` `{centralId, taskId}` | abre a mesa e inicia o plano (409 se já existir) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |
@@ -159,6 +182,6 @@ merge, reabrir, excluir).
 
 ## Testes
 
-`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, hub, runner com cliente
-falso, acompanhamento do PR, rota de ações, barra de ações) e
+`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), hub, runner
+com cliente falso, acompanhamento do PR, rota de ações, barra de ações) e
 `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

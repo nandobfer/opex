@@ -2,9 +2,11 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { Project } from "@/lib/db/models/Project"
+import { AgenticCentral } from "@/lib/db/models/Agentic"
 import { TaskBoardColumn, TaskBoardLayout, type ITaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { randomId } from "@/lib/random-id"
+import { parseCentralConfig } from "@/features/agentic/logic"
 import { normalizeLayout, placeColumnAfter, type ColumnColor, type ColumnIcon, type TaskColumnDto, type TaskBoardDto } from "../board"
 import { TASK_COLUMNS_UPDATED_EVENT } from "../constants"
 import type { ColumnInput, CreateColumnInput } from "../schemas"
@@ -101,6 +103,12 @@ export async function deleteColumn(key: string, actorId: string): Promise<void> 
     const repos = (await Project.find({ entryColumnKey: key }).select({ repo: 1 }).lean()).map((project) => project.repo)
     if (repos.length > 0) {
         throw new DomainError(409, `A coluna recebe as issues de ${repos.join(", ")}: troque a coluna de entrada no vínculo do GitHub antes de excluí-la`, "COLUMN_IN_USE")
+    }
+    const queueCentrals = (await AgenticCentral.find().select({ projectName: 1, config: 1 }).lean())
+        .filter((central) => parseCentralConfig(central.config).columns.queue === key)
+        .map((central) => central.projectName)
+    if (queueCentrals.length > 0) {
+        throw new DomainError(409, `A coluna inicia a mesa de ${queueCentrals.join(", ")}: troque a coluna da fila na central antes de excluí-la`, "COLUMN_QUEUE_IN_USE")
     }
     const inside = await DevTask.find({ columnId: key }).select({ code: 1 }).limit(5).lean()
     const count = await DevTask.countDocuments({ columnId: key })

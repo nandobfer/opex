@@ -4,6 +4,7 @@ import { AuditLog, type IAuditLog } from "@/lib/db/models/AuditLog"
 import { DevTask, TaskComment, type IDevTask } from "@/lib/db/models/DevTask"
 import { Project, type IProject } from "@/lib/db/models/Project"
 import { TimeLog } from "@/lib/db/models/TimeLog"
+import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
@@ -155,6 +156,18 @@ const assertTaskId = (id: string) => {
     if (!OBJECT_ID.test(id)) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
 }
 
+/**
+ * Avisa o desenvolvimento agêntico que tarefas mudaram de coluna: as que caíram na coluna da fila
+ * de uma central podem abrir a mesa na hora. Roda depois da resposta (nunca atrasa a requisição).
+ */
+function notifyAgenticQueue(ids: string[]): void {
+    if (!ids.length) return
+    runAfterResponse("agentic-queue", async () => {
+        const { notifyTasksColumnChanged } = await import("@/features/agentic/server/queue")
+        await notifyTasksColumnChanged(ids)
+    })
+}
+
 async function assertColumn(key: string): Promise<void> {
     const board = await getBoard()
     if (!board.columns.some((column) => column.key === key)) throw new DomainError(400, "Coluna inválida", "COLUMN_NOT_FOUND")
@@ -208,6 +221,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         depois: { codigo: code, titulo: task.title, projeto: project.name, coluna: input.columnId },
     })
     await publishTasksUpdated([String(task._id)])
+    notifyAgenticQueue([String(task._id)])
     return toTaskDto(task.toObject(), project)
 }
 
@@ -220,6 +234,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     const before: Record<string, unknown> = { codigo: task.code, titulo: task.title }
     const after: Record<string, unknown> = { codigo: task.code }
     const set: Record<string, unknown> = {}
+    let columnChanged = false
 
     if (input.title !== undefined) {
         set.title = input.title
@@ -254,12 +269,14 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
         set.columnId = input.columnId
         set.order = await endOrder(input.columnId, id)
         after.coluna = input.columnId
+        columnChanged = true
     }
 
     if (Object.keys(set).length === 0) return
     await DevTask.updateOne({ _id: id }, { $set: set })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: after })
     if (options.publish !== false) await publishTasksUpdated([id])
+    if (options.publish !== false && columnChanged) notifyAgenticQueue([id])
 }
 
 /** Mover a tarefa de coluna (e, opcionalmente, posição). */
@@ -283,6 +300,7 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
         depois: { codigo: task.code, coluna: columnNames.get(input.targetColumn) ?? input.targetColumn, ordem: order },
     })
     if (options.publish !== false) await publishTasksUpdated([id])
+    if (options.publish !== false && input.targetColumn !== task.columnId) notifyAgenticQueue([id])
     const updated = await DevTask.findById(id).lean()
     const project = updated ? await Project.findById(updated.projectId).lean() : null
     return updated ? toTaskDto(updated, project) : null
@@ -351,6 +369,7 @@ export async function runBulkTasks(input: BulkTasksInput, actorId: string): Prom
     }
     await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, input.items.length) }, worker))
     await publishTasksUpdated(results.filter((result) => result.ok).map((result) => result.id))
+    notifyAgenticQueue(results.filter((result, index) => result.ok && input.items[index]?.action.type === "move").map((result) => result.id))
     return results
 }
 
