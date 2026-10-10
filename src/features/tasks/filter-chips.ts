@@ -17,7 +17,7 @@ export interface TaskFilterChip {
 }
 
 export interface TaskFilterChipContext {
-    /** id → nome (projetos) e chave → nome (colunas). */
+    /** id → repositório (`owner/repo`) e chave → nome (colunas). */
     projects: ReadonlyMap<string, string>
     columns: ReadonlyMap<string, string>
 }
@@ -41,7 +41,7 @@ export function activeTaskFilterChips(filters: TaskFilters, ctx: TaskFilterChipC
     const search = filters.search.trim()
     if (search) chips.push({ key: "search", label: `Busca: "${search}"`, title: `Busca: "${search}"`, remove: { search: "" } })
 
-    chips.push(multi("projects", "Projeto", filters.projects.map((id) => nameOf(ctx.projects, id))))
+    chips.push(multi("projects", "Repositório", filters.projects.map((id) => nameOf(ctx.projects, id))))
     chips.push(multi("columns", "Coluna", filters.columns.filter((key) => ctx.columns.has(key)).map((key) => ctx.columns.get(key)!)))
     chips.push(multi("priorities", "Prioridade", filters.priorities.map((value) => TASK_PRIORITY_LABELS[value])))
     chips.push(multi("types", "Tipo", filters.types.map((value) => TASK_TYPE_LABELS[value])))

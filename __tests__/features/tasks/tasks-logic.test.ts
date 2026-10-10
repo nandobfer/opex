@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeDropOrderInList, sortTasks } from '@/features/tasks/ordering'
 import { finalDropPosition, moveBetweenColumns } from '@/features/tasks/drop-target'
-import { applyTaskFilters, DEFAULT_TASK_FILTERS, taskFiltersSchema, visibleColumns, type TaskFilters } from '@/features/tasks/filters'
+import { applyTaskFilters, DEFAULT_TASK_FILTERS, taskFiltersSchema, taskRepoOptions, visibleColumns, type TaskFilters } from '@/features/tasks/filters'
 import { buildBoardColumns, type TaskBoardDto } from '@/features/tasks/board'
 import type { TaskDto } from '@/features/tasks/types'
 
@@ -90,6 +90,19 @@ describe('filtros', () => {
   it('busca por código e por título com erro de digitação', () => {
     expect(applyTaskFilters(tasks, f({ search: 'opx-202' })).map((t) => t.id)).toEqual(['2'])
     expect(applyTaskFilters(tasks, f({ search: 'relatorio vendaz' })).map((t) => t.id)).toEqual(['2'])
+  })
+
+  it('opções do filtro Repositório: projetos vinculados + citados nas tarefas, sem duplicar, rótulo owner/repo', () => {
+    const projects = [
+      { id: 'p1', name: 'GO', repo: 'o/go', sigla: 'GO' },
+      { id: 'p2', name: 'CRM', repo: 'o/crm', sigla: 'CRM' },
+    ]
+    // p3 só aparece numa tarefa (options ainda não carregou): não pode ficar de fora.
+    const onlyInTask = task({ id: '2', project: { id: 'p3', name: 'Portal', repo: 'o/portal', sigla: 'POR' } })
+    const options = taskRepoOptions(projects, [task({ id: '1' }), onlyInTask])
+    expect(options.map((o) => o.label)).toEqual(['o/crm', 'o/go', 'o/portal'])
+    expect(options.map((o) => o.value)).toEqual(['p2', 'p1', 'p3'])
+    expect(options.filter((o) => o.value === 'p1')).toHaveLength(1)
   })
 
   it('o que vem do navegador é validado campo a campo (inválido volta ao padrão)', () => {

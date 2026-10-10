@@ -68,8 +68,12 @@ semeado na primeira leitura (`ensureBoard`).
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Projeto**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. "Limpar"
-  zera os filtros, mantendo visão e ordenações.
+  erro com fuse.js), **Repositório**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
+  + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
+  guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub
+  (integração ausente ou repositório fora do token), o avatar cai na inicial. "Limpar" zera os
+  filtros, mantendo visão e ordenações.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
@@ -77,9 +81,9 @@ semeado na primeira leitura (`ensureBoard`).
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
-  50 cards; cards com código, tipo, título, projeto, prioridade e "Arquivada".
-- **Tabela** (`TaskTable`): Código, Issue, Título, Coluna ("Mover para…"), Prioridade, Tipo, Projeto,
-  Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
+  50 cards; cards com código, tipo, título, repositório (`GithubRepoLabel`), prioridade e "Arquivada".
+- **Tabela** (`TaskTable`): Código, Issue, Título, Coluna ("Mover para…"), Prioridade, Tipo,
+  Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
   (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
@@ -94,8 +98,8 @@ semeado na primeira leitura (`ensureBoard`).
 
 Formulário no estilo "nova issue do GitHub", em **página própria** (não é mais modal): título,
 descrição com abas **Escrever / Visualizar** (Markdown) e os metadados em **autocomplete com chips**
-(`SearchPicker` + `FieldTrigger`): **Repositório** (só os vinculados), **Coluna**, **Tipo** e
-**Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
+(`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
+**Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
 campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
 `technicalSpec`).
 
@@ -112,7 +116,7 @@ tarefa.
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
   formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
-- Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
+- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento

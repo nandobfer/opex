@@ -4,8 +4,8 @@ import { DEFAULT_TASK_FILTERS, type TaskFilters } from '@/features/tasks/filters
 
 const ctx: TaskFilterChipContext = {
   projects: new Map([
-    ['p1', 'CRM Marketing'],
-    ['p2', 'Portal'],
+    ['p1', 'o/crm'],
+    ['p2', 'o/portal'],
   ]),
   columns: new Map([
     ['todo', 'A Fazer'],
@@ -21,14 +21,14 @@ describe('activeTaskFilterChips', () => {
     expect(activeTaskFilterChips(with_({ view: 'table' }), ctx)).toEqual([])
   })
 
-  it('rótulos com nomes de projeto, coluna, prioridade e tipo', () => {
+  it('rótulos com repositório, coluna, prioridade e tipo', () => {
     const chips = activeTaskFilterChips(
       with_({ search: ' login ', projects: ['p1'], columns: ['col-abc'], priorities: ['high'], types: ['bugfix'], showArchived: true }),
       ctx,
     )
     expect(chips.map((chip) => chip.label)).toEqual([
       'Busca: "login"',
-      'Projeto: CRM Marketing',
+      'Repositório: o/crm',
       'Coluna: Revisar',
       'Prioridade: Alta',
       'Tipo: Correção',

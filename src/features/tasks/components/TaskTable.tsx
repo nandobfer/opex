@@ -18,7 +18,8 @@ import { TASK_PRIORITY_LABELS, TASK_PRIORITY_RANK, TASK_TYPE_LABELS, type TaskPr
 import type { TaskFilters, TaskTableColumn } from "../filters"
 import type { TaskSelection } from "../hooks/useTaskSelection"
 import type { TaskDto } from "../types"
-import { IssueLinkButton } from "@/features/github/components/shared"
+import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "./TaskBadges"
 import { BULK_BAR_CLEARANCE } from "./TaskBulkBar"
 import { TaskColumnMenu } from "./TaskColumnMenu"
@@ -43,7 +44,7 @@ const COLUMNS: { key: TaskTableColumn; label: string; className: string }[] = [
     { key: "column", label: "Coluna", className: "w-[150px] md:w-[200px] xl:w-[240px]" },
     { key: "priority", label: "Prioridade", className: "w-[125px]" },
     { key: "type", label: "Tipo", className: "w-[100px]" },
-    { key: "project", label: "Projeto", className: "w-[130px]" },
+    { key: "project", label: "Repositório", className: "w-[200px]" },
     { key: "updatedAt", label: "Atualizada", className: "w-[120px]" },
 ]
 
@@ -73,7 +74,7 @@ function compare(a: TaskDto, b: TaskDto, column: TaskTableColumn, columnIndex: (
         case "type":
             return text(a.taskType ? TASK_TYPE_LABELS[a.taskType] : "").localeCompare(text(b.taskType ? TASK_TYPE_LABELS[b.taskType] : ""), "pt-BR")
         case "project":
-            return text(a.project?.name).localeCompare(text(b.project?.name), "pt-BR")
+            return text(a.project?.repo).localeCompare(text(b.project?.repo), "pt-BR")
         case "updatedAt":
             return (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "")
     }
@@ -108,6 +109,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     const headerState = selection.stateOf(orderedIds)
     const timer = useTimer()
     const progress = useWorkbenchProgress()
+    const repoIndex = useRepoIndex()
     const virtualize = rows.length > VIRTUALIZE_ABOVE
     const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: ROW_HEIGHT })
     const hasSelection = selection.selected.size > 0
@@ -199,8 +201,8 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                 <td className={cn("px-3 py-2", hide("type"))}>
                     <TaskTypeBadge type={task.taskType} />
                 </td>
-                <td className={cn("max-w-0 truncate px-3 py-2 text-xs text-muted-foreground", hide("project"))} title={task.project?.name}>
-                    {task.project?.name ?? "—"}
+                <td className={cn("px-3 py-2 text-xs", hide("project"))} title={task.project?.repo}>
+                    {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : <span className="text-muted-foreground">—</span>}
                 </td>
                 <td className={cn("whitespace-nowrap px-3 py-2 text-xs text-muted-foreground", hide("updatedAt"))}>
                     {task.updatedAt ? format(new Date(task.updatedAt), "dd/MM/yy HH:mm", { locale: ptBR }) : "—"}

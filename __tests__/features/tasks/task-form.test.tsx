@@ -6,7 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardColumnView } from '@/features/tasks/board'
 import type { ProjectRef } from '@/features/tasks/types'
 
+import { RepoIndexProvider } from '@/features/github/components/RepoIndexProvider'
+
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+vi.mock('@/features/github/hooks/useGithub', () => ({
+  useGithubRepoIndex: () => new Map([['o/portal', { fullName: 'o/portal', htmlUrl: 'https://github.com/o/portal', description: 'Portal interno', private: false, ownerAvatarUrl: 'https://avatars.githubusercontent.com/u/9?v=4' }]]),
+}))
 
 import { TaskForm } from '@/features/tasks/components/TaskForm'
 
@@ -18,7 +23,11 @@ const columns: BoardColumnView[] = [
 const renderForm = (overrides: Partial<React.ComponentProps<typeof TaskForm>> = {}) => {
   const onSubmit = vi.fn()
   const onCancel = vi.fn()
-  render(<TaskForm mode="create" projects={[project]} columns={columns} submitting={false} onSubmit={onSubmit} onCancel={onCancel} {...overrides} />)
+  render(
+    <RepoIndexProvider enabled>
+      <TaskForm mode="create" projects={[project]} columns={columns} submitting={false} onSubmit={onSubmit} onCancel={onCancel} {...overrides} />
+    </RepoIndexProvider>,
+  )
   return { onSubmit, onCancel }
 }
 
@@ -31,6 +40,7 @@ describe('TaskForm', () => {
     expect(screen.getByRole('tab', { name: /Escrever/ })).toBeTruthy()
     expect(screen.getByRole('tab', { name: /Visualizar/ })).toBeTruthy()
     expect(screen.getByText('o/portal')).toBeTruthy()
+    expect(document.querySelector('img[src="https://avatars.githubusercontent.com/u/9?v=4"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Criar tarefa' })).toBeTruthy()
   })
 

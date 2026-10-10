@@ -21,6 +21,14 @@ vi.mock('@/features/tasks/hooks/useTasks', async (original) => ({
   useTaskOptions: () => ({ data: { projects: [{ id: 'p1', name: 'Portal', repo: 'o/portal', sigla: 'POR' }] }, isFetching: false, isError: false }),
   useTasksRealtime: vi.fn(),
 }))
+vi.mock('@/features/github/hooks/useGithub', async (original) => ({
+  ...(await original<typeof import('@/features/github/hooks/useGithub')>()),
+  useGithubRepoIndex: () =>
+    new Map([
+      ['o/portal', { fullName: 'o/portal', htmlUrl: 'https://github.com/o/portal', description: 'Portal interno', private: false, ownerAvatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4' }],
+      ['outro/repo', { fullName: 'outro/repo', htmlUrl: 'https://github.com/outro/repo', description: null, private: false, ownerAvatarUrl: 'https://avatars.githubusercontent.com/u/2?v=4' }],
+    ]),
+}))
 vi.mock('@/features/tasks/hooks/useTaskBoard', async () => {
   const { buildBoardColumns } = await import('@/features/tasks/board')
   const board = {
@@ -36,6 +44,8 @@ vi.mock('@/features/tasks/hooks/useTaskBoard', async () => {
     useColumnMutations: () => ({ create: { isPending: false }, update: { isPending: false }, remove: { mutate: vi.fn() }, reorder: { mutate: vi.fn() } }),
   }
 })
+
+import { RepoIndexProvider } from '@/features/github/components/RepoIndexProvider'
 
 import { TasksPage } from '@/features/tasks/components/TasksPage'
 
@@ -59,7 +69,9 @@ const renderPage = () => {
   client.invalidateQueries = mocks.invalidate as never
   return render(
     <QueryClientProvider client={client}>
-      <TasksPage />
+      <RepoIndexProvider enabled>
+        <TasksPage />
+      </RepoIndexProvider>
     </QueryClientProvider>,
   )
 }
@@ -112,6 +124,24 @@ describe('TasksPage', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar tarefas' }))
     expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
+  })
+
+  it('o filtro Repositório lista os vínculos com o avatar real (e só os vinculados)', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros' }))
+    const group = screen.getByText('Repositório').closest('div')!
+    fireEvent.click(within(group).getByRole('button'))
+    expect(document.querySelector('img[src="https://avatars.githubusercontent.com/u/1?v=4"]')).toBeTruthy()
+    expect(screen.getAllByText('o/portal').length).toBeGreaterThan(0)
+    expect(screen.queryByText('outro/repo')).toBeNull()
+  })
+
+  it('a tabela e o card mostram o avatar real do repositório', () => {
+    renderPage()
+    expect(document.querySelector('img[src="https://avatars.githubusercontent.com/u/1?v=4"]')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /Tabela/ }))
+    expect(screen.getByRole('columnheader', { name: /Repositório/ })).toBeTruthy()
+    expect(document.querySelector('img[src="https://avatars.githubusercontent.com/u/1?v=4"]')).toBeTruthy()
   })
 
   it('erro mostra o aviso com tentar novamente', () => {
