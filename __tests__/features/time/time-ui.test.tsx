@@ -80,6 +80,16 @@ describe('controle de horas é somente leitura', () => {
     expect(screen.queryByRole('button', { name: /Parar/ })).toBeNull()
   })
 
+  it('o popover "Trabalhos em andamento" se dimensiona pelo conteúdo (sem largura fixa)', async () => {
+    await renderWith([log()], <TimerIndicator />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Trabalho em andamento em OPX-1' }))
+    const popover = await screen.findByTestId('in-progress-popover')
+    expect(popover.className).toContain('w-max')
+    expect(popover.className).toContain('max-w-[calc(100vw-2rem)]')
+    expect(popover.className).not.toContain('w-80')
+    expect(popover.className).not.toContain('w-72')
+  })
+
   it('não existem botões de iniciar/parar timer na interface', async () => {
     await renderWith([log()], <TimerIndicator />)
     expect(screen.queryByRole('button', { name: /Iniciar o timer|Parar o timer/ })).toBeNull()
@@ -114,6 +124,8 @@ describe('TimeLogTaskGroup (agrupamento por task/mesa)', () => {
     taskTitle: 'Primeira',
     logs: [log({ active: false, endTime: '2026-10-10T10:30:00.000Z', duration: 30 })],
     totalMinutes: 30,
+    totalTokens: 0,
+    totalCostUsd: 0,
     hasActive: false,
     ...overrides,
   })
@@ -152,5 +164,17 @@ describe('TimeLogTaskGroup (agrupamento por task/mesa)', () => {
   it('sinaliza o grupo com período ativo como "Em execução"', () => {
     render(<GroupHarness group={group({ logs: [log()], totalMinutes: 0, hasActive: true })} />)
     expect(screen.getByText('Em execução')).toBeTruthy()
+  })
+
+  it('mostra o consumo de tokens e o custo somados no cabeçalho', () => {
+    render(<GroupHarness group={group({ totalTokens: 175, totalCostUsd: 0.5 })} />)
+    expect(screen.getByText(/175 tokens/)).toBeTruthy()
+    expect(screen.getByText(/0,50/)).toBeTruthy()
+  })
+
+  it('não mostra tokens nem custo quando o grupo não tem uso', () => {
+    render(<GroupHarness group={group()} />)
+    expect(screen.queryByText(/tokens/)).toBeNull()
+    expect(screen.queryByText(/US\$/)).toBeNull()
   })
 })

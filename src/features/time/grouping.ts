@@ -41,6 +41,10 @@ export interface TimeLogTask {
     logs: TimeLogDto[]
     /** Minutos dos apontamentos encerrados do grupo. */
     totalMinutes: number
+    /** Tokens somados do grupo (entrada + saída + raciocínio). */
+    totalTokens: number
+    /** Custo em dólares somado do grupo. */
+    totalCostUsd: number
     /** O grupo contém algum período ativo (em execução)? */
     hasActive: boolean
 }
@@ -56,11 +60,13 @@ export function groupTimeLogsByTask(logs: readonly TimeLogDto[]): TimeLogTask[] 
     for (const log of sorted) {
         let group = groups.get(log.taskId)
         if (!group) {
-            group = { key: log.taskId, taskId: log.taskId, taskCode: log.taskCode, taskTitle: log.taskTitle, logs: [], totalMinutes: 0, hasActive: false }
+            group = { key: log.taskId, taskId: log.taskId, taskCode: log.taskCode, taskTitle: log.taskTitle, logs: [], totalMinutes: 0, totalTokens: 0, totalCostUsd: 0, hasActive: false }
             groups.set(log.taskId, group)
         }
         group.logs.push(log)
         group.totalMinutes += log.duration ?? 0
+        group.totalTokens += log.inputTokens + log.outputTokens + log.reasoningTokens
+        group.totalCostUsd += log.costUsd
         if (log.active) group.hasActive = true
     }
     return [...groups.values()]

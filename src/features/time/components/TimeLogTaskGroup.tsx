@@ -2,10 +2,11 @@
 
 import { useId } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Coins, Hash } from "lucide-react"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { formatMinutes } from "@/features/tasks/format"
 import type { TimeLogTask } from "../grouping"
+import { formatCostUsd, formatTokens } from "../format"
 import { TimeLogItem } from "./TimeLogItem"
 
 interface TimeLogTaskGroupProps {
@@ -16,8 +17,9 @@ interface TimeLogTaskGroupProps {
 
 /**
  * Grupo de apontamentos de uma task/mesa **expansível** (nível abaixo do dia em Horas agênticas): o
- * cabeçalho mostra código, título, contagem e total de minutos; ao abrir, revela os apontamentos item
- * a item (`TimeLogItem`, **somente leitura**). Anima com Framer Motion e respeita movimento reduzido.
+ * cabeçalho mostra código, título, contagem, total de minutos e o consumo (tokens e custo); ao abrir,
+ * revela os apontamentos item a item (`TimeLogItem`, **somente leitura**). Anima com Framer Motion e
+ * respeita movimento reduzido.
  */
 export function TimeLogTaskGroup({ group, open, onToggle }: TimeLogTaskGroupProps) {
     const reduceMotion = useReducedMotion()
@@ -56,10 +58,22 @@ export function TimeLogTaskGroup({ group, open, onToggle }: TimeLogTaskGroupProp
                             )}
                         </span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                         <span>
                             {count} {count === 1 ? "apontamento" : "apontamentos"}
                         </span>
+                        {group.totalTokens > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                                <Hash className="h-3 w-3" aria-hidden />
+                                {formatTokens(group.totalTokens)} tokens
+                            </span>
+                        )}
+                        {group.totalCostUsd > 0 && (
+                            <span className="inline-flex items-center gap-1">
+                                <Coins className="h-3 w-3" aria-hidden />
+                                {formatCostUsd(group.totalCostUsd)}
+                            </span>
+                        )}
                         <strong className="font-mono text-sm text-foreground">{formatMinutes(group.totalMinutes)}</strong>
                     </span>
                 </button>

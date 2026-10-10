@@ -78,9 +78,10 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   destructive) com o motivo em pt-BR; a linha também ganha faixa à esquerda.
 - `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Horas agênticas — ícone girando +
   cronômetro quando algum agente executa, ou aviso em warning quando **só** há mesas aguardando ação.
-  Clique abre a lista **"Trabalhos em andamento"**: cada item é um botão que navega para a **mesa de
-  trabalho** (`/desenvolvimento/{central}/{tarefa}`) — ou para a tarefa, em apontamentos legados sem
-  mesa. As mesas pausadas **não** somem da lista.
+  Clique abre a lista **"Trabalhos em andamento"** (o popover **se dimensiona pelo conteúdo**,
+  limitado à largura da viewport, para não quebrar linhas sem necessidade): cada item é um botão que
+  navega para a **mesa de trabalho** (`/desenvolvimento/{central}/{tarefa}`) — ou para a tarefa, em
+  apontamentos legados sem mesa. As mesas pausadas **não** somem da lista.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)
 
@@ -92,10 +93,11 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   legados sem mesa caem no mesmo grupo pelo `taskId`). Dentro do grupo, os apontamentos ficam em
   ordem de início mais recente primeiro.
 - Cada grupo é **expansível** (`TimeLogTaskGroup`): o cabeçalho (botão com `aria-expanded`) mostra
-  código, título, a contagem de apontamentos e o total de minutos do grupo naquele dia, além de um
-  indicador "Em execução" quando contém período ativo. O grupo **começa recolhido**; grupos com
-  período ativo ficam **sempre abertos**. A abertura/fechamento é animada por Framer Motion
-  (altura/opacidade) respeitando movimento reduzido.
+  código, título, a contagem de apontamentos, o total de minutos do grupo naquele dia e o consumo
+  somado (**tokens** e **custo em US$**, exibidos só quando maiores que zero; `groupTimeLogsByTask`
+  soma `totalTokens` e `totalCostUsd`), além de um indicador "Em execução" quando contém período
+  ativo. O grupo **começa recolhido**; grupos com período ativo ficam **sempre abertos**. A
+  abertura/fechamento é animada por Framer Motion (altura/opacidade) respeitando movimento reduzido.
 - "Carregar mais" (páginas de 100).
 - Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
   descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
