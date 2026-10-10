@@ -1,17 +1,28 @@
 "use client"
 
+import Link from "next/link"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import type { GithubRepoLabelData } from "@/features/github/types"
 import { repoLabelFrom } from "@/features/orcamentos/logic"
 import { ArchivedBadge, TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
-import { EstimateBadge } from "@/features/tasks/components/EstimateBadge"
 import type { BoardColumnView } from "@/features/tasks/board"
-import type { TaskDto } from "@/features/tasks/types"
+import type { ClienteTaskDto } from "@/features/orcamentos/types"
+import { ClienteEstimateBadge } from "./ClienteEstimateBadge"
 
-/** Tabela somente leitura do portal do cliente. */
-export function ClienteTaskTable({ tasks, columns, repoIndex }: { tasks: readonly TaskDto[]; columns: readonly BoardColumnView[]; repoIndex?: ReadonlyMap<string, GithubRepoLabelData> }) {
+/** Tabela somente leitura do portal do cliente; o título abre a página da tarefa. */
+export function ClienteTaskTable({
+    tasks,
+    columns,
+    repoIndex,
+    hrefFor,
+}: {
+    tasks: readonly ClienteTaskDto[]
+    columns: readonly BoardColumnView[]
+    repoIndex?: ReadonlyMap<string, GithubRepoLabelData>
+    hrefFor: (task: ClienteTaskDto) => string
+}) {
     const byKey = new Map(columns.map((column) => [column.key, column.label]))
     return (
         <div className="overflow-x-auto rounded-lg border">
@@ -36,7 +47,9 @@ export function ClienteTaskTable({ tasks, columns, repoIndex }: { tasks: readonl
                                 {task.archived && <span className="ml-1.5"><ArchivedBadge /></span>}
                             </td>
                             <td className="px-3 py-2">
-                                <span className="block font-medium">{task.title}</span>
+                                <Link href={hrefFor(task)} className="block font-medium transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                                    {task.title}
+                                </Link>
                                 {task.summary && <span className="block line-clamp-1 text-xs text-muted-foreground">{task.summary}</span>}
                             </td>
                             <td className="px-3 py-2 text-xs">{byKey.get(task.columnId) ?? task.columnId}</td>
@@ -45,7 +58,7 @@ export function ClienteTaskTable({ tasks, columns, repoIndex }: { tasks: readonl
                             <td className="hidden px-3 py-2 md:table-cell">
                                 {task.project && <span className="inline-flex max-w-[220px]"><GithubRepoLabel repo={repoLabelFrom(task.project.repo, repoIndex)} /></span>}
                             </td>
-                            <td className="px-3 py-2"><EstimateBadge estimate={task.estimate} mode="client" /></td>
+                            <td className="px-3 py-2"><ClienteEstimateBadge estimate={task.estimate} /></td>
                             <td className="hidden px-3 py-2 text-xs text-muted-foreground xl:table-cell">{task.updatedAt ? format(new Date(task.updatedAt), "dd/MM HH:mm", { locale: ptBR }) : "—"}</td>
                         </tr>
                     ))}

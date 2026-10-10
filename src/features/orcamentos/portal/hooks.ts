@@ -1,11 +1,12 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { unwrapApi } from "@/lib/api"
+import { toast } from "sonner"
+import { apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
-import type { TaskDto, TaskListDto } from "@/features/tasks/types"
+import type { TaskDto } from "@/features/tasks/types"
 import type { ClienteDraftInput } from "../schemas"
-import type { ClientePortalOptionsDto, OrcamentoDraftDto } from "../types"
+import type { ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskListDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
 
 /** Consultas e mutações do portal do cliente (axios autenticado pelo token). */
@@ -13,6 +14,7 @@ import { useClientePortal } from "./ClientePortalContext"
 export const CLIENTE_QUERY_KEY = "cliente"
 const optionsKey = [CLIENTE_QUERY_KEY, "options"] as const
 const tasksKey = (includeArchived: boolean) => [CLIENTE_QUERY_KEY, "tasks", { includeArchived }] as const
+const taskKey = (id: string) => [CLIENTE_QUERY_KEY, "task", id] as const
 const draftKey = (id: string) => [CLIENTE_QUERY_KEY, "draft", id] as const
 
 export function useClienteOptions() {
@@ -28,8 +30,28 @@ export function useClienteTasks(includeArchived: boolean) {
     const { api } = useClientePortal()
     return useQuery({
         queryKey: tasksKey(includeArchived),
-        queryFn: async () => unwrapApi((await api.get<ApiResponse<TaskListDto>>("/cliente/tasks", { params: includeArchived ? { includeArchived: true } : {} })).data),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteTaskListDto>>("/cliente/tasks", { params: includeArchived ? { includeArchived: true } : {} })).data),
         staleTime: 15_000,
+    })
+}
+
+/** Detalhe da tarefa na visão do cliente (só as que ele solicitou). */
+export function useClienteTask(id: string) {
+    const { api } = useClientePortal()
+    return useQuery({
+        queryKey: taskKey(id),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteTaskDetailDto>>(`/cliente/tasks/${id}`)).data),
+    })
+}
+
+/** Comentário do cliente numa tarefa do portal. */
+export function useAddClienteComment(taskId: string) {
+    const { api } = useClientePortal()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (content: string) => unwrapApi((await api.post<ApiResponse<{ id: string }>>(`/cliente/tasks/${taskId}/comments`, { content })).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível comentar")),
+        onSuccess: () => void queryClient.invalidateQueries({ queryKey: taskKey(taskId) }),
     })
 }
 

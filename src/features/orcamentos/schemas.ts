@@ -34,6 +34,12 @@ export const clienteCorrectionSchema = z.object({
 })
 export type ClienteCorrectionInput = z.infer<typeof clienteCorrectionSchema>
 
+/** Comentário do cliente numa tarefa do portal. */
+export const clienteCommentSchema = z.object({
+    content: z.string().trim().min(1, "Escreva um comentário").max(5000, "Máximo de 5000 caracteres"),
+})
+export type ClienteCommentInput = z.infer<typeof clienteCommentSchema>
+
 /** Prévia estruturada devolvida pela IA (validada antes de qualquer uso; sem as horas). */
 export const draftPreviewSchema = z.object({
     title: z.string().trim().min(1, "Título vazio").max(200),

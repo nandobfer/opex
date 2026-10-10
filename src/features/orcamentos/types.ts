@@ -1,6 +1,6 @@
 import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
-import type { ProjectRef, TaskListDto } from "@/features/tasks/types"
+import type { ProjectRef, TaskComment, TaskDto } from "@/features/tasks/types"
 
 /**
  * Repositório do cliente no portal: o projeto (`ProjectRef`) mais os dados do GitHub que o
@@ -70,8 +70,37 @@ export interface DraftEstimateDto {
     billingBrl: number
 }
 
-/** Lista de tarefas do portal (mesmo formato da lista interna). */
-export type ClienteTaskListDto = TaskListDto
+/** Estimativa exibida ao cliente: só o que ele pode ver (horas infladas e faturamento). */
+export interface ClienteTaskEstimateDto {
+    /** Horas exibidas ao cliente (`H × fator`). */
+    clientHours: number
+    /** Faturamento em reais (`clientHours × custo/hora`). */
+    billingBrl: number
+}
+
+/**
+ * Tarefa na visão do cliente (lista): igual ao `TaskDto` interno, mas a estimativa **não** traz as
+ * horas reais, o fator, o custo/hora nem o modelo — o cliente só vê o tempo inflado e o faturamento.
+ */
+export interface ClienteTaskDto extends Omit<TaskDto, "estimate"> {
+    estimate: ClienteTaskEstimateDto | null
+}
+
+/**
+ * Detalhe da tarefa na visão do cliente: descrição, especificação técnica e comentários (com o autor
+ * resolvido). **Sem** histórico, horas apontadas, horas reais, fator, custo/hora ou modelo.
+ */
+export interface ClienteTaskDetailDto extends Omit<ClienteTaskDto, "issue"> {
+    description: string | null
+    technicalSpec: string | null
+    comments: TaskComment[]
+}
+
+/** Lista de tarefas do portal (visão do cliente). */
+export interface ClienteTaskListDto {
+    tasks: ClienteTaskDto[]
+    fetchedAt: string
+}
 
 /** Opções do portal: repositórios permitidos ao cliente e o quadro (colunas). */
 export interface ClientePortalOptionsDto {

@@ -6,9 +6,8 @@ import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { ListFilters } from "@/components/list/ListFilters"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "@/features/tasks/constants"
-import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type TaskFilters } from "@/features/tasks/filters"
+import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type FilterableTask, type TaskFilters } from "@/features/tasks/filters"
 import type { BoardColumnView } from "@/features/tasks/board"
-import type { TaskDto } from "@/features/tasks/types"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelFrom, repoLabelIndex } from "@/features/orcamentos/logic"
 import type { ClienteRepoDto } from "@/features/orcamentos/types"
@@ -19,7 +18,7 @@ interface ClienteFiltersBarProps {
     filters: TaskFilters
     setFilters: Dispatch<SetStateAction<TaskFilters>>
     total: number
-    tasks: readonly TaskDto[]
+    tasks: readonly FilterableTask[]
     projects: readonly ClienteRepoDto[]
     columns: readonly BoardColumnView[]
 }

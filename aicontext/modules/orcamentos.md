@@ -2,8 +2,8 @@
 
 Integração **Orçamentos** (`orcamentos`, rota `/integracoes/orcamentos`): o dono cadastra **clientes**
 e cada cliente ganha uma **URL fixa com token** para um **portal próprio, somente leitura**, sem
-sidebar, com o **mesmo kanban/tabela** das Tarefas (restrito aos repositórios escolhidos). O cliente
-pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
+sidebar, com o **mesmo kanban/tabela** das Tarefas, restrito aos repositórios escolhidos e **apenas
+às tarefas que o cliente solicitou**. O cliente pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
 prioridade, resumo e especificação técnica) e, em seguida, um **agente do OpenCode estima as horas**
 (consultando o banco com as ferramentas do servidor), que o cliente **aprova ou corrige**. A
 aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
@@ -25,6 +25,9 @@ recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que orig
   priority, technicalSpec, summary }` (1ª fase da IA); `estimatedHours` (H) é gravado na 2ª fase.
 - `DevTask.estimate` (subdocumento, `null` fora do portal): `{ hours, clientHours, billingBrl, factor,
   hourlyRate, model, generatedAt }` — snapshot no momento da aprovação. Ver `modules/tasks.md`.
+- `DevTask.clientId`: o **cliente de orçamento que solicitou** a tarefa (`OrcamentoClient._id`; `null`
+  fora do portal). É o que define a **lista do portal** — o cliente só vê as tarefas com o seu
+  `clientId`, nunca todas as do repositório. Ver `modules/tasks.md`.
 
 ## Autenticação do portal (`server/token.ts`)
 
@@ -65,11 +68,27 @@ pontos que exibem repositório no portal usam o `GithubRepoLabel` real (`repoLab
 aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
 
 - `/cliente?t=` — **lista** (`ClienteTasksPage`): cabeçalho com o nome do cliente, **Nova tarefa**,
-  **Kanban | Tabela**, Atualizar e filtros (busca, Repositório, Coluna, Prioridade, Tipo). Mesmo
+  **Kanban | Tabela**, Atualizar e filtros (busca, Repositório, Coluna, Prioridade, Tipo). Mostra
+  **somente as tarefas que o cliente solicitou** (filtro por `clientId` no servidor), com o mesmo
   visual das Tarefas, porém **somente leitura** (sem arrastar, sem editar, sem excluir). O filtro de
-  Repositório fica **limitado** aos repositórios do cliente. Cada card/linha mostra o repositório com
-  o `GithubRepoLabel` (avatar/descrição/privado) e a estimativa do cliente (`EstimateBadge` modo
-  `client`: `H × fator` h e `R$ faturamento`).
+  Repositório fica **limitado** aos repositórios do cliente. Cada card/linha é um **link** para a
+  página da tarefa e mostra o repositório com o `GithubRepoLabel` (avatar/descrição/privado) e a
+  estimativa do cliente (`ClienteEstimateBadge`: `H × fator` h e `R$ faturamento` — nunca as horas
+  reais).
+- `/cliente/tarefa/[id]?t=` — **página da tarefa** (`ClienteTaskDetailPage`), somente leitura, com os
+  detalhes equivalentes aos do dono, **exceto Histórico e Horas apontadas** (dados internos: auditoria,
+  horas reais apontadas, tokens, custo em USD e modelo agêntico). Abas próprias (`ClienteTaskTabs`):
+  **Descrição**, **Especificação técnica** e **Comentários** (o cliente pode comentar — ver abaixo).
+  Acima do conteúdo, o **Resumo (IA)** em card próprio (`TaskSummaryCard`). Coluna lateral
+  (`ClienteTaskSidebar`): prioridade (badge, sem edição), tipo, repositório, criada/atualizada e a
+  **estimativa** (`ClienteEstimateCard`): o cliente vê **só o prazo inflado** (`H × fator`) e o
+  faturamento; **não** vê as horas reais, o fator, o custo/hora nem o modelo. Acesso validado por
+  `clientId` (tarefa de outro cliente devolve 404 `TASK_NOT_FOUND`). Sem Pusher: o portal é público e
+  atualiza pelo botão **Atualizar** (e revalida o detalhe ao comentar).
+- **Comentários** no portal (`ClienteCommentsSection`): lista (Markdown) e formulário. Cada comentário
+  mostra o **nome do autor** — o nome do cliente (comentário do portal) ou o do dono
+  (`APP_OWNER_NAME`/`getLocalUser()`, comentário do app). A origem vai gravada em `TaskComment`
+  (`authorType`/`authorName`); o formulário interno (`CommentsSection`) exibe o mesmo nome.
 - `/cliente/nova?t=` — **nova tarefa** (`ClienteNovaTarefaPage`): repositório (só os permitidos, no
   `SearchPicker` com o `GithubRepoLabel` real) + **descrição** em Markdown (`MarkdownField`). Ao
   avançar, cria o rascunho e vai para a revisão.
@@ -115,10 +134,12 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
 
 Aprovar exige a **prévia** (409 `DRAFT_WITHOUT_PREVIEW`) e usa `createTaskWithIssue` (mesma rota do
 app: **cria a issue no GitHub antes de persistir** — falha do GitHub bloqueia) com
-`origin: "client"`. Quando há estimativa, envia o `estimate` (snapshot: horas reais, horas do cliente,
-faturamento, fator, custo/hora e modelo); **sem estimativa, a tarefa nasce sem o `estimate`**. O
-rascunho vira `approved` com `taskId` e registra auditoria (`RascunhoOrcamento`, ação `APROVAR`). A
-tarefa nasce na **coluna de entrada** do projeto (`entryColumnKey`).
+`origin: "client"` e **`clientId` do cliente** (o que define a lista do portal). Quando há estimativa,
+envia o `estimate` (snapshot: horas reais, horas do cliente, faturamento, fator, custo/hora e modelo);
+**sem estimativa, a tarefa nasce sem o `estimate`**. O rascunho vira `approved` com `taskId` e registra
+auditoria (`RascunhoOrcamento`, ação `APROVAR`). A tarefa nasce na **coluna de entrada** do projeto
+(`entryColumnKey`). Tarefas pedidas **antes** da marcação por `clientId` são retroalimentadas pela
+migração `backfill-task-client-id` (a partir dos rascunhos aprovados).
 
 ## APIs
 
@@ -128,7 +149,9 @@ tarefa nasce na **coluna de entrada** do projeto (`entryColumnKey`).
 | `PATCH/DELETE /api/integrations/orcamentos/clients/[id]` | Edita / exclui cliente e seus rascunhos |
 | `POST /api/integrations/orcamentos/clients/[id]/token` | Regenera o token (invalida o anterior) |
 | `GET /api/cliente/options` | Nome do cliente, repositórios permitidos e quadro (colunas) |
-| `GET /api/cliente/tasks[?includeArchived=true]` | Tarefas dos repositórios do cliente |
+| `GET /api/cliente/tasks[?includeArchived=true]` | Tarefas **que o cliente solicitou** (por `clientId`), na visão do cliente |
+| `GET /api/cliente/tasks/[id]` | Detalhe da tarefa na visão do cliente (sem histórico, horas apontadas nem dados internos da estimativa) |
+| `POST /api/cliente/tasks/[id]/comments` | Comentário do cliente (origem marcada pelo nome do cliente) |
 | `POST /api/cliente/drafts` | Abre um rascunho (repositório + descrição) |
 | `GET /api/cliente/drafts/[id]` | Rascunho (prévia + estimativa) |
 | `POST /api/cliente/drafts/[id]/correction` | Registra a correção pedida |
@@ -141,12 +164,15 @@ pública (`/api/v1/*`).
 
 ## Arquivos
 
-- `src/features/orcamentos/` — `constants.ts`, `logic.ts` (puro: `computeClientEstimate`,
+- `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
+  `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
   `formatHoursLabel`), `schemas.ts`, `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
   `components/` (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
   — `useBudgetReview` orquestra as duas fases —, páginas e componentes; `portal/components/preview/`
   tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard` e
-  `CorrectionCard`).
+  `CorrectionCard`). A visão do cliente tem `ClienteTaskDetailPage`, `ClienteTaskTabs`,
+  `ClienteTaskSidebar`, `ClienteEstimateCard`, `ClienteEstimateBadge` e `ClienteCommentsSection`, além
+  dos tipos seguros `ClienteTaskDto`/`ClienteTaskDetailDto` (sem horas reais/fator/custo/modelo).
 - `src/app/(app)/integracoes/orcamentos/page.tsx`, `src/app/api/integrations/orcamentos/*`,
   `src/app/cliente/*` e `src/app/api/cliente/*`.
 - `src/components/ui/markdown-field.tsx` — campo Markdown com barra de formatação e abas
@@ -156,7 +182,9 @@ pública (`/api/v1/*`).
 
 `__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt` (contratos/parsers
 das duas fases), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
-`orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa), `cliente-revisao`
-(cards da revisão), `copy-portal-url`, `markdown-field` e `cliente-task-table`. A configuração de
-"Estimar prazos" em `__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge`
-(faturamento no dono) em `__tests__/features/tasks/estimate-badge.test.tsx`.
+`orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa, lista/detalhe do cliente por
+`clientId` e comentário com origem), `cliente-revisao` (cards da revisão), `cliente-task-table`,
+`cliente-task-card`, `cliente-task-detail` (abas sem Histórico/Horas, estimativa inflada e comentários
+com autor), `copy-portal-url`, `markdown-field`. A configuração de "Estimar prazos" em
+`__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge` (faturamento no dono) em
+`__tests__/features/tasks/estimate-badge.test.tsx`.
