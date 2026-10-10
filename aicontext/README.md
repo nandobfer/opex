@@ -2,8 +2,9 @@
 
 Esta pasta contém documentação estruturada para desenvolvimento assistido por IA no Opex.
 
-O Opex é um app Next.js **de uso pessoal** (um único usuário, sem login, roda só localmente ou
-em Docker, nunca publicado) para acompanhar as tarefas do Centro de Desenvolvimento do **Go!
+O Opex é um app Next.js **de uso pessoal** (um único usuário, protegido por um login com senha
+única; roda localmente, em Docker ou publicado na internet) para acompanhar as tarefas do Centro
+de Desenvolvimento do **Go!
 Sipal** e apontar horas, com um módulo de **Integrações** para guardar credenciais e configurar os
 serviços usados. O core (tema/componentes, layout, integrações, Pusher, crons) foi copiado do CRM
 Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
@@ -37,6 +38,7 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 | Arquivo | Módulo | Quando consultar |
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
+| `modules/auth.md` | Login e sessão | Tela `/login`, senha única (`APP_PASSWORD`), cookie assinado, guarda do middleware e logout |
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
 | `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |
 | `modules/integrations.md` | Integrações e agendador | Pusher, API interna (OpenAPI + tokens de sistema), Crons, GitHub; abas na página da integração; Archflow em desenvolvimento |

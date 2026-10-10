@@ -112,6 +112,10 @@ export interface WorkbenchSummaryDto {
     runState: RunState
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
     buildQueuePosition: number | null
+    /** Permissões do agente pendentes (o agente está parado esperando o usuário permitir uma ação). */
+    pendingPermissions: number
+    /** Perguntas do agente pendentes (o agente está parado esperando o usuário responder). */
+    pendingForms: number
     updatedAt: string
 }
 

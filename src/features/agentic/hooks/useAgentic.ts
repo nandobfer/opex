@@ -112,7 +112,7 @@ function useSetWorkbench() {
 export function useStartWorkbench() {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (input: { centralId: string; taskId: string }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
+        mutationFn: async (input: { centralId: string; taskId: string; text?: string }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
         onSuccess: (workbench) => {
             setWorkbench(workbench)
             toast.success("Mesa aberta: o planejamento começou")

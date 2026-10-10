@@ -44,8 +44,8 @@ export function workbenchStageLabel(stage: WorkbenchStage, runState: RunState): 
     return runState === "failed" ? `${label}: falhou` : runState === "interrupted" ? `${label}: parada` : label
 }
 
-/** Etapa da mesa; executando pulsa, falha/interrupção ficam em destaque. */
-export function WorkbenchStageBadge({ stage, runState, className }: { stage: WorkbenchStage; runState: RunState; className?: string }) {
+/** Etapa da mesa; executando pulsa, falha/interrupção ficam em destaque. `running` permite ao chamador desligar o pulso quando o agente está parado aguardando o usuário. */
+export function WorkbenchStageBadge({ stage, runState, running = runState === "running", className }: { stage: WorkbenchStage; runState: RunState; running?: boolean; className?: string }) {
     return (
         <motion.span
             key={`${stage}-${runState}`}
@@ -54,7 +54,7 @@ export function WorkbenchStageBadge({ stage, runState, className }: { stage: Wor
             transition={{ duration: 0.18 }}
             className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium", workbenchToneClasses(stage, runState).badge, className)}
         >
-            {runState === "running" && (
+            {running && (
                 <span className="relative flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />

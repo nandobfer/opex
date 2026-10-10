@@ -1,6 +1,7 @@
 # Módulo: Layout e navegação
 
-Casca única do app: sidebar + conteúdo (**sem cabeçalho**), sem login (uso pessoal).
+Casca única do app: sidebar + conteúdo (**sem cabeçalho**). O acesso é protegido por login por
+senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 ## Estrutura
 
@@ -9,6 +10,7 @@ Casca única do app: sidebar + conteúdo (**sem cabeçalho**), sem login (uso pe
   o layout lê o ambiente e o banco em tempo de execução — estático, o `next build` do Docker (sem o
   `.env`, que é ignorado no contexto) congelaria "Usuário local" e a config do Pusher.
 - `src/app/page.tsx`: redireciona para `HOME_HREF` (`/tarefas`).
+- `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
 - `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[centralId]/[[...task]]/page.tsx`:
@@ -32,6 +34,8 @@ Casca única do app: sidebar + conteúdo (**sem cabeçalho**), sem login (uso pe
   tem o próprio título. No celular, o botão "Abrir menu" flutua no canto superior esquerdo
   (`fixed`) e o conteúdo ganha `pt-16`.
 - `AppSidebar` + `sidebar/*`: ver `use-para-atualizar-tema-e-componentes-ui.md`, "Menu lateral".
+- `sidebar/SidebarFooter`: dono do app (`APP_OWNER_NAME`), versão e a ação **Sair**
+  (`LogoutButton`, de `src/features/auth/`), que encerra a sessão e volta para `/login`.
 - `navigation.ts`: `APP_NAV` (Tarefas, Minhas horas, Central de desenvolvimento; Sistema › Integrações), `HOME_HREF`,
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 
@@ -39,7 +43,9 @@ Casca única do app: sidebar + conteúdo (**sem cabeçalho**), sem login (uso pe
 
 - Novo item de menu: entrada em `APP_NAV` + página em `src/app/(app)/<rota>/page.tsx` (página
   "Em desenvolvimento" enquanto não existir).
-- Não há permissões nem guarda de rota: todo item do menu é sempre visível.
+- Não há permissões nem multiusuário, mas toda página e API interna exige a sessão: a guarda fica
+  em `src/middleware.ts` (`resolveAuthAction`), liberando só `/login`, `/api/auth/*`, `/api/v1/*` e
+  `/api/routines/*`. Todo item do menu é sempre visível depois do login.
 - Espaçamento horizontal do conteúdo: `CONTENT_PADDING_X` (`px-4 md:px-6 lg:px-8`, em
   `src/features/layout/content-padding.ts`), usado pelo `AppShell`. Para um bloco ir até a borda do
   conteúdo (ex.: kanban rolando para os lados), use `CONTENT_BLEED_X` — nunca repita os valores.

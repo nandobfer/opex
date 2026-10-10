@@ -18,9 +18,11 @@ import { workbenchPath } from "../../constants"
 import { DEFAULT_DEV_CENTER_FILTERS, DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, filterCentralTasks } from "../../dev-center-filters"
 import { PANE_WIDTHS } from "../../dev-center-layout"
 import { useCentralQueue, useCentralWorkbenches } from "../../hooks/useAgentic"
+import { workbenchUserWaitReason } from "../../logic"
 import type { CentralDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
+import { WorkbenchWaitingBadge } from "../WorkbenchWaitingBadge"
 import { CollapsiblePane, PaneToggle } from "./CollapsiblePane"
 import { TaskFilters } from "./TaskFilters"
 
@@ -116,6 +118,10 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                     const queueItem = queued.get(task.id)
                                     const column = columns.get(task.columnId)
                                     const active = task.id === activeTaskId
+                                    // Warning quando a mesa está parada aguardando o usuário (build_queued e done não contam).
+                                    const waitingFor = workbench
+                                        ? workbenchUserWaitReason({ stage: workbench.stage, runState: workbench.runState, pendingPermissions: workbench.pendingPermissions, pendingForms: workbench.pendingForms })
+                                        : null
                                     return (
                                         <div key={task.id} role="listitem" className="absolute inset-x-0 px-1.5 py-0.5" style={{ height: ROW_HEIGHT, transform: `translateY(${row.start}px)` }}>
                                             <Link
@@ -127,11 +133,12 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                                     {column && <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} title={column.label} aria-label={column.label} />}
                                                     <span className="font-mono text-[11px] font-semibold text-primary">{task.code}</span>
                                                     <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{column?.label ?? "Sem coluna"}</span>
+                                                    {waitingFor && <WorkbenchWaitingBadge reason={waitingFor} />}
                                                     {workbench ? (
                                                         workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
                                                             <QueueBadge position={workbench.buildQueuePosition} label="Na fila do build" title="Aguardando a vez do build" />
                                                         ) : (
-                                                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />
+                                                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} running={workbench.runState === "running" && waitingFor === null} />
                                                         )
                                                     ) : (
                                                         queueItem && <QueueBadge position={queueItem.position} />
