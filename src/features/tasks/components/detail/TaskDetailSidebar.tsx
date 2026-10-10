@@ -12,6 +12,7 @@ import type { TaskPriority } from "../../constants"
 import type { TaskDetailDto } from "../../types"
 import { TaskTypeBadge } from "../TaskBadges"
 import { TaskPriorityMenu } from "../TaskPriorityMenu"
+import { TaskEstimateCard } from "./TaskEstimateCard"
 
 function Row({ icon: Icon, label, children }: { icon: typeof Clock; label: string; children: ReactNode }) {
     return (
@@ -36,30 +37,33 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
     const repoIndex = useRepoIndex()
     return (
         <motion.aside variants={fadeUp} initial="hidden" animate="visible" transition={{ delay: 0.05 }}>
-            <Card>
-                <CardContent className="divide-y pt-4">
-                    <dl>
-                        <Row icon={Package} label="Prioridade e tipo">
-                            <span className="flex flex-wrap gap-1.5">
-                                <TaskPriorityMenu value={task.priority} pending={updating} onChange={onUpdate} />
-                                <TaskTypeBadge type={task.taskType} long />
-                            </span>
-                        </Row>
-                        <Row icon={Github} label="Repositório">
-                            {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : "—"}
-                        </Row>
-                        <Row icon={Clock} label="Horas apontadas">
-                            <span className="font-mono">{formatMinutes(task.totalTimeLogged)}</span>
-                        </Row>
-                        <Row icon={UserPen} label="Criada">
-                            {formatDateTime(task.createdAt)}
-                        </Row>
-                        <Row icon={CalendarClock} label="Atualizada">
-                            {formatDateTime(task.updatedAt)}
-                        </Row>
-                    </dl>
-                </CardContent>
-            </Card>
+            <div className="space-y-4">
+                <Card>
+                    <CardContent className="divide-y pt-4">
+                        <dl>
+                            <Row icon={Package} label="Prioridade e tipo">
+                                <span className="flex flex-wrap gap-1.5">
+                                    <TaskPriorityMenu value={task.priority} pending={updating} onChange={onUpdate} />
+                                    <TaskTypeBadge type={task.taskType} long />
+                                </span>
+                            </Row>
+                            <Row icon={Github} label="Repositório">
+                                {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : "—"}
+                            </Row>
+                            <Row icon={Clock} label="Horas apontadas">
+                                <span className="font-mono">{formatMinutes(task.totalTimeLogged)}</span>
+                            </Row>
+                            <Row icon={UserPen} label="Criada">
+                                {formatDateTime(task.createdAt)}
+                            </Row>
+                            <Row icon={CalendarClock} label="Atualizada">
+                                {formatDateTime(task.updatedAt)}
+                            </Row>
+                        </dl>
+                    </CardContent>
+                </Card>
+                <TaskEstimateCard task={task} />
+            </div>
         </motion.aside>
     )
 }
