@@ -32,7 +32,7 @@ export function AgentQuestionsCard({ form, pending, onReply, onCancel }: { form:
     const set = (key: string, value: Answer[string]) => setAnswer((current) => ({ ...current, [key]: value }))
 
     return (
-        <div className="space-y-3 rounded-lg border border-amber-500/40 bg-background p-3" role="alertdialog" aria-label="Pergunta do agente">
+        <div className="space-y-3 rounded-lg border border-amber-500/40 bg-background p-3" role="alertdialog" aria-label="Pergunta do agente" data-ctrl-enter-scope>
             <p className="flex items-center gap-2 text-sm font-medium">
                 <MessageCircleQuestion className="h-4 w-4 text-amber-300" aria-hidden /> {form.title}
             </p>
@@ -43,7 +43,7 @@ export function AgentQuestionsCard({ form, pending, onReply, onCancel }: { form:
                 <Button type="button" size="sm" variant="outline" disabled={pending} onClick={onCancel}>
                     Dispensar
                 </Button>
-                <Button type="button" size="sm" disabled={pending || missing} onClick={() => onReply(answer)}>
+                <Button type="button" data-ctrl-enter-submit size="sm" disabled={pending || missing} onClick={() => onReply(answer)}>
                     Responder
                 </Button>
             </div>

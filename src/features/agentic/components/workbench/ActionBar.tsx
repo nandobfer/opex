@@ -55,7 +55,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
     const canImplement = actions.includes("implement")
 
     return (
-        <div className="space-y-2 border-t p-3">
+        <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
             <AnimatePresence initial={false}>
                 {failed && workbench.error && (
                     <motion.p key="error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
@@ -91,7 +91,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                             <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => setComposer(null)} disabled={pending}>
                                 <X className="h-3.5 w-3.5" aria-hidden /> Cancelar
                             </Button>
-                            <Button type="button" size="sm" className="gap-1.5" disabled={pending || text.trim().length < 3} onClick={() => run(composer, text.trim())}>
+                            <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || text.trim().length < 3} onClick={() => run(composer, text.trim())}>
                                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
                                 {FEEDBACK[composer].submit}
                             </Button>
@@ -122,7 +122,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                 )
                             case "implement":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
+                                    <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
                                         <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                     </Button>
                                 )

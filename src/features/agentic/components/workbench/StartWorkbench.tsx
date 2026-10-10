@@ -29,7 +29,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
 
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
-            <div className="my-auto flex w-full flex-col gap-4">
+            <div className="my-auto flex w-full flex-col gap-4" data-ctrl-enter-scope>
                 {task.isLoading ? (
                     <Skeleton className="h-20 w-full" />
                 ) : task.data ? (
@@ -64,7 +64,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined })}>
+                    <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined })}>
                         {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                         Abrir mesa e gerar o plano
                     </Button>

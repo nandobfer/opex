@@ -29,10 +29,10 @@ export function CorrectionCard({
                 <CardTitle className="text-base">Ajustar ou aprovar</CardTitle>
                 <CardDescription>Descreva o que mudar na prévia, ou aprove para criar a tarefa.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3" data-ctrl-enter-scope>
                 <Textarea rows={4} placeholder="Ex.: O prazo está alto; é só ajustar o texto do rodapé." value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} />
                 <div className="flex flex-wrap justify-end gap-2">
-                    <Button type="button" variant="secondary" className="gap-1.5" onClick={onCorrect} disabled={disabled || !value.trim()}>
+                    <Button type="button" data-ctrl-enter-submit variant="secondary" className="gap-1.5" onClick={onCorrect} disabled={disabled || !value.trim()}>
                         {correcting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} Solicitar correção
                     </Button>
                     <Button type="button" className="gap-1.5" onClick={onApprove} disabled={approving}>

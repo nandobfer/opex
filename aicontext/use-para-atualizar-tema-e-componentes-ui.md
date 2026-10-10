@@ -275,6 +275,38 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista
   (`ListFilters`/`FilterGroup`), tabelas, dashboards e cards de escolha.
 
+### Atalho Ctrl+Enter (⌘+Enter) em campos multiline
+
+Campos `<textarea>` (multiline) usam o Enter para quebrar linha; para enviar o contexto do campo
+sem sair do teclado, **Ctrl+Enter** (e **⌘+Enter** no Mac) aciona a ação principal. O atalho é
+**global** — instalado uma única vez por `CtrlEnterSubmit` (`src/components/ctrl-enter-submit.tsx`),
+renderizado no layout raiz (`src/app/layout.tsx`) — e não exige handler por campo. O Enter simples
+continua nativo (quebra linha no textarea, submete no `<input>`).
+
+Como funciona (listener de `keydown` no `document`, em fase de captura para alcançar formulários
+portalados por diálogos Radix):
+
+1. Age só em `<textarea>`, com `Enter` + (`ctrlKey` ou `metaKey`) e **sem** `altKey` (AltGr emite
+   ctrl+alt), fora de `[data-ctrl-enter-ignore]` e do terminal `.xterm`, ignorando eventos já
+   cancelados ou em composição (IME).
+2. Resolve a ação, do mais específico ao mais genérico: **escopo explícito**
+   (`data-ctrl-enter-scope`) → **botão marcado dentro do `<form>`** → **botão marcado em um
+   ancestral** → **o próprio `<form>`** via `requestSubmit()` (respeita a validação e exibe os
+   erros). Sem alvo resolvido, não interfere no padrão.
+3. Ao resolver, previne o padrão e aciona o botão (`button.click()`; um botão desabilitado não
+   dispara nada) ou submete o form.
+
+Atributos (só onde não há `<form>` — nos formulários normais nada é necessário):
+
+- `data-ctrl-enter-submit`: no botão que deve ser acionado.
+- `data-ctrl-enter-scope`: no contêiner que envolve campo + botão (torna a resolução determinística).
+- `data-ctrl-enter-ignore`: em qualquer ancestral, desliga o atalho na subárvore.
+
+Campos que usam marcação: abas de IA ("Salvar" de cada aba, dentro do `<form>` do editor),
+comentários da tarefa e do cliente, `CorrectionCard` ("Solicitar correção"), `ActionBar`
+("Implementar"/envio do feedback), `StartWorkbench` ("Abrir mesa e gerar o plano"),
+`AgentQuestionsCard` ("Responder") e o explorador OpenAPI ("Executar").
+
 ## Filtros persistidos na URL
 
 Listas filtráveis usam um hook `useUrlFilters` no padrão do Smart Desk: a query string é a fonte
