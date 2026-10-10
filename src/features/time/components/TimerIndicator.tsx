@@ -112,7 +112,7 @@ export function TimerIndicator() {
                         <PopoverTrigger className={className} aria-label={label}>
                             {body}
                         </PopoverTrigger>
-                        <PopoverContent align="end" className="w-80 p-1">
+                        <PopoverContent align="end" data-testid="in-progress-popover" className="w-max max-w-[calc(100vw-2rem)] p-1">
                             <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Trabalhos em andamento</p>
                             <AnimatePresence initial={false}>
                                 {rows.map((row) => (
@@ -136,14 +136,14 @@ function ActiveRow({ row }: { row: WorkRow }) {
                 className="flex items-center gap-2 rounded-md px-2 py-2 text-xs transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
             >
                 <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1">
+                    <span className="flex min-w-0 items-center gap-1">
                         {row.code && <span className="font-mono font-semibold text-primary">{row.code}</span>}
                         <span className="truncate">{row.title ?? "Sem tarefa"}</span>
                     </span>
                     {row.running ? (
                         <span className="mt-0.5 block truncate text-muted-foreground">Em execução</span>
                     ) : (
-                        <span className="mt-0.5 flex items-center gap-1 text-warning">
+                        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-warning">
                             <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
                             <span className="truncate" title={row.waitingFor ?? undefined}>
                                 {row.waitingFor}
