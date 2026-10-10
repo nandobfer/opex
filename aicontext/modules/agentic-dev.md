@@ -99,7 +99,10 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 - Item próprio no menu. A **central selecionada vive no `localStorage`**
   (`opex:dev-center-central:v1`) e a **tarefa na URL** (`/desenvolvimento` sem tarefa,
   `/desenvolvimento/[tarefa]` com a mesa aberta). A central efetiva é a do projeto da tarefa
-  aberta, senão a salva, senão a primeira; trocar de central limpa a tarefa da URL. Duas colunas:
+  aberta, senão a salva, senão a primeira; trocar de central limpa a tarefa da URL. A **escolha feita
+  no seletor tem prioridade** sobre a central do projeto da tarefa até a tarefa sair da URL: a central
+  escolhida fica salva e a tarefa é limpa (o guarda evita que a central da tarefa regrave por cima a
+  escolha no render intermediário entre a troca e a navegação). Duas colunas:
   **Tarefas do projeto** | **Mesa de trabalho**.
 - O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho

@@ -40,14 +40,25 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     const sectionRef = useRef<HTMLElement>(null)
     const height = useScrollViewportHeight(sectionRef, list.length > 0)
     const reduceMotion = useReducedMotion()
+    // Escolha do seletor aguardando a tarefa sair da URL: enquanto houver, ela vence a central da tarefa.
+    const pendingSelectionRef = useRef<string | null>(null)
 
-    // A central efetiva (da tarefa, salva ou a primeira) fica gravada no navegador.
+    // A central efetiva (da tarefa, salva ou a primeira) fica gravada no navegador — exceto enquanto há
+    // uma escolha explícita aguardando a tarefa sair da URL. Sem esse guarda, o render intermediário
+    // (o `localStorage` atualiza de forma síncrona, mas a navegação é assíncrona) regravaria a central
+    // do projeto da tarefa por cima da escolha do usuário (OPE-42).
     useEffect(() => {
+        if (pendingSelectionRef.current) {
+            if (!taskId) pendingSelectionRef.current = null
+            return
+        }
         if (central && central.id !== storedId) setCentralId(central.id)
-    }, [central, storedId, setCentralId])
+    }, [taskId, central, storedId, setCentralId])
 
     // Trocar de central limpa a tarefa da URL (a mesa aberta era de outro projeto).
     const selectCentral = (id: string) => {
+        // A escolha do usuário tem prioridade sobre a central derivada da tarefa até a URL ser limpa.
+        pendingSelectionRef.current = id
         setCentralId(id)
         if (taskId) router.replace(DEV_CENTER_PATH)
     }
