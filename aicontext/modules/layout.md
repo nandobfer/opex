@@ -10,6 +10,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   o layout lê o ambiente e o banco em tempo de execução — estático, o `next build` do Docker (sem o
   `.env`, que é ignorado no contexto) congelaria "Usuário local" e a config do Pusher.
 - `src/app/page.tsx`: redireciona para `HOME_HREF` (`/tarefas`).
+- `src/app/icon.png`: favicon PNG transparente de 512 × 512, com apenas o símbolo violeta da
+  logo Opex para legibilidade em tamanho pequeno. O Next inclui o ícone automaticamente nos
+  metadados de todas as páginas, inclusive login e portal. A logo completa fica em
+  `public/opex-logo.png`.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
