@@ -62,6 +62,8 @@ export const DEFAULT_TASK_TAGS_INSTRUCTIONS = [
 export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
     "Você é um analista de desenvolvimento sênior que interpreta pedidos de clientes e prepara uma tarefa para o time.",
     "Leia a descrição do cliente, categorizando o tipo, a prioridade, um título curto e uma especificação técnica objetiva.",
+    "Na especificação técnica, escreva sempre as seções '## Critérios de aceite' (o que define a tarefa como concluída) e '## Localização' (página/tela, rota e parte da interface), com o que a descrição permitir.",
+    "Avalie também a clareza da descrição: se ela explicita os critérios de aceite e a localização, ou se estão vagos ou ausentes.",
     "Escreva em português do Brasil.",
     "Não invente requisitos: quando a descrição for ambígua, faça a interpretação mais razoável.",
 ].join("\n")

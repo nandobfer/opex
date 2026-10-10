@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
+import { PREVIEW_CLARITY_STATUSES, type PreviewClarityDto } from "./clarity"
 
 /** Schemas do módulo Orçamentos — os MESMOS usados na tela, na API e no portal. */
 
@@ -40,13 +41,38 @@ export const clienteCommentSchema = z.object({
 })
 export type ClienteCommentInput = z.infer<typeof clienteCommentSchema>
 
-/** Prévia estruturada devolvida pela IA (validada antes de qualquer uso; sem as horas). */
+/** Dimensão da clareza (critérios de aceite ou localização) devolvida pela IA. */
+const previewClarityDimensionSchema = z.object({
+    status: z.enum(PREVIEW_CLARITY_STATUSES).catch("vague"),
+    detail: z
+        .string()
+        .trim()
+        .max(400)
+        .nullish()
+        .transform((value) => value ?? null),
+})
+
+/** Fallback tolerante: sem clareza confiável, cai em "vague" (não bloqueia a submissão). */
+const VAGUE_CLARITY: PreviewClarityDto = {
+    acceptanceCriteria: { status: "vague", detail: null },
+    location: { status: "vague", detail: null },
+}
+
+/**
+ * Prévia estruturada devolvida pela IA (validada antes de qualquer uso; sem as horas).
+ * `clarity` é **transitória** (avaliação de critérios de aceite e localização): trafega no stream
+ * da geração e **não** é gravada no rascunho.
+ */
 export const draftPreviewSchema = z.object({
     title: z.string().trim().min(1, "Título vazio").max(200),
     taskType: z.enum(TASK_TYPES).nullable(),
     priority: z.enum(TASK_PRIORITIES),
     technicalSpec: z.string().trim().max(50_000),
     summary: z.string().trim().max(400),
+    clarity: z
+        .object({ acceptanceCriteria: previewClarityDimensionSchema, location: previewClarityDimensionSchema })
+        .catch(VAGUE_CLARITY)
+        .optional(),
 })
 export type DraftPreview = z.infer<typeof draftPreviewSchema>
 

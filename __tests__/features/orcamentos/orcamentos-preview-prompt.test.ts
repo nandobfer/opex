@@ -13,6 +13,16 @@ describe("prompt da prévia (fase 1)", () => {
         expect(instructions).not.toContain('"estimatedHours"')
     })
 
+    it("instrui a avaliar a clareza (critérios de aceite e localização)", () => {
+        const instructions = buildBudgetPreviewInstructions("Você é um analista.")
+        expect(instructions).toContain('"clarity"')
+        expect(instructions).toContain('"acceptanceCriteria"')
+        expect(instructions).toContain('"location"')
+        expect(instructions).toContain('"missing"')
+        expect(instructions).toContain("Critérios de aceite")
+        expect(instructions).toContain("Localização")
+    })
+
     it("inclui a descrição do cliente no prompt", () => {
         const prompt = buildBudgetPreviewPrompt({ projectName: "acme/app", description: "Ajustar rodapé", correction: null })
         expect(prompt).toContain("Ajustar rodapé")
@@ -22,6 +32,24 @@ describe("prompt da prévia (fase 1)", () => {
         const prompt = buildBudgetPreviewPrompt({ projectName: "acme/app", description: "x", correction: "Mude o título" })
         expect(prompt).toContain("Correção solicitada")
         expect(prompt).toContain("Mude o título")
+    })
+
+    it("na correção, inclui a prévia atual e pede ajuste mínimo (sem refazer tudo)", () => {
+        const prompt = buildBudgetPreviewPrompt({
+            projectName: "acme/app",
+            description: "Ajustar rodapé",
+            correction: "Informe a página e os critérios",
+            previousPreview: { title: "Corrigir X", taskType: "bugfix", priority: "high", technicalSpec: "## Passos", summary: "Corrige X" },
+        })
+        expect(prompt).toContain("Prévia atual")
+        expect(prompt).toContain("Aplique SOMENTE o ajuste pedido")
+        expect(prompt).toContain("Informe a página e os critérios")
+    })
+
+    it("sem prévia anterior, não pede ajuste mínimo", () => {
+        const prompt = buildBudgetPreviewPrompt({ projectName: "acme/app", description: "x", correction: "Mude o título" })
+        expect(prompt).not.toContain("Prévia atual")
+        expect(prompt).not.toContain("Aplique SOMENTE o ajuste pedido")
     })
 })
 
@@ -103,6 +131,18 @@ describe("parse da saída da IA", () => {
     it("aceita taskType nulo", () => {
         const parsed = parseDraftPreview('{"title":"T","taskType":null,"priority":"low","technicalSpec":"","summary":"S"}')
         expect(parsed?.taskType).toBeNull()
+    })
+
+    it("valida a clareza devolvida pela IA", () => {
+        const parsed = parseDraftPreview(
+            '{"title":"T","taskType":null,"priority":"low","technicalSpec":"","summary":"S","clarity":{"acceptanceCriteria":{"status":"clear","detail":null},"location":{"status":"missing","detail":"sem página"}}}',
+        )
+        expect(parsed?.clarity).toEqual({ acceptanceCriteria: { status: "clear", detail: null }, location: { status: "missing", detail: "sem página" } })
+    })
+
+    it("sem clareza no JSON, é tolerante e não inclui a chave", () => {
+        const parsed = parseDraftPreview('{"title":"T","taskType":null,"priority":"low","technicalSpec":"","summary":"S"}')
+        expect(parsed?.clarity).toBeUndefined()
     })
 
     it("devolve null quando a prévia não é JSON válido ou não casa o schema", () => {

@@ -14,6 +14,8 @@ export function CorrectionCard({
     correcting,
     approving,
     disabled,
+    approveDisabled = false,
+    approveDisabledReason,
 }: {
     value: string
     onChange: (value: string) => void
@@ -22,6 +24,9 @@ export function CorrectionCard({
     correcting: boolean
     approving: boolean
     disabled: boolean
+    /** Quando a clareza está ausente, a aprovação fica bloqueada (só a correção é liberada). */
+    approveDisabled?: boolean
+    approveDisabledReason?: string
 }) {
     return (
         <Card>
@@ -35,10 +40,11 @@ export function CorrectionCard({
                     <Button type="button" data-ctrl-enter-submit variant="secondary" className="gap-1.5" onClick={onCorrect} disabled={disabled || !value.trim()}>
                         {correcting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />} Solicitar correção
                     </Button>
-                    <Button type="button" className="gap-1.5" onClick={onApprove} disabled={approving}>
+                    <Button type="button" className="gap-1.5" onClick={onApprove} disabled={approving || approveDisabled}>
                         {approving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />} Aprovar tarefa
                     </Button>
                 </div>
+                {approveDisabled && approveDisabledReason ? <p className="text-right text-xs text-muted-foreground">{approveDisabledReason}</p> : null}
             </CardContent>
         </Card>
     )

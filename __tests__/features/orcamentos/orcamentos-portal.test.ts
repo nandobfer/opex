@@ -119,6 +119,14 @@ describe("portal do cliente", () => {
         expect(again.estimate).toBeNull()
     })
 
+    it("não persiste a avaliação de clareza (ela vive só na tela)", async () => {
+        const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
+        const clarity = { acceptanceCriteria: { status: "clear" as const, detail: null }, location: { status: "clear" as const, detail: null } }
+        const saved = await saveDraftPreview(client, draft.id, { ...preview, clarity })
+        expect(saved.preview).not.toHaveProperty("clarity")
+        expect((await getDraft(client, draft.id)).preview).not.toHaveProperty("clarity")
+    })
+
     it("registra a correção pedida pelo cliente", async () => {
         const draft = await createDraft(client, { projectId, description: "x" })
         const corrected = await setDraftCorrection(client, draft.id, "Mude o título")

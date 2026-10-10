@@ -7,6 +7,7 @@ import { askJevSystemOne } from "@/lib/ai/jev"
 import { describeAiError, streamAi, type AiStreamEvent } from "@/lib/ai/stream"
 import type { AiProviderId } from "@/lib/ai/providers"
 import { Project } from "@/lib/db/models/Project"
+import type { IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { generateTagsForInput } from "@/features/ai/server/task-tags"
 import { loadBudgetPreviewSettings, availabilityOfBudgetPreview, loadEstimateHoursSettings, availabilityOfEstimateHours } from "@/features/ai/server/settings"
 import type { BudgetPreviewSettings, EstimateHoursSettings } from "@/features/ai/schemas"
@@ -94,6 +95,18 @@ async function requireEstimateSettings(): Promise<ResolvedEstimateSettings> {
     return { ...settings, provider: settings.provider, model: settings.model }
 }
 
+/** Prévia persistida no rascunho no formato aceito pelo prompt (sem tags/clareza). */
+function draftPreviewInput(preview: IOrcamentoDraftPreview | null): DraftPreview | null {
+    if (!preview) return null
+    return {
+        title: preview.title,
+        taskType: (preview.taskType as DraftPreview["taskType"]) ?? null,
+        priority: preview.priority as DraftPreview["priority"],
+        technicalSpec: preview.technicalSpec,
+        summary: preview.summary,
+    }
+}
+
 /** Monta a entrada da fase 1 (prévia) ANTES de abrir o stream. */
 export async function prepareBudgetPreview(client: ClienteOrcamentoDoc, draftId: string): Promise<PreparedBudgetPreview> {
     const settings = await requireSettings()
@@ -104,7 +117,12 @@ export async function prepareBudgetPreview(client: ClienteOrcamentoDoc, draftId:
         draftId,
         settings,
         instructions: buildBudgetPreviewInstructions(settings.instructions),
-        prompt: buildBudgetPreviewPrompt({ projectName: project?.name ?? draft.projectId, description: draft.description, correction: draft.correction ?? null }),
+        prompt: buildBudgetPreviewPrompt({
+            projectName: project?.name ?? draft.projectId,
+            description: draft.description,
+            correction: draft.correction ?? null,
+            previousPreview: draftPreviewInput(draft.preview),
+        }),
         title: `Orçamento ${client.name}`,
     }
 }

@@ -108,18 +108,32 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
     (`EstimateCard`). O card de horas tem um **carregamento animado** enquanto o agente pensa/consulta
     o banco (mostra o progresso, ex.: "Consultando (banco)…"); ao concluir, os valores entram com
     `AnimatedNumber` (`H:mm` e `R$`); em erro, mostra "Tentar novamente".
+  - **Card de clareza** (`ClarityCard`) em **largura total**, acima do card de ajuste: **um único
+    card que alterna** entre **sucesso** (critérios de aceite e localização claros → "pode
+    aprovar"), **aviso** (alguma dimensão vaga → "dá para enviar", mas lista o que detalhar) e
+    **erro** (alguma dimensão ausente → submissão **bloqueada**, orientando o cliente a usar o campo
+    de solicitar ajuste). A avaliação vem da IA a cada geração e é **transitória** (não é gravada no
+    rascunho); sem avaliação (prévia lida do banco), o card cai em **aviso**.
   - Card **"Ajustar ou aprovar"** em **largura total** abaixo do grid: **Solicitar correção** (texto
-    que entra no próximo prompt) e **Aprovar tarefa**. **Não** há botão "Gerar novamente" — a
-    geração é automática (prévia → estimativa). Ao **solicitar a correção**, a tela volta a exibir
-    **skeleton** na prévia e na estimativa (via `selectReviewView` de `useBudgetReview`) até chegarem
-    os novos valores — nunca reaproveita o resultado anterior do cache do rascunho.
+    que entra no próximo prompt) e **Aprovar tarefa**. O botão **Aprovar tarefa** fica
+    **desabilitado** quando a clareza está em erro (só a correção continua liberada). **Não** há botão
+    "Gerar novamente" — a geração é automática (prévia → estimativa). Ao **solicitar a correção**, a
+    tela volta a exibir **skeleton** na prévia e na estimativa (via `selectReviewView` de
+    `useBudgetReview`) até chegarem os novos valores — nunca reaproveita o resultado anterior do cache
+    do rascunho.
 
 ## IA em duas fases
 
 - **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`), feature **Orçamentos**
   (`budget-preview`): monta a entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod
   (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours` e as
-  tags** (nova correção ⇒ nova estimativa e novas tags). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
+  tags** (nova correção ⇒ nova estimativa e novas tags). A saída inclui ainda **`clarity`** — a
+  avaliação de clareza de `acceptanceCriteria` (critérios de aceite) e `location` (localização),
+  com estados `clear`/`vague`/`missing` — que é **transitória**: trafega no stream para o card da
+  revisão e **não** é gravada no rascunho (`saveDraftPreview` remove o campo). A IA também escreve as
+  seções **"## Critérios de aceite"** e **"## Localização"** dentro da especificação técnica. Na
+  **correção**, o prompt recebe a **prévia atual** e pede para **ajustar somente o que foi
+  solicitado** (só refaz tudo se a correção pedir explicitamente). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
   cru nunca é exibido — e, na correção, prévia **e** estimativa voltam a skeleton até chegarem os
   novos valores.
 - **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
@@ -136,7 +150,8 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
   resolvidos no servidor por `resolveTagViews`).
 - `preview-prompt.ts` (puro): contratos de saída das duas fases
   (`buildBudgetPreviewInstructions`/`buildBudgetEstimateInstructions`), prompts
-  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt` — este último recebe as tarefas semelhantes
+  (`buildBudgetPreviewPrompt` — inclui a **prévia atual** e a instrução de ajuste mínimo quando há
+  correção — / `buildBudgetEstimatePrompt` — este último recebe as tarefas semelhantes
   e a **âncora do histórico**, `estimateAnchor`), parsers e helpers do JEV (`buildJevEstimateQuestions`,
   `mapJevEstimateScore`).
 - Cada geração grava uma linha em `ai_usage_logs` (`feature: "budget-preview"` na prévia;
@@ -179,13 +194,14 @@ pública (`/api/v1/*`).
 
 - `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
   `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
-  `formatHoursLabel`), `schemas.ts`, `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
+  `formatHoursLabel`), `clarity.ts` (puro: `selectPreviewClarity` — clareza da prévia), `schemas.ts`,
+  `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
   `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa; só horas reais),
   `server/tag-views.ts` (resolve ids de tags em `{ id, label }` para o portal), `components/`
   (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
   — `useBudgetReview` orquestra as duas fases —, páginas e componentes; `portal/components/preview/`
-  tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard` e
-  `CorrectionCard`). A visão do cliente tem `ClienteTaskDetailPage`, `ClienteTaskTabs`,
+  tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard`,
+  `ClarityCard` e `CorrectionCard`). A visão do cliente tem `ClienteTaskDetailPage`, `ClienteTaskTabs`,
   `ClienteTaskSidebar`, `ClienteEstimateCard`, `ClienteEstimateBadge` e `ClienteCommentsSection`, além
   dos tipos seguros `ClienteTaskDto`/`ClienteTaskDetailDto` (sem horas reais/fator/custo/modelo).
 - `src/app/(app)/integracoes/orcamentos/page.tsx`, `src/app/api/integrations/orcamentos/*`,
@@ -196,7 +212,8 @@ pública (`/api/v1/*`).
 ## Testes
 
 `__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt` (contratos/parsers
-das duas fases), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
+das duas fases), `orcamentos-clarity` (card da revisão: sucesso/aviso/erro e bloqueio), `clarity-card`
+(cards e gate do botão), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
 `orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa, lista/detalhe do cliente por
 `clientId` e comentário com origem), `orcamentos-estimate` (estimativa em uma chamada: tags +
 semelhantes + provedor de texto/JEV), `orcamentos-similar` (busca por tags com fallback e horas

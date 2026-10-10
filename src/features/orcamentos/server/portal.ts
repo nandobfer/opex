@@ -174,10 +174,15 @@ export async function setDraftCorrection(client: ClienteOrcamentoDoc, id: string
     return draftToDto({ ...draft, correction }, client)
 }
 
-/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa e as tags. */
+/**
+ * Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa e as tags.
+ * A avaliação de clareza é **transitória** (vive só na tela): é removida antes de persistir.
+ */
 export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: Omit<DraftPreviewDto, "tags">): Promise<OrcamentoDraftDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...preview, tags: [] }, estimatedHours: null } })
+    const { clarity, ...persisted } = preview
+    void clarity
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...persisted, tags: [] }, estimatedHours: null } })
     return getDraft(client, id)
 }
 
