@@ -22,8 +22,8 @@ export interface RouteArgs<P extends Record<string, string>> {
 }
 
 /**
- * Wrapper das rotas do app (sem autenticação: uso pessoal, local). `DomainError` vira a resposta
- * padronizada; qualquer outro erro é logado e vira 500.
+ * Wrapper das rotas do app. O acesso é barrado pelo `middleware` (sessão de senha única);
+ * `DomainError` vira a resposta padronizada; qualquer outro erro é logado e vira 500.
  */
 export function withRoute<P extends Record<string, string> = Record<string, never>>(handler: (args: RouteArgs<P>) => Promise<Response>) {
     return async (req: NextRequest, context: { params: Promise<P> }) => {

@@ -2,11 +2,12 @@
 
 Guia normativo para qualquer IA que trabalhe neste repositório.
 
-O **Opex** é um app Next.js **de uso pessoal**: um único usuário (o dono), **sem login**,
-rodando só localmente ou em Docker, nunca publicado. É a **fonte de verdade** das suas tarefas:
-gerenciar tarefas, apontar horas e automatizar o desenvolvimento, com um módulo de **Integrações**
-para configurar serviços e guardar credenciais. O core (tema, componentes, layout, integrações,
-Pusher, crons) foi copiado do CRM Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
+O **Opex** é um app Next.js **de uso pessoal**: um único usuário (o dono), protegido por um login
+com **senha única** (sem cadastro e sem usuários) e que pode ser publicado na internet. É a **fonte
+de verdade** das suas tarefas: gerenciar tarefas, apontar horas e automatizar o desenvolvimento, com
+um módulo de **Integrações** para configurar serviços e guardar credenciais. O core (tema,
+componentes, layout, integrações, Pusher, crons) foi copiado do CRM Marketing Campanhas
+(`~/code/crm-marketing-campanhas`, branch `dev`).
 
 ## 1. Ordem obrigatória de leitura
 
@@ -28,11 +29,13 @@ Antes de implementar, leia nesta ordem:
   - `src/features`: regras e fluxos de negócio
   - `src/lib`: infraestrutura compartilhada (banco, logger, Pusher, integrações, constantes)
   - `src/components`: UI genérica e reutilizável
-- **Sem autenticação, permissões, empresas ou multiusuário.** Não introduza Clerk, cargos,
-  `companyId`, slug nem guardas de permissão sem pedido explícito do usuário. Toda ação é do
-  usuário local (`getLocalUser()` de `src/lib/local-user.ts`).
-- **O app não pode ser exposto à internet** (não há login). Outros sistemas só acessam endpoints
-  públicos por **token de sistema** (Integrações › API interna).
+- **Login por senha única, sem usuários, permissões, empresas ou multiusuário.** O app tem uma
+tela de login (`/login`, senha `APP_PASSWORD`, sessão assinada por `AUTH_SECRET`; ver
+`aicontext/modules/auth.md`), mas não há cadastro, cargos, `companyId`, slug nem guardas de
+permissão. Não introduza usuários/papéis sem pedido explícito do usuário. Toda ação continua sendo
+do usuário local (`getLocalUser()` de `src/lib/local-user.ts`).
+- **O app só pode ser exposto à internet atrás do login** (senha única). Outros sistemas acessam
+  endpoints públicos por **token de sistema** (Integrações › API interna).
 - Credenciais de serviços externos (ex.: token do GitHub, chaves dos provedores de IA) ficam como
   **campo privado da integração** (cifrado no banco); nunca no código, no navegador ou em `.env`
   versionado.
@@ -133,6 +136,9 @@ Antes de implementar, leia nesta ordem:
   triviais de hover/foco podem usar classes Tailwind.
 - **Exceção — gráficos:** o desenho das séries usa a animação interna do recharts, desligada com
   movimento reduzido. Blocos e cards ao redor continuam com Framer Motion.
+- **Exceção — fundo da tela de login:** o campo de partículas usa **tsParticles** (`@tsparticles/react`
+  + `@tsparticles/slim`, receita "links"), fora do escopo do Framer Motion (canvas). Ver
+  `aicontext/modules/auth.md`. No restante da UI a animação continua só com Framer Motion.
 - Animações são curtas (≈150–300 ms), não bloqueiam a interação nem atrasam dados e respeitam
   `prefers-reduced-motion` (`useReducedMotion`/`MotionConfig reducedMotion="user"`).
 - Mutações com efeito visual imediato (iniciar/parar timer, mover tarefa) usam **resposta
@@ -221,13 +227,15 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
 - Framework: Next.js 16 + React 19
 - Linguagem: TypeScript 5 em modo strict
 - UI: Tailwind CSS 4 + Shadcn/ui + Radix, tema escuro fixo (primária `#8000FF`)
-- Auth: nenhuma (uso pessoal, local); API pública por token de sistema
+- Auth: login por senha única (`APP_PASSWORD` + `AUTH_SECRET`), sessão em cookie assinado, guarda
+  em `src/middleware.ts`; API pública por token de sistema (`aicontext/modules/auth.md`)
 - Banco: MongoDB + Mongoose
 - Estado assíncrono: TanStack Query (com resposta otimista nas mutações de efeito imediato)
 - HTTP no cliente: axios do projeto (`baseURL: '/api'`)
 - Validação: Zod
 - Formulários: react-hook-form + `@hookform/resolvers` (Zod)
-- Animações: Framer Motion (única biblioteca de animação)
+- Animações: Framer Motion (biblioteca de animação única; exceção: campo de partículas do login,
+  com tsParticles — `@tsparticles/react` + `@tsparticles/slim`)
 - Arrastar e soltar: dnd-kit (`@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities`)
 - Virtualização: TanStack Virtual
 - Tempo real: Pusher (`pusher` no servidor, `pusher-js` no cliente; Soketi compatível)

@@ -2,7 +2,7 @@
 
 Cópia do módulo de Integrações do CRM Marketing Campanhas (que veio do Smart Desk): mesmos
 métodos, logs, debug, explorador e segredos cifrados, com o catálogo do Opex e **sem
-permissões** (app de uso pessoal, sem login). Lista as integrações usadas pelo app, mostra o status
+permissões** (app de uso pessoal, com login por senha única). Lista as integrações usadas pelo app, mostra o status
 da conexão, permite editar a configuração sem redeploy e acompanhar logs de debug em tempo real.
 Valores que antes viviam no `.env` são persistidos no MongoDB.
 
