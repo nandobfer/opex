@@ -256,7 +256,7 @@ export function OperationPanel({ operation, schemas, integrationName, onOpenSche
     }
 
     return (
-        <div className="space-y-4 pt-1">
+        <div className="space-y-4 pt-1" data-ctrl-enter-scope>
             {(operation.description || operation.summary) && (
                 <p className="whitespace-pre-line text-sm text-muted-foreground">{operation.description ?? operation.summary}</p>
             )}
@@ -342,7 +342,7 @@ export function OperationPanel({ operation, schemas, integrationName, onOpenSche
 
             <div className="flex items-center justify-end gap-2">
                 {blockedReason && <span className="text-xs text-muted-foreground">{blockedReason}</span>}
-                <Button type="button" onClick={requestRun} disabled={running || Boolean(blockedReason)}>
+                <Button type="button" data-ctrl-enter-submit onClick={requestRun} disabled={running || Boolean(blockedReason)}>
                     {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                     Executar
                 </Button>

@@ -95,7 +95,7 @@ export function TaskSummaryTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                 <Button type="button" variant="outline" className="gap-1.5" disabled={!dirty || save.isPending} onClick={() => form.reset(query.data.settings)}>
                     <Undo2 className="h-4 w-4" aria-hidden /> Desfazer
                 </Button>
-                <Button type="button" className="gap-1.5" disabled={(!dirty && !query.data.isDefault) || save.isPending} onClick={() => void submit()}>
+                <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={(!dirty && !query.data.isDefault) || save.isPending} onClick={() => void submit()}>
                     {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
                     Salvar
                 </Button>

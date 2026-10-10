@@ -35,10 +35,10 @@ export function ClienteCommentsSection({ taskId, comments }: { taskId: string; c
     }
     return (
         <div className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-2" data-ctrl-enter-scope>
                 <Textarea value={content} onChange={(event) => setContent(event.target.value)} rows={3} placeholder="Escreva um comentário (Markdown aceito)" aria-label="Novo comentário" />
                 <div className="flex justify-end">
-                    <Button type="button" size="sm" className="gap-1.5" disabled={add.isPending || !content.trim()} onClick={submit}>
+                    <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={add.isPending || !content.trim()} onClick={submit}>
                         {add.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
                         Comentar
                     </Button>

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { QueryProvider } from "@/lib/react-query/QueryProvider"
 import { Toaster } from "@/components/ui/toast"
 import { MotionProvider } from "@/components/motion/MotionProvider"
+import { CtrlEnterSubmit } from "@/components/ctrl-enter-submit"
 import { PusherConfigBridge } from "@/lib/pusher/PusherConfigBridge"
 import { getPusherPublicConfig } from "@/lib/pusher/public-config"
 
@@ -29,6 +30,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <html lang="pt-BR" className="dark" style={{ colorScheme: "dark" }}>
             <body className={cn("min-h-screen bg-background font-sans antialiased", inter.variable)}>
                 <PusherConfigBridge config={pusherConfig} />
+                <CtrlEnterSubmit />
                 <QueryProvider>
                     <MotionProvider>
                         {children}
