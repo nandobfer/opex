@@ -1,0 +1,46 @@
+import { z } from "zod"
+import { TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
+
+/** Schemas do módulo Orçamentos — os MESMOS usados na tela, na API e no portal. */
+
+const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
+
+/** Cliente do portal (criar/editar). */
+export const clienteOrcamentoSchema = z.object({
+    name: z.string().trim().min(1, "Informe o nome").max(120, "Máximo de 120 caracteres"),
+    projectIds: z.array(objectId).min(1, "Selecione ao menos um repositório"),
+    hourlyRate: z
+        .number({ error: "Informe o custo por hora" })
+        .min(0, "Não pode ser negativo")
+        .max(1_000_000, "Valor muito alto"),
+    profitFactor: z
+        .number({ error: "Informe o fator de lucro" })
+        .min(1, "Mínimo 1")
+        .max(100, "Máximo 100"),
+    active: z.boolean(),
+})
+export type ClienteOrcamentoInput = z.infer<typeof clienteOrcamentoSchema>
+
+/** Rascunho criado pelo portal: repositório + descrição. */
+export const clienteDraftSchema = z.object({
+    projectId: objectId,
+    description: z.string().trim().min(1, "Descreva a tarefa").max(50_000, "Texto muito longo"),
+})
+export type ClienteDraftInput = z.infer<typeof clienteDraftSchema>
+
+/** Correção pedida pelo cliente sobre a prévia. */
+export const clienteCorrectionSchema = z.object({
+    correction: z.string().trim().min(1, "Descreva a correção").max(4000, "Máximo de 4.000 caracteres"),
+})
+export type ClienteCorrectionInput = z.infer<typeof clienteCorrectionSchema>
+
+/** Prévia estruturada devolvida pela IA (validada antes de qualquer uso). */
+export const draftPreviewSchema = z.object({
+    title: z.string().trim().min(1, "Título vazio").max(200),
+    taskType: z.enum(TASK_TYPES).nullable(),
+    priority: z.enum(TASK_PRIORITIES),
+    technicalSpec: z.string().trim().max(50_000),
+    summary: z.string().trim().max(400),
+    estimatedHours: z.number().min(0).max(10_000),
+})
+export type DraftPreview = z.infer<typeof draftPreviewSchema>

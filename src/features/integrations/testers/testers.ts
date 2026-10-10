@@ -3,6 +3,7 @@ import { GITHUB_DEFAULT_API_URL, type IntegrationId } from "@/lib/integrations/c
 import { describeSchedule } from "@/lib/integrations/schedule"
 import { CronJobState } from "@/lib/db/models/CronJobState"
 import { ApiToken } from "@/lib/db/models/ApiToken"
+import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { dbConnect } from "@/lib/db"
 import { getRawPusherServer } from "@/lib/pusher/server"
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
@@ -135,6 +136,18 @@ const testGithub: IntegrationTester = async ({ emit, signal }) => {
     return warnings.length ? warnResult(`Conectado com restrição: ${warnings.join("; ")}`) : `Conectado como @${user.login ?? "?"}`
 }
 
+// ---------------------------------------------------------------------------
+// Orçamentos: sem serviço externo — só confere o cadastro de clientes
+// ---------------------------------------------------------------------------
+
+const testOrcamentos: IntegrationTester = async ({ emit }) => {
+    await dbConnect()
+    const total = await OrcamentoClient.countDocuments()
+    const active = await OrcamentoClient.countDocuments({ active: true })
+    emit("info", `${total} cliente(s) cadastrado(s), ${active} ativo(s)`)
+    return `Portal de Orçamentos disponível (${active} cliente(s) ativo(s))`
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -143,4 +156,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     ai: testAiHub,
     ai_opencode: testOpencode,
     ai_gemini: testGemini,
+    orcamentos: testOrcamentos,
 }

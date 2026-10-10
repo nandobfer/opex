@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, AlignLeft, Sparkles } from "lucide-react"
+import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -16,6 +16,7 @@ import { useAiFeatureRealtime } from "../hooks/useAi"
 import { AiProvidersTab } from "./AiProvidersTab"
 import { UnderstandTaskTab } from "./understand-task/UnderstandTaskTab"
 import { TaskSummaryTab } from "./task-summary/TaskSummaryTab"
+import { BudgetPreviewTab } from "./budget-preview/BudgetPreviewTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 
 interface AiEditorFormProps {
@@ -33,6 +34,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "provedores", label: "Provedores", icon: BrainCircuit },
     { id: "entender-tarefas", label: "Entender tarefas", icon: Sparkles },
     { id: "resumos-tarefas", label: "Resumos de tarefas", icon: AlignLeft },
+    { id: "orcamentos", label: "Orçamentos", icon: Calculator },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
 ]
 
@@ -74,6 +76,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 )}
                 {tab === "entender-tarefas" && <UnderstandTaskTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "resumos-tarefas" && <TaskSummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "orcamentos" && <BudgetPreviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>

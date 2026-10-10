@@ -42,7 +42,8 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
 | `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |
 | `modules/integrations.md` | Integrações e agendador | Pusher, API interna (OpenAPI + tokens de sistema), Crons, GitHub; abas na página da integração; Archflow em desenvolvimento |
-| `modules/ai.md` | Provedores de IA | OpenCode e Gemini (Vercel AI SDK), `/integracoes/ia`, features "Entender tarefas" e "Resumos de tarefas" (IA em streaming na tarefa) |
+| `modules/ai.md` | Provedores de IA | OpenCode e Gemini (Vercel AI SDK), `/integracoes/ia`, features "Entender tarefas", "Resumos de tarefas" e "Orçamentos" (IA em streaming na tarefa) |
+| `modules/orcamentos.md` | Orçamentos | Integração Orçamentos (`/integracoes/orcamentos`), clientes com token, portal público do cliente (`/cliente`), prévia/estimativa por IA e criação da tarefa |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
 

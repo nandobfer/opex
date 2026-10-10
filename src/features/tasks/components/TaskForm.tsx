@@ -1,20 +1,17 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AnimatePresence, motion } from "framer-motion"
-import { Eye, Loader2, Pencil } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
 import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { FormFooter } from "@/components/ui/form-footer"
 import { Input } from "@/components/ui/input"
-import { Markdown } from "@/components/ui/markdown"
+import { MarkdownField } from "@/components/ui/markdown-field"
 import { SearchPicker } from "@/components/ui/search-picker"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
 import type { BoardColumnView } from "../board"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "../constants"
 import { taskFormSchema, type TaskFormValues } from "../schemas"
@@ -60,7 +57,6 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
         mode: "onChange",
         defaultValues: emptyValues(projects[0]?.id ?? "", defaultColumnKey ?? columns[0]?.key ?? ""),
     })
-    const [descTab, setDescTab] = useState<"write" | "preview">("write")
 
     useEffect(() => {
         form.reset(
@@ -79,7 +75,7 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
     }, [task?.id, mode, projects, columns, defaultColumnKey])
 
     const errors = form.formState.errors
-    const [description, projectId, columnId, taskType, priority] = useWatch({ control: form.control, name: ["description", "projectId", "columnId", "taskType", "priority"] })
+    const [projectId, columnId, taskType, priority] = useWatch({ control: form.control, name: ["projectId", "columnId", "taskType", "priority"] })
     const project = useMemo(() => projects.find((item) => item.id === projectId) ?? null, [projects, projectId])
     const column = useMemo(() => columns.find((item) => item.key === columnId) ?? null, [columns, columnId])
     const repoIndex = useRepoIndex()
@@ -124,42 +120,11 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
             </Field>
 
             <Field id="task-description" label="Descrição" error={errors.description?.message}>
-                <div className="space-y-2">
-                    <div role="tablist" aria-label="Editar ou visualizar a descrição" className="flex gap-1 rounded-lg bg-muted p-1">
-                        {(
-                            [
-                                { id: "write", label: "Escrever", icon: Pencil },
-                                { id: "preview", label: "Visualizar", icon: Eye },
-                            ] as const
-                        ).map((tab) => {
-                            const active = descTab === tab.id
-                            return (
-                                <button
-                                    key={tab.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={active}
-                                    onClick={() => setDescTab(tab.id)}
-                                    className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors", active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-                                >
-                                    <tab.icon className="h-3.5 w-3.5" aria-hidden />
-                                    {tab.label}
-                                </button>
-                            )
-                        })}
-                    </div>
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.div key={descTab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
-                            {descTab === "write" ? (
-                                <Textarea id="task-description" rows={8} placeholder="Markdown aceito" {...form.register("description")} />
-                            ) : (
-                                <div className="min-h-[172px] rounded-md border bg-muted/30 p-3">
-                                    {description?.trim() ? <Markdown>{description}</Markdown> : <p className="text-sm text-muted-foreground">Nada para visualizar ainda.</p>}
-                                </div>
-                            )}
-                        </motion.div>
-                    </AnimatePresence>
-                </div>
+                <Controller
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => <MarkdownField id="task-description" value={field.value ?? ""} onChange={field.onChange} rows={8} placeholder="Markdown aceito" invalid={Boolean(errors.description)} />}
+                />
             </Field>
 
             <div className={FORM_GRID}>

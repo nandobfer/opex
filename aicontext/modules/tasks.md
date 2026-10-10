@@ -12,10 +12,11 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 ## Modelo (`src/lib/db/models/`)
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
-  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt }`. `code` =
+  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt, estimate }`. `code` =
   `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o resumo
   de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele (detecta
-  desatualização) — ver `modules/ai.md`.
+  desatualização) — ver `modules/ai.md`. `estimate` é o orçamento vindo do portal do cliente
+  (`null` fora dele) — ver `modules/orcamentos.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, createdAt }`.
 - `TaskBoardColumn` (`task_board_columns`) e `TaskBoardLayout` (`task_board_layout`, documento
   `board` com a ordem).
@@ -84,12 +85,15 @@ semeado na primeira leitura (`ensureBoard`).
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
-  50 cards; cards com código, tipo, título, repositório (`GithubRepoLabel`), prioridade e "Arquivada".
+  50 cards; cards com código, tipo, título, repositório (`GithubRepoLabel`), prioridade, a
+  **estimativa real** de horas (`EstimateBadge`, quando a tarefa veio do portal — ver
+  `modules/orcamentos.md`) e "Arquivada".
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`).
-- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** sob o título),
-  Coluna ("Mover para…"), Prioridade, Tipo, Repositório, Atualizada; ordenação por coluna (salva);
-  virtualizada acima de 50; rola com a página (`usePageVirtualizer`).
+- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** e a
+  **estimativa real** de horas sob o título), Coluna ("Mover para…"), Prioridade, Tipo,
+  Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
+  (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no
@@ -102,11 +106,13 @@ semeado na primeira leitura (`ensureBoard`).
 ## Criar tarefa (`/tarefas/nova`, `components/TaskCreatePage.tsx` + `TaskForm.tsx`)
 
 Formulário no estilo "nova issue do GitHub", em **página própria** (não é mais modal): título,
-descrição com abas **Escrever / Visualizar** (Markdown) e os metadados em **autocomplete com chips**
+descrição em **campo Markdown** (`MarkdownField`: abas **Escrever / Visualizar** + barra com
+**negrito**, itálico, cabeçalho, link, imagem, lista, citação e código) e os metadados em
+**autocomplete com chips**
 (`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
 **Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
 campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
-`technicalSpec`).
+`technicalSpec`). O mesmo `MarkdownField` é reusado no portal do cliente (`modules/orcamentos.md`).
 
 O **Repositório** substitui o antigo campo "Projeto": o Projeto É o repositório vinculado, então a
 escolha do repositório define o `projectId`. Ao salvar, a tarefa **cria a issue no repositório** e o

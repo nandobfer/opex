@@ -9,17 +9,21 @@ import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
 import {
+    DEFAULT_BUDGET_PREVIEW_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
     DEFAULT_UNDERSTAND_TASK_SETTINGS,
+    budgetPreviewSettingsSchema,
     taskSummarySettingsSchema,
     understandTaskSettingsSchema,
+    type BudgetPreviewSettings,
     type TaskSummarySettings,
     type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
+const BUDGET_PREVIEW_FEATURE = "budget-preview"
 
 /** Campos de provedor comuns a toda feature de IA. */
 type ProviderSettings = {
@@ -95,7 +99,6 @@ export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTask
 export function normalizeTaskSummarySettings(input: TaskSummarySettings): TaskSummarySettings {
     return normalizeProvider(input)
 }
-
 async function persistFeature<T extends ProviderSettings>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
     await AiFeatureSetting.updateOne({ feature }, { $set: { settings: next, updatedAt: new Date(), updatedBy: actorId } }, { upsert: true })
     await recordAudit({
@@ -162,4 +165,31 @@ export async function saveTaskSummarySettings(input: TaskSummarySettings, actorI
     await persistFeature(TASK_SUMMARY_FEATURE, next, actorId, before)
     if (next.enabled && !before.settings.enabled) scheduleTaskSummaryBackfill()
     return getTaskSummarySettings()
+}
+
+// ── Orçamentos (prévia do portal do cliente) ─────────────────────────────────
+
+export async function loadBudgetPreviewSettings(): Promise<{ settings: BudgetPreviewSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(BUDGET_PREVIEW_FEATURE, budgetPreviewSettingsSchema, DEFAULT_BUDGET_PREVIEW_SETTINGS)
+}
+
+export async function availabilityOfBudgetPreview(settings: BudgetPreviewSettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Orçamentos"')
+}
+
+export async function getBudgetPreviewSettings(): Promise<BudgetPreviewSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadBudgetPreviewSettings()
+    return { settings, isDefault, availability: await availabilityOfBudgetPreview(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export function normalizeBudgetPreviewSettings(input: BudgetPreviewSettings): BudgetPreviewSettings {
+    return normalizeProvider(input)
+}
+
+export async function saveBudgetPreviewSettings(input: BudgetPreviewSettings, actorId: string): Promise<BudgetPreviewSettingsDto> {
+    const next = normalizeBudgetPreviewSettings(input)
+    await assertCatalog(next)
+    const before = await loadBudgetPreviewSettings()
+    await persistFeature(BUDGET_PREVIEW_FEATURE, next, actorId, before)
+    return getBudgetPreviewSettings()
 }

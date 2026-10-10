@@ -54,8 +54,9 @@ e opções na própria aba da página "Provedores de IA".
   `/integracoes/ia/gemini` em `ia/[provider]/page.tsx`, provedor desconhecido = 404;
   `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas** e
-  **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
+  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
+  **Orçamentos** e **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em
+  `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
   (estado local, não vão à URL).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
@@ -127,6 +128,21 @@ e opções na própria aba da página "Provedores de IA".
   fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
   `understand-stream.ts`.
 
+## Feature "Orçamentos" (prévia do portal do cliente)
+
+- Configuração em `ai_feature_settings` (`feature: "budget-preview"`), schema Zod
+  `budgetPreviewSettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
+  variante/raciocínio, temperatura e máximo de tokens (só Gemini) e instruções (prompt de sistema).
+  Regras ao salvar iguais às demais features (ativa exige provedor+modelo conectados; modelo,
+  variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
+- A IA interpreta a **descrição enviada pelo cliente** no portal e devolve **JSON validado com Zod**
+  (`parseDraftPreview` em `src/features/orcamentos/preview-prompt.ts`): título, tipo, prioridade,
+  especificação técnica (Markdown), resumo de 1 linha e **horas estimadas** (H). Como não há saída
+  estruturada garantida, o JSON é extraído do texto e validado; inválido → evento `error`.
+- As horas são calibradas pelo **histórico de horas dos agentes** (`estimateStats`, agregado de
+  `TimeLog.duration` por `DevTask.taskType`) injetado no prompt — **sem ferramenta** (o `streamAi`
+  não tem tool calling). Ver `modules/orcamentos.md`.
+
 ## APIs
 
 | Rota | Descrição |
@@ -135,6 +151,7 @@ e opções na própria aba da página "Provedores de IA".
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
+| `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 
@@ -144,4 +161,5 @@ e opções na própria aba da página "Provedores de IA".
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
 `task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
-seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo).
+seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo). A
+feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).

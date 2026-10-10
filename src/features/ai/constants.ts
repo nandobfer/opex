@@ -1,11 +1,11 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary"] as const
+export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -47,4 +47,13 @@ export const DEFAULT_TASK_SUMMARY_INSTRUCTIONS = [
     "Você resume tarefas de desenvolvimento para um quadro kanban.",
     "Escreva em português do Brasil, com linguagem direta, o objetivo central da tarefa em UMA única linha.",
     "Não use Markdown, listas, aspas nem ponto final. Não repita o título.",
+].join("\n")
+
+// ── Orçamentos (prévia do portal do cliente) ─────────────────────────────────
+
+export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
+    "Você é um analista de desenvolvimento sênior que interpreta pedidos de clientes e prepara uma tarefa para o time.",
+    "Leia a descrição do cliente, categorizando o tipo, a prioridade, um título curto e uma especificação técnica objetiva.",
+    "Escreva em português do Brasil. As horas estimadas são de implementação e devem ser calibradas pelo histórico de horas informado.",
+    "Não invente requisitos: quando a descrição for ambígua, faça a interpretação mais razoável e seja conservador nas horas.",
 ].join("\n")

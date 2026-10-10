@@ -6,6 +6,23 @@ import { Schema, model, models, type Model } from "mongoose"
  * Comentários ficam em `task_comments`; o Histórico é derivado da auditoria (`audit_logs`).
  */
 
+/** Estimativa/orçamento da tarefa vinda do portal do cliente (ver `modules/orcamentos.md`). */
+export interface ITaskEstimate {
+    /** Horas reais estimadas pela IA (visão interna). */
+    hours: number
+    /** Horas exibidas ao cliente (H × fator de lucro). */
+    clientHours: number
+    /** Faturamento em reais (clientHours × custo por hora). */
+    billingBrl: number
+    /** Fator de lucro aplicado (snapshot). */
+    factor: number
+    /** Custo por hora aplicado (snapshot). */
+    hourlyRate: number
+    /** Modelo que gerou a estimativa (`provedor/modelo`). */
+    model: string | null
+    generatedAt: Date
+}
+
 export interface IDevTask {
     code: string
     projectId: string
@@ -22,9 +39,24 @@ export interface IDevTask {
     /** Hash da fonte (título + descrição) do resumo atual; divergente = resumo desatualizado. */
     summarySourceHash: string | null
     summaryUpdatedAt: Date | null
+    /** Estimativa/orçamento do portal do cliente (`null` quando não veio do portal). */
+    estimate: ITaskEstimate | null
     createdAt: Date
     updatedAt: Date
 }
+
+const TaskEstimateSchema = new Schema<ITaskEstimate>(
+    {
+        hours: { type: Number, default: 0 },
+        clientHours: { type: Number, default: 0 },
+        billingBrl: { type: Number, default: 0 },
+        factor: { type: Number, default: 1 },
+        hourlyRate: { type: Number, default: 0 },
+        model: { type: String, default: null },
+        generatedAt: { type: Date, default: () => new Date() },
+    },
+    { _id: false },
+)
 
 const DevTaskSchema = new Schema<IDevTask>(
     {
@@ -41,6 +73,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         summary: { type: String, default: null },
         summarySourceHash: { type: String, default: null },
         summaryUpdatedAt: { type: Date, default: null },
+        estimate: { type: TaskEstimateSchema, default: null },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },
 )

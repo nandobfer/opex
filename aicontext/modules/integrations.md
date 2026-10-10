@@ -15,8 +15,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   campos públicos, campos privados e as variáveis legadas do `.env`.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
   dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
-  `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode` e `ai_gemini` — ver
-  `modules/ai.md`).
+  `modules/github.md`), `ai` (Provedores de IA, com os provedores `ai_opencode` e `ai_gemini` — ver
+  `modules/ai.md`) e `orcamentos` (Orçamentos: clientes do portal público — ver
+  `modules/orcamentos.md`).
 - **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
   `parent` e `configured`) e aparecem dentro da página da mãe; o voltar da página leva à mãe.
   Rotas próprias via `integrationPath` (`/integracoes/ia`, `/integracoes/ia/opencode`,
@@ -111,9 +112,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Abas** (`components/tabs/`: `IntegrationTabs` + `useIntegrationTab`, copiados do Orquestrador
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
-  Geral, Vínculos, Mapeamento, Sincronização) e por Provedores de IA (`AiEditorForm`:
-  Provedores, Entender tarefas, Desenvolvimento agêntico) e pela página da central de
-  desenvolvimento (`/integracoes/ia/centrais/[id]`). `useLocalTabs` é o irmão **sem URL** (mesmo
+  Geral, Vínculos, Mapeamento, Sincronização), Provedores de IA (`AiEditorForm`:
+  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico),
+  Orçamentos (`OrcamentosEditorForm`: Clientes, rota própria `/integracoes/orcamentos`) e a página da
+  central de desenvolvimento (`/integracoes/ia/centrais/[id]`). `useLocalTabs` é o irmão **sem URL** (mesmo
   formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não podem
   reutilizar `?aba` (já reservado para as abas externas de `AiEditorForm`).
 - **Não use `layout` do framer-motion na grade/formulário desta página**: dentro do
@@ -132,6 +134,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   - **GitHub**: `GET /user` e `GET /rate_limit`; amarelo sem escopo `repo` (token clássico) ou com
     o limite de uso quase esgotado (ver `modules/github.md`).
   - **OpenCode / Gemini / Provedores de IA**: ver `modules/ai.md`.
+  - **Orçamentos**: sem serviço externo — só conta os clientes cadastrados (ver
+    `modules/orcamentos.md`).
 - `warnResult(mensagem)` (`testers/types.ts`) grava status amarelo ("Disponível com restrição").
 
 ### Status em tempo real
@@ -235,6 +239,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 | `GET/POST /api/integrations/internal_api/tokens` | Lista / gera token de sistema (valor só na resposta do POST) |
 | `DELETE /api/integrations/internal_api/tokens/[tokenId]` | Revoga token de sistema |
 | `GET /api/openapi.json` · `GET /api/docs` | Especificação e Swagger UI da API interna (públicas) |
+| `/api/integrations/orcamentos/clients*` | Clientes do portal de Orçamentos (ver `modules/orcamentos.md`) |
+| `/api/cliente/*` | Portal do cliente, autenticado pelo token do cliente (ver `modules/orcamentos.md`) |
 | `GET /api/v1/whoami` | Pública por token de sistema |
 | `/api/integrations/github/*` | Vínculos, mapeamento, sincronização e opções (ver `modules/github.md`) |
 | `GET/POST /api/routines/scheduler-tick` | Tick do agendador (Bearer `CRON_SECRET` ou cron secret) |
