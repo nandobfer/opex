@@ -52,6 +52,14 @@ export const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = {
     low: "border-zinc-400/30 bg-zinc-500/10 text-zinc-300",
 }
 
+/** Cor do ícone de prioridade sem rótulo (rodapé do card do kanban): fundo translúcido + cor do ícone. */
+export const TASK_PRIORITY_ICON_STYLES: Record<TaskPriority, string> = {
+    urgent: "bg-red-500/15 text-red-300",
+    high: "bg-orange-500/15 text-orange-300",
+    medium: "bg-sky-500/10 text-sky-300",
+    low: "bg-zinc-500/10 text-zinc-300",
+}
+
 /** Ordenação dos cards dentro da coluna. */
 export const TASK_SORT_KEYS = ["priority", "manual", "newest", "oldest"] as const
 export type TaskSortKey = (typeof TASK_SORT_KEYS)[number]
