@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { loginSchema } from "@/features/auth/schemas"
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/features/auth/session"
 import { getAppPassword, getAuthSecret, verifyPassword } from "@/features/auth/server/auth-service"
+import { isHttpsRequest, sessionCookieOptions } from "@/features/auth/server/cookie"
 import { checkRateLimit, registerFailedAttempt, resetRateLimit } from "@/features/auth/server/rate-limit"
 
 export const runtime = "nodejs"
@@ -15,15 +16,6 @@ function clientKey(req: NextRequest): string {
     const forwarded = req.headers.get("x-forwarded-for")
     if (forwarded) return forwarded.split(",")[0]!.trim() || "local"
     return req.headers.get("x-real-ip")?.trim() || "local"
-}
-
-function sessionCookieOptions() {
-    return {
-        httpOnly: true,
-        sameSite: "lax" as const,
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-    }
 }
 
 /**
@@ -59,7 +51,8 @@ export const POST = withRoute(async ({ req }) => {
     }
 
     resetRateLimit(key)
+    const secure = isHttpsRequest(req.headers.get("x-forwarded-proto"), req.nextUrl.protocol)
     const response = ok({ authenticated: true })
-    response.cookies.set({ name: SESSION_COOKIE_NAME, value: await createSessionToken(secret), ...sessionCookieOptions() })
+    response.cookies.set({ name: SESSION_COOKIE_NAME, value: await createSessionToken(secret), ...sessionCookieOptions(secure) })
     return response
 })

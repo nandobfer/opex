@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, ChevronsUp, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { TASK_PRIORITY_LABELS, TASK_PRIORITY_STYLES, TASK_TYPE_LABELS, TASK_TYPE_SHORT_LABELS, TASK_TYPE_STYLES, type TaskPriority, type TaskType } from "../constants"
+import { TASK_PRIORITY_ICON_STYLES, TASK_PRIORITY_LABELS, TASK_PRIORITY_STYLES, TASK_TYPE_LABELS, TASK_TYPE_SHORT_LABELS, TASK_TYPE_STYLES, type TaskPriority, type TaskType } from "../constants"
 import type { BoardColumnView } from "../board"
 import { ColumnIconView } from "./column-icons"
 
@@ -25,6 +25,22 @@ export function TaskPriorityBadge({ priority }: { priority: TaskPriority }) {
         <span className={cn(chip, TASK_PRIORITY_STYLES[priority])} title={`Prioridade ${TASK_PRIORITY_LABELS[priority].toLowerCase()}`}>
             <Icon className="h-3 w-3" aria-hidden />
             {TASK_PRIORITY_LABELS[priority]}
+        </span>
+    )
+}
+
+/** Ícone da prioridade com a cor correspondente, sem rótulo (rodapé do card do kanban). */
+export function TaskPriorityIcon({ priority, className }: { priority: TaskPriority; className?: string }) {
+    const Icon = PRIORITY_ICON[priority]
+    const label = TASK_PRIORITY_LABELS[priority]
+    return (
+        <span
+            role="img"
+            aria-label={`Prioridade ${label}`}
+            title={`Prioridade ${label.toLowerCase()}`}
+            className={cn("inline-flex h-4 w-4 shrink-0 items-center justify-center rounded", TASK_PRIORITY_ICON_STYLES[priority], className)}
+        >
+            <Icon className="h-3 w-3" aria-hidden />
         </span>
     )
 }
