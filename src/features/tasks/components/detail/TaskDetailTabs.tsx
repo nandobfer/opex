@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, type ComponentType } from "react"
+import { useId, type ComponentType, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { TaskDetailDto } from "../../types"
@@ -25,8 +25,9 @@ const TABS: readonly TabDef[] = [
 
 /** Abas da página da tarefa. A seção ativa é renderizada como **componente** (nunca chamada como
  * função), para que cada aba tenha o próprio escopo de hooks. O controle da aba é do pai, para
- * preservar a aba selecionada ao alternar entre visão e edição. */
-export function TaskDetailTabs({ task, value, onValueChange }: { task: TaskDetailDto; value: TaskDetailTabId; onValueChange: (tab: TaskDetailTabId) => void }) {
+ * preservar a aba selecionada ao alternar entre visão e edição. `specSlot` é renderizado abaixo da
+ * especificação quando a aba "Especificação técnica" está ativa (painel do refinamento). */
+export function TaskDetailTabs({ task, value, onValueChange, specSlot }: { task: TaskDetailDto; value: TaskDetailTabId; onValueChange: (tab: TaskDetailTabId) => void; specSlot?: ReactNode }) {
     const baseId = useId()
     const active = TABS.find((item) => item.id === value) ?? TABS[0]
     const Section = active.Component
@@ -67,6 +68,7 @@ export function TaskDetailTabs({ task, value, onValueChange }: { task: TaskDetai
                     transition={{ duration: 0.18 }}
                 >
                     <Section task={task} />
+                    {active.id === "spec" && specSlot}
                 </motion.div>
             </AnimatePresence>
         </>

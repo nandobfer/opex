@@ -1,13 +1,16 @@
 # Módulo: Refinar tarefa (refinamento de tarefa por agente)
 
-Na página da tarefa, ao lado de **Entender tarefa**, o botão de ícone **Refinar tarefa** abre um
-modal em que um agente do **OpenCode** lê a tarefa inteira, faz **perguntas de esclarecimento**
-(uma rodada por vez, usando o **mesmo sistema de perguntas da mesa de trabalho** — os formulários
-do OpenCode) e vai **reescrevendo a especificação técnica** da tarefa até ela ficar clara. Inspirado
-na skill *grill-me* e no *clarify* do speckit.
+Na página da tarefa, ao lado de **Entender tarefa**, o botão de ícone **Refinar tarefa** seleciona a
+aba **"Especificação técnica"** e **inicia** o refinamento (se ainda não houver): um agente do
+**OpenCode** lê a tarefa inteira, faz **perguntas de esclarecimento** (uma rodada por vez, usando o
+**mesmo sistema de perguntas da mesa de trabalho** — os formulários do OpenCode) e vai
+**reescrevendo a especificação técnica** da tarefa até ela ficar clara. Abrir a aba pelo próprio
+clique apenas mostra o conteúdo (não inicia). Inspirado na skill *grill-me* e no *clarify* do speckit.
 
-É uma sessão **longa e retomável**: o turno roda **em segundo plano no servidor** (fechar o modal
-não interrompe o agente) e reabrir reconecta de onde parou.
+É uma sessão **longa e retomável**: o turno roda **em segundo plano no servidor** (sair da aba não
+interrompe o agente) e voltar reconecta de onde parou. O painel do refinamento fica **dentro da aba
+"Especificação técnica"**, **abaixo** da especificação já salva (o antigo modal foi removido para
+dar espaço de leitura às perguntas).
 
 Código: `src/features/refinement/` (domínio + servidor + UI). Reaproveita o cliente oficial
 `@opencode/client`, o **runner genérico de turno** `src/lib/ai/opencode-run.ts` (compartilhado com a
@@ -37,13 +40,14 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
 ## Fluxo do refinamento
 
-1. Abrir o modal **inicia** o refinamento (idempotente: se já existir, apenas devolve o estado) e
-   dispara um **turno** com a tarefa em Markdown + o protocolo.
+1. O botão do cabeçalho abre a aba **já com a intenção de iniciar**; o painel **inicia** o refinamento
+   (idempotente: se já existir, apenas devolve o estado) e dispara um **turno** com a tarefa em
+   Markdown + o protocolo. Sem a intenção do botão (abrir a aba clicando nela), não inicia.
 2. O agente faz as perguntas pela **ferramenta nativa de perguntas do OpenCode, `question`** — a
    mesma que abre um formulário (mesmos campos da mesa: texto, número, sim/não, opções, múltipla
    escolha). A ferramenta pausa o turno até a resposta. O protocolo **proíbe** o agente de escrever
-   as perguntas como texto. As perguntas pendentes aparecem no modal para **Responder** ou
-   **Dispensar**.
+   as perguntas como texto. As perguntas pendentes aparecem no painel, **abaixo da saída do agente**,
+   para **Responder** ou **Dispensar**.
 3. O usuário responde; a resposta vai para a **mesma sessão** (`session.form.reply`) e o agente
    continua.
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título
@@ -57,7 +61,7 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 **Conclusão (`resolved`)**: um turno só é marcado como esclarecido quando ele termina (`succeeded`)
 **e** o texto do agente traz a especificação técnica — que é então gravada na tarefa. Se o turno
 termina sem a especificação, o refinamento fica `idle` com o aviso *"O agente terminou sem produzir a
-especificação técnica. Use Continuar."* e o modal oferece **Continuar** (o `runState` nunca fica
+especificação técnica. Use Continuar."* e o painel oferece **Continuar** (o `runState` nunca fica
 "resolvido" sem a especificação).
 
 O texto do agente **não é salvo** na tarefa além da especificação: o diálogo é reconstruído pelos
@@ -87,10 +91,12 @@ vira `interrupted` e o usuário retoma com **Continuar**.
   (`useRefinementStream` → `useEventStream` genérico) e reconstrói com `applyTimelineLine`.
 - Mudanças de estado publicam `refinement-updated { taskId }` em `private-app`; `useRefinementRealtime`
   invalida a consulta do refinamento.
-- O modal (`RefineTaskDialog`) reusa a **Timeline** da mesa (saída ao vivo) e o card genérico de
-  perguntas (`components/agent-questions/`, compartilhado com a mesa), com **Parar**, **Continuar**,
-  **Recomeçar** (com confirmação) e **Fechar**; quando `resolved`, mostra que a especificação foi
-  esclarecida e salva.
+- O painel (`RefinementPanel`, dentro da aba "Especificação técnica", **abaixo** da especificação)
+  reusa a **Timeline** da mesa (saída ao vivo) numa **área própria com rolagem** (`h-[40vh]
+  min-h-[18rem] max-h-[28rem]`) e o card genérico de perguntas (`components/agent-questions/`,
+  compartilhado com a mesa) **logo abaixo**, sem rolagem interna curta. Controles: **Parar**,
+  **Continuar**, **Recomeçar** (com confirmação) e, sem refinamento, **Refinar tarefa** (inicia).
+  Quando `resolved`, mostra que a especificação foi esclarecida e salva.
 
 ## Modelo e tipos
 
@@ -123,6 +129,8 @@ nada para a issue.
 `__tests__/features/refinement/`: `logic` (extração da especificação e montagem do prompt),
 `refinement-service` (disponibilidade sem central / desativada / feature off, início com sessão no
 diretório da central e gravação da especificação, resposta e interrupção), `refinement-route`
-(rotas NDJSON/ações/formulários) e `RefineTaskButton` (bloqueio com motivo).
-`__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração. O OpenCode é sempre
-mockado.
+(rotas NDJSON/ações/formulários), `RefineTaskButton` (bloqueio com motivo e `onOpen`) e
+`RefinementPanel` (CTA de início, indisponível, saída/perguntas, `autoStart` e aviso de esclarecido).
+`__tests__/features/tasks/task-detail-tabs.test.tsx` cobre o slot do refinamento abaixo da
+especificação. `__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração. O
+OpenCode é sempre mockado.

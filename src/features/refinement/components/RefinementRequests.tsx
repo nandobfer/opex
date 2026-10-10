@@ -15,7 +15,7 @@ export function RefinementRequests({ taskId, refinement }: { taskId: string; ref
     return (
         <AnimatePresence initial={false}>
             {count > 0 && (
-                <motion.div key="pending" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="max-h-[45%] overflow-y-auto border-t bg-amber-500/5">
+                <motion.div key="pending" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="rounded-md border bg-amber-500/5">
                     <div className="space-y-3 p-3">
                         <AnimatePresence initial={false}>
                             {refinement.pendingPermissions.map((item) => (
