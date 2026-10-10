@@ -77,6 +77,30 @@ describe('TaskCardView: resumo de IA', () => {
   })
 })
 
+describe('TaskCardView: prioridade e tipo no rodapé', () => {
+  it('mostra a prioridade só como ícone colorido, sem o rótulo', () => {
+    render(<TaskCardView task={task({ priority: 'high' })} />)
+    const icon = screen.getByRole('img', { name: 'Prioridade Alta' })
+    expect(icon.className).toContain('text-orange-300')
+    expect(screen.queryByText('Alta')).toBeNull()
+  })
+
+  it('mostra o chip de tipo no rodapé e não no cabeçalho', () => {
+    render(<TaskCardView task={task({ taskType: 'feature' })} />)
+    const footer = screen.getByTestId('task-card-footer')
+    const header = screen.getByTestId('task-card-header')
+    expect(within(footer).getByText('Feature')).toBeTruthy()
+    expect(within(header).queryByText('Feature')).toBeNull()
+  })
+
+  it('mantém o "Arquivada" no rodapé junto do ícone de prioridade baixa', () => {
+    render(<TaskCardView task={task({ priority: 'low', archived: true })} />)
+    const footer = screen.getByTestId('task-card-footer')
+    expect(within(footer).getByRole('img', { name: 'Prioridade Baixa' })).toBeTruthy()
+    expect(within(footer).getByText('Arquivada')).toBeTruthy()
+  })
+})
+
 describe('TaskCardView: mesa aguardando ação', () => {
   it('destaca o card em warning e mostra o motivo', () => {
     mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano' })
