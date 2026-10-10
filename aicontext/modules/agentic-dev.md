@@ -92,20 +92,27 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 - Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
   turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
 
-## Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`)
+## Central de desenvolvimento (`/desenvolvimento/[tarefa]`)
 
-- Item próprio no menu. Sem central na URL, abre a primeira. Três colunas:
-  **Centrais** | **Tarefas do projeto** | **Mesa de trabalho**.
+- Item próprio no menu. A **central selecionada vive no `localStorage`**
+  (`opex:dev-center-central:v1`) e a **tarefa na URL** (`/desenvolvimento` sem tarefa,
+  `/desenvolvimento/[tarefa]` com a mesa aberta). A central efetiva é a do projeto da tarefa
+  aberta, senão a salva, senão a primeira; trocar de central limpa a tarefa da URL. Duas colunas:
+  **Tarefas do projeto** | **Mesa de trabalho**.
+- O topo da coluna de tarefas traz o **seletor da central** (`SearchPicker`/`CentralPicker`): o
+  gatilho mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado)
+  e a lista é buscada por nome/projeto; ao lado, o atalho das configurações da central, um divisor
+  discreto e a lista de tarefas. O avatar real vem do índice de repositórios do GitHub
+  (`RepoIndexProvider`, montado no layout de `/desenvolvimento`); sem token, cai na inicial.
 - Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
   está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
-- A partir de `lg`, **Centrais** e **Tarefas** recolhem (botão no cabeçalho de cada uma) para uma
-  faixa estreita de 48 px, e a mesa ocupa o espaço liberado (largura animada, `CollapsiblePane`).
-  Faixa das centrais: um ícone por central (nome na dica), ainda navegável; faixa das tarefas:
-  quantidade filtrada e o código da tarefa aberta. O conteúdo fica montado (rolagem e filtros se
-  mantêm). Estado salvo em `localStorage` (`opex:dev-center-layout:v1`); abaixo de `lg` as
-  colunas ficam empilhadas e sempre abertas.
+- A partir de `lg`, a coluna **Tarefas** recolhe (botão no cabeçalho) para uma faixa estreita de
+  48 px, e a mesa ocupa o espaço liberado (largura animada, `CollapsiblePane`). Faixa: o seletor da
+  central como **avatar + sigla do repositório**, a quantidade filtrada e o código da tarefa
+  aberta. O conteúdo fica montado (rolagem e filtros se mantêm). Estado salvo em `localStorage`
+  (`opex:dev-center-layout:v2`); abaixo de `lg` as colunas ficam empilhadas e sempre abertas.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
   `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da

@@ -84,7 +84,7 @@ describe('trabalhos em andamento: mesas pausadas continuam na lista', () => {
     fireEvent.click(button)
     expect(await screen.findByText('Trabalhos em andamento')).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Abrir a mesa de OPX-1' })
-    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${TASK}`)
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/${TASK}`)
     expect(screen.getByText('Aguardando revisão do plano')).toBeTruthy()
   })
 
@@ -97,7 +97,7 @@ describe('trabalhos em andamento: mesas pausadas continuam na lista', () => {
 
     fireEvent.click(button)
     const link = await screen.findByRole('link', { name: 'Abrir a mesa de OPX-1' })
-    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${TASK}`)
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/${TASK}`)
     expect(screen.getByText('Em execução')).toBeTruthy()
   })
 

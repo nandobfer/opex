@@ -17,9 +17,9 @@ export async function publishAgentic(payload: Record<string, unknown>): Promise<
     await publishAppEvent(AGENTIC_UPDATED_EVENT, payload).catch(() => undefined)
 }
 
-export async function repoForProject(projectId: string): Promise<{ repo: string; repoUrl: string } | null> {
-    const project = await Project.findById(projectId).select({ repo: 1, repoUrl: 1 }).lean().catch(() => null)
-    return project ? { repo: project.repo, repoUrl: project.repoUrl } : null
+export async function repoForProject(projectId: string): Promise<{ repo: string; repoUrl: string; sigla: string } | null> {
+    const project = await Project.findById(projectId).select({ repo: 1, repoUrl: 1, sigla: 1 }).lean().catch(() => null)
+    return project ? { repo: project.repo, repoUrl: project.repoUrl, sigla: project.sigla } : null
 }
 
 /** Coluna de entrada do vínculo do projeto (usada como destino ao reabrir a mesa quando a central não define "Ao abrir a mesa"). */
@@ -38,8 +38,8 @@ async function countsByCentral(): Promise<Map<string, { active: number; running:
 
 export async function listCentrals(): Promise<CentralDto[]> {
     await dbConnect()
-    const [docs, counts, projects] = await Promise.all([AgenticCentral.find().sort({ projectName: 1 }).lean(), countsByCentral(), Project.find().select({ repo: 1, repoUrl: 1 }).lean()])
-    const repos = new Map(projects.map((project) => [String(project._id), { repo: project.repo, repoUrl: project.repoUrl }]))
+    const [docs, counts, projects] = await Promise.all([AgenticCentral.find().sort({ projectName: 1 }).lean(), countsByCentral(), Project.find().select({ repo: 1, repoUrl: 1, sigla: 1 }).lean()])
+    const repos = new Map(projects.map((project) => [String(project._id), { repo: project.repo, repoUrl: project.repoUrl, sigla: project.sigla }]))
     return docs.map((doc) => {
         const count = counts.get(String(doc._id)) ?? { active: 0, running: 0 }
         return toCentralDto(doc, { repo: repos.get(doc.projectId) ?? null, ...count })

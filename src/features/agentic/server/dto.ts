@@ -11,12 +11,13 @@ export const asRunState = (value: string): RunState => (RUN_STATES as readonly s
 
 export function toCentralDto(
     doc: Pick<IAgenticCentral, "_id" | "projectId" | "projectName" | "config" | "lastTest" | "createdAt" | "updatedAt">,
-    extra: { repo: { repo: string; repoUrl: string } | null; active: number; running: number },
+    extra: { repo: { repo: string; repoUrl: string; sigla: string } | null; active: number; running: number },
 ): CentralDto {
     return {
         id: String(doc._id),
         projectId: doc.projectId,
         projectName: doc.projectName,
+        sigla: extra.repo?.sigla ?? "",
         config: parseCentralConfig(doc.config),
         repo: extra.repo?.repo ?? null,
         repoUrl: extra.repo?.repoUrl ?? null,

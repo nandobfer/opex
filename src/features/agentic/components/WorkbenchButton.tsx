@@ -31,7 +31,7 @@ export function WorkbenchButton({ taskId, projectId }: { taskId: string; project
     return (
         <TooltipIconButton
             label={LABEL}
-            href={workbenchPath(central.id, taskId)}
+            href={workbenchPath(taskId)}
             className={current ? workbenchToneClasses(current.stage, current.runState).button : undefined}
             tooltip={
                 current ? (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, type CSSProperties } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -11,41 +11,52 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
+import { useTaskList } from "@/features/tasks/hooks/useTasks"
 import { DEV_CENTER_PATH } from "../../constants"
+import { pickActiveCentral } from "../../dev-center-central"
 import { useAgenticRealtime, useCentrals } from "../../hooks/useAgentic"
+import { useDevCenterCentral } from "../../hooks/useDevCenterCentral"
 import { useDevCenterLayout } from "../../hooks/useDevCenterLayout"
 import { AGENTIC_SETTINGS_HREF } from "../central/CentralPage"
 import { WorkbenchPane } from "../workbench/WorkbenchPane"
-import { CentralsPane } from "./CentralsPane"
 import { TasksPane } from "./TasksPane"
 
 /**
- * Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`): centrais à esquerda, tarefas
- * do produto no meio e a mesa de trabalho da tarefa à direita. Trocar de central ou de tarefa não
- * remonta a tela (a casca agrupa `/desenvolvimento`): as colunas ficam e só o que mudou anima.
+ * Central de desenvolvimento (`/desenvolvimento/[tarefa]`): a **central vem do navegador** e a
+ * **tarefa vem da URL**. Trocar de central ou de tarefa não remonta a tela (a casca agrupa
+ * `/desenvolvimento`): as colunas ficam e só o que mudou anima (a mesa ao trocar de tarefa, a lista
+ * de tarefas ao trocar de central).
  */
-export function DevCenterPage({ centralId, taskId }: { centralId: string | null; taskId: string | null }) {
+export function DevCenterPage({ taskId }: { taskId: string | null }) {
     useAgenticRealtime()
     const router = useRouter()
     const centrals = useCentrals()
-    const list = centrals.data ?? []
-    const central = list.find((item) => item.id === centralId) ?? null
+    const list = useMemo(() => centrals.data ?? [], [centrals.data])
+    const { centralId: storedId, setCentralId } = useDevCenterCentral()
+    // A tarefa (na URL) manda na central: a central efetiva é a do projeto dela.
+    const tasks = useTaskList(false)
+    const taskProjectId = taskId ? (tasks.data?.tasks.find((task) => task.id === taskId)?.project?.id ?? null) : null
+    const central = useMemo(() => pickActiveCentral(list, storedId, taskProjectId), [list, storedId, taskProjectId])
     // As colunas ocupam exatamente a área visível do <main> (descontado o padding e o aviso de conexão).
     const sectionRef = useRef<HTMLElement>(null)
     const height = useScrollViewportHeight(sectionRef, list.length > 0)
     const layout = useDevCenterLayout()
     const reduceMotion = useReducedMotion()
 
-    // Sem central na URL (ou inexistente): abre a primeira.
+    // A central efetiva (da tarefa, salva ou a primeira) fica gravada no navegador.
     useEffect(() => {
-        if (!centrals.data?.length) return
-        if (!centralId || !centrals.data.some((item) => item.id === centralId)) router.replace(`${DEV_CENTER_PATH}/${centrals.data[0]!.id}`)
-    }, [centralId, centrals.data, router])
+        if (central && central.id !== storedId) setCentralId(central.id)
+    }, [central, storedId, setCentralId])
+
+    // Trocar de central limpa a tarefa da URL (a mesa aberta era de outro projeto).
+    const selectCentral = (id: string) => {
+        setCentralId(id)
+        if (taskId) router.replace(DEV_CENTER_PATH)
+    }
 
     if (centrals.isLoading) {
         return (
-            <div className="grid gap-4 lg:grid-cols-[220px_340px_1fr]" aria-label="Carregando a Central de desenvolvimento">
-                <Skeleton className="h-96" />
+            <div className="grid gap-4 lg:grid-cols-[340px_1fr]" aria-label="Carregando a Central de desenvolvimento">
                 <Skeleton className="h-96" />
                 <Skeleton className="h-96" />
             </div>
@@ -73,9 +84,8 @@ export function DevCenterPage({ centralId, taskId }: { centralId: string | null;
             style={height ? ({ "--dev-center-height": `${height}px` } as CSSProperties) : undefined}
             className="flex min-h-0 flex-col gap-4 lg:h-[var(--dev-center-height,calc(100dvh-3rem))] lg:flex-row"
         >
-            <CentralsPane centrals={list} activeId={central?.id ?? null} collapsed={layout.centralsCollapsed} wide={layout.wide} onToggle={layout.toggleCentrals} />
             {central ? (
-                <TasksPane central={central} activeTaskId={taskId} collapsed={layout.tasksCollapsed} wide={layout.wide} onToggle={layout.toggleTasks} />
+                <TasksPane central={central} centrals={list} activeTaskId={taskId} collapsed={layout.tasksCollapsed} wide={layout.wide} onToggle={layout.toggleTasks} onSelectCentral={selectCentral} />
             ) : (
                 <Skeleton className="h-96 lg:w-[340px] lg:shrink-0" />
             )}

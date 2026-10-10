@@ -79,7 +79,7 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 - `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Horas agênticas — ícone girando +
   cronômetro quando algum agente executa, ou aviso em warning quando **só** há mesas aguardando ação.
   Clique abre a lista **"Trabalhos em andamento"**: cada item é um botão que navega para a **mesa de
-  trabalho** (`/desenvolvimento/{central}/{tarefa}`) — ou para a tarefa, em apontamentos legados sem
+  trabalho** (`/desenvolvimento/{tarefa}`) — ou para a tarefa, em apontamentos legados sem
   mesa. As mesas pausadas **não** somem da lista.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)

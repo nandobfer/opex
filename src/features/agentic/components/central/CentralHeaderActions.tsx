@@ -19,12 +19,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { DEV_CENTER_PATH } from "../../constants"
 import { useDeleteCentral, useTestCentral } from "../../hooks/useAgentic"
+import { useDevCenterCentral } from "../../hooks/useDevCenterCentral"
 import type { CentralDto, CentralTestOutcome } from "../../types"
 
 /** Testar a central (com o resultado de cada verificação), abrir na Central e excluir. */
 export function CentralHeaderActions({ central, onDeleted }: { central: CentralDto; onDeleted: () => void }) {
     const test = useTestCentral(central.id)
     const remove = useDeleteCentral()
+    const { setCentralId } = useDevCenterCentral()
     const [confirming, setConfirming] = useState(false)
     const [result, setResult] = useState<CentralTestOutcome | null>(null)
     const last = central.lastTest
@@ -37,7 +39,7 @@ export function CentralHeaderActions({ central, onDeleted }: { central: CentralD
                     Testar central
                 </Button>
                 <Button asChild variant="outline" className="gap-1.5">
-                    <Link href={`${DEV_CENTER_PATH}/${central.id}`}>
+                    <Link href={DEV_CENTER_PATH} onClick={() => setCentralId(central.id)}>
                         <Workflow className="h-4 w-4" aria-hidden /> Abrir na Central
                     </Link>
                 </Button>
