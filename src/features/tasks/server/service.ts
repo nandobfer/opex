@@ -73,6 +73,7 @@ const FIELD_LABELS: Record<string, string> = {
     projeto: "projeto",
     coluna: "coluna",
     arquivada: "arquivada",
+    cliente: "cliente",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -148,6 +149,20 @@ async function resolveProjectClient(projectId: string): Promise<{ name: string; 
     return { name: client.name, profitFactor: Math.max(1, client.profitFactor ?? 1), hourlyRate: Math.max(0, client.hourlyRate ?? 0) }
 }
 
+/**
+ * Cliente de orçamento da tarefa: o `clientId` **gravado nela** tem precedência; sem ele (dados
+ * legados, anteriores à edição do cliente), cai no cliente ativo que inclui o repositório.
+ */
+async function resolveTaskClient(task: { clientId?: string | null; projectId: string }): Promise<{ name: string; profitFactor: number; hourlyRate: number } | null> {
+    if (task.clientId) {
+        const client = await OrcamentoClient.findById(task.clientId).lean()
+        if (client) {
+            return { name: client.name, profitFactor: Math.max(1, client.profitFactor ?? 1), hourlyRate: Math.max(0, client.hourlyRate ?? 0) }
+        }
+    }
+    return resolveProjectClient(task.projectId)
+}
+
 // ── Consultas ──────────────────────────────────────────────────────────────
 
 export async function listTasks(includeArchived: boolean): Promise<TaskListDto> {
@@ -181,9 +196,10 @@ export async function getTask(id: string): Promise<TaskDetailDto> {
         timeLogsFor(id),
     ])
     const [withIssue] = await withIssueRefs([toTaskDto(task, project)])
-    const estimateClientName = withIssue.estimate ? (await resolveProjectClient(task.projectId))?.name ?? null : null
+    const estimateClientName = withIssue.estimate ? (await resolveTaskClient(task))?.name ?? null : null
     return {
         ...withIssue,
+        clientId: task.clientId ?? null,
         estimateClientName,
         description: task.description ?? null,
         technicalSpec: task.technicalSpec ?? null,
@@ -399,7 +415,7 @@ export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateIn
     if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
     if (!task.estimate) throw new DomainError(409, "A tarefa não tem estimativa para editar", "TASK_WITHOUT_ESTIMATE")
 
-    const client = await resolveProjectClient(task.projectId)
+    const client = await resolveTaskClient(task)
     const factor = client?.profitFactor ?? Math.max(1, task.estimate.factor ?? 1)
     const hourlyRate = client?.hourlyRate ?? Math.max(0, task.estimate.hourlyRate ?? 0)
     const next = computeClientEstimate(input.hours, factor, hourlyRate)
@@ -416,6 +432,66 @@ export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateIn
     })
     await publishTasksUpdated([id])
     return toEstimateDto(estimate)
+}
+
+/**
+ * Define, troca ou remove o cliente da tarefa. Ao definir/trocar, recalcula a estimativa com o fator
+ * de lucro e o custo/hora do cliente escolhido, **preservando as horas** já estimadas (ou `0` quando
+ * ainda não havia estimativa); ao remover (`null`), zera o cliente e a estimativa. Só aceita cliente
+ * **ativo** que inclua o repositório da tarefa (mesma regra do portal).
+ */
+export async function setTaskClient(id: string, clientId: string | null, actorId: string): Promise<{ clientId: string | null; estimate: TaskEstimate | null }> {
+    assertTaskId(id)
+    await dbConnect()
+    const task = await DevTask.findById(id).lean()
+    if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+
+    const beforeName = (await resolveTaskClient(task))?.name ?? null
+
+    if (clientId === null) {
+        if ((task.clientId ?? null) === null && !task.estimate) return { clientId: null, estimate: null }
+        await DevTask.updateOne({ _id: id }, { $set: { clientId: null, estimate: null } })
+        await recordAudit({
+            userId: actorId,
+            entidade: TASK_AUDIT_ENTITY,
+            entidadeId: id,
+            acao: AcaoAuditoria.ATUALIZAR,
+            antes: { codigo: task.code, cliente: beforeName },
+            depois: { codigo: task.code, cliente: null, estimativa: "removida" },
+        })
+        await publishTasksUpdated([id])
+        return { clientId: null, estimate: null }
+    }
+
+    const client = await OrcamentoClient.findById(clientId).lean()
+    if (!client) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
+    if (client.active === false) throw new DomainError(400, "O cliente está inativo", "CLIENT_INACTIVE")
+    if (!(client.projectIds ?? []).includes(task.projectId)) throw new DomainError(400, "O cliente não inclui o repositório da tarefa", "CLIENT_NOT_FOR_PROJECT")
+
+    const factor = Math.max(1, client.profitFactor ?? 1)
+    const hourlyRate = Math.max(0, client.hourlyRate ?? 0)
+    const next = computeClientEstimate(task.estimate?.hours ?? 0, factor, hourlyRate)
+    const estimate: ITaskEstimate = {
+        hours: next.hours,
+        clientHours: next.clientHours,
+        billingBrl: next.billingBrl,
+        factor,
+        hourlyRate,
+        model: task.estimate?.model ?? null,
+        generatedAt: task.estimate?.generatedAt ? new Date(task.estimate.generatedAt) : new Date(),
+    }
+
+    await DevTask.updateOne({ _id: id }, { $set: { clientId, estimate } })
+    await recordAudit({
+        userId: actorId,
+        entidade: TASK_AUDIT_ENTITY,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { codigo: task.code, cliente: beforeName },
+        depois: { codigo: task.code, cliente: client.name, fatorLucro: factor, horasEstimadas: next.hours },
+    })
+    await publishTasksUpdated([id])
+    return { clientId, estimate: toEstimateDto(estimate) }
 }
 
 /** Mover a tarefa de coluna (e, opcionalmente, posição). */

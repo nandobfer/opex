@@ -10,9 +10,10 @@ agente —, que o cliente **aprova ou corrige**. A aprovação cria a tarefa de 
 
 Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
 e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
-real (H). Na **página da tarefa** as horas estimadas são **editáveis**; ao salvar, o servidor
-recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que originou a tarefa (o
-`OrcamentoClient` cujo `projectIds` inclui o repositório). Ver `modules/tasks.md`.
+real (H). Na **página da tarefa** o **cliente é editável** (adicionar/trocar/remover) e as horas
+estimadas também; ao salvar ou trocar o cliente, o servidor recalcula o orçamento com o fator de lucro
+e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; sem ele — dados legados —, o
+`OrcamentoClient` ativo cujo `projectIds` inclui o repositório). Ver `modules/tasks.md`.
 
 ## Modelo (`src/lib/db/models/Orcamento.ts`)
 
@@ -24,11 +25,13 @@ recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que orig
   estimatedHours, model, status: "draft" | "approved", taskId }`. `preview` = `{ title, taskType,
   priority, technicalSpec, summary, tags }` (1ª fase da IA + tags da feature "Tags de tarefas");
   `estimatedHours` (H) é gravado na 2ª fase.
-- `DevTask.estimate` (subdocumento, `null` fora do portal): `{ hours, clientHours, billingBrl, factor,
-  hourlyRate, model, generatedAt }` — snapshot no momento da aprovação. Ver `modules/tasks.md`.
-- `DevTask.clientId`: o **cliente de orçamento que solicitou** a tarefa (`OrcamentoClient._id`; `null`
-  fora do portal). É o que define a **lista do portal** — o cliente só vê as tarefas com o seu
-  `clientId`, nunca todas as do repositório. Ver `modules/tasks.md`.
+- `DevTask.estimate` (subdocumento; `null` **quando a tarefa não tem cliente**): `{ hours, clientHours,
+  billingBrl, factor, hourlyRate, model, generatedAt }` — snapshot gravado na aprovação do portal ou
+  ao **definir/trocar o cliente na página da tarefa**. Ver `modules/tasks.md`.
+- `DevTask.clientId`: o **cliente de orçamento da tarefa** (`OrcamentoClient._id`; `null` = sem
+  cliente) — tanto o que **solicitou** pelo portal quanto o que o dono **atribuiu/atualizou na página
+  da tarefa**. É o que define a **lista do portal** (o cliente só vê as tarefas com o seu `clientId`;
+  trocar/remover o cliente na tarefa muda o que o portal mostra). Ver `modules/tasks.md`.
 
 ## Autenticação do portal (`server/token.ts`)
 

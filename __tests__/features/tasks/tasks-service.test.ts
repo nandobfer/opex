@@ -64,7 +64,7 @@ vi.mock('@/lib/db/models/Orcamento', async () => {
 })
 
 import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
-import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
+import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, setTaskClient, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
@@ -346,5 +346,85 @@ describe('tarefas do portal (cliente)', () => {
     await mocks.models.comment.create({ taskId: a.id, content: 'Antigo' })
     const detail = await getTask(a.id)
     expect(detail.comments[0]).toMatchObject({ authorType: 'owner', authorName: 'Usuário local' })
+  })
+})
+
+describe('cliente da tarefa (editar na página da tarefa)', () => {
+  it('adiciona um cliente: grava o clientId e habilita a estimativa (horas 0, fator do cliente)', async () => {
+    const pid = await seedProject()
+    const clientId = await seedClient({ projectIds: [pid], profitFactor: 3, hourlyRate: 80 })
+    const a = await create(pid)
+    mocks.recordAudit.mockClear()
+    mocks.publish.mockClear()
+
+    const result = await setTaskClient(a.id, clientId, 'local')
+    expect(result.clientId).toBe(clientId)
+    expect(result.estimate).toMatchObject({ hours: 0, factor: 3, hourlyRate: 80, clientHours: 0, billingBrl: 0 })
+
+    const detail = await getTask(a.id)
+    expect(detail.clientId).toBe(clientId)
+    expect(detail.estimate).toMatchObject({ factor: 3, hourlyRate: 80 })
+    expect(detail.estimateClientName).toBe('ACME')
+    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'Tarefa', entidadeId: a.id, acao: 'ATUALIZAR' }))
+  })
+
+  it('troca o cliente e recalcula com o novo fator, preservando as horas', async () => {
+    const pid = await seedProject()
+    const c1 = await seedClient({ name: 'ACME', projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
+    const c2 = await seedClient({ name: 'Globex', projectIds: [pid], profitFactor: 5, hourlyRate: 50 })
+    const a = await createEstimated(pid, { hours: 4 })
+
+    await setTaskClient(a.id, c1, 'local')
+    const result = await setTaskClient(a.id, c2, 'local')
+    expect(result.clientId).toBe(c2)
+    expect(result.estimate).toMatchObject({ hours: 4, factor: 5, hourlyRate: 50, clientHours: 20, billingBrl: 1000 })
+
+    const detail = await getTask(a.id)
+    expect(detail.clientId).toBe(c2)
+    expect(detail.estimateClientName).toBe('Globex')
+  })
+
+  it('remove o cliente: zera o clientId e a estimativa e publica a mudança', async () => {
+    const pid = await seedProject()
+    const clientId = await seedClient({ projectIds: [pid] })
+    const a = await createEstimated(pid, { hours: 4 })
+    await setTaskClient(a.id, clientId, 'local')
+    mocks.publish.mockClear()
+
+    const result = await setTaskClient(a.id, null, 'local')
+    expect(result).toEqual({ clientId: null, estimate: null })
+    const detail = await getTask(a.id)
+    expect(detail.clientId).toBeNull()
+    expect(detail.estimate).toBeNull()
+    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
+  })
+
+  it('rejeita cliente inexistente, inativo ou que não cobre o repositório, sem mudar a tarefa', async () => {
+    const pid = await seedProject()
+    const other = await seedProject({ repo: 'o/outro', sigla: 'OU' })
+    const a = await create(pid)
+    const inactive = await seedClient({ active: false, projectIds: [pid] })
+    const wrongRepo = await seedClient({ projectIds: [other] })
+
+    await expect(setTaskClient(a.id, 'f'.repeat(24), 'local')).rejects.toMatchObject({ status: 404, code: 'CLIENT_NOT_FOUND' })
+    await expect(setTaskClient(a.id, inactive, 'local')).rejects.toMatchObject({ status: 400, code: 'CLIENT_INACTIVE' })
+    await expect(setTaskClient(a.id, wrongRepo, 'local')).rejects.toMatchObject({ status: 400, code: 'CLIENT_NOT_FOR_PROJECT' })
+    expect((await getTask(a.id)).clientId).toBeNull()
+  })
+
+  it('usa o cliente da TAREFA (não o do repositório) no nome e no fator ao salvar horas', async () => {
+    const pid = await seedProject()
+    const chosen = await seedClient({ name: 'ACME', projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
+    const a = await create(pid)
+    await setTaskClient(a.id, chosen, 'local')
+    // Outro cliente passa a cobrir o mesmo repositório e fica "mais recente".
+    await seedClient({ name: 'Globex', projectIds: [pid], profitFactor: 9, hourlyRate: 999 })
+
+    const detail = await getTask(a.id)
+    expect(detail.estimateClientName).toBe('ACME')
+
+    const estimate = await updateTaskEstimate(a.id, { hours: 3 }, 'local')
+    expect(estimate).toMatchObject({ hours: 3, factor: 2, hourlyRate: 100, clientHours: 6, billingBrl: 600 })
   })
 })

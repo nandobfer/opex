@@ -95,6 +95,8 @@ export interface TaskTimeLog {
 
 /** Tarefa completa (página da tarefa). */
 export interface TaskDetailDto extends TaskDto {
+    /** Cliente de orçamento atribuído à tarefa (`null` = sem cliente e sem estimativa). */
+    clientId: string | null
     description: string | null
     technicalSpec: string | null
     comments: TaskComment[]

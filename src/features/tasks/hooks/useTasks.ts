@@ -172,6 +172,24 @@ export function useUpdateTaskEstimate(taskId: string, code: string) {
     })
 }
 
+/**
+ * Define, troca ou remove o cliente da tarefa (`PATCH /api/tasks/[id]/client`). O servidor recalcula
+ * a estimativa (fator de lucro e custo/hora do cliente); `null` remove o cliente e a estimativa.
+ */
+export function useSetTaskClient(taskId: string, code: string) {
+    const queryClient = useQueryClient()
+    return useMutation<{ clientId: string | null; estimate: TaskEstimate | null }, unknown, string | null>({
+        mutationFn: async (clientId: string | null) =>
+            unwrapApi((await api.patch<ApiResponse<{ clientId: string | null; estimate: TaskEstimate | null }>>(`/tasks/${taskId}/client`, { clientId })).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível atualizar o cliente")),
+        onSuccess: (_data, clientId) => {
+            toast.success(clientId ? `Cliente de ${code} atualizado` : `Cliente de ${code} removido`)
+            void queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY, "list"] })
+            void queryClient.invalidateQueries({ queryKey: taskDetailKey(taskId) })
+        },
+    })
+}
+
 /** Cria uma tarefa (`POST /api/tasks`). */
 export function useCreateTask() {
     const queryClient = useQueryClient()
