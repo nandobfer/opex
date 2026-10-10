@@ -18,6 +18,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
     getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, start: index * estimateSize(), size: estimateSize(), key: index })),
+    measureElement: () => {},
   }),
 }))
 
@@ -39,6 +40,7 @@ const task = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   columnId: 'doing',
   order: 1,
   title: 'Warning na lista',
+  summary: null,
   taskType: 'feature',
   priority: 'high',
   archived: false,
