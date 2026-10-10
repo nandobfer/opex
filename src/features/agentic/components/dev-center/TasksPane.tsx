@@ -29,7 +29,7 @@ import { CollapsiblePane, PaneToggle } from "./CollapsiblePane"
 import { TaskFilters } from "./TaskFilters"
 
 const ROW_HEIGHT = 64
-const RAIL_ROW_HEIGHT = 28
+const RAIL_ROW_HEIGHT = 40
 
 interface TasksPaneProps {
     central: CentralDto
@@ -76,7 +76,7 @@ export function TasksPane({ central, centrals, activeTaskId, collapsed, wide, on
                 <>
                     <PaneToggle label={LABEL} collapsed onToggle={onToggle} />
                     <CentralPicker variant="rail" centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
-                    <div role="separator" aria-hidden className="h-px w-8 shrink-0 bg-gradient-to-r from-transparent via-border to-transparent" />
+                    <div role="separator" aria-hidden className="h-px w-16 shrink-0 bg-gradient-to-r from-transparent via-border to-transparent" />
                     <div ref={railScrollRef} className="min-h-0 w-full flex-1 overflow-y-auto px-1" role="list" aria-label={`Tarefas de ${central.projectName}`}>
                         <div className="relative w-full" style={{ height: railVirtualizer.getTotalSize() }}>
                             {railVirtualizer.getVirtualItems().map((row) => {
@@ -89,10 +89,10 @@ export function TasksPane({ central, centrals, activeTaskId, collapsed, wide, on
                                             href={workbenchPath(task.id)}
                                             aria-current={active ? "page" : undefined}
                                             title={`${task.code} · ${task.title}${column ? ` · ${column.label}` : ""}`}
-                                            className={cn("flex h-full items-center gap-1.5 rounded-md px-1.5 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
+                                            className={cn("flex h-full items-center gap-2 rounded-md px-2 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
                                         >
-                                            <span className={cn("h-2 w-2 shrink-0 rounded-full", column?.dot ?? "bg-muted-foreground/40")} aria-hidden />
-                                            <span className="truncate font-mono text-[11px] font-semibold text-primary">{task.code}</span>
+                                            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", column?.dot ?? "bg-muted-foreground/40")} aria-hidden />
+                                            <span className="truncate font-mono text-[13px] font-semibold text-primary">{task.code}</span>
                                         </Link>
                                     </div>
                                 )

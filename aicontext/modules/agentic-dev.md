@@ -108,7 +108,7 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
-- A partir de `lg`, a coluna **Tarefas** recolhe (botão no cabeçalho) para uma faixa de 72 px, e a
+- A partir de `lg`, a coluna **Tarefas** recolhe (botão no cabeçalho) para uma faixa de 144 px, e a
   mesa ocupa o espaço liberado (largura animada, `CollapsiblePane`). Faixa: o seletor da central
   como **avatar + sigla do projeto** e, abaixo, a **lista das tarefas filtradas** — cada uma com a
   **bolinha da coluna** (status) e o código, clicável para abrir a mesa. O conteúdo aberto fica

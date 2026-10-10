@@ -12,4 +12,4 @@ export type DevCenterLayout = z.infer<typeof devCenterLayoutSchema>
 export const DEFAULT_DEV_CENTER_LAYOUT: DevCenterLayout = { tasksCollapsed: false }
 
 /** Larguras da coluna de tarefas (px): aberta e recolhida (faixa estreita). */
-export const PANE_WIDTHS = { tasks: 340, rail: 72 } as const
+export const PANE_WIDTHS = { tasks: 340, rail: 144 } as const

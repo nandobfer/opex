@@ -63,10 +63,10 @@ function RailTrigger({ central, index }: { central: CentralDto; index: ReadonlyM
             type="button"
             title={repo.fullName}
             aria-label={`Central ${repo.fullName}`}
-            className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+            className="flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
         >
-            <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} className="h-4 w-4" />
-            <span className="truncate font-mono text-[10px] font-semibold">{centralSigla(central)}</span>
+            <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} className="h-5 w-5" />
+            <span className="truncate font-mono text-xs font-semibold">{centralSigla(central)}</span>
         </button>
     )
 }
