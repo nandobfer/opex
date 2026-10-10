@@ -11,7 +11,8 @@ import type { TaskDto } from "../types"
 import { RunningClock, useRunningTimer } from "@/features/time/components/RunningClock"
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
 import { workbenchProgressTone } from "@/features/agentic/logic"
-import { IssueLinkButton } from "@/features/github/components/shared"
+import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
 
 /** Seleção do card: checkbox (aparece ao passar o mouse; sempre visível quando há seleção). */
@@ -36,6 +37,7 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
     const selected = selection?.selected ?? false
     const running = useRunningTimer(task.id)
     const progress = useWorkbenchProgress()?.progressOf(task.id)
+    const repoIndex = useRepoIndex()
     const waiting = progress && !progress.running ? progress : null
     const tone = waiting ? workbenchProgressTone(waiting) : null
     return (
@@ -117,9 +119,9 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                 </p>
             )}
             {task.project && (
-                <p className="mb-2 truncate text-[11px] text-muted-foreground" title={task.project.name}>
-                    {task.project.name}
-                </p>
+                <div className="mb-2 text-[11px] text-muted-foreground">
+                    <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} />
+                </div>
             )}
             {task.issue?.notice && (
                 <div className="mb-2 min-w-0">

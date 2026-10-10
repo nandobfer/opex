@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
@@ -22,6 +22,12 @@ const get = async <T,>(path: string, params?: Record<string, string>) => unwrapA
 export const useGithubLinks = () => useQuery({ queryKey: key("links"), queryFn: () => get<GithubLinkDto[]>("/integrations/github/links") })
 export const useGithubRepos = (enabled: boolean) =>
     useQuery({ queryKey: key("repos"), queryFn: () => get<GithubRepoOption[]>("/integrations/github/repos"), enabled, staleTime: 5 * 60_000, retry: false })
+
+/** Índice `owner/repo → repositório` do token, para o avatar/descrição/privado do `GithubRepoLabel`. */
+export function useGithubRepoIndex(enabled: boolean): Map<string, GithubRepoOption> {
+    const repos = useGithubRepos(enabled)
+    return useMemo(() => new Map((repos.data ?? []).map((repo) => [repo.fullName, repo])), [repos.data])
+}
 export const useGithubLabels = (enabled: boolean) =>
     useQuery({ queryKey: key("labels"), queryFn: () => get<GithubLabelOption[]>("/integrations/github/labels"), enabled, staleTime: 5 * 60_000, retry: false })
 export const useGithubIssueTypes = (enabled: boolean) =>

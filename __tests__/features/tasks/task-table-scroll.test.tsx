@@ -100,11 +100,11 @@ describe('TaskTable rolando com a página', () => {
     const header = (name: RegExp) => screen.getByRole('columnheader', { name })
     expect(header(/Atualizada/).className).toContain('hidden xl:table-cell')
     expect(header(/Tipo/).className).toContain('hidden lg:table-cell')
-    expect(header(/Projeto/).className).toContain('hidden lg:table-cell')
+    expect(header(/Repositório/).className).toContain('hidden lg:table-cell')
     expect(header(/Issue/).className).toContain('hidden sm:table-cell')
     expect(header(/Prioridade/).className).toContain('hidden md:table-cell')
     expect(header(/Coluna/).className).not.toContain('hidden')
-    expect(screen.getByTitle('CRM').className).toContain('hidden lg:table-cell')
+    expect(screen.getByTitle('o/crm').className).toContain('hidden lg:table-cell')
     expect(screen.getByRole('img', { name: 'Prioridade Alta' }).className).toContain('md:hidden')
   })
 

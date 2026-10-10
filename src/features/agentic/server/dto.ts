@@ -58,6 +58,17 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
     }
 }
 
-export function toWorkbenchSummary(doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "updatedAt">, buildQueuePosition: number | null = null): WorkbenchSummaryDto {
-    return { id: String(doc._id), taskId: doc.taskId, taskCode: doc.taskCode, taskTitle: doc.taskTitle, stage: asStage(doc.stage), runState: asRunState(doc.runState), buildQueuePosition, updatedAt: new Date(doc.updatedAt).toISOString() }
+export function toWorkbenchSummary(doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "pendingPermissions" | "pendingForms" | "updatedAt">, buildQueuePosition: number | null = null): WorkbenchSummaryDto {
+    return {
+        id: String(doc._id),
+        taskId: doc.taskId,
+        taskCode: doc.taskCode,
+        taskTitle: doc.taskTitle,
+        stage: asStage(doc.stage),
+        runState: asRunState(doc.runState),
+        buildQueuePosition,
+        pendingPermissions: doc.pendingPermissions?.length ?? 0,
+        pendingForms: doc.pendingForms?.length ?? 0,
+        updatedAt: new Date(doc.updatedAt).toISOString(),
+    }
 }

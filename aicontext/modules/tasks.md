@@ -71,8 +71,12 @@ semeado na primeira leitura (`ensureBoard`).
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Projeto**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. "Limpar"
-  zera os filtros, mantendo visão e ordenações.
+  erro com fuse.js), **Repositório**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
+  + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
+  guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub
+  (integração ausente ou repositório fora do token), o avatar cai na inicial. "Limpar" zera os
+  filtros, mantendo visão e ordenações.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
@@ -80,10 +84,11 @@ semeado na primeira leitura (`ensureBoard`).
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
-  50 cards; cards com código, tipo, título, projeto, prioridade e "Arquivada". O **resumo de IA**
-  aparece como uma linha sob o título quando existir, **sem substituir** a descrição (ver `modules/ai.md`).
+  50 cards; cards com código, tipo, título, repositório (`GithubRepoLabel`), prioridade e "Arquivada".
+  O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
+  descrição (ver `modules/ai.md`).
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** sob o título),
-  Coluna ("Mover para…"), Prioridade, Tipo, Projeto, Atualizada; ordenação por coluna (salva);
+  Coluna ("Mover para…"), Prioridade, Tipo, Repositório, Atualizada; ordenação por coluna (salva);
   virtualizada acima de 50; rola com a página (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
@@ -98,8 +103,8 @@ semeado na primeira leitura (`ensureBoard`).
 
 Formulário no estilo "nova issue do GitHub", em **página própria** (não é mais modal): título,
 descrição com abas **Escrever / Visualizar** (Markdown) e os metadados em **autocomplete com chips**
-(`SearchPicker` + `FieldTrigger`): **Repositório** (só os vinculados), **Coluna**, **Tipo** e
-**Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
+(`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
+**Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
 campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
 `technicalSpec`).
 
@@ -111,16 +116,14 @@ tarefa.
 
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
-- Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"**
-  (`TaskColumnMenu`), **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
-  **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
-  salvar/cancelar voltam à visão.
+- Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
+  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
+  abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
   fonte discreta) — é **adicional** e **não substitui** a descrição.
-- Abas animadas: Descrição (descrição completa em Markdown + especificação técnica), Comentários
-  (lista + formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em
-  andamento").
-- Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
+- Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
+  formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
+- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa

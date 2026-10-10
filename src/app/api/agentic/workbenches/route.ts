@@ -10,5 +10,5 @@ export const dynamic = "force-dynamic"
 export const POST = withRoute(async ({ req }) => {
     const body = await parseBody(req, startWorkbenchSchema)
     if (!body.ok) return body.response
-    return created(await startWorkbench(body.data.centralId, body.data.taskId))
+    return created(await startWorkbench(body.data.centralId, body.data.taskId, body.data.text))
 })

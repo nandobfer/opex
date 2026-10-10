@@ -9,6 +9,7 @@ import {
   extractPrUrl,
   formatReviewFeedback,
   implementPrompt,
+  planPrompt,
   prPrompt,
   slugify,
   worktreePathFor,
@@ -71,6 +72,14 @@ describe('mensagens das etapas', () => {
 
   it('instruções adicionais da central vão no fim', () => {
     expect(implementPrompt({ ...config, instructions: { ...config.instructions, implementation: 'Use pnpm.' } }, ctx, 1)).toContain('## Instruções adicionais da central\nUse pnpm.')
+  })
+
+  it('planejamento anexa as informações adicionais do usuário no primeiro prompt', () => {
+    const withInfo = planPrompt(config, ctx, '# Tarefa GO-DEV-12', 'Use o componente X; não altere o schema.')
+    expect(withInfo).toContain('## Informações adicionais')
+    expect(withInfo).toContain('Use o componente X; não altere o schema.')
+    expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12')).not.toContain('Informações adicionais')
+    expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12', '   ')).not.toContain('Informações adicionais')
   })
 })
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, type Dispatch, type SetStateAction } from "react"
-import { Archive, Flag, FolderKanban, Layers, ListChecks, Shapes } from "lucide-react"
+import { Archive, Flag, Github, Layers, ListChecks, Shapes } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
@@ -9,9 +9,11 @@ import { FilterGroup } from "@/components/list/FilterGroup"
 import { ListFilters } from "@/components/list/ListFilters"
 import { cn } from "@/lib/utils"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_SORT_KEYS, TASK_SORT_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskSortKey, type TaskType } from "../constants"
-import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, type TaskFilters } from "../filters"
+import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type TaskFilters } from "../filters"
 import type { TaskDto, TaskOptionsDto } from "../types"
 import type { BoardColumnView } from "../board"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { activeTaskFilterChips } from "../filter-chips"
 import { ColumnBadge } from "./TaskBadges"
 
@@ -31,19 +33,17 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
     const byKey = useMemo(() => new Map(columns.map((column) => [column.key, column])), [columns])
     const set = <K extends keyof TaskFilters>(key: K) => (value: TaskFilters[K]) => setFilters((prev) => ({ ...prev, [key]: value }))
 
-    const projectOptions = useMemo(() => {
-        const map = new Map((options?.projects ?? []).map((project) => [project.id, project.name]))
-        for (const task of tasks) if (task.project) map.set(task.project.id, task.project.name)
-        return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
-    }, [options, tasks])
+    const repoOptions = useMemo(() => taskRepoOptions(options?.projects ?? [], tasks), [options, tasks])
+    const projectById = useMemo(() => new Map(repoOptions.map((option) => [option.value, option.project])), [repoOptions])
+    const repoIndex = useRepoIndex()
 
     const chips = useMemo(() => {
         const ctx = {
-            projects: new Map(projectOptions.map((option) => [option.value, option.label])),
+            projects: new Map(repoOptions.map((option) => [option.value, option.label])),
             columns: new Map(columns.map((column) => [column.key, column.label])),
         }
         return activeTaskFilterChips(filters, ctx).map(({ remove, ...chip }) => ({ ...chip, onRemove: () => setFilters((prev) => ({ ...prev, ...remove })) }))
-    }, [filters, projectOptions, columns, setFilters])
+    }, [filters, repoOptions, columns, setFilters])
 
     const clear = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
@@ -104,15 +104,19 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
                 </>
             }
         >
-            <FilterGroup label="Projeto" className={COL}>
+            <FilterGroup label="Repositório" className={COL}>
                 <CadastroMultiSelect
-                    icon={FolderKanban}
+                    icon={Github}
                     placeholder="Todos"
-                    options={projectOptions}
+                    options={repoOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    renderLabel={(option) => {
+                        const project = projectById.get(option.value)
+                        return project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : option.label
+                    }}
                     selected={filters.projects}
                     onSelect={set("projects")}
                     searchable
-                    searchPlaceholder="Buscar projeto..."
+                    searchPlaceholder="Buscar repositório..."
                 />
             </FilterGroup>
             <FilterGroup label="Coluna" className={COL}>

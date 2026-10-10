@@ -72,13 +72,13 @@ describe("AppSidebar — padrão SideNavigation do DS Sipal", () => {
         expect(screen.getByRole("link", { name: /Integrações/ }).hasAttribute("aria-current")).toBe(false)
     })
 
-    it("rodapé mostra o dono do app com iniciais e a versão", () => {
+    it("rodapé mostra o dono do app com iniciais, a versão e a ação de sair", () => {
         renderSidebar()
         const text = document.body.textContent ?? ""
         expect(text).toContain("Ana Souza")
         expect(text).toContain("AS")
         expect(text).toContain("v1.2.3")
-        expect(screen.queryByRole("button", { name: /Sair/ })).toBeNull()
+        expect(screen.getByRole("button", { name: "Sair" })).toBeTruthy()
     })
 
     it("contador mostra 99+ e anuncia a quantidade para leitor de tela", () => {

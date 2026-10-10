@@ -17,6 +17,13 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
   limpeza) e **Pull Request**. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature
   ativa, exige o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
+- A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
+  - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa, com os botões
+    **Salvar**/**Desfazer** (mesma configuração geral acima).
+  - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo).
+  Trocar de aba com alterações não salvas pede *"Descartar alterações?"* e restaura os valores
+  salvos (mesmo efeito do Desfazer). `AGENTIC_SETTINGS_HREF` (voltar da central, após excluir e
+  atalho do `/desenvolvimento`) leva a esta aba na aba interna padrão (Agentes).
 - Card **Centrais de desenvolvimento**: lista (projeto, diretório, repositório, mesas, bolinha do
   último teste) e **Nova central** (projeto — repositório vinculado, um por central — e diretório das
   sessões, caminho absoluto, já sugerido como `<raiz dos repositórios>/<repositório>`). Criar leva às
@@ -102,9 +109,17 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
   `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da
-  mesa ou, sem mesa, a posição na fila ("Na fila · #N").
-- Tarefa sem mesa: **Abrir mesa e gerar o plano** (desabilitado com o motivo quando indisponível,
-  central desativada ou tarefa de outro projeto); em fila, mostra a posição e abre ao liberar a vaga.
+  mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está **parada aguardando o
+  usuário**, o item mostra um **warning** (ícone de alerta, com o motivo na dica): revisão do plano,
+  aprovação da prévia, revisão/merge do PR, "mudanças pedidas no PR", permissão ou pergunta
+  pendente do agente, falha/interrupção (regra `workbenchUserWaitReason`; o chip de etapa deixa de
+  pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
+  **concluída** não gera warning.
+- Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa e um campo
+  opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
+  e exibidas como mensagem do usuário na saída). O botão **Abrir mesa e gerar o plano** desabilita com
+  o motivo quando indisponível, com a central desativada ou com a tarefa de outro projeto; em fila,
+  mostra a posição e abre ao liberar a vaga.
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
 
@@ -132,7 +147,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   **Tentar novamente** (reenvia a mensagem da etapa pedindo para retomar) e, depois do plano,
   **Voltar ao planejamento**.
 - **Planejamento**: só leitura; o texto do turno vira uma nova **versão do plano** (com o pedido que
-  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`) + link.
+  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`) + link. As **Informações
+  adicionais** informadas ao abrir a mesa são anexadas ao **primeiro prompt** (seção própria, sem
+  virar o "pedido" da versão 1) e aparecem como mensagem do usuário na saída.
 - **Implementação**: a branch (`branchNameFor`) e o caminho do worktree (`worktreePathFor`) são
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
@@ -187,6 +204,12 @@ done → Reabrir mesa (texto ao planejador) → planning
   prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
   IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
   **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+- **Rolagem da saída** (`useStickToBottom`): a aba "Saída da IA" acompanha o fim do stream sozinha
+  sempre que o conteúdo cresce — inclusive quando um item do **meio** da lista muda (ex.: o fim de
+  um turno) — enquanto o usuário estiver no fim. Ao rolar para cima, o acompanhamento **para** (não
+  volta sozinho) e aparece um botão flutuante **Ir para o final**; ao voltar ao fim ou clicar no
+  botão, o acompanhamento **retoma**. O botão rola suave, desligando o movimento com
+  `prefers-reduced-motion`.
 
 ## APIs (`src/app/api/agentic/`)
 
@@ -194,7 +217,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 |---|---|
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
-| `POST /workbenches` `{centralId, taskId}` | abre a mesa e inicia o plano (409 se já existir) |
+| `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |

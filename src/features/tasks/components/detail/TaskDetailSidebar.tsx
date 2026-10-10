@@ -2,9 +2,11 @@
 
 import type { ReactNode } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, Clock, FolderKanban, Package, UserPen } from "lucide-react"
+import { CalendarClock, Clock, Github, Package, UserPen } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { fadeUp } from "@/components/motion/presets"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { formatDateTime, formatMinutes } from "../../format"
 import type { TaskPriority } from "../../constants"
 import type { TaskDetailDto } from "../../types"
@@ -31,6 +33,7 @@ interface TaskDetailSidebarProps {
 
 /** Propriedades da tarefa (coluna lateral); prioridade editável na hora. */
 export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSidebarProps) {
+    const repoIndex = useRepoIndex()
     return (
         <motion.aside variants={fadeUp} initial="hidden" animate="visible" transition={{ delay: 0.05 }}>
             <Card>
@@ -42,8 +45,8 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
                                 <TaskTypeBadge type={task.taskType} long />
                             </span>
                         </Row>
-                        <Row icon={FolderKanban} label="Projeto">
-                            {task.project?.name ?? "—"}
+                        <Row icon={Github} label="Repositório">
+                            {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : "—"}
                         </Row>
                         <Row icon={Clock} label="Horas apontadas">
                             <span className="font-mono">{formatMinutes(task.totalTimeLogged)}</span>

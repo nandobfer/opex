@@ -56,6 +56,8 @@ e opções na própria aba da página "Provedores de IA".
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas** e
   **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
+  A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
+  (estado local, não vão à URL).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
   fuse.js, lista virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar).
 

@@ -95,7 +95,7 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 - **Visual**: fundo `bg-sidebar` (quase preto violeta) com borda `sidebar-border`, marca "Opex"
   no topo (iniciais num quadrado `bg-primary` com brilho), item ativo em `bg-sidebar-accent` com
   barra `bg-primary` (com brilho) à esquerda via `layoutId`, dono do app e versão no rodapé
-  (`SidebarFooter`: `APP_OWNER_NAME`, sem sair — não há login). Largura 240px ↔ 68px recolhido
+  (`SidebarFooter`: `APP_OWNER_NAME`, versão e ação "Sair" que encerra a sessão). Largura 240px ↔ 68px recolhido
   (preferência em `localStorage`, `opex-sidebar-collapsed`). Animações em Framer Motion
   (entrada dos itens, `whileHover x:4`, `whileTap 0.98`, largura, gaveta).
 - **Seções** (`NavSectionDef { id, label?, items }` em `src/features/layout/navigation.ts`,

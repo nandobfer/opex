@@ -71,9 +71,21 @@ Abas: **Geral** (token e opções), **Vínculos** (`GithubLinksTab` + `GithubLin
 Crons). As abas recarregam por `github-updated` (`useGithubRealtime`). Removidas as abas **Pessoas** e
 os rascunhos descartados.
 
+## Item de repositório compartilhado
+
+`GithubRepoLabel` (`components/shared.tsx`) é o item único de repositório do app: **avatar real** do
+GitHub (fallback para a inicial quando não há `ownerAvatarUrl`) + `owner/repo` + descrição + cadeado
+quando privado. É usado pelo diálogo de vínculo e, nas tarefas, pelo filtro Repositório, pelo
+seletor do formulário, pela tabela, pelo card e pelo painel lateral.
+
+O índice `owner/repo → GithubRepoOption` vem de `useGithubRepoIndex(enabled)` (`hooks/useGithub.ts`,
+sobre `useGithubRepos`, cache 5 min) e é distribuído às telas de tarefas por `RepoIndexProvider`
+(`components/RepoIndexProvider.tsx`, montado no layout de `/tarefas`); `useRepoIndex()` lê o índice e
+`repoLabelOption(repo, index)` devolve os dados do GitHub ou, na ausência, os do projeto (inicial).
+
 ## Testes
 
 `__tests__/features/github/github-logic.test.ts` (leitura da issue, nome/sigla do projeto,
 mapeamento direto/reverso, coluna ↔ estado e menção da issue), `task-issue.test.ts` (criação com
-issue e bloqueio em falha), `github-task-sync.test.ts` (push/pull com last-write-wins) e
-`github-sync.test.ts` (`processIssue`).
+issue e bloqueio em falha), `github-task-sync.test.ts` (push/pull com last-write-wins),
+`github-sync.test.ts` (`processIssue`) e `github-repo-label.test.tsx` (avatar real e fallback).

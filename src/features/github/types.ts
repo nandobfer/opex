@@ -34,6 +34,9 @@ export interface GithubRepoOption {
     ownerAvatarUrl: string | null
 }
 
+/** Dados mínimos para o item de repositório (`GithubRepoLabel`). */
+export type GithubRepoLabelData = Pick<GithubRepoOption, "fullName" | "ownerAvatarUrl" | "description" | "private">
+
 export interface GithubLabelOption {
     name: string
     color: string | null

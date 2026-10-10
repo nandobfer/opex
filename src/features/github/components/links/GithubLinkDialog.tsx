@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2, Lock } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
@@ -15,7 +15,7 @@ import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { repoLinkInputSchema, type RepoLinkInput, type RepoLinkValues } from "../../schemas"
 import type { GithubLinkDto } from "../../types"
 import { useGithubRepos } from "../../hooks/useGithub"
-import { FieldTrigger, GithubAvatar } from "../shared"
+import { FieldTrigger, GithubRepoLabel } from "../shared"
 
 interface GithubLinkDialogProps {
     open: boolean
@@ -74,16 +74,7 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
                                 items={repos.data ?? []}
                                 getKey={(item) => item.fullName}
                                 searchKeys={["fullName", "description"]}
-                                renderItem={(item) => (
-                                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                                        <GithubAvatar login={item.fullName} avatarUrl={item.ownerAvatarUrl} />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate font-medium">{item.fullName}</span>
-                                            {item.description && <span className="block truncate text-xs text-muted-foreground">{item.description}</span>}
-                                        </span>
-                                        {item.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Privado" />}
-                                    </span>
-                                )}
+                                renderItem={(item) => <GithubRepoLabel repo={item} />}
                                 onPick={(item) => form.setValue("repo", item.fullName, { shouldValidate: true, shouldDirty: true })}
                                 disabledReason={(item) => (takenRepos.has(item.fullName) ? "Já vinculado" : false)}
                                 loading={repos.isLoading}
