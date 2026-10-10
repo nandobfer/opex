@@ -98,7 +98,7 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   soma `totalTokens` e `totalCostUsd`), além de um indicador "Em execução" quando contém período
   ativo. O grupo **começa recolhido**; grupos com período ativo ficam **sempre abertos**. A
   abertura/fechamento é animada por Framer Motion (altura/opacidade) respeitando movimento reduzido.
-- "Carregar mais" (páginas de 100).
+- **Infinite scrolling** (páginas de 100): um sentinel no fim da lista é observado na área de rolagem do app (`#main-content`); a próxima página carrega automaticamente ao se aproximar do fim. Enquanto carrega, aparece um indicador (spinner Framer Motion, respeitando movimento reduzido). Sem `IntersectionObserver` no ambiente, o botão "Carregar mais" permanece como fallback.
 - Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
   descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
   custo). Sem editar/excluir/parar.
