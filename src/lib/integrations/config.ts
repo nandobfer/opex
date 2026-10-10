@@ -38,21 +38,6 @@ export interface IntegrationConfigMap {
     }
     internal_api: Record<string, never>
     crons: { schedulerEnabled: boolean; internalBaseUrl?: string; jobs: CronJobConfig[]; cronSecret?: string }
-    go_sipal: {
-        baseUrl: string
-        email?: string
-        expiryWarningDays: number
-        sessionName?: string
-        sessionEmail?: string
-        sessionUserType?: string
-        sessionIsDeveloper?: boolean
-        sessionIsDevLeader?: boolean
-        sessionConnectedAt?: string
-        pendingEmail?: string
-        pendingRequestedAt?: string
-        /** JWT da sessão (28 dias), gravado só pelo login por código. */
-        token?: string
-    }
     github: { apiUrl: string; commentOnCreate: boolean; token?: string }
     ai: Record<string, never>
     ai_opencode: { baseUrl?: string; directory?: string; password?: string }

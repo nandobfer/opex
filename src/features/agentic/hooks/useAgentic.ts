@@ -42,7 +42,7 @@ export function useCreateCentral() {
         mutationFn: async (input: CreateCentralInput) => unwrapApi((await api.post<ApiResponse<CentralDto>>("/agentic/centrals", input)).data),
         onSuccess: (central) => {
             void queryClient.invalidateQueries({ queryKey: agenticKey("centrals") })
-            toast.success(`Central de ${central.productName} criada`)
+            toast.success(`Central de ${central.projectName} criada`)
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível criar a central")),
     })

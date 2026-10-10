@@ -7,7 +7,7 @@ import { moveTask } from "@/features/tasks/server/service"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** POST /api/tasks/[id]/move — muda o status/ordem no Go! Sipal. */
+/** POST /api/tasks/[id]/move — muda a coluna e/ou a posição da tarefa. */
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, moveTaskSchema)
     if (!body.ok) return body.response

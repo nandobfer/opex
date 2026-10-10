@@ -12,19 +12,18 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS } from "@/features/tasks/constants"
 import { useGithubLinks, useSaveLink } from "../../hooks/useGithub"
-import type { GithubRepoLinkDto } from "../../types"
+import type { GithubLinkDto } from "../../types"
 import { NotConfiguredHint } from "../shared"
 import { GithubLinkDialog } from "./GithubLinkDialog"
 import { RemoveLinkDialog } from "./RemoveLinkDialog"
 
-/** Aba Vínculos: repositório ↔ produto (um para um), autores e coluna de entrada dos rascunhos. */
+/** Aba Vínculos: repositório ↔ Opex (o repositório é o Projeto) e a coluna de entrada das issues. */
 export function GithubLinksTab({ configured }: { configured: boolean }) {
     const links = useGithubLinks()
     const save = useSaveLink()
-    const [editing, setEditing] = useState<{ link: GithubRepoLinkDto | null } | null>(null)
-    const [removing, setRemoving] = useState<GithubRepoLinkDto | null>(null)
+    const [editing, setEditing] = useState<{ link: GithubLinkDto | null } | null>(null)
+    const [removing, setRemoving] = useState<GithubLinkDto | null>(null)
 
     if (!configured) return <NotConfiguredHint />
     const list = links.data ?? []
@@ -34,7 +33,7 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
             <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                 <div className="space-y-1.5">
                     <CardTitle className="text-base">Vínculos</CardTitle>
-                    <CardDescription>Cada repositório aponta para um único produto do Go! Sipal (e vice-versa).</CardDescription>
+                    <CardDescription>Cada repositório vinculado vira um Projeto: as issues novas viram tarefas dO Opex na coluna de entrada.</CardDescription>
                 </div>
                 <Button type="button" size="sm" className="gap-1.5" onClick={() => setEditing({ link: null })}>
                     <Plus className="h-4 w-4" aria-hidden /> Novo vínculo
@@ -49,7 +48,7 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
                 ) : links.isError ? (
                     <ErrorState title="Não foi possível carregar os vínculos" description={apiErrorMessage(links.error, "Tente novamente.")} onRetry={() => void links.refetch()} />
                 ) : list.length === 0 ? (
-                    <EmptyState icon={FolderGit2} title="Nenhum repositório vinculado" description="Vincule um repositório a um produto para que as issues virem rascunhos de tarefas." actionLabel="Novo vínculo" onAction={() => setEditing({ link: null })} />
+                    <EmptyState icon={FolderGit2} title="Nenhum repositório vinculado" description="Vincule um repositório para que as issues virem tarefas dO Opex." actionLabel="Novo vínculo" onAction={() => setEditing({ link: null })} />
                 ) : (
                     <ul className="space-y-2">
                         <AnimatePresence initial={false}>
@@ -83,7 +82,7 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
     )
 }
 
-function LinkRow({ link, onEdit, onRemove }: { link: GithubRepoLinkDto; onEdit: () => void; onRemove: () => void }) {
+function LinkRow({ link, onEdit, onRemove }: { link: GithubLinkDto; onEdit: () => void; onRemove: () => void }) {
     return (
         <div className={cn("flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start", !link.enabled && "opacity-60")}>
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -91,19 +90,19 @@ function LinkRow({ link, onEdit, onRemove }: { link: GithubRepoLinkDto; onEdit: 
                     <a href={link.repoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-primary hover:underline">
                         {link.repo} <ExternalLink className="h-3 w-3" aria-hidden />
                     </a>
-                    <span className="text-xs text-muted-foreground">→</span>
-                    <span className="text-sm font-medium">{link.productName}</span>
+                    <span className="rounded-full border px-1.5 font-mono text-[10px] uppercase text-muted-foreground" title="Sigla usada no código das tarefas">
+                        {link.sigla}
+                    </span>
                     {!link.enabled && <span className="rounded-full border px-1.5 text-[10px] uppercase text-muted-foreground">desativado</span>}
-                    {link.pendingDrafts > 0 && <span className="rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">{link.pendingDrafts} rascunho(s)</span>}
+                    {link.taskCount > 0 && <span className="rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary">{link.taskCount} tarefa(s)</span>}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                    Autores: {link.authors.map((login) => `@${login}`).join(", ")} · Entrada:{" "}
+                    Entrada:{" "}
                     {link.entryColumnName ?? (
                         <span className="inline-flex items-center gap-1 text-warning">
                             <AlertTriangle className="h-3 w-3" aria-hidden /> coluna excluída
                         </span>
-                    )}{" "}
-                    · Padrão: {TASK_TYPE_LABELS[link.defaultType]}, {TASK_PRIORITY_LABELS[link.defaultPriority].toLowerCase()}
+                    )}
                 </p>
                 <p className={cn("text-xs", link.lastSync && !link.lastSync.ok ? "text-destructive" : "text-muted-foreground")}>
                     {link.lastSync

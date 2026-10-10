@@ -18,7 +18,6 @@ export const understandTaskSettingsSchema = z
             comments: z.boolean(),
             history: z.boolean(),
             timeLogs: z.boolean(),
-            plan: z.boolean(),
         }),
     })
     .superRefine((value, ctx) => {
@@ -39,5 +38,5 @@ export const DEFAULT_UNDERSTAND_TASK_SETTINGS: UnderstandTaskSettings = {
     maxOutputTokens: null,
     responseFormat: "sections",
     instructions: DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS,
-    include: { comments: true, history: true, timeLogs: false, plan: true },
+    include: { comments: true, history: true, timeLogs: false },
 }

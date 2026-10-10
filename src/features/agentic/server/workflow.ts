@@ -6,7 +6,7 @@ import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client
 import { getLocalUser } from "@/lib/local-user"
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
 import { getTask, moveTask } from "@/features/tasks/server/service"
-import { listActiveTimers, startTimer, stopTimer } from "@/features/time/server/service"
+import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
 import { canRun, resolveAgent, type WorkbenchAction } from "../logic"
@@ -29,13 +29,14 @@ import {
 } from "../prompts"
 import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
-import { loadCentral, publishAgentic, repoForProduct } from "./centrals"
+import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { runAgentTurn, type TurnResult } from "./runner"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
+import { syncWorkbenchTimer } from "./timer-sync"
 
 /**
  * Fluxo da mesa de trabalho: planejar → (corrigir) → implementar → subir a prévia → (corrigir) →
@@ -44,7 +45,6 @@ import { agenticAvailability, loadAgenticSettings } from "./settings"
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
-const PLAN_STATUSES_BEFORE_DEV = ["backlog", "prioritized", "specification"]
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -63,6 +63,8 @@ async function loadWorkbench(id: string): Promise<IAgenticWorkbench> {
 
 async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId">, set: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<void> {
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: set, ...extra })
+    // O apontamento agêntico acompanha o estado da mesa (abre/atualiza/fecha o período).
+    await syncWorkbenchTimer(String(doc._id))
     await publishAgentic({ centralId: doc.centralId, workbenchId: String(doc._id), taskId: doc.taskId })
 }
 
@@ -72,6 +74,7 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
     const error = "A execução foi perdida (o app reiniciou durante a etapa). Use Tentar novamente."
     await AgenticWorkbench.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", error, pendingPermissions: [], pendingForms: [] } })
+    await syncWorkbenchTimer(String(doc._id))
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
 }
 
@@ -94,26 +97,26 @@ export async function listCentralWorkbenches(centralId: string): Promise<Workben
 interface Loaded {
     doc: IAgenticWorkbench
     config: CentralConfig
-    productName: string
+    projectName: string
     repo: { repo: string; repoUrl: string } | null
 }
 
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
-    return { doc, config, productName: central.productName, repo: await repoForProduct(central.productId) }
+    return { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
 }
 
-function contextOf({ doc, config, productName, repo }: Loaded): WorkbenchContext {
+function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
     return {
         code: doc.taskCode,
         title: doc.taskTitle,
-        productName,
+        projectName,
         repo: repo?.repo ?? null,
         sessionDirectory: config.sessionDirectory,
         worktreePath: doc.worktreePath ?? worktreePathFor(config, doc.taskCode),
         branch: doc.branch ?? branchNameFor(config, { code: doc.taskCode, title: doc.taskTitle }),
-        composeProject: doc.composeProject ?? composeProjectFor(productName, doc.taskCode),
+        composeProject: doc.composeProject ?? composeProjectFor(projectName, doc.taskCode),
     }
 }
 
@@ -158,18 +161,23 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
     if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
-    await update(loaded.doc, {
-        stage: turn.stage,
-        runState: "running",
-        error: null,
-        lastStage: turn.stage,
-        lastPrompt: turn,
-        heartbeatAt: new Date(),
-        ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
-        ...options.extraSet,
-    })
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
+    try {
+        await update(loaded.doc, {
+            stage: turn.stage,
+            runState: "running",
+            error: null,
+            lastStage: turn.stage,
+            lastPrompt: turn,
+            heartbeatAt: new Date(),
+            ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
+            ...options.extraSet,
+        })
+    } catch (error) {
+        clearWorkbenchActive(id, controller)
+        throw error
+    }
     void executeTurns(id, turn, controller)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
         .finally(() => clearWorkbenchActive(id, controller))
@@ -234,22 +242,27 @@ function turnHooks(doc: IAgenticWorkbench) {
     return {
         onPermission: async (permission: unknown) => {
             await AgenticWorkbench.updateOne(filter, { $push: { pendingPermissions: permission } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onPermissionClosed: async (requestId: string) => {
             await AgenticWorkbench.updateOne(filter, { $pull: { pendingPermissions: { id: requestId } } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onForm: async (form: unknown) => {
             await AgenticWorkbench.updateOne(filter, { $push: { pendingForms: form } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onFormClosed: async (formId: string) => {
             await AgenticWorkbench.updateOne(filter, { $pull: { pendingForms: { id: formId } } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onStep: async ({ costUsd, tokens }: { costUsd: number; tokens: { input: number; output: number; reasoning: number } }) => {
             await AgenticWorkbench.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
+            await accumulateWorkPeriodUsage(String(doc._id), { costUsd, inputTokens: tokens.input, outputTokens: tokens.output, reasoningTokens: tokens.reasoning })
         },
         onMoved: async (directory: string) => {
             await AgenticWorkbench.updateOne(filter, { $set: { sessionDirectory: directory } })
@@ -297,7 +310,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            const port = await allocatePreviewPort(id, config.environment.previewHost)
+            const port = await allocatePreviewPort(id, config.environment.previewHost, { min: config.environment.previewPortMin, max: config.environment.previewPortMax })
             notice("info", `Porta reservada para a prévia: ${port}`)
             return { stage: "building", text: buildPrompt(config, ctx, port) }
         }
@@ -322,6 +335,15 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, closedNotified: false }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
+            const prColumn = config.columns.onPr
+            if (prColumn) {
+                try {
+                    await moveTask(doc.taskId, { targetColumn: prColumn }, actorId())
+                    notice("info", "Tarefa movida para a coluna do Pull Request")
+                } catch (error) {
+                    notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+                }
+            }
             await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: pr.url } })
             return null
         }
@@ -348,29 +370,19 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function taskMarkdown(task: TaskDetailDto, config: CentralConfig): string {
-    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false }) + `\n\nLink da tarefa: ${task.platformUrl}`
+    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false })
 }
 
-/** Efeitos no Go! Sipal ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
-async function goSipalOnStart(id: string, task: TaskDetailDto, config: CentralConfig): Promise<void> {
+/** Efeitos na tarefa ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
+async function applyStartEffects(id: string, task: TaskDetailDto, config: CentralConfig): Promise<void> {
     const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
-    if (config.goSipal.moveToDevelopment && PLAN_STATUSES_BEFORE_DEV.includes(task.status)) {
+    const target = config.columns.onStart
+    if (target && target !== task.columnId) {
         try {
-            await moveTask(task.id, { targetStatus: "development", fromStatus: task.status, code: task.code }, actorId())
-            notice("info", "Tarefa movida para Desenvolvimento no Go! Sipal")
+            await moveTask(task.id, { targetColumn: target }, actorId())
+            notice("info", "Tarefa movida para a coluna de implementação")
         } catch (error) {
-            notice("warn", `Não foi possível mover a tarefa para Desenvolvimento: ${errorText(error)}`)
-        }
-    }
-    if (config.goSipal.startTimer) {
-        try {
-            const timers = await listActiveTimers()
-            if (!timers.some((timer) => timer.taskId === task.id)) {
-                await startTimer({ taskId: task.id }, actorId())
-                notice("info", "Timer iniciado no Go! Sipal")
-            }
-        } catch (error) {
-            notice("warn", `Não foi possível iniciar o timer: ${errorText(error)}`)
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
         }
     }
 }
@@ -381,7 +393,7 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
     if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
     const task = await getTask(taskId)
-    if (task.product?.id !== central.productId) throw new DomainError(400, `A tarefa ${task.code} não é do produto ${central.productName}`, "TASK_OTHER_PRODUCT")
+    if (task.project?.id !== central.projectId) throw new DomainError(400, `A tarefa ${task.code} não é do projeto ${central.projectName}`, "TASK_OTHER_PROJECT")
     await assertAvailable(centralId, null, config)
 
     let doc: IAgenticWorkbench
@@ -394,7 +406,7 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
                 taskTitle: task.title,
                 stage: "planning",
                 runState: "idle",
-                composeProject: composeProjectFor(central.productName, task.code),
+                composeProject: composeProjectFor(central.projectName, task.code),
             })
         ).toObject()
     } catch (error) {
@@ -402,11 +414,11 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
         throw error
     }
     const id = String(doc._id)
-    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.productName } })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName } })
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
-    await goSipalOnStart(id, task, config)
-    const loaded: Loaded = { doc, config, productName: central.productName, repo: await repoForProduct(central.productId) }
+    await applyStartEffects(id, task, config)
+    const loaded: Loaded = { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
     await launchTurn(loaded, { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config)) })
     return getWorkbench(id)
 }
@@ -443,7 +455,7 @@ export async function approve(id: string): Promise<WorkbenchDto> {
     assertAction(loaded.doc, "approve")
     const task = await getTask(loaded.doc.taskId)
     const pr = loaded.doc.pr && loaded.doc.pr.state === "open" ? { number: loaded.doc.pr.number, url: loaded.doc.pr.url } : null
-    await launchTurn(loaded, { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title, url: task.platformUrl }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
+    await launchTurn(loaded, { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
     return getWorkbench(id)
 }
 
@@ -532,6 +544,7 @@ export async function deleteWorkbench(id: string): Promise<void> {
     }
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })
+    await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage } })
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
@@ -562,7 +575,7 @@ export async function handlePrChangesRequested(id: string, feedback: string): Pr
 /** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */
 export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeCommitSha: string | null }): Promise<void> {
     const loaded = await loadAll(id)
-    const { doc, config, repo } = loaded
+    const { doc, config } = loaded
     const log = centralLogger(doc.centralId, doc.taskCode)
     await prepareHub(id)
     const notice = (level: "info" | "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
@@ -570,21 +583,14 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
     await update(doc, { pr })
     notice("success", `PR #${pr.number} mergeado`)
 
-    const commitUrl = merge.mergeCommitSha && repo ? `${repo.repoUrl.replace(/\/+$/, "")}/commit/${merge.mergeCommitSha}` : undefined
-    try {
-        await moveTask(doc.taskId, { targetStatus: "validation", code: doc.taskCode, ...(commitUrl ? { commitUrl } : {}), pullRequestUrl: pr.url }, actorId())
-        notice("info", "Tarefa movida para Validação no Go! Sipal")
-    } catch (error) {
-        notice("warn", `Não foi possível mover a tarefa para Validação: ${errorText(error)}`)
-        log.warn("Falha ao mover a tarefa para Validação", { workbenchId: id, error: errorText(error) })
-    }
-    if (config.goSipal.stopTimerOnDone) {
+    const doneColumn = config.columns.onDone
+    if (doneColumn) {
         try {
-            const timers = (await listActiveTimers()).filter((timer) => timer.taskId === doc.taskId)
-            for (const timer of timers) await stopTimer(timer.id, { description: `Desenvolvimento agêntico: PR #${pr.number} mergeado`, taskCode: doc.taskCode }, actorId())
-            if (timers.length) notice("info", "Timer parado no Go! Sipal")
+            await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
+            notice("info", "Tarefa movida para a coluna de conclusão")
         } catch (error) {
-            notice("warn", `Não foi possível parar o timer: ${errorText(error)}`)
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+            log.warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
         }
     }
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, prMergeado: pr.url } })

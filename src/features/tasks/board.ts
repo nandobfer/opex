@@ -1,14 +1,10 @@
-import { isTaskStatus, TASK_STATUS_ACCENT, TASK_STATUS_LABELS, TASK_STATUSES, type TaskStatus } from "./constants"
-
 /**
- * Colunas do quadro: as 7 do Go! Sipal (fixas, mover para elas altera a tarefa na plataforma) e
- * as customizadas (status pessoais, só nO Opex). Módulo PURO (cliente e servidor).
+ * Quadro de Tarefas dO Opex: colunas 100% configuráveis (o Opex é a fonte de verdade). Cada
+ * tarefa pertence a UMA coluna. Módulo PURO (cliente e servidor).
  */
 
-export const CUSTOM_COLUMN_PREFIX = "custom-"
-export const CUSTOM_COLUMN_KEY = /^custom-[a-z0-9]{6,32}$/
-
-export const isCustomColumnKey = (key: string | null | undefined): boolean => typeof key === "string" && key.startsWith(CUSTOM_COLUMN_PREFIX)
+/** Chave de coluna: minúsculas, dígitos e hífen (ex.: `todo`, `col-3f8a1b2c`). */
+export const COLUMN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export const COLUMN_COLORS = ["violet", "sky", "emerald", "amber", "rose", "cyan", "orange", "pink", "lime", "zinc"] as const
 export type ColumnColor = (typeof COLUMN_COLORS)[number]
@@ -27,7 +23,7 @@ export const COLUMN_COLOR_STYLES: Record<ColumnColor, { label: string; border: s
     zinc: { label: "Cinza", border: "border-t-zinc-400", dot: "bg-zinc-400", swatch: "bg-zinc-500" },
 }
 
-/** Ícones disponíveis para colunas customizadas (componentes em `components/column-icons.tsx`). */
+/** Ícones disponíveis para colunas (componentes em `components/column-icons.tsx`). */
 export const COLUMN_ICON_KEYS = [
     "star",
     "flag",
@@ -64,7 +60,7 @@ export const COLUMN_ICON_KEYS = [
 ] as const
 export type ColumnIcon = (typeof COLUMN_ICON_KEYS)[number]
 
-export interface CustomColumnDto {
+export interface TaskColumnDto {
     key: string
     name: string
     color: ColumnColor
@@ -75,44 +71,40 @@ export interface CustomColumnDto {
 }
 
 export interface TaskBoardDto {
-    columns: CustomColumnDto[]
-    /** Ordem de todas as colunas (chaves: status do Go! Sipal ou `custom-…`). */
+    columns: TaskColumnDto[]
+    /** Ordem das colunas (chaves). */
     layout: string[]
 }
 
-/** Coluna pronta para a tela (Go! Sipal ou customizada). */
+/** Coluna pronta para a tela. */
 export interface BoardColumnView {
     key: string
-    kind: "go" | "custom"
     label: string
     border: string
     dot: string
-    custom: CustomColumnDto | null
+    column: TaskColumnDto
 }
 
 /**
- * Normaliza a ordem salva: as colunas do Go! Sipal ficam sempre todas e na ordem do fluxo; cada
- * customizada fica logo depois da coluna do Go! Sipal que a precede (ou no início). Chaves
- * desconhecidas/repetidas saem; customizadas que faltam vão para o fim.
+ * Normaliza a ordem salva: tira chaves desconhecidas/repetidas e completa com as colunas que
+ * faltam, no fim. Sem colunas, devolve vazio.
  */
-export function normalizeLayout(order: readonly string[], customKeys: readonly string[]): string[] {
-    const customs = new Set(customKeys)
-    const anchored = new Map<TaskStatus | null, string[]>()
-    const placed = new Set<string>()
-    const push = (anchor: TaskStatus | null, key: string) => {
-        placed.add(key)
-        anchored.set(anchor, [...(anchored.get(anchor) ?? []), key])
-    }
-    let anchor: TaskStatus | null = null
+export function normalizeLayout(order: readonly string[], keys: readonly string[]): string[] {
+    const known = new Set(keys)
+    const seen = new Set<string>()
+    const result: string[] = []
     for (const key of order) {
-        if (isTaskStatus(key)) anchor = key
-        else if (customs.has(key) && !placed.has(key)) push(anchor, key)
+        if (known.has(key) && !seen.has(key)) {
+            seen.add(key)
+            result.push(key)
+        }
     }
-    const last = TASK_STATUSES[TASK_STATUSES.length - 1]!
-    for (const key of customKeys) if (!placed.has(key)) push(last, key)
-
-    const result = [...(anchored.get(null) ?? [])]
-    for (const status of TASK_STATUSES) result.push(status, ...(anchored.get(status) ?? []))
+    for (const key of keys) {
+        if (!seen.has(key)) {
+            seen.add(key)
+            result.push(key)
+        }
+    }
     return result
 }
 
@@ -135,21 +127,17 @@ export function mergeVisibleOrder(layout: readonly string[], visibleNewOrder: re
     return layout.map((key) => (visible.has(key) ? queue.shift()! : key))
 }
 
-export function goColumnView(status: TaskStatus): BoardColumnView {
-    return { key: status, kind: "go", label: TASK_STATUS_LABELS[status], border: TASK_STATUS_ACCENT[status].border, dot: TASK_STATUS_ACCENT[status].dot, custom: null }
-}
-
-export function customColumnView(column: CustomColumnDto): BoardColumnView {
+export function columnView(column: TaskColumnDto): BoardColumnView {
     const style = COLUMN_COLOR_STYLES[column.color] ?? COLUMN_COLOR_STYLES.violet
-    return { key: column.key, kind: "custom", label: column.name, border: style.border, dot: style.dot, custom: column }
+    return { key: column.key, label: column.name, border: style.border, dot: style.dot, column }
 }
 
-/** Colunas na ordem do quadro (sem quadro carregado: só as do Go! Sipal). */
+/** Colunas na ordem do quadro. */
 export function buildBoardColumns(board: TaskBoardDto | undefined): BoardColumnView[] {
     const customs = new Map((board?.columns ?? []).map((column) => [column.key, column]))
     const layout = normalizeLayout(board?.layout ?? [], [...customs.keys()])
-    return layout.map((key) => (isTaskStatus(key) ? goColumnView(key) : customColumnView(customs.get(key)!)))
+    return layout.map((key) => columnView(customs.get(key)!))
 }
 
-/** Coluna em que a tarefa aparece: a customizada, se houver; senão o status do Go! Sipal. */
-export const columnKeyOf = (task: { status: TaskStatus; localColumn?: string | null }): string => task.localColumn ?? task.status
+/** Coluna em que a tarefa aparece. */
+export const columnKeyOf = (task: { columnId: string }): string => task.columnId

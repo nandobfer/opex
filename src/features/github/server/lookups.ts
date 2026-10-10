@@ -1,12 +1,10 @@
 import { dbConnect } from "@/lib/db"
-import { GithubPerson, GithubRepoLink } from "@/lib/db/models/Github"
+import { Project } from "@/lib/db/models/Project"
 import { githubPaginate, githubRequest } from "../client"
-import type { GithubLabelOption, GithubRepoOption, GithubUserOption } from "../types"
-import { toTaskDomainError } from "@/features/tasks/server/service"
+import type { GithubLabelOption, GithubRepoOption } from "../types"
 import { toGithubDomainError } from "./errors"
-import { listGoProducts, type GoProductOption } from "./go-sipal"
 
-/** Opções dos seletores da integração (repositórios, pessoas, labels, Issue Types, produtos). */
+/** Opções dos seletores da integração (repositórios, labels, Issue Types). */
 
 const REPOS_TTL_MS = 5 * 60_000
 let reposCache: { at: number; repos: GithubRepoOption[] } | null = null
@@ -38,25 +36,9 @@ export async function listGithubRepos(refresh = false): Promise<GithubRepoOption
     }
 }
 
-/** Pessoas: já conhecidas (aba Pessoas) + busca no GitHub quando há termo. */
-export async function searchGithubUsers(term: string): Promise<GithubUserOption[]> {
-    await dbConnect()
-    const known = (await GithubPerson.find().sort({ login: 1 }).limit(300).lean()).map((person) => ({ login: person.login, name: person.name ?? null, avatarUrl: person.avatarUrl ?? null }))
-    const query = term.trim()
-    if (query.length < 2) return known
-    try {
-        const result = await githubRequest<{ items?: { login: string; avatar_url?: string }[] }>(`/search/users?q=${encodeURIComponent(`${query} in:login in:name`)}&per_page=20`, { label: "buscar pessoas" })
-        const remote = (result.items ?? []).map((user) => ({ login: user.login.toLowerCase(), name: null, avatarUrl: user.avatar_url ?? null }))
-        const seen = new Set(known.map((person) => person.login))
-        return [...known, ...remote.filter((user) => !seen.has(user.login))]
-    } catch (error) {
-        toGithubDomainError(error)
-    }
-}
-
 async function linkedRepos(): Promise<string[]> {
     await dbConnect()
-    return (await GithubRepoLink.find().select({ repo: 1 }).lean()).map((link) => link.repo)
+    return (await Project.find().select({ repo: 1 }).lean()).map((project) => project.repo)
 }
 
 /** Labels dos repositórios vinculados (mesmo nome = uma opção). */
@@ -91,21 +73,4 @@ export async function listGithubIssueTypes(): Promise<string[]> {
         }
     }
     return [...names].sort((a, b) => a.localeCompare(b, "pt-BR"))
-}
-
-export interface ProductLinkOption extends GoProductOption {
-    /** Repositório já vinculado a este produto (um para um). */
-    linkedRepo: string | null
-}
-
-export async function listProductOptions(): Promise<ProductLinkOption[]> {
-    let products: GoProductOption[]
-    try {
-        products = await listGoProducts()
-    } catch (error) {
-        toTaskDomainError(error)
-    }
-    await dbConnect()
-    const links = new Map((await GithubRepoLink.find().select({ productId: 1, repo: 1 }).lean()).map((link) => [link.productId, link.repo]))
-    return products.map((product) => ({ ...product, linkedRepo: links.get(product.id) ?? null }))
 }

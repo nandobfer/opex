@@ -4,7 +4,6 @@ import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "../../types"
-import { GoSipalSessionCard } from "@/features/go-sipal/components/GoSipalSessionCard"
 import { AiModelsCard } from "@/features/ai/components/AiModelsCard"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
 import { ApiTokensCard } from "../internal-api/ApiTokensCard"
@@ -55,8 +54,6 @@ export function EditorForm({ def, data, draft, setDraft, dirty, pending, onSave,
             }}
         >
             <DetailHeader def={def} data={data} hasAnySecret={def.secretFields.length > 0} />
-
-            {def.id === "go_sipal" && <GoSipalSessionCard dirty={dirty} />}
 
             <GeneralCard draft={draft} setDraft={setDraft} />
 

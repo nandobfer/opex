@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../../constants"
 import type { CentralForm } from "./form"
 
-/** Aba Ambiente: docker compose da prévia, variável da porta, endereço e teste de saúde. */
+/** Aba Ambiente: docker compose da prévia, faixa de portas, variável da porta, endereço e teste de saúde. */
 export function EnvironmentSection({ form }: { form: CentralForm }) {
     const errors = form.formState.errors.environment
     const env = useWatch({ control: form.control, name: "environment" })
@@ -17,9 +17,9 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
             <CardHeader>
                 <CardTitle className="text-base">Prévia (Docker Compose)</CardTitle>
                 <CardDescription>
-                    Cada mesa recebe uma porta livre entre {PREVIEW_PORT_MIN} e {PREVIEW_PORT_MAX}. O agente roda{" "}
+                    Cada mesa recebe uma porta livre entre {env.previewPortMin || PREVIEW_PORT_MIN} e {env.previewPortMax || PREVIEW_PORT_MAX}. O agente roda{" "}
                     <code className="font-mono text-foreground">
-                        {env.portEnvVar || "PORT"}=40xx docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d --build
+                        {env.portEnvVar || "PORT"}={env.previewPortMin || PREVIEW_PORT_MIN} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d --build
                     </code>{" "}
                     no worktree.
                 </CardDescription>
@@ -40,6 +40,12 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
                     </Field>
                     <Field id="central-env-timeout" label="Tempo máximo do build (minutos)" error={errors?.buildTimeoutMinutes?.message}>
                         <Input id="central-env-timeout" type="number" min={2} max={120} {...form.register("environment.buildTimeoutMinutes", { valueAsNumber: true })} aria-invalid={errors?.buildTimeoutMinutes ? true : undefined} />
+                    </Field>
+                    <Field id="central-env-port-min" label="Porta inicial da prévia" error={errors?.previewPortMin?.message}>
+                        <Input id="central-env-port-min" type="number" min={1024} max={65535} {...form.register("environment.previewPortMin", { valueAsNumber: true })} aria-invalid={errors?.previewPortMin ? true : undefined} />
+                    </Field>
+                    <Field id="central-env-port-max" label="Porta final da prévia" error={errors?.previewPortMax?.message}>
+                        <Input id="central-env-port-max" type="number" min={1024} max={65535} {...form.register("environment.previewPortMax", { valueAsNumber: true })} aria-invalid={errors?.previewPortMax ? true : undefined} />
                     </Field>
                 </div>
                 <p className="mt-4 text-xs text-muted-foreground">

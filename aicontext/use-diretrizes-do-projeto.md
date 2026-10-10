@@ -6,9 +6,9 @@ Decisões técnicas do Opex e suas motivações. Em conflito, o `AGENTS.md` prev
 
 ### Objetivo
 
-App pessoal para acompanhar as tarefas do Centro de Desenvolvimento do Go! Sipal e apontar horas,
-com integrações configuráveis (Go! Sipal, Archflow e as de infraestrutura: Pusher, API interna,
-Crons). Um único usuário, sem login, rodando localmente ou em Docker.
+App pessoal para gerenciar as tarefas (o Opex é a fonte de verdade) e apontar horas, com
+integrações configuráveis (GitHub, provedores de IA, Archflow e as de infraestrutura: Pusher, API
+interna, Crons). Um único usuário, sem login, rodando localmente ou em Docker.
 
 ## Arquitetura
 
@@ -49,19 +49,20 @@ Catálogo puro + resolvedor banco → `.env` → default, segredos AES-256-GCM
 (`INTEGRATIONS_ENCRYPTION_KEY`), teste de conexão, status em tempo real, modo debug com terminal e
 explorador OpenAPI. Detalhes em `modules/integrations.md`.
 
-**Credenciais de serviços pessoais** (ex.: JWT do Go! Sipal) ficam como campo privado da
-integração, nunca em `.env` versionado nem no navegador.
+**Credenciais de serviços pessoais** (ex.: token do GitHub, chaves de IA) ficam como campo privado
+da integração, nunca em `.env` versionado nem no navegador.
 
-### 4. Go! Sipal pelas rotas internas (JWT)
+### 4. Tarefas locais são a fonte de verdade
 
-**Decisão**: consumir `go.sipal.com.br` pelas rotas da própria interface web (login por código de
-e-mail → JWT de 28 dias; timers em `/api/dev-center/time-logs`).
+**Decisão**: tarefas, colunas do quadro e apontamentos de horas vivem no MongoDB dO Opex
+(`dev_tasks`, `task_board_columns`, `time_logs`); não há espelho de plataforma externa. Cada tarefa
+pertence a um **Projeto** (repositório vinculado) e a uma **coluna** configurável do quadro.
 
-**Motivo**: a API `/api/mcp/*` (X-API-Key) não tem timers; o MCP integrado (`/mcp`, OAuth) exige
-inscrição por administrador.
+**Motivo**: uso pessoal; o Opex deixa de ser uma camada sobre outra plataforma e passa a ser o
+dono dos dados.
 
-**Risco**: rotas internas sem contrato formal — conferir no código (`~/code/sap-painel-lancamento`)
-antes de implementar e tratar mudanças com testes.
+**Consequência**: o quadro, o CRUD de tarefas e as horas são locais; o GitHub só cria tarefas a
+partir das issues dos repositórios vinculados (ver `modules/github.md`).
 
 ### 5. Agendador interno só em processo persistente
 

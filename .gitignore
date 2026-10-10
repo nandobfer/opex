@@ -13,3 +13,6 @@ next-env.d.ts
 # Sistema
 .DS_Store
 *.log
+
+# Worktrees do desenvolvimento agêntico
+/worktrees/

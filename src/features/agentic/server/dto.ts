@@ -10,13 +10,13 @@ export const asStage = (value: string): WorkbenchStage => (WORKBENCH_STAGES as r
 export const asRunState = (value: string): RunState => (RUN_STATES as readonly string[]).includes(value) ? (value as RunState) : "idle"
 
 export function toCentralDto(
-    doc: Pick<IAgenticCentral, "_id" | "productId" | "productName" | "config" | "lastTest" | "createdAt" | "updatedAt">,
+    doc: Pick<IAgenticCentral, "_id" | "projectId" | "projectName" | "config" | "lastTest" | "createdAt" | "updatedAt">,
     extra: { repo: { repo: string; repoUrl: string } | null; active: number; running: number },
 ): CentralDto {
     return {
         id: String(doc._id),
-        productId: doc.productId,
-        productName: doc.productName,
+        projectId: doc.projectId,
+        projectName: doc.projectName,
         config: parseCentralConfig(doc.config),
         repo: extra.repo?.repo ?? null,
         repoUrl: extra.repo?.repoUrl ?? null,

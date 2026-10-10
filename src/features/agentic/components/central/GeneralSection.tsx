@@ -20,7 +20,7 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Geral</CardTitle>
-                <CardDescription>Onde as sessões do OpenCode trabalham para o produto {central.productName}.</CardDescription>
+                <CardDescription>Onde as sessões do OpenCode trabalham para o produto {central.projectName}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
                 <FormToggleCard control={form.control} name="enabled" id="central-enabled" label="Central ativa" description="Desativada, a central aparece na Central de desenvolvimento, mas não abre nem executa mesas" />
@@ -29,7 +29,7 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
                         <Input id="central-session-directory" className="font-mono" {...form.register("sessionDirectory")} aria-invalid={errors.sessionDirectory ? true : undefined} />
                     </Field>
                     <Field id="central-worktree-root" label="Pasta dos worktrees" error={errors.worktreeRoot?.message}>
-                        <Input id="central-worktree-root" className="font-mono" placeholder={`${directory || "/caminho/do/repo"}-worktrees`} {...form.register("worktreeRoot")} aria-invalid={errors.worktreeRoot ? true : undefined} />
+                        <Input id="central-worktree-root" className="font-mono" placeholder={`${directory || "/caminho/do/repo"}/worktrees`} {...form.register("worktreeRoot")} aria-invalid={errors.worktreeRoot ? true : undefined} />
                     </Field>
                     <Field id="central-max-concurrent" label="Mesas executando ao mesmo tempo" error={errors.maxConcurrent?.message}>
                         <Input id="central-max-concurrent" type="number" min={1} max={10} {...form.register("maxConcurrent", { valueAsNumber: true })} aria-invalid={errors.maxConcurrent ? true : undefined} />

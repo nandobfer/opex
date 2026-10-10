@@ -9,7 +9,7 @@ import type { CentralConfig } from "./schemas"
 export interface WorkbenchContext {
     code: string
     title: string
-    productName: string
+    projectName: string
     repo: string | null
     sessionDirectory: string
     worktreePath: string
@@ -40,12 +40,12 @@ export function branchNameFor(config: CentralConfig, task: { code: string; title
 }
 
 export function worktreePathFor(config: CentralConfig, code: string): string {
-    const root = config.worktreeRoot || `${config.sessionDirectory}-worktrees`
+    const root = config.worktreeRoot || `${config.sessionDirectory}/worktrees`
     return `${root}/${code.toLowerCase()}`
 }
 
-export function composeProjectFor(productName: string, code: string): string {
-    return slugify(`${productName}-${code}`, 60) || slugify(code)
+export function composeProjectFor(projectName: string, code: string): string {
+    return slugify(`${projectName}-${code}`, 60) || slugify(code)
 }
 
 function extra(config: CentralConfig, role: AgentRole): string {
@@ -57,7 +57,7 @@ const JSON_RULE = "Termine a resposta com um bloco ```json``` contendo SOMENTE o
 
 export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMarkdown: string): string {
     return [
-        `Você é o agente de PLANEJAMENTO de uma mesa de trabalho dO Opex para a tarefa ${ctx.code} do produto ${ctx.productName}.`,
+        `Você é o agente de PLANEJAMENTO de uma mesa de trabalho dO Opex para a tarefa ${ctx.code} do projeto ${ctx.projectName}.`,
         `O repositório está no diretório atual (${ctx.sessionDirectory}). Leia o código e as instruções do projeto (AGENTS.md, README, docs) antes de planejar.`,
         "NÃO altere arquivos, NÃO crie branches e NÃO execute comandos que modifiquem o repositório nesta etapa.",
         "Produza um plano de implementação em Markdown, em português do Brasil, com: entendimento da tarefa, abordagem, arquivos a criar/alterar, passos numerados, testes, riscos e dúvidas em aberto.",
@@ -145,7 +145,7 @@ export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: 
     ].join("\n") + extra(config, "build")
 }
 
-export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { code: string; title: string; url: string }, existingPr: { number: number; url: string } | null): string {
+export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { code: string; title: string; url?: string }, existingPr: { number: number; url: string } | null): string {
     const git = config.git
     const title = renderPattern(git.prTitlePattern, task)
     const commit = renderPattern(git.commitPattern, task)
@@ -159,7 +159,7 @@ export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { c
         `- \`git push -u origin ${ctx.branch}\`.`,
         existingPr
             ? `- O PR #${existingPr.number} (${existingPr.url}) já existe: o push o atualiza. Comente nele um resumo do que mudou nesta rodada (\`gh pr comment ${existingPr.number}\`). Não abra outro PR.`
-            : `- Abra o PR com o gh: \`gh pr create --base ${git.prTargetBranch} --head ${ctx.branch} --title "${title}" ${flags}\` com um corpo em Markdown: resumo, o que mudou, como testar e o link da tarefa (${task.url}).`,
+            : `- Abra o PR com o gh: \`gh pr create --base ${git.prTargetBranch} --head ${ctx.branch} --title "${title}" ${flags}\` com um corpo em Markdown: resumo, o que mudou, como testar${task.url ? ` e o link da tarefa (${task.url})` : ""}.`,
         `- ${JSON_RULE} Formato: {"url": "<URL do PR>", "number": <número>}.`,
     ]
         .filter(Boolean)

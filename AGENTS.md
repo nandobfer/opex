@@ -3,11 +3,10 @@
 Guia normativo para qualquer IA que trabalhe neste repositório.
 
 O **Opex** é um app Next.js **de uso pessoal**: um único usuário (o dono), **sem login**,
-rodando só localmente ou em Docker, nunca publicado. Serve para acompanhar as tarefas do Centro de
-Desenvolvimento do **Go! Sipal** (`go.sipal.com.br`) e apontar horas, com um módulo de
-**Integrações** para configurar serviços e guardar credenciais. O core (tema, componentes, layout,
-integrações, Pusher, crons) foi copiado do CRM Marketing Campanhas
-(`~/code/crm-marketing-campanhas`, branch `dev`).
+rodando só localmente ou em Docker, nunca publicado. É a **fonte de verdade** das suas tarefas:
+gerenciar tarefas, apontar horas e automatizar o desenvolvimento, com um módulo de **Integrações**
+para configurar serviços e guardar credenciais. O core (tema, componentes, layout, integrações,
+Pusher, crons) foi copiado do CRM Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 
 ## 1. Ordem obrigatória de leitura
 
@@ -20,7 +19,6 @@ Antes de implementar, leia nesta ordem:
    - Módulos: `aicontext/modules/*.md`
    - UI, tema, componentes e animações: `aicontext/use-para-atualizar-tema-e-componentes-ui.md`
    - Tempo real: seção 3, "Tempo real (Pusher)"
-   - Go! Sipal: seção 3, "Go! Sipal"
 
 ## 2. Regras não negociáveis
 
@@ -35,8 +33,9 @@ Antes de implementar, leia nesta ordem:
   usuário local (`getLocalUser()` de `src/lib/local-user.ts`).
 - **O app não pode ser exposto à internet** (não há login). Outros sistemas só acessam endpoints
   públicos por **token de sistema** (Integrações › API interna).
-- Credenciais de serviços externos (ex.: JWT do Go! Sipal) ficam como **campo privado da
-  integração** (cifrado no banco); nunca no código, no navegador ou em `.env` versionado.
+- Credenciais de serviços externos (ex.: token do GitHub, chaves dos provedores de IA) ficam como
+  **campo privado da integração** (cifrado no banco); nunca no código, no navegador ou em `.env`
+  versionado.
 - **Configuração de integrações só pela tela `/integracoes`**: integração ou campo novo **não**
   declara `env` nem ganha variável no `.env`/`.env.example` (o `env` legado existe só nas
   integrações herdadas do CRM).
@@ -70,19 +69,6 @@ Antes de implementar, leia nesta ordem:
   gráficos do dashboard, importação de planilha) podem ser **lidos e copiados** (e adaptados).
 - **Nunca importe** arquivos de lá nem altere aquele repositório a partir daqui.
 - Ao copiar, adapte: sem `companyId`/slug, sem Clerk/permissões, tema escuro por tokens.
-
-### Go! Sipal
-
-- Plataforma real: `https://go.sipal.com.br`; código-fonte em `~/code/sap-painel-lancamento`
-  (somente leitura daqui).
-- Consumo pelas **rotas internas da interface** com JWT: a sessão (código por e-mail → JWT de 28
-  dias) é feita no card "Sessão Go! Sipal" da integração; toda chamada passa por `goSipalRequest`
-  (`src/features/go-sipal/client.ts`). Timers em `/api/dev-center/time-logs` (`GET`,
-  `POST {taskId, description}`, `/active`, `PUT`/`DELETE /[id]`). Detalhes em
-  `aicontext/modules/go-sipal.md`.
-- São rotas sem contrato formal: **confira no código da plataforma antes de implementar** e não
-  presuma formatos. Chamadas sempre no servidor do app, nunca do navegador.
-- O JWT é o segredo `token` da integração `go_sipal`; nunca o leia fora do servidor.
 
 ### APIs
 
@@ -276,20 +262,22 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
   `jest-dom` globalmente nem por arquivo.
 - Faça mock apenas do necessário e preserve independência entre casos.
 - Para novos fluxos críticos, cubra happy path, falhas esperadas e casos-limite relevantes.
-- Chamadas ao Go! Sipal são sempre mockadas nos testes (nunca rede real).
+- Chamadas a serviços externos (GitHub, provedores de IA) são sempre mockadas nos testes (nunca
+  rede real).
 
 ## 7. Ambiente local, Docker e git worktree
 
 - Copie `.env.example` para `.env` e preencha (`INTEGRATIONS_ENCRYPTION_KEY`: `openssl rand -base64 32`).
-- O `.env` é escrito para o **Docker** (como no CRM): hosts da rede `devteam`
-  (`devteam-mongo`, `devteam-soketi`). Para `pnpm dev` fora do Docker, troque esses hosts por
-  `localhost`. A URL pública do Pusher (`NEXT_PUBLIC_PUSHER_URL` / "URL pública do cliente") é o
-  endereço que o **navegador** alcança: abrindo o app de outra máquina, use o IP do servidor
-  (ex.: `ws://192.168.0.64:6001`), nunca `localhost`.
+- O `.env` é escrito para o **Docker rootless** desta máquina: o Mongo é o container `mongodb`
+  (rede `mongodb-network`) e o Soketi é o container `soketi` (rede `soketi-network`). Para
+  `pnpm dev` fora do Docker, troque esses hosts por `localhost`. A URL pública do Pusher
+  (`NEXT_PUBLIC_PUSHER_URL` / "URL pública do cliente") é o endereço que o **navegador** alcança:
+  abrindo o app de outra máquina, use o IP do servidor (ex.: `ws://192.168.0.64:6001`), nunca
+  `localhost`.
 - Local: `pnpm dev` (porta `PORT`, padrão 3100) com um MongoDB acessível em `MONGODB_URI`.
-- Docker: `docker compose --profile dev up app-dev --watch` (desenvolvimento) ou
-  `docker compose up -d app` (imagem standalone). Usa a rede externa `docker_default`
-  (`devteam`) com o Mongo e o Soketi compartilhados.
+- Docker (rootless): `docker compose --profile dev up app-dev --watch` (desenvolvimento) ou
+  `docker compose up -d app` (imagem standalone). As redes externas são `mongodb-network` e
+  `soketi-network` (o build sai pela rede do host); a porta é publicada no host.
 - Ao criar um `git worktree`: copie o `.env` do repositório principal; **nunca** crie symlink do
   `node_modules` (rode `pnpm install` no worktree).
 
@@ -300,8 +288,6 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
   - **major** (`X.0.0`): mudanças incompatíveis;
   - **minor** (`x.Y.0`): nova funcionalidade compatível;
   - **patch** (`x.y.Z`): correção de bug compatível.
-- Se o trabalho vier de uma tarefa do Go! Sipal, termine o título do commit com o código dela
-  (ex.: `feat(tasks): timer na lista (GO-DEV-123)`).
 
 ## 9. Checklist mínimo antes de encerrar
 

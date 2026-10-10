@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Archive, ArchiveRestore, ArrowRightLeft, Flag, Loader2, Trash2, UserRound, X } from "lucide-react"
+import { Archive, ArchiveRestore, ArrowRightLeft, Flag, Loader2, X } from "lucide-react"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import {
     AlertDialog,
@@ -16,54 +16,37 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { columnKeyOf, type BoardColumnView } from "../board"
-import { FINAL_TASK_STATUS, type TaskPriority, type TaskStatus } from "../constants"
-import { DRAFT_SENDABLE_STATUSES } from "../drafts"
+import type { BoardColumnView } from "../board"
+import type { TaskPriority } from "../constants"
 import type { BulkProgress } from "../hooks/useBulkTasks"
-import type { PersonRef, TaskDto } from "../types"
+import type { TaskDto } from "../types"
 import { ColumnBadge } from "./TaskBadges"
-import { TaskAssigneePicker } from "./TaskAssigneePicker"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
 
 interface TaskBulkBarProps {
     tasks: readonly TaskDto[]
     columns: readonly BoardColumnView[]
-    people: readonly PersonRef[]
-    currentUserId: string | null
     progress: BulkProgress | null
     onMove: (column: string) => void
-    onAssign: (person: PersonRef | null) => void
     onPriority: (priority: TaskPriority) => void
     onArchive: (archive: boolean) => void
-    /** Descarta os rascunhos selecionados. */
-    onDiscard: () => void
     onClear: () => void
 }
 
 const same = <T,>(values: T[]): T | undefined => (values.length && values.every((value) => value === values[0]) ? values[0] : undefined)
 
-/** Barra flutuante com as ações das tarefas selecionadas (aparece com 1+ selecionadas). */
-/**
- * Espaço que o conteúdo reserva no fim enquanto a barra flutuante está aberta, para ela não cobrir
- * as últimas linhas/cards. Mesmo valor nas duas formas: classe (tabela) e px (colunas do kanban).
- */
+/** Espaço que o conteúdo reserva no fim enquanto a barra flutuante está aberta. */
 export const BULK_BAR_CLEARANCE = "pb-24"
 export const BULK_BAR_CLEARANCE_PX = 96
 
-export function TaskBulkBar({ tasks, columns, people, currentUserId, progress, onMove, onAssign, onPriority, onArchive, onDiscard, onClear }: TaskBulkBarProps) {
+/** Barra flutuante com as ações das tarefas selecionadas (aparece com 1+ selecionadas). */
+export function TaskBulkBar({ tasks, columns, progress, onMove, onPriority, onArchive, onClear }: TaskBulkBarProps) {
     const [confirmArchive, setConfirmArchive] = useState(false)
-    const [confirmDiscard, setConfirmDiscard] = useState(false)
     const count = tasks.length
     const running = progress !== null
-    const drafts = tasks.filter((task) => task.draft).length
-    const real = tasks.filter((task) => !task.draft)
-    const allDrafts = count > 0 && drafts === count
-    const allArchived = real.length > 0 && real.every((task) => task.archived)
-    const status = same(tasks.map(columnKeyOf))
-    const allFinal = real.length > 0 && real.every((task) => task.status === FINAL_TASK_STATUS) && drafts === 0
+    const allArchived = count > 0 && tasks.every((task) => task.archived)
+    const column = same(tasks.map((task) => task.columnId))
     const priority = same(tasks.map((task) => task.priority)) ?? null
-    const assigneeIds = tasks.map((task) => task.assignee?.id ?? null)
-    const commonAssignee = same(assigneeIds) === undefined ? undefined : (tasks[0]?.assignee ?? null)
 
     return (
         <>
@@ -93,48 +76,15 @@ export function TaskBulkBar({ tasks, columns, people, currentUserId, progress, o
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="center" side="top">
-                                        <DropdownMenuLabel className="text-xs">Go! Sipal</DropdownMenuLabel>
-                                        {columns
-                                            .filter((column) => column.kind === "go")
-                                            .map((column) => (
-                                                <DropdownMenuItem
-                                                    key={column.key}
-                                                    disabled={column.key === status || (allFinal && column.key !== FINAL_TASK_STATUS) || (allDrafts && !DRAFT_SENDABLE_STATUSES.includes(column.key as TaskStatus))}
-                                                    onSelect={() => onMove(column.key)}
-                                                >
-                                                    <ColumnBadge column={column} />
-                                                    {drafts > 0 && DRAFT_SENDABLE_STATUSES.includes(column.key as TaskStatus) && <span className="ml-auto text-[10px] text-muted-foreground">envia rascunhos</span>}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        {columns.some((column) => column.kind === "custom") && (
-                                            <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuLabel className="text-xs">Pessoais</DropdownMenuLabel>
-                                                {columns
-                                                    .filter((column) => column.kind === "custom")
-                                                    .map((column) => (
-                                                        <DropdownMenuItem key={column.key} disabled={column.key === status} onSelect={() => onMove(column.key)}>
-                                                            <ColumnBadge column={column} />
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                            </>
-                                        )}
+                                        <DropdownMenuLabel className="text-xs">Mover para…</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {columns.map((item) => (
+                                            <DropdownMenuItem key={item.key} disabled={item.key === column} onSelect={() => onMove(item.key)}>
+                                                <ColumnBadge column={item} />
+                                            </DropdownMenuItem>
+                                        ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
-
-                                <TaskAssigneePicker
-                                    value={commonAssignee}
-                                    people={people}
-                                    currentUserId={currentUserId}
-                                    onChange={onAssign}
-                                    disabled={running}
-                                    align="center"
-                                    trigger={
-                                        <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5">
-                                            <UserRound className="h-3.5 w-3.5" aria-hidden /> Atribuir
-                                        </Button>
-                                    }
-                                />
 
                                 <TaskPriorityMenu
                                     value={priority}
@@ -148,18 +98,10 @@ export function TaskBulkBar({ tasks, columns, people, currentUserId, progress, o
                                     }
                                 />
 
-                                {real.length > 0 && (
-                                    <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" disabled={running} onClick={() => setConfirmArchive(true)}>
-                                        {allArchived ? <ArchiveRestore className="h-3.5 w-3.5" aria-hidden /> : <Archive className="h-3.5 w-3.5" aria-hidden />}
-                                        {allArchived ? "Desarquivar" : "Arquivar"}
-                                    </Button>
-                                )}
-
-                                {drafts > 0 && (
-                                    <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-destructive hover:text-destructive" disabled={running} onClick={() => setConfirmDiscard(true)}>
-                                        <Trash2 className="h-3.5 w-3.5" aria-hidden /> Descartar{drafts < count ? ` ${drafts} rascunho(s)` : ""}
-                                    </Button>
-                                )}
+                                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5" disabled={running} onClick={() => setConfirmArchive(true)}>
+                                    {allArchived ? <ArchiveRestore className="h-3.5 w-3.5" aria-hidden /> : <Archive className="h-3.5 w-3.5" aria-hidden />}
+                                    {allArchived ? "Desarquivar" : "Arquivar"}
+                                </Button>
 
                                 <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onClear} disabled={running} aria-label="Limpar seleção" title="Limpar seleção (Esc)">
                                     <X className="h-4 w-4" aria-hidden />
@@ -187,31 +129,14 @@ export function TaskBulkBar({ tasks, columns, people, currentUserId, progress, o
             <AlertDialog open={confirmArchive} onOpenChange={setConfirmArchive}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>{allArchived ? "Desarquivar" : "Arquivar"} {real.length === 1 ? "1 tarefa" : `${real.length} tarefas`}?</AlertDialogTitle>
+                        <AlertDialogTitle>{allArchived ? "Desarquivar" : "Arquivar"} {count === 1 ? "1 tarefa" : `${count} tarefas`}?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            {allArchived
-                                ? "Elas voltam a aparecer no quadro do Go! Sipal."
-                                : "Elas somem do quadro (aparecem só com o filtro Arquivadas). Dá para desfazer logo depois pelo aviso."}
+                            {allArchived ? "Elas voltam a aparecer no quadro." : "Elas somem do quadro (aparecem só com o filtro Arquivadas). Dá para desfazer logo depois pelo aviso."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
                         <AlertDialogAction onClick={() => onArchive(!allArchived)}>{allArchived ? "Desarquivar" : "Arquivar"}</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Descartar {drafts === 1 ? "1 rascunho" : `${drafts} rascunhos`}?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Eles saem do quadro e a sincronização não os recria. Dá para desfazer pelo aviso ou restaurar em Integrações › GitHub › Sincronização.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={onDiscard}>Descartar</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

@@ -22,6 +22,7 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   handlePrReopened: mocks.reopened,
   saveLastReviewId: mocks.saveReview,
 }))
+vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
 
 import { repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
 

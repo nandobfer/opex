@@ -7,7 +7,7 @@ export const APP_NAV: readonly NavSectionDef[] = [
         id: "inicio",
         items: [
             { href: "/tarefas", label: "Tarefas", title: "Tarefas", icon: ListTodo },
-            { href: "/tarefas/horas", label: "Minhas horas", title: "Minhas horas", icon: Clock },
+            { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
             { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: Workflow },
         ],
     },
@@ -60,7 +60,7 @@ export function pageTransitionKey(pathname: string, persistentHrefs: readonly st
 
 /**
  * Item ativo do menu: o de `href` mais específico que casa com o caminho (em `/tarefas/horas`
- * fica ativo "Minhas horas", não "Tarefas"; em `/tarefas/123`, "Tarefas").
+ * fica ativo "Horas agênticas", não "Tarefas"; em `/tarefas/123`, "Tarefas").
  */
 export function activeNavHref(pathname: string, items: readonly NavItemDef[]): string | null {
     let best: string | null = null

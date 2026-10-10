@@ -17,8 +17,8 @@ Regras gerais do Opex. Leia antes de qualquer implementação.
   explícito.
 - Toda ação é atribuída ao usuário local (`getLocalUser()` de `src/lib/local-user.ts`, id
   `local`) na auditoria e nos campos `createdBy`/`updatedBy`.
-- Integrações externas (Go! Sipal, Archflow) são configuradas na tela de Integrações; credenciais
-  (ex.: JWT) ficam cifradas no banco, no documento da integração.
+- Integrações externas (GitHub, provedores de IA, Archflow) são configuradas na tela de Integrações;
+  credenciais (ex.: token do GitHub) ficam cifradas no banco, no documento da integração.
 - A experiência do usuário é prioridade: animações com Framer Motion, resposta otimista e tempo
   real com Pusher.
 
@@ -122,7 +122,7 @@ animados usam o mock de `framer-motion` (`__tests__/helpers/framer-motion.tsx`).
 
 Mensagens claras, com bump de versão no `package.json`:
 ```
-feat(tasks): lista tarefas do Go! Sipal
+feat(tasks): lista de tarefas com colunas configuráveis
 fix(integrations): corrige teste do Pusher em modo host
 ```
 

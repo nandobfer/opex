@@ -55,6 +55,14 @@ describe('OpenCode', () => {
     expect(mocks.fetch.mock.calls[0]![0]).toBe('http://opencode:4096/api/model?location[directory]=%2Fhome%2Feu%2Fia')
   })
 
+  it('diretório configurado que não existe na máquina do OpenCode vira mensagem acionável', async () => {
+    mocks.config.ai_opencode!.directory = '/home/burgos/opex'
+    mocks.fetch.mockResolvedValue(json({}, 404))
+    await expect(listOpencodeModels()).rejects.toThrow(
+      'O OpenCode respondeu HTTP 404 em /api/model: confira se o diretório das sessões existe na máquina do OpenCode ("/home/burgos/opex")',
+    )
+  })
+
   it('agentes: só os primários e visíveis', async () => {
     mocks.fetch.mockResolvedValue(
       json({

@@ -13,7 +13,7 @@ Casca única do app: sidebar + conteúdo (**sem cabeçalho**), sem login (uso pe
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
 - `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[centralId]/[[...task]]/page.tsx`:
   Central de desenvolvimento (item próprio no menu; ver `modules/agentic-dev.md`).
-- `src/app/(app)/tarefas/layout.tsx`: `TimerProvider` (timers do Go! Sipal) para as três páginas.
+- `src/app/(app)/tarefas/layout.tsx`: `TimerProvider` (timers locais) para as três páginas.
 - Item ativo do menu = o de `href` mais específico que casa com o caminho (`activeNavHref`): em
   `/tarefas/horas` fica "Minhas horas"; em `/tarefas/123`, "Tarefas".
 - `src/app/(app)/layout.tsx`: monta `AppLayoutShell` com o dono do app (`getLocalUser().name`,

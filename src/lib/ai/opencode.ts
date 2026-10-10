@@ -39,6 +39,8 @@ export async function opencodeGet<T>(path: string, signal?: AbortSignal, connect
     }
     if (res.status === 401) throw new AiProviderError("O OpenCode recusou a senha (HTTP 401): confira a senha do servidor")
     if (res.status === 404 && path === "/api/info") throw new AiProviderError("Servidor sem /api/info: é um OpenCode 1.x ou incompatível (use o 2.x)")
+    if (res.status === 404 && conn.directory)
+        throw new AiProviderError(`O OpenCode respondeu HTTP 404 em ${path}: confira se o diretório das sessões existe na máquina do OpenCode ("${conn.directory}")`)
     if (!res.ok) throw new AiProviderError(`O OpenCode respondeu HTTP ${res.status} em ${path}`)
     return (await res.json()) as T
 }

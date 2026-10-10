@@ -7,8 +7,8 @@ import { useAiFeatureRealtime, useUnderstandTaskSettings } from "../../hooks/use
 import { UnderstandTaskDialog } from "./UnderstandTaskDialog"
 
 /**
- * Botão de ícone "Entender tarefa" da página da tarefa (ou "Entender rascunho", com `label`), com o
- * rótulo na dica; indisponível fica bloqueado com o motivo na dica.
+ * Botão de ícone "Entender tarefa" da página da tarefa, com o rótulo na dica; indisponível fica
+ * bloqueado com o motivo na dica.
  */
 export function UnderstandTaskButton({ taskId, taskCode, label = "Entender tarefa" }: { taskId: string; taskCode: string; label?: string }) {
     useAiFeatureRealtime()

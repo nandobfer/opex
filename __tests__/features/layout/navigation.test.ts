@@ -8,21 +8,21 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Tarefas, Minhas horas, Central de desenvolvimento) e Sistema (Integrações)", () => {
+    it("seções Início (Tarefas, Horas agênticas, Central de desenvolvimento) e Sistema (Integrações)", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
             ["inicio", undefined],
             ["sistema", "Sistema"],
         ])
         expect(APP_NAV_ITEMS.map((item) => [item.label, item.href])).toEqual([
             ["Tarefas", "/tarefas"],
-            ["Minhas horas", "/tarefas/horas"],
+            ["Horas agênticas", "/tarefas/horas"],
             ["Central de desenvolvimento", "/desenvolvimento"],
             ["Integrações", "/integracoes"],
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)
     })
 
-    it("item ativo é o mais específico: Minhas horas em /tarefas/horas, Tarefas em /tarefas/123", () => {
+    it("item ativo é o mais específico: Horas agênticas em /tarefas/horas, Tarefas em /tarefas/123", () => {
         expect(activeNavHref("/tarefas/horas", APP_NAV_ITEMS)).toBe("/tarefas/horas")
         expect(activeNavHref("/tarefas/abc123", APP_NAV_ITEMS)).toBe("/tarefas")
         expect(activeNavHref("/tarefas", APP_NAV_ITEMS)).toBe("/tarefas")

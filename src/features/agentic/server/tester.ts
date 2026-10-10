@@ -1,5 +1,5 @@
 import { getOpencodeClient, runOpencodeShell, type OpencodeShellResult } from "@/lib/ai/opencode-client"
-import { loadCentral, repoForProduct, saveCentralTest } from "./centrals"
+import { loadCentral, repoForProject, saveCentralTest } from "./centrals"
 import { centralLogger } from "./log"
 import type { CentralCheck, CentralTestOutcome } from "../types"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
@@ -27,13 +27,13 @@ export async function testCentral(id: string): Promise<CentralTestOutcome> {
         else if (check.status === "warn") log.warn(text)
         else log.error(text)
     }
-    log.step(`Testando a central ${doc.productName}`)
+    log.step(`Testando a central ${doc.projectName}`)
 
     const { settings } = await loadAgenticSettings()
     const availability = await agenticAvailability(settings)
     add(availability.available ? { label: "Feature", status: "ok", detail: "ativa e OpenCode conectado" } : { label: "Feature", status: settings.enabled ? "error" : "warn", detail: availability.reason ?? "indisponível" })
 
-    const repo = await repoForProduct(doc.productId)
+    const repo = await repoForProject(doc.projectId)
     add(repo ? { label: "Repositório", status: "ok", detail: `${repo.repo} (vínculo do GitHub)` } : { label: "Repositório", status: "warn", detail: "produto sem repositório vinculado em Integrações › GitHub (o acompanhamento do PR usa a URL do PR)" })
 
     try {
@@ -67,7 +67,7 @@ export async function testCentral(id: string): Promise<CentralTestOutcome> {
             const found = firstLine(compose)
             add({ label: "Arquivo do compose", status: compose.exitCode === 0 && found ? "ok" : "error", detail: found ? found : file ? `${file} não encontrado` : "nenhum compose.yaml/docker-compose.yml na raiz" })
 
-            const root = config.worktreeRoot || `${dir}-worktrees`
+            const root = config.worktreeRoot || `${dir}/worktrees`
             const writable = await run(`mkdir -p ${shellQuote(root)} && test -w ${shellQuote(root)}`)
             add({ label: "Pasta dos worktrees", status: writable.exitCode === 0 ? "ok" : "error", detail: writable.exitCode === 0 ? root : `sem permissão de escrita em ${root}` })
         }

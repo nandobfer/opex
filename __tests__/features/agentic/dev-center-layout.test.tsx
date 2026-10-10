@@ -76,7 +76,7 @@ describe('CollapsiblePane', () => {
 })
 
 describe('CentralsPane recolhida', () => {
-  const central = (id: string, productName: string) => ({ id, productId: id, productName, runningWorkbenches: 0, config: { enabled: true } }) as unknown as CentralDto
+  const central = (id: string, projectName: string) => ({ id, projectId: id, projectName, runningWorkbenches: 0, config: { enabled: true } }) as unknown as CentralDto
 
   it('a faixa continua navegável entre as centrais e permite expandir', () => {
     const onToggle = vi.fn()

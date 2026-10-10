@@ -6,11 +6,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 /**
- * POST /api/tasks/[id]/understand — "Entender tarefa" com o provedor de IA configurado. Aceita
- * tarefas do Go! Sipal e rascunhos (`draft-…`, issues do GitHub ainda não enviadas).
+ * POST /api/tasks/[id]/understand — "Entender tarefa" com o provedor de IA configurado.
  *
- * Feature indisponível (409), tarefa/rascunho inexistente (404) ou rascunho enviado/descartado
- * (409) respondem JSON. Senão, NDJSON
+ * Feature indisponível (409) ou tarefa inexistente (404) respondem JSON. Senão, NDJSON
  * (`application/x-ndjson`): `start`, `delta`/`reasoning`/`tool`/`notice` à medida que chegam e um
  * `done` ou `error` final. Fechar a conexão cancela a geração.
  */

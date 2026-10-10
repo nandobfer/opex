@@ -19,23 +19,23 @@ import { AgentsSection } from "./AgentsSection"
 import { CentralHeaderActions } from "./CentralHeaderActions"
 import { CentralLogsSection } from "./CentralLogsSection"
 import { CentralWorkbenchesSection } from "./CentralWorkbenchesSection"
+import { ColumnsSection } from "./ColumnsSection"
 import { EnvironmentSection } from "./EnvironmentSection"
 import { FormActions } from "./FormActions"
 import { GeneralSection } from "./GeneralSection"
 import { GitSection } from "./GitSection"
-import { GoSipalSection } from "./GoSipalSection"
 import { InstructionsSection } from "./InstructionsSection"
 
-const TAB_IDS = ["geral", "agentes", "git", "ambiente", "go-sipal", "instrucoes", "logs", "mesas"] as const
+const TAB_IDS = ["geral", "agentes", "git", "ambiente", "colunas", "instrucoes", "logs", "mesas"] as const
 type CentralTab = (typeof TAB_IDS)[number]
-const FORM_TABS: readonly CentralTab[] = ["geral", "agentes", "git", "ambiente", "go-sipal", "instrucoes"]
+const FORM_TABS: readonly CentralTab[] = ["geral", "agentes", "git", "ambiente", "colunas", "instrucoes"]
 
 const TABS: IntegrationTabDef<CentralTab>[] = [
     { id: "geral", label: "Geral", icon: FolderCog },
     { id: "agentes", label: "Agentes", icon: Bot },
     { id: "git", label: "Git e PR", icon: GitBranch },
     { id: "ambiente", label: "Ambiente", icon: Server },
-    { id: "go-sipal", label: "Go! Sipal e conclusão", icon: ListChecks },
+    { id: "colunas", label: "Colunas e conclusão", icon: ListChecks },
     { id: "instrucoes", label: "Instruções", icon: FileText },
     { id: "logs", label: "Logs", icon: Bug },
     { id: "mesas", label: "Mesas", icon: LayoutDashboard },
@@ -80,7 +80,7 @@ export function CentralPage({ id }: { id: string }) {
                             <ArrowLeft className="h-4 w-4" aria-hidden /> Desenvolvimento agêntico
                         </Link>
                     </Button>
-                    <h1 className="text-xl font-semibold md:text-2xl">Central {central.productName}</h1>
+                    <h1 className="text-xl font-semibold md:text-2xl">Central {central.projectName}</h1>
                     <p className="truncate font-mono text-xs text-muted-foreground">{central.config.sessionDirectory}</p>
                 </div>
                 <CentralHeaderActions central={central} onDeleted={() => router.push(AGENTIC_SETTINGS_HREF)} />
@@ -98,7 +98,7 @@ export function CentralPage({ id }: { id: string }) {
                     {tab === "agentes" && <AgentsSection form={form} />}
                     {tab === "git" && <GitSection form={form} />}
                     {tab === "ambiente" && <EnvironmentSection form={form} />}
-                    {tab === "go-sipal" && <GoSipalSection form={form} />}
+                    {tab === "colunas" && <ColumnsSection form={form} />}
                     {tab === "instrucoes" && <InstructionsSection form={form} />}
                     {tab === "logs" && <CentralLogsSection centralId={id} />}
                     {tab === "mesas" && <CentralWorkbenchesSection centralId={id} />}

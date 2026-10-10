@@ -1,7 +1,7 @@
 import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
-import { AGENTIC_PR_WATCH_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, GO_SIPAL_TASK_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { AGENTIC_PR_WATCH_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
@@ -276,10 +276,6 @@ export function registerBuiltInJobs(): void {
         const results = await runAllIntegrationHealthChecks()
         const failing = Object.entries(results).filter(([, r]) => !r.ok).map(([id]) => id)
         return failing.length ? `Com falha: ${failing.join(", ")}` : "Todas as integrações OK"
-    })
-    registerInternalJob(GO_SIPAL_TASK_SYNC_JOB_ID, async () => {
-        const { syncGoSipalTasks } = await import("@/features/tasks/server/sync")
-        return syncGoSipalTasks()
     })
     registerInternalJob(GITHUB_ISSUE_SYNC_JOB_ID, async () => {
         const { syncGithubIssues } = await import("@/features/github/server/sync")

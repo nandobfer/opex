@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Docker rootless: o build sai pela rede do host (mesmo padrão do dndicas).
+      network: host
       args:
         NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-}
         NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
@@ -17,12 +19,12 @@ services:
     ports:
       - "${PORT:?defina PORT no .env}:${PORT:?defina PORT no .env}"
     environment:
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/opex}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/opex}
       NODE_ENV: production
       PORT: ${PORT:?defina PORT no .env}
     networks:
-      - default
-      - devteam
+      - mongodb-network
+      - soketi-network
     deploy:
       resources:
         limits:
@@ -37,12 +39,14 @@ services:
       context: .
       dockerfile: Dockerfile
       target: dev
+      # Docker rootless: o build sai pela rede do host (mesmo padrão do dndicas).
+      network: host
     env_file:
       - .env
     ports:
       - "${PORT:?defina PORT no .env}:${PORT:?defina PORT no .env}"
     environment:
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/opex}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/opex}
       NODE_ENV: development
       PORT: ${PORT:?defina PORT no .env}
     deploy:
@@ -61,8 +65,8 @@ services:
       - --port
       - ${PORT:?defina PORT no .env}
     networks:
-      - default
-      - devteam
+      - mongodb-network
+      - soketi-network
     develop:
       watch:
         - action: sync
@@ -91,6 +95,7 @@ services:
           path: ./Dockerfile
 
 networks:
-  devteam:
+  mongodb-network:
     external: true
-    name: docker_default
+  soketi-network:
+    external: true

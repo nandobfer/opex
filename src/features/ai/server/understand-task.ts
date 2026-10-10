@@ -5,8 +5,7 @@ import { integrationDebug } from "@/lib/integrations/debug"
 import { loggerFor } from "@/lib/logger"
 import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
 import { getTask } from "@/features/tasks/server/service"
-import { isDraftTaskId } from "@/features/tasks/drafts"
-import { buildUnderstandDraftPrompt, buildUnderstandTaskInstructions, buildUnderstandTaskPrompt } from "../understand-task"
+import { buildUnderstandTaskInstructions, buildUnderstandTaskPrompt } from "../understand-task"
 import type { UnderstandTaskSettings } from "../schemas"
 import type { UnderstandTaskEvent } from "../types"
 import { availabilityOf, loadUnderstandTaskSettings } from "./settings"
@@ -22,25 +21,14 @@ export interface PreparedUnderstandTask {
 }
 
 /**
- * Confere a configuração e monta a entrada ANTES de abrir o stream: feature indisponível (409),
- * tarefa/rascunho inexistente (404) ou rascunho já enviado/descartado (409) viram resposta JSON.
- * Ids `draft-…` são rascunhos (issues do GitHub ainda não enviadas ao Go! Sipal).
+ * Confere a configuração e monta a entrada ANTES de abrir o stream: feature indisponível (409) ou
+ * tarefa inexistente (404) viram resposta JSON.
  */
 export async function prepareUnderstandTask(taskId: string): Promise<PreparedUnderstandTask> {
     const { settings } = await loadUnderstandTaskSettings()
     const availability = await availabilityOf(settings)
     if (!availability.available || !settings.provider || !settings.model) throw new DomainError(409, availability.reason ?? "Feature indisponível", "AI_FEATURE_UNAVAILABLE")
     const base = { settings: { ...settings, provider: settings.provider, model: settings.model }, instructions: buildUnderstandTaskInstructions(settings) }
-
-    if (isDraftTaskId(taskId)) {
-        const { getDraftDetail } = await import("@/features/github/server/drafts")
-        const draft = await getDraftDetail(taskId)
-        if (draft.state === "sent" || draft.state === "sending") {
-            throw new DomainError(409, draft.goTaskCode ? `Rascunho já enviado: use a tarefa ${draft.goTaskCode}` : "Rascunho já enviado ao Go! Sipal", "DRAFT_ALREADY_SENT")
-        }
-        if (draft.state === "discarded") throw new DomainError(409, "Rascunho descartado: restaure-o para entender", "DRAFT_DISCARDED")
-        return { ...base, taskId: draft.id, title: `Entender rascunho ${draft.code}`, prompt: buildUnderstandDraftPrompt(draft, settings.include) }
-    }
 
     const task = await getTask(taskId)
     return { ...base, taskId: task.id, title: `Entender tarefa ${task.code}`, prompt: buildUnderstandTaskPrompt(task, settings.include) }
