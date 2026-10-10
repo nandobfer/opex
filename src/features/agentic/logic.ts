@@ -31,7 +31,6 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         git: { ...base.git, ...value.git },
         environment: { ...base.environment, ...value.environment },
         columns: { ...base.columns, ...value.columns },
-        timers: { ...base.timers, ...value.timers },
         cleanup: { ...base.cleanup, ...value.cleanup },
         include: { ...base.include, ...value.include },
         instructions: { ...base.instructions, ...value.instructions },

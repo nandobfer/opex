@@ -3,6 +3,7 @@ import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { githubPaginate, githubRequest } from "@/features/github/client"
 import { formatReviewFeedback } from "../prompts"
 import { centralLogger } from "./log"
+import { closeOrphanWorkPeriods } from "./timer-sync"
 import { handlePrChangesRequested, handlePrClosed, handlePrMerged, handlePrReopened, saveLastReviewId } from "./workflow"
 
 /**
@@ -39,6 +40,7 @@ export function repoFromPrUrl(url: string): string | null {
 
 export async function watchPullRequests(): Promise<string> {
     await dbConnect()
+    const closedOrphans = await closeOrphanWorkPeriods().catch(() => 0)
     const docs = await AgenticWorkbench.find({ stage: "pr_open", runState: { $ne: "running" }, pr: { $ne: null } }).lean()
     let merged = 0
     let replans = 0
@@ -87,5 +89,5 @@ export async function watchPullRequests(): Promise<string> {
             log.error(`Falha ao consultar o PR #${pr.number}`, error, { workbenchId: id })
         }
     }
-    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com mudanças pedidas${failures ? `; ${failures} com falha` : ""}`
+    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com mudanças pedidas${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
 }

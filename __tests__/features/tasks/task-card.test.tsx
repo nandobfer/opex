@@ -6,7 +6,7 @@ import type { TaskDto } from '@/features/tasks/types'
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/time/components/TimerProvider', () => ({
-  useTimer: () => ({ timerOf: () => undefined, busyTaskId: null, start: vi.fn(), requestStop: vi.fn() }),
+  useTimer: () => ({ active: [], timerOf: () => undefined }),
 }))
 
 import { TaskCardView } from '@/features/tasks/components/TaskCard'
@@ -30,14 +30,11 @@ const task = (overrides: Partial<TaskDto> = {}): TaskDto => ({
 const issueLink = () => screen.queryByRole('link', { name: 'Abrir issue sipal/app#123 no GitHub' })
 
 describe('TaskCardView: issue no rodapé', () => {
-  it('mostra o botão da issue com #N no rodapé, à esquerda do ▶ do timer', () => {
+  it('mostra o botão da issue com #N no rodapé', () => {
     render(<TaskCardView task={task()} />)
     const link = issueLink()!
     expect(link.getAttribute('href')).toBe('https://github.com/sipal/app/issues/123')
     expect(link.textContent).toBe('#123')
-    const timer = screen.getByRole('button', { name: 'Iniciar o timer de OPX-1' })
-    expect(link.parentElement).toBe(timer.parentElement)
-    expect(link.compareDocumentPosition(timer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const header = screen.getByText('OPX-1').parentElement!
     expect(within(header).queryByRole('link')).toBeNull()
   })

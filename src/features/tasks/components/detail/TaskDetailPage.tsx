@@ -28,7 +28,6 @@ import { useTaskBoard } from "../../hooks/useTaskBoard"
 import { useDeleteTask, useTaskDetail, useTaskOptions, useTasksRealtime, useUpdateTask } from "../../hooks/useTasks"
 import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
 import type { TaskDetailDto } from "../../types"
-import { TimerButton } from "@/features/time/components/TimerButton"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
 import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
@@ -115,7 +114,6 @@ export function TaskDetailPage({ id }: { id: string }) {
                                 </div>
                                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <TimerIndicator />
-                                    <TimerButton task={task} size="md" withLabel />
                                     <TaskColumnMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, column) => flow.move(current, column)} size="default" />
                                     <UnderstandTaskButton taskId={task.id} taskCode={task.code} />
                                     <WorkbenchButton taskId={task.id} projectId={task.project?.id ?? null} />

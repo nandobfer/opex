@@ -11,7 +11,7 @@ import type { CentralForm } from "./form"
 
 const NONE = "__none__"
 
-/** Aba Colunas e conclusão: movimentação das colunas por etapa, timers e o que vai para o planejador. */
+/** Aba Colunas e conclusão: movimentação das colunas por etapa e o que vai para o planejador. */
 export function ColumnsSection({ form }: { form: CentralForm }) {
     const board = useTaskBoard()
     const control = form.control
@@ -51,16 +51,6 @@ export function ColumnsSection({ form }: { form: CentralForm }) {
                     {columnField("columns.onStart", "central-col-start", "Ao abrir a mesa (implementação)")}
                     {columnField("columns.onPr", "central-col-pr", "Ao abrir o Pull Request")}
                     {columnField("columns.onDone", "central-col-done", "Ao concluir (PR mergeado)")}
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Timers</CardTitle>
-                    <CardDescription>Início e fim automáticos do timer da tarefa.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <FormToggleCard control={control} name="timers.start" id="central-timer-start" label="Iniciar o timer ao abrir a mesa" description="Se ainda não houver timer rodando nesta tarefa" onLabel="Sim" offLabel="Não" />
-                    <FormToggleCard control={control} name="timers.stopOnDone" id="central-timer-stop" label="Parar o timer ao concluir" description="Quando o PR é mergeado" onLabel="Sim" offLabel="Não" />
                 </CardContent>
             </Card>
             <Card>

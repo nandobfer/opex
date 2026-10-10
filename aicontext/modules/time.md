@@ -1,61 +1,94 @@
-# Módulo: Controle de horas (`/tarefas/horas`)
+# Módulo: Controle de horas agêntico (`/tarefas/horas`)
 
-Apontamento de horas **local** — o Opex é a fonte de verdade. Iniciar, parar, editar e excluir
-gravam em `time_logs`. Código em `src/features/time/`.
+O controle de horas dO Opex é **agêntico**: cada apontamento é um **período de trabalho de uma mesa
+de desenvolvimento** (não há timer manual). Quem abre/fecha os períodos é o servidor, a partir do
+estado da mesa; a interação humana com o timer e com as horas é **somente leitura**. O Opex é a
+fonte de verdade; os dados ficam em `time_logs`. Código em `src/features/time/`.
 
-## Modelo e regras (`src/lib/db/models/TimeLog.ts`, `schemas.ts`)
+## Modelo e regras (`src/lib/db/models/TimeLog.ts`)
 
-- `TimeLog` (`time_logs`): `{ taskId, startTime, endTime, duration (minutos), description, active }`.
-- **Um timer ativo por tarefa** (`active: true`); `duration` é gravada ao parar.
-- Regras: nada no futuro (tolerância de 60 s), fim depois do início. **Sem justificativa.**
+- `TimeLog` (`time_logs`): `{ taskId, workbenchId, stage, agent, model, startTime, endTime,
+  duration (minutos), costUsd, inputTokens, outputTokens, reasoningTokens, description, active }`.
+- Um período é um **intervalo contínuo em que o agente esteve trabalhando**, independentemente da
+  etapa; a `description` nasce como "Desenvolvimento agêntico · {Etapa}".
+- **Um período ativo por mesa**; como várias mesas podem rodar juntas, **há vários períodos ativos ao
+  mesmo tempo** (não existe mais "um timer por vez" nem "um por tarefa").
+- O período guarda a etapa e o **agente/modelo** vigentes e acumula **tokens e custo** (de
+  `session.step.ended`). Se a execução encadear dois turnos sem pausa (implementação → build), o
+  período é um só, com a etapa/agente/modelo do turno mais recente.
+
+### Quando o período abre, pausa e fecha
+
+Regra única: o agente está **executando** quando `runState === "running"` **e** não há
+permissão/pergunta pendente (`pendingPermissions`/`pendingForms` vazios).
+
+| Estado da mesa | Timer |
+|---|---|
+| `running` e sem permissão/pergunta pendente | **ativo** (período aberto) |
+| `running` aguardando permissão/pergunta do OpenCode | **pausado** |
+| `idle` (`plan_review`, `preview`, `pr_open`, `changes_requested`, `done`) | **pausado** |
+| `failed` / `interrupted` | **pausado** |
+| `done` (mesa concluída) | **parado em definitivo** |
 
 ## Servidor (`src/features/time/server/service.ts`, `TIME_AUDIT_ENTITY = "Apontamento"`)
 
-- `listActiveTimers`, `startTimer` (404 se a tarefa não existe; 409 `TIMER_RUNNING` se já há timer),
-  `stopTimer` (início/fim/descrição opcionais), `listTimeLogs` (filtra por `startTime`, 100 por
-  página, `totalMinutes` do período), `updateTimeLog` (`kind: "description"` ou `"period"`),
-  `deleteTimeLog`.
-- O `taskCode`/`taskTitle` do apontamento vêm das tarefas locais.
-- Auditoria (`CRIAR`/`ATUALIZAR`/`EXCLUIR`) e evento Pusher `time-updated { taskIds }` no canal
-  `private-app`.
+Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
-| Rota do app | Descrição |
+- `beginWorkPeriod` — abre o período da mesa (idempotente por `workbenchId`; 404 se a tarefa não
+  existe).
+- `touchWorkPeriod` — atualiza etapa/agente/modelo do período aberto (encadeamento de turnos).
+- `accumulateWorkPeriodUsage` — soma tokens/custo no período ativo (a cada passo do agente).
+- `endWorkPeriod` / `endWorkPeriodById` — fecham o período (pausa ou conclusão).
+- `listActiveWorkPeriods` — referências dos períodos ativos (limpeza de órfãos).
+- `listActiveTimers`, `listTimeLogs` — leitura (100 por página; `totalMinutes` e `totalCostUsd` do
+  período).
+- O `taskCode`/`taskTitle` vêm das tarefas locais. Auditoria (`CRIAR`/`ATUALIZAR`) e evento Pusher
+  `time-updated { taskIds }` no canal `private-app` (ao abrir/fechar, não a cada passo).
+
+| Rota do app (somente leitura) | Descrição |
 |---|---|
 | `GET /api/time/active` | `TimeLogDto[]` |
-| `POST /api/time/start` | `startTimerSchema` `{ taskId }` |
-| `POST /api/time/[id]/stop` | `stopTimerSchema` `{ description?, startTime?, endTime? }` |
 | `GET /api/time/logs?from&to&page` | `TimeLogPageDto` (`from`/`to` ISO) |
-| `PATCH /api/time/[id]` | `updateTimeLogSchema`: `{ kind: "description", description }` ou `{ kind: "period", startTime, endTime }` |
-| `DELETE /api/time/[id]` | Exclui o apontamento |
 
-## Tela
+## Integração com a mesa (`src/features/agentic/server/timer-sync.ts`)
 
-- `TimerProvider` (em `src/app/(app)/tarefas/layout.tsx`): timers ativos, iniciar/parar e o único
-  modal "Parar timer" para Tarefas, página da tarefa e Minhas horas. `useTimer()` fora do provider
-  devolve `null` (os botões não aparecem).
-- **Um timer por vez**: iniciar com outro rodando abre o modal de parar o atual ("Parar e
-  iniciar"); ao confirmar, para e inicia o novo.
-- `TimerButton` (▶/⏸): no card (rodapé), na linha da tabela (coluna antes do código) e na página da
-  tarefa ("Iniciar trabalho"/"Parar"). Iniciar é otimista; parar abre o modal.
+- `syncWorkbenchTimer(workbenchId)` lê a mesa, resolve etapa/agente/modelo (`resolveAgent`) e
+  **concilia** o período (abre, atualiza ou fecha). É idempotente e tolerante a falhas (nunca derruba
+  o fluxo da mesa). Chamada em toda transição de estado da mesa (`update`/`reconcile`) e nas
+  permissões/perguntas (`onPermission`/`onForm` e respectivas respostas).
+- `closeOrphanWorkPeriods()` fecha apontamentos legados sem mesa e mesas que não estão mais
+  executando neste processo (o app reiniciou no meio da etapa); roda no início da rotina
+  `agentic-pr-watch`.
+- A central **não** tem mais as opções `timers.start`/`timers.stopOnDone`: o ciclo
+  iniciar/pausar/retomar/parar é sempre automático.
+
+## Tela (somente leitura)
+
+- `TimerProvider` (em `src/app/(app)/tarefas/layout.tsx`): expõe os períodos ativos (`active`,
+  `timerOf`) e o tempo real; **não** tem mais iniciar/parar. `useTimer()` fora do provider devolve
+  `null`.
 - Tarefa em andamento: card com borda e brilho verde pulsando + cronômetro ao vivo; linha da tabela
-  com fundo verde, faixa à esquerda e cronômetro sob o código.
-- `StopTimerDialog`: tempo decorrido ao vivo e tarefa, "Ajustar horários" (início/fim,
-  `datetime-local`, fim pré-preenchido com agora) e descrição opcional; react-hook-form +
-  `stopTimerFormSchema`.
-- `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Minhas horas — ícone girando +
-  cronômetro; clique abre o modal de parar.
+  com fundo verde, faixa à esquerda e cronômetro sob o código. Não há mais botão ▶/⏸.
+- `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Horas agênticas — ícone girando +
+  cronômetro; clique abre um resumo dos períodos ativos (sem ação).
 
-## Minhas horas (`/tarefas/horas`, item próprio no menu)
+## Horas agênticas (`/tarefas/horas`, item próprio no menu)
 
-- Período na URL (`from`/`to`, padrão: última semana) com `PresetDateRangeFilter`; total do período
-  e quantidade de apontamentos (números animados).
+- Período na URL (`from`/`to`, padrão: última semana) com `PresetDateRangeFilter`; totais do período
+  (tempo, quantidade e custo) em números animados.
 - Apontamentos agrupados por dia (`groupTimeLogsByDay`, mais recente primeiro, total do dia),
   "Carregar mais" (páginas de 100).
-- Cada apontamento (`TimeLogItem`): código (link para a tarefa), título, início–fim, duração; ativo
-  com cronômetro e **Parar**. Ações: editar descrição na linha, **Editar período** e **Excluir**
-  (desabilitados no timer ativo).
+- Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
+  descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
+  custo). Sem editar/excluir/parar.
 - Estados: carregando, vazio e erro.
+
+## Página da tarefa
+
+- Aba **Horas**: apontamentos da tarefa em modo leitura, com etapa/uso (agente, modelo, tokens,
+  custo). Resumo mostra as horas apontadas.
 
 ## Testes
 
-`__tests__/features/time/time-service.test.ts` e `time-ui.test.tsx`.
+`__tests__/features/time/time-service.test.ts`, `time-ui.test.tsx` e
+`__tests__/features/agentic/timer-sync.test.ts`.

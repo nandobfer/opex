@@ -29,3 +29,15 @@ export function toLocalInput(iso: string | Date): string {
 export function fromLocalInput(value: string): string {
     return new Date(value).toISOString()
 }
+
+/** Quantidade de tokens em forma curta (ex.: `12,4k`, `1,2M`). */
+export function formatTokens(value: number): string {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(".", ",")}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(1).replace(".", ",")}k`
+    return String(value)
+}
+
+/** Custo em dólares (ex.: `US$ 0,02`). */
+export function formatCostUsd(value: number): string {
+    return value.toLocaleString("pt-BR", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 })
+}

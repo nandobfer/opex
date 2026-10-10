@@ -20,7 +20,7 @@ const task = (overrides: Partial<TaskDetailDto> = {}): TaskDetailDto => ({
   technicalSpec: 'Usar streaming',
   comments: [{ id: 'c1', content: 'Usar ponto e vírgula', createdAt: '2026-10-02T12:00:00.000Z' }],
   history: [{ id: 'h1', action: 'movida', description: 'Moveu para A fazer', createdAt: '2026-10-02T13:00:00.000Z' }],
-  timeLogs: [{ id: 'l1', startTime: '2026-10-03T12:00:00.000Z', endTime: null, duration: 30, description: 'Análise', active: false }],
+  timeLogs: [{ id: 'l1', startTime: '2026-10-03T12:00:00.000Z', endTime: null, duration: 30, description: 'Análise', active: false, agent: 'plan', model: null, costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }],
   totalTimeLogged: 30,
   ...overrides,
 })

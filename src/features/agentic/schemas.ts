@@ -83,10 +83,6 @@ export const centralConfigSchema = z.object({
         /** Coluna de destino quando o PR é mergeado; `null` = não move. */
         onDone: z.string().trim().max(60).nullable(),
     }),
-    timers: z.object({
-        start: z.boolean(),
-        stopOnDone: z.boolean(),
-    }),
     cleanup: z.object({
         teardownEnvironment: z.boolean(),
         removeWorktree: z.boolean(),
@@ -123,7 +119,6 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
         },
         environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         columns: { onStart: null, onPr: null, onDone: null },
-        timers: { start: true, stopOnDone: true },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },
         instructions: { planning: "", implementation: "", build: "", pr: "" },

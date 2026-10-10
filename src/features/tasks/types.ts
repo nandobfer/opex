@@ -60,6 +60,13 @@ export interface TaskTimeLog {
     duration: number | null
     description: string | null
     active: boolean
+    /** Uso agêntico do período. */
+    agent: string | null
+    model: string | null
+    costUsd: number
+    inputTokens: number
+    outputTokens: number
+    reasoningTokens: number
 }
 
 /** Tarefa completa (página da tarefa). */

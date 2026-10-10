@@ -174,7 +174,7 @@ export function TasksPage() {
                     <TimerIndicator />
                     <Button asChild variant="outline" size="sm" className="h-9 gap-2">
                         <Link href={TIME_PATH}>
-                            <Clock className="h-4 w-4" aria-hidden /> Minhas horas
+                            <Clock className="h-4 w-4" aria-hidden /> Horas agênticas
                         </Link>
                     </Button>
                     <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} />

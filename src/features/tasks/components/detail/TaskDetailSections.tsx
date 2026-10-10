@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { formatDateTime, formatMinutes } from "../../format"
+import { formatCostUsd, formatTokens } from "@/features/time/format"
 import type { TaskDetailDto } from "../../types"
 import { useAddComment } from "../../hooks/useTasks"
 
@@ -107,24 +108,37 @@ export function TimeLogsSection({ task }: { task: TaskDetailDto }) {
     if (task.timeLogs.length === 0) return <Empty icon={Timer}>Nenhuma hora apontada.</Empty>
     return (
         <motion.ul variants={listContainer} initial="hidden" animate="visible" className="divide-y rounded-md border">
-            {task.timeLogs.map((log) => (
-                <motion.li key={log.id} variants={listItem} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={log.description ?? undefined}>
-                        {log.description ?? "Sem descrição"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                        {formatDateTime(log.startTime)}
-                        {log.endTime && <> → {formatDateTime(log.endTime)}</>}
-                    </span>
-                    {log.active ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" aria-hidden /> Em andamento
+            {task.timeLogs.map((log) => {
+                const tokens = log.inputTokens + log.outputTokens + log.reasoningTokens
+                return (
+                    <motion.li key={log.id} variants={listItem} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                            <span className="block truncate text-xs text-muted-foreground" title={log.description ?? undefined}>
+                                {log.description ?? "Sem descrição"}
+                            </span>
+                            {(log.agent || log.model || tokens > 0 || log.costUsd > 0) && (
+                                <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                                    {log.agent && <span>{log.agent}</span>}
+                                    {log.model && <span>· {log.model}</span>}
+                                    {tokens > 0 && <span>· {formatTokens(tokens)} tokens</span>}
+                                    {log.costUsd > 0 && <span>· {formatCostUsd(log.costUsd)}</span>}
+                                </span>
+                            )}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                            {formatDateTime(log.startTime)}
+                            {log.endTime && <> → {formatDateTime(log.endTime)}</>}
                         </span>
-                    ) : (
-                        <span className="font-mono text-xs font-semibold">{formatMinutes(log.duration)}</span>
-                    )}
-                </motion.li>
-            ))}
+                        {log.active ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-success/15 px-1.5 py-0.5 text-[11px] font-medium text-success">
+                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" aria-hidden /> Em andamento
+                            </span>
+                        ) : (
+                            <span className="font-mono text-xs font-semibold">{formatMinutes(log.duration)}</span>
+                        )}
+                    </motion.li>
+                )
+            })}
         </motion.ul>
     )
 }

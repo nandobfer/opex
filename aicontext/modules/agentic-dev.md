@@ -33,7 +33,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
-| Colunas e conclusão | coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; timers (iniciar ao abrir, parar ao concluir); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
+| Colunas e conclusão | coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
@@ -109,11 +109,13 @@ done → Reabrir mesa (texto ao planejador) → planning
   PR no GitHub (repositório tirado da URL do PR). Revisões novas (`id` > `lastReviewId`) com
   `CHANGES_REQUESTED` viram texto (corpo + comentários de linha) para o planejador.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver),
-  o timer é parado (opção), a limpeza é feita pela IA (volta a sessão ao
-  diretório da central, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
-  central) e a porta é liberada.
-- Abrir a mesa pode mover a tarefa para a coluna configurada em "Ao abrir a mesa" e iniciar o timer
-  (opções da central); falhas ao mover/iniciar viram aviso na mesa, sem interromper.
+  a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose down`,
+  `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+- **Controle de horas agêntico**: a mesa abre/pausa/retoma/fecha o apontamento da tarefa conforme o
+  agente trabalha ou espera o usuário (`timer-sync.ts`; ver `modules/time.md`). Não há controles
+  manuais de timer e a central não tem mais as opções de timer.
+- Abrir a mesa pode mover a tarefa para a coluna configurada em "Ao abrir a mesa"; falhas ao mover
+  viram aviso na mesa, sem interromper.
 - **Permissões e perguntas** do agente aparecem na mesa (`pendingPermissions`/`pendingForms`):
   Aprovar uma vez / Aprovar sempre / Recusar; formulários desenhados pelos campos do OpenCode
   (texto, número, sim/não, opções, múltipla escolha) com Responder ou Dispensar.

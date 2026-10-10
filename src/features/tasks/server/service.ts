@@ -92,6 +92,12 @@ async function timeLogsFor(taskId: string): Promise<{ logs: TaskTimeLog[]; total
         duration: doc.duration ?? null,
         description: doc.description ?? null,
         active: doc.active === true,
+        agent: doc.agent ?? null,
+        model: doc.model ?? null,
+        costUsd: doc.costUsd ?? 0,
+        inputTokens: doc.inputTokens ?? 0,
+        outputTokens: doc.outputTokens ?? 0,
+        reasoningTokens: doc.reasoningTokens ?? 0,
     }))
     const total = docs.reduce((sum, doc) => sum + (doc.active ? 0 : (doc.duration ?? 0)), 0)
     return { logs, total }

@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { usePageVirtualizer } from "@/hooks/usePageVirtualizer"
-import { RunningClock, TimerButton } from "@/features/time/components/TimerButton"
+import { RunningClock } from "@/features/time/components/RunningClock"
 import { useTimer } from "@/features/time/components/TimerProvider"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, type BoardColumnView } from "../board"
@@ -140,7 +140,6 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                 <td className="px-3 py-2">
                     <SelectionCheckbox checked={selected} onToggle={(event) => selection.toggle(task.id, { shift: event.shiftKey, ordered: orderedIds })} label={`Selecionar ${task.code}`} />
                 </td>
-                {timer && <td className="px-1 py-2"><TimerButton task={task} /></td>}
                 <td className="px-3 py-2 font-mono text-xs font-semibold text-primary">
                     <span className="flex items-center gap-1.5">
                         <span role="img" className={cn("h-2 w-2 shrink-0 rounded-full md:hidden", PRIORITY_DOT[task.priority])} title={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} aria-label={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} />
@@ -202,11 +201,6 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                                     disabled={rows.length === 0}
                                 />
                             </th>
-                            {timer && (
-                                <th className="h-10 w-[40px] px-1 align-middle" aria-label="Timer">
-                                    <span className="sr-only">Timer</span>
-                                </th>
-                            )}
                             {COLUMNS.map((column) => {
                                 const active = sort.column === column.key
                                 const Icon = !active ? ArrowUpDown : sort.direction === "asc" ? ArrowUp : ArrowDown

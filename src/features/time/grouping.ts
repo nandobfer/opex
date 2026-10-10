@@ -2,7 +2,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import type { TimeLogDto } from "./types"
 
-/** Agrupamento dos apontamentos por dia (Minhas horas). Módulo puro. */
+/** Agrupamento dos apontamentos por dia (Horas agênticas). Módulo puro. */
 
 export interface TimeLogDay {
     /** `yyyy-MM-dd` no fuso local. */

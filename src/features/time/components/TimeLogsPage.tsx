@@ -1,10 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { endOfDay, parseISO, startOfDay } from "date-fns"
 import { Clock, Loader2, RefreshCw } from "lucide-react"
-import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,18 +15,19 @@ import { listContainer } from "@/components/motion/presets"
 import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { formatMinutes } from "@/features/tasks/format"
+import { formatCostUsd } from "../format"
 import { groupTimeLogsByDay } from "../grouping"
-import { useDeleteTimeLog, useTimeLogs, useUpdateTimeLog } from "../hooks/useTime"
-import type { TimeLogDto } from "../types"
-import { DeleteTimeLogDialog, EditPeriodDialog } from "./TimeLogDialogs"
+import { useTimeLogs } from "../hooks/useTime"
 import { TimeLogItem } from "./TimeLogItem"
 import { TimerIndicator } from "./TimerIndicator"
-import { useTimer } from "./TimerProvider"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 const RANGE_SCHEMA = { from: urlFilterCodecs.string(), to: urlFilterCodecs.string() }
 
-/** Minhas horas (`/tarefas/horas`): apontamentos locais por período (na URL), agrupados por dia. */
+/**
+ * Horas agênticas (`/tarefas/horas`): apontamentos das mesas por período (na URL), agrupados por
+ * dia. **Somente leitura** — o timer é controlado pela mesa de trabalho; aqui só se consulta.
+ */
 export function TimeLogsPage() {
     const reduceMotion = useReducedMotion()
     const defaults = useMemo(() => {
@@ -43,16 +43,12 @@ export function TimeLogsPage() {
         [range.from, range.to],
     )
     const logsQuery = useTimeLogs(query)
-    const timer = useTimer()
-    const update = useUpdateTimeLog()
-    const remove = useDeleteTimeLog()
-    const [editing, setEditing] = useState<TimeLogDto | null>(null)
-    const [deleting, setDeleting] = useState<TimeLogDto | null>(null)
 
     const pages = useMemo(() => logsQuery.data?.pages ?? [], [logsQuery.data])
     const logs = useMemo(() => pages.flatMap((page) => page.logs), [pages])
     const days = useMemo(() => groupTimeLogsByDay(logs), [logs])
     const totalMinutes = pages[0]?.totalMinutes ?? 0
+    const totalCostUsd = pages[0]?.totalCostUsd ?? 0
     const total = pages[0]?.total ?? 0
     const view = logsQuery.isLoading ? "loading" : logsQuery.isError ? "error" : logs.length === 0 ? "empty" : "list"
 
@@ -64,8 +60,8 @@ export function TimeLogsPage() {
                         <Clock className="h-5 w-5" aria-hidden />
                     </span>
                     <div>
-                        <h1 className="text-lg font-semibold md:text-2xl">Minhas horas</h1>
-                        <p className="text-sm text-muted-foreground">Seus apontamentos</p>
+                        <h1 className="text-lg font-semibold md:text-2xl">Horas agênticas</h1>
+                        <p className="text-sm text-muted-foreground">Tempo e uso das mesas de desenvolvimento</p>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -94,6 +90,10 @@ export function TimeLogsPage() {
                             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apontamentos</p>
                             <p className="font-mono text-2xl font-bold">{logsQuery.data ? <AnimatedNumber value={total} /> : "—"}</p>
                         </div>
+                        <div className="text-right">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Custo</p>
+                            <p className="font-mono text-2xl font-bold">{logsQuery.data ? formatCostUsd(totalCostUsd) : "—"}</p>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
@@ -108,7 +108,7 @@ export function TimeLogsPage() {
                         </div>
                     )}
                     {view === "error" && <ErrorState title="Não foi possível carregar os apontamentos" description={apiErrorMessage(logsQuery.error, "Tente novamente.")} onRetry={() => void logsQuery.refetch()} />}
-                    {view === "empty" && <EmptyState icon={Clock} title="Nenhum apontamento neste período" description="Escolha outro período ou inicie um timer numa tarefa." />}
+                    {view === "empty" && <EmptyState icon={Clock} title="Nenhum apontamento neste período" description="Abra uma mesa de trabalho para o tempo começar a ser registrado." />}
                     {view === "list" && (
                         <div className="space-y-6">
                             {days.map((day) => (
@@ -122,23 +122,7 @@ export function TimeLogsPage() {
                                     <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-2">
                                         <AnimatePresence initial={false}>
                                             {day.logs.map((log) => (
-                                                <TimeLogItem
-                                                    key={log.id}
-                                                    log={log}
-                                                    savingDescription={update.isPending && update.variables?.log.id === log.id}
-                                                    onSaveDescription={async (description) => {
-                                                        try {
-                                                            await update.mutateAsync({ log, input: { kind: "description", description } })
-                                                            return true
-                                                        } catch (error) {
-                                                            toast.error(apiErrorMessage(error, "Não foi possível salvar a descrição"))
-                                                            return false
-                                                        }
-                                                    }}
-                                                    onEditPeriod={() => setEditing(log)}
-                                                    onDelete={() => setDeleting(log)}
-                                                    onStop={() => timer?.requestStop(log)}
-                                                />
+                                                <TimeLogItem key={log.id} log={log} />
                                             ))}
                                         </AnimatePresence>
                                     </motion.ul>
@@ -156,35 +140,6 @@ export function TimeLogsPage() {
                     )}
                 </motion.div>
             </AnimatePresence>
-
-            <EditPeriodDialog
-                log={editing}
-                submitting={update.isPending}
-                onClose={() => setEditing(null)}
-                onSubmit={async (input) => {
-                    if (!editing) return
-                    try {
-                        await update.mutateAsync({ log: editing, input: { kind: "period", ...input } })
-                        setEditing(null)
-                    } catch (error) {
-                        toast.error(apiErrorMessage(error, "Não foi possível alterar o período"))
-                    }
-                }}
-            />
-            <DeleteTimeLogDialog
-                log={deleting}
-                submitting={remove.isPending}
-                onClose={() => setDeleting(null)}
-                onSubmit={async () => {
-                    if (!deleting) return
-                    try {
-                        await remove.mutateAsync({ log: deleting })
-                        setDeleting(null)
-                    } catch (error) {
-                        toast.error(apiErrorMessage(error, "Não foi possível excluir o apontamento"))
-                    }
-                }}
-            />
         </motion.section>
     )
 }

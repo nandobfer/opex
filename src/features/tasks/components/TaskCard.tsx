@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { cn } from "@/lib/utils"
 import type { TaskDto } from "../types"
-import { RunningClock, TimerButton, useRunningTimer } from "@/features/time/components/TimerButton"
+import { RunningClock, useRunningTimer } from "@/features/time/components/RunningClock"
 import { IssueLinkButton } from "@/features/github/components/shared"
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
 
@@ -104,7 +104,6 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                 </div>
                 <span className="flex shrink-0 items-center gap-1.5">
                     {task.issue && !dragging && <IssueLinkButton url={task.issue.url} number={task.issue.number} label={`Abrir issue ${task.issue.repo}#${task.issue.number} no GitHub`} className="rounded-full border" />}
-                    {!dragging && <TimerButton task={task} />}
                 </span>
             </div>
         </div>

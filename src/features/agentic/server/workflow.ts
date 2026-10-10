@@ -6,7 +6,7 @@ import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client
 import { getLocalUser } from "@/lib/local-user"
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
 import { getTask, moveTask } from "@/features/tasks/server/service"
-import { listActiveTimers, startTimer, stopTimer } from "@/features/time/server/service"
+import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
 import { canRun, resolveAgent, type WorkbenchAction } from "../logic"
@@ -36,6 +36,7 @@ import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { runAgentTurn, type TurnResult } from "./runner"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
+import { syncWorkbenchTimer } from "./timer-sync"
 
 /**
  * Fluxo da mesa de trabalho: planejar → (corrigir) → implementar → subir a prévia → (corrigir) →
@@ -62,6 +63,8 @@ async function loadWorkbench(id: string): Promise<IAgenticWorkbench> {
 
 async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId">, set: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<void> {
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: set, ...extra })
+    // O apontamento agêntico acompanha o estado da mesa (abre/atualiza/fecha o período).
+    await syncWorkbenchTimer(String(doc._id))
     await publishAgentic({ centralId: doc.centralId, workbenchId: String(doc._id), taskId: doc.taskId })
 }
 
@@ -71,6 +74,7 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
     const error = "A execução foi perdida (o app reiniciou durante a etapa). Use Tentar novamente."
     await AgenticWorkbench.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", error, pendingPermissions: [], pendingForms: [] } })
+    await syncWorkbenchTimer(String(doc._id))
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
 }
 
@@ -157,18 +161,23 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
     if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
-    await update(loaded.doc, {
-        stage: turn.stage,
-        runState: "running",
-        error: null,
-        lastStage: turn.stage,
-        lastPrompt: turn,
-        heartbeatAt: new Date(),
-        ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
-        ...options.extraSet,
-    })
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
+    try {
+        await update(loaded.doc, {
+            stage: turn.stage,
+            runState: "running",
+            error: null,
+            lastStage: turn.stage,
+            lastPrompt: turn,
+            heartbeatAt: new Date(),
+            ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
+            ...options.extraSet,
+        })
+    } catch (error) {
+        clearWorkbenchActive(id, controller)
+        throw error
+    }
     void executeTurns(id, turn, controller)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
         .finally(() => clearWorkbenchActive(id, controller))
@@ -233,22 +242,27 @@ function turnHooks(doc: IAgenticWorkbench) {
     return {
         onPermission: async (permission: unknown) => {
             await AgenticWorkbench.updateOne(filter, { $push: { pendingPermissions: permission } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onPermissionClosed: async (requestId: string) => {
             await AgenticWorkbench.updateOne(filter, { $pull: { pendingPermissions: { id: requestId } } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onForm: async (form: unknown) => {
             await AgenticWorkbench.updateOne(filter, { $push: { pendingForms: form } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onFormClosed: async (formId: string) => {
             await AgenticWorkbench.updateOne(filter, { $pull: { pendingForms: { id: formId } } })
+            await syncWorkbenchTimer(String(doc._id))
             await changed()
         },
         onStep: async ({ costUsd, tokens }: { costUsd: number; tokens: { input: number; output: number; reasoning: number } }) => {
             await AgenticWorkbench.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
+            await accumulateWorkPeriodUsage(String(doc._id), { costUsd, inputTokens: tokens.input, outputTokens: tokens.output, reasoningTokens: tokens.reasoning })
         },
         onMoved: async (directory: string) => {
             await AgenticWorkbench.updateOne(filter, { $set: { sessionDirectory: directory } })
@@ -369,17 +383,6 @@ async function applyStartEffects(id: string, task: TaskDetailDto, config: Centra
             notice("info", "Tarefa movida para a coluna de implementação")
         } catch (error) {
             notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
-        }
-    }
-    if (config.timers.start) {
-        try {
-            const timers = await listActiveTimers()
-            if (!timers.some((timer) => timer.taskId === task.id)) {
-                await startTimer({ taskId: task.id }, actorId())
-                notice("info", "Timer iniciado")
-            }
-        } catch (error) {
-            notice("warn", `Não foi possível iniciar o timer: ${errorText(error)}`)
         }
     }
 }
@@ -541,6 +544,7 @@ export async function deleteWorkbench(id: string): Promise<void> {
     }
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })
+    await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage } })
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
@@ -587,15 +591,6 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
         } catch (error) {
             notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
             log.warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
-        }
-    }
-    if (config.timers.stopOnDone) {
-        try {
-            const timers = (await listActiveTimers()).filter((timer) => timer.taskId === doc.taskId)
-            for (const timer of timers) await stopTimer(timer.id, { description: `Desenvolvimento agêntico: PR #${pr.number} mergeado` }, actorId())
-            if (timers.length) notice("info", "Timer parado")
-        } catch (error) {
-            notice("warn", `Não foi possível parar o timer: ${errorText(error)}`)
         }
     }
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, prMergeado: pr.url } })

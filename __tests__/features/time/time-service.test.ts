@@ -23,7 +23,7 @@ vi.mock('@/lib/db/models/TimeLog', async () => {
   return { TimeLog: mocks.models.timeLog }
 })
 
-import { deleteTimeLog, listActiveTimers, listTimeLogs, startTimer, stopTimer, updateTimeLog } from '@/features/time/server/service'
+import { accumulateWorkPeriodUsage, beginWorkPeriod, endWorkPeriod, endWorkPeriodById, listActiveTimers, listActiveWorkPeriods, listTimeLogs, touchWorkPeriod } from '@/features/time/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
@@ -35,56 +35,69 @@ beforeEach(() => {
   reset()
 })
 
-describe('timers locais', () => {
-  it('iniciar cria o apontamento ativo, audita e avisa a tela', async () => {
+describe('controle de horas agêntico', () => {
+  it('abrir a mesa cria um período ativo com etapa/agente/modelo, audita e avisa a tela', async () => {
     const taskId = await seedTask()
-    const log = await startTimer({ taskId }, 'local')
-    expect(log).toMatchObject({ taskId, taskCode: 'OPX-7', taskTitle: 'Ajustar login', active: true, duration: null })
+    const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: 'implementing', agent: 'build', model: 'openai/gpt', description: 'Desenvolvimento agêntico · Implementando' }, 'local')
+    expect(log).toMatchObject({ taskId, workbenchId: 'wb-1', stage: 'implementing', agent: 'build', model: 'openai/gpt', taskCode: 'OPX-7', active: true, duration: null, costUsd: 0 })
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'Apontamento', acao: 'CRIAR' }))
     expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'time-updated', { taskIds: [taskId] })
   })
 
-  it('tarefa inexistente → 404; já com timer → 409', async () => {
-    await expect(startTimer({ taskId: 'a'.repeat(24) }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
-    const taskId = await seedTask()
-    await startTimer({ taskId }, 'local')
-    await expect(startTimer({ taskId }, 'local')).rejects.toMatchObject({ status: 409, code: 'TIMER_RUNNING' })
+  it('tarefa inexistente → 404', async () => {
+    await expect(beginWorkPeriod({ taskId: 'a'.repeat(24), workbenchId: 'wb-x', stage: null, agent: null, model: null }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
   })
 
-  it('parar calcula a duração e grava descrição', async () => {
-    const taskId = await seedTask()
-    const started = await startTimer({ taskId }, 'local')
-    const log = await stopTimer(started.id, { description: 'Revisão', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:30:00.000Z' }, 'local')
-    expect(log).toMatchObject({ duration: 90, description: 'Revisão', active: false })
-    await expect(stopTimer(started.id, { startTime: '2026-10-08T13:00:00.000Z', endTime: '2026-10-08T12:00:00.000Z' }, 'local')).rejects.toMatchObject({ status: 400 })
-  })
-
-  it('ativos lista só os ativos com o código da tarefa', async () => {
-    const taskId = await seedTask()
-    await startTimer({ taskId }, 'local')
+  it('é idempotente por mesa e permite vários períodos ativos ao mesmo tempo', async () => {
+    const taskA = await seedTask()
+    const taskB = (await mocks.models.devTask.create({ code: 'OPX-8', title: 'Outra', columnId: 'todo', order: 0, priority: 'low', archived: false }))._id as string
+    const first = await beginWorkPeriod({ taskId: taskA, workbenchId: 'wb-a', stage: 'planning', agent: 'plan', model: null }, 'local')
+    const again = await beginWorkPeriod({ taskId: taskA, workbenchId: 'wb-a', stage: 'implementing', agent: 'build', model: null }, 'local')
+    expect(again.id).toBe(first.id)
+    await beginWorkPeriod({ taskId: taskB, workbenchId: 'wb-b', stage: 'planning', agent: 'plan', model: null }, 'local')
     const active = await listActiveTimers()
-    expect(active).toHaveLength(1)
-    expect(active[0]).toMatchObject({ taskId, taskCode: 'OPX-7', active: true })
+    expect(active).toHaveLength(2)
+    expect(active.map((log) => log.workbenchId).sort()).toEqual(['wb-a', 'wb-b'])
   })
 
-  it('apontamentos: filtra por período, pagina e soma os minutos', async () => {
+  it('acumula tokens/custo no período e atualiza etapa/agente/modelo', async () => {
     const taskId = await seedTask()
-    const log = await startTimer({ taskId }, 'local')
-    await stopTimer(log.id, { startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:00:00.000Z' }, 'local')
-    mocks.models.timeLog.aggregate = async () => [{ total: 60 }]
-    const page = await listTimeLogs({ from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T00:00:00.000Z', page: 1 })
-    expect(page).toMatchObject({ page: 1, totalPages: 1, total: 1, totalMinutes: 60 })
-    expect(page.logs[0]).toMatchObject({ taskId, taskCode: 'OPX-7', duration: 60 })
+    const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: 'implementing', agent: 'build', model: 'openai/gpt' }, 'local')
+    await accumulateWorkPeriodUsage('wb-1', { costUsd: 0.25, inputTokens: 100, outputTokens: 40, reasoningTokens: 10 })
+    await accumulateWorkPeriodUsage('wb-1', { costUsd: 0.1, inputTokens: 20, outputTokens: 5, reasoningTokens: 0 })
+    await touchWorkPeriod('wb-1', { stage: 'building', agent: 'build', model: 'anthropic/haiku' })
+    const [active] = await listActiveTimers()
+    expect(active).toMatchObject({ id: log.id, costUsd: 0.35, inputTokens: 120, outputTokens: 45, reasoningTokens: 10, stage: 'building', model: 'anthropic/haiku' })
   })
 
-  it('editar descrição e período; excluir remove', async () => {
+  it('fechar o período calcula a duração e para de listá-lo como ativo', async () => {
     const taskId = await seedTask()
-    const log = await startTimer({ taskId }, 'local')
-    await updateTimeLog(log.id, { kind: 'description', description: 'Nova' }, 'local')
-    await updateTimeLog(log.id, { kind: 'period', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T12:30:00.000Z' }, 'local')
-    expect((await listActiveTimers())[0]).toMatchObject({ description: 'Nova', duration: 30 })
-    await deleteTimeLog(log.id, 'local')
+    const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: 'planning', agent: 'plan', model: null }, 'local')
+    const ended = await endWorkPeriod('wb-1', 'local', { description: 'Desenvolvimento agêntico · Concluída' })
+    expect(ended).toMatchObject({ id: log.id, active: false, description: 'Desenvolvimento agêntico · Concluída' })
+    expect(ended?.endTime).toBeTruthy()
+    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ acao: 'ATUALIZAR' }))
     expect(await listActiveTimers()).toHaveLength(0)
-    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ acao: 'EXCLUIR' }))
+    expect(await endWorkPeriod('wb-1', 'local')).toBeNull()
+  })
+
+  it('encerra período órfão pelo id e lista as referências ativas', async () => {
+    const taskId = await seedTask()
+    const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: null, agent: null, model: null }, 'local')
+    const refs = await listActiveWorkPeriods()
+    expect(refs).toEqual([{ id: log.id, taskId, workbenchId: 'wb-1' }])
+    await endWorkPeriodById(log.id, 'local', 'Encerrado (execução perdida)')
+    expect(await listActiveTimers()).toHaveLength(0)
+  })
+
+  it('apontamentos: filtra por período, pagina e soma os minutos e o custo', async () => {
+    const taskId = await seedTask()
+    const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: 'planning', agent: 'plan', model: null }, 'local')
+    await accumulateWorkPeriodUsage('wb-1', { costUsd: 0.5, inputTokens: 1, outputTokens: 0, reasoningTokens: 0 })
+    await endWorkPeriod('wb-1', 'local')
+    mocks.models.timeLog.aggregate = async () => [{ totalMinutes: 60, totalCostUsd: 0.5 }]
+    const page = await listTimeLogs({ from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T00:00:00.000Z', page: 1 })
+    expect(page).toMatchObject({ page: 1, totalPages: 1, total: 1, totalMinutes: 60, totalCostUsd: 0.5 })
+    expect(page.logs[0]).toMatchObject({ id: log.id, taskId, taskCode: 'OPX-7', costUsd: 0.5 })
   })
 })

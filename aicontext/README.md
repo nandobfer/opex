@@ -38,7 +38,7 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
-| `modules/time.md` | Controle de horas | Timers locais (iniciar/parar), Minhas horas (`/tarefas/horas`) |
+| `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |
 | `modules/integrations.md` | Integrações e agendador | Pusher, API interna (OpenAPI + tokens de sistema), Crons, GitHub; abas na página da integração; Archflow em desenvolvimento |
 | `modules/ai.md` | Provedores de IA | OpenCode e Gemini (Vercel AI SDK), `/integracoes/ia`, feature "Entender tarefas" (modal com streaming na tarefa) |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
