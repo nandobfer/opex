@@ -38,6 +38,7 @@ describe("páginas dos Provedores de IA", () => {
     it.each([
         ["opencode", "ai_opencode"],
         ["gemini", "ai_gemini"],
+        ["jev", "ai_jev"],
     ])("/integracoes/ia/%s abre a integração %s", async (provider, id) => {
         render(await ProvedorIaPage({ params: Promise.resolve({ provider }) }))
         expect(screen.getByTestId("detail").textContent).toBe(id)

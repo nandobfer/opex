@@ -5,13 +5,19 @@
 
 import type { IntegrationId } from "@/lib/integrations/catalog"
 
-export const AI_PROVIDER_IDS = ["opencode", "gemini"] as const
+export const AI_PROVIDER_IDS = ["opencode", "gemini", "jev"] as const
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
+
+/** Provedores que geram texto (usados por "Entender tarefas" e "Resumos de tarefas"). */
+export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini"] as const
+export type AiTextProviderId = (typeof AI_TEXT_PROVIDER_IDS)[number]
 
 export interface AiProviderDef {
     readonly id: AiProviderId
     readonly integrationId: IntegrationId
     readonly name: string
+    /** Gera texto para as features do app (streaming). O JEV decide de forma estruturada e não gera texto. */
+    readonly supportsTextGeneration: boolean
     /** Aceita temperatura e máximo de tokens (o OpenCode ignora parâmetros de amostragem). */
     readonly supportsSampling: boolean
     /** Sessões rodam com um agente do servidor (OpenCode). */
@@ -21,8 +27,9 @@ export interface AiProviderDef {
 }
 
 export const AI_PROVIDERS: readonly AiProviderDef[] = [
-    { id: "opencode", integrationId: "ai_opencode", name: "OpenCode", supportsSampling: false, supportsAgent: true, variantLabel: "Variante" },
-    { id: "gemini", integrationId: "ai_gemini", name: "Gemini", supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio (thinking)" },
+    { id: "opencode", integrationId: "ai_opencode", name: "OpenCode", supportsTextGeneration: true, supportsSampling: false, supportsAgent: true, variantLabel: "Variante" },
+    { id: "gemini", integrationId: "ai_gemini", name: "Gemini", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio (thinking)" },
+    { id: "jev", integrationId: "ai_jev", name: "JEV", supportsTextGeneration: false, supportsSampling: false, supportsAgent: false, variantLabel: "Variante" },
 ]
 
 export function getAiProvider(id: AiProviderId): AiProviderDef {
@@ -31,6 +38,11 @@ export function getAiProvider(id: AiProviderId): AiProviderDef {
 
 export function isAiProviderId(value: string): value is AiProviderId {
     return (AI_PROVIDER_IDS as readonly string[]).includes(value)
+}
+
+/** Provedor de texto? As features de texto só aceitam estes (o JEV fica de fora). */
+export function isAiTextProviderId(value: string): value is AiTextProviderId {
+    return (AI_TEXT_PROVIDER_IDS as readonly string[]).includes(value)
 }
 
 export function aiProviderOfIntegration(integrationId: IntegrationId): AiProviderDef | undefined {

@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import { isAiTextProviderId, type AiProviderId } from "@/lib/ai/providers"
 import { DEFAULT_TASK_SUMMARY_SETTINGS, taskSummarySettingsSchema, type TaskSummarySettings } from "../../schemas"
 import { useAiProviderStatuses, useSaveTaskSummarySettings, useTaskSummarySettings } from "../../hooks/useAi"
 import { ProviderModelCard } from "../understand-task/ProviderModelCard"
@@ -43,8 +44,8 @@ export function TaskSummaryTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
         const saved = await save.mutateAsync(values).catch(() => null)
         if (saved) form.reset(saved.settings)
     })
-    const changeProvider = (next: TaskSummarySettings["provider"]) => {
-        if (next === provider) return
+    const changeProvider = (next: AiProviderId) => {
+        if (next === provider || !isAiTextProviderId(next)) return
         form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
         form.setValue("model", null, { shouldDirty: true, shouldValidate: true })
         form.setValue("variant", null, { shouldDirty: true })
