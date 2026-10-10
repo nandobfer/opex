@@ -17,6 +17,13 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
   limpeza) e **Pull Request**. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature
   ativa, exige o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
+- A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
+  - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa, com os botões
+    **Salvar**/**Desfazer** (mesma configuração geral acima).
+  - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo).
+  Trocar de aba com alterações não salvas pede *"Descartar alterações?"* e restaura os valores
+  salvos (mesmo efeito do Desfazer). `AGENTIC_SETTINGS_HREF` (voltar da central, após excluir e
+  atalho do `/desenvolvimento`) leva a esta aba na aba interna padrão (Agentes).
 - Card **Centrais de desenvolvimento**: lista (projeto, diretório, repositório, mesas, bolinha do
   último teste) e **Nova central** (projeto — repositório vinculado, um por central — e diretório das
   sessões, caminho absoluto, já sugerido como `<raiz dos repositórios>/<repositório>`). Criar leva às
