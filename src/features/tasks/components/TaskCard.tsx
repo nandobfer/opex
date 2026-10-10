@@ -4,12 +4,13 @@ import type { HTMLAttributes, MouseEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Loader2, TriangleAlert } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { cn } from "@/lib/utils"
 import type { TaskDto } from "../types"
 import { RunningClock, useRunningTimer } from "@/features/time/components/RunningClock"
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
+import { WorkbenchWaitingLink } from "@/features/agentic/components/WorkbenchWaitingLink"
 import { workbenchProgressTone } from "@/features/agentic/logic"
 import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
@@ -112,12 +113,7 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                     {task.summary}
                 </p>
             )}
-            {tone && waiting && (
-                <p className={cn("mb-2 flex items-center gap-1 text-[10px] font-medium", tone === "failed" ? "text-destructive" : "text-warning")} title={waiting.waitingFor ?? undefined}>
-                    <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
-                    <span className="truncate">{waiting.waitingFor}</span>
-                </p>
-            )}
+            {waiting && <WorkbenchWaitingLink taskId={task.id} taskCode={task.code} item={waiting} className="mb-2" />}
             {task.project && (
                 <div className="mb-2 text-[11px] text-muted-foreground">
                     <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} />

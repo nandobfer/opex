@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskDto } from '@/features/tasks/types'
 
-const mocks = vi.hoisted(() => ({ progress: undefined as undefined | (() => { running: boolean; runState: string; waitingFor: string | null }) }))
+const mocks = vi.hoisted(() => ({ progress: undefined as undefined | (() => { running: boolean; runState: string; waitingFor: string | null; centralId: string }) }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/time/components/TimerProvider', () => ({
@@ -102,15 +102,41 @@ describe('TaskCardView: prioridade e tipo no rodapé', () => {
 })
 
 describe('TaskCardView: mesa aguardando ação', () => {
+  const waitingLink = (code = 'OPX-1', reason = 'Aguardando revisão do plano') => screen.queryByRole('link', { name: `Abrir a mesa de ${code} — ${reason}` })
+
   it('destaca o card em warning e mostra o motivo', () => {
-    mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano' })
+    mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano', centralId: 'c1' })
     render(<TaskCardView task={task()} />)
     expect(screen.getByText('Aguardando revisão do plano')).toBeTruthy()
   })
 
+  it('o motivo é um link direto para a mesa de trabalho', () => {
+    mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano', centralId: 'c1' })
+    render(<TaskCardView task={task()} />)
+    const link = waitingLink()!
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${task().id}`)
+  })
+
+  it('clicar no motivo abre a mesa e não a tarefa', () => {
+    mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano', centralId: 'c1' })
+    const onOpen = vi.fn()
+    render(<TaskCardView task={task()} onOpen={onOpen} />)
+    fireEvent.click(waitingLink()!)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('falha/interrupção também é link para a mesa', () => {
+    mocks.progress = () => ({ running: false, runState: 'failed', waitingFor: 'A etapa falhou — use Tentar novamente', centralId: 'c1' })
+    render(<TaskCardView task={task()} />)
+    const link = waitingLink('OPX-1', 'A etapa falhou — use Tentar novamente')!
+    expect(link.getAttribute('href')).toBe(`/desenvolvimento/c1/${task().id}`)
+    expect(link.className).toContain('text-destructive')
+  })
+
   it('mesa executando não mostra o motivo de espera', () => {
-    mocks.progress = () => ({ running: true, runState: 'running', waitingFor: null })
+    mocks.progress = () => ({ running: true, runState: 'running', waitingFor: null, centralId: 'c1' })
     render(<TaskCardView task={task()} />)
     expect(screen.queryByText('Aguardando revisão do plano')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Abrir a mesa de OPX-1/ })).toBeNull()
   })
 })

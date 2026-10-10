@@ -90,11 +90,16 @@ semeado na primeira leitura (`ensureBoard`).
   quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo e "Arquivada"; o
   título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
-  descrição (ver `modules/ai.md`).
+  descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
+  (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**
+  (`workbenchProgressTone`) como **link direto para a mesa** (`/desenvolvimento/[central]/[tarefa]`):
+  clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
+  `modules/agentic-dev.md`, "Trabalhos em andamento").
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** e a
   **estimativa real** de horas e o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
-  Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a
-  página (`usePageVirtualizer`).
+  Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com
+  a página (`usePageVirtualizer`). Na célula do código, o **motivo de espera** de uma mesa é o
+  mesmo **link para a mesa** do card do kanban.
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no
