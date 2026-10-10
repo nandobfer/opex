@@ -2,7 +2,7 @@ import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { runAfterResponse } from "@/lib/after-response"
 import { Project } from "@/lib/db/models/Project"
-import { assertColumn, createTask } from "@/features/tasks/server/service"
+import { assertColumn, createTask, type CreateTaskOptions } from "@/features/tasks/server/service"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
 import type { TaskDto } from "@/features/tasks/types"
 import { githubRequest } from "../client"
@@ -36,7 +36,7 @@ async function createGithubIssue(repo: string, body: { title: string; body: stri
 }
 
 /** Cria a tarefa e a issue vinculada. Falha do GitHub bloqueia a criação (`DomainError`). */
-export async function createTaskWithIssue(input: CreateTaskInput, actorId: string): Promise<TaskDto> {
+export async function createTaskWithIssue(input: CreateTaskInput, actorId: string, options: Omit<CreateTaskOptions, "actorId"> = {}): Promise<TaskDto> {
     await dbConnect()
     const project = await Project.findById(input.projectId).lean()
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
@@ -46,7 +46,7 @@ export async function createTaskWithIssue(input: CreateTaskInput, actorId: strin
     const labels = reverseLabels(input.taskType ?? null, input.priority ?? null, mapping)
     const issue = await createGithubIssue(project.repo, { title: input.title, body: input.description?.trim() || "", labels })
 
-    const task = await createTask(input, { actorId })
+    const task = await createTask(input, { actorId, ...options })
     await createIssueLink({
         repo: project.repo,
         number: issue.number,

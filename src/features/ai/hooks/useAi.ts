@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { TaskSummarySettings, UnderstandTaskSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { TaskSummarySettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -78,6 +78,34 @@ export function useSaveTaskSummarySettings() {
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "task-summary"), saved)
             toast.success("Configuração de \"Resumos de tarefas\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const useBudgetPreviewSettings = () => useQuery({ queryKey: key("feature", "budget-preview"), queryFn: () => get<BudgetPreviewSettingsDto>("/ai/features/budget-preview") })
+
+export function useSaveBudgetPreviewSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: BudgetPreviewSettings) => unwrapApi((await api.put<ApiResponse<BudgetPreviewSettingsDto>>("/ai/features/budget-preview", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "budget-preview"), saved)
+            toast.success("Configuração de \"Orçamentos\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const useEstimateHoursSettings = () => useQuery({ queryKey: key("feature", "estimate-hours"), queryFn: () => get<EstimateHoursSettingsDto>("/ai/features/estimate-hours") })
+
+export function useSaveEstimateHoursSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: EstimateHoursSettings) => unwrapApi((await api.put<ApiResponse<EstimateHoursSettingsDto>>("/ai/features/estimate-hours", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "estimate-hours"), saved)
+            toast.success("Configuração de \"Estimar prazos\" salva")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })

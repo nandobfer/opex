@@ -12,10 +12,11 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 ## Modelo (`src/lib/db/models/`)
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
-  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt }`. `code` =
+  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt, estimate }`. `code` =
   `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o resumo
   de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele (detecta
-  desatualização) — ver `modules/ai.md`.
+  desatualização) — ver `modules/ai.md`. `estimate` é o orçamento vindo do portal do cliente
+  (`null` fora dele) — ver `modules/orcamentos.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, createdAt }`.
 - `TaskBoardColumn` (`task_board_columns`) e `TaskBoardLayout` (`task_board_layout`, documento
   `board` com a ordem).
@@ -57,6 +58,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial) |
+| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
 | `POST /api/tasks/[id]/comments` | `{ content }` |
@@ -85,13 +87,20 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; o card mostra no cabeçalho o código e, no rodapé, o ícone de prioridade (só o ícone
-  colorido, sem rótulo), o chip de tipo e "Arquivada"; o título, o resumo de IA e o repositório
-  (`GithubRepoLabel`) ficam no corpo.
+  colorido, sem rótulo), a **estimativa real** de horas e o **faturamento** estimado (`EstimateBadge`,
+  quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo e "Arquivada"; o
+  título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
-  descrição (ver `modules/ai.md`).
-- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** sob o título),
-  Coluna ("Mover para…"), Prioridade, Tipo, Repositório, Atualizada; ordenação por coluna (salva);
-  virtualizada acima de 50; rola com a página (`usePageVirtualizer`).
+  descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
+  (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**
+  (`workbenchProgressTone`) como **link direto para a mesa** (`/desenvolvimento/[central]/[tarefa]`):
+  clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
+  `modules/agentic-dev.md`, "Trabalhos em andamento").
+- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** e a
+  **estimativa real** de horas e o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
+  Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com
+  a página (`usePageVirtualizer`). Na célula do código, o **motivo de espera** de uma mesa é o
+  mesmo **link para a mesa** do card do kanban.
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no
@@ -104,11 +113,13 @@ semeado na primeira leitura (`ensureBoard`).
 ## Criar tarefa (`/tarefas/nova`, `components/TaskCreatePage.tsx` + `TaskForm.tsx`)
 
 Formulário no estilo "nova issue do GitHub", em **página própria** (não é mais modal): título,
-descrição com abas **Escrever / Visualizar** (Markdown) e os metadados em **autocomplete com chips**
+descrição em **campo Markdown** (`MarkdownField`: abas **Escrever / Visualizar** + barra com
+**negrito**, itálico, cabeçalho, link, imagem, lista, citação e código) e os metadados em
+**autocomplete com chips**
 (`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
 **Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
 campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
-`technicalSpec`).
+`technicalSpec`). O mesmo `MarkdownField` é reusado no portal do cliente (`modules/orcamentos.md`).
 
 O **Repositório** substitui o antigo campo "Projeto": o Projeto É o repositório vinculado, então a
 escolha do repositório define o `projectId`. Ao salvar, a tarefa **cria a issue no repositório** e o
@@ -122,10 +133,24 @@ tarefa.
   **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
-  fonte discreta) — é **adicional** e **não substitui** a descrição.
-- Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
-  formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
-- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
+ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e **não substitui**
+a descrição.
+- Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
+animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
+**Especificação técnica** (aba própria, em Markdown), Comentários (lista + formulário), Histórico
+(auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
+componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
+preservar o escopo de hooks de cada aba.
+- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), **estimativa** (ver
+  abaixo), horas apontadas, criada e atualizada.
+- **Estimativa** (`TaskEstimateCard`, coluna lateral; só em tarefas que vieram do portal): as
+  **horas estimadas** (originais, H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`);
+  o **prazo do cliente** (`H × fator`) e o **faturamento estimado** (`horas do cliente × custo/hora`)
+  são recalculados com o fator e o custo/hora **atuais** do cliente que originou a tarefa
+  (`resolveProjectClient`: o `OrcamentoClient` ativo cujo `projectIds` inclui o repositório) e
+  animados com `AnimatedNumber`; mostra também o **cliente** (`estimateClientName`). Salvar grava
+  auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`; sem cliente, o
+  servidor usa o fator e o custo/hora do próprio snapshot.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
@@ -146,4 +171,6 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
-`task-board-layout`, `task-table-scroll`) e `__tests__/hooks/usePersistentState.test.tsx`.
+`task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
+`task-summary-card`, `task-estimate-card` — a estimativa editável é coberta em `tasks-service` e
+`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`.

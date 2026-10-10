@@ -57,4 +57,19 @@ describe('groupTimeLogsByTask', () => {
   it('sem apontamentos devolve lista vazia', () => {
     expect(groupTimeLogsByTask([])).toEqual([])
   })
+
+  it('soma os tokens (entrada + saída + raciocínio) e o custo do grupo', () => {
+    const groups = groupTimeLogsByTask([
+      log({ inputTokens: 100, outputTokens: 20, reasoningTokens: 5, costUsd: 0.25 }),
+      log({ startTime: '2026-10-10T11:00:00.000Z', inputTokens: 30, outputTokens: 10, reasoningTokens: 0, costUsd: 0.1 }),
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].totalTokens).toBe(165)
+    expect(groups[0].totalCostUsd).toBeCloseTo(0.35)
+  })
+
+  it('zera tokens e custo no grupo sem uso', () => {
+    const groups = groupTimeLogsByTask([log()])
+    expect(groups[0]).toMatchObject({ totalTokens: 0, totalCostUsd: 0 })
+  })
 })

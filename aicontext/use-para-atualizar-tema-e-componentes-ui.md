@@ -268,6 +268,10 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - **Liga/desliga** em formulário usa `ToggleCard`/`FormToggleCard` (`ui/toggle-card.tsx`): rótulo + descrição à esquerda;
   situação ("Ativo"/"Inativo", configurável por `onLabel`/`offLabel`) + `Switch` à direita. Nunca
   checkbox para liga/desliga.
+- **Texto longo em Markdown** usa `MarkdownField` (`ui/markdown-field.tsx`): barra de formatação
+  (negrito, itálico, cabeçalho, link, imagem, lista, citação e código), abas **Escrever /
+  Visualizar** animadas (Framer Motion) e prévia com o componente `Markdown`. Nunca um `Textarea`
+  cru para descrição — é o mesmo campo no `TaskForm` e no portal do cliente (`modules/orcamentos.md`).
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista
   (`ListFilters`/`FilterGroup`), tabelas, dashboards e cards de escolha.
 

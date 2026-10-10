@@ -56,9 +56,15 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   mocks.models.central = memoryModel()
   return { AgenticCentral: mocks.models.central, AgenticWorkbench: memoryModel(), AgenticEvent: memoryModel() }
 })
+vi.mock('@/lib/db/models/Orcamento', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.orcamentoClient = memoryModel()
+  mocks.models.orcamentoDraft = memoryModel()
+  return { OrcamentoClient: mocks.models.orcamentoClient, OrcamentoDraft: mocks.models.orcamentoDraft }
+})
 
 import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
-import { createTask, deleteTask, getTask, getTaskOptions, listTasks, moveTask, runBulkTasks, setTaskArchived, updateTask } from '@/features/tasks/server/service'
+import { createTask, deleteTask, getTask, getTaskOptions, listTasks, moveTask, runBulkTasks, setTaskArchived, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
@@ -70,6 +76,15 @@ const seedProject = async (overrides: Record<string, unknown> = {}) =>
 
 const create = async (projectId: string, overrides: Record<string, unknown> = {}) =>
   createTask({ title: 'Tarefa', projectId, columnId: 'todo', priority: 'high', ...overrides } as never, { actorId: 'local' })
+
+const seedClient = async (overrides: Record<string, unknown> = {}) =>
+  (await mocks.models.orcamentoClient.create({ name: 'ACME', token: 'cli_x', tokenHash: 'h', tokenPrefix: 'cli_x', projectIds: [], hourlyRate: 100, profitFactor: 2, active: true, ...overrides }))._id as string
+
+const createEstimated = async (projectId: string, estimate: Record<string, unknown>) =>
+  createTask({ title: 'Estimada', projectId, columnId: 'todo', priority: 'medium' } as never, {
+    actorId: 'local',
+    estimate: { hours: 5, clientHours: 5, billingBrl: 0, factor: 1, hourlyRate: 0, model: 'gemini/pro', ...estimate },
+  })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -257,5 +272,47 @@ describe('auditoria da sincronização do GitHub', () => {
     })
     const detail = await getTask(a.id)
     expect(detail.history[0]?.description).toBe('Sincronizada do GitHub: alterou título')
+  })
+})
+
+describe('estimativa da tarefa (portal do cliente)', () => {
+  it('recalcula horas do cliente e faturamento com o cliente que originou a tarefa', async () => {
+    const pid = await seedProject()
+    await seedClient({ projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
+    const a = await createEstimated(pid, { hours: 5 })
+    mocks.recordAudit.mockClear()
+    mocks.publish.mockClear()
+
+    const estimate = await updateTaskEstimate(a.id, { hours: 3 }, 'local')
+    expect(estimate).toMatchObject({ hours: 3, clientHours: 6, billingBrl: 600, factor: 2, hourlyRate: 100 })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entidade: 'Tarefa',
+        entidadeId: a.id,
+        acao: 'ATUALIZAR',
+        antes: expect.objectContaining({ horasEstimadas: 5 }),
+        depois: expect.objectContaining({ horasEstimadas: 3, faturamentoEstimado: 600 }),
+      }),
+    )
+    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
+
+    const detail = await getTask(a.id)
+    expect(detail.estimate).toMatchObject({ hours: 3, clientHours: 6, billingBrl: 600 })
+    expect(detail.estimateClientName).toBe('ACME')
+  })
+
+  it('sem cliente que inclua o repositório, usa o fator e o custo/hora do snapshot', async () => {
+    const pid = await seedProject()
+    const a = await createEstimated(pid, { hours: 5, factor: 3, hourlyRate: 50 })
+    const estimate = await updateTaskEstimate(a.id, { hours: 2 }, 'local')
+    expect(estimate).toMatchObject({ hours: 2, clientHours: 6, billingBrl: 300, factor: 3, hourlyRate: 50 })
+    expect((await getTask(a.id)).estimateClientName).toBeNull()
+  })
+
+  it('tarefa sem estimativa devolve 409; id inválido, 404', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await expect(updateTaskEstimate(a.id, { hours: 1 }, 'local')).rejects.toMatchObject({ status: 409, code: 'TASK_WITHOUT_ESTIMATE' })
+    await expect(updateTaskEstimate('nope', { hours: 1 }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
   })
 })
