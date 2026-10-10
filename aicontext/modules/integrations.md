@@ -113,7 +113,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
   Geral, Vínculos, Mapeamento, Sincronização) e por Provedores de IA (`AiEditorForm`:
   Provedores, Entender tarefas, Desenvolvimento agêntico) e pela página da central de
-  desenvolvimento (`/integracoes/ia/centrais/[id]`).
+  desenvolvimento (`/integracoes/ia/centrais/[id]`). `useLocalTabs` é o irmão **sem URL** (mesmo
+  formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não podem
+  reutilizar `?aba` (já reservado para as abas externas de `AiEditorForm`).
 - **Não use `layout` do framer-motion na grade/formulário desta página**: dentro do
   `<motion.main>` do `AppShell` a projeção mede errado e deixa a tela em branco às vezes.
 
