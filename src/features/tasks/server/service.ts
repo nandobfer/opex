@@ -18,6 +18,9 @@ import type { ProjectRef, TaskDetailDto, TaskDto, TaskHistoryEntry, TaskListDto,
 
 export const TASK_AUDIT_ENTITY = "Tarefa"
 
+/** Campos da tarefa que refletem na issue do GitHub (título, descrição, tipo/prioridade → labels e coluna → estado). */
+const GITHUB_SYNCED_FIELDS = ["title", "description", "taskType", "priority"] as const
+
 // ── Mappers ────────────────────────────────────────────────────────────────
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i
@@ -208,6 +211,18 @@ function notifyAgenticQueue(ids: string[]): void {
     })
 }
 
+/**
+ * Empurra a tarefa para a issue vinculada (Integrações › GitHub) após uma mutação. É a **fonte única**
+ * do disparo: qualquer caminho (rotas, lote e a mesa de trabalho agêntica) fecha/reabre a issue
+ * conforme a coluna. A importação é dinâmica para evitar o ciclo estático com `github/task-sync`.
+ * Só é chamado quando algo relevante para a issue mudou e nunca na sincronização vinda do GitHub
+ * (`origin: "github"`), para não ecoar de volta.
+ */
+async function syncGithubIssue(id: string): Promise<void> {
+    const { pushTasksToIssues } = await import("@/features/github/server/task-sync")
+    await pushTasksToIssues([id])
+}
+
 async function assertColumn(key: string): Promise<void> {
     const board = await getBoard()
     if (!board.columns.some((column) => column.key === key)) throw new DomainError(400, "Coluna inválida", "COLUMN_NOT_FOUND")
@@ -335,6 +350,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: after })
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && columnChanged) notifyAgenticQueue([id])
+    if (options.origin !== "github" && (columnChanged || GITHUB_SYNCED_FIELDS.some((field) => field in set))) await syncGithubIssue(id)
 }
 
 /** Mover a tarefa de coluna (e, opcionalmente, posição). */
@@ -359,6 +375,7 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
     })
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && input.targetColumn !== task.columnId) notifyAgenticQueue([id])
+    if (options.origin !== "github" && input.targetColumn !== task.columnId) await syncGithubIssue(id)
     const updated = await DevTask.findById(id).lean()
     const project = updated ? await Project.findById(updated.projectId).lean() : null
     return updated ? toTaskDto(updated, project) : null

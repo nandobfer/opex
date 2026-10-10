@@ -44,6 +44,8 @@ export interface IWorkbenchPr {
     mergeCommitSha: string | null
     /** Maior id de revisão já tratado (as novas pedem replanejamento). */
     lastReviewId: number
+    /** Maior id de comentário (conversa ou linha) já tratado; os novos com `@opex` voltam ao planejamento. */
+    lastCommentId: number
     closedNotified: boolean
 }
 

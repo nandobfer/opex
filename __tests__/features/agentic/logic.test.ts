@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, reopenTargetColumn, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -103,7 +103,7 @@ describe('workbenchWaitingReason', () => {
   it('cada espera tem o seu motivo', () => {
     expect(workbenchWaitingReason(base)).toBe('Aguardando revisão do plano')
     expect(workbenchWaitingReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
-    expect(workbenchWaitingReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchWaitingReason({ ...base, stage: 'pr_open' })).toBe('Aguardando comentário (@opex), revisão ou merge do PR')
     expect(workbenchWaitingReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
   })
 
@@ -124,7 +124,7 @@ describe('workbenchUserWaitReason', () => {
   it('esperas do usuário têm o mesmo motivo da lista de trabalhos em andamento', () => {
     expect(workbenchUserWaitReason(base)).toBe('Aguardando revisão do plano')
     expect(workbenchUserWaitReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
-    expect(workbenchUserWaitReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchUserWaitReason({ ...base, stage: 'pr_open' })).toBe('Aguardando comentário (@opex), revisão ou merge do PR')
     expect(workbenchUserWaitReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
   })
 
@@ -140,6 +140,22 @@ describe('workbenchUserWaitReason', () => {
   it('mesa concluída e mesa na fila do build não contam como espera do usuário', () => {
     expect(workbenchUserWaitReason({ ...base, stage: 'done' })).toBeNull()
     expect(workbenchUserWaitReason({ ...base, stage: 'build_queued' })).toBeNull()
+  })
+})
+
+describe('reopenTargetColumn', () => {
+  it('reabrir usa a coluna "Ao abrir a mesa" (desenvolvimento) quando definida', () => {
+    const base = defaultCentralConfig('/x')
+    const config = { ...base, columns: { ...base.columns, onStart: 'doing', onDone: 'done' } }
+    expect(reopenTargetColumn(config, 'todo')).toBe('doing')
+  })
+
+  it('sem "Ao abrir a mesa", cai na coluna de entrada do vínculo', () => {
+    expect(reopenTargetColumn(defaultCentralConfig('/x'), 'todo')).toBe('todo')
+  })
+
+  it('sem destino definido, não move (null)', () => {
+    expect(reopenTargetColumn(defaultCentralConfig('/x'), null)).toBeNull()
   })
 })
 

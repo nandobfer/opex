@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AI_PROVIDER_IDS } from "@/lib/ai/providers"
+import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import {
     DEFAULT_TASK_SUMMARY_INSTRUCTIONS,
     DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS,
@@ -15,7 +15,7 @@ import {
 export const understandTaskSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_IDS).nullable(),
+        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -54,7 +54,7 @@ export const DEFAULT_UNDERSTAND_TASK_SETTINGS: UnderstandTaskSettings = {
 export const taskSummarySettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_IDS).nullable(),
+        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -91,7 +91,7 @@ export const DEFAULT_TASK_SUMMARY_SETTINGS: TaskSummarySettings = {
 export const budgetPreviewSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_IDS).nullable(),
+        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),

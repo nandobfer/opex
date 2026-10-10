@@ -9,7 +9,7 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
-import { canRun, resolveAgent, type WorkbenchAction } from "../logic"
+import { canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildPrompt,
@@ -30,7 +30,7 @@ import {
 import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
-import { loadCentral, publishAgentic, repoForProject } from "./centrals"
+import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
@@ -107,13 +107,14 @@ interface Loaded {
     doc: IAgenticWorkbench
     config: CentralConfig
     projectName: string
+    projectId: string
     repo: { repo: string; repoUrl: string } | null
 }
 
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
-    return { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
+    return { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
 }
 
 function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
@@ -354,7 +355,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const found = parsed.success ? { url: parsed.data.url, number: parsed.data.number ?? extractPrUrl(parsed.data.url)?.number } : extractPrUrl(result.text)
             if (!found?.url || !found.number) throw new Error("O agente não informou a URL do Pull Request")
             const keep = doc.pr && doc.pr.number === found.number
-            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, closedNotified: false }
+            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
             const prColumn = config.columns.onPr
@@ -410,6 +411,21 @@ async function applyStartEffects(id: string, task: TaskDetailDto, config: Centra
     }
 }
 
+/** Efeitos na tarefa ao reabrir a mesa (melhor esforço: falha vira aviso na mesa). */
+async function applyReopenEffects(id: string, loaded: Loaded): Promise<void> {
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const task = await getTask(loaded.doc.taskId)
+    const target = reopenTargetColumn(loaded.config, await entryColumnForProject(loaded.projectId))
+    if (target && target !== task.columnId) {
+        try {
+            await moveTask(task.id, { targetColumn: target }, actorId())
+            notice("info", "Tarefa movida para a coluna de desenvolvimento")
+        } catch (error) {
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+        }
+    }
+}
+
 /**
  * Inicia o turno de build de uma mesa que está aguardando a vez (`build_queued`): reserva a porta
  * da prévia e roda o turno `building`. Devolve `false` quando a mesa já não está mais na fila (o
@@ -456,7 +472,7 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
     await applyStartEffects(id, task, config)
-    const loaded: Loaded = { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
+    const loaded: Loaded = { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
     // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).
     const additionalInfo = text?.trim() || null
     await launchTurn(
@@ -474,14 +490,17 @@ export async function revisePlan(id: string, feedback: string): Promise<Workbenc
     return getWorkbench(id)
 }
 
-export async function implement(id: string): Promise<WorkbenchDto> {
+export async function implement(id: string, additionalInfo?: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "implement")
     const ctx = contextOf(loaded)
+    // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
+    const info = additionalInfo?.trim() || null
+    const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
     await launchTurn(
         loaded,
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1) },
-        { userText: "Plano aprovado: implementar", extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info) },
+        { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
     return getWorkbench(id)
 }
@@ -516,6 +535,7 @@ export async function reopen(id: string, feedback: string): Promise<WorkbenchDto
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
+    await applyReopenEffects(id, loaded)
     await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
     return getWorkbench(id)
 }
@@ -606,20 +626,20 @@ export async function deleteWorkbench(id: string): Promise<void> {
 // Acompanhamento do PR (rotina agendada)
 // ---------------------------------------------------------------------------
 
-/** Revisão pediu mudanças: com o motivo, replaneja sozinho; sem, pede o texto ao usuário. */
-export async function handlePrChangesRequested(id: string, feedback: string): Promise<void> {
+/** Pedido de mudança no PR (comentário com `@opex` ou revisão): com o motivo, replaneja sozinho; sem, pede o texto ao usuário. */
+export async function handlePrFeedback(id: string, feedback: string): Promise<void> {
     const loaded = await loadAll(id)
     await prepareHub(id)
     if (!feedback.trim()) {
-        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "A revisão do PR pediu mudanças sem dizer o motivo: descreva o que precisa mudar" })
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "O PR pediu mudanças sem dizer o motivo: descreva o que precisa mudar" })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
         return
     }
     try {
-        await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Revisão do PR pediu mudanças:\n\n${feedback}`, feedback })
+        await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Pedido de mudança no PR:\n\n${feedback}`, feedback })
     } catch (error) {
         // Sem como replanejar agora (ex.: limite de mesas): guarda o pedido para o usuário reenviar.
-        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `A revisão do PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido da revisão:\n\n${feedback}` })
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido:\n\n${feedback}` })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
     }
 }
@@ -674,7 +694,8 @@ export async function handlePrReopened(id: string): Promise<void> {
     await update(doc, { pr: { ...doc.pr, state: "open", closedNotified: false } })
 }
 
-export async function saveLastReviewId(id: string, lastReviewId: number): Promise<void> {
-    await AgenticWorkbench.updateOne({ _id: id }, { $set: { "pr.lastReviewId": lastReviewId } })
+/** Grava os cursores de acompanhamento do PR (maior id de revisão e de comentário já tratados). */
+export async function savePrCursors(id: string, cursors: { lastReviewId: number; lastCommentId: number }): Promise<void> {
+    await AgenticWorkbench.updateOne({ _id: id }, { $set: { "pr.lastReviewId": cursors.lastReviewId, "pr.lastCommentId": cursors.lastCommentId } })
 }
 

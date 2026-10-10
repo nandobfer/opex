@@ -15,6 +15,8 @@ vi.mock('@/lib/integrations/debug', () => ({
 
 import { getOpencodeInfo, listOpencodeAgents, listOpencodeModels } from '@/lib/ai/opencode'
 import { listGeminiModels } from '@/lib/ai/gemini'
+import { listJevModels } from '@/lib/ai/jev'
+import { AI_PROVIDERS, AI_TEXT_PROVIDER_IDS } from '@/lib/ai/providers'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -23,6 +25,7 @@ beforeEach(() => {
   mocks.config = {
     ai_opencode: { baseUrl: 'http://opencode:4096/', password: 'segredo' },
     ai_gemini: { apiKey: 'chave' },
+    ai_jev: { apiKey: 'chave-jev' },
   }
 })
 
@@ -118,5 +121,43 @@ describe('Gemini', () => {
     mocks.fetch.mockClear()
     await expect(listGeminiModels()).rejects.toThrow('Gemini sem API key')
     expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('JEV', () => {
+  it('lista os modelos/aliases e envia a API key como Bearer', async () => {
+    mocks.fetch.mockResolvedValue(
+      json({
+        models: [
+          { name: 'jev-latest', description: 'Mais recente', release_date: '2026-01-01' },
+          { name: 'jev-preview', description: 'Prévia', release_date: '2026-01-01' },
+        ],
+      }),
+    )
+    const models = await listJevModels()
+    expect(models.map((model) => model.id)).toEqual(['jev-latest', 'jev-preview'])
+    expect(models[0]).toMatchObject({ name: 'jev-latest', variants: [], contextWindow: null, free: false })
+
+    const [url, init] = mocks.fetch.mock.calls[0]!
+    expect(url).toBe('https://api.typesafe.ai/v1/models')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer chave-jev')
+  })
+
+  it('API key recusada vira mensagem em pt-BR; sem chave nem chama a rede', async () => {
+    mocks.fetch.mockResolvedValueOnce(json({}, 401))
+    await expect(listJevModels()).rejects.toThrow('O JEV recusou a API key (HTTP 401)')
+
+    mocks.config.ai_jev = {}
+    mocks.fetch.mockClear()
+    await expect(listJevModels()).rejects.toThrow('JEV sem API key')
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('capacidade dos provedores', () => {
+  it('só os provedores de texto são oferecidos às features de texto (o JEV fica de fora)', () => {
+    expect([...AI_TEXT_PROVIDER_IDS]).toEqual(AI_PROVIDERS.filter((provider) => provider.supportsTextGeneration).map((provider) => provider.id))
+    expect(AI_TEXT_PROVIDER_IDS).not.toContain('jev')
+    expect(AI_PROVIDERS.map((provider) => provider.id)).toContain('jev')
   })
 })

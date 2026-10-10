@@ -132,10 +132,11 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 
 ```
 planning → plan_review ─┬─ Solicitar correção do plano → planning
-                        └─ Implementar → implementing → build_queued → building → preview
+                        └─ Implementar (texto opcional) → implementing → build_queued → building → preview
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
-pr_open ─┬─ revisão "pediu mudanças" com texto → planning (automático)
+pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
+         ├─ revisão "pediu mudanças" com texto → planning (automático)
          ├─ revisão sem texto → changes_requested (usuário descreve) → planning
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
@@ -154,6 +155,10 @@ done → Reabrir mesa (texto ao planejador) → planning
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
   sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
+  Ao aprovar o plano (ação **Implementar**), o usuário pode anexar **Informações adicionais**
+  opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
+  implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
+  comportamento das informações informadas na abertura da mesa.
 - **Build**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
@@ -166,11 +171,21 @@ done → Reabrir mesa (texto ao planejador) → planning
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
 - **Acompanhamento**: rotina `agentic-pr-watch` dos Crons (a cada 2 min, `pr-watch.ts`) consulta o
-  PR no GitHub (repositório tirado da URL do PR). Revisões novas (`id` > `lastReviewId`) com
-  `CHANGES_REQUESTED` viram texto (corpo + comentários de linha) para o planejador.
-- **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver),
-  a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose down`,
-  `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+  PR no GitHub (repositório tirado da URL do PR). Volta ao planejamento quando há:
+  - **comentário novo** que mencione `@opex` (`mentionsOpex`; `id` > `lastCommentId`) — na conversa
+    (`issues/{n}/comments`), na linha (`pulls/{n}/comments`) ou no corpo de uma revisão;
+  - **revisão nova** com `CHANGES_REQUESTED` (`id` > `lastReviewId`), mantida como antes.
+  As revisões relevantes viram texto (corpo + comentários de linha); os comentários soltos com `@opex`
+  entram como seção própria. Os cursores `lastReviewId`/`lastCommentId` são gravados a cada varredura;
+  mesas abertas antes desta rotina (sem `lastCommentId`) fazem uma 1ª varredura só de linha de base,
+  sem replanejar por comentários antigos.
+- **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
+  é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
+  tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
+  down`, `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+- **Reabrir mesa** (`done` → planejamento): a tarefa é movida para a coluna de desenvolvimento (a
+  mesma "Ao abrir a mesa (implementação)"; sem ela, a coluna de entrada do vínculo) e a issue é
+  **reaberta** (mesma sincronização).
 - **Controle de horas agêntico**: a mesa abre/pausa/retoma/fecha o apontamento da tarefa conforme o
   agente trabalha ou espera o usuário (`timer-sync.ts`; ver `modules/time.md`). Não há controles
   manuais de timer e a central não tem mais as opções de timer.
@@ -220,7 +235,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt` |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |

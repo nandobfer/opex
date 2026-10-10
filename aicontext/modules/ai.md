@@ -10,6 +10,7 @@ e opções na própria aba da página "Provedores de IA".
 |---|---|---|---|
 | OpenCode | `ai_opencode` | `ai-sdk-provider-opencode-sdk` (5.x, OpenCode **2.x**) | URL do `opencode serve` (origem), diretório das sessões (opcional), senha (segredo) |
 | Gemini | `ai_gemini` | `@ai-sdk/google` | API key do Google AI Studio (segredo) |
+| JEV | `ai_jev` | — (HTTP TypeSafe) | API key da TypeSafe (segredo); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
 - **OpenCode** (`src/lib/ai/opencode.ts`): autenticação Basic `opencode:<senha>` em toda rota.
@@ -21,6 +22,12 @@ e opções na própria aba da página "Provedores de IA".
 - **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.
+- **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
+  texto). O núcleo cobre só a integração: `GET v1/models` (header `Authorization: Bearer <apiKey>`)
+  lista os modelos/aliases (`jev-latest`, `jev-preview`); a URL (`https://api.typesafe.ai`) é fixa no
+  código. Como não gera texto, o JEV **não** é oferecido às features de texto (flag
+  `supportsTextGeneration` em `AI_PROVIDERS`; ver `AI_TEXT_PROVIDER_IDS`); os usos do JEV virão
+  depois.
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
@@ -48,11 +55,11 @@ e opções na própria aba da página "Provedores de IA".
 
 ## Página `/integracoes/ia`
 
-- `ai` é o hub do catálogo ("Provedores de IA"); `ai_opencode` e `ai_gemini` são **filhas**
-  (`parent: "ai"`): ficam fora da lista de `/integracoes` e têm rotas próprias
-  (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`; `/integracoes/ia/opencode` e
-  `/integracoes/ia/gemini` em `ia/[provider]/page.tsx`, provedor desconhecido = 404;
-  `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
+- `ai` é o hub do catálogo ("Provedores de IA"); `ai_opencode`, `ai_gemini` e `ai_jev` são
+  **filhas** (`parent: "ai"`): ficam fora da lista de `/integracoes` e têm rotas próprias
+  (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`; `/integracoes/ia/opencode`,
+  `/integracoes/ia/gemini` e `/integracoes/ia/jev` em `ia/[provider]/page.tsx`, provedor
+  desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
   **Orçamentos** e **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em
@@ -170,7 +177,9 @@ e opções na própria aba da página "Provedores de IA".
 `__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (entrada e
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
-`task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
-seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo;
-`estimate-hours-settings` cobre a configuração de "Estimar prazos"). A
-feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).
+`task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` e
+`task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
+substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os
+hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
+`estimate-hours-settings` cobre a configuração de "Estimar prazos"). A feature "Orçamentos" é
+coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).

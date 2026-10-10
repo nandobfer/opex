@@ -16,7 +16,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'orcamentos']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_jev', 'orcamentos']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -74,18 +74,22 @@ describe('catálogo de integrações', () => {
     expect(integrationPath('ai')).toBe('/integracoes/ia')
     expect(integrationPath('ai_opencode')).toBe('/integracoes/ia/opencode')
     expect(integrationPath('ai_gemini')).toBe('/integracoes/ia/gemini')
+    expect(integrationPath('ai_jev')).toBe('/integracoes/ia/jev')
     expect(hasCustomIntegrationPath('ai_opencode')).toBe(true)
     expect(hasCustomIntegrationPath('github')).toBe(false)
     expect(INTEGRATIONS.filter((def) => def.parent).map((def) => [def.id, def.parent])).toEqual([
       ['ai_opencode', 'ai'],
       ['ai_gemini', 'ai'],
+      ['ai_jev', 'ai'],
     ])
-    for (const id of ['ai', 'ai_opencode', 'ai_gemini'] as const) {
+    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_jev'] as const) {
       const def = getIntegrationDef(id)
       expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
     }
     expect(getIntegrationDef('ai_opencode').secretFields).toEqual([expect.objectContaining({ key: 'password', required: true })])
     expect(getIntegrationDef('ai_gemini').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
+    expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
+    expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
   })
 
   it('isCardManagedField só reconhece o grupo "card"', () => {

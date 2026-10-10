@@ -44,6 +44,15 @@ export function defaultSessionDirectory(codeRoot: string, projectName: string): 
     return `${codeRoot.replace(/\/+$/, "")}/${projectName.trim()}`
 }
 
+/**
+ * Coluna de destino ao reabrir a mesa concluída: a mesma "Ao abrir a mesa" (desenvolvimento) e,
+ * quando a central não a define, a coluna de entrada do vínculo — assim a tarefa sai da coluna de
+ * conclusão e a issue é reaberta (`null` = não mover).
+ */
+export function reopenTargetColumn(config: CentralConfig, entryColumnKey: string | null): string | null {
+    return config.columns.onStart ?? entryColumnKey ?? null
+}
+
 /** Menor porta livre da faixa (`null` = faixa esgotada). */
 export function pickPreviewPort(used: Iterable<number>, min = PREVIEW_PORT_MIN, max = PREVIEW_PORT_MAX): number | null {
     const taken = new Set(used)
@@ -112,7 +121,7 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
         case "preview":
             return "Aguardando aprovação da prévia"
         case "pr_open":
-            return "Aguardando revisão ou merge do PR"
+            return "Aguardando comentário (@opex), revisão ou merge do PR"
         case "changes_requested":
             return "Aguardando descrever as mudanças"
         default:

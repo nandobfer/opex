@@ -86,8 +86,17 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
 - Período na URL (`from`/`to`, padrão: última semana) com `PresetDateRangeFilter`; totais do período
   (tempo, quantidade e custo) em números animados.
-- Apontamentos agrupados por dia (`groupTimeLogsByDay`, mais recente primeiro, total do dia),
-  "Carregar mais" (páginas de 100).
+- **Agrupamento em dois níveis: dia → task/mesa → itens.** As seções de dia (`groupTimeLogsByDay`,
+  mais recente primeiro, total do dia) contêm **grupos por task/mesa** (`groupTimeLogsByTask`, que
+  agrupa pelo `taskId`; como há uma mesa por tarefa, o grupo representa a task/mesa — apontamentos
+  legados sem mesa caem no mesmo grupo pelo `taskId`). Dentro do grupo, os apontamentos ficam em
+  ordem de início mais recente primeiro.
+- Cada grupo é **expansível** (`TimeLogTaskGroup`): o cabeçalho (botão com `aria-expanded`) mostra
+  código, título, a contagem de apontamentos e o total de minutos do grupo naquele dia, além de um
+  indicador "Em execução" quando contém período ativo. O grupo **começa recolhido**; grupos com
+  período ativo ficam **sempre abertos**. A abertura/fechamento é animada por Framer Motion
+  (altura/opacidade) respeitando movimento reduzido.
+- "Carregar mais" (páginas de 100).
 - Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
   descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
   custo). Sem editar/excluir/parar.

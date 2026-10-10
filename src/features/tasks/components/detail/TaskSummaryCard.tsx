@@ -11,10 +11,7 @@ export function TaskSummaryCard({ summary }: { summary: string }) {
             <Card>
                 <CardContent className="flex items-start gap-2.5 pt-4">
                     <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                    <div className="min-w-0 space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Resumo (IA)</p>
-                        <p className="text-xs leading-relaxed text-muted-foreground">{summary}</p>
-                    </div>
+                    <p className="min-w-0 text-xs leading-relaxed text-muted-foreground">{summary}</p>
                 </CardContent>
             </Card>
         </motion.div>

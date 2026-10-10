@@ -24,7 +24,7 @@ type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correcti
 const FEEDBACK: Record<FeedbackAction, { button: string; title: string; placeholder: string; submit: string }> = {
     "revise-plan": { button: "Solicitar correção do plano", title: "O que precisa mudar no plano?", placeholder: "Ex.: não altere o schema; use o componente X; inclua testes de Y…", submit: "Enviar ao planejador" },
     "request-correction": { button: "Solicitar correção", title: "O que está errado?", placeholder: "Descreva o que não funcionou ou precisa mudar. Vai para o planejador, que refaz o plano.", submit: "Enviar ao planejador" },
-    "submit-pr-feedback": { button: "Descrever as mudanças", title: "O que a revisão do PR pediu?", placeholder: "A revisão pediu mudanças sem comentário: descreva o que precisa mudar.", submit: "Enviar ao planejador" },
+    "submit-pr-feedback": { button: "Descrever as mudanças", title: "O que o PR pediu?", placeholder: "O PR pediu mudanças sem comentário: descreva o que precisa mudar.", submit: "Enviar ao planejador" },
     reopen: { button: "Reabrir mesa", title: "O que fazer agora?", placeholder: "Descreva o ajuste ou a continuação. Vai para o planejador.", submit: "Reabrir e planejar" },
 }
 
@@ -36,6 +36,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
     const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl))
     const [composer, setComposer] = useState<FeedbackAction | null>(workbench.stage === "changes_requested" && workbench.runState === "idle" ? "submit-pr-feedback" : null)
     const [text, setText] = useState("")
+    const [additional, setAdditional] = useState("")
     const [confirm, setConfirm] = useState<"interrupt" | "approve" | null>(null)
     const pending = mutation.isPending
     const run = (action: WorkbenchAction, body?: string) =>
@@ -45,10 +46,13 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 onSuccess: () => {
                     setComposer(null)
                     setText("")
+                    setAdditional("")
                 },
             },
         )
     const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
+    // Ao aprovar o plano, o usuário pode anexar informações adicionais ao prompt de implementação.
+    const canImplement = actions.includes("implement")
 
     return (
         <div className="space-y-2 border-t p-3">
@@ -60,13 +64,22 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 )}
                 {workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
                 )}
                 {workbench.stage === "build_queued" && (
                     <motion.p key="build-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.
                     </motion.p>
+                )}
+                {!composer && canImplement && (
+                    <motion.div key="implement-info" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-1.5 overflow-hidden">
+                        <label htmlFor="workbench-implement-info" className="text-sm font-medium">
+                            Informações adicionais (opcional)
+                        </label>
+                        <Textarea id="workbench-implement-info" rows={3} maxLength={8000} value={additional} onChange={(event) => setAdditional(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
+                        <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto do plano aprovado, no prompt de implementação.</p>
+                    </motion.div>
                 )}
                 {composer && (
                     <motion.div key="composer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-2 overflow-hidden">
@@ -109,7 +122,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                 )
                             case "implement":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement")}>
+                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
                                         <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                     </Button>
                                 )

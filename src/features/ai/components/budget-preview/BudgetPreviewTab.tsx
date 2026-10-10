@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { getAiProvider } from "@/lib/ai/providers"
+import { getAiProvider, isAiTextProviderId, type AiProviderId } from "@/lib/ai/providers"
 import { DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_BUDGET_PREVIEW_SETTINGS, budgetPreviewSettingsSchema, type BudgetPreviewSettings } from "../../schemas"
 import { useAiProviderStatuses, useBudgetPreviewSettings, useSaveBudgetPreviewSettings } from "../../hooks/useAi"
@@ -55,8 +55,8 @@ export function BudgetPreviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
         const saved = await save.mutateAsync(values).catch(() => null)
         if (saved) form.reset(saved.settings)
     })
-    const changeProvider = (next: BudgetPreviewSettings["provider"]) => {
-        if (next === provider) return
+    const changeProvider = (next: AiProviderId) => {
+        if (next === provider || !isAiTextProviderId(next)) return
         form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
         form.setValue("model", null, { shouldDirty: true, shouldValidate: true })
         form.setValue("variant", null, { shouldDirty: true })

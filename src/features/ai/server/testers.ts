@@ -46,6 +46,17 @@ export const testGemini: IntegrationTester = async ({ emit, signal }) => {
     return `API key válida; ${models.length} modelo(s)`
 }
 
+export const testJev: IntegrationTester = async ({ emit, signal }) => {
+    const resolved = await getIntegration("ai_jev")
+    if (!resolved.values.apiKey) fail("Sem API key: cadastre a chave da TypeSafe em Campos privados")
+    clearAiCatalogCache()
+    emit("step", "GET /v1/models")
+    const models = await listAiModels("jev", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
+    emit(models.length ? "success" : "warn", `${models.length} modelo(s) disponível(is)`)
+    if (!models.length) return warnResult("API key válida, mas nenhum modelo disponível")
+    return `API key válida; ${models.length} modelo(s)`
+}
+
 /** Hub: testa cada provedor configurado (gravando o status de cada um) e resume. */
 export const testAiHub: IntegrationTester = async ({ emit, signal }) => {
     const { runIntegrationTest } = await import("@/features/integrations/services/integration-test-runner")
@@ -67,7 +78,7 @@ export const testAiHub: IntegrationTester = async ({ emit, signal }) => {
         if (result.ok) connected++
         emit(result.ok ? "success" : "error", `${provider.name}: ${result.message}`)
     }
-    if (configured === 0) fail("Nenhum provedor configurado: configure o OpenCode ou o Gemini na aba Provedores")
+    if (configured === 0) fail("Nenhum provedor configurado: configure ao menos um provedor na aba Provedores")
     if (connected === 0) fail("Nenhum provedor de IA conectado")
     if (connected < configured) return warnResult(`${connected} de ${configured} provedor(es) conectado(s)`)
     return `${connected} provedor(es) de IA conectado(s)`

@@ -92,13 +92,13 @@ export function previewCorrectionPrompt(config: CentralConfig, feedback: string)
     ].join("\n") + extra(config, "planning")
 }
 
-export function prChangesPrompt(config: CentralConfig, prUrl: string, reviews: string): string {
+export function prChangesPrompt(config: CentralConfig, prUrl: string, feedback: string): string {
     return [
-        `A revisão do Pull Request (${prUrl}) pediu mudanças. Volte ao PLANEJAMENTO: analise os comentários abaixo e responda com o plano COMPLETO atualizado para atendê-los.`,
+        `Um comentário ou revisão do Pull Request (${prUrl}) pediu mudanças. Volte ao PLANEJAMENTO: analise os comentários abaixo e responda com o plano COMPLETO atualizado para atendê-los.`,
         "Não altere arquivos nesta etapa.",
         "",
-        "## Comentários da revisão",
-        reviews,
+        "## Comentários do PR",
+        feedback,
     ].join("\n") + extra(config, "planning")
 }
 
@@ -112,24 +112,28 @@ export function reopenPrompt(config: CentralConfig, ctx: WorkbenchContext, feedb
     ].join("\n") + extra(config, "planning")
 }
 
-export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number): string {
+export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, additionalInfo: string | null = null): string {
     const setup = config.git.setupCommands.trim()
-    return [
-        `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
-        "",
-        "## 1. Worktree (obrigatório antes de editar qualquer arquivo)",
-        `- Se o diretório ${ctx.worktreePath} já for um worktree deste repositório, reutilize-o (é uma nova rodada sobre o mesmo trabalho).`,
-        `- Senão, a partir de ${ctx.sessionDirectory}: \`git fetch origin\` e \`git worktree add -b ${ctx.branch} ${ctx.worktreePath} origin/${config.git.baseBranch}\` (se a branch já existir, use \`git worktree add ${ctx.worktreePath} ${ctx.branch}\`).`,
-        `- MOVA ESTA SESSÃO para ${ctx.worktreePath} com a ferramenta de mover sessão do OpenCode (session_move) e confirme o diretório atual antes de continuar.`,
-        setup ? `- No worktree, rode os comandos de preparo:\n\`\`\`sh\n${setup}\n\`\`\`` : "",
-        "",
-        "## 2. Implementação",
-        "- Siga o plano aprovado e as instruções do projeto (AGENTS.md etc.). Escreva/atualize os testes previstos e rode-os.",
-        "- Pode fazer commits locais; NÃO faça push e NÃO abra Pull Request nesta etapa.",
-        "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
-    ]
-        .filter(Boolean)
-        .join("\n") + extra(config, "implementation")
+    const info = (additionalInfo ?? "").trim()
+    const base =
+        [
+            `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
+            "",
+            "## 1. Worktree (obrigatório antes de editar qualquer arquivo)",
+            `- Se o diretório ${ctx.worktreePath} já for um worktree deste repositório, reutilize-o (é uma nova rodada sobre o mesmo trabalho).`,
+            `- Senão, a partir de ${ctx.sessionDirectory}: \`git fetch origin\` e \`git worktree add -b ${ctx.branch} ${ctx.worktreePath} origin/${config.git.baseBranch}\` (se a branch já existir, use \`git worktree add ${ctx.worktreePath} ${ctx.branch}\`).`,
+            `- MOVA ESTA SESSÃO para ${ctx.worktreePath} com a ferramenta de mover sessão do OpenCode (session_move) e confirme o diretório atual antes de continuar.`,
+            setup ? `- No worktree, rode os comandos de preparo:\n\`\`\`sh\n${setup}\n\`\`\`` : "",
+            "",
+            "## 2. Implementação",
+            "- Siga o plano aprovado e as instruções do projeto (AGENTS.md etc.). Escreva/atualize os testes previstos e rode-os.",
+            "- Pode fazer commits locais; NÃO faça push e NÃO abra Pull Request nesta etapa.",
+            "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
+        ]
+            .filter(Boolean)
+            .join("\n")
+    const withInfo = info ? `${base}\n\n## Informações adicionais\n${info}` : base
+    return withInfo + extra(config, "implementation")
 }
 
 export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number): string {
@@ -205,15 +209,15 @@ export function extractPrUrl(text: string): { url: string; number: number } | nu
     return last ? { url: last[0], number: Number(last[1]) } : null
 }
 
-/** Revisões que pediram mudanças → texto para o planejador (vazio = sem comentário com o motivo). */
-export function formatReviewFeedback(reviews: { author: string | null; body: string; comments: { path: string | null; line: number | null; body: string }[] }[]): string {
-    return reviews
-        .map((review) => {
+/** Pedidos de mudança do PR (comentários e revisões) → texto para o planejador (vazio = sem texto com o motivo). */
+export function formatPrFeedback(sections: { author: string | null; body: string; comments: { path: string | null; line: number | null; body: string }[] }[]): string {
+    return sections
+        .map((section) => {
             const lines = [
-                review.body.trim() ? review.body.trim() : "",
-                ...review.comments.filter((comment) => comment.body.trim()).map((comment) => `- ${comment.path ? `\`${comment.path}${comment.line ? `:${comment.line}` : ""}\`: ` : ""}${comment.body.trim()}`),
+                section.body.trim() ? section.body.trim() : "",
+                ...section.comments.filter((comment) => comment.body.trim()).map((comment) => `- ${comment.path ? `\`${comment.path}${comment.line ? `:${comment.line}` : ""}\`: ` : ""}${comment.body.trim()}`),
             ].filter(Boolean)
-            return lines.length ? `### ${review.author ? `@${review.author}` : "Revisor"}\n${lines.join("\n")}` : ""
+            return lines.length ? `### ${section.author ? `@${section.author}` : "Revisor"}\n${lines.join("\n")}` : ""
         })
         .filter(Boolean)
         .join("\n\n")

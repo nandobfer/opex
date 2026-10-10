@@ -7,7 +7,7 @@ import {
   composeProjectFor,
   extractJsonBlock,
   extractPrUrl,
-  formatReviewFeedback,
+  formatPrFeedback,
   implementPrompt,
   planPrompt,
   prPrompt,
@@ -81,6 +81,14 @@ describe('mensagens das etapas', () => {
     expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12')).not.toContain('Informações adicionais')
     expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12', '   ')).not.toContain('Informações adicionais')
   })
+
+  it('implementação anexa as informações adicionais informadas ao aprovar o plano', () => {
+    const withInfo = implementPrompt(config, ctx, 2, 'Use o componente X; não altere o schema.')
+    expect(withInfo).toContain('## Informações adicionais')
+    expect(withInfo).toContain('Use o componente X; não altere o schema.')
+    expect(implementPrompt(config, ctx, 2)).not.toContain('Informações adicionais')
+    expect(implementPrompt(config, ctx, 2, '   ')).not.toContain('Informações adicionais')
+  })
 })
 
 describe('leitura das respostas', () => {
@@ -95,10 +103,16 @@ describe('leitura das respostas', () => {
     expect(extractPrUrl('nada')).toBeNull()
   })
 
-  it('formatReviewFeedback junta corpo e comentários; sem texto vira vazio', () => {
-    const text = formatReviewFeedback([{ author: 'ana', body: 'Ajustar nomes', comments: [{ path: 'a.ts', line: 3, body: 'renomear' }] }])
+  it('formatPrFeedback junta corpo e comentários; sem texto vira vazio', () => {
+    const text = formatPrFeedback([
+      { author: 'ana', body: 'Ajustar nomes', comments: [{ path: 'a.ts', line: 3, body: 'renomear' }] },
+      { author: 'bia', body: '@opex ajuste o filtro', comments: [] },
+      { author: 'caio', body: '', comments: [{ path: 'b.ts', line: 1, body: '@opex reordenar' }] },
+    ])
     expect(text).toContain('### @ana')
     expect(text).toContain('`a.ts:3`: renomear')
-    expect(formatReviewFeedback([{ author: 'ana', body: '  ', comments: [] }])).toBe('')
+    expect(text).toContain('### @bia\n@opex ajuste o filtro')
+    expect(text).toContain('`b.ts:1`: @opex reordenar')
+    expect(formatPrFeedback([{ author: 'ana', body: '  ', comments: [] }])).toBe('')
   })
 })

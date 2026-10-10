@@ -127,9 +127,14 @@ tarefa.
   **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
-  fonte discreta) — é **adicional** e **não substitui** a descrição.
-- Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
-  formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
+ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e **não substitui**
+a descrição.
+- Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
+animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
+**Especificação técnica** (aba própria, em Markdown), Comentários (lista + formulário), Histórico
+(auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
+componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
+preservar o escopo de hooks de cada aba.
 - Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
@@ -151,4 +156,5 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
-`task-board-layout`, `task-table-scroll`) e `__tests__/hooks/usePersistentState.test.tsx`.
+`task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
+`task-summary-card`) e `__tests__/hooks/usePersistentState.test.tsx`.
