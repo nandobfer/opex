@@ -4,11 +4,13 @@ import type { HTMLAttributes, MouseEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Loader2 } from "lucide-react"
+import { Loader2, TriangleAlert } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { cn } from "@/lib/utils"
 import type { TaskDto } from "../types"
 import { RunningClock, useRunningTimer } from "@/features/time/components/RunningClock"
+import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
+import { workbenchProgressTone } from "@/features/agentic/logic"
 import { IssueLinkButton } from "@/features/github/components/shared"
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
 
@@ -33,6 +35,9 @@ interface TaskCardViewProps {
 export function TaskCardView({ task, moving = false, dragging = false, selection, onOpen, handleProps }: TaskCardViewProps) {
     const selected = selection?.selected ?? false
     const running = useRunningTimer(task.id)
+    const progress = useWorkbenchProgress()?.progressOf(task.id)
+    const waiting = progress && !progress.running ? progress : null
+    const tone = waiting ? workbenchProgressTone(waiting) : null
     return (
         <div
             {...handleProps}
@@ -52,6 +57,8 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                 task.archived && "opacity-70",
                 selected && "border-primary bg-primary/10",
                 running && "border-success/70 bg-success/5",
+                tone === "failed" && "border-destructive/70 bg-destructive/5",
+                tone === "waiting" && "border-warning/70 bg-warning/5",
                 dragging && "cursor-grabbing border-primary shadow-lg shadow-primary/20 ring-1 ring-primary/40",
             )}
         >
@@ -64,6 +71,17 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                         animate={{ opacity: [0.35, 1, 0.35], boxShadow: ["0 0 0px rgba(52,211,153,0)", "0 0 14px rgba(52,211,153,0.35)", "0 0 0px rgba(52,211,153,0)"] }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                        aria-hidden
+                    />
+                )}
+                {tone && (
+                    <motion.span
+                        key={`waiting-${tone}`}
+                        className={cn("pointer-events-none absolute -inset-px rounded-md ring-1", tone === "failed" ? "ring-destructive/60" : "ring-warning/60")}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
                         aria-hidden
                     />
                 )}
@@ -87,6 +105,12 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
             <h4 className="mb-2 line-clamp-2 text-xs font-semibold leading-snug transition-colors group-hover:text-primary" title={task.title}>
                 {task.title}
             </h4>
+            {tone && waiting && (
+                <p className={cn("mb-2 flex items-center gap-1 text-[10px] font-medium", tone === "failed" ? "text-destructive" : "text-warning")} title={waiting.waitingFor ?? undefined}>
+                    <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="truncate">{waiting.waitingFor}</span>
+                </p>
+            )}
             {task.project && (
                 <p className="mb-2 truncate text-[11px] text-muted-foreground" title={task.project.name}>
                     {task.project.name}

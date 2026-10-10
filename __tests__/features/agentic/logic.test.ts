@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions, workbenchProgressTone, workbenchWaitingReason } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -90,5 +90,39 @@ describe('padrões da central', () => {
   it('defaultSessionDirectory monta <raiz>/<repositório>', () => {
     expect(defaultSessionDirectory('/home/burgos/code', 'opex')).toBe('/home/burgos/code/opex')
     expect(defaultSessionDirectory('/home/burgos/code/', 'opex')).toBe('/home/burgos/code/opex')
+  })
+})
+
+describe('workbenchWaitingReason', () => {
+  const base = { stage: 'plan_review' as const, runState: 'idle' as const, pendingPermissions: 0, pendingForms: 0 }
+
+  it('agente trabalhando (running e sem pendências) não tem motivo de espera', () => {
+    expect(workbenchWaitingReason({ ...base, stage: 'implementing', runState: 'running' })).toBeNull()
+  })
+
+  it('cada espera tem o seu motivo', () => {
+    expect(workbenchWaitingReason(base)).toBe('Aguardando revisão do plano')
+    expect(workbenchWaitingReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
+    expect(workbenchWaitingReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchWaitingReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
+  })
+
+  it('permissão e pergunta pendentes vêm antes da etapa, mesmo durante o turno', () => {
+    expect(workbenchWaitingReason({ ...base, stage: 'implementing', runState: 'running', pendingPermissions: 1 })).toBe('Aguardando você permitir uma ação')
+    expect(workbenchWaitingReason({ ...base, stage: 'implementing', runState: 'running', pendingForms: 2 })).toBe('Aguardando você responder uma pergunta')
+  })
+
+  it('falha e interrupção têm prioridade sobre pendências obsoletas', () => {
+    expect(workbenchWaitingReason({ ...base, runState: 'failed', pendingPermissions: 1 })).toBe('A etapa falhou — use Tentar novamente')
+    expect(workbenchWaitingReason({ ...base, runState: 'interrupted', pendingForms: 1 })).toBe('Execução interrompida — use Tentar novamente')
+  })
+})
+
+describe('workbenchProgressTone', () => {
+  it('executando é verde; falha é destructive; o resto é warning', () => {
+    expect(workbenchProgressTone({ running: true, runState: 'running' })).toBe('running')
+    expect(workbenchProgressTone({ running: false, runState: 'failed' })).toBe('failed')
+    expect(workbenchProgressTone({ running: false, runState: 'idle' })).toBe('waiting')
+    expect(workbenchProgressTone({ running: false, runState: 'interrupted' })).toBe('waiting')
   })
 })

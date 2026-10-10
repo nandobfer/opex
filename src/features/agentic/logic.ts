@@ -85,3 +85,37 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
 }
 
 export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction) => workbenchActions(stage, runState, true).includes(action)
+
+/** Tom do destaque de uma mesa em andamento: executando (verde), falhou (destructive) ou espera (warning). */
+export type WorkbenchProgressTone = "running" | "waiting" | "failed"
+
+export function workbenchProgressTone(input: { running: boolean; runState: RunState }): WorkbenchProgressTone {
+    if (input.running) return "running"
+    return input.runState === "failed" ? "failed" : "waiting"
+}
+
+/**
+ * Motivo (pt-BR) pelo qual a mesa não está executando — o que ela aguarda do usuário (ou o que
+ * precisa de ação, em falha/interrupção). `null` quando o agente está trabalhando (período ativo).
+ * Falha/interrupção vêm antes das pendências: uma mesa reconciliada não deve exibir pedido obsoleto.
+ */
+export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number }): string | null {
+    const { stage, runState, pendingPermissions, pendingForms } = input
+    if (runState === "running" && pendingPermissions === 0 && pendingForms === 0) return null
+    if (runState === "failed") return "A etapa falhou — use Tentar novamente"
+    if (runState === "interrupted") return "Execução interrompida — use Tentar novamente"
+    if (pendingPermissions > 0) return "Aguardando você permitir uma ação"
+    if (pendingForms > 0) return "Aguardando você responder uma pergunta"
+    switch (stage) {
+        case "plan_review":
+            return "Aguardando revisão do plano"
+        case "preview":
+            return "Aguardando aprovação da prévia"
+        case "pr_open":
+            return "Aguardando revisão ou merge do PR"
+        case "changes_requested":
+            return "Aguardando descrever as mudanças"
+        default:
+            return "Aguardando você"
+    }
+}
