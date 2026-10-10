@@ -137,6 +137,10 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Controle de horas agêntico**: a mesa abre/pausa/retoma/fecha o apontamento da tarefa conforme o
   agente trabalha ou espera o usuário (`timer-sync.ts`; ver `modules/time.md`). Não há controles
   manuais de timer e a central não tem mais as opções de timer.
+- **Trabalhos em andamento** (`server/in-progress.ts`): lista as mesas **não concluídas** para o
+  popover do indicador de tempo — executando (agente com período ativo) ou paradas com o **motivo da
+  espera** (`workbenchWaitingReason`): revisão do plano, aprovação da prévia, revisão/merge do PR,
+  permissão/pergunta pendente, falha ou interrupção. Somente leitura; cada item navega para a mesa.
 - Abrir a mesa pode mover a tarefa para a coluna configurada em "Ao abrir a mesa"; falhas ao mover
   viram aviso na mesa, sem interromper.
 - **Permissões e perguntas** do agente aparecem na mesa (`pendingPermissions`/`pendingForms`):
@@ -171,6 +175,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
 | `POST /workbenches` `{centralId, taskId}` | abre a mesa e inicia o plano (409 se já existir) |
+| `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
@@ -182,6 +187,6 @@ merge, reabrir, excluir).
 
 ## Testes
 
-`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), hub, runner
-com cliente falso, acompanhamento do PR, rota de ações, barra de ações) e
-`__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.
+`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
+andamento (`in-progress`), hub, runner com cliente falso, acompanhamento do PR, rota de ações, barra
+de ações) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

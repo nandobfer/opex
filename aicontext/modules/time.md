@@ -67,10 +67,20 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 - `TimerProvider` (em `src/app/(app)/tarefas/layout.tsx`): expõe os períodos ativos (`active`,
   `timerOf`) e o tempo real; **não** tem mais iniciar/parar. `useTimer()` fora do provider devolve
   `null`.
-- Tarefa em andamento: card com borda e brilho verde pulsando + cronômetro ao vivo; linha da tabela
-  com fundo verde, faixa à esquerda e cronômetro sob o código. Não há mais botão ▶/⏸.
+- `WorkbenchProgressProvider` (mesmo layout, do desenvolvimento agêntico) compartilha as **mesas em
+  andamento**: executando (período ativo) ou pausadas aguardando ação humana. É a fonte do destaque
+  das tarefas e da lista de trabalhos em andamento.
+- Tarefa em andamento (agente executando): card com borda e brilho verde pulsando + cronômetro ao
+  vivo; linha da tabela com fundo verde, faixa à esquerda e cronômetro sob o código. Não há mais
+  botão ▶/⏸.
+- Tarefa cuja mesa **aguarda ação** (revisão do plano, aprovação da prévia, PR, permissão/pergunta,
+  falha ou interrupção): card e linha destacados em **warning** (`--color-warning`; `failed` em
+  destructive) com o motivo em pt-BR; a linha também ganha faixa à esquerda.
 - `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Horas agênticas — ícone girando +
-  cronômetro; clique abre um resumo dos períodos ativos (sem ação).
+  cronômetro quando algum agente executa, ou aviso em warning quando **só** há mesas aguardando ação.
+  Clique abre a lista **"Trabalhos em andamento"**: cada item é um botão que navega para a **mesa de
+  trabalho** (`/desenvolvimento/{central}/{tarefa}`) — ou para a tarefa, em apontamentos legados sem
+  mesa. As mesas pausadas **não** somem da lista.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)
 
@@ -90,5 +100,6 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
 ## Testes
 
-`__tests__/features/time/time-service.test.ts`, `time-ui.test.tsx` e
-`__tests__/features/agentic/timer-sync.test.ts`.
+`__tests__/features/time/time-service.test.ts`, `time-ui.test.tsx`,
+`__tests__/features/agentic/timer-sync.test.ts` e
+`__tests__/features/agentic/workbench-progress.test.tsx`.

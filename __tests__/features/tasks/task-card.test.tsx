@@ -1,12 +1,17 @@
 /** @vitest-environment jsdom */
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskDto } from '@/features/tasks/types'
+
+const mocks = vi.hoisted(() => ({ progress: undefined as undefined | (() => { running: boolean; runState: string; waitingFor: string | null }) }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/time/components/TimerProvider', () => ({
   useTimer: () => ({ active: [], timerOf: () => undefined }),
+}))
+vi.mock('@/features/agentic/components/WorkbenchProgressProvider', () => ({
+  useWorkbenchProgress: () => (mocks.progress ? { items: [], progressOf: mocks.progress } : null),
 }))
 
 import { TaskCardView } from '@/features/tasks/components/TaskCard'
@@ -28,6 +33,10 @@ const task = (overrides: Partial<TaskDto> = {}): TaskDto => ({
 })
 
 const issueLink = () => screen.queryByRole('link', { name: 'Abrir issue sipal/app#123 no GitHub' })
+
+beforeEach(() => {
+  mocks.progress = undefined
+})
 
 describe('TaskCardView: issue no rodapé', () => {
   it('mostra o botão da issue com #N no rodapé', () => {
@@ -52,5 +61,19 @@ describe('TaskCardView: issue no rodapé', () => {
     unmount()
     render(<TaskCardView task={task()} dragging />)
     expect(issueLink()).toBeNull()
+  })
+})
+
+describe('TaskCardView: mesa aguardando ação', () => {
+  it('destaca o card em warning e mostra o motivo', () => {
+    mocks.progress = () => ({ running: false, runState: 'idle', waitingFor: 'Aguardando revisão do plano' })
+    render(<TaskCardView task={task()} />)
+    expect(screen.getByText('Aguardando revisão do plano')).toBeTruthy()
+  })
+
+  it('mesa executando não mostra o motivo de espera', () => {
+    mocks.progress = () => ({ running: true, runState: 'running', waitingFor: null })
+    render(<TaskCardView task={task()} />)
+    expect(screen.queryByText('Aguardando revisão do plano')).toBeNull()
   })
 })

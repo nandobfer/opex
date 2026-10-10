@@ -111,6 +111,25 @@ export interface WorkbenchSummaryDto {
     updatedAt: string
 }
 
+/**
+ * Mesa em andamento vista pela lista "Trabalhos em andamento": executando (agente com período
+ * ativo) ou parada aguardando ação humana (revisão do plano, prévia, PR, permissão/pergunta,
+ * falha ou interrupção). `waitingFor` é o motivo em pt-BR quando não está executando.
+ */
+export interface InProgressWorkbenchDto {
+    workbenchId: string
+    centralId: string
+    taskId: string
+    taskCode: string
+    taskTitle: string
+    stage: WorkbenchStage
+    runState: RunState
+    /** Agente executando agora: destaque verde + cronômetro. */
+    running: boolean
+    /** Motivo (pt-BR) quando não está executando; `null` quando executando. */
+    waitingFor: string | null
+}
+
 /** Tarefa aguardando na fila da central. A posição segue a ordem dos cards na coluna do kanban. */
 export interface QueueItemDto {
     taskId: string

@@ -4,12 +4,14 @@ import { useMemo, type CSSProperties } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, TriangleAlert } from "lucide-react"
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { usePageVirtualizer } from "@/hooks/usePageVirtualizer"
 import { RunningClock } from "@/features/time/components/RunningClock"
 import { useTimer } from "@/features/time/components/TimerProvider"
+import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
+import { workbenchProgressTone } from "@/features/agentic/logic"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, type BoardColumnView } from "../board"
 import { TASK_PRIORITY_LABELS, TASK_PRIORITY_RANK, TASK_TYPE_LABELS, type TaskPriority } from "../constants"
@@ -105,6 +107,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     const orderedIds = useMemo(() => rows.map((task) => task.id), [rows])
     const headerState = selection.stateOf(orderedIds)
     const timer = useTimer()
+    const progress = useWorkbenchProgress()
     const virtualize = rows.length > VIRTUALIZE_ABOVE
     const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: ROW_HEIGHT })
     const hasSelection = selection.selected.size > 0
@@ -116,6 +119,9 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
         const selected = selection.selected.has(task.id)
         const updating = updatingId === task.id
         const running = timer?.timerOf(task.id)
+        const progressItem = progress?.progressOf(task.id)
+        const waiting = progressItem && !progressItem.running ? progressItem : null
+        const tone = waiting ? workbenchProgressTone(waiting) : null
         return (
             <motion.tr
                 key={task.id}
@@ -132,8 +138,18 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                 aria-selected={selected}
                 className={cn(
                     "cursor-pointer border-b transition-colors focus:outline-none",
-                    selected ? "bg-primary/10 hover:bg-primary/15" : running ? "bg-success/10 hover:bg-success/15" : "hover:bg-muted/50 focus:bg-muted/50",
+                    selected
+                        ? "bg-primary/10 hover:bg-primary/15"
+                        : tone === "failed"
+                          ? "bg-destructive/10 hover:bg-destructive/15"
+                          : tone === "waiting"
+                            ? "bg-warning/10 hover:bg-warning/15"
+                            : running
+                              ? "bg-success/10 hover:bg-success/15"
+                              : "hover:bg-muted/50 focus:bg-muted/50",
                     running && "shadow-[inset_3px_0_0_var(--color-success)]",
+                    tone === "failed" && "shadow-[inset_3px_0_0_var(--color-destructive)]",
+                    tone === "waiting" && "shadow-[inset_3px_0_0_var(--color-warning)]",
                     task.archived && "opacity-70",
                 )}
             >
@@ -146,6 +162,12 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                         {task.code}
                     </span>
                     {running && <RunningClock startTime={running.startTime} className="block text-[10px] font-semibold text-success" />}
+                    {tone && waiting && (
+                        <span className={cn("mt-0.5 flex items-center gap-1 text-[10px] font-medium", tone === "failed" ? "text-destructive" : "text-warning")} title={waiting.waitingFor ?? undefined}>
+                            <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
+                            <span className="truncate">{waiting.waitingFor}</span>
+                        </span>
+                    )}
                 </td>
                 <td className={cn("px-2 py-2", hide("issue"))}>
                     {task.issue ? (

@@ -11,7 +11,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput } from "../schemas"
-import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
 
@@ -93,6 +93,10 @@ export const useCentralWorkbenches = (centralId: string | null) =>
 /** Fila da central: tarefas na coluna da fila ainda sem mesa, na ordem do kanban. */
 export const useCentralQueue = (centralId: string | null) =>
     useQuery({ queryKey: agenticKey("queue", centralId), queryFn: () => get<QueueItemDto[]>(`/agentic/centrals/${centralId}/queue`), enabled: Boolean(centralId) })
+
+/** Mesas em andamento (executando ou aguardando ação humana) — lista "Trabalhos em andamento". */
+export const useWorkbenchesInProgress = (enabled = true) =>
+    useQuery({ queryKey: agenticKey("workbenches", "in-progress"), queryFn: () => get<InProgressWorkbenchDto[]>("/agentic/workbenches/in-progress"), enabled, staleTime: 15_000 })
 
 export const useWorkbenchByTask = (taskId: string | null) =>
     useQuery({ queryKey: agenticKey("workbench", taskId), queryFn: () => get<WorkbenchDto | null>(`/agentic/workbenches/by-task/${taskId}`), enabled: Boolean(taskId) })
@@ -187,6 +191,22 @@ export function useDeleteWorkbench() {
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível excluir a mesa")),
     })
+}
+
+/** Mesas em andamento mudaram no servidor: recarrega só a lista de trabalhos em andamento. */
+export function useWorkbenchProgressRealtime(): void {
+    const queryClient = useQueryClient()
+    useEffect(() => {
+        if (!isPusherClientAvailable()) return
+        const name = appChannel()
+        const channel = acquireChannel(name)
+        const handler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("workbenches", "in-progress") })
+        channel.bind(AGENTIC_UPDATED_EVENT, handler)
+        return () => {
+            channel.unbind(AGENTIC_UPDATED_EVENT, handler)
+            releaseChannel(name)
+        }
+    }, [queryClient])
 }
 
 /** Centrais, mesas ou configuração alteradas no servidor: recarrega. */
