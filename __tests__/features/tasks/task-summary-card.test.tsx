@@ -15,8 +15,8 @@ describe('TaskSummaryCard', () => {
     expect(text.className).toContain('text-muted-foreground')
   })
 
-  it('identifica o conteúdo como Resumo (IA)', () => {
+  it('não exibe o rótulo "Resumo (IA)"', () => {
     render(<TaskSummaryCard summary="Qualquer resumo" />)
-    expect(screen.getByText('Resumo (IA)')).toBeTruthy()
+    expect(screen.queryByText('Resumo (IA)')).toBeNull()
   })
 })

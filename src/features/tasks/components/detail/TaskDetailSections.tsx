@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { motion } from "framer-motion"
-import { FileCode2, History, Loader2, MessageSquare, Send, Timer } from "lucide-react"
+import { FileCode2, FileTerminal, History, Loader2, MessageSquare, Send, Timer } from "lucide-react"
 import { Markdown } from "@/components/ui/markdown"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,29 +20,24 @@ function Empty({ icon: Icon, children }: { icon: typeof History; children: React
     )
 }
 
-function Block({ title, children }: { title: string; children: ReactNode }) {
+export function DescriptionSection({ task }: { task: TaskDetailDto }) {
+    if (!task.description) return <Empty icon={FileCode2}>Sem descrição.</Empty>
     return (
-        <motion.section variants={listItem} className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
-            {children}
-        </motion.section>
+        <motion.div variants={listContainer} initial="hidden" animate="visible">
+            <motion.div variants={listItem}>
+                <Markdown>{task.description}</Markdown>
+            </motion.div>
+        </motion.div>
     )
 }
 
-export function DescriptionSection({ task }: { task: TaskDetailDto }) {
-    if (!task.description && !task.technicalSpec) return <Empty icon={FileCode2}>Sem descrição.</Empty>
+export function TechnicalSpecSection({ task }: { task: TaskDetailDto }) {
+    if (!task.technicalSpec) return <Empty icon={FileTerminal}>Sem especificação técnica.</Empty>
     return (
-        <motion.div variants={listContainer} initial="hidden" animate="visible" className="space-y-6">
-            {task.description && (
-                <Block title="Descrição">
-                    <Markdown>{task.description}</Markdown>
-                </Block>
-            )}
-            {task.technicalSpec && (
-                <Block title="Especificação técnica">
-                    <Markdown>{task.technicalSpec}</Markdown>
-                </Block>
-            )}
+        <motion.div variants={listContainer} initial="hidden" animate="visible">
+            <motion.div variants={listItem}>
+                <Markdown>{task.technicalSpec}</Markdown>
+            </motion.div>
         </motion.div>
     )
 }
