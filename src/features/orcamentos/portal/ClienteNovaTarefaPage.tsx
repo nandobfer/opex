@@ -17,6 +17,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { clienteDraftSchema, type ClienteDraftInput } from "../schemas"
+import { repoLabel } from "../logic"
 import { clientePortalPath, clienteRevisaoPath } from "../constants"
 import { useClienteOptions, useCreateDraft } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
@@ -96,13 +97,13 @@ function ClienteNovaTarefaView() {
                                                         id="cliente-repo"
                                                         placeholder="Escolha o repositório"
                                                         invalid={Boolean(errors.projectId)}
-                                                        value={selected ? <GithubRepoLabel repo={{ fullName: selected.repo, ownerAvatarUrl: null, description: null, private: false }} /> : undefined}
+                                                        value={selected ? <GithubRepoLabel repo={repoLabel(selected)} /> : undefined}
                                                     />
                                                 }
                                                 items={projects}
                                                 getKey={(item) => item.id}
                                                 searchKeys={["repo", "name", "sigla"]}
-                                                renderItem={(item) => <GithubRepoLabel repo={{ fullName: item.repo, ownerAvatarUrl: null, description: null, private: false }} />}
+                                                renderItem={(item) => <GithubRepoLabel repo={repoLabel(item)} />}
                                                 onPick={(item) => field.onChange(item.id)}
                                                 matchTriggerWidth
                                                 searchLabel="Buscar repositório"

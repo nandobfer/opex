@@ -13,6 +13,7 @@ import { buildBoardColumns } from "@/features/tasks/board"
 import { applyTaskFilters, DEFAULT_TASK_FILTERS, type TaskFilters } from "@/features/tasks/filters"
 import { TaskViewSwitch } from "@/features/tasks/components/TaskViewSwitch"
 import { clienteNovaPath } from "../constants"
+import { repoLabelIndex } from "../logic"
 import { useClienteOptions, useClienteTasks } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
 import { ClienteFiltersBar } from "./components/ClienteFiltersBar"
@@ -36,6 +37,7 @@ function ClienteTasksView() {
     const tasks = useClienteTasks(filters.showArchived)
 
     const columns = useMemo(() => buildBoardColumns(options.data?.board), [options.data])
+    const repoIndex = useMemo(() => repoLabelIndex(options.data?.projects ?? []), [options.data])
     const allTasks = useMemo(() => tasks.data?.tasks ?? [], [tasks.data])
     const visible = useMemo(() => applyTaskFilters(allTasks, filters, { ignoreColumn: filters.view === "kanban" }), [allTasks, filters])
     const shown = useMemo(() => {
@@ -79,9 +81,9 @@ function ClienteTasksView() {
                     {shown.length === 0 ? (
                         <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas dos seus repositórios aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath(token))} />
                     ) : filters.view === "kanban" ? (
-                        <ClienteTaskBoard tasks={visible} columns={columns} />
+                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} />
                     ) : (
-                        <ClienteTaskTable tasks={visible} columns={columns} />
+                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} />
                     )}
                 </>
             )}

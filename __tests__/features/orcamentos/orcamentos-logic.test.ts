@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { computeClientEstimate, formatFactorLabel, formatHoursLabel } from "@/features/orcamentos/logic"
+import { computeClientEstimate, formatFactorLabel, formatHoursLabel, repoLabel, repoLabelFrom, repoLabelIndex } from "@/features/orcamentos/logic"
+import type { ClienteRepoDto } from "@/features/orcamentos/types"
 
 describe("orçamento do cliente", () => {
     it("aplica o fator de lucro nas horas e calcula o faturamento (exemplo R$ 40 × 20:00 = R$ 800)", () => {
@@ -20,5 +21,17 @@ describe("orçamento do cliente", () => {
         expect(formatHoursLabel(0)).toBe("0:00")
         expect(formatFactorLabel(10)).toBe("10x")
         expect(formatFactorLabel(2.5)).toBe("2.5x")
+    })
+
+    it("monta o rótulo do GitHub a partir do repositório do cliente", () => {
+        const repo: ClienteRepoDto = { id: "p", name: "acme/app", repo: "acme/app", sigla: "APP", ownerAvatarUrl: "https://avatar/acme.png", description: "App do Acme", private: true }
+        expect(repoLabel(repo)).toEqual({ fullName: "acme/app", ownerAvatarUrl: "https://avatar/acme.png", description: "App do Acme", private: true })
+    })
+
+    it("indexa pelo repo em minúsculas e cai na inicial quando o repositório não está no índice", () => {
+        const repo: ClienteRepoDto = { id: "p", name: "acme/app", repo: "Acme/App", sigla: "APP", ownerAvatarUrl: "https://avatar/acme.png", description: null, private: false }
+        const index = repoLabelIndex([repo])
+        expect(repoLabelFrom("acme/app", index).ownerAvatarUrl).toBe("https://avatar/acme.png")
+        expect(repoLabelFrom("outro/repo", index)).toEqual({ fullName: "outro/repo", ownerAvatarUrl: null, description: null, private: false })
     })
 })
