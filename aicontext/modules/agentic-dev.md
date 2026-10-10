@@ -199,6 +199,12 @@ done → Reabrir mesa (texto ao planejador) → planning
   prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
   IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
   **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+- **Rolagem da saída** (`useStickToBottom`): a aba "Saída da IA" acompanha o fim do stream sozinha
+  sempre que o conteúdo cresce — inclusive quando um item do **meio** da lista muda (ex.: o fim de
+  um turno) — enquanto o usuário estiver no fim. Ao rolar para cima, o acompanhamento **para** (não
+  volta sozinho) e aparece um botão flutuante **Ir para o final**; ao voltar ao fim ou clicar no
+  botão, o acompanhamento **retoma**. O botão rola suave, desligando o movimento com
+  `prefers-reduced-motion`.
 
 ## APIs (`src/app/api/agentic/`)
 
