@@ -3,8 +3,8 @@ import mongoose, { Schema, type Model } from "mongoose"
 /**
  * Trilha de auditoria (coleção capped, como no Smart Desk).
  *
- * App de uso pessoal, sem login: `userId` é o dono local (`LOCAL_USER.id`) ou `system` para
- * rotinas e migrações.
+ * App de uso pessoal (login por senha única, sem usuários): `userId` é o dono local (`LOCAL_USER.id`)
+ * ou `system` para rotinas e migrações.
  */
 
 export const ACOES_AUDITORIA = [

@@ -1,8 +1,8 @@
 /**
  * Regras de autorização dos canais privados do Pusher.
  *
- * O app é de uso pessoal e sem login: não há usuário nem permissão para conferir. Mesmo assim só
- * canais CONHECIDOS são autorizados:
+ * O app é de uso pessoal, com login por senha única: não há usuário nem permissão por canal para
+ * conferir. Mesmo assim só canais CONHECIDOS são autorizados:
  * - `private-app`: dados das telas do app;
  * - `private-integration-{id}`: debug e status de uma integração existente no catálogo.
  */

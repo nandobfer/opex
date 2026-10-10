@@ -1,4 +1,5 @@
 allowBuilds:
+  '@tsparticles/engine': false
   core-js: true
   esbuild: true
   msgpackr-extract: false

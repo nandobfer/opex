@@ -1,6 +1,7 @@
 /**
- * Dono do app. O Opex é de uso pessoal, roda só localmente e não tem login: toda ação é
- * atribuída a este usuário fixo (auditoria, campos `createdBy`/`updatedBy`). SOMENTE servidor.
+ * Dono do app. O Opex é de uso pessoal, protegido por um login com senha única (sem usuários):
+ * toda ação é atribuída a este usuário fixo (auditoria, campos `createdBy`/`updatedBy`). SOMENTE
+ * servidor.
  */
 export const LOCAL_USER_ID = "local"
 

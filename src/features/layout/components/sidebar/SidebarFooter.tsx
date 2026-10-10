@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { LogoutButton } from "@/features/auth/components/LogoutButton"
 
 export function initials(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -11,12 +12,12 @@ export function initials(name: string): string {
 
 interface SidebarFooterProps {
     collapsed: boolean
-    /** Dono do app (uso pessoal, sem login): `APP_OWNER_NAME`. */
+    /** Dono do app (uso pessoal): `APP_OWNER_NAME`. */
     ownerName: string
     version?: string
 }
 
-/** Rodapé do menu: o dono do app e a versão. */
+/** Rodapé do menu: o dono do app, a versão e a ação de sair (encerra a sessão). */
 export function SidebarFooter({ collapsed, ownerName, version }: SidebarFooterProps) {
     return (
         <div className="shrink-0 border-t border-sidebar-border p-2">
@@ -31,6 +32,7 @@ export function SidebarFooter({ collapsed, ownerName, version }: SidebarFooterPr
                     </span>
                 )}
             </div>
+            <LogoutButton collapsed={collapsed} className="mt-1" />
         </div>
     )
 }

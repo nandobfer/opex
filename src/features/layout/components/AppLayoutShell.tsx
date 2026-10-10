@@ -10,7 +10,7 @@ interface AppLayoutShellProps {
     children: ReactNode
 }
 
-/** Casca do app: marca, menu e dono (sem login; uso pessoal). */
+/** Casca do app: marca, menu e dono (uso pessoal; acesso protegido por login). */
 export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellProps) {
     return (
         <AppShell

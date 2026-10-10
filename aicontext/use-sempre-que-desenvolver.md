@@ -11,10 +11,11 @@ Regras gerais do Opex. Leia antes de qualquer implementação.
 
 ## Conceito do Projeto
 
-- App Next.js único, de **uso pessoal**: um único usuário (o dono, `APP_OWNER_NAME`), **sem
-  login**, rodando só localmente ou em Docker. Não é publicado.
-- Sem autenticação, permissões, empresas ou multiusuário. Não introduza nada disso sem pedido
-  explícito.
+- App Next.js único, de **uso pessoal**: um único usuário (o dono, `APP_OWNER_NAME`). Pode ser
+  publicado na internet atrás de uma tela de login com **senha única** (`APP_PASSWORD`, ver
+  `modules/auth.md`) — sem cadastro e sem usuários.
+- Sem usuários, permissões, empresas ou multiusuário: o login é só uma senha compartilhada. Não
+  introduza usuários/papéis/`companyId` sem pedido explícito.
 - Toda ação é atribuída ao usuário local (`getLocalUser()` de `src/lib/local-user.ts`, id
   `local`) na auditoria e nos campos `createdBy`/`updatedBy`.
 - Integrações externas (GitHub, provedores de IA, Archflow) são configuradas na tela de Integrações;
@@ -128,7 +129,9 @@ fix(integrations): corrige teste do Pusher em modo host
 
 ## Segurança
 
-- Mesmo sem login, NUNCA exponha secrets no client-side nem devolva valores de campos privados.
+- Mesmo atrás do login (senha única), NUNCA exponha secrets no client-side nem devolva valores de
+  campos privados.
 - Valide inputs no servidor com Zod.
-- O app não deve ser exposto à internet: não há autenticação. Endpoints públicos para outros
-  sistemas só via token de sistema (Integrações › API interna).
+- O app pode ser exposto à internet **somente** atrás da tela de login (senha única, ver
+  `modules/auth.md`). Outros sistemas acessam endpoints públicos por token de sistema
+  (Integrações › API interna).
