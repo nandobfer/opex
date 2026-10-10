@@ -121,7 +121,7 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
         case "preview":
             return "Aguardando aprovação da prévia"
         case "pr_open":
-            return "Aguardando revisão ou merge do PR"
+            return "Aguardando comentário (@opex), revisão ou merge do PR"
         case "changes_requested":
             return "Aguardando descrever as mudanças"
         default:

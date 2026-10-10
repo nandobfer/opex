@@ -103,7 +103,7 @@ describe('workbenchWaitingReason', () => {
   it('cada espera tem o seu motivo', () => {
     expect(workbenchWaitingReason(base)).toBe('Aguardando revisão do plano')
     expect(workbenchWaitingReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
-    expect(workbenchWaitingReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchWaitingReason({ ...base, stage: 'pr_open' })).toBe('Aguardando comentário (@opex), revisão ou merge do PR')
     expect(workbenchWaitingReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
   })
 
@@ -124,7 +124,7 @@ describe('workbenchUserWaitReason', () => {
   it('esperas do usuário têm o mesmo motivo da lista de trabalhos em andamento', () => {
     expect(workbenchUserWaitReason(base)).toBe('Aguardando revisão do plano')
     expect(workbenchUserWaitReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
-    expect(workbenchUserWaitReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchUserWaitReason({ ...base, stage: 'pr_open' })).toBe('Aguardando comentário (@opex), revisão ou merge do PR')
     expect(workbenchUserWaitReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
   })
 

@@ -355,7 +355,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const found = parsed.success ? { url: parsed.data.url, number: parsed.data.number ?? extractPrUrl(parsed.data.url)?.number } : extractPrUrl(result.text)
             if (!found?.url || !found.number) throw new Error("O agente não informou a URL do Pull Request")
             const keep = doc.pr && doc.pr.number === found.number
-            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, closedNotified: false }
+            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
             const prColumn = config.columns.onPr
@@ -623,20 +623,20 @@ export async function deleteWorkbench(id: string): Promise<void> {
 // Acompanhamento do PR (rotina agendada)
 // ---------------------------------------------------------------------------
 
-/** Revisão pediu mudanças: com o motivo, replaneja sozinho; sem, pede o texto ao usuário. */
-export async function handlePrChangesRequested(id: string, feedback: string): Promise<void> {
+/** Pedido de mudança no PR (comentário com `@opex` ou revisão): com o motivo, replaneja sozinho; sem, pede o texto ao usuário. */
+export async function handlePrFeedback(id: string, feedback: string): Promise<void> {
     const loaded = await loadAll(id)
     await prepareHub(id)
     if (!feedback.trim()) {
-        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "A revisão do PR pediu mudanças sem dizer o motivo: descreva o que precisa mudar" })
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "O PR pediu mudanças sem dizer o motivo: descreva o que precisa mudar" })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
         return
     }
     try {
-        await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Revisão do PR pediu mudanças:\n\n${feedback}`, feedback })
+        await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Pedido de mudança no PR:\n\n${feedback}`, feedback })
     } catch (error) {
         // Sem como replanejar agora (ex.: limite de mesas): guarda o pedido para o usuário reenviar.
-        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `A revisão do PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido da revisão:\n\n${feedback}` })
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido:\n\n${feedback}` })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
     }
 }
@@ -691,7 +691,8 @@ export async function handlePrReopened(id: string): Promise<void> {
     await update(doc, { pr: { ...doc.pr, state: "open", closedNotified: false } })
 }
 
-export async function saveLastReviewId(id: string, lastReviewId: number): Promise<void> {
-    await AgenticWorkbench.updateOne({ _id: id }, { $set: { "pr.lastReviewId": lastReviewId } })
+/** Grava os cursores de acompanhamento do PR (maior id de revisão e de comentário já tratados). */
+export async function savePrCursors(id: string, cursors: { lastReviewId: number; lastCommentId: number }): Promise<void> {
+    await AgenticWorkbench.updateOne({ _id: id }, { $set: { "pr.lastReviewId": cursors.lastReviewId, "pr.lastCommentId": cursors.lastCommentId } })
 }
 
