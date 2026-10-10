@@ -54,8 +54,8 @@ e opções na própria aba da página "Provedores de IA".
   `/integracoes/ia/gemini` em `ia/[provider]/page.tsx`, provedor desconhecido = 404;
   `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub), **Entender tarefas** e **Desenvolvimento agêntico**
-  (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
+  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas** e
+  **Desenvolvimento agêntico** (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
   fuse.js, lista virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar).
 
@@ -87,6 +87,40 @@ e opções na própria aba da página "Provedores de IA".
   **Gerar novamente**, **Copiar**; rodapé com tokens, custo e duração. Estado em
   `understand-stream.ts` (redutor puro) + `useUnderstandTaskStream`.
 
+## Feature "Resumos de tarefas"
+
+- Configuração em `ai_feature_settings` (`feature: "task-summary"`), schema Zod
+  `taskSummarySettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
+  variante/raciocínio, temperatura e máximo de tokens (só Gemini), **tamanho máximo** do resumo
+  (40–400 caracteres, padrão 140) e instruções (prompt de sistema, "Restaurar padrão").
+- Regras ao salvar iguais às de "Entender tarefas" (ativa exige provedor+modelo conectado; modelo,
+  variante e agente conferidos no catálogo; campos que não se aplicam ao provedor viram vazios).
+  **Ao ativar** (`enabled` de falso→verdadeiro), dispara em segundo plano a varredura das tarefas
+  não concluídas sem resumo (`runTaskSummaryBackfill` via `runAfterResponse`). Auditoria `FeatureIA`
+  e evento `ai-feature-updated` em `private-app`.
+- **Resumo** = 1 linha que **substitui a descrição** na exibição: aparece no card do kanban (linha
+  sob o título), na coluna **Título** da tabela e na aba **Descrição** da página da tarefa (a
+  descrição completa continua acessível no **Editar**). Sem resumo, a descrição aparece normalmente.
+- **Entrada** (`src/features/ai/task-summary.ts`, puro): a tarefa vira Markdown (código, tipo,
+  prioridade, projeto, título e descrição cortada). `toSummaryLine` normaliza a saída do modelo
+  (primeira linha com conteúdo, sem Markdown, espaços colapsados, corte no tamanho máximo).
+- **Desatualização**: o `DevTask` guarda `summarySourceHash` (hash de título+descrição no momento
+  da geração) e `summary`; `needsSummary` marca como pendente quando falta resumo ou o hash
+  divergiu. Editar título/descrição no app regenera em segundo plano (`PATCH /api/tasks/[id]`); a
+  rotina cobre as edições vindas da sincronização do GitHub.
+- **Rotina**: `ai-task-summary` (Cron interno, a cada 2 min) gera, **sequencialmente**, os resumos
+  pendentes das tarefas não arquivadas que não estão em nenhuma **coluna de conclusão** (vínculo do
+  projeto; ver `modules/github.md`). Só age com a feature disponível; sem pendências, é no-op. A
+  criação pela tela dispara a geração na hora; a criação pelo GitHub é coberta pela rotina.
+- **Execução**: `POST /api/tasks/[id]/summary` — feature indisponível (409) ou tarefa inexistente
+  (404) respondem JSON; senão NDJSON (`start`, eventos do `streamAi`, `done`/`error`). O resumo é
+  **gravado no `done`** (publica `tasks-updated`) e cada geração grava linha em `ai_usage_logs`
+  (`feature: "task-summary"`). Fechar a conexão cancela a geração.
+- **Modal** (`TaskSummaryDialog`): inicia ao abrir; texto progressivo com cursor animado,
+  atividade do agente e uso; **Parar**, **Gerar novamente**, **Copiar**. O botão **Gerar resumo**
+  fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
+  `understand-stream.ts`.
+
 ## APIs
 
 | Rota | Descrição |
@@ -94,10 +128,13 @@ e opções na própria aba da página "Provedores de IA".
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
+| `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
+| `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 
 ## Testes
 
 `__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (entrada e
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
-`UnderstandTaskDialog` e `UnderstandTaskButton`).
+`UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
+`task-summary-settings`, `task-summary-job` e `task-summary-route`).

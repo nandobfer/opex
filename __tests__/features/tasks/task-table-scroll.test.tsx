@@ -6,7 +6,7 @@ import type { TaskDto } from '@/features/tasks/types'
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 
-import { sortTaskRows, TaskTable } from '@/features/tasks/components/TaskTable'
+import { sortTaskRows, TaskTable, TASK_TABLE_ROW_HEIGHT } from '@/features/tasks/components/TaskTable'
 import { useTaskSelection } from '@/features/tasks/hooks/useTaskSelection'
 import { buildBoardColumns } from '@/features/tasks/board'
 import { APP_SCROLL_CONTAINER_ID } from '@/hooks/usePageVirtualizer'
@@ -25,6 +25,7 @@ const task = (n: number): TaskDto => ({
   columnId: 'todo',
   order: n,
   title: `Tarefa ${n}`,
+  summary: null,
   taskType: 'feature',
   priority: 'high',
   archived: false,
@@ -83,7 +84,7 @@ describe('TaskTable rolando com a página', () => {
 
     const main = document.getElementById(APP_SCROLL_CONTAINER_ID)!
     await act(async () => {
-      Object.defineProperty(main, 'scrollTop', { configurable: true, value: 48 * 200 })
+      Object.defineProperty(main, 'scrollTop', { configurable: true, value: TASK_TABLE_ROW_HEIGHT * 200 })
       const table = screen.getByTestId('task-table')
       table.getBoundingClientRect = () => ({ top: -main.scrollTop, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: -main.scrollTop, toJSON: () => ({}) })
       fireEvent.scroll(main)
@@ -118,6 +119,14 @@ describe('TaskTable rolando com a página', () => {
     })
     const tooltip = await screen.findByRole('tooltip')
     expect(tooltip.textContent).toBe(long.title)
+  })
+
+  it('mostra a prévia do resumo sob o título quando presente', () => {
+    const withSummary = { ...task(1), summary: 'Exporta as tarefas em CSV' }
+    inPage(<Table tasks={[withSummary]} />)
+    const cell = screen.getByText('Exporta as tarefas em CSV')
+    expect(cell.className).toContain('truncate')
+    expect(cell.getAttribute('title')).toBe('Exporta as tarefas em CSV')
   })
 
   it('coluna Issue: link com #N depois do código; "—" sem issue', () => {

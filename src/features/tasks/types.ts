@@ -20,6 +20,8 @@ export interface TaskDto {
     columnId: string
     order: number
     title: string
+    /** Resumo de 1 linha gerado por IA (substitui a descrição na exibição). */
+    summary: string | null
     taskType: TaskType | null
     priority: TaskPriority
     archived: boolean

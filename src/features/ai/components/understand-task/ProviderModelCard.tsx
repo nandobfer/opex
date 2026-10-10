@@ -11,21 +11,29 @@ import { apiErrorMessage } from "@/lib/api"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { getAiProvider, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiAgents, useAiModels } from "../../hooks/useAi"
-import type { UnderstandTaskSettings } from "../../schemas"
 
 const DEFAULT_OPTION = "__default__"
 
-interface ProviderModelCardProps {
-    form: UseFormReturn<UnderstandTaskSettings>
+/** Campos de provedor compartilhados pelas features de IA. */
+export interface ProviderModelFields {
+    provider: AiProviderId | null
+    model: string | null
+    agent: string | null
+    variant: string | null
+}
+
+interface ProviderModelCardProps<T extends ProviderModelFields> {
+    form: UseFormReturn<T>
     providers: AiProviderStatusDto[]
     onProviderChange: (provider: AiProviderId) => void
 }
 
 /** Provedor (só os conectados), modelo, agente (OpenCode) e variante/raciocínio. */
-export function ProviderModelCard({ form, providers, onProviderChange }: ProviderModelCardProps) {
-    const errors = form.formState.errors
-    const provider = useWatch({ control: form.control, name: "provider" })
-    const modelId = useWatch({ control: form.control, name: "model" })
+export function ProviderModelCard<T extends ProviderModelFields>({ form, providers, onProviderChange }: ProviderModelCardProps<T>) {
+    const cardForm = form as unknown as UseFormReturn<ProviderModelFields>
+    const errors = cardForm.formState.errors
+    const provider = useWatch({ control: cardForm.control, name: "provider" })
+    const modelId = useWatch({ control: cardForm.control, name: "model" })
     const def = provider ? getAiProvider(provider) : null
     const models = useAiModels(provider)
     const agents = useAiAgents(def?.supportsAgent === true)
@@ -62,8 +70,8 @@ export function ProviderModelCard({ form, providers, onProviderChange }: Provide
                             searchKeys={["name", "id", "group"]}
                             renderItem={(item) => <ModelOption model={item} />}
                             onPick={(item) => {
-                                form.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
-                                form.setValue("variant", null, { shouldDirty: true })
+                                cardForm.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
+                                cardForm.setValue("variant", null, { shouldDirty: true })
                             }}
                             loading={models.isLoading}
                             disabled={!provider}
@@ -79,7 +87,7 @@ export function ProviderModelCard({ form, providers, onProviderChange }: Provide
                     {def && model && model.variants.length > 0 && (
                         <Field id="ai-variant" label={def.variantLabel}>
                             <Controller
-                                control={form.control}
+                                control={cardForm.control}
                                 name="variant"
                                 render={({ field }) => (
                                     <Select value={field.value ?? DEFAULT_OPTION} onValueChange={(value) => field.onChange(value === DEFAULT_OPTION ? null : value)}>
@@ -103,7 +111,7 @@ export function ProviderModelCard({ form, providers, onProviderChange }: Provide
                     {def?.supportsAgent && (
                         <Field id="ai-agent" label="Agente do OpenCode" error={agents.isError ? apiErrorMessage(agents.error, "Não foi possível listar os agentes") : undefined}>
                             <Controller
-                                control={form.control}
+                                control={cardForm.control}
                                 name="agent"
                                 render={({ field }) => (
                                     <Select value={field.value ?? DEFAULT_OPTION} onValueChange={(value) => field.onChange(value === DEFAULT_OPTION ? null : value)}>

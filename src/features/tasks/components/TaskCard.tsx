@@ -105,6 +105,11 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
             <h4 className="mb-2 line-clamp-2 text-xs font-semibold leading-snug transition-colors group-hover:text-primary" title={task.title}>
                 {task.title}
             </h4>
+            {task.summary && (
+                <p className="mb-2 line-clamp-1 text-[11px] leading-snug text-muted-foreground" title={task.summary}>
+                    {task.summary}
+                </p>
+            )}
             {tone && waiting && (
                 <p className={cn("mb-2 flex items-center gap-1 text-[10px] font-medium", tone === "failed" ? "text-destructive" : "text-warning")} title={waiting.waitingFor ?? undefined}>
                     <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />

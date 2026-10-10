@@ -30,6 +30,7 @@ import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
 import type { TaskDetailDto } from "../../types"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
+import { TaskSummaryButton } from "@/features/ai/components/task-summary/TaskSummaryButton"
 import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
@@ -116,6 +117,7 @@ export function TaskDetailPage({ id }: { id: string }) {
                                     <TimerIndicator />
                                     <TaskColumnMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, column) => flow.move(current, column)} size="default" />
                                     <UnderstandTaskButton taskId={task.id} taskCode={task.code} />
+                                    <TaskSummaryButton taskId={task.id} taskCode={task.code} />
                                     <WorkbenchButton taskId={task.id} projectId={task.project?.id ?? null} />
                                     {task.issue && <IssueIconButton url={task.issue.url} repo={task.issue.repo} number={task.issue.number} />}
                                     <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={() => setEditing(true)} aria-label="Editar tarefa" title="Editar tarefa">

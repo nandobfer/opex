@@ -175,6 +175,7 @@ export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
 export const GITHUB_ISSUE_SYNC_JOB_ID = "github-issue-sync"
 export const AGENTIC_PR_WATCH_JOB_ID = "agentic-pr-watch"
 export const AGENTIC_QUEUE_JOB_ID = "agentic-queue-pump"
+export const TASK_SUMMARY_JOB_ID = "ai-task-summary"
 
 /** Rotinas padrão. */
 export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
@@ -204,6 +205,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Processar a fila do desenvolvimento agêntico",
         kind: "internal",
         schedule: { type: "interval", minutes: 1 },
+        enabled: true,
+    },
+    {
+        id: TASK_SUMMARY_JOB_ID,
+        label: "Gerar resumos de tarefas (IA)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 2 },
         enabled: true,
     },
 ]

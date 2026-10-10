@@ -1,6 +1,7 @@
 import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
+import { runAfterResponse } from "@/lib/after-response"
 import { updateTaskSchema } from "@/features/tasks/schemas"
 import { deleteTask, getTask, updateTask } from "@/features/tasks/server/service"
 import { pushTasksToIssues } from "@/features/github/server/task-sync"
@@ -17,6 +18,13 @@ export const PATCH = withRoute<{ id: string }>(async ({ req, params }) => {
     if (!body.ok) return body.response
     await updateTask(params.id, body.data, getLocalUser().id)
     await pushTasksToIssues([params.id])
+    // Título/descrição mudaram: o resumo de IA fica desatualizado e é regenerado em segundo plano.
+    if (body.data.title !== undefined || body.data.description !== undefined) {
+        runAfterResponse("task-summary", async () => {
+            const { generateTaskSummary } = await import("@/features/ai/server/task-summary")
+            await generateTaskSummary(params.id)
+        })
+    }
     return ok({ id: params.id })
 })
 

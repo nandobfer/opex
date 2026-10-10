@@ -17,6 +17,11 @@ export interface IDevTask {
     taskType: string | null
     priority: string
     archived: boolean
+    /** Resumo de 1 linha gerado por IA (substitui a descrição na exibição). */
+    summary: string | null
+    /** Hash da fonte (título + descrição) do resumo atual; divergente = resumo desatualizado. */
+    summarySourceHash: string | null
+    summaryUpdatedAt: Date | null
     createdAt: Date
     updatedAt: Date
 }
@@ -33,6 +38,9 @@ const DevTaskSchema = new Schema<IDevTask>(
         taskType: { type: String, default: null },
         priority: { type: String, default: "medium" },
         archived: { type: Boolean, default: false },
+        summary: { type: String, default: null },
+        summarySourceHash: { type: String, default: null },
+        summaryUpdatedAt: { type: Date, default: null },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },
 )

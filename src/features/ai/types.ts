@@ -1,5 +1,5 @@
 import type { AiUsage } from "@/lib/ai/stream"
-import type { UnderstandTaskSettings } from "./schemas"
+import type { TaskSummarySettings, UnderstandTaskSettings } from "./schemas"
 
 export type { AiAgentDto, AiModelDto, AiProviderStatusDto } from "@/lib/ai/providers"
 
@@ -17,6 +17,14 @@ export interface UnderstandTaskSettingsDto {
     updatedAt: string | null
 }
 
+export interface TaskSummarySettingsDto {
+    settings: TaskSummarySettings
+    /** Nada salvo ainda: valores iniciais do código. */
+    isDefault: boolean
+    availability: AiFeatureAvailability
+    updatedAt: string | null
+}
+
 /** Linha do stream NDJSON de `POST /api/tasks/[id]/understand`. */
 export type UnderstandTaskEvent =
     | { type: "start"; provider: string; model: string; agent: string | null }
@@ -26,3 +34,6 @@ export type UnderstandTaskEvent =
     | { type: "notice"; message: string }
     | { type: "done"; finishReason: string; usage: AiUsage; durationMs: number }
     | { type: "error"; message: string }
+
+/** Linha do stream NDJSON de `POST /api/tasks/[id]/summary` (mesma forma de "Entender tarefas"). */
+export type TaskSummaryEvent = UnderstandTaskEvent

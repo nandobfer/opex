@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { UnderstandTaskSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, UnderstandTaskSettingsDto } from "../types"
+import type { TaskSummarySettings, UnderstandTaskSettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -63,6 +63,20 @@ export function useSaveUnderstandTaskSettings() {
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "understand-task"), saved)
             toast.success("Configuração de \"Entender tarefas\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const useTaskSummarySettings = () => useQuery({ queryKey: key("feature", "task-summary"), queryFn: () => get<TaskSummarySettingsDto>("/ai/features/task-summary") })
+
+export function useSaveTaskSummarySettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: TaskSummarySettings) => unwrapApi((await api.put<ApiResponse<TaskSummarySettingsDto>>("/ai/features/task-summary", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "task-summary"), saved)
+            toast.success("Configuração de \"Resumos de tarefas\" salva")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })
