@@ -16,6 +16,10 @@ describe('toSummaryLine', () => {
     expect(toSummaryLine('x'.repeat(20), 10)).toBe('x'.repeat(10))
   })
 
+  it('corta em limite de palavra quando houver espaço (não termina no meio)', () => {
+    expect(toSummaryLine('Implementar agente de IA para gerar resumos', 20)).toBe('Implementar agente…')
+  })
+
   it('saída só com espaços vira string vazia', () => {
     expect(toSummaryLine('\n   \n', 140)).toBe('')
   })

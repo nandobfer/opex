@@ -84,7 +84,11 @@ describe('runTaskSummaryBackfill', () => {
     expect(mocks.find).toHaveBeenCalledWith({ archived: { $ne: true }, columnId: { $nin: ['done'] } })
     expect(mocks.getTask).toHaveBeenCalledTimes(1)
     expect(mocks.getTask).toHaveBeenCalledWith('a')
-    expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'a' }, expect.objectContaining({ $set: expect.objectContaining({ summary: 'Resumo salvo' }) }))
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      { _id: 'a' },
+      expect.objectContaining({ $set: expect.objectContaining({ summary: 'Resumo salvo' }) }),
+      { timestamps: false },
+    )
     expect(mocks.publish).toHaveBeenCalledWith(['a'])
   })
 

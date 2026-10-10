@@ -48,7 +48,9 @@ async function saveTaskSummary(taskId: string, source: TaskSummarySource, text: 
     const line = toSummaryLine(text, maxLength)
     if (!line) return null
     await dbConnect()
-    await DevTask.updateOne({ _id: taskId }, { $set: { summary: line, summarySourceHash: taskSummarySourceHash(source), summaryUpdatedAt: new Date() } })
+    // `timestamps: false`: o resumo não é uma edição do usuário — não deve mexer no `updatedAt`
+    // (nem fazer a sincronização do GitHub achar que a tarefa é mais nova que a issue).
+    await DevTask.updateOne({ _id: taskId }, { $set: { summary: line, summarySourceHash: taskSummarySourceHash(source), summaryUpdatedAt: new Date() } }, { timestamps: false })
     await publishTasksUpdated([taskId])
     return line
 }

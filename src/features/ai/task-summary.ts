@@ -82,7 +82,8 @@ function cleanLine(line: string): string {
 
 /**
  * Normaliza a saída do modelo para um resumo de 1 linha: descarta cercas de código, pega a
- * primeira linha com conteúdo, colapsa espaços e corta no tamanho máximo.
+ * primeira linha com conteúdo, colapsa espaços e corta no tamanho máximo — em limite de palavra
+ * quando possível, para não terminar no meio de uma (ex.: "integraç…").
  */
 export function toSummaryLine(text: string, maxLength: number): string {
     const line =
@@ -92,5 +93,13 @@ export function toSummaryLine(text: string, maxLength: number): string {
             .map(cleanLine)
             .find((candidate) => candidate.length > 0) ?? ""
     const collapsed = line.replace(/\s+/g, " ").trim()
-    return collapsed.length > maxLength ? collapsed.slice(0, maxLength).trim() : collapsed
+    return truncateAtWord(collapsed, maxLength)
+}
+
+function truncateAtWord(text: string, maxLength: number): string {
+    if (text.length <= maxLength) return text
+    const slice = text.slice(0, maxLength)
+    const lastSpace = slice.lastIndexOf(" ")
+    if (lastSpace <= 0) return slice
+    return `${slice.slice(0, lastSpace).trimEnd()}…`
 }

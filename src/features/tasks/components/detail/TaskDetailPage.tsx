@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ArrowLeft, FileSearch, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { AlignLeft, ArrowLeft, FileSearch, Pencil, RefreshCw, Trash2 } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -112,6 +112,12 @@ export function TaskDetailPage({ id }: { id: string }) {
                                         {task.issue?.notice && <IssueNoticeBadge notice={task.issue.notice} />}
                                     </div>
                                     <h1 className="text-xl font-semibold leading-tight md:text-2xl">{task.title}</h1>
+                                    {task.summary && (
+                                        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                                            <AlignLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                                            <span>{task.summary}</span>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <TimerIndicator />

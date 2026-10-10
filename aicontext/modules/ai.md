@@ -98,12 +98,13 @@ e opções na própria aba da página "Provedores de IA".
   **Ao ativar** (`enabled` de falso→verdadeiro), dispara em segundo plano a varredura das tarefas
   não concluídas sem resumo (`runTaskSummaryBackfill` via `runAfterResponse`). Auditoria `FeatureIA`
   e evento `ai-feature-updated` em `private-app`.
-- **Resumo** = 1 linha que **substitui a descrição** na exibição: aparece no card do kanban (linha
-  sob o título), na coluna **Título** da tabela e na aba **Descrição** da página da tarefa (a
-  descrição completa continua acessível no **Editar**). Sem resumo, a descrição aparece normalmente.
+- **Resumo** = 1 linha **adicional**, que **não substitui** a descrição: aparece no card do kanban
+  (linha sob o título), na coluna **Título** da tabela e, na página da tarefa, como **subtítulo no
+  cabeçalho**. A aba **Descrição** segue mostrando a descrição completa em Markdown.
 - **Entrada** (`src/features/ai/task-summary.ts`, puro): a tarefa vira Markdown (código, tipo,
   prioridade, projeto, título e descrição cortada). `toSummaryLine` normaliza a saída do modelo
-  (primeira linha com conteúdo, sem Markdown, espaços colapsados, corte no tamanho máximo).
+  (primeira linha com conteúdo, sem Markdown, espaços colapsados) e corta no tamanho máximo em
+  **limite de palavra** quando houver espaço (evita terminar no meio, ex.: "integraç…").
 - **Desatualização**: o `DevTask` guarda `summarySourceHash` (hash de título+descrição no momento
   da geração) e `summary`; `needsSummary` marca como pendente quando falta resumo ou o hash
   divergiu. Editar título/descrição no app regenera em segundo plano (`PATCH /api/tasks/[id]`); a
@@ -114,8 +115,10 @@ e opções na própria aba da página "Provedores de IA".
   criação pela tela dispara a geração na hora; a criação pelo GitHub é coberta pela rotina.
 - **Execução**: `POST /api/tasks/[id]/summary` — feature indisponível (409) ou tarefa inexistente
   (404) respondem JSON; senão NDJSON (`start`, eventos do `streamAi`, `done`/`error`). O resumo é
-  **gravado no `done`** (publica `tasks-updated`) e cada geração grava linha em `ai_usage_logs`
-  (`feature: "task-summary"`). Fechar a conexão cancela a geração.
+  **gravado no `done`** com `timestamps: false` (não mexe no `updatedAt` da tarefa, para não a
+  marcar como editada nem fazer a sincronização do GitHub empurrá-la para a issue) e publica
+  `tasks-updated`; cada geração grava linha em `ai_usage_logs` (`feature: "task-summary"`). Fechar
+  a conexão cancela a geração.
 - **Modal** (`TaskSummaryDialog`): inicia ao abrir; texto progressivo com cursor animado,
   atividade do agente e uso; **Parar**, **Gerar novamente**, **Copiar**. O botão **Gerar resumo**
   fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
@@ -137,4 +140,5 @@ e opções na própria aba da página "Provedores de IA".
 `__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (entrada e
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
-`task-summary-settings`, `task-summary-job` e `task-summary-route`).
+`task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
+seção de Descrição não sendo substituída pelo resumo).

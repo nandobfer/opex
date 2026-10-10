@@ -30,19 +30,13 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function DescriptionSection({ task }: { task: TaskDetailDto }) {
-    if (!task.summary && !task.description && !task.technicalSpec) return <Empty icon={FileCode2}>Sem descrição.</Empty>
+    if (!task.description && !task.technicalSpec) return <Empty icon={FileCode2}>Sem descrição.</Empty>
     return (
         <motion.div variants={listContainer} initial="hidden" animate="visible" className="space-y-6">
-            {task.summary ? (
-                <Block title="Resumo">
-                    <p className="text-sm leading-relaxed">{task.summary}</p>
+            {task.description && (
+                <Block title="Descrição">
+                    <Markdown>{task.description}</Markdown>
                 </Block>
-            ) : (
-                task.description && (
-                    <Block title="Descrição">
-                        <Markdown>{task.description}</Markdown>
-                    </Block>
-                )
             )}
             {task.technicalSpec && (
                 <Block title="Especificação técnica">

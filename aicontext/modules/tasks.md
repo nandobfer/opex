@@ -81,7 +81,7 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; cards com código, tipo, título, projeto, prioridade e "Arquivada". O **resumo de IA**
-  aparece como uma linha sob o título quando existir (substitui a descrição — ver `modules/ai.md`).
+  aparece como uma linha sob o título quando existir, **sem substituir** a descrição (ver `modules/ai.md`).
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** sob o título),
   Coluna ("Mover para…"), Prioridade, Tipo, Projeto, Atualizada; ordenação por coluna (salva);
   virtualizada acima de 50; rola com a página (`usePageVirtualizer`).
@@ -111,11 +111,12 @@ tarefa.
 
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
-- Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
-  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
+- Voltar, Atualizar, código, tipo, "Arquivada", título (com o **resumo de IA** como subtítulo
+  quando existir), **coluna com "Mover para…"** (`TaskColumnMenu`), **Entender tarefa**, **Mesa de
+  trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
-- Abas animadas: Descrição (o **resumo de IA** no lugar da descrição; sem resumo, mostra a
-  descrição; sempre com a especificação técnica em Markdown), Comentários (lista + formulário),
+- Abas animadas: Descrição (descrição completa em Markdown + especificação técnica; o **resumo de
+  IA** fica no cabeçalho e **não substitui** a descrição), Comentários (lista + formulário),
   Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
 - Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
