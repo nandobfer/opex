@@ -9,6 +9,7 @@ vi.mock("framer-motion", () => framerMotionMock())
 import { EstimateCard } from "@/features/orcamentos/portal/components/preview/EstimateCard"
 import { PreviewTitleCard } from "@/features/orcamentos/portal/components/preview/PreviewTitleCard"
 import { RepoMetaCard } from "@/features/orcamentos/portal/components/preview/RepoMetaCard"
+import { TypePriorityMetaCard } from "@/features/orcamentos/portal/components/preview/TypePriorityMetaCard"
 import type { ClienteRepoDto, DraftPreviewDto } from "@/features/orcamentos/types"
 
 const preview: DraftPreviewDto = { title: "Ajustar o rodapé", taskType: "bugfix", priority: "medium", technicalSpec: "## Passos", summary: "Corrige o rodapé do site" }
@@ -63,5 +64,12 @@ describe("revisão da prévia (portal)", () => {
     it("o card de repositório mostra um traço quando não há repositório", () => {
         render(<RepoMetaCard repo={null} />)
         expect(screen.getByText("—")).toBeTruthy()
+    })
+
+    it("o card de tipo e prioridade é editável com onPriorityChange e somente leitura sem ele", () => {
+        const { rerender } = render(<TypePriorityMetaCard taskType="bugfix" priority="medium" />)
+        expect(screen.queryByRole("button", { name: "Prioridade: alterar" })).toBeNull()
+        rerender(<TypePriorityMetaCard taskType="bugfix" priority="medium" onPriorityChange={() => {}} />)
+        expect(screen.getByRole("button", { name: "Prioridade: alterar" })).toBeTruthy()
     })
 })

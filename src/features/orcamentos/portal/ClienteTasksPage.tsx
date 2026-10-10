@@ -14,7 +14,7 @@ import { applyTaskFilters, DEFAULT_TASK_FILTERS, type TaskFilters } from "@/feat
 import { TaskViewSwitch } from "@/features/tasks/components/TaskViewSwitch"
 import { clienteNovaPath, clienteTarefaPath } from "../constants"
 import { repoLabelIndex } from "../logic"
-import { useClienteOptions, useClienteTasks } from "./hooks"
+import { useClienteOptions, useClienteTasks, useSetClienteTaskPriority } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
 import { ClienteFiltersBar } from "./components/ClienteFiltersBar"
 import { ClienteTaskBoard } from "./components/ClienteTaskBoard"
@@ -35,6 +35,7 @@ function ClienteTasksView() {
     const options = useClienteOptions()
     const [filters, setFilters] = useState<TaskFilters>(DEFAULT_TASK_FILTERS)
     const tasks = useClienteTasks(filters.showArchived)
+    const priority = useSetClienteTaskPriority()
 
     const columns = useMemo(() => buildBoardColumns(options.data?.board), [options.data])
     const repoIndex = useMemo(() => repoLabelIndex(options.data?.projects ?? []), [options.data])
@@ -83,7 +84,7 @@ function ClienteTasksView() {
                     ) : filters.view === "kanban" ? (
                         <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} />
                     ) : (
-                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} />
+                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} onUpdate={(task, change) => priority.mutate({ task, priority: change.priority })} updating={priority.isPending} />
                     )}
                 </>
             )}

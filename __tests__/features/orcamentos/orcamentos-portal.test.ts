@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     listTasksForClient: vi.fn(async () => ({ tasks: [], fetchedAt: "now" })),
     getTask: vi.fn(),
     addComment: vi.fn(),
+    updateTask: vi.fn(),
     clients: null as unknown,
     drafts: null as unknown,
     projects: null as unknown,
@@ -42,13 +43,14 @@ vi.mock("@/features/tasks/server/service", () => ({
     listTasksForClient: mocks.listTasksForClient,
     getTask: mocks.getTask,
     addComment: mocks.addComment,
+    updateTask: mocks.updateTask,
 }))
 vi.mock("@/features/tasks/server/columns", () => ({ getBoard: vi.fn(async () => ({ columns: [], layout: [] })) }))
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock("@/features/github/server/lookups", () => ({ listGithubRepos: mocks.listGithubRepos }))
 vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
 
-import { addClientComment, approveDraft, createDraft, getClientOptions, getClientTask, getDraft, listClientTasks, saveDraftEstimate, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
+import { addClientComment, approveDraft, createDraft, getClientOptions, getClientTask, getDraft, listClientTasks, saveDraftEstimate, saveDraftPreview, setClientTaskPriority, setDraftCorrection } from "@/features/orcamentos/server/portal"
 import type { ClienteOrcamentoDoc } from "@/features/orcamentos/server/token"
 import type { MemoryModel } from "../../helpers/memory-model"
 
@@ -166,6 +168,14 @@ describe("portal do cliente", () => {
         expect(options.origin).toBe("client")
         expect(options.estimate).toBeUndefined()
     })
+
+    it("ao aprovar com prioridade escolhida, ela sobrepõe a sugerida pela IA", async () => {
+        const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
+        await saveDraftPreview(client, draft.id, preview)
+        mocks.createTaskWithIssue.mockResolvedValue({ id: "t3", code: "APP-3" })
+        await approveDraft(client, draft.id, "local", "low")
+        expect(mocks.createTaskWithIssue).toHaveBeenCalledWith(expect.objectContaining({ priority: "low" }), "local", expect.anything())
+    })
 })
 
 const taskDto = {
@@ -228,5 +238,17 @@ describe("lista e detalhe do portal (visão do cliente)", () => {
         const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
         await addClientComment(client, String(doc._id), "Olá")
         expect(mocks.addComment).toHaveBeenCalledWith(String(doc._id), "Olá", { id: "Acme", type: "client", name: "Acme" })
+    })
+
+    it("edita a prioridade da própria tarefa reusando o updateTask com origem client", async () => {
+        const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
+        await setClientTaskPriority(client, String(doc._id), "urgent")
+        expect(mocks.updateTask).toHaveBeenCalledWith(String(doc._id), { priority: "urgent" }, "Acme", { origin: "client" })
+    })
+
+    it("recusa (404) editar a prioridade de tarefa de outro cliente", async () => {
+        const other = await (mocks.devTasks as MemoryModel).create({ clientId: "outro" })
+        await expect(setClientTaskPriority(client, String(other._id), "low")).rejects.toMatchObject({ code: "TASK_NOT_FOUND" })
+        expect(mocks.updateTask).not.toHaveBeenCalled()
     })
 })

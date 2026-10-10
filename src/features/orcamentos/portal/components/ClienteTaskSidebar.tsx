@@ -11,6 +11,8 @@ import { repoLabelFrom } from "../../logic"
 import { formatDateTime } from "@/features/tasks/format"
 import { ArchivedBadge, TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
 import type { ClienteTaskDetailDto } from "../../types"
+import type { TaskPriority } from "@/features/tasks/constants"
+import { TaskPriorityMenu } from "@/features/tasks/components/TaskPriorityMenu"
 import { ClienteEstimateCard } from "./ClienteEstimateCard"
 
 function Row({ icon: Icon, label, children }: { icon: typeof Github; label: string; children: ReactNode }) {
@@ -26,10 +28,11 @@ function Row({ icon: Icon, label, children }: { icon: typeof Github; label: stri
 }
 
 /**
- * Propriedades da tarefa na visão do cliente (coluna lateral, somente leitura): prioridade, tipo,
- * repositório, datas e a estimativa (só o tempo inflado). Sem horas apontadas nem histórico.
+ * Propriedades da tarefa na visão do cliente (coluna lateral): prioridade editável na hora (com
+ * `onUpdate`), tipo, repositório, datas e a estimativa (só o tempo inflado). Sem horas apontadas nem
+ * histórico.
  */
-export function ClienteTaskSidebar({ task, repoIndex }: { task: ClienteTaskDetailDto; repoIndex?: ReadonlyMap<string, GithubRepoLabelData> }) {
+export function ClienteTaskSidebar({ task, repoIndex, onUpdate, updating = false }: { task: ClienteTaskDetailDto; repoIndex?: ReadonlyMap<string, GithubRepoLabelData>; onUpdate?: (priority: TaskPriority) => void; updating?: boolean }) {
     return (
         <motion.aside variants={fadeUp} initial="hidden" animate="visible" transition={{ delay: 0.05 }}>
             <div className="space-y-4">
@@ -38,7 +41,7 @@ export function ClienteTaskSidebar({ task, repoIndex }: { task: ClienteTaskDetai
                         <dl>
                             <Row icon={Package} label="Prioridade e tipo">
                                 <span className="flex flex-wrap gap-1.5">
-                                    <TaskPriorityBadge priority={task.priority} />
+                                    {onUpdate ? <TaskPriorityMenu value={task.priority} pending={updating} onChange={onUpdate} /> : <TaskPriorityBadge priority={task.priority} />}
                                     <TaskTypeBadge type={task.taskType} long />
                                     {task.archived && <ArchivedBadge />}
                                 </span>

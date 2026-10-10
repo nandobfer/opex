@@ -3,10 +3,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
+import { TaskPriorityMenu } from "@/features/tasks/components/TaskPriorityMenu"
 import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 
-/** Card de tipo e prioridade da prévia. */
-export function TypePriorityMetaCard({ taskType, priority, loading = false }: { taskType: TaskType | null; priority: TaskPriority; loading?: boolean }) {
+/**
+ * Card de tipo e prioridade da prévia. Com `onPriorityChange`, a prioridade vira editável (o cliente
+ * escolhe e a tarefa nasce com ela ao aprovar); sem ele, o card é somente leitura.
+ */
+export function TypePriorityMetaCard({ taskType, priority, loading = false, onPriorityChange, updating = false }: { taskType: TaskType | null; priority: TaskPriority; loading?: boolean; onPriorityChange?: (priority: TaskPriority) => void; updating?: boolean }) {
     return (
         <Card>
             <CardHeader className="pb-3">
@@ -21,7 +25,7 @@ export function TypePriorityMetaCard({ taskType, priority, loading = false }: { 
                 ) : (
                     <>
                         <TaskTypeBadge type={taskType} long />
-                        <TaskPriorityBadge priority={priority} />
+                        {onPriorityChange ? <TaskPriorityMenu value={priority} pending={updating} onChange={onPriorityChange} /> : <TaskPriorityBadge priority={priority} />}
                     </>
                 )}
             </CardContent>

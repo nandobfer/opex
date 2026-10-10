@@ -41,6 +41,17 @@ export const clienteCommentSchema = z.object({
 })
 export type ClienteCommentInput = z.infer<typeof clienteCommentSchema>
 
+/** Prioridade editada pelo cliente numa tarefa já existente (lista e página do portal). */
+export const clienteTaskPrioritySchema = z.object({ priority: z.enum(TASK_PRIORITIES) })
+export type ClienteTaskPriorityInput = z.infer<typeof clienteTaskPrioritySchema>
+
+/**
+ * Aprovação da prévia: a prioridade escolhida na revisão **sobrepõe** a sugestão da IA. Sem ela, vale
+ * a prioridade gerada na prévia.
+ */
+export const clienteApproveSchema = z.object({ priority: z.enum(TASK_PRIORITIES).optional() })
+export type ClienteApproveInput = z.infer<typeof clienteApproveSchema>
+
 /** Dimensão da clareza (critérios de aceite ou localização) devolvida pela IA. */
 const previewClarityDimensionSchema = z.object({
     status: z.enum(PREVIEW_CLARITY_STATUSES).catch("vague"),

@@ -56,7 +56,10 @@ semeado na primeira leitura (`ensureBoard`).
   estimativa), `addComment` (grava a origem e o nome do autor via
   `{ id, type, name }`), `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um
   `tasks-updated`), `listTasksForClient(clientId, includeArchived)` (tarefas que um cliente do portal
-  solicitou). Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`.
+  solicitou). `updateTask` aceita `origin`: `"opex"` (padrão), `"github"` (vindo da sincronização —
+  não ecoa de volta) ou `"client"` (edição do cliente no portal, ex.: a prioridade — ver
+  `modules/orcamentos.md`); a origem entra na auditoria. Toda mutação grava auditoria e publica
+  `tasks-updated { ids }` no canal `private-app`.
   Mudanças de coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma
   central). Criar a tarefa e editar título/descrição disparam, em segundo plano, a geração do resumo
   e das tags de IA. `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos
