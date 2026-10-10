@@ -92,10 +92,10 @@ describe('TasksPage', () => {
     expect(screen.getByRole('button', { name: /Nova coluna$/ })).toBeTruthy()
   })
 
-  it('Nova tarefa abre o formulário', () => {
+  it('Nova tarefa navega para a página de criação', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: /Nova tarefa/ }))
-    expect(screen.getByRole('heading', { name: 'Nova tarefa' })).toBeTruthy()
+    expect(mocks.push).toHaveBeenCalledWith('/tarefas/nova')
   })
 
   it('alternar para Tabela fica salvo no navegador', () => {

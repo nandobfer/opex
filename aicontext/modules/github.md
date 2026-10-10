@@ -7,8 +7,12 @@ Código em `src/features/github/`. É uma integração normal do catálogo (`git
 ## Vínculos = Projetos (`server/links.ts`)
 
 A aba **Vínculos** liga um repositório ao Opex e **cria um Projeto** (`lib/db/models/Project.ts`).
-Campos do formulário: **repositório**, **coluna de entrada** e **sincronização ativa**. Nome e sigla
-saem do repositório (`projectNameFromRepo`, `siglaFromRepo`); o código das tarefas é `{SIGLA}-{n}`.
+Campos do formulário: **repositório**, **coluna de entrada**, **coluna de conclusão** (opcional) e
+**sincronização ativa**. Nome e sigla saem do repositório (`projectNameFromRepo`, `siglaFromRepo`);
+o código das tarefas é `{SIGLA}-{n}`. A **coluna de conclusão** é a que representa "concluído":
+mover a tarefa para lá fecha a issue, e sair dela (ou fechar a issue no GitHub) sincroniza o outro
+lado. Excluir uma coluna usada como entrada ou conclusão é bloqueado em `tasks/server/columns.ts`
+(409 `COLUMN_IN_USE`).
 
 - `createLink`/`updateLink`/`deleteLink`/`listLinks`; repositório único (409 `LINK_REPO_TAKEN`);
   trocar de repositório reinicia a importação inicial. Audita (`VinculoGithub`) e publica
@@ -20,31 +24,40 @@ saem do repositório (`projectNameFromRepo`, `siglaFromRepo`); o código das tar
 
 Regras **Issue Type/label → tipo** e **label → prioridade** (documento `default`; sem documento, os
 padrões do código). `mapTaskType` (Issue Type vence label; sem regra, sem tipo) e `mapPriority` (sem
-regra, média). Não há autores, pessoas nem produto: removidos.
+regra, média). O **mapeamento reverso** (`reverseLabels`) usa as mesmas regras: o tipo e a prioridade
+da tarefa viram labels na issue (label-kind para o tipo e a primeira regra da prioridade). Não há
+autores, pessoas nem produto: removidos.
 
-## Sincronização (`server/sync.ts`)
+## Sincronização (`server/sync.ts`, `server/task-sync.ts`)
 
-Rotina **"Sincronizar issues do GitHub"** (`github-issue-sync`, Integrações › Crons, padrão a cada
-2 min). Para cada Projeto ativo:
+O vínculo issue ↔ tarefa é **bidirecional com last-write-wins** ("quem foi atualizado por último
+vence"). Sincroniza **título, descrição, tipo, prioridade e coluna ↔ aberta/fechada**. O
+`issueUpdatedAt` do vínculo é a marca d'água do último `updated_at` conhecido da issue.
 
-- **1ª leitura**: importa as issues **abertas**; depois, só o que mudou desde `since` (+ ETag; 304
-  não gasta limite).
-- Issue **nova** → cria a **tarefa** na coluna de entrada, com tipo/prioridade do mapeamento e a
-  descrição do corpo + rodapé (`buildTaskDescription`). Sem etapa de rascunho.
-- Issue que uma tarefa do projeto **já cita** (URL, `owner/repo#N` ou `#N` — `mentionsIssue`) só
-  ganha o **vínculo** (`github_issue_links`), sem criar tarefa.
-- Issue que muda de estado atualiza o vínculo (`updateIssueState`); a coluna da tarefa **não** muda
-  sozinha (sem transições automáticas).
+- **Tarefa → issue (imediato)**: editar a tarefa (`PATCH /api/tasks/[id]`), mover
+  (`/api/tasks/[id]/move`) ou aplicar ações em lote (`/api/tasks/bulk`) empurra os campos para a
+  issue (`pushTaskToIssue`). Falha do push **não** derruba a edição: grava um aviso (`notice`) no
+  vínculo e a rotina tenta de novo.
+- **Issue → tarefa (rotina)**: para cada issue alterada desde a última leitura, se ela for mais
+  recente que a tarefa, aplica na tarefa (`applyIssueToTask`, reusa `updateTask`/`moveTask` com
+  `origin: "github"`); se a tarefa for mais recente, empurra. Mudanças do GitHub entram no Histórico
+  ("Sincronizada do GitHub: …").
+- Rotina **"Sincronizar issues do GitHub"** (`github-issue-sync`, Integrações › Crons, padrão a cada
+  2 min): **1ª leitura** importa as issues **abertas**; depois, só o que mudou desde `since` (+ ETag;
+  304 não gasta limite).
+- Issue **nova** → cria a **tarefa** na coluna de entrada (ou na coluna de conclusão, se a issue já
+  vier fechada), com tipo/prioridade do mapeamento e a descrição **verbatim** (sem rodapé). Issue que
+  uma tarefa do projeto **já cita** (URL, `owner/repo#N` ou `#N` — `mentionsIssue`) só ganha o vínculo.
+- **Criação de tarefa** (`POST /api/tasks`, `server/task-issue.ts`): cria a issue no repositório
+  escolhido **antes** de persistir a tarefa; **falha do GitHub bloqueia** a criação. O vínculo já
+  nasce com a marca d'água.
 - O resultado por vínculo é gravado em `Project.lastSync`; `github-updated { scope: "sync" }`.
-
-O vínculo issue ↔ tarefa (`server/issue-links.ts`) é **informativo**: alimenta o botão "Abrir issue"
-no card/tabela/página e o dedupe da sincronização.
 
 ## APIs
 
 | Rota | Descrição |
 |---|---|
-| `GET/POST /api/integrations/github/links` | Lista / cria vínculo (= Projeto) |
+| `GET/POST /api/integrations/github/links` | Lista / cria vínculo (= Projeto; inclui a coluna de conclusão) |
 | `PATCH/DELETE /api/integrations/github/links/[linkId]` | Edita / remove |
 | `GET/PUT /api/integrations/github/mappings` | Regras de tipo e prioridade |
 | `GET /api/integrations/github/sync` | Estado da rotina e resultado por vínculo |
@@ -61,4 +74,6 @@ os rascunhos descartados.
 ## Testes
 
 `__tests__/features/github/github-logic.test.ts` (leitura da issue, nome/sigla do projeto,
-mapeamento e menção da issue).
+mapeamento direto/reverso, coluna ↔ estado e menção da issue), `task-issue.test.ts` (criação com
+issue e bloqueio em falha), `github-task-sync.test.ts` (push/pull com last-write-wins) e
+`github-sync.test.ts` (`processIssue`).

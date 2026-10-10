@@ -26,6 +26,8 @@ function toDto(doc: ProjectDoc, columns: ReadonlyMap<string, string>, taskCounts
         sigla: doc.sigla,
         entryColumnKey: doc.entryColumnKey,
         entryColumnName: columns.get(doc.entryColumnKey) ?? null,
+        closedColumnKey: doc.closedColumnKey ?? null,
+        closedColumnName: doc.closedColumnKey ? columns.get(doc.closedColumnKey) ?? null : null,
         enabled: doc.enabled !== false,
         initialImportAt: doc.initialImportAt ? new Date(doc.initialImportAt).toISOString() : null,
         lastSync: doc.lastSync ? { at: new Date(doc.lastSync.at).toISOString(), ok: doc.lastSync.ok, message: doc.lastSync.message } : null,
@@ -60,14 +62,22 @@ async function assertColumn(key: string): Promise<string> {
 const auditView = (input: RepoLinkValues, column: string | null) => ({
     repositorio: input.repo,
     coluna: column,
+    colunaConclusao: input.closedColumnKey,
     ativo: input.enabled,
 })
+
+async function assertOptionalColumn(key: string | null): Promise<void> {
+    if (!key) return
+    const column = await TaskBoardColumn.findOne({ key }).select({ key: 1 }).lean()
+    if (!column) throw new DomainError(400, "A coluna de conclusão não existe: escolha uma coluna do quadro", "COLUMN_NOT_FOUND")
+}
 
 export async function createLink(input: RepoLinkValues, actorId: string): Promise<GithubLinkDto> {
     await dbConnect()
     const existing = await Project.findOne({ repo: input.repo }).select({ repo: 1 }).lean()
     if (existing) throw new DomainError(409, `O repositório ${input.repo} já está vinculado`, "LINK_REPO_TAKEN")
     const columnName = await assertColumn(input.entryColumnKey)
+    await assertOptionalColumn(input.closedColumnKey)
     const { apiUrl } = await getIntegrationConfig("github")
     const doc = await Project.create({
         repo: input.repo,
@@ -75,6 +85,7 @@ export async function createLink(input: RepoLinkValues, actorId: string): Promis
         name: projectNameFromRepo(input.repo),
         sigla: siglaFromRepo(input.repo),
         entryColumnKey: input.entryColumnKey,
+        closedColumnKey: input.closedColumnKey,
         enabled: input.enabled,
         taskSeq: 0,
         initialImportAt: null,
@@ -94,6 +105,7 @@ export async function updateLink(id: string, input: RepoLinkValues, actorId: str
     const other = await Project.findOne({ repo: input.repo, _id: { $ne: id } }).select({ repo: 1 }).lean()
     if (other) throw new DomainError(409, `O repositório ${input.repo} já está vinculado`, "LINK_REPO_TAKEN")
     const columnName = await assertColumn(input.entryColumnKey)
+    await assertOptionalColumn(input.closedColumnKey)
     const repoChanged = before.repo !== input.repo
     const { apiUrl } = await getIntegrationConfig("github")
     await Project.updateOne(
@@ -105,6 +117,7 @@ export async function updateLink(id: string, input: RepoLinkValues, actorId: str
                 name: projectNameFromRepo(input.repo),
                 sigla: siglaFromRepo(input.repo),
                 entryColumnKey: input.entryColumnKey,
+                closedColumnKey: input.closedColumnKey,
                 enabled: input.enabled,
                 // Outro repositório: recomeça da importação das issues abertas.
                 ...(repoChanged ? { initialImportAt: null, since: null, etag: null } : {}),

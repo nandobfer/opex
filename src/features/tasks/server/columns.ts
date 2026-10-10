@@ -100,9 +100,9 @@ export async function deleteColumn(key: string, actorId: string): Promise<void> 
     const column = await TaskBoardColumn.findOne({ key }).lean()
     if (!column) throw new DomainError(404, "Coluna não encontrada", "COLUMN_NOT_FOUND")
     if ((await TaskBoardColumn.countDocuments({})) <= 1) throw new DomainError(409, "O quadro precisa de ao menos uma coluna", "LAST_COLUMN")
-    const repos = (await Project.find({ entryColumnKey: key }).select({ repo: 1 }).lean()).map((project) => project.repo)
+    const repos = (await Project.find({ $or: [{ entryColumnKey: key }, { closedColumnKey: key }] }).select({ repo: 1 }).lean()).map((project) => project.repo)
     if (repos.length > 0) {
-        throw new DomainError(409, `A coluna recebe as issues de ${repos.join(", ")}: troque a coluna de entrada no vínculo do GitHub antes de excluí-la`, "COLUMN_IN_USE")
+        throw new DomainError(409, `A coluna é usada por ${repos.join(", ")}: ajuste o vínculo do GitHub antes de excluí-la`, "COLUMN_IN_USE")
     }
     const queueCentrals = (await AgenticCentral.find().select({ projectName: 1, config: 1 }).lean())
         .filter((central) => parseCentralConfig(central.config).columns.queue === key)

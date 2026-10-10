@@ -65,10 +65,8 @@ semeado na primeira leitura (`ensureBoard`).
 
 - Cabeçalho: título com total animado, "atualizado às HH:mm:ss", **Nova tarefa**, **Kanban |
   Tabela** (`TaskViewSwitch`) e **Atualizar**. `TimerIndicator` e "Minhas horas" ao lado.
-- **Nova tarefa** (`TaskFormDialog`, react-hook-form + Zod `taskInputSchema`): título, projeto,
-  coluna, tipo, prioridade, descrição e especificação técnica (Markdown). Editar/excluir ficam na
-  página da tarefa. Sem projeto vinculado, o botão fica desabilitado ("Vincule um repositório em
-  Integrações › GitHub").
+- **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
+  fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
   erro com fuse.js), **Projeto**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. "Limpar"
   zera os filtros, mantendo visão e ordenações.
@@ -92,10 +90,26 @@ semeado na primeira leitura (`ensureBoard`).
   das que falharam e "Desfazer por 8 s" (`useBulkTasks`, itens em `bulk-items.ts`).
 - Tempo real: `useTasksRealtime` assina `tasks-updated` e `task-columns-updated` em `private-app`.
 
+## Criar tarefa (`/tarefas/nova`, `components/TaskCreatePage.tsx` + `TaskForm.tsx`)
+
+Formulário no estilo "nova issue do GitHub", em **página própria** (não é mais modal): título,
+descrição com abas **Escrever / Visualizar** (Markdown) e os metadados em **autocomplete com chips**
+(`SearchPicker` + `FieldTrigger`): **Repositório** (só os vinculados), **Coluna**, **Tipo** e
+**Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
+campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
+`technicalSpec`).
+
+O **Repositório** substitui o antigo campo "Projeto": o Projeto É o repositório vinculado, então a
+escolha do repositório define o `projectId`. Ao salvar, a tarefa **cria a issue no repositório** e o
+vínculo (`createTaskWithIssue`, `features/github/server/task-issue.ts`); **falha do GitHub bloqueia**
+a criação (nenhuma tarefa é criada). O `TaskForm` também é usado na **edição inline** da página da
+tarefa.
+
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
-  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**.
+  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
+  abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
   formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
 - Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
@@ -107,12 +121,14 @@ semeado na primeira leitura (`ensureBoard`).
 
 ## Issue ↔ tarefa (GitHub)
 
-Issues dos repositórios vinculados viram tarefas (ver `modules/github.md`). A tarefa mostra o botão
-da issue (`#N`) no card, na coluna Issue da tabela e na página. O vínculo é **informativo** (dedupe
-da sincronização + "Abrir issue"); a coluna da tarefa é sempre gerida por você.
+Issues dos repositórios vinculados viram tarefas e vice-versa (ver `modules/github.md`). A tarefa
+mostra o botão da issue (`#N`) no card, na coluna Issue da tabela e na página. O vínculo é
+**bidirecional com last-write-wins**: editar título/descrição/tipo/prioridade/coluna empurra para a
+issue na hora e a rotina puxa mudanças mais recentes da issue (a coluna ↔ aberta/fechada segue a
+coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Histórico com origem GitHub.
 
 ## Testes
 
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
-`task-columns`, `task-filter-chips`, `TasksPage`, `task-card`, `task-column-header`,
+`task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`) e `__tests__/hooks/usePersistentState.test.tsx`.

@@ -29,10 +29,10 @@ import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, mergeVisibleOrder, type TaskColumnDto } from "../board"
-import { taskPath } from "../constants"
+import { TASK_NEW_PATH, taskPath } from "../constants"
 import { applyTaskFilters, countActiveFilters, DEFAULT_TASK_FILTERS, knownColumns, TASK_FILTER_KEYS, TASK_FILTERS_STORAGE_KEY, taskFiltersSchema, visibleColumns, type TaskFilters } from "../filters"
 import { useColumnMutations, useTaskBoard } from "../hooks/useTaskBoard"
-import { TASKS_QUERY_KEY, useCreateTask, useTaskList, useTaskOptions, useTasksRealtime, useUpdateTask } from "../hooks/useTasks"
+import { TASKS_QUERY_KEY, useTaskList, useTaskOptions, useTasksRealtime, useUpdateTask } from "../hooks/useTasks"
 import { useTaskBulkActions } from "../hooks/useTaskBulkActions"
 import { useTaskMoveFlow } from "../hooks/useTaskMoveFlow"
 import { useTaskSelection } from "../hooks/useTaskSelection"
@@ -42,7 +42,6 @@ import { TaskBulkBar } from "./TaskBulkBar"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
 import { TaskBoard } from "./TaskBoard"
 import { TaskFiltersBar } from "./TaskFiltersBar"
-import { TaskFormDialog } from "./TaskFormDialog"
 import { TaskTable } from "./TaskTable"
 import { TaskViewSwitch } from "./TaskViewSwitch"
 
@@ -65,7 +64,6 @@ export function TasksPage() {
     useTasksRealtime()
     const flow = useTaskMoveFlow(allColumns)
     const columnMutations = useColumnMutations()
-    const create = useCreateTask()
     const update = useUpdateTask()
 
     // Filtro Coluna sem colunas que não existem mais (ex.: coluna excluída).
@@ -113,8 +111,7 @@ export function TasksPage() {
         [columnMutations.reorder, board.data, allColumns],
     )
 
-    // Tarefa: criar/editar (diálogo) e excluir (na página da tarefa).
-    const [taskForm, setTaskForm] = useState<{ task: TaskDto | null } | null>(null)
+    // Tarefa: criar na página própria (/tarefas/nova); editar/excluir na página da tarefa.
 
     // Seleção (tabela e kanban): só as tarefas visíveis.
     const visibleIds = useMemo(() => shown.map((task) => task.id), [shown])
@@ -178,7 +175,7 @@ export function TasksPage() {
                         </Link>
                     </Button>
                     <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} />
-                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => setTaskForm({ task: null })} disabled={projects.length === 0} title={projects.length === 0 ? "Vincule um repositório em Integrações › GitHub" : undefined}>
+                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => router.push(TASK_NEW_PATH)} disabled={projects.length === 0} title={projects.length === 0 ? "Vincule um repositório em Integrações › GitHub" : undefined}>
                         <Plus className="h-4 w-4" aria-hidden /> Nova tarefa
                     </Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={refreshing} aria-label="Atualizar tarefas">
@@ -208,7 +205,7 @@ export function TasksPage() {
                             title={filtering ? "Nenhuma tarefa com estes filtros" : "Nenhuma tarefa ainda"}
                             description={filtering ? "Ajuste ou limpe os filtros para ver mais tarefas." : projects.length === 0 ? "Vincule um repositório em Integrações › GitHub para começar." : "Crie a primeira tarefa."}
                             actionLabel={filtering ? "Limpar filtros" : projects.length > 0 ? "Nova tarefa" : undefined}
-                            onAction={filtering ? clearFilters : projects.length > 0 ? () => setTaskForm({ task: null }) : undefined}
+                            onAction={filtering ? clearFilters : projects.length > 0 ? () => router.push(TASK_NEW_PATH) : undefined}
                         />
                     )}
                     {view === "kanban" && (
@@ -254,23 +251,6 @@ export function TasksPage() {
                     onClear={selection.clear}
                 />
             )}
-
-            <TaskFormDialog
-                open={taskForm !== null}
-                task={taskForm?.task ?? null}
-                projects={projects}
-                columns={allColumns}
-                submitting={create.isPending}
-                onClose={() => setTaskForm(null)}
-                onSubmit={async (values) => {
-                    try {
-                        await create.mutateAsync(values)
-                        setTaskForm(null)
-                    } catch {
-                        // Toast já mostrado; o diálogo fica aberto para corrigir.
-                    }
-                }}
-            />
 
             <ColumnFormDialog
                 open={columnForm !== null}

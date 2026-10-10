@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildTaskDescription,
+  columnForIssueState,
   DEFAULT_PRIORITY_RULES,
   DEFAULT_TYPE_RULES,
   htmlBaseOf,
+  issueStateForColumn,
   mapPriority,
   mapTaskType,
   mentionsIssue,
   normalizeRepo,
   projectNameFromRepo,
+  reverseLabels,
   siglaFromRepo,
+  taskDescriptionFromIssue,
   toIssueLite,
 } from '@/features/github/logic'
 
@@ -59,9 +62,34 @@ describe('mapeamento issue → tarefa', () => {
     expect(mapPriority({ labels: [] }, DEFAULT_PRIORITY_RULES, 'low').value).toBe('low')
   })
 
-  it('descrição leva o corpo e o rodapé com a issue e quem abriu', () => {
-    const text = buildTaskDescription('Passos', { url: 'https://github.com/sipal/app/issues/12', authorLogin: 'ana', authorName: 'Ana', createdAt: '2026-03-05T12:00:00Z' })
-    expect(text).toBe('Passos\n\n---\nIssue: https://github.com/sipal/app/issues/12\nAberta por Ana (@ana) em 05/03/2026')
+  it('descrição da tarefa é o corpo da issue verbatim (sem rodapé, para não ecoar no push)', () => {
+    expect(taskDescriptionFromIssue('Passos\n\nMais')).toBe('Passos\n\nMais')
+    expect(taskDescriptionFromIssue(null)).toBe('')
+    expect(taskDescriptionFromIssue('   ')).toBe('')
+  })
+})
+
+describe('mapeamento reverso (tarefa → issue)', () => {
+  it('tipo e prioridade viram labels pelas regras do mapeamento', () => {
+    expect(reverseLabels('bugfix', 'urgent', { typeRules: DEFAULT_TYPE_RULES, priorityRules: DEFAULT_PRIORITY_RULES })).toEqual(['bug', 'urgent'])
+    expect(reverseLabels('feature', 'medium', { typeRules: DEFAULT_TYPE_RULES, priorityRules: DEFAULT_PRIORITY_RULES })).toEqual(['enhancement', 'P2'])
+    expect(reverseLabels(null, null, { typeRules: DEFAULT_TYPE_RULES, priorityRules: DEFAULT_PRIORITY_RULES })).toEqual([])
+  })
+})
+
+describe('coluna ↔ estado da issue', () => {
+  it('coluna de conclusão fecha a issue; sair dela reabre', () => {
+    expect(issueStateForColumn('done', 'done')).toBe('closed')
+    expect(issueStateForColumn('doing', 'done')).toBe('open')
+    expect(issueStateForColumn('done', null)).toBe('open')
+  })
+
+  it('estado da issue define a coluna de destino', () => {
+    expect(columnForIssueState('closed', 'done', 'todo', 'doing')).toBe('done')
+    expect(columnForIssueState('closed', 'done', 'todo', 'done')).toBeNull()
+    expect(columnForIssueState('open', 'done', 'todo', 'done')).toBe('todo')
+    expect(columnForIssueState('open', 'done', 'todo', 'doing')).toBeNull()
+    expect(columnForIssueState('closed', null, 'todo', 'doing')).toBeNull()
   })
 })
 

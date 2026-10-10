@@ -33,7 +33,7 @@ import { UnderstandTaskButton } from "@/features/ai/components/understand-task/U
 import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
-import { TaskFormDialog } from "../TaskFormDialog"
+import { TaskForm } from "../TaskForm"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
 import { CommentsSection, DescriptionSection, HistorySection, TimeLogsSection } from "./TaskDetailSections"
 
@@ -130,6 +130,25 @@ export function TaskDetailPage({ id }: { id: string }) {
                             <div className="grid items-start gap-4 lg:grid-cols-[1fr_320px]">
                                 <Card className="min-w-0">
                                     <CardContent className="space-y-4 pt-4">
+                                        {editing ? (
+                                            <TaskForm
+                                                mode="edit"
+                                                task={task}
+                                                projects={projects}
+                                                columns={board.columns}
+                                                submitting={update.isPending}
+                                                onCancel={() => setEditing(false)}
+                                                onSubmit={async (values) => {
+                                                    try {
+                                                        await update.mutateAsync({ task, body: values, success: `Tarefa ${task.code} salva` })
+                                                        setEditing(false)
+                                                    } catch {
+                                                        // Toast já mostrado; o formulário fica aberto para corrigir.
+                                                    }
+                                                }}
+                                            />
+                                        ) : (
+                                            <>
                                         <div role="tablist" aria-label="Seções da tarefa" className="flex gap-1 overflow-x-auto border-b">
                                             {TABS.map((item) => {
                                                 const active = tab === item.id
@@ -155,6 +174,8 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                 {TABS.find((item) => item.id === tab)!.render({ task })}
                                             </motion.div>
                                         </AnimatePresence>
+                                            </>
+                                        )}
                                     </CardContent>
                                 </Card>
                                 <TaskDetailSidebar task={task} updating={update.isPending} onUpdate={(priority) => update.mutate({ task, body: { priority }, patch: { priority }, success: `${task.code} com prioridade ${priority}` })} />
@@ -163,24 +184,6 @@ export function TaskDetailPage({ id }: { id: string }) {
                     )}
                 </motion.div>
             </AnimatePresence>
-
-            <TaskFormDialog
-                open={editing}
-                task={task ?? null}
-                projects={projects}
-                columns={board.columns}
-                submitting={update.isPending}
-                onClose={() => setEditing(false)}
-                onSubmit={async (values) => {
-                    if (!task) return
-                    try {
-                        await update.mutateAsync({ task, body: values, success: `Tarefa ${task.code} salva` })
-                        setEditing(false)
-                    } catch {
-                        // Toast já mostrado; o diálogo fica aberto para corrigir.
-                    }
-                }}
-            />
 
             <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
                 <AlertDialogContent>

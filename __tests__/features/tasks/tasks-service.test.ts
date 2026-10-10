@@ -200,3 +200,21 @@ describe('colunas do quadro', () => {
     await expect(deleteColumn('doing', 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMN_QUEUE_IN_USE' })
   })
 })
+
+
+describe('auditoria da sincronização do GitHub', () => {
+  it('descreve no histórico as alterações vindas do GitHub', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await mocks.models.audit.create({
+      entidade: 'Tarefa',
+      entidadeId: a.id,
+      acao: 'ATUALIZAR',
+      dadosAnteriores: { titulo: 'Antigo' },
+      dadosNovos: { titulo: 'Novo', origem: 'github' },
+      timestamp: new Date(),
+    })
+    const detail = await getTask(a.id)
+    expect(detail.history[0]?.description).toBe('Sincronizada do GitHub: alterou título')
+  })
+})

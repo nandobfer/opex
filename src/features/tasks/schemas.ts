@@ -18,6 +18,13 @@ export const taskInputSchema = z.object({
 })
 export type TaskInput = z.infer<typeof taskInputSchema>
 
+/**
+ * Formulário da tarefa: o mesmo contrato da API **sem a especificação técnica** (ela sai do
+ * formulário e será gerada de forma agêntica).
+ */
+export const taskFormSchema = taskInputSchema.omit({ technicalSpec: true })
+export type TaskFormValues = z.infer<typeof taskFormSchema>
+
 export const createTaskSchema = taskInputSchema
 export type CreateTaskInput = z.infer<typeof createTaskSchema>
 
