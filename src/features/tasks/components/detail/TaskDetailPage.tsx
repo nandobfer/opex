@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlignLeft, ArrowLeft, FileSearch, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import { ArrowLeft, FileSearch, Pencil, RefreshCw, Trash2 } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -37,6 +37,7 @@ import { TaskColumnMenu } from "../TaskColumnMenu"
 import { TaskForm } from "../TaskForm"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
 import { CommentsSection, DescriptionSection, HistorySection, TimeLogsSection } from "./TaskDetailSections"
+import { TaskSummaryCard } from "./TaskSummaryCard"
 
 const TABS = [
     { id: "description", label: "Descrição", render: DescriptionSection, count: null },
@@ -112,12 +113,6 @@ export function TaskDetailPage({ id }: { id: string }) {
                                         {task.issue?.notice && <IssueNoticeBadge notice={task.issue.notice} />}
                                     </div>
                                     <h1 className="text-xl font-semibold leading-tight md:text-2xl">{task.title}</h1>
-                                    {task.summary && (
-                                        <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                                            <AlignLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                                            <span>{task.summary}</span>
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <TimerIndicator />
@@ -136,56 +131,59 @@ export function TaskDetailPage({ id }: { id: string }) {
                             </header>
 
                             <div className="grid items-start gap-4 lg:grid-cols-[1fr_320px]">
-                                <Card className="min-w-0">
-                                    <CardContent className="space-y-4 pt-4">
-                                        {editing ? (
-                                            <TaskForm
-                                                mode="edit"
-                                                task={task}
-                                                projects={projects}
-                                                columns={board.columns}
-                                                submitting={update.isPending}
-                                                onCancel={() => setEditing(false)}
-                                                onSubmit={async (values) => {
-                                                    try {
-                                                        await update.mutateAsync({ task, body: values, success: `Tarefa ${task.code} salva` })
-                                                        setEditing(false)
-                                                    } catch {
-                                                        // Toast já mostrado; o formulário fica aberto para corrigir.
-                                                    }
-                                                }}
-                                            />
-                                        ) : (
-                                            <>
-                                        <div role="tablist" aria-label="Seções da tarefa" className="flex gap-1 overflow-x-auto border-b">
-                                            {TABS.map((item) => {
-                                                const active = tab === item.id
-                                                const count = item.count?.(task)
-                                                return (
-                                                    <button
-                                                        key={item.id}
-                                                        type="button"
-                                                        role="tab"
-                                                        aria-selected={active}
-                                                        onClick={() => setTab(item.id)}
-                                                        className={cn("relative whitespace-nowrap px-3 pb-2.5 pt-1 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-                                                    >
-                                                        {item.label}
-                                                        {count ? <span className="ml-1.5 rounded bg-muted px-1.5 font-mono text-[11px]">{count}</span> : null}
-                                                        {active && <motion.span layoutId="task-detail-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
-                                                    </button>
-                                                )
-                                            })}
-                                        </div>
-                                        <AnimatePresence mode="wait" initial={false}>
-                                            <motion.div key={tab} role="tabpanel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
-                                                {TABS.find((item) => item.id === tab)!.render({ task })}
-                                            </motion.div>
-                                        </AnimatePresence>
-                                            </>
-                                        )}
-                                    </CardContent>
-                                </Card>
+                                <div className="min-w-0 space-y-4">
+                                    {task.summary && <TaskSummaryCard summary={task.summary} />}
+                                    <Card className="min-w-0">
+                                        <CardContent className="space-y-4 pt-4">
+                                            {editing ? (
+                                                <TaskForm
+                                                    mode="edit"
+                                                    task={task}
+                                                    projects={projects}
+                                                    columns={board.columns}
+                                                    submitting={update.isPending}
+                                                    onCancel={() => setEditing(false)}
+                                                    onSubmit={async (values) => {
+                                                        try {
+                                                            await update.mutateAsync({ task, body: values, success: `Tarefa ${task.code} salva` })
+                                                            setEditing(false)
+                                                        } catch {
+                                                            // Toast já mostrado; o formulário fica aberto para corrigir.
+                                                        }
+                                                    }}
+                                                />
+                                            ) : (
+                                                <>
+                                                    <div role="tablist" aria-label="Seções da tarefa" className="flex gap-1 overflow-x-auto border-b">
+                                                        {TABS.map((item) => {
+                                                            const active = tab === item.id
+                                                            const count = item.count?.(task)
+                                                            return (
+                                                                <button
+                                                                    key={item.id}
+                                                                    type="button"
+                                                                    role="tab"
+                                                                    aria-selected={active}
+                                                                    onClick={() => setTab(item.id)}
+                                                                    className={cn("relative whitespace-nowrap px-3 pb-2.5 pt-1 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                                                                >
+                                                                    {item.label}
+                                                                    {count ? <span className="ml-1.5 rounded bg-muted px-1.5 font-mono text-[11px]">{count}</span> : null}
+                                                                    {active && <motion.span layoutId="task-detail-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                    <AnimatePresence mode="wait" initial={false}>
+                                                        <motion.div key={tab} role="tabpanel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
+                                                            {TABS.find((item) => item.id === tab)!.render({ task })}
+                                                        </motion.div>
+                                                    </AnimatePresence>
+                                                </>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
                                 <TaskDetailSidebar task={task} updating={update.isPending} onUpdate={(priority) => update.mutate({ task, body: { priority }, patch: { priority }, success: `${task.code} com prioridade ${priority}` })} />
                             </div>
                         </div>

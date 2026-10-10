@@ -99,8 +99,9 @@ e opções na própria aba da página "Provedores de IA".
   não concluídas sem resumo (`runTaskSummaryBackfill` via `runAfterResponse`). Auditoria `FeatureIA`
   e evento `ai-feature-updated` em `private-app`.
 - **Resumo** = 1 linha **adicional**, que **não substitui** a descrição: aparece no card do kanban
-  (linha sob o título), na coluna **Título** da tabela e, na página da tarefa, como **subtítulo no
-  cabeçalho**. A aba **Descrição** segue mostrando a descrição completa em Markdown.
+  (linha sob o título), na coluna **Título** da tabela e, na página da tarefa, em um **card próprio
+  acima do card de conteúdo** (`TaskSummaryCard`, fonte discreta). A aba **Descrição** segue
+  mostrando a descrição completa em Markdown.
 - **Entrada** (`src/features/ai/task-summary.ts`, puro): a tarefa vira Markdown (código, tipo,
   prioridade, projeto, título e descrição cortada). `toSummaryLine` normaliza a saída do modelo
   (primeira linha com conteúdo, sem Markdown, espaços colapsados) e corta no tamanho máximo em
@@ -141,4 +142,4 @@ e opções na própria aba da página "Provedores de IA".
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
 `task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
-seção de Descrição não sendo substituída pelo resumo).
+seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo).

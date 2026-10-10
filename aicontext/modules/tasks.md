@@ -111,13 +111,15 @@ tarefa.
 
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
-- Voltar, Atualizar, código, tipo, "Arquivada", título (com o **resumo de IA** como subtítulo
-  quando existir), **coluna com "Mover para…"** (`TaskColumnMenu`), **Entender tarefa**, **Mesa de
-  trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
-  abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
-- Abas animadas: Descrição (descrição completa em Markdown + especificação técnica; o **resumo de
-  IA** fica no cabeçalho e **não substitui** a descrição), Comentários (lista + formulário),
-  Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
+- Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"**
+  (`TaskColumnMenu`), **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
+  **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
+  salvar/cancelar voltam à visão.
+- Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
+  fonte discreta) — é **adicional** e **não substitui** a descrição.
+- Abas animadas: Descrição (descrição completa em Markdown + especificação técnica), Comentários
+  (lista + formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em
+  andamento").
 - Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
