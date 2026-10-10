@@ -58,6 +58,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial) |
+| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
 | `POST /api/tasks/[id]/comments` | `{ content }` |
@@ -140,7 +141,16 @@ animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, 
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
-- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), horas apontadas, criada e atualizada.
+- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), **estimativa** (ver
+  abaixo), horas apontadas, criada e atualizada.
+- **Estimativa** (`TaskEstimateCard`, coluna lateral; só em tarefas que vieram do portal): as
+  **horas estimadas** (originais, H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`);
+  o **prazo do cliente** (`H × fator`) e o **faturamento estimado** (`horas do cliente × custo/hora`)
+  são recalculados com o fator e o custo/hora **atuais** do cliente que originou a tarefa
+  (`resolveProjectClient`: o `OrcamentoClient` ativo cujo `projectIds` inclui o repositório) e
+  animados com `AnimatedNumber`; mostra também o **cliente** (`estimateClientName`). Salvar grava
+  auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`; sem cliente, o
+  servidor usa o fator e o custo/hora do próprio snapshot.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
@@ -162,4 +172,5 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`) e `__tests__/hooks/usePersistentState.test.tsx`.
+`task-summary-card`, `task-estimate-card` — a estimativa editável é coberta em `tasks-service` e
+`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`.

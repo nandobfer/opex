@@ -96,6 +96,8 @@ export interface TaskDetailDto extends TaskDto {
     timeLogs: TaskTimeLog[]
     /** Minutos apontados no total. */
     totalTimeLogged: number
+    /** Nome do cliente de orçamento que originou a tarefa (só quando há estimativa). */
+    estimateClientName: string | null
 }
 
 export interface TaskListDto {

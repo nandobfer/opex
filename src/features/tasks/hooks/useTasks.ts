@@ -9,7 +9,7 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { appChannel } from "@/lib/pusher/channel-names"
 import { TASK_COLUMNS_UPDATED_EVENT, TASKS_UPDATED_EVENT } from "../constants"
 import type { CreateTaskInput, UpdateTaskInput } from "../schemas"
-import type { TaskDetailDto, TaskDto, TaskListDto, TaskOptionsDto, TasksUpdatedEvent } from "../types"
+import type { TaskDetailDto, TaskDto, TaskEstimate, TaskListDto, TaskOptionsDto, TasksUpdatedEvent } from "../types"
 
 /** Tarefas dO Opex: consultas, mutações (otimistas) e atualização em tempo real. */
 
@@ -151,6 +151,23 @@ export function useUpdateTask() {
         onSettled: (_data, _error, { task }) => {
             void queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY, "list"] })
             void queryClient.invalidateQueries({ queryKey: taskDetailKey(task.id) })
+        },
+    })
+}
+
+/**
+ * Edita as horas estimadas de uma tarefa do portal (`PATCH /api/tasks/[id]/estimate`). As horas do
+ * cliente e o faturamento são recalculados no servidor com o cliente que originou a tarefa.
+ */
+export function useUpdateTaskEstimate(taskId: string, code: string) {
+    const queryClient = useQueryClient()
+    return useMutation<TaskEstimate, unknown, number>({
+        mutationFn: async (hours: number) => unwrapApi((await api.patch<ApiResponse<TaskEstimate>>(`/tasks/${taskId}/estimate`, { hours })).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível atualizar a estimativa")),
+        onSuccess: () => {
+            toast.success(`Estimativa de ${code} atualizada`)
+            void queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY, "list"] })
+            void queryClient.invalidateQueries({ queryKey: taskDetailKey(taskId) })
         },
     })
 }
