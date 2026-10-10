@@ -1,4 +1,5 @@
-import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASK_TYPES } from "@/features/tasks/constants"
+import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASK_TYPES, type TaskType } from "@/features/tasks/constants"
+import type { JevQuestion } from "@/lib/ai/jev"
 import { draftEstimateSchema, draftPreviewSchema, type DraftPreview } from "./schemas"
 
 /**
@@ -50,18 +51,41 @@ export function buildBudgetPreviewPrompt(input: BudgetPreviewInput): string {
     return parts.filter(Boolean).join("\n\n")
 }
 
-/** Instruções de sistema da estimativa (fase 2 — agente do OpenCode com tools). */
+/** Instruções de sistema da estimativa (fase 2 — uma chamada, com o histórico já no prompt). */
 export function buildBudgetEstimateInstructions(instructions: string): string {
     const contract = [
-        "Você estima o esforço de implementação de uma tarefa. Use as ferramentas disponíveis (consulta ao banco de dados, histórico de horas apontadas, tarefas semelhantes) para embasar a estimativa antes de responder.",
+        "Você estima o esforço de implementação de uma tarefa, em horas de desenvolvimento, com base no pedido e no histórico de tarefas semelhantes apresentado no prompt.",
+        "Considere a complexidade, o tipo e as horas reais apontadas nas tarefas semelhantes. Seja conservador quando houver incerteza.",
         "Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente esta chave:",
-        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5), sua estimativa de esforço de implementação.',
+        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5).',
     ].join("\n")
     return `${instructions.trim()}\n\n${contract}`
 }
 
-/** Prompt da estimativa: a prévia gerada + o pedido original (o agente consulta o histórico com as tools). */
-export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput): string {
+/** Tarefa do histórico apresentada ao estimador (horas reais apontadas ou estimativa anterior). */
+export interface EstimateContextTask {
+    code: string
+    title: string
+    taskType: TaskType | null
+    tags: string[]
+    hours: number | null
+}
+
+function similarSection(similar: readonly EstimateContextTask[]): string {
+    if (similar.length === 0) return "## Tarefas semelhantes\nNenhuma tarefa semelhante encontrada no histórico."
+    const lines = similar.map((task) => {
+        const meta = [
+            `tipo: ${task.taskType ? TASK_TYPE_LABELS[task.taskType] : "não informado"}`,
+            task.tags.length ? `tags: ${task.tags.join(", ")}` : "",
+            task.hours != null ? `horas: ${task.hours} h` : "sem horas registradas",
+        ].filter(Boolean)
+        return `- ${task.code} — ${task.title} (${meta.join("; ")})`
+    })
+    return `## Tarefas semelhantes (histórico)\n${lines.join("\n")}`
+}
+
+/** Prompt da estimativa: a prévia, o pedido e o histórico de tarefas semelhantes (pré-buscado). */
+export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput, similar: readonly EstimateContextTask[] = []): string {
     const parts = [
         "# Tarefa a estimar",
         `Repositório: ${input.projectName}`,
@@ -73,9 +97,44 @@ export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPr
         "## Pedido original do cliente",
         clip(input.description),
         input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
-        "Consulte o banco de dados e o histórico de horas dos agentes com as ferramentas disponíveis e estime as horas de implementação desta tarefa.",
+        similarSection(similar),
+        "Estime as horas de implementação desta tarefa usando o histórico acima como referência.",
     ]
     return parts.filter(Boolean).join("\n\n")
+}
+
+// ── Estimativa via JEV (decisão estruturada: um `score` mapeado para horas) ──
+
+export const JEV_ESTIMATE_QUESTION_ID = "estimated_hours"
+
+/** Níveis de esforço (índice = nível; o JEV devolve a posição, que mapeia para horas). */
+export const JEV_ESTIMATE_LEVELS = [
+    "Até 2 horas (ajuste trivial, poucos arquivos)",
+    "3 a 4 horas (tarefa pequena, escopo claro)",
+    "5 a 8 horas (tarefa média, vários arquivos e testes)",
+    "9 a 16 horas (tarefa grande, integração ou refatoração)",
+    "17 a 32 horas (tarefa muito grande, várias partes)",
+    "Mais de 32 horas (épico, alto risco ou incerteza)",
+] as const
+
+/** Horas representativas de cada nível (política explícita de mapeamento `score` → horas). */
+export const JEV_ESTIMATE_HOURS = [2, 4, 8, 16, 32, 48] as const
+
+/** Pergunta `score` única: quanto esforço a tarefa exige, considerando o histórico. */
+export function buildJevEstimateQuestions(): Record<string, JevQuestion> {
+    return {
+        [JEV_ESTIMATE_QUESTION_ID]: {
+            type: "score",
+            instructions: "Quanto esforço de implementação (em horas de desenvolvimento) esta tarefa exige, considerando as tarefas semelhantes apresentadas?",
+            criteria: [...JEV_ESTIMATE_LEVELS],
+        },
+    }
+}
+
+/** Mapeia o `score` do JEV (0..N, pode ser fracionário) para horas, arredondando ao nível mais próximo. */
+export function mapJevEstimateScore(score: number): number {
+    const index = Math.max(0, Math.min(JEV_ESTIMATE_HOURS.length - 1, Math.round(score)))
+    return JEV_ESTIMATE_HOURS[index]!
 }
 
 export const TASK_TYPE_LABEL_LIST = TASK_TYPES.map((type) => TASK_TYPE_LABELS[type])

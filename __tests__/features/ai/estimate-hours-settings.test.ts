@@ -27,6 +27,7 @@ import { availabilityOfEstimateHours, getEstimateHoursSettings, normalizeEstimat
 const settings = (overrides: Partial<EstimateHoursSettings> = {}): EstimateHoursSettings => ({
     ...DEFAULT_ESTIMATE_HOURS_SETTINGS,
     enabled: true,
+    provider: "opencode",
     model: "anthropic/claude",
     ...overrides,
 })
@@ -45,10 +46,10 @@ beforeEach(() => {
 })
 
 describe('schema de "Estimar prazos"', () => {
-    it("ativada exige modelo; desativada aceita vazio", () => {
+    it("ativada exige provedor e modelo; desativada aceita vazio", () => {
         const result = estimateHoursSettingsSchema.safeParse({ ...DEFAULT_ESTIMATE_HOURS_SETTINGS, enabled: true })
         expect(result.success).toBe(false)
-        expect(result.error?.issues.map((issue) => issue.message)).toEqual(["Selecione o modelo"])
+        expect(result.error?.issues.map((issue) => issue.message)).toEqual(["Selecione o provedor", "Selecione o modelo"])
         expect(estimateHoursSettingsSchema.safeParse(DEFAULT_ESTIMATE_HOURS_SETTINGS).success).toBe(true)
     })
 })
@@ -60,7 +61,7 @@ describe("configuração e disponibilidade", () => {
         expect(dto.availability.reason).toContain("desativada")
     })
 
-    it("disponível só com a feature ativa, modelo escolhido e OpenCode conectado", async () => {
+    it("disponível só com a feature ativa, provedor e modelo escolhidos e o provedor conectado", async () => {
         expect(await availabilityOfEstimateHours(settings())).toEqual({ available: true, reason: null })
         expect((await availabilityOfEstimateHours(settings({ model: null }))).reason).toContain("provedor e o modelo")
         mocks.statuses.mockResolvedValue(connected({ connected: false }))

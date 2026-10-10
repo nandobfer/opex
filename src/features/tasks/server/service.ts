@@ -13,6 +13,7 @@ import { getBoard } from "./columns"
 import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
 import { computeClientEstimate } from "@/features/orcamentos/logic"
+import { taskTagsSourceHash } from "@/features/ai/task-tags"
 
 /**
  * Tarefas dO Opex — a fonte de verdade. CRUD sobre `dev_tasks`; o código é sequencial por projeto
@@ -52,6 +53,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         order: task.order,
         title: task.title,
         summary: task.summary ?? null,
+        tags: task.tags ?? [],
         taskType: (task.taskType as TaskType | null) ?? null,
         priority: (task.priority as TaskPriority) ?? "medium",
         archived: task.archived === true,
@@ -280,6 +282,8 @@ export interface CreateTaskOptions {
     clientId?: string
     /** Estimativa/orçamento vinda do portal do cliente (snapshot). */
     estimate?: TaskEstimateInput
+    /** Tags já conhecidas (ex.: vindas do portal, para não gerar de novo). */
+    tags?: string[]
 }
 
 /** Estimativa gravada na tarefa ao aprovar a prévia do portal. */
@@ -311,6 +315,8 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         priority: input.priority ?? "medium",
         archived: false,
         clientId: options.clientId ?? null,
+        tags: options.tags ?? [],
+        tagsSourceHash: options.tags ? taskTagsSourceHash({ title: input.title, description: input.description?.trim() || null }) : null,
         estimate: options.estimate ? { ...options.estimate, generatedAt: new Date() } : null,
     })
     await recordAudit({

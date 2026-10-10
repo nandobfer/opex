@@ -57,9 +57,11 @@ function toClienteEstimate(estimate: TaskDto["estimate"]): ClienteTaskEstimateDt
     return estimate ? { clientHours: estimate.clientHours, billingBrl: estimate.billingBrl } : null
 }
 
-/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo da estimativa. */
+/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo e as tags (internas). */
 export function toClienteTaskDto(task: TaskDto): ClienteTaskDto {
-    return { ...task, estimate: toClienteEstimate(task.estimate) }
+    const { tags, ...rest } = task
+    void tags
+    return { ...rest, estimate: toClienteEstimate(task.estimate) }
 }
 
 /** Detalhe na visão do cliente: sem histórico, horas apontadas nem dados internos da estimativa. */
@@ -112,7 +114,7 @@ export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<Cli
 function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
     const preview = draft.preview
     if (!preview) return null
-    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary }
+    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary, tags: preview.tags ?? [] }
 }
 
 async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise<OrcamentoDraftDto> {
@@ -166,11 +168,18 @@ export async function setDraftCorrection(client: ClienteOrcamentoDoc, id: string
     return draftToDto({ ...draft, correction }, client)
 }
 
-/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa (nova correção). */
-export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: DraftPreviewDto, model: string | null): Promise<OrcamentoDraftDto> {
+/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa e as tags. */
+export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: Omit<DraftPreviewDto, "tags">, model: string | null): Promise<OrcamentoDraftDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview, estimatedHours: null, model } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...preview, tags: [] }, estimatedHours: null, model } })
     return getDraft(client, id)
+}
+
+/** Grava as tags do rascunho (geradas pela feature "Tags de tarefas") na prévia existente. */
+export async function saveDraftTags(client: ClienteOrcamentoDoc, id: string, tags: string[]): Promise<void> {
+    const draft = await getDraftDoc(client, id)
+    if (!draft.preview) throw new DomainError(409, "Gere a prévia antes de classificar", "DRAFT_WITHOUT_PREVIEW")
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { "preview.tags": tags } })
 }
 
 /** Grava a estimativa de horas (H) e devolve o orçamento do cliente (H × fator × custo/hora). */
@@ -203,6 +212,7 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
     const task = await createTaskWithIssue(input, actorId, {
         origin: "client",
         clientId: String(client._id),
+        tags: preview.tags ?? [],
         ...(estimate ? { estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } } : {}),
     })
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { status: "approved", taskId: task.id } })

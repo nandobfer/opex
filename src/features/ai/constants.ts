@@ -1,11 +1,11 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "estimar-prazos", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview", "estimate-hours"] as const
+export const AI_FEATURE_IDS = ["understand-task", "task-summary", "task-tags", "budget-preview", "estimate-hours"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -49,7 +49,15 @@ export const DEFAULT_TASK_SUMMARY_INSTRUCTIONS = [
     "Não use Markdown, listas, aspas nem ponto final. Não repita o título.",
 ].join("\n")
 
-// ── Orçamentos (prévia do portal do cliente) ─────────────────────────────────
+// ── Tags de tarefas ──────────────────────────────────────────────
+
+export const DEFAULT_TASK_TAGS_INSTRUCTIONS = [
+    "Você classifica tarefas de desenvolvimento com tags de uma taxonomia fechada.",
+    "Escolha as tags que melhor descrevem do que a tarefa trata, usando apenas os ids fornecidos.",
+    "Prefira poucas tags relevantes; não marque tags só por proximidade. Use [] quando nenhuma se aplicar.",
+].join("\n")
+
+// ── Orçamentos (prévia do portal do cliente) ─────────────────────────────
 
 export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
     "Você é um analista de desenvolvimento sênior que interpreta pedidos de clientes e prepara uma tarefa para o time.",
@@ -58,11 +66,11 @@ export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
     "Não invente requisitos: quando a descrição for ambígua, faça a interpretação mais razoável.",
 ].join("\n")
 
-// ── Estimar prazos (agente OpenCode que consulta o banco) ─────────────────────
+// ── Estimar prazos (tarefas semelhantes já no prompt) ──────────────────────
 
 export const DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS = [
-    "Você é um agente do OpenCode que estima o esforço (em horas) de uma tarefa de desenvolvimento para fins de orçamento.",
-    "Use as ferramentas disponíveis (consulta ao banco de dados, histórico de horas apontadas pelos agentes, tarefas semelhantes) para embasar a estimativa antes de responder.",
-    "Investigue o histórico do repositório e do tipo da tarefa, pense no esforço de implementação e responda em português do Brasil.",
+    "Você estima o esforço (em horas) de uma tarefa de desenvolvimento para fins de orçamento.",
+    "Use as tarefas semelhantes do histórico (horas apontadas, tipo e tags) como referência para embasar a estimativa.",
+    "Responda em português do Brasil.",
     "Seja conservador: quando houver incerteza, prefira uma estimativa um pouco maior.",
 ].join("\n")

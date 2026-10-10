@@ -4,9 +4,9 @@ Integração **Orçamentos** (`orcamentos`, rota `/integracoes/orcamentos`): o d
 e cada cliente ganha uma **URL fixa com token** para um **portal próprio, somente leitura**, sem
 sidebar, com o **mesmo kanban/tabela** das Tarefas, restrito aos repositórios escolhidos e **apenas
 às tarefas que o cliente solicitou**. O cliente pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
-prioridade, resumo e especificação técnica) e, em seguida, um **agente do OpenCode estima as horas**
-(consultando o banco com as ferramentas do servidor), que o cliente **aprova ou corrige**. A
-aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
+prioridade, resumo e especificação técnica); em seguida a IA **classifica a tarefa com tags**
+(feature "Tags de tarefas") e **estima as horas por tarefas semelhantes** — uma única chamada, sem
+agente —, que o cliente **aprova ou corrige**. A aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
 
 Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
 e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
@@ -22,7 +22,8 @@ recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que orig
   visível** (`tokenPrefix`) é o que aparece na lista.
 - `OrcamentoDraft` (`orcamento_drafts`): `{ clientId, projectId, description, correction, preview,
   estimatedHours, model, status: "draft" | "approved", taskId }`. `preview` = `{ title, taskType,
-  priority, technicalSpec, summary }` (1ª fase da IA); `estimatedHours` (H) é gravado na 2ª fase.
+  priority, technicalSpec, summary, tags }` (1ª fase da IA + tags da feature "Tags de tarefas");
+  `estimatedHours` (H) é gravado na 2ª fase.
 - `DevTask.estimate` (subdocumento, `null` fora do portal): `{ hours, clientHours, billingBrl, factor,
   hourlyRate, model, generatedAt }` — snapshot no momento da aprovação. Ver `modules/tasks.md`.
 - `DevTask.clientId`: o **cliente de orçamento que solicitou** a tarefa (`OrcamentoClient._id`; `null`
@@ -112,21 +113,23 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
 
 - **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`), feature **Orçamentos**
   (`budget-preview`): monta a entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod
-  (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours`** (nova
-  correção ⇒ nova estimativa). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
+  (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours` e as
+  tags** (nova correção ⇒ nova estimativa e novas tags). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
   cru nunca é exibido — e, na correção, prévia **e** estimativa voltam a skeleton até chegarem os
   novos valores.
 - **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
   depois da prévia), feature **Estimar prazos** (`estimate-hours`): exige a prévia (409
-  `DRAFT_WITHOUT_PREVIEW`), roda o `streamAi` com um **agente do OpenCode** que **consulta o banco
-  com as ferramentas do servidor (MCP)** e pensa, e valida `{ estimatedHours }`
-  (`parseEstimateHours`); ao concluir grava as horas e devolve o orçamento (`saveDraftEstimate` →
-  `H × fator × custo/hora`). Os eventos de ferramenta (`tool`) são retransmitidos e o card de horas
-  mostra o progresso (ex.: "Consultando (banco)…").
+  `DRAFT_WITHOUT_PREVIEW`); garante as **tags** do rascunho (feature "Tags de tarefas"), pré-busca em
+  `dev_tasks` as **tarefas semelhantes** por tags (fallback por tipo/projeto, `server/similar.ts`,
+  considerando as horas reais apontadas) e faz **uma única chamada** — provedor de texto com o
+  histórico no prompt (valida `{ estimatedHours }`, `parseEstimateHours`) ou **JEV** (um `score` de
+  esforço mapeado para horas). Ao concluir grava as horas e devolve o orçamento
+  (`saveDraftEstimate` → `H × fator × custo/hora`). O rascunho mostra o progresso ("Classificando…",
+  "Buscando tarefas semelhantes…").
 - `preview-prompt.ts` (puro): contratos de saída das duas fases
   (`buildBudgetPreviewInstructions`/`buildBudgetEstimateInstructions`), prompts
-  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt`) e parsers. O **histórico não é injetado**:
-  o agente da 2ª fase o consulta por conta própria via tool.
+  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt` — este último recebe as tarefas
+  semelhantes), parsers e helpers do JEV (`buildJevEstimateQuestions`, `mapJevEstimateScore`).
 - Cada geração grava uma linha em `ai_usage_logs` (`feature: "budget-preview"` na prévia;
   `"estimate-hours"` na estimativa).
 
@@ -134,7 +137,8 @@ aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
 
 Aprovar exige a **prévia** (409 `DRAFT_WITHOUT_PREVIEW`) e usa `createTaskWithIssue` (mesma rota do
 app: **cria a issue no GitHub antes de persistir** — falha do GitHub bloqueia) com
-`origin: "client"` e **`clientId` do cliente** (o que define a lista do portal). Quando há estimativa,
+`origin: "client"` e **`clientId` do cliente** (o que define a lista do portal), além das **tags** do
+rascunho (`tags` de `createTask`, sem gerar de novo). Quando há estimativa,
 envia o `estimate` (snapshot: horas reais, horas do cliente, faturamento, fator, custo/hora e modelo);
 **sem estimativa, a tarefa nasce sem o `estimate`**. O rascunho vira `approved` com `taskId` e registra
 auditoria (`RascunhoOrcamento`, ação `APROVAR`). A tarefa nasce na **coluna de entrada** do projeto
@@ -167,7 +171,8 @@ pública (`/api/v1/*`).
 - `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
   `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
   `formatHoursLabel`), `schemas.ts`, `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
-  `components/` (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
+  `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa), `components/`
+  (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
   — `useBudgetReview` orquestra as duas fases —, páginas e componentes; `portal/components/preview/`
   tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard` e
   `CorrectionCard`). A visão do cliente tem `ClienteTaskDetailPage`, `ClienteTaskTabs`,
@@ -183,7 +188,9 @@ pública (`/api/v1/*`).
 `__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt` (contratos/parsers
 das duas fases), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
 `orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa, lista/detalhe do cliente por
-`clientId` e comentário com origem), `cliente-revisao` (cards da revisão), `cliente-task-table`,
+`clientId` e comentário com origem), `orcamentos-estimate` (estimativa em uma chamada: tags +
+semelhantes + provedor de texto/JEV), `orcamentos-similar` (busca por tags com fallback e horas
+dos apontamentos), `cliente-revisao` (cards da revisão), `cliente-task-table`,
 `cliente-task-card`, `cliente-task-detail` (abas sem Histórico/Horas, estimativa inflada e comentários
 com autor), `copy-portal-url`, `markdown-field`. A configuração de "Estimar prazos" em
 `__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge` (faturamento no dono) em

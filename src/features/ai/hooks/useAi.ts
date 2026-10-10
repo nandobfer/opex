@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { TaskSummarySettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto } from "../types"
+import type { TaskSummarySettings, TaskTagsSettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -20,10 +20,10 @@ export const AI_QUERY_KEY = "ai"
 const key = (...parts: unknown[]) => [AI_QUERY_KEY, ...parts] as const
 const get = async <T,>(path: string) => unwrapApi((await api.get<ApiResponse<T>>(path)).data)
 
-/** Situação dos provedores de texto, derivada da lista de integrações (status ao vivo). O JEV
- * (decisão estruturada, sem geração de texto) não é oferecido às features de texto. */
-export function toProviderStatuses(integrations: readonly IntegrationListItemDto[]): AiProviderStatusDto[] {
-    return AI_PROVIDERS.filter((provider) => provider.supportsTextGeneration).map((provider) => {
+/** Situação dos provedores de texto, derivada da lista de integrações (status ao vivo). Com
+ * `includeAll`, inclui também o JEV (decisão estruturada) — usado pela feature "Tags de tarefas". */
+export function toProviderStatuses(integrations: readonly IntegrationListItemDto[], includeAll = false): AiProviderStatusDto[] {
+    return AI_PROVIDERS.filter((provider) => includeAll || provider.supportsTextGeneration).map((provider) => {
         const item = integrations.find((integration) => integration.id === provider.integrationId)
         const configured = item?.configured === true
         return {
@@ -36,9 +36,9 @@ export function toProviderStatuses(integrations: readonly IntegrationListItemDto
     })
 }
 
-export function useAiProviderStatuses() {
+export function useAiProviderStatuses(includeAll = false) {
     const query = useIntegrations()
-    return { ...query, providers: toProviderStatuses(query.data ?? []) }
+    return { ...query, providers: toProviderStatuses(query.data ?? [], includeAll) }
 }
 
 export const useAiModels = (provider: AiProviderId | null, enabled = true) =>
@@ -78,6 +78,20 @@ export function useSaveTaskSummarySettings() {
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "task-summary"), saved)
             toast.success("Configuração de \"Resumos de tarefas\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const useTaskTagsSettings = () => useQuery({ queryKey: key("feature", "task-tags"), queryFn: () => get<TaskTagsSettingsDto>("/ai/features/task-tags") })
+
+export function useSaveTaskTagsSettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: TaskTagsSettings) => unwrapApi((await api.put<ApiResponse<TaskTagsSettingsDto>>("/ai/features/task-tags", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "task-tags"), saved)
+            toast.success("Configuração de \"Tags de tarefas\" salva")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })

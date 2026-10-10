@@ -2,17 +2,20 @@
 
 import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { useForm } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Info, Loader2, RotateCcw, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
+import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_ESTIMATE_HOURS_SETTINGS, estimateHoursSettingsSchema, type EstimateHoursSettings } from "../../schemas"
 import { useAiProviderStatuses, useEstimateHoursSettings, useSaveEstimateHoursSettings } from "../../hooks/useAi"
@@ -21,16 +24,19 @@ import { ProviderModelCard } from "../understand-task/ProviderModelCard"
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
 /**
- * Aba "Estimar prazos": configura o agente do OpenCode que estima as horas de uma tarefa do portal.
- * O agente roda tools no servidor OpenCode (ex.: consulta ao banco via MCP) e pensa antes de responder.
+ * Aba "Estimar prazos": provedor (texto ou JEV), modelo, instruções e quantas tarefas semelhantes
+ * embasar a estimativa. A estimativa usa as tags da tarefa (feature "Tags de tarefas") para buscar
+ * o histórico; com JEV, um `score` de esforço é mapeado para horas.
  */
 export function EstimateHoursTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const query = useEstimateHoursSettings()
     const save = useSaveEstimateHoursSettings()
-    const { providers } = useAiProviderStatuses()
+    const { providers } = useAiProviderStatuses(true)
     const form = useForm<EstimateHoursSettings>({ resolver: zodResolver(estimateHoursSettingsSchema), mode: "onChange", defaultValues: DEFAULT_ESTIMATE_HOURS_SETTINGS })
     const dirty = form.formState.isDirty
     const errors = form.formState.errors
+    const provider = useWatch({ control: form.control, name: "provider" })
+    const sampling = provider ? getAiProvider(provider).supportsSampling : false
 
     useEffect(() => {
         if (query.data) form.reset(query.data.settings)
@@ -48,6 +54,13 @@ export function EstimateHoursTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
         const saved = await save.mutateAsync(values).catch(() => null)
         if (saved) form.reset(saved.settings)
     })
+    const changeProvider = (next: AiProviderId) => {
+        if (next === provider) return
+        form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
+        form.setValue("model", null, { shouldDirty: true, shouldValidate: true })
+        form.setValue("variant", null, { shouldDirty: true })
+        form.setValue("agent", null, { shouldDirty: true })
+    }
 
     return (
         <>
@@ -58,7 +71,7 @@ export function EstimateHoursTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                         name="enabled"
                         id="ai-estimate-enabled"
                         label="Estimar prazos"
-                        description="Estima as horas de uma tarefa com um agente do OpenCode, que consulta o banco (via MCP) e pensa antes de responder"
+                        description="Estima as horas de uma tarefa pelas tarefas semelhantes (por tags), numa única chamada — sem agente"
                     />
                     <AnimatePresence initial={false}>
                         {!dirty && !availability.available && availability.reason && (
@@ -70,14 +83,47 @@ export function EstimateHoursTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                 </CardContent>
             </Card>
 
-            <ProviderModelCard form={form} providers={providers} fixedProvider="opencode" />
+            <ProviderModelCard form={form} providers={providers} onProviderChange={changeProvider} />
 
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Instruções</CardTitle>
-                    <CardDescription>Recebe a prévia e o pedido original; usa as ferramentas do agente para embasar a estimativa.</CardDescription>
+                    <CardDescription>Recebe a prévia, o pedido original e o histórico de tarefas semelhantes.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-5">
+                    <div className={FORM_GRID_WIDE}>
+                        <Field id="ai-estimate-similar" label="Tarefas semelhantes a considerar" error={errors.similarLimit?.message}>
+                            <Controller
+                                control={form.control}
+                                name="similarLimit"
+                                render={({ field }) => <Input id="ai-estimate-similar" type="number" min={1} max={20} value={field.value} onChange={(event) => field.onChange(event.target.value === "" ? 0 : Number(event.target.value))} />}
+                            />
+                        </Field>
+                    </div>
+
+                    <AnimatePresence initial={false}>
+                        {sampling && (
+                            <motion.div key="sampling" {...noticeMotion} className="overflow-hidden">
+                                <div className={FORM_GRID_WIDE}>
+                                    <Field id="ai-estimate-temperature" label="Temperatura" error={errors.temperature?.message}>
+                                        <Controller
+                                            control={form.control}
+                                            name="temperature"
+                                            render={({ field }) => <Input id="ai-estimate-temperature" type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value.trim() === "" ? null : Number(event.target.value))} />}
+                                        />
+                                    </Field>
+                                    <Field id="ai-estimate-max-tokens" label="Máximo de tokens na resposta" error={errors.maxOutputTokens?.message}>
+                                        <Controller
+                                            control={form.control}
+                                            name="maxOutputTokens"
+                                            render={({ field }) => <Input id="ai-estimate-max-tokens" type="number" step="256" min={256} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value.trim() === "" ? null : Number(event.target.value))} />}
+                                        />
+                                    </Field>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
                     <Field id="ai-estimate-instructions" label="Instruções (prompt de sistema)" error={errors.instructions?.message}>
                         <Textarea id="ai-estimate-instructions" rows={7} className="font-mono text-xs" {...form.register("instructions")} />
                         <div className="flex justify-end">

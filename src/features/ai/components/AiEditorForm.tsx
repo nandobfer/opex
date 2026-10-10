@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer } from "lucide-react"
+import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -16,6 +16,7 @@ import { useAiFeatureRealtime } from "../hooks/useAi"
 import { AiProvidersTab } from "./AiProvidersTab"
 import { UnderstandTaskTab } from "./understand-task/UnderstandTaskTab"
 import { TaskSummaryTab } from "./task-summary/TaskSummaryTab"
+import { TaskTagsTab } from "./task-tags/TaskTagsTab"
 import { BudgetPreviewTab } from "./budget-preview/BudgetPreviewTab"
 import { EstimateHoursTab } from "./estimate-hours/EstimateHoursTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
@@ -35,6 +36,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "provedores", label: "Provedores", icon: BrainCircuit },
     { id: "entender-tarefas", label: "Entender tarefas", icon: Sparkles },
     { id: "resumos-tarefas", label: "Resumos de tarefas", icon: AlignLeft },
+    { id: "tags-tarefas", label: "Tags de tarefas", icon: Tag },
     { id: "orcamentos", label: "Orçamentos", icon: Calculator },
     { id: "estimar-prazos", label: "Estimar prazos", icon: Timer },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
@@ -78,6 +80,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 )}
                 {tab === "entender-tarefas" && <UnderstandTaskTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "resumos-tarefas" && <TaskSummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "tags-tarefas" && <TaskTagsTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "orcamentos" && <BudgetPreviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "estimar-prazos" && <EstimateHoursTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}

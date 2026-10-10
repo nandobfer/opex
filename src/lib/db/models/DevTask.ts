@@ -45,6 +45,11 @@ export interface IDevTask {
     /** Hash da fonte (título + descrição) do resumo atual; divergente = resumo desatualizado. */
     summarySourceHash: string | null
     summaryUpdatedAt: Date | null
+    /** Tags geradas por IA (ids da taxonomia da feature "Tags de tarefas"). */
+    tags: string[]
+    /** Hash da fonte (título + descrição) das tags atuais; divergente = tags desatualizadas. */
+    tagsSourceHash: string | null
+    tagsUpdatedAt: Date | null
     /** Estimativa/orçamento do portal do cliente (`null` quando não veio do portal). */
     estimate: ITaskEstimate | null
     createdAt: Date
@@ -80,6 +85,9 @@ const DevTaskSchema = new Schema<IDevTask>(
         summary: { type: String, default: null },
         summarySourceHash: { type: String, default: null },
         summaryUpdatedAt: { type: Date, default: null },
+        tags: { type: [String], default: [], index: true },
+        tagsSourceHash: { type: String, default: null },
+        tagsUpdatedAt: { type: Date, default: null },
         estimate: { type: TaskEstimateSchema, default: null },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildBudgetEstimateInstructions, buildBudgetEstimatePrompt, buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, extractJsonObject, parseDraftPreview, parseEstimateHours } from "@/features/orcamentos/preview-prompt"
+import { buildBudgetEstimateInstructions, buildBudgetEstimatePrompt, buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, buildJevEstimateQuestions, extractJsonObject, JEV_ESTIMATE_QUESTION_ID, mapJevEstimateScore, parseDraftPreview, parseEstimateHours } from "@/features/orcamentos/preview-prompt"
 import type { DraftPreview } from "@/features/orcamentos/schemas"
 
 const preview: DraftPreview = { title: "Corrigir X", taskType: "bugfix", priority: "high", technicalSpec: "## Passos", summary: "Corrige X" }
@@ -25,19 +25,41 @@ describe("prompt da prévia (fase 1)", () => {
     })
 })
 
-describe("prompt da estimativa (fase 2 — agente do OpenCode)", () => {
-    it("instrui o agente a usar as ferramentas e responder somente estimatedHours", () => {
+describe("prompt da estimativa (fase 2 — uma chamada com o histórico)", () => {
+    it("instrui a responder somente estimatedHours, sem ferramentas", () => {
         const instructions = buildBudgetEstimateInstructions("Você é um estimador.")
         expect(instructions).toContain('"estimatedHours"')
         expect(instructions).not.toContain('"technicalSpec"')
-        expect(instructions.toLowerCase()).toContain("ferramentas")
+        expect(instructions.toLowerCase()).not.toContain("ferramentas")
     })
 
-    it("inclui a prévia e o pedido original no prompt", () => {
-        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "Ajustar rodapé", correction: null })
+    it("inclui a prévia, o pedido original e as tarefas semelhantes no prompt", () => {
+        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "Ajustar rodapé", correction: null }, [
+            { code: "OPX-1", title: "Rodapé anterior", taskType: "bugfix", tags: ["frontend"], hours: 4 },
+        ])
         expect(prompt).toContain("Corrigir X")
         expect(prompt).toContain("Ajustar rodapé")
-        expect(prompt).toContain("Consulte o banco de dados")
+        expect(prompt).toContain("OPX-1")
+        expect(prompt).toContain("4 h")
+    })
+
+    it("sem semelhantes, avisa que o histórico está vazio", () => {
+        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "x", correction: null }, [])
+        expect(prompt).toContain("Nenhuma tarefa semelhante")
+    })
+})
+
+describe("estimativa via JEV (score → horas)", () => {
+    it("mapeia o score para as horas do nível mais próximo", () => {
+        expect(mapJevEstimateScore(0)).toBe(2)
+        expect(mapJevEstimateScore(2.4)).toBe(8)
+        expect(mapJevEstimateScore(9)).toBe(48)
+    })
+
+    it("monta uma pergunta score com os níveis de esforço", () => {
+        const question = buildJevEstimateQuestions()[JEV_ESTIMATE_QUESTION_ID]
+        expect(question).toMatchObject({ type: "score" })
+        expect(question.type === "score" && question.criteria.length).toBeGreaterThanOrEqual(2)
     })
 })
 

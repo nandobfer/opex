@@ -2,6 +2,7 @@ import Fuse from "fuse.js"
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_SORT_KEYS, TASK_TYPES, TASK_VIEW_MODES, type TaskPriority, type TaskSortKey, type TaskType, type TaskViewMode } from "./constants"
 import { columnKeyOf, type BoardColumnView } from "./board"
+import { TASK_TAG_ID_MAX } from "./tags"
 import type { ProjectRef } from "./types"
 
 /** Filtros e preferências da tela de Tarefas (salvos no navegador). Módulo puro. */
@@ -16,6 +17,8 @@ export interface TaskFilters {
     columns: string[]
     priorities: TaskPriority[]
     types: TaskType[]
+    /** Ids de tags (taxonomia da feature "Tags de tarefas"). */
+    tags: string[]
     showArchived: boolean
     view: TaskViewMode
     sort: TaskSortKey
@@ -31,6 +34,7 @@ export const DEFAULT_TASK_FILTERS: TaskFilters = {
     columns: [],
     priorities: [],
     types: [],
+    tags: [],
     showArchived: false,
     view: "kanban",
     sort: "priority",
@@ -38,7 +42,7 @@ export const DEFAULT_TASK_FILTERS: TaskFilters = {
 }
 
 /** Campos que contam como "filtro" (Limpar zera só estes; visão e ordenação ficam). */
-export const TASK_FILTER_KEYS = ["search", "projects", "columns", "priorities", "types", "showArchived"] as const
+export const TASK_FILTER_KEYS = ["search", "projects", "columns", "priorities", "types", "tags", "showArchived"] as const
 
 const list = <T extends string>(values: readonly T[]) => z.array(z.enum(values as unknown as [T, ...T[]])).catch([])
 
@@ -49,6 +53,7 @@ export const taskFiltersSchema = z.object({
     columns: z.array(z.string().max(60)).catch([]),
     priorities: list(TASK_PRIORITIES),
     types: list(TASK_TYPES),
+    tags: z.array(z.string().max(TASK_TAG_ID_MAX)).catch([]),
     showArchived: z.boolean().catch(false),
     view: z.enum(TASK_VIEW_MODES).catch(DEFAULT_TASK_FILTERS.view),
     sort: z.enum(TASK_SORT_KEYS).catch(DEFAULT_TASK_FILTERS.sort),
@@ -79,6 +84,8 @@ export interface FilterableTask {
     archived: boolean
     priority: TaskPriority
     taskType: TaskType | null
+    /** Tags (ausente na visão do cliente, que não expõe tags). */
+    tags?: string[]
     columnId: string
     project: ProjectRef | null
 }
@@ -110,7 +117,8 @@ export function applyTaskFilters<T extends FilterableTask>(tasks: readonly T[], 
             includesOrAll(filters.projects, task.project?.id ?? "") &&
             (options.ignoreColumn || includesOrAll(filters.columns, columnKeyOf(task))) &&
             includesOrAll(filters.priorities, task.priority) &&
-            (filters.types.length === 0 || (task.taskType !== null && filters.types.includes(task.taskType))),
+            (filters.types.length === 0 || (task.taskType !== null && filters.types.includes(task.taskType))) &&
+            (filters.tags.length === 0 || (task.tags ?? []).some((id) => filters.tags.includes(id))),
     )
 
     const term = filters.search.trim()

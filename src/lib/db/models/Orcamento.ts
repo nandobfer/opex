@@ -47,6 +47,8 @@ export interface IOrcamentoDraftPreview {
     priority: string
     technicalSpec: string
     summary: string
+    /** Tags (ids da taxonomia) geradas pela feature "Tags de tarefas" para este rascunho. */
+    tags: string[]
 }
 
 export interface IOrcamentoDraft {
@@ -74,6 +76,7 @@ const OrcamentoDraftPreviewSchema = new Schema<IOrcamentoDraftPreview>(
         priority: { type: String, default: "medium" },
         technicalSpec: { type: String, default: "" },
         summary: { type: String, default: "" },
+        tags: { type: [String], default: [] },
     },
     { _id: false },
 )

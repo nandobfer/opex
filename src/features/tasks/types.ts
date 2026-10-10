@@ -36,6 +36,8 @@ export interface TaskDto {
     title: string
     /** Resumo de 1 linha gerado por IA (substitui a descrição na exibição). */
     summary: string | null
+    /** Tags (ids da taxonomia da feature "Tags de tarefas"); vazio quando nenhuma. */
+    tags: string[]
     taskType: TaskType | null
     priority: TaskPriority
     archived: boolean
