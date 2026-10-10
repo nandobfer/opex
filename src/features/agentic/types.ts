@@ -88,6 +88,8 @@ export interface WorkbenchDto {
     port: number | null
     previewUrl: string | null
     previewHealthy: boolean | null
+    /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
+    buildQueuePosition: number | null
     plans: PlanVersionDto[]
     pr: WorkbenchPrDto | null
     pendingPermissions: OpencodePermissionDto[]
@@ -108,6 +110,8 @@ export interface WorkbenchSummaryDto {
     taskTitle: string
     stage: WorkbenchStage
     runState: RunState
+    /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
+    buildQueuePosition: number | null
     updatedAt: string
 }
 

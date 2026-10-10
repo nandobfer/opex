@@ -66,6 +66,25 @@ conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fi
 - Excluir a coluna da fila de uma central é bloqueado (`COLUMN_QUEUE_IN_USE`): troque a coluna na
   central antes.
 
+## Fila do build (um build por vez)
+
+A subida da prévia usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
+centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
+
+- A mesa vai para a etapa **`build_queued`** ("Na fila do build") e aguarda; a posição (1-based)
+  aparece na lista de tarefas e na mesa como "Na fila do build · #N".
+- Um **motor** (`build-queue.ts`, `pumpBuildQueue`) inicia o próximo build quando **não há nenhum
+  build vivo no processo** (mesa em `building` e executando). A ordem é **FIFO** pela hora de entrada
+  (`buildQueuedAt`); a porta da prévia só é reservada quando a vez chega (`startBuildTurn`).
+- **Gatilhos**: fim da implementação, fim de cada build (sucesso ou falha/interrupção) e a rotina
+  interna **`agentic-queue-pump`** (1 min, Crons), que cobre reinícios e vagas liberadas fora do
+  processo.
+- **Tentar novamente** num build que falhou **volta para a fila** (`build_queued`) em vez de subir
+  direto. Enquanto aguarda, a mesa fica `idle` (o apontamento de horas não corre) e **não** oferece
+  ações além de excluir a mesa.
+- Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
+  turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
+
 ## Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`)
 
 - Item próprio no menu. Sem central na URL, abre a primeira. Três colunas:
@@ -98,7 +117,7 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 
 ```
 planning → plan_review ─┬─ Solicitar correção do plano → planning
-                        └─ Implementar → implementing → building → preview
+                        └─ Implementar → implementing → build_queued → building → preview
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
 pr_open ─┬─ revisão "pediu mudanças" com texto → planning (automático)
@@ -118,8 +137,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
   sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
-- **Build**: emenda automática após a implementação. Porta reservada no banco (índice único) na
-  faixa configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
+- **Build**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
+  acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
+  configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
   (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder

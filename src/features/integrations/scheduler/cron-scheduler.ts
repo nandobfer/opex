@@ -287,7 +287,11 @@ export function registerBuiltInJobs(): void {
     })
     registerInternalJob(AGENTIC_QUEUE_JOB_ID, async () => {
         const { pumpAllCentralQueues } = await import("@/features/agentic/server/queue")
-        return pumpAllCentralQueues()
+        const { pumpBuildQueue } = await import("@/features/agentic/server/build-queue")
+        const summary = await pumpAllCentralQueues()
+        // A fila global do build também é avaliada aqui (reinício, vaga liberada fora do processo).
+        await pumpBuildQueue()
+        return summary
     })
 }
 

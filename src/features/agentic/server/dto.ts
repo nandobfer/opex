@@ -28,7 +28,7 @@ export function toCentralDto(
     }
 }
 
-export function toWorkbenchDto(doc: IAgenticWorkbench): WorkbenchDto {
+export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: number | null = null): WorkbenchDto {
     return {
         id: String(doc._id),
         centralId: doc.centralId,
@@ -45,6 +45,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench): WorkbenchDto {
         port: doc.port ?? null,
         previewUrl: doc.previewUrl ?? null,
         previewHealthy: doc.previewHealthy ?? null,
+        buildQueuePosition,
         plans: (doc.plans ?? []).map((plan) => ({ version: plan.version, text: plan.text, feedback: plan.feedback ?? null, createdAt: new Date(plan.createdAt).toISOString() })),
         pr: doc.pr ? { number: doc.pr.number, url: doc.pr.url, state: doc.pr.state, mergedAt: iso(doc.pr.mergedAt) } : null,
         pendingPermissions: (doc.pendingPermissions ?? []) as OpencodePermissionDto[],
@@ -57,6 +58,6 @@ export function toWorkbenchDto(doc: IAgenticWorkbench): WorkbenchDto {
     }
 }
 
-export function toWorkbenchSummary(doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "updatedAt">): WorkbenchSummaryDto {
-    return { id: String(doc._id), taskId: doc.taskId, taskCode: doc.taskCode, taskTitle: doc.taskTitle, stage: asStage(doc.stage), runState: asRunState(doc.runState), updatedAt: new Date(doc.updatedAt).toISOString() }
+export function toWorkbenchSummary(doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "updatedAt">, buildQueuePosition: number | null = null): WorkbenchSummaryDto {
+    return { id: String(doc._id), taskId: doc.taskId, taskCode: doc.taskCode, taskTitle: doc.taskTitle, stage: asStage(doc.stage), runState: asRunState(doc.runState), buildQueuePosition, updatedAt: new Date(doc.updatedAt).toISOString() }
 }

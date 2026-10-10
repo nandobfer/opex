@@ -64,6 +64,8 @@ export interface IAgenticWorkbench {
     worktreePath: string | null
     composeProject: string | null
     port: number | null
+    /** Instante em que a mesa entrou na fila global do build (`null` fora da fila); define a ordem FIFO. */
+    buildQueuedAt: Date | null
     previewUrl: string | null
     previewHealthy: boolean | null
     plans: IPlanVersion[]
@@ -97,6 +99,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         worktreePath: { type: String, default: null },
         composeProject: { type: String, default: null },
         port: { type: Number, default: null },
+        buildQueuedAt: { type: Date, default: null },
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
@@ -114,6 +117,8 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
 )
 // Uma porta por mesa ativa (as concluídas liberam a porta gravando null).
 AgenticWorkbenchSchema.index({ port: 1 }, { unique: true, partialFilterExpression: { port: { $type: "number" } } })
+// Fila global do build: mesas aguardando, na ordem de chegada.
+AgenticWorkbenchSchema.index({ buildQueuedAt: 1 }, { partialFilterExpression: { buildQueuedAt: { $type: "date" } } })
 
 export interface IAgenticEvent {
     workbenchId: string

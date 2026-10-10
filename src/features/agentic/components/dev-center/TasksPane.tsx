@@ -127,7 +127,15 @@ export function TasksPane({ central, activeTaskId, collapsed, wide, onToggle }: 
                                                     {column && <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} title={column.label} aria-label={column.label} />}
                                                     <span className="font-mono text-[11px] font-semibold text-primary">{task.code}</span>
                                                     <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{column?.label ?? "Sem coluna"}</span>
-                                                    {workbench ? <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} /> : queueItem && <QueueBadge position={queueItem.position} />}
+                                                    {workbench ? (
+                                                        workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
+                                                            <QueueBadge position={workbench.buildQueuePosition} label="Na fila do build" title="Aguardando a vez do build" />
+                                                        ) : (
+                                                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />
+                                                        )
+                                                    ) : (
+                                                        queueItem && <QueueBadge position={queueItem.position} />
+                                                    )}
                                                 </span>
                                                 <span className="truncate text-sm">{task.title}</span>
                                             </Link>

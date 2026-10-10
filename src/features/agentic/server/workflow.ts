@@ -29,6 +29,7 @@ import {
 } from "../prompts"
 import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
@@ -79,19 +80,27 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 }
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
-    return toWorkbenchDto(await reconcile(await loadWorkbench(id)))
+    const doc = await reconcile(await loadWorkbench(id))
+    return toWorkbenchDto(doc, await buildQueuePosition(id))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
-    return doc ? toWorkbenchDto(await reconcile(doc)) : null
+    if (!doc) return null
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
     await dbConnect()
-    const docs = await AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean()
-    return docs.map((doc) => toWorkbenchSummary(doc.runState === "running" && !isWorkbenchActive(String(doc._id)) ? { ...doc, runState: "interrupted" } : doc))
+    const [docs, positions] = await Promise.all([
+        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
+        buildQueuePositions(),
+    ])
+    return docs.map((doc) => {
+        const reconciled = doc.runState === "running" && !isWorkbenchActive(String(doc._id)) ? { ...doc, runState: "interrupted" } : doc
+        return toWorkbenchSummary(reconciled, positions.get(String(doc._id)) ?? null)
+    })
 }
 
 interface Loaded {
@@ -188,7 +197,11 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     }
     void executeTurns(id, turn, controller)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
-        .finally(() => clearWorkbenchActive(id, controller))
+        .finally(() => {
+            clearWorkbenchActive(id, controller)
+            // Terminou um build (liberou a vaga) ou uma implementação (entrou na fila): avalia a fila do build.
+            if (turn.stage === "building" || turn.stage === "implementing") pumpBuildQueue()
+        })
 }
 
 /** Executa o turno e os encadeados (implementação → build), mantendo a mesa ativa entre eles. */
@@ -318,9 +331,10 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            const port = await allocatePreviewPort(id, config.environment.previewHost, { min: config.environment.previewPortMin, max: config.environment.previewPortMax })
-            notice("info", `Porta reservada para a prévia: ${port}`)
-            return { stage: "building", text: buildPrompt(config, ctx, port) }
+            // Entra na fila global do build (um build por vez); a porta é reservada quando a vez chega.
+            await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
+            notice("info", "Implementação concluída. Aguardando a vez do build — um build por vez.")
+            return null
         }
         case "building": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
@@ -394,6 +408,21 @@ async function applyStartEffects(id: string, task: TaskDetailDto, config: Centra
             notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
         }
     }
+}
+
+/**
+ * Inicia o turno de build de uma mesa que está aguardando a vez (`build_queued`): reserva a porta
+ * da prévia e roda o turno `building`. Devolve `false` quando a mesa já não está mais na fila (o
+ * motor da fila tenta a próxima).
+ */
+export async function startBuildTurn(id: string): Promise<boolean> {
+    const loaded = await loadAll(id)
+    if (asStage(loaded.doc.stage) !== "build_queued") return false
+    const port = await allocatePreviewPort(id, loaded.config.environment.previewHost, { min: loaded.config.environment.previewPortMin, max: loaded.config.environment.previewPortMax })
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}` })
+    await launchTurn(loaded, { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port) }, { extraSet: { buildQueuedAt: null } })
+    return true
 }
 
 export async function startWorkbench(centralId: string, taskId: string): Promise<WorkbenchDto> {
@@ -496,6 +525,12 @@ export async function retry(id: string): Promise<WorkbenchDto> {
         await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded)) }, { userText: "Tentar a limpeza novamente" })
         return getWorkbench(id)
     }
+    if (stage === "building") {
+        // O build não corre solto: volta para a fila global e o motor decide a vez (um build por vez).
+        await update(doc, { stage: "build_queued", runState: "idle", error: null, buildQueuedAt: new Date() })
+        pumpBuildQueue()
+        return getWorkbench(id)
+    }
     const text = `A execução anterior desta etapa não terminou (${doc.error ?? "motivo desconhecido"}). Retome de onde parou e conclua a etapa conforme as instruções abaixo.\n\n${doc.lastPrompt.text}`
     await launchTurn({ ...loaded, doc }, { stage, text }, { userText: "Tentar novamente" })
     return getWorkbench(id)
@@ -558,6 +593,7 @@ export async function deleteWorkbench(id: string): Promise<void> {
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
     pumpQueue(doc.centralId)
+    pumpBuildQueue()
 }
 
 // ---------------------------------------------------------------------------
