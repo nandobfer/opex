@@ -27,7 +27,8 @@ import { WorkbenchWaitingBadge } from "../WorkbenchWaitingBadge"
 import { CentralPicker, CentralSettingsLink } from "./CentralPicker"
 import { TaskFilters } from "./TaskFilters"
 
-const ROW_HEIGHT = 64
+// Estimativa inicial da altura das linhas; cada linha é medida de verdade (o resumo varia de 1 a 2 linhas).
+const ROW_HEIGHT = 72
 
 interface TasksPaneProps {
     central: CentralDto
@@ -111,11 +112,11 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: 
                                         ? workbenchUserWaitReason({ stage: workbench.stage, runState: workbench.runState, pendingPermissions: workbench.pendingPermissions, pendingForms: workbench.pendingForms })
                                         : null
                                     return (
-                                        <div key={task.id} role="listitem" className="absolute inset-x-0 px-1.5 py-0.5" style={{ height: ROW_HEIGHT, transform: `translateY(${row.start}px)` }}>
+                                        <div key={task.id} ref={virtualizer.measureElement} data-index={row.index} role="listitem" className="absolute inset-x-0 px-1.5 py-0.5" style={{ transform: `translateY(${row.start}px)` }}>
                                             <Link
                                                 href={workbenchPath(task.id)}
                                                 aria-current={active ? "page" : undefined}
-                                                className={cn("flex h-full flex-col justify-center gap-1 rounded-md px-2.5 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
+                                                className={cn("flex flex-col gap-1 rounded-md px-2.5 py-1.5 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
                                             >
                                                 <span className="flex items-center gap-2">
                                                     {column && <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} title={column.label} aria-label={column.label} />}
@@ -133,6 +134,11 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: 
                                                     )}
                                                 </span>
                                                 <span className="truncate text-sm">{task.title}</span>
+                                                {task.summary && (
+                                                    <span className="line-clamp-2 text-[11px] leading-snug text-muted-foreground" title={task.summary}>
+                                                        {task.summary}
+                                                    </span>
+                                                )}
                                             </Link>
                                         </div>
                                     )

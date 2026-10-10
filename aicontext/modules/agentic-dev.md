@@ -114,8 +114,11 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   espaço restante); abaixo de `lg` as colunas ficam empilhadas e a coluna ocupa a linha inteira.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
-  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da
-  mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está **parada aguardando o
+  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada, com a altura de cada linha
+  medida dinamicamente; cada item mostra o título e, **abaixo dele, o resumo (`summary`) da tarefa**
+  quando houver (texto discreto, com o texto completo na dica e limitado a 2 linhas). Cada tarefa
+  mostra a etapa da mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está
+  **parada aguardando o
   usuário**, o item mostra um **warning** (ícone de alerta, com o motivo na dica): revisão do plano,
   aprovação da prévia, revisão/merge do PR, "mudanças pedidas no PR", permissão ou pergunta
   pendente do agente, falha/interrupção (regra `workbenchUserWaitReason`; o chip de etapa deixa de
