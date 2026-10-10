@@ -33,13 +33,26 @@ describe("uniqueTagId", () => {
 })
 
 describe("filterKnownTags e tagLabel", () => {
+    const taxonomy = [
+        { id: "integracoes", label: "Integrações" },
+        { id: "checkout", label: "Checkout e carrinho" },
+    ]
+
     it("mantém só ids conhecidos, sem repetição e no limite", () => {
-        expect(filterKnownTags(["api", "api", "ghost", "frontend"], DEFAULT_TASK_TAXONOMY, 5)).toEqual(["api", "frontend"])
-        expect(filterKnownTags(["api", "frontend"], DEFAULT_TASK_TAXONOMY, 1)).toEqual(["api"])
+        expect(filterKnownTags(["integracoes", "integracoes", "ghost", "checkout"], taxonomy, 5)).toEqual(["integracoes", "checkout"])
+        expect(filterKnownTags(["integracoes", "checkout"], taxonomy, 1)).toEqual(["integracoes"])
     })
 
     it("rótulo cai no id quando a tag saiu da taxonomia", () => {
-        expect(tagLabel("api", DEFAULT_TASK_TAXONOMY)).toBe("API")
-        expect(tagLabel("desconhecida", DEFAULT_TASK_TAXONOMY)).toBe("desconhecida")
+        expect(tagLabel("integracoes", taxonomy)).toBe("Integrações")
+        expect(tagLabel("desconhecida", taxonomy)).toBe("desconhecida")
+    })
+})
+
+describe("DEFAULT_TASK_TAXONOMY", () => {
+    it("não repete ids e não tem rótulo vazio", () => {
+        const ids = DEFAULT_TASK_TAXONOMY.map((tag) => tag.id)
+        expect(new Set(ids).size).toBe(ids.length)
+        expect(DEFAULT_TASK_TAXONOMY.every((tag) => tag.label.trim().length > 0)).toBe(true)
     })
 })

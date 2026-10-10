@@ -39,7 +39,7 @@ beforeEach(() => {
   mocks.find.mockImplementation(() => ({ select: () => ({ lean: async () => mocks.docs }) }))
   mocks.getTask.mockImplementation(async (id: string) => task({ id }))
   mocks.stream.mockImplementation(async function* () {
-    yield { type: 'delta', text: '{"tags":["api"]}' }
+    yield { type: 'delta', text: '{"tags":["tarefas"]}' }
     yield { type: 'done', finishReason: 'stop', durationMs: 5, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: null } }
   })
 })
@@ -47,10 +47,10 @@ beforeEach(() => {
 describe('generateTaskTags', () => {
   it('gera pelo provedor de texto e grava as tags com o hash da fonte', async () => {
     const tags = await generateTaskTags('a')
-    expect(tags).toEqual(['api'])
+    expect(tags).toEqual(['tarefas'])
     expect(mocks.updateOne).toHaveBeenCalledWith(
       { _id: 'a' },
-      expect.objectContaining({ $set: expect.objectContaining({ tags: ['api'], tagsSourceHash: expect.any(String), tagsUpdatedAt: expect.any(Date) }) }),
+      expect.objectContaining({ $set: expect.objectContaining({ tags: ['tarefas'], tagsSourceHash: expect.any(String), tagsUpdatedAt: expect.any(Date) }) }),
       { timestamps: false },
     )
     expect(mocks.publish).toHaveBeenCalledWith(['a'])
@@ -58,8 +58,8 @@ describe('generateTaskTags', () => {
 
   it('gera pelo JEV (uma pergunta noul por tag, acima do limiar)', async () => {
     mocks.loadSettings.mockResolvedValue({ settings: settings({ provider: 'jev', model: 'jev-latest', jevThreshold: 0.5 }), isDefault: false, updatedAt: new Date() })
-    mocks.jev.mockResolvedValue({ answers: { tag_api: { type: 'noul', noul: 0.9 }, tag_ux: { type: 'noul', noul: 0.2 } } })
-    expect(await generateTaskTags('a')).toEqual(['api'])
+    mocks.jev.mockResolvedValue({ answers: { tag_tarefas: { type: 'noul', noul: 0.9 }, tag_horas: { type: 'noul', noul: 0.2 } } })
+    expect(await generateTaskTags('a')).toEqual(['tarefas'])
     expect(mocks.jev).toHaveBeenCalledOnce()
   })
 })

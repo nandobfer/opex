@@ -12,34 +12,39 @@ export interface TaskTagDef {
     label: string
 }
 
-/** Taxonomia inicial sugerida — o dono edita livremente na aba "Tags de tarefas". */
+/**
+ * Taxonomia inicial sugerida — o dono edita livremente na aba "Tags de tarefas". É só a semente:
+ * a lista em execução fica salva em `ai_feature_settings` (feature `task-tags`) e é o que a aba edita.
+ * As tags descrevem **do que a tarefa trata** (módulo/produto do Opex ou domínio do cliente), nunca
+ * a camada técnica. Derivada das tarefas reais do Opex e das demandas de clientes.
+ */
 export const DEFAULT_TASK_TAXONOMY: TaskTagDef[] = [
-    { id: "frontend", label: "Frontend" },
-    { id: "backend", label: "Backend" },
-    { id: "banco-de-dados", label: "Banco de dados" },
-    { id: "api", label: "API" },
-    { id: "integracao", label: "Integração" },
+    // Módulos e áreas do Opex
+    { id: "tarefas", label: "Tarefas" },
+    { id: "horas", label: "Horas" },
+    { id: "orcamentos", label: "Orçamentos" },
+    { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico" },
     { id: "ia", label: "IA" },
-    { id: "automacao", label: "Automação" },
-    { id: "infra", label: "Infraestrutura" },
-    { id: "devops", label: "DevOps" },
-    { id: "seguranca", label: "Segurança" },
-    { id: "autenticacao", label: "Autenticação" },
-    { id: "performance", label: "Performance" },
-    { id: "ux", label: "UX" },
-    { id: "design", label: "Design" },
-    { id: "testes", label: "Testes" },
-    { id: "documentacao", label: "Documentação" },
-    { id: "refatoracao", label: "Refatoração" },
-    { id: "bug", label: "Bug" },
+    { id: "integracoes", label: "Integrações" },
     { id: "github", label: "GitHub" },
-    { id: "pusher", label: "Tempo real" },
-    { id: "cron", label: "Rotinas agendadas" },
-    { id: "portal-cliente", label: "Portal do cliente" },
+    { id: "painel", label: "Painel e navegação" },
+    { id: "acesso", label: "Acesso e login" },
     { id: "relatorios", label: "Relatórios" },
     { id: "notificacoes", label: "Notificações" },
-    { id: "pagamento", label: "Pagamento" },
-    { id: "observabilidade", label: "Observabilidade" },
+    { id: "tempo-real", label: "Tempo real" },
+    { id: "rotinas", label: "Rotinas agendadas" },
+    { id: "arquivos", label: "Arquivos e anexos" },
+    // Domínios de negócio dos clientes
+    { id: "marketplace", label: "Marketplace" },
+    { id: "catalogo", label: "Catálogo de produtos" },
+    { id: "checkout", label: "Checkout e carrinho" },
+    { id: "pagamentos", label: "Pagamentos" },
+    { id: "endereco", label: "Endereço e entrega" },
+    { id: "leads", label: "Leads e marketing" },
+    { id: "nota-fiscal", label: "Nota fiscal" },
+    { id: "cadastros", label: "Cadastros" },
+    { id: "app-mobile", label: "Aplicativo mobile" },
+    { id: "emails", label: "E-mails" },
 ]
 
 /** Limites (espelham o schema Zod da feature). */

@@ -6,7 +6,7 @@ describe("instruções e prompt (provedor de texto)", () => {
     it("lista a taxonomia e pede JSON com tags, respeitando o máximo", () => {
         const instructions = buildTaskTagsInstructions({ instructions: "Classifique." }, DEFAULT_TASK_TAXONOMY, 5)
         expect(instructions).toContain('"tags"')
-        expect(instructions).toContain('"api"')
+        expect(instructions).toContain('"tarefas"')
         expect(instructions).toContain("no máximo 5")
     })
 
@@ -19,7 +19,11 @@ describe("instruções e prompt (provedor de texto)", () => {
 
 describe("parseTaskTags", () => {
     it("aceita cercas de código e mantém só ids conhecidos, sem repetição", () => {
-        expect(parseTaskTags('```json\n{"tags":["api","api","ghost","frontend"]}\n```', DEFAULT_TASK_TAXONOMY, 5)).toEqual(["api", "frontend"])
+        const taxonomy = [
+            { id: "integracoes", label: "Integrações" },
+            { id: "checkout", label: "Checkout e carrinho" },
+        ]
+        expect(parseTaskTags('```json\n{"tags":["integracoes","integracoes","ghost","checkout"]}\n```', taxonomy, 5)).toEqual(["integracoes", "checkout"])
     })
 
     it("devolve null quando não é JSON válido ou não casa o contrato", () => {
@@ -45,7 +49,7 @@ describe("JEV (uma pergunta noul por tag)", () => {
     it("monta uma pergunta por tag da taxonomia", () => {
         const questions = buildJevTagQuestions(DEFAULT_TASK_TAXONOMY)
         expect(Object.keys(questions)).toHaveLength(DEFAULT_TASK_TAXONOMY.length)
-        expect(questions["tag_api"]).toMatchObject({ type: "noul" })
+        expect(questions["tag_tarefas"]).toMatchObject({ type: "noul" })
     })
 
     it("seleciona acima do limiar, ordenado por probabilidade e no limite", () => {
