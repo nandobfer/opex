@@ -161,6 +161,9 @@ export const EXPLORER_INTERNAL_BASE_URL = "internal"
 
 export type CronJobKind = "http" | "internal"
 
+/** Escopo de varredura das rotinas internas que processam tarefas (hoje: tags de tarefas concluídas). */
+export type CronJobScope = "pending" | "all"
+
 export interface CronJobConfig {
     id: string
     label: string
@@ -169,6 +172,8 @@ export interface CronJobConfig {
     path?: string
     schedule: Schedule
     enabled: boolean
+    /** Somente rotinas que aceitam escolher o escopo (`jobSupportsScope`). `pending` = só o que falta/está desatualizado. */
+    scope?: CronJobScope
 }
 
 export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
@@ -176,6 +181,19 @@ export const GITHUB_ISSUE_SYNC_JOB_ID = "github-issue-sync"
 export const AGENTIC_PR_WATCH_JOB_ID = "agentic-pr-watch"
 export const AGENTIC_QUEUE_JOB_ID = "agentic-queue-pump"
 export const TASK_SUMMARY_JOB_ID = "ai-task-summary"
+export const TASK_TAGS_JOB_ID = "ai-task-tags"
+export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
+
+/** Rotinas internas que processam tarefas e deixam escolher o escopo (`scope`). */
+export function jobSupportsScope(jobId: string): boolean {
+    return jobId === TASK_TAGS_CONCLUDED_JOB_ID
+}
+
+/** Opções de escopo da rotina (`scope`). */
+export const CRON_JOB_SCOPE_OPTIONS = [
+    { value: "pending", label: "Só pendentes" },
+    { value: "all", label: "Todas" },
+] as const satisfies readonly { value: CronJobScope; label: string }[]
 
 /** Rotinas padrão. */
 export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
@@ -213,6 +231,21 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         kind: "internal",
         schedule: { type: "interval", minutes: 2 },
         enabled: true,
+    },
+    {
+        id: TASK_TAGS_JOB_ID,
+        label: "Gerar tags de tarefas (IA)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 3 },
+        enabled: true,
+    },
+    {
+        id: TASK_TAGS_CONCLUDED_JOB_ID,
+        label: "Gerar tags de tarefas concluídas (IA)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 60 },
+        enabled: false,
+        scope: "pending",
     },
 ]
 

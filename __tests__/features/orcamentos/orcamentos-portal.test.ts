@@ -5,9 +5,14 @@ const mocks = vi.hoisted(() => ({
     publish: vi.fn(),
     createTaskWithIssue: vi.fn(),
     listGithubRepos: vi.fn(),
+    listTasksForClient: vi.fn(async () => ({ tasks: [], fetchedAt: "now" })),
+    getTask: vi.fn(),
+    addComment: vi.fn(),
     clients: null as unknown,
     drafts: null as unknown,
     projects: null as unknown,
+    devTasks: null as unknown,
+    comments: null as unknown,
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -27,12 +32,23 @@ vi.mock("@/lib/db/models/Project", async () => {
     mocks.projects = memoryModel()
     return { Project: mocks.projects }
 })
-vi.mock("@/features/tasks/server/service", () => ({ listTasksForProjects: vi.fn(async () => ({ tasks: [], fetchedAt: "now" })) }))
+vi.mock("@/lib/db/models/DevTask", async () => {
+    const { memoryModel } = await import("../../helpers/memory-model")
+    mocks.devTasks = memoryModel()
+    mocks.comments = memoryModel()
+    return { DevTask: mocks.devTasks, TaskComment: mocks.comments }
+})
+vi.mock("@/features/tasks/server/service", () => ({
+    listTasksForClient: mocks.listTasksForClient,
+    getTask: mocks.getTask,
+    addComment: mocks.addComment,
+}))
 vi.mock("@/features/tasks/server/columns", () => ({ getBoard: vi.fn(async () => ({ columns: [], layout: [] })) }))
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock("@/features/github/server/lookups", () => ({ listGithubRepos: mocks.listGithubRepos }))
+vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
 
-import { approveDraft, createDraft, getClientOptions, getDraft, saveDraftEstimate, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
+import { addClientComment, approveDraft, createDraft, getClientOptions, getClientTask, getDraft, listClientTasks, saveDraftEstimate, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
 import type { ClienteOrcamentoDoc } from "@/features/orcamentos/server/token"
 import type { MemoryModel } from "../../helpers/memory-model"
 
@@ -50,6 +66,8 @@ beforeEach(async () => {
     projects().docs.length = 0
     clients().docs.length = 0
     ;(mocks.drafts as MemoryModel).docs.length = 0
+    ;(mocks.devTasks as MemoryModel).docs.length = 0
+    ;(mocks.comments as MemoryModel).docs.length = 0
     const project = await projects().create({ repo: "acme/app", repoUrl: "https://github.com/acme/app", name: "acme/app", sigla: "APP", entryColumnKey: "todo", enabled: true, taskSeq: 0 })
     projectId = String(project._id)
     client = (await clients().create({ name: "Acme", tokenHash: "h", tokenPrefix: "cli_x", projectIds: [projectId], hourlyRate: 40, profitFactor: 10, active: true })) as unknown as ClienteOrcamentoDoc
@@ -84,20 +102,20 @@ describe("portal do cliente", () => {
 
     it("grava a prévia (sem estimativa) e, ao estimar, calcula H × fator e o faturamento", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        const saved = await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        const saved = await saveDraftPreview(client, draft.id, preview)
         expect(saved.preview).toMatchObject({ title: "Corrigir X" })
         expect(saved.estimate).toBeNull()
 
-        const estimate = await saveDraftEstimate(client, draft.id, 2)
+        const estimate = await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
         expect(estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
         expect((await getDraft(client, draft.id)).estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
     })
 
     it("regravar a prévia (correção) zera a estimativa anterior", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
-        await saveDraftEstimate(client, draft.id, 2)
-        const again = await saveDraftPreview(client, draft.id, { ...preview, title: "Outro título" }, "gemini/pro")
+        await saveDraftPreview(client, draft.id, preview)
+        await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
+        const again = await saveDraftPreview(client, draft.id, { ...preview, title: "Outro título" })
         expect(again.estimate).toBeNull()
     })
 
@@ -109,8 +127,8 @@ describe("portal do cliente", () => {
 
     it("ao aprovar, cria a tarefa na coluna de entrada com a estimativa e marca o rascunho", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
-        await saveDraftEstimate(client, draft.id, 2)
+        await saveDraftPreview(client, draft.id, preview)
+        await saveDraftEstimate(client, draft.id, 2, "gemini/pro")
         mocks.createTaskWithIssue.mockResolvedValue({ id: "t1", code: "APP-1" })
 
         const task = await approveDraft(client, draft.id, "local")
@@ -118,7 +136,7 @@ describe("portal do cliente", () => {
         expect(mocks.createTaskWithIssue).toHaveBeenCalledWith(
             expect.objectContaining({ title: "Corrigir X", projectId, columnId: "todo", priority: "high" }),
             "local",
-            expect.objectContaining({ origin: "client", estimate: expect.objectContaining({ hours: 2, clientHours: 20, billingBrl: 800, factor: 10, hourlyRate: 40, model: "gemini/pro" }) }),
+            expect.objectContaining({ origin: "client", clientId: String(client._id), estimate: expect.objectContaining({ hours: 2, clientHours: 20, billingBrl: 800, factor: 10, hourlyRate: 40, model: "gemini/pro" }) }),
         )
         expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "RascunhoOrcamento", acao: "APROVAR" }))
         const after = await getDraft(client, draft.id)
@@ -133,11 +151,74 @@ describe("portal do cliente", () => {
 
     it("permite aprovar sem estimativa (a tarefa nasce sem orçamento)", async () => {
         const draft = await createDraft(client, { projectId, description: "x" })
-        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        await saveDraftPreview(client, draft.id, preview)
         mocks.createTaskWithIssue.mockResolvedValue({ id: "t2", code: "APP-2" })
         await approveDraft(client, draft.id, "local")
         const options = mocks.createTaskWithIssue.mock.calls[0][2] as { origin: string; estimate?: unknown }
         expect(options.origin).toBe("client")
         expect(options.estimate).toBeUndefined()
+    })
+})
+
+const taskDto = {
+    id: "t1",
+    code: "APP-1",
+    columnId: "todo",
+    order: 0,
+    title: "Ajustar o rodapé",
+    summary: "Corrige o rodapé",
+    taskType: "bugfix" as const,
+    priority: "high" as const,
+    archived: false,
+    project: { id: "p", name: "acme/app", repo: "acme/app", sigla: "APP" },
+    estimate: { hours: 2, clientHours: 20, billingBrl: 800, factor: 10, hourlyRate: 40, model: "gemini/pro", generatedAt: null },
+    createdAt: null,
+    updatedAt: null,
+}
+
+const taskDetail = {
+    ...taskDto,
+    description: "Descrição do cliente",
+    technicalSpec: "## Passos",
+    comments: [{ id: "c1", content: "Oi", authorType: "client" as const, authorName: "Acme", createdAt: null }],
+    history: [{ id: "h1", action: "criada", description: "Tarefa criada", createdAt: null }],
+    timeLogs: [{ id: "l1", startTime: null, endTime: null, duration: 60, description: null, active: false, agent: null, model: null, costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }],
+    totalTimeLogged: 60,
+    estimateClientName: "Acme",
+}
+
+describe("lista e detalhe do portal (visão do cliente)", () => {
+    it("lista só as tarefas do cliente (por clientId) e sem as horas reais", async () => {
+        mocks.listTasksForClient.mockResolvedValue({ tasks: [taskDto], fetchedAt: "now" })
+        const list = await listClientTasks(client, false)
+        expect(mocks.listTasksForClient).toHaveBeenCalledWith(String(client._id), false)
+        expect(list.tasks[0]).toMatchObject({ id: "t1", code: "APP-1" })
+        expect(list.tasks[0].estimate).toEqual({ clientHours: 20, billingBrl: 800 })
+        expect(list.tasks[0].estimate).not.toHaveProperty("hours")
+    })
+
+    it("detalhe esconde histórico, horas apontadas e os dados internos da estimativa", async () => {
+        const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
+        mocks.getTask.mockResolvedValue(taskDetail)
+        const detail = await getClientTask(client, String(doc._id))
+        expect(detail.description).toBe("Descrição do cliente")
+        expect(detail.technicalSpec).toBe("## Passos")
+        expect(detail.estimate).toEqual({ clientHours: 20, billingBrl: 800 })
+        expect(detail).not.toHaveProperty("history")
+        expect(detail).not.toHaveProperty("timeLogs")
+        expect(detail).not.toHaveProperty("totalTimeLogged")
+        expect(detail).not.toHaveProperty("estimateClientName")
+        expect(detail.comments[0]).toMatchObject({ authorName: "Acme" })
+    })
+
+    it("recusa (404) a tarefa de outro cliente", async () => {
+        const other = await (mocks.devTasks as MemoryModel).create({ clientId: "outro" })
+        await expect(getClientTask(client, String(other._id))).rejects.toMatchObject({ code: "TASK_NOT_FOUND" })
+    })
+
+    it("comenta marcando a origem como o nome do cliente", async () => {
+        const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
+        await addClientComment(client, String(doc._id), "Olá")
+        expect(mocks.addComment).toHaveBeenCalledWith(String(doc._id), "Olá", { id: "Acme", type: "client", name: "Acme" })
     })
 })

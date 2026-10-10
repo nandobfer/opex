@@ -20,6 +20,7 @@ import { PreviewSpecCard } from "./components/preview/PreviewSpecCard"
 import { PreviewTitleCard } from "./components/preview/PreviewTitleCard"
 import { RepoMetaCard } from "./components/preview/RepoMetaCard"
 import { TypePriorityMetaCard } from "./components/preview/TypePriorityMetaCard"
+import { PreviewTagsCard } from "./components/preview/PreviewTagsCard"
 
 /** Revisão da prévia da IA: metadados à parte, prévia em destaque; aprovar ou solicitar correção. */
 export function ClienteRevisaoPage({ token, draftId }: { token: string; draftId: string }) {
@@ -107,6 +108,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
                         <div className="space-y-4 lg:order-2 lg:col-span-1">
                             <RepoMetaCard repo={data.projectRepo} />
                             <TypePriorityMetaCard taskType={preview?.taskType ?? null} priority={preview?.priority ?? "medium"} loading={!preview && state.generatingPreview} />
+                            <PreviewTagsCard tags={view.tags} loading={state.estimating && view.tags.length === 0} />
                             <EstimateCard estimate={estimate} estimating={state.estimating} status={state.estimating ? state.notice : null} error={estimateError} onRetry={() => void retryEstimate()} />
                         </div>
                         <div className="space-y-4 lg:order-1 lg:col-span-3">

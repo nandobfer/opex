@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   getIntegrationConfig: vi.fn(),
   updateOne: vi.fn(),
   findOneAndUpdate: vi.fn(),
+  concludedTags: vi.fn(),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({
@@ -16,6 +17,7 @@ vi.mock('@/lib/db/models/CronJobState', () => ({
   CronJobState: { updateOne: mocks.updateOne, findOneAndUpdate: mocks.findOneAndUpdate },
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('@/features/ai/server/task-tags', () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
 
 import {
   CronJobRunError,
@@ -25,7 +27,7 @@ import {
   runSchedulerTick,
   tickReference,
 } from '@/features/integrations/scheduler/cron-scheduler'
-import type { CronJobConfig } from '@/lib/integrations/catalog'
+import { DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
 
 const httpJob: CronJobConfig = {
   id: 'cancel',
@@ -47,6 +49,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('runSchedulerTick (issue #604)', () => {
+  it('ignora as tags de concluídas desligadas, mas execução manual usa o escopo salvo', async () => {
+    const job = { ...DEFAULT_CRON_JOBS.find((item) => item.id === TASK_TAGS_CONCLUDED_JOB_ID)!, scope: 'all' as const }
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs: [job] })
+    expect((await runSchedulerTick()).executed).toEqual([])
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled()
+    mocks.findOneAndUpdate.mockResolvedValue({ jobId: job.id })
+    mocks.concludedTags.mockResolvedValue('2 tarefa(s) marcada(s)')
+    expect(await runJobNow(job.id)).toMatchObject({ ok: true, message: '2 tarefa(s) marcada(s)' })
+    expect(mocks.concludedTags).toHaveBeenCalledWith('all')
+  })
   it('agendador desligado não reivindica nem executa nada', async () => {
     mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: false, jobs: [httpJob], cronSecret: 's' })
     const result = await runSchedulerTick()

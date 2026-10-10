@@ -6,6 +6,7 @@ import { runAfterResponse } from "@/lib/after-response"
 import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/catalog"
 import { AiProviderError } from "@/lib/ai/errors"
 import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
+import { normalizeTaxonomy } from "@/features/tasks/tags"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
 import {
@@ -13,22 +14,26 @@ import {
     DEFAULT_ESTIMATE_HOURS_SETTINGS,
     DEFAULT_TASK_REFINEMENT_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
+    DEFAULT_TASK_TAGS_SETTINGS,
     DEFAULT_UNDERSTAND_TASK_SETTINGS,
     budgetPreviewSettingsSchema,
     estimateHoursSettingsSchema,
     taskRefinementSettingsSchema,
     taskSummarySettingsSchema,
+    taskTagsSettingsSchema,
     understandTaskSettingsSchema,
     type BudgetPreviewSettings,
     type EstimateHoursSettings,
     type TaskRefinementSettings,
     type TaskSummarySettings,
+    type TaskTagsSettings,
     type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto } from "../types"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
+const TASK_TAGS_FEATURE = "task-tags"
 const BUDGET_PREVIEW_FEATURE = "budget-preview"
 const ESTIMATE_HOURS_FEATURE = "estimate-hours"
 const TASK_REFINEMENT_FEATURE = "task-refinement"
@@ -175,6 +180,45 @@ export async function saveTaskSummarySettings(input: TaskSummarySettings, actorI
     return getTaskSummarySettings()
 }
 
+// ── Tags de tarefas (provider configurável; JEV pela taxonomia fechada) ──────
+
+export async function loadTaskTagsSettings(): Promise<{ settings: TaskTagsSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(TASK_TAGS_FEATURE, taskTagsSettingsSchema, DEFAULT_TASK_TAGS_SETTINGS)
+}
+
+/** A feature pode ser usada agora (qualquer provedor conectado, texto ou JEV). */
+export async function availabilityOfTaskTags(settings: TaskTagsSettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Tags de tarefas"')
+}
+
+export async function getTaskTagsSettings(): Promise<TaskTagsSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadTaskTagsSettings()
+    return { settings, isDefault, availability: await availabilityOfTaskTags(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+/** Campos que não se aplicam ao provedor viram vazios; a taxonomia é normalizada (ids/duplicatas). */
+export function normalizeTaskTagsSettings(input: TaskTagsSettings): TaskTagsSettings {
+    const normalized = normalizeProvider(input)
+    return { ...normalized, taxonomy: normalizeTaxonomy(normalized.taxonomy) }
+}
+
+/** Ao ativar a feature, varre as tarefas não concluídas que ainda não têm tags (em segundo plano). */
+function scheduleTaskTagsBackfill(): void {
+    runAfterResponse("task-tags-backfill", async () => {
+        const { runTaskTagsBackfill } = await import("./task-tags")
+        await runTaskTagsBackfill()
+    })
+}
+
+export async function saveTaskTagsSettings(input: TaskTagsSettings, actorId: string): Promise<TaskTagsSettingsDto> {
+    const next = normalizeTaskTagsSettings(input)
+    await assertCatalog(next)
+    const before = await loadTaskTagsSettings()
+    await persistFeature(TASK_TAGS_FEATURE, next, actorId, before)
+    if (next.enabled && !before.settings.enabled) scheduleTaskTagsBackfill()
+    return getTaskTagsSettings()
+}
+
 // ── Orçamentos (prévia do portal do cliente) ─────────────────────────────────
 
 export async function loadBudgetPreviewSettings(): Promise<{ settings: BudgetPreviewSettings; isDefault: boolean; updatedAt: Date | null }> {
@@ -208,9 +252,9 @@ export async function loadEstimateHoursSettings(): Promise<{ settings: EstimateH
     return loadFeature(ESTIMATE_HOURS_FEATURE, estimateHoursSettingsSchema, DEFAULT_ESTIMATE_HOURS_SETTINGS)
 }
 
-/** A feature é exclusiva do OpenCode (o agente roda tools no servidor para consultar o banco). */
+/** A feature pode usar provedores de texto ou o JEV (decisão estruturada). */
 export async function availabilityOfEstimateHours(settings: EstimateHoursSettings): Promise<AiFeatureAvailability> {
-    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Estimar prazos"')
+    return availability(settings, '"Estimar prazos"')
 }
 
 export async function getEstimateHoursSettings(): Promise<EstimateHoursSettingsDto> {
@@ -219,12 +263,12 @@ export async function getEstimateHoursSettings(): Promise<EstimateHoursSettingsD
 }
 
 export function normalizeEstimateHoursSettings(input: EstimateHoursSettings): EstimateHoursSettings {
-    return { ...input, agent: input.agent || null, variant: input.variant || null }
+    return normalizeProvider(input)
 }
 
 export async function saveEstimateHoursSettings(input: EstimateHoursSettings, actorId: string): Promise<EstimateHoursSettingsDto> {
     const next = normalizeEstimateHoursSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog(next)
     const before = await loadEstimateHoursSettings()
     await persistFeature(ESTIMATE_HOURS_FEATURE, next, actorId, before)
     return getEstimateHoursSettings()

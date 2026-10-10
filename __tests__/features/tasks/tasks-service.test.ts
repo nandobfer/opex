@@ -64,7 +64,7 @@ vi.mock('@/lib/db/models/Orcamento', async () => {
 })
 
 import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
-import { createTask, deleteTask, getTask, getTaskOptions, listTasks, moveTask, runBulkTasks, setTaskArchived, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
+import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
@@ -314,5 +314,37 @@ describe('estimativa da tarefa (portal do cliente)', () => {
     const a = await create(pid)
     await expect(updateTaskEstimate(a.id, { hours: 1 }, 'local')).rejects.toMatchObject({ status: 409, code: 'TASK_WITHOUT_ESTIMATE' })
     await expect(updateTaskEstimate('nope', { hours: 1 }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
+  })
+})
+
+describe('tarefas do portal (cliente)', () => {
+  it('guarda o cliente que solicitou e lista só as tarefas dele', async () => {
+    const pid = await seedProject()
+    const clientId = await seedClient({ projectIds: [pid] })
+    const mine = await createTask({ title: 'Do cliente', projectId: pid, columnId: 'todo', priority: 'medium' } as never, { actorId: 'local', origin: 'client', clientId })
+    await create(pid, { title: 'Do dono' })
+    const list = await listTasksForClient(clientId, false)
+    expect(list.tasks.map((task) => task.id)).toEqual([mine.id])
+    expect((await listTasksForClient('outro', false)).tasks).toHaveLength(0)
+  })
+
+  it('comentário guarda a origem e o nome do autor', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await addComment(a.id, 'Oi', { id: 'local', type: 'owner', name: 'Fernando' })
+    await addComment(a.id, 'Olá', { id: 'ACME', type: 'client', name: 'ACME' })
+    const detail = await getTask(a.id)
+    expect(detail.comments.map((comment) => [comment.authorType, comment.authorName])).toEqual([
+      ['owner', 'Fernando'],
+      ['client', 'ACME'],
+    ])
+  })
+
+  it('comentário legado (sem autor) cai no dono', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await mocks.models.comment.create({ taskId: a.id, content: 'Antigo' })
+    const detail = await getTask(a.id)
+    expect(detail.comments[0]).toMatchObject({ authorType: 'owner', authorName: 'Usuário local' })
   })
 })

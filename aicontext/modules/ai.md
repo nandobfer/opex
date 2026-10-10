@@ -23,11 +23,12 @@ e opções na própria aba da página "Provedores de IA".
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.
 - **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
-  texto). O núcleo cobre só a integração: `GET v1/models` (header `Authorization: Bearer <apiKey>`)
-  lista os modelos/aliases (`jev-latest`, `jev-preview`); a URL (`https://api.typesafe.ai`) é fixa no
-  código. Como não gera texto, o JEV **não** é oferecido às features de texto (flag
-  `supportsTextGeneration` em `AI_PROVIDERS`; ver `AI_TEXT_PROVIDER_IDS`); os usos do JEV virão
-  depois.
+  texto). Além do catálogo (`GET v1/models`, header `Authorization: Bearer <apiKey>`), expõe
+  `askJevSystemOne` (`POST v1/systemone`): envia `state` + `questions` tipadas (`choice`, `score`,
+  `noul`) e devolve `answers` tipadas. É usado por "Tags de tarefas" (um `noul` por tag) e por
+  "Estimar prazos" (um `score` fracionário de **tempo de execução**, interpolado para horas). Como
+  não gera texto, o JEV continua
+  **fora** das features de texto (flag `supportsTextGeneration`; ver `AI_TEXT_PROVIDER_IDS`).
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
@@ -47,6 +48,7 @@ e opções na própria aba da página "Provedores de IA".
   OpenCode não aceita). Falha do modelo informada só nos metadados do passo (`finish: "error"`)
   vira `error` com a mensagem do servidor. O provider é descartado (`dispose`) ao fim.
 - **Gemini**: temperatura, máximo de tokens e `thinkingConfig.thinkingLevel` (variante).
+- **JEV**: não passa pelo `streamAi` (não gera texto); quem o usa chama `askJevSystemOne` direto.
 - Não há saída estruturada garantida pelo OpenCode: features que precisarem de JSON validam com Zod.
 - **Exceção — sessões longas**: o desenvolvimento agêntico usa o cliente oficial `@opencode/client`
   (`src/lib/ai/opencode-client.ts` + eventos normalizados em `opencode-events.ts`) porque precisa
@@ -137,6 +139,34 @@ e opções na própria aba da página "Provedores de IA".
   fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
   `understand-stream.ts`.
 
+## Feature "Tags de tarefas"
+
+- Configuração em `ai_feature_settings` (`feature: "task-tags"`), schema Zod `taskTagsSettingsSchema`:
+  ativa, provedor (texto ou **JEV**), modelo, agente/variante/amostragem, instruções, **máximo de
+  tags por tarefa** (`maxTags`), limiar do JEV (`jevThreshold`) e a **taxonomia fechada** (`taxonomy`:
+  lista `{ id, label }`, gerenciada na aba "Tags de tarefas"). Ativar exige provedor, modelo e ao
+  menos uma tag; ids repetidos são recusados. Regras ao salvar iguais às demais features (provedor
+  conectado; modelo/variante/agente conferidos no catálogo).
+- Geração (`src/features/ai/server/task-tags.ts`): provedores de texto respondem o JSON
+  `{ "tags": [...] }` (validado contra a taxonomia por `parseTaskTags`); o **JEV** recebe uma pergunta
+  `noul` por tag (`buildJevTagQuestions`) e seleciona as que passam do limiar (`selectJevTags`). Ao
+  ativar, dispara em segundo plano o backfill (`runTaskTagsBackfill`); a rotina `ai-task-tags` (Cron,
+  3 min) cobre as demais tarefas não concluídas. Cada geração grava em `ai_usage_logs`
+  (`feature: "task-tags"`).
+- As tags ficam no campo `tags` do `DevTask` (ids da taxonomia — ver `modules/tasks.md`) e, no portal,
+  embasam a busca de tarefas semelhantes da estimativa. `POST /api/tasks/[id]/tags` gera/regenera as
+  tags de uma tarefa (JSON `{ tags }`).
+
+- Rotina `ai-task-tags-concluded` ("Gerar tags de tarefas concluídas (IA)"): interna,
+  **desligada por padrão**, intervalo de **60 minutos**. "Executar agora" funciona mesmo desligada.
+  Processa somente tarefas nas colunas de conclusão configuradas, nunca arquivadas. O escopo fica
+  salvo na rotina: `pending` (padrão, "Só pendentes") processa apenas tarefas sem hash ou com
+  título/descrição alterados; `all` ("Todas") regenera inclusive tags atualizadas, útil após mudar
+  a taxonomia. Alterar o escopo exige salvar antes de executar. Sem colunas de conclusão ou sem
+  tarefas elegíveis, retorna um aviso sem chamar a IA. Respeita a disponibilidade da feature,
+  processa sequencialmente e contabiliza falhas sem interromper as demais tarefas. A geração
+  preserva `updatedAt`, publica `tasks-updated` e registra o uso de IA como na rotina original.
+
 ## Feature "Orçamentos" (prévia do portal do cliente)
 
 - Configuração em `ai_feature_settings` (`feature: "budget-preview"`), schema Zod
@@ -149,17 +179,21 @@ e opções na própria aba da página "Provedores de IA".
   especificação técnica (Markdown) e resumo de 1 linha. Como não há saída estruturada garantida, o
   JSON é extraído do texto e validado; inválido → evento `error`. Ver `modules/orcamentos.md`.
 
-## Feature "Estimar prazos" (agente do OpenCode que consulta o banco)
+## Feature "Estimar prazos" (tarefas semelhantes; provedor configurável)
 
 - Configuração em `ai_feature_settings` (`feature: "estimate-hours"`), schema Zod
-  `estimateHoursSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante e instruções.
-  É **exclusiva do OpenCode** (sem provedor nem amostragem): o agente roda as ferramentas no servidor
-  OpenCode (ex.: consulta ao banco via **MCP**) e pensa antes de responder. Ativar exige modelo;
-  modelo, variante e agente são conferidos no catálogo do OpenCode.
-- Usada na 2ª fase do portal (ver `modules/orcamentos.md`): recebe a prévia + o pedido e devolve
-  `{ estimatedHours }` (H), validado por `parseEstimateHours`. Os eventos de ferramenta do agente
-  (`tool`) são retransmitidos ao navegador pela `streamAi`. O cálculo exibido ao cliente
-  (`H × fator × custo/hora`) é do servidor.
+  `estimateHoursSettingsSchema`: ativa, provedor (texto ou **JEV**), modelo, agente/variante
+  (OpenCode), temperatura e máximo de tokens (só provedores que amostram), **quantas tarefas
+  semelhantes** considerar (`similarLimit`) e instruções. Regras ao salvar iguais às demais features.
+- Usada na 2ª fase do portal (ver `modules/orcamentos.md`). `H` é o **tempo de execução observado**
+  (não esforço humano), ancorado nas **horas reais apontadas** das tarefas semelhantes: `server/similar.ts`
+  só considera tarefas **com apontamento** (`TimeLog`) e o prompt injeta a **mediana** como âncora
+  (`estimateAnchor`); tarefas sem horas e a estimativa anterior da IA ficam de fora. É uma **única
+  chamada** (sem agente/tools): provedores de texto devolvem `{ estimatedHours }` (validado por
+  `parseEstimateHours`) e o **JEV** responde um `score` de 10 níveis de tempo (posição fracionária de
+  0 a 9) que é **interpolado** para horas entre as âncoras (`mapJevEstimateScore`); `saveDraftEstimate`
+  grava as horas **e o modelo** que as gerou. O cálculo exibido ao cliente (`H × fator × custo/hora`)
+  é do servidor.
 
 ## Feature "Refinar tarefa" (agente do OpenCode que conduz perguntas)
 
@@ -188,11 +222,13 @@ e opções na própria aba da página "Provedores de IA".
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
+| `GET/PUT /api/ai/features/task-tags` | Configuração de "Tags de tarefas" (taxonomia) + disponibilidade |
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração de "Refinar tarefa" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
+| `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 
 ## Testes
 
@@ -203,7 +239,8 @@ estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, 
 `task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
 substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os
 hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
-`estimate-hours-settings` cobre a configuração de "Estimar prazos";
-`task-refinement-settings` cobre a configuração de "Refinar tarefa"). A feature "Orçamentos" é
-coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o refinamento de tarefas
-em `__tests__/features/refinement/` (ver `modules/refinement.md`).
+`estimate-hours-settings` cobre a configuração de "Estimar prazos"; tags: `task-tags` puro,
+`task-tags-settings`, `task-tags-job`; estimativa por tarefas semelhantes: `orcamentos-estimate` e
+`orcamentos-similar`; `task-refinement-settings` cobre a configuração de "Refinar tarefa"). A
+feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o
+refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`).

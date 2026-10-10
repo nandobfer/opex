@@ -18,9 +18,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { OptionTabs } from "@/components/ui/option-tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import type { CronJobConfig } from "@/lib/integrations/catalog"
+import { CRON_JOB_SCOPE_OPTIONS, jobSupportsScope, type CronJobConfig, type CronJobScope } from "@/lib/integrations/catalog"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
 import { integrationErrorMessage, useRunCronJob } from "../hooks/useIntegrations"
 import type { CronJobStateDto } from "../types"
@@ -252,6 +253,21 @@ export function CronJobsEditor({ value, onChange, states = [], disabled, savedJo
                         )}
 
                         <ScheduleEditor value={job.schedule} onChange={(schedule) => update(index, { schedule })} disabled={disabled} />
+                        {jobSupportsScope(job.id) && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs">Escopo</Label>
+                                <OptionTabs<CronJobScope>
+                                    aria-label={`Escopo de ${job.label}`}
+                                    options={CRON_JOB_SCOPE_OPTIONS}
+                                    value={job.scope ?? "pending"}
+                                    onChange={(scope) => update(index, { scope })}
+                                    disabled={disabled}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    “Só pendentes” marca apenas as tarefas sem tags ou com título/descrição alterados; “Todas” regenera as tags de todo o escopo.
+                                </p>
+                            </div>
+                        )}
                         <JobStatus state={stateById.get(job.id)} enabled={job.enabled} manualRunning={runningJobId === job.id} />
                     </motion.div>
                 ))}

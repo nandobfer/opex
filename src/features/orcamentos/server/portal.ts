@@ -1,20 +1,21 @@
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
+import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoDraft, type IOrcamentoDraft, type IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { Project } from "@/lib/db/models/Project"
 import { createTaskWithIssue } from "@/features/github/server/task-issue"
 import { listGithubRepos } from "@/features/github/server/lookups"
 import type { GithubRepoOption } from "@/features/github/types"
-import type { ProjectRef } from "@/features/tasks/types"
-import { listTasksForProjects } from "@/features/tasks/server/service"
+import type { ProjectRef, TaskDetailDto, TaskDto } from "@/features/tasks/types"
+import { addComment, getTask, listTasksForClient } from "@/features/tasks/server/service"
 import { getBoard } from "@/features/tasks/server/columns"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
-import type { TaskDto, TaskListDto } from "@/features/tasks/types"
 import { DRAFT_AUDIT_ENTITY } from "../constants"
 import { computeClientEstimate, type ClientEstimate } from "../logic"
 import type { ClienteDraftInput } from "../schemas"
-import type { ClientePortalOptionsDto, ClienteRepoDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
+import type { ClientePortalOptionsDto, ClienteRepoDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskEstimateDto, ClienteTaskListDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
 import { clientProjects } from "./clients"
+import { resolveTagViews } from "./tag-views"
 import type { ClienteOrcamentoDoc } from "./token"
 
 /**
@@ -47,8 +48,63 @@ function withGithubData(project: ProjectRef, index: Map<string, GithubRepoOption
     return { ...project, ownerAvatarUrl: repo?.ownerAvatarUrl ?? null, description: repo?.description ?? null, private: repo?.private ?? false }
 }
 
-export async function listClientTasks(client: ClienteOrcamentoDoc, includeArchived: boolean): Promise<TaskListDto> {
-    return listTasksForProjects(client.projectIds ?? [], includeArchived)
+export async function listClientTasks(client: ClienteOrcamentoDoc, includeArchived: boolean): Promise<ClienteTaskListDto> {
+    const list = await listTasksForClient(String(client._id), includeArchived)
+    return { tasks: list.tasks.map(toClienteTaskDto), fetchedAt: list.fetchedAt }
+}
+
+/** Estimativa segura ao cliente: só horas infladas e faturamento (sem horas reais, fator, custo/hora ou modelo). */
+function toClienteEstimate(estimate: TaskDto["estimate"]): ClienteTaskEstimateDto | null {
+    return estimate ? { clientHours: estimate.clientHours, billingBrl: estimate.billingBrl } : null
+}
+
+/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo e as tags (internas). */
+export function toClienteTaskDto(task: TaskDto): ClienteTaskDto {
+    const { tags, ...rest } = task
+    void tags
+    return { ...rest, estimate: toClienteEstimate(task.estimate) }
+}
+
+/** Detalhe na visão do cliente: sem histórico, horas apontadas nem dados internos da estimativa. */
+export function toClienteTaskDetail(task: TaskDetailDto): ClienteTaskDetailDto {
+    return {
+        id: task.id,
+        code: task.code,
+        columnId: task.columnId,
+        order: task.order,
+        title: task.title,
+        summary: task.summary,
+        taskType: task.taskType,
+        priority: task.priority,
+        archived: task.archived,
+        project: task.project,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        estimate: toClienteEstimate(task.estimate),
+        description: task.description,
+        technicalSpec: task.technicalSpec,
+        comments: task.comments,
+    }
+}
+
+/** Garante que a tarefa é do cliente (a que ele solicitou); caso contrário, 404 (não revela existência). */
+async function assertClientTask(client: ClienteOrcamentoDoc, id: string): Promise<void> {
+    await dbConnect()
+    if (!OBJECT_ID.test(id)) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+    const task = await DevTask.findById(id).lean()
+    if (!task || task.clientId !== String(client._id)) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+}
+
+/** Detalhe da tarefa na visão do cliente (só as que ele solicitou). */
+export async function getClientTask(client: ClienteOrcamentoDoc, id: string): Promise<ClienteTaskDetailDto> {
+    await assertClientTask(client, id)
+    return toClienteTaskDetail(await getTask(id))
+}
+
+/** Comentário do cliente na tarefa (origem marcada com o nome do cliente). */
+export async function addClientComment(client: ClienteOrcamentoDoc, id: string, content: string): Promise<void> {
+    await assertClientTask(client, id)
+    await addComment(id, content, { id: client.name, type: "client", name: client.name })
 }
 
 export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<ClientePortalOptionsDto> {
@@ -59,12 +115,16 @@ export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<Cli
 function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
     const preview = draft.preview
     if (!preview) return null
-    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary }
+    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary, tags: preview.tags ?? [] }
 }
 
 async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise<OrcamentoDraftDto> {
-    const [project, index] = await Promise.all([Project.findById(draft.projectId).lean(), githubRepoIndex()])
     const preview = draftPreview(draft)
+    const [project, index, tags] = await Promise.all([
+        Project.findById(draft.projectId).lean(),
+        githubRepoIndex(),
+        resolveTagViews(preview?.tags ?? []),
+    ])
     const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
     return {
         id: String(draft._id),
@@ -74,6 +134,7 @@ async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise
         description: draft.description,
         correction: draft.correction ?? null,
         preview,
+        tags,
         model: draft.model ?? null,
         status: draft.status,
         taskId: draft.taskId ?? null,
@@ -113,17 +174,24 @@ export async function setDraftCorrection(client: ClienteOrcamentoDoc, id: string
     return draftToDto({ ...draft, correction }, client)
 }
 
-/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa (nova correção). */
-export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: DraftPreviewDto, model: string | null): Promise<OrcamentoDraftDto> {
+/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa e as tags. */
+export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: Omit<DraftPreviewDto, "tags">): Promise<OrcamentoDraftDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview, estimatedHours: null, model } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview: { ...preview, tags: [] }, estimatedHours: null } })
     return getDraft(client, id)
 }
 
-/** Grava a estimativa de horas (H) e devolve o orçamento do cliente (H × fator × custo/hora). */
-export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string, estimatedHours: number): Promise<DraftEstimateDto> {
+/** Grava as tags do rascunho (geradas pela feature "Tags de tarefas") na prévia existente. */
+export async function saveDraftTags(client: ClienteOrcamentoDoc, id: string, tags: string[]): Promise<void> {
+    const draft = await getDraftDoc(client, id)
+    if (!draft.preview) throw new DomainError(409, "Gere a prévia antes de classificar", "DRAFT_WITHOUT_PREVIEW")
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { "preview.tags": tags } })
+}
+
+/** Grava a estimativa de horas (H) e o modelo que a gerou; devolve o orçamento do cliente (H × fator × custo/hora). */
+export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string, estimatedHours: number, model: string | null): Promise<DraftEstimateDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { estimatedHours } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { estimatedHours, model } })
     return toEstimateDto(computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate))
 }
 
@@ -149,6 +217,8 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
     }
     const task = await createTaskWithIssue(input, actorId, {
         origin: "client",
+        clientId: String(client._id),
+        tags: preview.tags ?? [],
         ...(estimate ? { estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } } : {}),
     })
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { status: "approved", taskId: task.id } })

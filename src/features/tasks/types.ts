@@ -36,6 +36,8 @@ export interface TaskDto {
     title: string
     /** Resumo de 1 linha gerado por IA (substitui a descrição na exibição). */
     summary: string | null
+    /** Tags (ids da taxonomia da feature "Tags de tarefas"); vazio quando nenhuma. */
+    tags: string[]
     taskType: TaskType | null
     priority: TaskPriority
     archived: boolean
@@ -60,6 +62,10 @@ export interface TaskIssueRef {
 export interface TaskComment {
     id: string
     content: string
+    /** Origem do comentário: o dono (app interno) ou o cliente (portal). */
+    authorType: "owner" | "client"
+    /** Nome exibido do autor (dono: `APP_OWNER_NAME`; cliente: nome do cliente). */
+    authorName: string
     createdAt: string | null
 }
 

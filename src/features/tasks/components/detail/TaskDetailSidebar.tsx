@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, Clock, Github, Package, UserPen } from "lucide-react"
+import { CalendarClock, Clock, Github, Package, Tag, UserPen } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { fadeUp } from "@/components/motion/presets"
 import { GithubRepoLabel } from "@/features/github/components/shared"
@@ -11,6 +11,7 @@ import { formatDateTime, formatMinutes } from "../../format"
 import type { TaskPriority } from "../../constants"
 import type { TaskDetailDto } from "../../types"
 import { TaskTypeBadge } from "../TaskBadges"
+import { TaskTagsBadge } from "../TaskTagsBadge"
 import { TaskPriorityMenu } from "../TaskPriorityMenu"
 import { TaskEstimateCard } from "./TaskEstimateCard"
 
@@ -46,6 +47,9 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
                                     <TaskPriorityMenu value={task.priority} pending={updating} onChange={onUpdate} />
                                     <TaskTypeBadge type={task.taskType} long />
                                 </span>
+                            </Row>
+                            <Row icon={Tag} label="Tags">
+                                {(task.tags?.length ?? 0) > 0 ? <TaskTagsBadge tags={task.tags} max={99} /> : <span className="text-muted-foreground">—</span>}
                             </Row>
                             <Row icon={Github} label="Repositório">
                                 {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : "—"}

@@ -43,6 +43,15 @@ describe('buildIntegrationUpdateSchema', () => {
     expect(duplicated.error?.issues[0].message).toMatch(/duplicada/)
   })
 
+  it('valida o escopo das rotinas internas que aceitam escopo', () => {
+    const schema = buildIntegrationUpdateSchema(getIntegrationDef('crons'))
+    const concluded = DEFAULT_CRON_JOBS[DEFAULT_CRON_JOBS.length - 1]
+    expect(concluded.scope).toBe('pending')
+    expect(schema.safeParse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).success).toBe(true)
+    expect(schema.parse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).publicValues?.jobs).toEqual([{ ...concluded, scope: 'all' }])
+    expect(schema.safeParse({ publicValues: { jobs: [{ ...concluded, scope: 'outro' }] } }).success).toBe(false)
+  })
+
   it('API interna não aceita campos públicos nem segredos', () => {
     const schema = buildIntegrationUpdateSchema(getIntegrationDef('internal_api'))
     expect(schema.safeParse({ publicValues: { exportToken: 'a'.repeat(64) } }).success).toBe(false)

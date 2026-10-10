@@ -20,6 +20,8 @@ export interface TaskFilterChipContext {
     /** id → repositório (`owner/repo`) e chave → nome (colunas). */
     projects: ReadonlyMap<string, string>
     columns: ReadonlyMap<string, string>
+    /** id → rótulo (tags). */
+    tags: ReadonlyMap<string, string>
 }
 
 /** Valores além deste limite viram "N selecionados" (a lista completa fica no `title`). */
@@ -45,6 +47,7 @@ export function activeTaskFilterChips(filters: TaskFilters, ctx: TaskFilterChipC
     chips.push(multi("columns", "Coluna", filters.columns.filter((key) => ctx.columns.has(key)).map((key) => ctx.columns.get(key)!)))
     chips.push(multi("priorities", "Prioridade", filters.priorities.map((value) => TASK_PRIORITY_LABELS[value])))
     chips.push(multi("types", "Tipo", filters.types.map((value) => TASK_TYPE_LABELS[value])))
+    chips.push(multi("tags", "Tags", filters.tags.map((id) => nameOf(ctx.tags, id))))
     if (filters.showArchived) chips.push({ key: "showArchived", label: "Arquivadas: mostrando", title: "Mostrando tarefas arquivadas", remove: { showArchived: false } })
     if (filters.sort !== DEFAULT_TASK_FILTERS.sort) {
         const label = `Ordem: ${TASK_SORT_LABELS[filters.sort]}`

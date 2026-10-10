@@ -24,6 +24,10 @@ interface CadastroMultiSelectProps {
     className?: string
     searchable?: boolean
     searchPlaceholder?: string
+    /** Associa o gatilho ao rótulo do formulário (`Label htmlFor`). */
+    id?: string
+    /** Nome acessível do gatilho quando não há `Label` associado. */
+    "aria-label"?: string
 }
 
 export function CadastroMultiSelect({ 
@@ -35,7 +39,9 @@ export function CadastroMultiSelect({
     icon: Icon,
     className,
     searchable = false,
-    searchPlaceholder = "Buscar..."
+    searchPlaceholder = "Buscar...",
+    id,
+    "aria-label": ariaLabel
 }: CadastroMultiSelectProps) {
     const [search, setSearch] = useState("")
 
@@ -61,7 +67,7 @@ export function CadastroMultiSelect({
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="outline" className={cn("w-full justify-start h-10 font-normal px-3 transition-all", className)}>
+                <Button id={id} aria-label={ariaLabel} variant="outline" className={cn("w-full justify-start h-10 font-normal px-3 transition-all", className)}>
                     <div className="flex items-center gap-2 truncate flex-1">
                         {Icon && <Icon className="h-4 w-4 shrink-0 opacity-50 text-primary" />}
                         <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>

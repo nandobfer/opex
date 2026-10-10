@@ -22,6 +22,7 @@ import type { TaskDto } from "../types"
 import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "./TaskBadges"
+import { TaskTagsBadge } from "./TaskTagsBadge"
 import { EstimateBadge } from "./EstimateBadge"
 import { BULK_BAR_CLEARANCE } from "./TaskBulkBar"
 import { TaskColumnMenu } from "./TaskColumnMenu"
@@ -196,6 +197,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                                 {task.summary}
                             </span>
                         )}
+                        {(task.tags?.length ?? 0) > 0 && <TaskTagsBadge tags={task.tags} max={3} />}
                     </div>
                 </td>
                 <td className="px-3 py-2">

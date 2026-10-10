@@ -78,6 +78,7 @@ export function ClientesTab() {
                 open={editing !== null}
                 client={editing?.client ?? null}
                 submitting={create.isPending || update.isPending}
+                repoIndex={repoIndex}
                 onClose={() => setEditing(null)}
                 onSubmit={async (values) => {
                     try {

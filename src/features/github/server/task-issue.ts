@@ -62,5 +62,12 @@ export async function createTaskWithIssue(input: CreateTaskInput, actorId: strin
         const { generateTaskSummary } = await import("@/features/ai/server/task-summary")
         await generateTaskSummary(task.id)
     })
+    // Tarefas do portal já chegam com as tags do rascunho (não gera de novo).
+    if (!options.tags) {
+        runAfterResponse("task-tags", async () => {
+            const { generateTaskTags } = await import("@/features/ai/server/task-tags")
+            await generateTaskTags(task.id)
+        })
+    }
     return { ...task, issue: { url: issue.html_url, repo: project.repo, number: issue.number, state: issue.state, notice: null } }
 }

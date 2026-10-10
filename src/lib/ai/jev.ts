@@ -56,3 +56,79 @@ export async function listJevModels(signal?: AbortSignal): Promise<AiModelDto[]>
     const body = (await res.json()) as { models?: JevModelRaw[] }
     return (body.models ?? []).map(toJevModel)
 }
+
+// ── System One (decisão estruturada) ─────────────────────────────────────────
+
+/** Critério de uma questão `noul` (o que conta como sim e como não). */
+export interface JevNoulCriteria {
+    true: string
+    false: string
+}
+
+/** Questão tipada enviada ao JEV (`/v1/systemone`). */
+export type JevQuestion =
+    | { type: "noul"; instructions: string; criteria?: JevNoulCriteria }
+    | { type: "choice"; instructions: string; criteria: Record<string, string> }
+    | { type: "score"; instructions: string; criteria: string[] }
+
+export interface JevNoulAnswer {
+    type: "noul"
+    noul: number
+}
+
+export interface JevChoiceAnswer {
+    type: "choice"
+    choice: string
+    confidence: number
+    probabilities: Record<string, number>
+}
+
+export interface JevScoreAnswer {
+    type: "score"
+    score: number
+    confidence: number
+    legend: Record<string, unknown>
+    probabilities: Record<string, number>
+}
+
+export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer
+
+export interface JevResponse {
+    model?: string
+    answers?: Record<string, JevAnswer>
+    usage?: { input_tokens?: number; output_tokens?: number }
+}
+
+export interface JevSystemOneInput {
+    model: string
+    /** Estado avaliado: texto ou objeto JSON (as perguntas são julgadas contra ele). */
+    state: unknown
+    questions: Record<string, JevQuestion>
+    signal?: AbortSignal
+}
+
+/**
+ * Envia `state` + `questions` tipadas e devolve as respostas (`answers`). SOMENTE servidor; nunca
+ * gera texto. Erros viram `AiProviderError` com mensagem acionável em pt-BR.
+ */
+export async function askJevSystemOne(input: JevSystemOneInput): Promise<JevResponse> {
+    const apiKey = await getJevApiKey()
+    let res: Response
+    try {
+        res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/systemone`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ model: input.model, state: input.state, questions: input.questions }),
+            cache: "no-store",
+            signal: input.signal,
+        })
+    } catch (error) {
+        throw new AiProviderError(`Não foi possível conectar ao JEV: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    if (res.status === 401 || res.status === 403) throw new AiProviderError(`O JEV recusou a API key (HTTP ${res.status})`)
+    if (res.status === 400) throw new AiProviderError("O JEV recusou a requisição (HTTP 400): confira o modelo e as perguntas")
+    if (!res.ok) throw new AiProviderError(`O JEV respondeu HTTP ${res.status}`)
+    const body = (await res.json()) as JevResponse
+    if (!body.answers) throw new AiProviderError("O JEV não devolveu respostas")
+    return body
+}

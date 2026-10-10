@@ -27,7 +27,7 @@ vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
 import { CronJobsEditor, runNowBlockReason } from "@/features/integrations/components/CronJobsEditor"
 import { CONTROL, ScheduleEditor } from "@/features/integrations/components/ScheduleEditor"
 import { FIELD_GRID } from "@/features/integrations/components/IntegrationDetailPage"
-import type { CronJobConfig } from "@/lib/integrations/catalog"
+import { TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
 
 const job: CronJobConfig = {
     id: "cancel",
@@ -82,6 +82,31 @@ describe("CronJobsEditor — Executar agora (issue #604)", () => {
         const button = screen.getByRole("button", { name: "Executar agora: Cancelar negociações" })
         expect(button.hasAttribute("disabled")).toBe(true)
         expect(screen.getByTestId("run-now-blocked")).toBeTruthy()
+    })
+})
+
+describe("escopo das tags de concluídas", () => {
+    const concluded: CronJobConfig = {
+        id: TASK_TAGS_CONCLUDED_JOB_ID,
+        label: "Tags concluídas",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 60 },
+        enabled: false,
+        scope: "pending",
+    }
+
+    it("permite editar o escopo mesmo com a rotina desligada", () => {
+        const onChange = vi.fn()
+        render(<CronJobsEditor value={[concluded]} onChange={onChange} savedJobs={[concluded]} canRun />)
+        fireEvent.click(screen.getByRole("radio", { name: "Todas" }))
+        expect(onChange).toHaveBeenCalledWith([{ ...concluded, scope: "all" }])
+        expect(runNowBlockReason({ ...concluded, scope: "all" }, [concluded], true, false)).toBe("Salve as alterações antes de executar")
+        expect(screen.getByRole("button", { name: "Executar agora: Tags concluídas" }).hasAttribute("disabled")).toBe(false)
+    })
+
+    it("não oferece escopo em outras rotinas", () => {
+        render(<CronJobsEditor value={[job]} onChange={vi.fn()} savedJobs={[job]} canRun />)
+        expect(screen.queryByRole("radio", { name: "Todas" })).toBeNull()
     })
 })
 

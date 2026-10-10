@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react"
 import { withBasePath } from "@/lib/base-path"
-import type { DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
+import type { DraftEstimateDto, DraftPreviewDto, DraftTagDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
 
 export interface BudgetReviewState {
@@ -12,12 +12,14 @@ export interface BudgetReviewState {
     /** Fase 2 (estimativa de horas/custo) em andamento. */
     estimating: boolean
     estimate: DraftEstimateDto | null
+    /** Tags da prévia já resolvidas (chegam ao fim da estimativa). */
+    tags: DraftTagDto[]
     /** Progresso corrente (ex.: ferramenta do agente em execução) — prévia ou estimativa. */
     notice: string | null
     error: string | null
 }
 
-const INITIAL: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, notice: null, error: null }
+const INITIAL: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, tags: [], notice: null, error: null }
 
 /** O que a tela de revisão exibe: enquanto a IA regenera (prévia ou estimativa, ou correção enviada),
  * ignora o cache do rascunho e mostra só o que esta geração já produziu (skeleton até chegar). */
@@ -25,6 +27,7 @@ export interface ReviewView {
     running: boolean
     preview: DraftPreviewDto | null
     estimate: DraftEstimateDto | null
+    tags: DraftTagDto[]
 }
 
 export function selectReviewView(state: BudgetReviewState, data: OrcamentoDraftDto | undefined, correcting: boolean): ReviewView {
@@ -33,6 +36,7 @@ export function selectReviewView(state: BudgetReviewState, data: OrcamentoDraftD
         running,
         preview: running ? state.preview : (state.preview ?? data?.preview ?? null),
         estimate: running ? state.estimate : (state.estimate ?? data?.estimate ?? null),
+        tags: running ? (state.tags ?? []) : (state.tags?.length ? state.tags : (data?.tags ?? [])),
     }
 }
 
@@ -43,6 +47,7 @@ interface StreamEvent {
     state?: string
     preview?: DraftPreviewDto
     estimate?: DraftEstimateDto
+    tags?: DraftTagDto[]
 }
 
 /** Lê o NDJSON de um endpoint do portal e chama `onEvent` linha a linha. */
@@ -87,7 +92,7 @@ export function useBudgetReview(draftId: string) {
             await readNdjson(`/api/cliente/drafts/${draftId}/estimate`, token, (event) => {
                 if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
                 else if (event.type === "tool") setState((prev) => ({ ...prev, notice: event.state === "running" ? `Consultando (${event.name ?? "ferramenta"})…` : prev.notice }))
-                else if (event.type === "done") setState((prev) => ({ ...prev, estimating: false, estimate: event.estimate ?? null, notice: null }))
+                else if (event.type === "done") setState((prev) => ({ ...prev, estimating: false, estimate: event.estimate ?? null, tags: event.tags ?? prev.tags, notice: null }))
                 else if (event.type === "error") {
                     outcome.error = event.message ?? "Falha na estimativa"
                     setState((prev) => ({ ...prev, estimating: false, error: outcome.error }))
@@ -107,7 +112,7 @@ export function useBudgetReview(draftId: string) {
             // Os deltas (JSON cru) não são exibidos: a tela mostra skeleton até o `done`.
             await readNdjson(`/api/cliente/drafts/${draftId}/preview`, token, (event) => {
                 if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
-                else if (event.type === "done") setState((prev) => ({ ...prev, generatingPreview: false, preview: event.preview ?? null, notice: null, estimating: true }))
+                else if (event.type === "done") setState((prev) => ({ ...prev, generatingPreview: false, preview: event.preview ?? null, tags: [], notice: null, estimating: true }))
                 else if (event.type === "error") {
                     outcome.error = event.message ?? "Falha na prévia"
                     setState((prev) => ({ ...prev, generatingPreview: false, error: outcome.error }))

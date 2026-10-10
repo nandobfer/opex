@@ -20,26 +20,34 @@ function Empty({ icon: Icon, children }: { icon: typeof History; children: React
     )
 }
 
-export function DescriptionSection({ task }: { task: TaskDetailDto }) {
-    if (!task.description) return <Empty icon={FileCode2}>Sem descrição.</Empty>
+export function TaskDescription({ description }: { description: string | null }) {
+    if (!description) return <Empty icon={FileCode2}>Sem descrição.</Empty>
     return (
         <motion.div variants={listContainer} initial="hidden" animate="visible">
             <motion.div variants={listItem}>
-                <Markdown>{task.description}</Markdown>
+                <Markdown>{description}</Markdown>
+            </motion.div>
+        </motion.div>
+    )
+}
+
+export function DescriptionSection({ task }: { task: TaskDetailDto }) {
+    return <TaskDescription description={task.description} />
+}
+
+export function TaskTechnicalSpec({ technicalSpec }: { technicalSpec: string | null }) {
+    if (!technicalSpec) return <Empty icon={FileTerminal}>Sem especificação técnica.</Empty>
+    return (
+        <motion.div variants={listContainer} initial="hidden" animate="visible">
+            <motion.div variants={listItem}>
+                <Markdown>{technicalSpec}</Markdown>
             </motion.div>
         </motion.div>
     )
 }
 
 export function TechnicalSpecSection({ task }: { task: TaskDetailDto }) {
-    if (!task.technicalSpec) return <Empty icon={FileTerminal}>Sem especificação técnica.</Empty>
-    return (
-        <motion.div variants={listContainer} initial="hidden" animate="visible">
-            <motion.div variants={listItem}>
-                <Markdown>{task.technicalSpec}</Markdown>
-            </motion.div>
-        </motion.div>
-    )
+    return <TaskTechnicalSpec technicalSpec={task.technicalSpec} />
 }
 
 export function CommentsSection({ task }: { task: TaskDetailDto }) {
@@ -72,7 +80,8 @@ export function CommentsSection({ task }: { task: TaskDetailDto }) {
                 <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-3">
                     {task.comments.map((comment) => (
                         <motion.li key={comment.id} variants={listItem} className="rounded-md border bg-card p-3">
-                            <div className="mb-2 flex items-center justify-end gap-2">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                                <span className="truncate text-xs font-medium">{comment.authorName}</span>
                                 <span className="text-xs text-muted-foreground">{formatDateTime(comment.createdAt)}</span>
                             </div>
                             <Markdown>{comment.content}</Markdown>

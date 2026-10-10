@@ -16,11 +16,15 @@ export const PATCH = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, updateTaskSchema)
     if (!body.ok) return body.response
     await updateTask(params.id, body.data, getLocalUser().id)
-    // Título/descrição mudaram: o resumo de IA fica desatualizado e é regenerado em segundo plano.
+    // Título/descrição mudaram: o resumo e as tags de IA ficam desatualizados e são regenerados em segundo plano.
     if (body.data.title !== undefined || body.data.description !== undefined) {
         runAfterResponse("task-summary", async () => {
             const { generateTaskSummary } = await import("@/features/ai/server/task-summary")
             await generateTaskSummary(params.id)
+        })
+        runAfterResponse("task-tags", async () => {
+            const { generateTaskTags } = await import("@/features/ai/server/task-tags")
+            await generateTaskTags(params.id)
         })
     }
     return ok({ id: params.id })

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, type Dispatch, type SetStateAction } from "react"
-import { Archive, Flag, Github, Layers, ListChecks, Shapes } from "lucide-react"
+import { Archive, Flag, Github, Layers, ListChecks, Shapes, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
@@ -15,6 +15,7 @@ import type { BoardColumnView } from "../board"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { activeTaskFilterChips } from "../filter-chips"
+import { useTaskTaxonomy } from "./TaskTaxonomyProvider"
 import { ColumnBadge } from "./TaskBadges"
 
 interface TaskFiltersBarProps {
@@ -36,14 +37,17 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
     const repoOptions = useMemo(() => taskRepoOptions(options?.projects ?? [], tasks), [options, tasks])
     const projectById = useMemo(() => new Map(repoOptions.map((option) => [option.value, option.project])), [repoOptions])
     const repoIndex = useRepoIndex()
+    const taxonomy = useTaskTaxonomy()
+    const tagById = useMemo(() => new Map(taxonomy.map((tag) => [tag.id, tag.label])), [taxonomy])
 
     const chips = useMemo(() => {
         const ctx = {
             projects: new Map(repoOptions.map((option) => [option.value, option.label])),
             columns: new Map(columns.map((column) => [column.key, column.label])),
+            tags: tagById,
         }
         return activeTaskFilterChips(filters, ctx).map(({ remove, ...chip }) => ({ ...chip, onRemove: () => setFilters((prev) => ({ ...prev, ...remove })) }))
-    }, [filters, repoOptions, columns, setFilters])
+    }, [filters, repoOptions, columns, tagById, setFilters])
 
     const clear = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
@@ -72,6 +76,17 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
                             options={TASK_TYPES.map((value) => ({ value, label: TASK_TYPE_LABELS[value] }))}
                             selected={filters.types}
                             onSelect={(values) => set("types")(values as TaskType[])}
+                        />
+                    </FilterGroup>
+                    <FilterGroup label="Tags" className={COL}>
+                        <CadastroMultiSelect
+                            icon={Tag}
+                            placeholder="Todas"
+                            options={taxonomy.map((tag) => ({ value: tag.id, label: tag.label }))}
+                            selected={filters.tags}
+                            onSelect={set("tags")}
+                            searchable
+                            searchPlaceholder="Buscar tag..."
                         />
                     </FilterGroup>
                     <FilterGroup label="Ordenar cards" className={COL}>

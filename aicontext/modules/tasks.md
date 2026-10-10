@@ -12,12 +12,19 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 ## Modelo (`src/lib/db/models/`)
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
-  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt, estimate }`. `code` =
-  `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o resumo
-  de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele (detecta
-  desatualização) — ver `modules/ai.md`. `estimate` é o orçamento vindo do portal do cliente
-  (`null` fora dele) — ver `modules/orcamentos.md`.
-- `TaskComment` (`task_comments`): `{ taskId, content, createdAt }`.
+  taskType, priority, archived, clientId, summary, summarySourceHash, summaryUpdatedAt, tags,
+  tagsSourceHash, tagsUpdatedAt, estimate }`.
+  `code` = `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o
+  resumo de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele
+  (detecta desatualização) — ver `modules/ai.md`. `tags` são os **ids** da taxonomia fechada da
+  feature "Tags de tarefas" e `tagsSourceHash` é o hash equivalente das tags (ver `modules/ai.md`).
+  `estimate` é o orçamento vindo do portal do cliente
+  (`null` fora dele) e `clientId` é o cliente que **solicitou** a tarefa (`null` fora do portal) — o
+  que define a lista do portal (o cliente só vê as dele). Ver `modules/orcamentos.md`.
+- `TaskComment` (`task_comments`): `{ taskId, content, authorType, authorName, createdAt }`. A origem
+  do comentário (`authorType: "owner" | "client"`) e o nome exibido (`authorName`: o dono vindo de
+  `APP_OWNER_NAME`/`getLocalUser()`, ou o nome do cliente no portal) permitem marcar quem comentou;
+  comentários antigos (sem autor) caem no dono. Ver `modules/orcamentos.md`.
 - `TaskBoardColumn` (`task_board_columns`) e `TaskBoardLayout` (`task_board_layout`, documento
   `board` com a ordem).
 - `Project` (`projects`): um repositório GitHub vinculado (ver `modules/github.md`).
@@ -33,17 +40,24 @@ semeado na primeira leitura (`ensureBoard`).
 - Prioridades: Urgente, Alta, Média, Baixa.
 - Ordenação dos cards (`ordering.ts`): Prioridade (padrão), Manual (arrastar), Mais recentes, Mais
   antigas. `order` novo = ponto médio entre vizinhos (`computeDropOrderInList`).
+- **Tags** (`src/features/tasks/tags.ts`, puro): taxonomia **fechada** (`{ id, label }`) gerenciada
+  em "Tags de tarefas" (Integrações › Provedores de IA); a tarefa guarda só os ids. `slugifyTag`,
+  `normalizeTaxonomy`, `filterKnownTags`, `tagLabel`. Ver `modules/ai.md`.
 
 ## Servidor (`src/features/tasks/server/`)
 
 - `service.ts` (`TASK_AUDIT_ENTITY = "Tarefa"`): `listTasks(includeArchived)` (junta projeto e issue),
   `getTask` (detalhe com comentários, histórico e horas), `getTaskOptions` (projetos), `createTask`
-  (gera o código, vai para o fim da coluna), `updateTask` (campos; mudar de coluna leva ao fim dela),
-  `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga comentários e apontamentos),
-  `addComment`, `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um `tasks-updated`).
-  Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`. Mudanças de
-  coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma central).
-  `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos resumos de IA).
+  (gera o código, vai para o fim da coluna; aceita `clientId` do portal e `tags`), `updateTask` (campos; mudar
+  de coluna leva ao fim dela), `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga
+  comentários e apontamentos), `addComment` (grava a origem e o nome do autor via
+  `{ id, type, name }`), `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um
+  `tasks-updated`), `listTasksForClient(clientId, includeArchived)` (tarefas que um cliente do portal
+  solicitou). Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`.
+  Mudanças de coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma
+  central). Criar a tarefa e editar título/descrição disparam, em segundo plano, a geração do resumo
+  e das tags de IA. `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos
+  resumos e pelas tags de IA).
 - `columns.ts` (`COLUMN_AUDIT_ENTITY = "ColunaTarefas"`): `ensureBoard` (semeia o quadro padrão —
   A Fazer / Em Andamento / Concluído — na primeira execução), `getBoard`, `createColumn`,
   `updateColumn`, `deleteColumn` (só vazia, que não seja coluna de entrada de um projeto —
@@ -59,6 +73,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial) |
 | `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
+| `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
 | `POST /api/tasks/[id]/comments` | `{ content }` |
@@ -73,7 +88,7 @@ semeado na primeira leitura (`ensureBoard`).
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Repositório**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
   filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
   + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
   guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub
@@ -88,7 +103,7 @@ semeado na primeira leitura (`ensureBoard`).
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; o card mostra no cabeçalho o código e, no rodapé, o ícone de prioridade (só o ícone
   colorido, sem rótulo), a **estimativa real** de horas e o **faturamento** estimado (`EstimateBadge`,
-  quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo e "Arquivada"; o
+  quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo, as **tags** e "Arquivada"; o
   título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
@@ -96,7 +111,7 @@ semeado na primeira leitura (`ensureBoard`).
   (`workbenchProgressTone`) como **link direto para a mesa** (`/desenvolvimento/[central]/[tarefa]`):
   clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
   `modules/agentic-dev.md`, "Trabalhos em andamento").
-- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** e a
+- **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA**, as **tags** e a
   **estimativa real** de horas e o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
   Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com
   a página (`usePageVirtualizer`). Na célula do código, o **motivo de espera** de uma mesa é o
@@ -138,12 +153,13 @@ tarefa.
 a descrição.
 - Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
 animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
-**Especificação técnica** (aba própria: a especificação atual em Markdown e, **abaixo**, o painel do
-refinamento com IA — ver `modules/refinement.md`), Comentários (lista + formulário), Histórico
+  **Especificação técnica** (aba própria: a especificação atual em Markdown e, **abaixo**, o painel do
+  refinamento com IA — ver `modules/refinement.md`), Comentários (lista + formulário; cada
+  comentário mostra o **nome do autor** — dono ou cliente, ver `modules/orcamentos.md`), Histórico
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
-- Lateral: prioridade editável, tipo, repositório (`GithubRepoLabel`), **estimativa** (ver
+- Lateral: prioridade editável, tipo, **tags**, repositório (`GithubRepoLabel`), **estimativa** (ver
   abaixo), horas apontadas, criada e atualizada.
 - **Estimativa** (`TaskEstimateCard`, coluna lateral; só em tarefas que vieram do portal): as
   **horas estimadas** (originais, H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`);
@@ -180,6 +196,7 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`, `task-estimate-card` — a estimativa editável é coberta em `tasks-service` e
-`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão **Refinar tarefa** é
-coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).
+`task-summary-card`, `task-estimate-card` — a estimativa editável, o `clientId` do portal e o autor
+dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
+`__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão
+**Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).
