@@ -41,14 +41,14 @@ export function CentralsPane({ centrals, activeId, collapsed, wide, onToggle }: 
                                             <Link
                                                 href={`${DEV_CENTER_PATH}/${central.id}`}
                                                 aria-current={active ? "page" : undefined}
-                                                aria-label={central.productName}
+                                                aria-label={central.projectName}
                                                 className={cn("relative flex h-8 w-8 items-center justify-center rounded-md transition-colors", active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground")}
                                             >
                                                 <FolderGit2 className="h-4 w-4" aria-hidden />
                                                 {central.runningWorkbenches > 0 && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />}
                                             </Link>
                                         </TooltipTrigger>
-                                        <TooltipContent side="right">{central.productName}</TooltipContent>
+                                        <TooltipContent side="right">{central.projectName}</TooltipContent>
                                     </Tooltip>
                                 )
                             })}
@@ -80,7 +80,7 @@ export function CentralsPane({ centrals, activeId, collapsed, wide, onToggle }: 
                         >
                             {active && <motion.span layoutId="dev-center-central" className="absolute inset-0 rounded-md bg-primary/15" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
                             <FolderGit2 className={cn("relative h-4 w-4 shrink-0", active && "text-primary")} aria-hidden />
-                            <span className="relative min-w-0 flex-1 truncate">{central.productName}</span>
+                            <span className="relative min-w-0 flex-1 truncate">{central.projectName}</span>
                             {central.runningWorkbenches > 0 && (
                                 <span className="relative rounded-full bg-primary px-1.5 font-mono text-[10px] text-primary-foreground" title="Mesas executando">
                                     {central.runningWorkbenches}

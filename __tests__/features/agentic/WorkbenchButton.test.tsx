@@ -14,7 +14,7 @@ import { WorkbenchButton } from '@/features/agentic/components/WorkbenchButton'
 import { workbenchStageLabel, workbenchStageTone } from '@/features/agentic/components/WorkbenchStageBadge'
 import { workbenchPath } from '@/features/agentic/constants'
 
-const central = { id: 'c1', productId: 'p1' }
+const central = { id: 'c1', projectId: 'p1' }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -24,14 +24,14 @@ beforeEach(() => {
 
 describe('WorkbenchButton', () => {
   it('sem central para o produto: bloqueado, só ícone', () => {
-    render(<WorkbenchButton taskId="t1" productId="outro" />)
+    render(<WorkbenchButton taskId="t1" projectId="outro" />)
     const button = screen.getByRole('button', { name: 'Mesa de trabalho' })
     expect(button.getAttribute('aria-disabled')).toBe('true')
     expect(button.textContent).toBe('')
   })
 
   it('sem mesa: link para a mesa com ícone neutro', () => {
-    render(<WorkbenchButton taskId="t1" productId="p1" />)
+    render(<WorkbenchButton taskId="t1" projectId="p1" />)
     const link = screen.getByRole('link', { name: 'Mesa de trabalho' })
     expect(link.getAttribute('href')).toBe(workbenchPath('c1', 't1'))
     expect(link.className).not.toMatch(/amber|destructive/)
@@ -39,7 +39,7 @@ describe('WorkbenchButton', () => {
 
   it('com mesa: o botão assume a cor da etapa, sem o chip no botão', () => {
     mocks.workbench.mockReturnValue({ data: { stage: 'pr_open', runState: 'idle' } })
-    render(<WorkbenchButton taskId="t1" productId="p1" />)
+    render(<WorkbenchButton taskId="t1" projectId="p1" />)
     const link = screen.getByRole('link', { name: 'Mesa de trabalho' })
     expect(link.className).toContain('text-amber-300')
     expect(link.textContent).toBe('')
@@ -47,13 +47,13 @@ describe('WorkbenchButton', () => {
 
   it('mesa com falha fica em destaque (destrutivo)', () => {
     mocks.workbench.mockReturnValue({ data: { stage: 'implementing', runState: 'failed' } })
-    render(<WorkbenchButton taskId="t1" productId="p1" />)
+    render(<WorkbenchButton taskId="t1" projectId="p1" />)
     expect(screen.getByRole('link', { name: 'Mesa de trabalho' }).className).toContain('text-destructive')
   })
 
   it('a dica mostra o rótulo e o chip da etapa', async () => {
     mocks.workbench.mockReturnValue({ data: { stage: 'plan_review', runState: 'idle' } })
-    render(<WorkbenchButton taskId="t1" productId="p1" />)
+    render(<WorkbenchButton taskId="t1" projectId="p1" />)
     fireEvent.focus(screen.getByRole('link', { name: 'Mesa de trabalho' }))
     expect((await screen.findAllByText('Plano pronto')).length).toBeGreaterThan(0)
   })

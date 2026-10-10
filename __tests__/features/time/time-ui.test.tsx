@@ -26,9 +26,8 @@ const B = 'b'.repeat(24)
 const log = (overrides: Partial<TimeLogDto> = {}): TimeLogDto => ({
   id: 'c'.repeat(24),
   taskId: A,
-  taskCode: 'GO-DEV-1',
+  taskCode: 'OPX-1',
   taskTitle: 'Primeira',
-  productName: 'GO',
   startTime: new Date(Date.now() - 65_000).toISOString(),
   endTime: null,
   duration: null,
@@ -38,7 +37,7 @@ const log = (overrides: Partial<TimeLogDto> = {}): TimeLogDto => ({
 })
 const ok = (data: unknown) => ({ data: { success: true, data } })
 
-/** `server.active` = o que o Go! Sipal devolve em /time/active (muda ao longo do teste). */
+/** `server.active` = o que o servidor devolve em /time/active (muda ao longo do teste). */
 const server = { active: [] as TimeLogDto[] }
 
 async function renderWith(active: TimeLogDto[], children: React.ReactNode) {
@@ -82,24 +81,24 @@ describe('formatação e agrupamento', () => {
 })
 
 describe('TimerButton + TimerProvider', () => {
-  it('sem timer ativo: ▶ inicia no Go! Sipal (e o botão vira ⏸)', async () => {
+  it('sem timer ativo: ▶ inicia no servidor (e o botão vira ⏸)', async () => {
     const started = log({ id: 'd'.repeat(24) })
     mocks.post.mockImplementation(async () => {
       server.active = [started]
       return ok(started)
     })
-    await renderWith([], <TimerButton task={{ id: A, code: 'GO-DEV-1', title: 'Primeira' }} />)
-    const button = await screen.findByRole('button', { name: 'Iniciar o timer de GO-DEV-1' })
+    await renderWith([], <TimerButton task={{ id: A, code: 'OPX-1', title: 'Primeira' }} />)
+    const button = await screen.findByRole('button', { name: 'Iniciar o timer de OPX-1' })
     await act(async () => fireEvent.click(button))
     expect(mocks.post).toHaveBeenCalledWith('/time/start', { taskId: A })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Parar o timer de GO-DEV-1' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Parar o timer de OPX-1' })).toBeTruthy())
   })
 
-  it('timer da tarefa rodando: ⏸ abre o modal "Parar timer" e confirma no Go! Sipal', async () => {
+  it('timer da tarefa rodando: ⏸ abre o modal "Parar timer" e confirma no servidor', async () => {
     const running = log()
     mocks.post.mockResolvedValue(ok({ ...running, active: false, endTime: new Date().toISOString(), duration: 1 }))
-    await renderWith([running], <TimerButton task={{ id: A, code: 'GO-DEV-1', title: 'Primeira' }} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Parar o timer de GO-DEV-1' }))
+    await renderWith([running], <TimerButton task={{ id: A, code: 'OPX-1', title: 'Primeira' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Parar o timer de OPX-1' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByRole('heading', { name: 'Parar timer' })).toBeTruthy()
     fireEvent.change(within(dialog).getByLabelText('Descrição do trabalho realizado (opcional)'), { target: { value: 'Revisei o login' } })
@@ -110,12 +109,12 @@ describe('TimerButton + TimerProvider', () => {
   it('um timer por vez: iniciar outra tarefa pede para parar a atual e depois inicia', async () => {
     const running = log()
     mocks.post.mockImplementation(async (url: string) =>
-      url === '/time/start' ? ok(log({ id: 'e'.repeat(24), taskId: B, taskCode: 'GO-DEV-2' })) : ok({ ...running, active: false, endTime: new Date().toISOString(), duration: 1 }),
+      url === '/time/start' ? ok(log({ id: 'e'.repeat(24), taskId: B, taskCode: 'OPX-2' })) : ok({ ...running, active: false, endTime: new Date().toISOString(), duration: 1 }),
     )
-    await renderWith([running], <TimerButton task={{ id: B, code: 'GO-DEV-2', title: 'Segunda' }} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar o timer de GO-DEV-2' }))
+    await renderWith([running], <TimerButton task={{ id: B, code: 'OPX-2', title: 'Segunda' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar o timer de OPX-2' }))
     const dialog = await screen.findByRole('dialog')
-    expect(dialog.textContent).toContain('GO-DEV-2')
+    expect(dialog.textContent).toContain('OPX-2')
     expect(mocks.post).not.toHaveBeenCalled()
     await act(async () => fireEvent.click(within(dialog).getByRole('button', { name: /Parar e iniciar/ })))
     await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/time/start', { taskId: B }))
@@ -125,8 +124,8 @@ describe('TimerButton + TimerProvider', () => {
   it('erro ao parar fica no modal (não fecha)', async () => {
     const running = log()
     mocks.post.mockRejectedValue(Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400, data: { success: false, error: 'Data de fim não pode ser no futuro' } } }))
-    await renderWith([running], <TimerButton task={{ id: A, code: 'GO-DEV-1', title: 'Primeira' }} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Parar o timer de GO-DEV-1' }))
+    await renderWith([running], <TimerButton task={{ id: A, code: 'OPX-1', title: 'Primeira' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Parar o timer de OPX-1' }))
     const dialog = await screen.findByRole('dialog')
     await act(async () => fireEvent.click(within(dialog).getByRole('button', { name: /Parar timer/ })))
     await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('Data de fim não pode ser no futuro'))
@@ -139,14 +138,14 @@ describe('TimerButton + TimerProvider', () => {
 
   it('indicador do topo com timer: cronômetro e clique abre o modal', async () => {
     await renderWith([log()], <TimerIndicator />)
-    const button = await screen.findByRole('button', { name: 'Trabalho em andamento em GO-DEV-1: parar' })
+    const button = await screen.findByRole('button', { name: 'Trabalho em andamento em OPX-1: parar' })
     expect(button.textContent).toMatch(/00:01:0\d/)
     fireEvent.click(button)
     expect(await screen.findByRole('dialog')).toBeTruthy()
   })
 
   it('fora do provider o botão não aparece', () => {
-    render(<TimerButton task={{ id: A, code: 'GO-DEV-1', title: 'x' }} />)
+    render(<TimerButton task={{ id: A, code: 'OPX-1', title: 'x' }} />)
     expect(screen.queryByRole('button')).toBeNull()
   })
 })
@@ -159,7 +158,7 @@ describe('TimeLogItem (Minhas horas)', () => {
       <TimeLogItem log={log({ active: false, endTime: new Date().toISOString(), duration: 90 })} savingDescription={false} onSaveDescription={onSave} onEditPeriod={vi.fn()} onDelete={vi.fn()} onStop={onStop} />,
     )
     expect(screen.getByText('1h 30min')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'GO-DEV-1' }).getAttribute('href')).toBe(`/tarefas/${A}`)
+    expect(screen.getByRole('link', { name: 'OPX-1' }).getAttribute('href')).toBe(`/tarefas/${A}`)
     fireEvent.click(screen.getByTitle('Editar descrição'))
     fireEvent.change(screen.getByLabelText('Descrição do apontamento'), { target: { value: 'Ajuste fino' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Salvar descrição' })))

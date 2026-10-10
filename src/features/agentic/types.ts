@@ -36,8 +36,8 @@ export interface CentralTestOutcome {
 
 export interface CentralDto {
     id: string
-    productId: string
-    productName: string
+    projectId: string
+    projectName: string
     config: CentralConfig
     /** Repositório vinculado ao produto (Integrações › GitHub), ex.: `org/repo`. */
     repo: string | null

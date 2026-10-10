@@ -2,8 +2,7 @@ import { TASK_PRIORITY_RANK, type TaskSortKey } from "./constants"
 import type { TaskDto } from "./types"
 
 /**
- * Ordenação dos cards e cálculo do `order` ao soltar — mesma regra de
- * `lib/utils/devTaskOrdering.ts` do Go! Sipal. Módulo puro.
+ * Ordenação dos cards e cálculo do `order` ao soltar. Módulo puro.
  */
 
 const createdMs = (task: Pick<TaskDto, "createdAt">) => {

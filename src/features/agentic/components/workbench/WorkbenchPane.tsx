@@ -23,7 +23,7 @@ export function WorkbenchPane({ central, taskId }: { central: CentralDto; taskId
                 <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "empty" && (
                         <div className="flex flex-1 items-center justify-center p-6">
-                            <EmptyState icon={MousePointerClick} title="Selecione uma tarefa" description={`Escolha uma tarefa de ${central.productName} para abrir a mesa de trabalho.`} />
+                            <EmptyState icon={MousePointerClick} title="Selecione uma tarefa" description={`Escolha uma tarefa de ${central.projectName} para abrir a mesa de trabalho.`} />
                         </div>
                     )}
                     {view === "loading" && (
@@ -47,7 +47,7 @@ function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: stri
     const start = useStartWorkbench()
     const availability = settings.data?.availability
     const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
-    const otherProduct = task.data && task.data.product?.id !== central.productId
+    const otherProject = task.data && task.data.project?.id !== central.projectId
 
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
@@ -64,13 +64,13 @@ function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: stri
             <p className="max-w-lg text-sm text-muted-foreground">
                 A mesa começa gerando o plano com o agente de planejamento, no diretório <span className="font-mono text-foreground">{central.config.sessionDirectory}</span>. Você revisa o plano antes de qualquer alteração no código.
             </p>
-            <Button type="button" className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProduct) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId })}>
+            <Button type="button" className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId })}>
                 {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                 Abrir mesa e gerar o plano
             </Button>
-            {(blocked || otherProduct) && (
+            {(blocked || otherProject) && (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Info className="h-3.5 w-3.5" aria-hidden /> {otherProduct ? `A tarefa não é do produto ${central.productName}` : blocked}
+                    <Info className="h-3.5 w-3.5" aria-hidden /> {otherProject ? `A tarefa não é do projeto ${central.projectName}` : blocked}
                 </p>
             )}
         </div>

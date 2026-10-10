@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
-import { toast } from "sonner"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Clock, FilterX, KeyRound, ListTodo, RefreshCw } from "lucide-react"
+import { Clock, FilterX, ListTodo, Plus, RefreshCw } from "lucide-react"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { TIME_PATH } from "@/features/time/schemas"
 import {
@@ -28,34 +27,30 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
-import { integrationPath } from "@/lib/integrations/catalog"
 import { cn } from "@/lib/utils"
-import { columnKeyOf, mergeVisibleOrder, type CustomColumnDto } from "../board"
-import { TASK_STATUS_LABELS, taskPath } from "../constants"
-import { applyTaskFilters, countActiveFilters, DEFAULT_TASK_FILTERS, knownStatuses, TASK_FILTER_KEYS, TASK_FILTERS_STORAGE_KEY, taskFiltersSchema, visibleColumns, type TaskFilters } from "../filters"
+import { columnKeyOf, mergeVisibleOrder, type TaskColumnDto } from "../board"
+import { taskPath } from "../constants"
+import { applyTaskFilters, countActiveFilters, DEFAULT_TASK_FILTERS, knownColumns, TASK_FILTER_KEYS, TASK_FILTERS_STORAGE_KEY, taskFiltersSchema, visibleColumns, type TaskFilters } from "../filters"
 import { useColumnMutations, useTaskBoard } from "../hooks/useTaskBoard"
-import { isSessionError, TASKS_QUERY_KEY, useTaskList, useTaskOptions, useTasksRealtime, useUpdateTask } from "../hooks/useTasks"
+import { TASKS_QUERY_KEY, useCreateTask, useTaskList, useTaskOptions, useTasksRealtime, useUpdateTask } from "../hooks/useTasks"
 import { useTaskBulkActions } from "../hooks/useTaskBulkActions"
 import { useTaskMoveFlow } from "../hooks/useTaskMoveFlow"
 import { useTaskSelection } from "../hooks/useTaskSelection"
-import { buildPeople } from "../people"
 import type { TaskDto } from "../types"
 import { ColumnFormDialog } from "./ColumnFormDialog"
-import { SendDraftDialog } from "./draft/SendDraftDialog"
-import { MoveUrlDialog } from "./MoveUrlDialog"
 import { TaskBulkBar } from "./TaskBulkBar"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
 import { TaskBoard } from "./TaskBoard"
 import { TaskFiltersBar } from "./TaskFiltersBar"
+import { TaskFormDialog } from "./TaskFormDialog"
 import { TaskTable } from "./TaskTable"
 import { TaskViewSwitch } from "./TaskViewSwitch"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 
 /**
- * Tarefas do Centro de Desenvolvimento (Go! Sipal): kanban (arrastar muda o status lá) ou tabela,
- * com filtros salvos no navegador. Atualiza sozinha pela rotina de sincronização (Crons + Pusher) e
- * pelo botão Atualizar.
+ * Tarefas dO Opex: kanban (arrastar muda a coluna) ou tabela, com filtros salvos no navegador.
+ * Atualiza sozinha pelo Pusher e pelo botão Atualizar; criar/editar em formulário próprio.
  */
 export function TasksPage() {
     const router = useRouter()
@@ -64,25 +59,25 @@ export function TasksPage() {
     const { value: storedFilters, setValue: setFilters, ready } = usePersistentState<TaskFilters>(TASK_FILTERS_STORAGE_KEY, taskFiltersSchema, DEFAULT_TASK_FILTERS)
 
     const list = useTaskList(storedFilters.showArchived, ready)
-    const sessionMissing = list.isError && isSessionError(list.error)
-    const options = useTaskOptions(ready && !sessionMissing)
+    const options = useTaskOptions(ready)
     const board = useTaskBoard(ready)
     const allColumns = board.columns
     useTasksRealtime()
     const flow = useTaskMoveFlow(allColumns)
     const columnMutations = useColumnMutations()
+    const create = useCreateTask()
+    const update = useUpdateTask()
 
-    // Filtro Status sem colunas que não existem mais (ex.: customizada excluída).
+    // Filtro Coluna sem colunas que não existem mais (ex.: coluna excluída).
     const filters = useMemo(() => {
         if (!board.data) return storedFilters
-        const statuses = knownStatuses(allColumns, storedFilters.statuses)
-        return statuses.length === storedFilters.statuses.length ? storedFilters : { ...storedFilters, statuses }
+        const columns = knownColumns(allColumns, storedFilters.columns)
+        return columns.length === storedFilters.columns.length ? storedFilters : { ...storedFilters, columns }
     }, [storedFilters, allColumns, board.data])
 
     const tasks = useMemo(() => list.data?.tasks ?? [], [list.data])
-    const currentUserId = list.data?.currentUserId ?? null
     const columns = useMemo(() => visibleColumns(allColumns, filters), [allColumns, filters])
-    const visible = useMemo(() => applyTaskFilters(tasks, filters, { ignoreStatus: filters.view === "kanban" }), [tasks, filters])
+    const visible = useMemo(() => applyTaskFilters(tasks, filters, { ignoreColumn: filters.view === "kanban" }), [tasks, filters])
     const shown = useMemo(() => {
         if (filters.view !== "kanban") return visible
         const keys = new Set(columns.map((column) => column.key))
@@ -94,26 +89,14 @@ export function TasksPage() {
         return counts
     }, [tasks])
 
-    // Tarefas que voltaram de colunas pessoais porque o status mudou no Go! Sipal: aviso + destaque.
-    const returned = list.data?.returned
-    const [expiredHighlight, setExpiredHighlight] = useState<unknown>(null)
-    const highlightIds = useMemo<ReadonlySet<string>>(() => (returned && expiredHighlight !== returned ? new Set(returned.map((item) => item.id)) : new Set()), [returned, expiredHighlight])
-    useEffect(() => {
-        if (!returned?.length) return
-        for (const item of returned.slice(0, 3)) toast.info(`${item.code} voltou para ${TASK_STATUS_LABELS[item.status]}`, { description: `O status mudou no Go! Sipal${item.columnName ? ` (saiu de "${item.columnName}")` : ""}.` })
-        if (returned.length > 3) toast.info(`E mais ${returned.length - 3} tarefa(s) voltaram para as colunas do Go! Sipal`)
-        const timer = setTimeout(() => setExpiredHighlight(returned), 4000)
-        return () => clearTimeout(timer)
-    }, [returned])
-
-    // Colunas customizadas: criar/editar (diálogo) e excluir (confirmação).
-    const [columnForm, setColumnForm] = useState<{ column: CustomColumnDto | null; afterKey: string | null } | null>(null)
-    const [deleting, setDeleting] = useState<CustomColumnDto | null>(null)
+    // Colunas: criar/editar (diálogo) e excluir (confirmação).
+    const [columnForm, setColumnForm] = useState<{ column: TaskColumnDto | null; afterKey: string | null } | null>(null)
+    const [deleting, setDeleting] = useState<TaskColumnDto | null>(null)
     const columnActions = useMemo(
         () => ({
             onCreateAfter: (afterKey: string) => setColumnForm({ column: null, afterKey }),
-            onEdit: (column: CustomColumnDto) => setColumnForm({ column, afterKey: null }),
-            onDelete: (column: CustomColumnDto) => setDeleting(column),
+            onEdit: (column: TaskColumnDto) => setColumnForm({ column, afterKey: null }),
+            onDelete: (column: TaskColumnDto) => setDeleting(column),
             onShift: (key: string, direction: -1 | 1) => {
                 const order = columns.map((column) => column.key)
                 const index = order.indexOf(key)
@@ -130,14 +113,14 @@ export function TasksPage() {
         [columnMutations.reorder, board.data, allColumns],
     )
 
-    const people = useMemo(() => buildPeople(options.data, tasks, currentUserId), [options.data, tasks, currentUserId])
+    // Tarefa: criar/editar (diálogo) e excluir (na página da tarefa).
+    const [taskForm, setTaskForm] = useState<{ task: TaskDto | null } | null>(null)
 
     // Seleção (tabela e kanban): só as tarefas visíveis.
     const visibleIds = useMemo(() => shown.map((task) => task.id), [shown])
     const selection = useTaskSelection(visibleIds)
     const selectedTasks = useMemo(() => shown.filter((task) => selection.selected.has(task.id)), [shown, selection.selected])
     const bulk = useTaskBulkActions(selection.remove, allColumns)
-    const update = useUpdateTask()
     const updatingId = update.isPending ? (update.variables?.task.id ?? null) : null
 
     // Esc limpa a seleção (exceto com diálogo/menu aberto, que tratam o próprio Esc).
@@ -159,19 +142,17 @@ export function TasksPage() {
     const open = useCallback((task: TaskDto) => router.push(taskPath(task.id)), [router])
     const clearFilters = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
+    const projects = options.data?.projects ?? []
     const filtering = countActiveFilters(filters) > 0
-    // O kanban sem filtros aparece mesmo vazio (dá para criar colunas).
-    const view = !ready || list.isLoading ? "loading" : sessionMissing ? "session" : list.isError ? "error" : shown.length === 0 && (filtering || filters.view === "table") ? "empty" : filters.view
+    const view = !ready || list.isLoading ? "loading" : list.isError ? "error" : shown.length === 0 && (filtering || filters.view === "table") ? "empty" : filters.view
     const kanbanLayout = view === "kanban"
 
     return (
-        <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className={cn(
-                // Kanban: a página ocupa a altura da área de conteúdo e o quadro fica com o que sobra
-                // (colunas até o fim, sem altura chutada). Tabela: cresce e rola com a página.
-                // Sem espaço para a barra de ações aqui: no kanban encolheria o quadro. A tabela e as
-                // colunas reservam o próprio espaço (`BULK_BAR_CLEARANCE`).
-                kanbanLayout ? "flex min-h-full flex-col gap-4" : "space-y-4",
-            )}
+        <motion.section
+            initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className={cn(kanbanLayout ? "flex min-h-full flex-col gap-4" : "space-y-4")}
         >
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="flex items-center gap-3">
@@ -184,7 +165,7 @@ export function TasksPage() {
                             {list.data && <AnimatedNumber value={shown.length} className="font-mono text-sm font-normal text-muted-foreground tabular-nums" />}
                         </h1>
                         <p className="text-sm text-muted-foreground">
-                            Centro de Desenvolvimento do Go! Sipal
+                            Suas tarefas
                             {list.data?.fetchedAt && <> · atualizado às {format(new Date(list.data.fetchedAt), "HH:mm:ss", { locale: ptBR })}</>}
                         </p>
                     </div>
@@ -197,7 +178,10 @@ export function TasksPage() {
                         </Link>
                     </Button>
                     <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} />
-                    <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={refreshing || sessionMissing} aria-label="Atualizar tarefas">
+                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => setTaskForm({ task: null })} disabled={projects.length === 0} title={projects.length === 0 ? "Vincule um repositório em Integrações › GitHub" : undefined}>
+                        <Plus className="h-4 w-4" aria-hidden /> Nova tarefa
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={refreshing} aria-label="Atualizar tarefas">
                         <motion.span animate={{ rotate: refreshing ? 360 : 0 }} transition={refreshing ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
                             <RefreshCw className="h-4 w-4" aria-hidden />
                         </motion.span>
@@ -207,9 +191,9 @@ export function TasksPage() {
             </header>
 
             <AnimatePresence initial={false}>
-                {ready && !sessionMissing && (
+                {ready && (
                     <motion.div key="filters" {...swap}>
-                        <TaskFiltersBar filters={filters} setFilters={setFilters} total={shown.length} tasks={tasks} options={options.data} currentUserId={currentUserId} columns={allColumns} />
+                        <TaskFiltersBar filters={filters} setFilters={setFilters} total={shown.length} tasks={tasks} options={options.data} columns={allColumns} />
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -217,21 +201,14 @@ export function TasksPage() {
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} {...swap} className={cn(view === "kanban" && "flex min-h-0 flex-1 basis-0 flex-col")}>
                     {view === "loading" && <TasksSkeleton kanban={filters.view === "kanban"} />}
-                    {view === "session" && (
-                        <EmptyState icon={KeyRound} title="Conecte-se ao Go! Sipal" description={apiErrorMessage(list.error, "Entre com o código enviado por e-mail para ver suas tarefas.")}>
-                            <Button asChild size="sm">
-                                <Link href={integrationPath("go_sipal")}>Conectar ao Go! Sipal</Link>
-                            </Button>
-                        </EmptyState>
-                    )}
                     {view === "error" && <ErrorState title="Não foi possível carregar as tarefas" description={apiErrorMessage(list.error, "Tente novamente.")} onRetry={refresh} />}
                     {view === "empty" && (
                         <EmptyState
                             icon={filtering ? FilterX : ListTodo}
-                            title={filtering ? "Nenhuma tarefa com estes filtros" : "Nenhuma tarefa no Go! Sipal"}
-                            description={filtering ? "Ajuste ou limpe os filtros para ver mais tarefas." : undefined}
-                            actionLabel={filtering ? "Limpar filtros" : undefined}
-                            onAction={filtering ? clearFilters : undefined}
+                            title={filtering ? "Nenhuma tarefa com estes filtros" : "Nenhuma tarefa ainda"}
+                            description={filtering ? "Ajuste ou limpe os filtros para ver mais tarefas." : projects.length === 0 ? "Vincule um repositório em Integrações › GitHub para começar." : "Crie a primeira tarefa."}
+                            actionLabel={filtering ? "Limpar filtros" : projects.length > 0 ? "Nova tarefa" : undefined}
+                            onAction={filtering ? clearFilters : projects.length > 0 ? () => setTaskForm({ task: null }) : undefined}
                         />
                     )}
                     {view === "kanban" && (
@@ -240,10 +217,8 @@ export function TasksPage() {
                             columns={columns}
                             rawCounts={rawCounts}
                             sort={filters.sort}
-                            currentUserId={currentUserId}
                             movingId={flow.movingId}
                             selection={selection}
-                            highlightIds={highlightIds}
                             actions={columnActions}
                             onMove={flow.move}
                             onMoveMany={bulk.move}
@@ -257,55 +232,45 @@ export function TasksPage() {
                             columns={allColumns}
                             sort={filters.tableSort}
                             onSortChange={(tableSort) => setFilters((prev) => ({ ...prev, tableSort }))}
-                            currentUserId={currentUserId}
                             movingId={flow.movingId}
                             updatingId={updatingId}
-                            people={people}
                             selection={selection}
                             onMove={(task, column) => flow.move(task, column)}
-                            onUpdate={(task, change) => update.mutate({ task, ...change })}
+                            onUpdate={(task, change) => update.mutate({ task, body: change, patch: change, success: `${task.code} com prioridade ${change.priority}` })}
                             onOpen={open}
                         />
                     )}
                 </motion.div>
             </AnimatePresence>
 
-            <MoveUrlDialog request={flow.request} submitting={flow.submitting} error={flow.dialogError} onConfirm={flow.confirmUrl} onCancel={flow.cancel} />
-            <MoveUrlDialog request={bulk.urlRequest} submitting={bulk.running} error={null} onConfirm={bulk.confirmUrl} onCancel={bulk.cancelUrl} />
-            <SendDraftDialog request={flow.sendRequest} people={people} currentUserId={currentUserId} onClose={flow.closeSend} />
-
-            <AlertDialog open={bulk.sendRequest !== null} onOpenChange={(next) => !next && bulk.cancelSend()}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            Enviar {bulk.sendRequest?.drafts === 1 ? "1 rascunho" : `${bulk.sendRequest?.drafts ?? 0} rascunhos`} para o Go! Sipal?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Cada rascunho vira uma tarefa em {bulk.sendRequest ? TASK_STATUS_LABELS[bulk.sendRequest.target] : ""}, com o tipo, a prioridade e o responsável mostrados no card. Não dá para desfazer o envio.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={bulk.confirmSend}>Enviar</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            {view !== "session" && (
+            {view !== "loading" && (
                 <TaskBulkBar
                     tasks={selectedTasks}
                     columns={allColumns}
-                    people={people}
-                    currentUserId={currentUserId}
                     progress={bulk.progress}
                     onMove={(column) => bulk.move(selectedTasks, column)}
-                    onAssign={(person) => bulk.assign(selectedTasks, person)}
                     onPriority={(priority) => bulk.prioritize(selectedTasks, priority)}
                     onArchive={(value) => bulk.archive(selectedTasks, value)}
-                    onDiscard={() => bulk.discard(selectedTasks)}
                     onClear={selection.clear}
                 />
             )}
+
+            <TaskFormDialog
+                open={taskForm !== null}
+                task={taskForm?.task ?? null}
+                projects={projects}
+                columns={allColumns}
+                submitting={create.isPending}
+                onClose={() => setTaskForm(null)}
+                onSubmit={async (values) => {
+                    try {
+                        await create.mutateAsync(values)
+                        setTaskForm(null)
+                    } catch {
+                        // Toast já mostrado; o diálogo fica aberto para corrigir.
+                    }
+                }}
+            />
 
             <ColumnFormDialog
                 open={columnForm !== null}
@@ -328,7 +293,7 @@ export function TasksPage() {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Excluir a coluna &quot;{deleting?.name}&quot;?</AlertDialogTitle>
-                        <AlertDialogDescription>A coluna está vazia e some do quadro, dos filtros e da tabela. Nada muda no Go! Sipal.</AlertDialogDescription>
+                        <AlertDialogDescription>A coluna está vazia e some do quadro, dos filtros e da tabela.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>

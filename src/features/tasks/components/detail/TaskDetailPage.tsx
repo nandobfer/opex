@@ -1,40 +1,45 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ArrowLeft, ExternalLink, FileSearch, KeyRound, RefreshCw } from "lucide-react"
+import { ArrowLeft, FileSearch, Pencil, RefreshCw, Trash2 } from "lucide-react"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { IssueIconButton } from "@/features/github/components/shared"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorCode, apiErrorMessage } from "@/lib/api"
-import { integrationPath } from "@/lib/integrations/catalog"
 import { cn } from "@/lib/utils"
 import { TASKS_PATH } from "../../constants"
 import { useTaskBoard } from "../../hooks/useTaskBoard"
-import { isSessionError, useTaskDetail, useTaskOptions, useTasksRealtime, useUpdateTask } from "../../hooks/useTasks"
-import { buildPeople } from "../../people"
+import { useDeleteTask, useTaskDetail, useTaskOptions, useTasksRealtime, useUpdateTask } from "../../hooks/useTasks"
 import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
 import type { TaskDetailDto } from "../../types"
 import { TimerButton } from "@/features/time/components/TimerButton"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
 import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
-import { MoveUrlDialog } from "../MoveUrlDialog"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
-import { isDraftTaskId } from "../../drafts"
-import { DraftDetailPage } from "../draft/DraftDetailPage"
-import { TaskStatusMenu } from "../TaskStatusMenu"
+import { TaskColumnMenu } from "../TaskColumnMenu"
+import { TaskFormDialog } from "../TaskFormDialog"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
-import { CommentsSection, DescriptionSection, HistorySection, PlanSection, TimeLogsSection } from "./TaskDetailSections"
+import { CommentsSection, DescriptionSection, HistorySection, TimeLogsSection } from "./TaskDetailSections"
 
 const TABS = [
     { id: "description", label: "Descrição", render: DescriptionSection, count: null },
-    { id: "plan", label: "Plano", render: PlanSection, count: null },
     { id: "comments", label: "Comentários", render: CommentsSection, count: (task: TaskDetailDto) => task.comments.length },
     { id: "history", label: "Histórico", render: HistorySection, count: (task: TaskDetailDto) => task.history.length },
     { id: "time", label: "Horas", render: TimeLogsSection, count: (task: TaskDetailDto) => task.timeLogs.length },
@@ -42,26 +47,24 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"]
 
-/** Página da tarefa (`/tarefas/[id]`); ids `draft-…` abrem a página do rascunho. */
+/** Página da tarefa (`/tarefas/[id]`). */
 export function TaskDetailPage({ id }: { id: string }) {
-    return isDraftTaskId(id) ? <DraftDetailPage id={id} /> : <GoTaskDetailPage id={id} />
-}
-
-/** Tarefa do Go! Sipal: leitura completa; status, responsável e prioridade são alteráveis. */
-function GoTaskDetailPage({ id }: { id: string }) {
     const reduceMotion = useReducedMotion()
+    const router = useRouter()
     const query = useTaskDetail(id)
     useTasksRealtime()
     const board = useTaskBoard(!query.isError)
     const flow = useTaskMoveFlow(board.columns)
     const options = useTaskOptions(!query.isError)
     const update = useUpdateTask()
+    const remove = useDeleteTask()
     const [tab, setTab] = useState<TabId>("description")
+    const [editing, setEditing] = useState(false)
+    const [confirmDelete, setConfirmDelete] = useState(false)
     const task = query.data
-    const currentUserId = options.data?.currentUserId ?? null
-    const people = useMemo(() => buildPeople(options.data, task ? [task] : [], currentUserId), [options.data, task, currentUserId])
+    const projects = options.data?.projects ?? []
 
-    const view = query.isLoading ? "loading" : query.isError ? (isSessionError(query.error) ? "session" : apiErrorCode(query.error) === "TASK_NOT_FOUND" ? "missing" : "error") : "ready"
+    const view = query.isLoading ? "loading" : query.isError ? (apiErrorCode(query.error) === "TASK_NOT_FOUND" ? "missing" : "error") : "ready"
 
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
@@ -90,15 +93,8 @@ function GoTaskDetailPage({ id }: { id: string }) {
                             <Skeleton className="h-96 w-full" />
                         </div>
                     )}
-                    {view === "session" && (
-                        <EmptyState icon={KeyRound} title="Conecte-se ao Go! Sipal" description={apiErrorMessage(query.error, "Entre com o código enviado por e-mail.")}>
-                            <Button asChild size="sm">
-                                <Link href={integrationPath("go_sipal")}>Conectar ao Go! Sipal</Link>
-                            </Button>
-                        </EmptyState>
-                    )}
                     {view === "missing" && (
-                        <EmptyState icon={FileSearch} title="Tarefa não encontrada" description="Ela pode ter sido excluída no Go! Sipal ou o endereço está incorreto.">
+                        <EmptyState icon={FileSearch} title="Tarefa não encontrada" description="Ela pode ter sido excluída ou o endereço está incorreto.">
                             <Button asChild size="sm" variant="outline">
                                 <Link href={TASKS_PATH}>Voltar para Tarefas</Link>
                             </Button>
@@ -120,13 +116,16 @@ function GoTaskDetailPage({ id }: { id: string }) {
                                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <TimerIndicator />
                                     <TimerButton task={task} size="md" withLabel />
-                                    <TaskStatusMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, status) => flow.move(current, status)} size="default" />
+                                    <TaskColumnMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, column) => flow.move(current, column)} size="default" />
                                     <UnderstandTaskButton taskId={task.id} taskCode={task.code} />
-                                    <WorkbenchButton taskId={task.id} productId={task.product?.id ?? null} />
+                                    <WorkbenchButton taskId={task.id} projectId={task.project?.id ?? null} />
                                     {task.issue && <IssueIconButton url={task.issue.url} repo={task.issue.repo} number={task.issue.number} />}
-                                    <TooltipIconButton label="Abrir no Go! Sipal" href={task.platformUrl} external>
-                                        <ExternalLink aria-hidden />
-                                    </TooltipIconButton>
+                                    <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={() => setEditing(true)} aria-label="Editar tarefa" title="Editar tarefa">
+                                        <Pencil className="h-4 w-4" aria-hidden />
+                                    </Button>
+                                    <Button type="button" variant="outline" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)} aria-label="Excluir tarefa" title="Excluir tarefa">
+                                        <Trash2 className="h-4 w-4" aria-hidden />
+                                    </Button>
                                 </div>
                             </header>
 
@@ -160,20 +159,56 @@ function GoTaskDetailPage({ id }: { id: string }) {
                                         </AnimatePresence>
                                     </CardContent>
                                 </Card>
-                                <TaskDetailSidebar
-                                    task={task}
-                                    people={people}
-                                    currentUserId={currentUserId}
-                                    updating={update.isPending}
-                                    onUpdate={(change) => update.mutate({ task, ...change })}
-                                />
+                                <TaskDetailSidebar task={task} updating={update.isPending} onUpdate={(priority) => update.mutate({ task, body: { priority }, patch: { priority }, success: `${task.code} com prioridade ${priority}` })} />
                             </div>
                         </div>
                     )}
                 </motion.div>
             </AnimatePresence>
 
-            <MoveUrlDialog request={flow.request} submitting={flow.submitting} error={flow.dialogError} onConfirm={flow.confirmUrl} onCancel={flow.cancel} />
+            <TaskFormDialog
+                open={editing}
+                task={task ?? null}
+                projects={projects}
+                columns={board.columns}
+                submitting={update.isPending}
+                onClose={() => setEditing(false)}
+                onSubmit={async (values) => {
+                    if (!task) return
+                    try {
+                        await update.mutateAsync({ task, body: values, success: `Tarefa ${task.code} salva` })
+                        setEditing(false)
+                    } catch {
+                        // Toast já mostrado; o diálogo fica aberto para corrigir.
+                    }
+                }}
+            />
+
+            <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir a tarefa {task?.code}?</AlertDialogTitle>
+                        <AlertDialogDescription>Ela sai do quadro, junto com comentários e horas apontadas. Não dá para desfazer.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                            onClick={async () => {
+                                if (!task) return
+                                try {
+                                    await remove.mutateAsync(task)
+                                    router.push(TASKS_PATH)
+                                } catch {
+                                    // Toast já mostrado.
+                                }
+                            }}
+                        >
+                            Excluir
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </motion.section>
     )
 }

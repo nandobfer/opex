@@ -24,7 +24,7 @@ describe('autorização dos canais privados', () => {
     expect(isChannelAuthorized('private-integration-internal_api')).toBe(true)
     expect(isChannelAuthorized('private-integration-crons')).toBe(true)
     expect(isChannelAuthorized('private-integration-smtp')).toBe(false)
-    expect(isChannelAuthorized('private-integration-go_sipal')).toBe(true)
+    expect(isChannelAuthorized('private-integration-go_sipal')).toBe(false)
     expect(isChannelAuthorized('private-integration-archflow')).toBe(false)
     expect(isChannelAuthorized('private-integration-')).toBe(false)
   })

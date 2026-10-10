@@ -20,7 +20,7 @@ const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1
 
 /**
  * Aba "Desenvolvimento agêntico" (Provedores de IA): liga a feature, define os agentes padrão de
- * cada etapa e lista as centrais (uma por produto do Go! Sipal). Só usa o OpenCode.
+ * cada etapa e lista as centrais (uma por projeto). Só usa o OpenCode.
  */
 export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     useAgenticRealtime()
@@ -56,7 +56,7 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                         name="enabled"
                         id="agentic-enabled"
                         label="Desenvolvimento agêntico"
-                        description="Mesas de trabalho em que agentes do OpenCode planejam, implementam, sobem a prévia e abrem o PR de tarefas do Go! Sipal"
+                        description="Mesas de trabalho em que agentes do OpenCode planejam, implementam, sobem a prévia e abrem o PR de tarefas do projeto"
                     />
                     <AnimatePresence initial={false}>
                         {!dirty && !availability.available && availability.reason && (

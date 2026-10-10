@@ -2,7 +2,7 @@ import { isValidObjectId } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AgenticCentral, AgenticEvent, AgenticWorkbench, type IAgenticCentral } from "@/lib/db/models/Agentic"
-import { GithubRepoLink } from "@/lib/db/models/Github"
+import { Project } from "@/lib/db/models/Project"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_ROLE_LABELS, AGENT_ROLES, AGENTIC_AUDIT_CENTRAL, AGENTIC_UPDATED_EVENT } from "../constants"
 import { parseCentralConfig } from "../logic"
@@ -17,9 +17,9 @@ export async function publishAgentic(payload: Record<string, unknown>): Promise<
     await publishAppEvent(AGENTIC_UPDATED_EVENT, payload).catch(() => undefined)
 }
 
-export async function repoForProduct(productId: string): Promise<{ repo: string; repoUrl: string } | null> {
-    const link = await GithubRepoLink.findOne({ productId }).select({ repo: 1, repoUrl: 1 }).lean()
-    return link ? { repo: link.repo, repoUrl: link.repoUrl } : null
+export async function repoForProject(projectId: string): Promise<{ repo: string; repoUrl: string } | null> {
+    const project = await Project.findById(projectId).select({ repo: 1, repoUrl: 1 }).lean().catch(() => null)
+    return project ? { repo: project.repo, repoUrl: project.repoUrl } : null
 }
 
 async function countsByCentral(): Promise<Map<string, { active: number; running: number }>> {
@@ -32,11 +32,11 @@ async function countsByCentral(): Promise<Map<string, { active: number; running:
 
 export async function listCentrals(): Promise<CentralDto[]> {
     await dbConnect()
-    const [docs, counts, links] = await Promise.all([AgenticCentral.find().sort({ productName: 1 }).lean(), countsByCentral(), GithubRepoLink.find().select({ productId: 1, repo: 1, repoUrl: 1 }).lean()])
-    const repos = new Map(links.map((link) => [link.productId, { repo: link.repo, repoUrl: link.repoUrl }]))
+    const [docs, counts, projects] = await Promise.all([AgenticCentral.find().sort({ projectName: 1 }).lean(), countsByCentral(), Project.find().select({ repo: 1, repoUrl: 1 }).lean()])
+    const repos = new Map(projects.map((project) => [String(project._id), { repo: project.repo, repoUrl: project.repoUrl }]))
     return docs.map((doc) => {
         const count = counts.get(String(doc._id)) ?? { active: 0, running: 0 }
-        return toCentralDto(doc, { repo: repos.get(doc.productId) ?? null, ...count })
+        return toCentralDto(doc, { repo: repos.get(doc.projectId) ?? null, ...count })
     })
 }
 
@@ -52,23 +52,23 @@ export async function loadCentral(id: string): Promise<{ doc: IAgenticCentral; c
 export async function getCentral(id: string): Promise<CentralDto> {
     const { doc } = await loadCentral(id)
     const counts = (await countsByCentral()).get(id) ?? { active: 0, running: 0 }
-    return toCentralDto(doc, { repo: await repoForProduct(doc.productId), ...counts })
+    return toCentralDto(doc, { repo: await repoForProject(doc.projectId), ...counts })
 }
 
 export async function createCentral(input: CreateCentralInput, actorId: string): Promise<CentralDto> {
     await dbConnect()
-    if (await AgenticCentral.exists({ productId: input.productId })) throw new DomainError(409, `Já existe uma central para ${input.productName}`, "CENTRAL_EXISTS")
+    if (await AgenticCentral.exists({ projectId: input.projectId })) throw new DomainError(409, `Já existe uma central para ${input.projectName}`, "CENTRAL_EXISTS")
     const config = defaultCentralConfig(input.sessionDirectory)
     let doc: IAgenticCentral
     try {
-        doc = (await AgenticCentral.create({ productId: input.productId, productName: input.productName, config })).toObject()
+        doc = (await AgenticCentral.create({ projectId: input.projectId, projectName: input.projectName, config })).toObject()
     } catch (error) {
-        if ((error as { code?: number }).code === 11000) throw new DomainError(409, `Já existe uma central para ${input.productName}`, "CENTRAL_EXISTS")
+        if ((error as { code?: number }).code === 11000) throw new DomainError(409, `Já existe uma central para ${input.projectName}`, "CENTRAL_EXISTS")
         throw error
     }
     const id = String(doc._id)
-    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { produto: input.productName, diretorio: input.sessionDirectory } })
-    centralLogger(id).success(`Central criada para ${input.productName} em ${input.sessionDirectory}`)
+    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { produto: input.projectName, diretorio: input.sessionDirectory } })
+    centralLogger(id).success(`Central criada para ${input.projectName} em ${input.sessionDirectory}`)
     await publishAgentic({ centralId: id })
     return getCentral(id)
 }
@@ -94,7 +94,7 @@ export async function deleteCentral(id: string, actorId: string): Promise<void> 
     await AgenticEvent.deleteMany({ workbenchId: { $in: finished.map((item) => String(item._id)) } })
     await AgenticWorkbench.deleteMany({ centralId: id })
     await AgenticCentral.deleteOne({ _id: doc._id })
-    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.productName } })
+    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName } })
     await publishAgentic({ centralId: id })
 }
 

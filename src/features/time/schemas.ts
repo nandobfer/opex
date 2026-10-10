@@ -1,9 +1,8 @@
 import { z } from "zod"
 
 /**
- * Contratos do controle de horas (mesmas regras de `lib/services/timeTrackingService.ts` e
- * `flows/time/[id]/flow.ts` do Go! Sipal: nada no futuro, fim depois do início, justificativa para
- * mudar horários ou excluir). Módulo puro.
+ * Contratos do controle de horas local (o Opex é a fonte de verdade): nada no futuro, fim depois do
+ * início. Sem justificativa. Módulo puro.
  */
 
 export const TIME_UPDATED_EVENT = "time-updated"
@@ -12,7 +11,6 @@ export const TIME_PATH = "/tarefas/horas"
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
 const isoDate = z.string().refine((value) => !Number.isNaN(new Date(value).getTime()), "Data inválida")
 const description = z.string().trim().max(2000, "Máximo de 2000 caracteres")
-const justification = z.string().trim().min(3, "Informe a justificativa").max(500, "Máximo de 500 caracteres")
 
 /** Tolerância para relógios levemente adiantados (ms). */
 const FUTURE_TOLERANCE_MS = 60_000
@@ -22,12 +20,7 @@ export const startTimerSchema = z.object({ taskId: objectId })
 export type StartTimerInput = z.infer<typeof startTimerSchema>
 
 export const stopTimerSchema = z
-    .object({
-        description: description.optional(),
-        startTime: isoDate.optional(),
-        endTime: isoDate.optional(),
-        taskCode: z.string().max(40).optional(),
-    })
+    .object({ description: description.optional(), startTime: isoDate.optional(), endTime: isoDate.optional() })
     .superRefine((value, ctx) => {
         if (value.startTime && !notFuture(value.startTime)) ctx.addIssue({ code: "custom", path: ["startTime"], message: "Início não pode ser no futuro" })
         if (value.endTime && !notFuture(value.endTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim não pode ser no futuro" })
@@ -37,20 +30,16 @@ export const stopTimerSchema = z
     })
 export type StopTimerInput = z.infer<typeof stopTimerSchema>
 
-/** Editar apontamento: só a descrição, ou o período (com justificativa). */
+/** Editar apontamento: só a descrição, ou o período. */
 export const updateTimeLogSchema = z.union([
     z.object({ kind: z.literal("description"), description }),
-    z
-        .object({ kind: z.literal("period"), startTime: isoDate, endTime: isoDate, justification })
-        .superRefine((value, ctx) => {
-            if (!notFuture(value.startTime)) ctx.addIssue({ code: "custom", path: ["startTime"], message: "Início não pode ser no futuro" })
-            if (!notFuture(value.endTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim não pode ser no futuro" })
-            if (new Date(value.endTime) <= new Date(value.startTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim deve ser depois do início" })
-        }),
+    z.object({ kind: z.literal("period"), startTime: isoDate, endTime: isoDate }).superRefine((value, ctx) => {
+        if (!notFuture(value.startTime)) ctx.addIssue({ code: "custom", path: ["startTime"], message: "Início não pode ser no futuro" })
+        if (!notFuture(value.endTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim não pode ser no futuro" })
+        if (new Date(value.endTime) <= new Date(value.startTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim deve ser depois do início" })
+    }),
 ])
 export type UpdateTimeLogInput = z.infer<typeof updateTimeLogSchema>
-
-export const deleteTimeLogSchema = z.object({ justification })
 
 export const timeLogsQuerySchema = z.object({
     from: isoDate.optional(),
@@ -79,7 +68,7 @@ export type StopTimerForm = z.infer<typeof stopTimerFormSchema>
 
 /** Diálogo "Editar período". */
 export const editPeriodFormSchema = z
-    .object({ startTime: localDateTime, endTime: localDateTime, justification })
+    .object({ startTime: localDateTime, endTime: localDateTime })
     .superRefine((value, ctx) => {
         const start = new Date(value.startTime)
         const end = new Date(value.endTime)
@@ -88,5 +77,3 @@ export const editPeriodFormSchema = z
         if (end <= start) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Fim deve ser depois do início" })
     })
 export type EditPeriodForm = z.infer<typeof editPeriodFormSchema>
-
-export const justificationFormSchema = z.object({ justification })

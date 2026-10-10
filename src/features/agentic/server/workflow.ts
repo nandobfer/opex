@@ -29,7 +29,7 @@ import {
 } from "../prompts"
 import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
-import { loadCentral, publishAgentic, repoForProduct } from "./centrals"
+import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
@@ -44,7 +44,6 @@ import { agenticAvailability, loadAgenticSettings } from "./settings"
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
-const PLAN_STATUSES_BEFORE_DEV = ["backlog", "prioritized", "specification"]
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -94,26 +93,26 @@ export async function listCentralWorkbenches(centralId: string): Promise<Workben
 interface Loaded {
     doc: IAgenticWorkbench
     config: CentralConfig
-    productName: string
+    projectName: string
     repo: { repo: string; repoUrl: string } | null
 }
 
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
-    return { doc, config, productName: central.productName, repo: await repoForProduct(central.productId) }
+    return { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
 }
 
-function contextOf({ doc, config, productName, repo }: Loaded): WorkbenchContext {
+function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
     return {
         code: doc.taskCode,
         title: doc.taskTitle,
-        productName,
+        projectName,
         repo: repo?.repo ?? null,
         sessionDirectory: config.sessionDirectory,
         worktreePath: doc.worktreePath ?? worktreePathFor(config, doc.taskCode),
         branch: doc.branch ?? branchNameFor(config, { code: doc.taskCode, title: doc.taskTitle }),
-        composeProject: doc.composeProject ?? composeProjectFor(productName, doc.taskCode),
+        composeProject: doc.composeProject ?? composeProjectFor(projectName, doc.taskCode),
     }
 }
 
@@ -322,6 +321,15 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, closedNotified: false }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
+            const prColumn = config.columns.onPr
+            if (prColumn) {
+                try {
+                    await moveTask(doc.taskId, { targetColumn: prColumn }, actorId())
+                    notice("info", "Tarefa movida para a coluna do Pull Request")
+                } catch (error) {
+                    notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+                }
+            }
             await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: pr.url } })
             return null
         }
@@ -348,26 +356,27 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function taskMarkdown(task: TaskDetailDto, config: CentralConfig): string {
-    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false }) + `\n\nLink da tarefa: ${task.platformUrl}`
+    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false })
 }
 
-/** Efeitos no Go! Sipal ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
-async function goSipalOnStart(id: string, task: TaskDetailDto, config: CentralConfig): Promise<void> {
+/** Efeitos na tarefa ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
+async function applyStartEffects(id: string, task: TaskDetailDto, config: CentralConfig): Promise<void> {
     const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
-    if (config.goSipal.moveToDevelopment && PLAN_STATUSES_BEFORE_DEV.includes(task.status)) {
+    const target = config.columns.onStart
+    if (target && target !== task.columnId) {
         try {
-            await moveTask(task.id, { targetStatus: "development", fromStatus: task.status, code: task.code }, actorId())
-            notice("info", "Tarefa movida para Desenvolvimento no Go! Sipal")
+            await moveTask(task.id, { targetColumn: target }, actorId())
+            notice("info", "Tarefa movida para a coluna de implementação")
         } catch (error) {
-            notice("warn", `Não foi possível mover a tarefa para Desenvolvimento: ${errorText(error)}`)
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
         }
     }
-    if (config.goSipal.startTimer) {
+    if (config.timers.start) {
         try {
             const timers = await listActiveTimers()
             if (!timers.some((timer) => timer.taskId === task.id)) {
                 await startTimer({ taskId: task.id }, actorId())
-                notice("info", "Timer iniciado no Go! Sipal")
+                notice("info", "Timer iniciado")
             }
         } catch (error) {
             notice("warn", `Não foi possível iniciar o timer: ${errorText(error)}`)
@@ -381,7 +390,7 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
     if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
     const task = await getTask(taskId)
-    if (task.product?.id !== central.productId) throw new DomainError(400, `A tarefa ${task.code} não é do produto ${central.productName}`, "TASK_OTHER_PRODUCT")
+    if (task.project?.id !== central.projectId) throw new DomainError(400, `A tarefa ${task.code} não é do projeto ${central.projectName}`, "TASK_OTHER_PROJECT")
     await assertAvailable(centralId, null, config)
 
     let doc: IAgenticWorkbench
@@ -394,7 +403,7 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
                 taskTitle: task.title,
                 stage: "planning",
                 runState: "idle",
-                composeProject: composeProjectFor(central.productName, task.code),
+                composeProject: composeProjectFor(central.projectName, task.code),
             })
         ).toObject()
     } catch (error) {
@@ -402,11 +411,11 @@ export async function startWorkbench(centralId: string, taskId: string): Promise
         throw error
     }
     const id = String(doc._id)
-    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.productName } })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName } })
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
-    await goSipalOnStart(id, task, config)
-    const loaded: Loaded = { doc, config, productName: central.productName, repo: await repoForProduct(central.productId) }
+    await applyStartEffects(id, task, config)
+    const loaded: Loaded = { doc, config, projectName: central.projectName, repo: await repoForProject(central.projectId) }
     await launchTurn(loaded, { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config)) })
     return getWorkbench(id)
 }
@@ -443,7 +452,7 @@ export async function approve(id: string): Promise<WorkbenchDto> {
     assertAction(loaded.doc, "approve")
     const task = await getTask(loaded.doc.taskId)
     const pr = loaded.doc.pr && loaded.doc.pr.state === "open" ? { number: loaded.doc.pr.number, url: loaded.doc.pr.url } : null
-    await launchTurn(loaded, { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title, url: task.platformUrl }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
+    await launchTurn(loaded, { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
     return getWorkbench(id)
 }
 
@@ -562,7 +571,7 @@ export async function handlePrChangesRequested(id: string, feedback: string): Pr
 /** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */
 export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeCommitSha: string | null }): Promise<void> {
     const loaded = await loadAll(id)
-    const { doc, config, repo } = loaded
+    const { doc, config } = loaded
     const log = centralLogger(doc.centralId, doc.taskCode)
     await prepareHub(id)
     const notice = (level: "info" | "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
@@ -570,19 +579,21 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
     await update(doc, { pr })
     notice("success", `PR #${pr.number} mergeado`)
 
-    const commitUrl = merge.mergeCommitSha && repo ? `${repo.repoUrl.replace(/\/+$/, "")}/commit/${merge.mergeCommitSha}` : undefined
-    try {
-        await moveTask(doc.taskId, { targetStatus: "validation", code: doc.taskCode, ...(commitUrl ? { commitUrl } : {}), pullRequestUrl: pr.url }, actorId())
-        notice("info", "Tarefa movida para Validação no Go! Sipal")
-    } catch (error) {
-        notice("warn", `Não foi possível mover a tarefa para Validação: ${errorText(error)}`)
-        log.warn("Falha ao mover a tarefa para Validação", { workbenchId: id, error: errorText(error) })
+    const doneColumn = config.columns.onDone
+    if (doneColumn) {
+        try {
+            await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
+            notice("info", "Tarefa movida para a coluna de conclusão")
+        } catch (error) {
+            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
+            log.warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
+        }
     }
-    if (config.goSipal.stopTimerOnDone) {
+    if (config.timers.stopOnDone) {
         try {
             const timers = (await listActiveTimers()).filter((timer) => timer.taskId === doc.taskId)
-            for (const timer of timers) await stopTimer(timer.id, { description: `Desenvolvimento agêntico: PR #${pr.number} mergeado`, taskCode: doc.taskCode }, actorId())
-            if (timers.length) notice("info", "Timer parado no Go! Sipal")
+            for (const timer of timers) await stopTimer(timer.id, { description: `Desenvolvimento agêntico: PR #${pr.number} mergeado` }, actorId())
+            if (timers.length) notice("info", "Timer parado")
         } catch (error) {
             notice("warn", `Não foi possível parar o timer: ${errorText(error)}`)
         }

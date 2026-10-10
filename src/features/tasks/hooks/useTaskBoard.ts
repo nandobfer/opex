@@ -5,11 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
-import { buildBoardColumns, type CustomColumnDto, type TaskBoardDto } from "../board"
+import { buildBoardColumns, type TaskColumnDto, type TaskBoardDto } from "../board"
 import type { ColumnInput, CreateColumnInput } from "../schemas"
 import { TASKS_QUERY_KEY } from "./useTasks"
 
-/** Colunas do quadro (Go! Sipal + customizadas) e as mutações das customizadas. */
+/** Colunas do quadro e as mutações delas. */
 
 export const taskBoardKey = [TASKS_QUERY_KEY, "board"] as const
 
@@ -29,14 +29,14 @@ export function useColumnMutations() {
     const refresh = () => void queryClient.invalidateQueries({ queryKey: taskBoardKey })
 
     const create = useMutation({
-        mutationFn: async (input: CreateColumnInput) => unwrapApi((await api.post<ApiResponse<CustomColumnDto>>("/tasks/columns", input)).data),
+        mutationFn: async (input: CreateColumnInput) => unwrapApi((await api.post<ApiResponse<TaskColumnDto>>("/tasks/columns", input)).data),
         onSuccess: (column) => toast.success(`Coluna "${column.name}" criada`),
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível criar a coluna")),
         onSettled: refresh,
     })
 
     const update = useMutation({
-        mutationFn: async ({ key, input }: { key: string; input: ColumnInput }) => unwrapApi((await api.patch<ApiResponse<CustomColumnDto>>(`/tasks/columns/${key}`, input)).data),
+        mutationFn: async ({ key, input }: { key: string; input: ColumnInput }) => unwrapApi((await api.patch<ApiResponse<TaskColumnDto>>(`/tasks/columns/${key}`, input)).data),
         onMutate: async ({ key, input }) => {
             await queryClient.cancelQueries({ queryKey: taskBoardKey })
             const previous = queryClient.getQueryData<TaskBoardDto>(taskBoardKey)
@@ -54,7 +54,7 @@ export function useColumnMutations() {
     })
 
     const remove = useMutation({
-        mutationFn: async (column: CustomColumnDto) => unwrapApi((await api.delete<ApiResponse<{ key: string }>>(`/tasks/columns/${column.key}`)).data),
+        mutationFn: async (column: TaskColumnDto) => unwrapApi((await api.delete<ApiResponse<{ key: string }>>(`/tasks/columns/${column.key}`)).data),
         onMutate: async (column) => {
             await queryClient.cancelQueries({ queryKey: taskBoardKey })
             const previous = queryClient.getQueryData<TaskBoardDto>(taskBoardKey)

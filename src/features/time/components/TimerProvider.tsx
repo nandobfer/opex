@@ -42,7 +42,7 @@ interface StopRequest {
 }
 
 /**
- * Estado dos timers do Go! Sipal compartilhado pela página (cards, linhas, cabeçalho, página da
+ * Estado dos timers compartilhado pela página (cards, linhas, cabeçalho, página da
  * tarefa e Minhas horas) e o único modal "Parar timer".
  */
 export function TimerProvider({ enabled = true, children }: { enabled?: boolean; children: ReactNode }) {

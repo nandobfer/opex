@@ -14,8 +14,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   tela e pelo servidor. Cada entrada define id, nome, descrição de uma linha, ambiente padrão,
   campos públicos, campos privados e as variáveis legadas do `.env`.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
-  dos endpoints públicos, sem campos nem segredos), `crons`, `go_sipal` (Go! Sipal: sessão por
-  código de e-mail — ver `modules/go-sipal.md`), `github` (issues → rascunhos de tarefas — ver
+  dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
   `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode` e `ai_gemini` — ver
   `modules/ai.md`).
 - **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
@@ -56,8 +55,6 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   ausente mantém. Sem chave → **409** "configure INTEGRATIONS_ENCRYPTION_KEY".
 - Auditoria (`entidade: "Integracao"`, ator `local`) registra os campos públicos alterados e, para
   segredos, apenas `(alterado)`/`(removido)`.
-- O **JWT do Go! Sipal** é o segredo `token` da integração `go_sipal`, gravado só pelo card da
-  sessão (`group: "card"`).
 
 ### Campos condicionais, controle segmentado e campos de card próprio
 
@@ -69,7 +66,6 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - `urlOriginOnly` (campos `url`): só `esquema://host:porta`.
 - `group: "card"` (`isCardManagedField`): campo gravado só pela rota de um card próprio da
   integração — fica fora do detalhe, do formulário e do PATCH genérico (públicos e segredos).
-  Usado pela sessão do Go! Sipal.
 
 ### Pusher: cluster ou host próprio (Soketi)
 
@@ -108,15 +104,14 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 - Coluna do formulário: cabeçalho (voltar, nome + status, descrição, última alteração), cartões
   Geral (ambiente, modo debug), Documentação da API, Campos públicos, Campos privados (só com
-  segredos), na API interna **Tokens de sistema**, em Crons, Rotinas, e no Go! Sipal o card
-  **Sessão Go! Sipal** logo abaixo do cabeçalho.
+  segredos), na API interna **Tokens de sistema**, em Crons, Rotinas.
 - Rodapé (`border-t`, `justify-end`): **Desfazer** e **Salvar**, desabilitados sem alterações.
 - Com modo debug ligado, o cartão de Logs ocupa a coluna da direita (`sticky`, altura da área
   visível do `<main>` via `useScrollViewportHeight`). Abaixo de `xl` vai para baixo do formulário.
 - **Abas** (`components/tabs/`: `IntegrationTabs` + `useIntegrationTab`, copiados do Orquestrador
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
-  Geral, Vínculos, Mapeamento, Pessoas, Sincronização) e por Provedores de IA (`AiEditorForm`:
+  Geral, Vínculos, Mapeamento, Sincronização) e por Provedores de IA (`AiEditorForm`:
   Provedores, Entender tarefas, Desenvolvimento agêntico) e pela página da central de
   desenvolvimento (`/integracoes/ia/centrais/[id]`).
 - **Não use `layout` do framer-motion na grade/formulário desta página**: dentro do
@@ -132,8 +127,6 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   - **API interna**: `GET /api/openapi.json` pela URL interna (exige OpenAPI 3.x) e conta os
     tokens de sistema ativos (zero é só informativo).
   - **Crons**: cron secret, agendador ativo e estado de cada rotina.
-  - **Go! Sipal**: `GET /api/auth/me` com o JWT; amarelo sem perfil de desenvolvedor ou perto de
-    expirar (ver `modules/go-sipal.md`).
   - **GitHub**: `GET /user` e `GET /rate_limit`; amarelo sem escopo `repo` (token clássico) ou com
     o limite de uso quase esgotado (ver `modules/github.md`).
   - **OpenCode / Gemini / Provedores de IA**: ver `modules/ai.md`.
@@ -171,9 +164,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   sistema), com `Bearer` igual ao `CRON_SECRET` do ambiente **ou** ao cron secret da integração.
 - **Rotinas internas são do código** (`DEFAULT_CRON_JOBS`; `withBuiltInJobs` completa a lista
   salva). Hoje: `integrations-health-check` (a cada 5 min, testa todas as integrações) e
-  `go-sipal-task-sync` (a cada 1 min, avisa a tela de Tarefas quando o quadro do Go! Sipal muda —
-  ver `modules/tasks.md`) e `github-issue-sync` (a cada 2 min, issues dos repositórios vinculados →
-  rascunhos — ver `modules/github.md`) e `agentic-pr-watch` (a cada 2 min, acompanha os PRs das
+  `github-issue-sync` (a cada 2 min, issues dos repositórios vinculados → tarefas — ver
+  `modules/github.md`) e `agentic-pr-watch` (a cada 2 min, acompanha os PRs das
   mesas de trabalho — ver `modules/agentic-dev.md`). O agendamento das internas é editável na tela; só não se
   removem.
 - Cada rotina é reivindicada atomicamente em `integration_cron_jobs` (lease de 15 min); a
@@ -241,8 +233,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 | `DELETE /api/integrations/internal_api/tokens/[tokenId]` | Revoga token de sistema |
 | `GET /api/openapi.json` · `GET /api/docs` | Especificação e Swagger UI da API interna (públicas) |
 | `GET /api/v1/whoami` | Pública por token de sistema |
-| `/api/integrations/go_sipal/session[/code\|/verify]` | Sessão do Go! Sipal (ver `modules/go-sipal.md`) |
-| `/api/integrations/github/*` | Vínculos, mapeamento, pessoas, sincronização e opções (ver `modules/github.md`) |
+| `/api/integrations/github/*` | Vínculos, mapeamento, sincronização e opções (ver `modules/github.md`) |
 | `GET/POST /api/routines/scheduler-tick` | Tick do agendador (Bearer `CRON_SECRET` ou cron secret) |
 | `POST /api/pusher/auth` | Autoriza `private-app` e `private-integration-{id}` |
 

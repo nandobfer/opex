@@ -22,12 +22,14 @@ if (!process.env.DEBUG) {
 }
 
 // Polyfill de localStorage/sessionStorage para o ambiente jsdom desta versão do
-// vitest, que expõe `window` mas não `window.localStorage` (exige a flag
-// --localstorage-file do Node). Componentes que usam `@/lib/browser-storage`
-// dependem
-// disso em testes com `@vitest-environment jsdom`. Só define quando ausente,
-// preservando qualquer implementação real do ambiente.
-if (typeof window !== 'undefined' && !window.localStorage) {
+// vitest, que expõe `window` mas pode não ter `window.localStorage` funcional (exige
+// a flag --localstorage-file do Node). Componentes que usam `window.localStorage`
+// dependem disso em testes com `@vitest-environment jsdom`. Redefine quando ausente
+// ou incompleto, preservando uma implementação real e funcional do ambiente.
+const storageUsable = (value: unknown): value is Storage =>
+  typeof value === 'object' && value !== null && typeof (value as Storage).getItem === 'function' && typeof (value as Storage).clear === 'function'
+
+if (typeof window !== 'undefined' && !storageUsable(window.localStorage)) {
   const createMemoryStorage = (): Storage => {
     const store = new Map<string, string>()
     return {
@@ -50,10 +52,12 @@ if (typeof window !== 'undefined' && !window.localStorage) {
     configurable: true,
     value: createMemoryStorage(),
   })
-  Object.defineProperty(window, 'sessionStorage', {
-    configurable: true,
-    value: createMemoryStorage(),
-  })
+  if (!storageUsable(window.sessionStorage)) {
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: createMemoryStorage(),
+    })
+  }
 }
 
 // jsdom não tem ResizeObserver; componentes Radix (ex.: Slider) o usam para medir o polegar.

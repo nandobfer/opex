@@ -28,8 +28,5 @@ export async function saveMapping(input: MappingInput, actorId: string): Promise
         depois: { tipos: input.typeRules, prioridades: input.priorityRules },
     })
     await publishGithubUpdated("mappings")
-    // Rascunhos pendentes reaplicam o mapeamento nos campos não editados.
-    const { remapPendingDrafts } = await import("./drafts")
-    await remapPendingDrafts()
     return { ...input, isDefault: false }
 }

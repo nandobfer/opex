@@ -23,10 +23,12 @@ function matchValue(actual: unknown, expected: unknown): boolean {
 const matches = (doc: Doc, filter: Doc) => Object.entries(filter).every(([key, value]) => matchValue(doc[key], value))
 
 function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
-    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc }
-    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet) Object.assign(doc, update)
+    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc }
+    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset) Object.assign(doc, update)
     if (ops.$set) Object.assign(doc, ops.$set)
     if (inserting && ops.$setOnInsert) Object.assign(doc, ops.$setOnInsert)
+    for (const [key, value] of Object.entries(ops.$inc ?? {})) doc[key] = ((doc[key] as number) ?? 0) + value
+    for (const key of Object.keys(ops.$unset ?? {})) delete doc[key]
     for (const [key, value] of Object.entries(ops.$addToSet ?? {})) {
         const list = Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []
         if (!list.includes(value)) list.push(value)
@@ -37,23 +39,36 @@ function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
 function query<T>(result: () => T) {
     let sorter: ((list: Doc[]) => Doc[]) | null = null
     let max: number | null = null
+    let offset = 0
     const resolve = () => {
         const value = result() as unknown
         if (!Array.isArray(value)) return value as T
         let list = [...(value as Doc[])]
         if (sorter) list = sorter(list)
+        if (offset > 0) list = list.slice(offset)
         if (max !== null) list = list.slice(0, max)
         return list.map((doc) => ({ ...doc })) as T
     }
     const chain = {
         sort: (spec: Record<string, 1 | -1>) => {
             const [[field, dir]] = Object.entries(spec)
-            sorter = (list) => list.sort((a, b) => ((a[field!] as number) > (b[field!] as number) ? dir! : -dir!))
+            sorter = (list) =>
+                list.sort((a, b) => {
+                    const norm = (v: unknown) => (v instanceof Date ? v.getTime() : v)
+                    const av = norm(a[field!])
+                    const bv = norm(b[field!])
+                    if (av === bv) return 0
+                    return (av as number) > (bv as number) ? dir! : -dir!
+                })
             return chain
         },
         select: () => chain,
         limit: (n: number) => {
             max = n
+            return chain
+        },
+        skip: (n: number) => {
+            offset = n
             return chain
         },
         lean: async () => resolve(),
@@ -69,7 +84,13 @@ export function memoryModel() {
         const found = docs.filter((doc) => matches(doc, filter))
         if (sort) {
             const [[field, dir]] = Object.entries(sort)
-            found.sort((a, b) => ((a[field!] as number) > (b[field!] as number) ? dir! : -dir!))
+            const norm = (v: unknown) => (v instanceof Date ? v.getTime() : v)
+            found.sort((a, b) => {
+                const av = norm(a[field!])
+                const bv = norm(b[field!])
+                if (av === bv) return 0
+                return (av as number) > (bv as number) ? dir! : -dir!
+            })
         }
         return found[0] ?? null
     }
@@ -98,7 +119,12 @@ export function memoryModel() {
         create: async (doc: Doc) => {
             const created = { _id: fakeId(), createdAt: new Date(), updatedAt: new Date(), ...doc }
             docs.push(created)
-            return created
+            return { ...created, toObject: () => ({ ...created }) }
+        },
+        insertMany: async (items: Doc[]) => {
+            const created = items.map((doc) => ({ _id: fakeId(), createdAt: new Date(), updatedAt: new Date(), ...doc }))
+            docs.push(...created)
+            return created.map((doc) => ({ ...doc }))
         },
         updateOne: async (filter: Doc, update: Doc, options?: { upsert?: boolean }) => {
             const found = docs.find((doc) => matches(doc, filter))
@@ -127,6 +153,9 @@ export function memoryModel() {
         deleteOne: async (filter: Doc) => {
             const index = docs.findIndex((doc) => matches(doc, filter))
             if (index !== -1) docs.splice(index, 1)
+        },
+        deleteMany: async (filter: Doc) => {
+            for (let i = docs.length - 1; i >= 0; i--) if (matches(docs[i]!, filter)) docs.splice(i, 1)
         },
         exists: async (filter: Doc) => (docs.some((doc) => matches(doc, filter)) ? { _id: "x" } : null),
         countDocuments: async (filter: Doc = {}) => docs.filter((doc) => matches(doc, filter)).length,

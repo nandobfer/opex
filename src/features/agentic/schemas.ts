@@ -72,17 +72,24 @@ export const centralConfigSchema = z.object({
         healthPath: z.string().trim().max(200).regex(/^(\/.*)?$/, "Comece com /"),
         buildTimeoutMinutes: z.number({ error: "Informe um número" }).int().min(2, "Mínimo 2").max(120, "Máximo 120"),
     }),
-    goSipal: z.object({
-        moveToDevelopment: z.boolean(),
-        startTimer: z.boolean(),
-        stopTimerOnDone: z.boolean(),
+    columns: z.object({
+        /** Coluna de destino ao abrir a mesa (implementação); `null` = não move. */
+        onStart: z.string().trim().max(60).nullable(),
+        /** Coluna de destino quando o PR é aberto; `null` = não move. */
+        onPr: z.string().trim().max(60).nullable(),
+        /** Coluna de destino quando o PR é mergeado; `null` = não move. */
+        onDone: z.string().trim().max(60).nullable(),
+    }),
+    timers: z.object({
+        start: z.boolean(),
+        stopOnDone: z.boolean(),
     }),
     cleanup: z.object({
         teardownEnvironment: z.boolean(),
         removeWorktree: z.boolean(),
         deleteBranch: z.boolean(),
     }),
-    include: z.object({ comments: z.boolean(), history: z.boolean(), plan: z.boolean() }),
+    include: z.object({ comments: z.boolean(), history: z.boolean() }),
     instructions: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, optionalText(4000)])) as Record<AgentRole, ReturnType<typeof optionalText>>),
 })
 export type CentralConfig = z.infer<typeof centralConfigSchema>
@@ -108,17 +115,18 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             validateCommands: "",
         },
         environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20 },
-        goSipal: { moveToDevelopment: true, startTimer: true, stopTimerOnDone: true },
+        columns: { onStart: null, onPr: null, onDone: null },
+        timers: { start: true, stopOnDone: true },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
-        include: { comments: true, history: false, plan: true },
+        include: { comments: true, history: false },
         instructions: { planning: "", implementation: "", build: "", pr: "" },
     }
 }
 
-/** Nova central: produto do Go! Sipal + diretório das sessões (o resto nasce com os padrões). */
+/** Nova central: projeto (repositório vinculado) + diretório das sessões (o resto nasce com os padrões). */
 export const createCentralSchema = z.object({
-    productId: z.string().trim().regex(/^[a-f0-9]{24}$/i, "Selecione o produto"),
-    productName: z.string().trim().min(1).max(200),
+    projectId: z.string().trim().regex(/^[a-f0-9]{24}$/i, "Selecione o produto"),
+    projectName: z.string().trim().min(1).max(200),
     sessionDirectory: absolutePath,
 })
 export type CreateCentralInput = z.infer<typeof createCentralSchema>

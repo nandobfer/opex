@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /** GET /api/agentic/centrals — centrais de desenvolvimento (uma por produto). */
 export const GET = withRoute(async () => ok(await listCentrals()))
 
-/** POST /api/agentic/centrals — nova central (produto do Go! Sipal + diretório das sessões). */
+/** POST /api/agentic/centrals — nova central (projeto + diretório das sessões). */
 export const POST = withRoute(async ({ req }) => {
     const body = await parseBody(req, createCentralSchema)
     if (!body.ok) return body.response

@@ -1,12 +1,10 @@
-/** Apontamento de horas do Go! Sipal (timer), normalizado. Nada disso fica nO Opex. */
+/** Apontamento de horas dO Opex (timer local). */
 export interface TimeLogDto {
     id: string
-    /** `null` = timer sem tarefa (iniciado assim no Go! Sipal). */
-    taskId: string | null
-    /** Código da tarefa (ex.: `GO-DEV-12`), completado pelo quadro; `null` se não achou. */
+    taskId: string
+    /** Código da tarefa (ex.: `OPX-12`), lido do quadro local. */
     taskCode: string | null
     taskTitle: string | null
-    productName: string | null
     startTime: string
     endTime: string | null
     /** Minutos (só depois de parar). */

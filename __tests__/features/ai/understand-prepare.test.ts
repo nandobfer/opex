@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   availability: vi.fn(),
   getTask: vi.fn(),
-  getDraftDetail: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
@@ -12,40 +11,28 @@ vi.mock('@/lib/db/models/Ai', () => ({ AiUsageLog: { create: vi.fn() } }))
 vi.mock('@/lib/ai/stream', () => ({ streamAi: vi.fn() }))
 vi.mock('@/features/ai/server/settings', () => ({ loadUnderstandTaskSettings: mocks.load, availabilityOf: mocks.availability }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))
-vi.mock('@/features/github/server/drafts', () => ({ getDraftDetail: mocks.getDraftDetail }))
 
 import { DEFAULT_UNDERSTAND_TASK_SETTINGS } from '@/features/ai/schemas'
 import { prepareUnderstandTask } from '@/features/ai/server/understand-task'
 
-const DRAFT_ID = 'draft-0123456789abcdef01234567'
-
-const draft = (overrides: Record<string, unknown> = {}) => ({
-  id: DRAFT_ID,
-  code: 'GH-7',
-  title: 'Bot\u00e3o de exportar',
-  body: 'Corpo',
-  issueTitle: 'Bot\u00e3o de exportar',
-  issueBody: 'Corpo',
-  previewBody: 'Corpo com https://assinada.example/img?token=segredo',
-  repo: 'sipal/portal',
-  number: 7,
-  issueState: 'open',
-  author: { login: 'ana', name: null, avatarUrl: null, developerName: null },
-  labels: [],
-  issueType: null,
-  milestone: null,
-  assignees: [],
-  product: { id: 'p1', name: 'Portal' },
+const task = (overrides: Record<string, unknown> = {}) => ({
+  id: '0123456789abcdef01234567',
+  code: 'OPX-7',
+  columnId: 'todo',
+  order: 0,
+  title: 'Botão de exportar',
   taskType: 'feature',
   priority: 'medium',
-  assignee: null,
-  workPackage: null,
-  columnName: null,
-  imageCount: 0,
+  archived: false,
+  project: { id: 'p1', name: 'Portal', repo: 'sipal/portal', sigla: 'POR' },
+  createdAt: null,
+  updatedAt: null,
+  description: 'Corpo',
+  technicalSpec: null,
   comments: [],
-  issueCreatedAt: null,
-  state: 'draft',
-  goTaskCode: null,
+  history: [],
+  timeLogs: [],
+  totalTimeLogged: 0,
   ...overrides,
 })
 
@@ -55,27 +42,18 @@ beforeEach(() => {
   mocks.availability.mockResolvedValue({ available: true, reason: null })
 })
 
-describe('prepareUnderstandTask com rascunhos', () => {
-  it('id draft-\u2026 usa o rascunho (n\u00e3o o Go! Sipal) e nunca envia o corpo com URLs assinadas', async () => {
-    mocks.getDraftDetail.mockResolvedValue(draft())
-    const prepared = await prepareUnderstandTask(DRAFT_ID)
-    expect(mocks.getDraftDetail).toHaveBeenCalledWith(DRAFT_ID)
-    expect(mocks.getTask).not.toHaveBeenCalled()
-    expect(prepared).toMatchObject({ taskId: DRAFT_ID, title: 'Entender rascunho GH-7' })
-    expect(prepared.prompt).toContain('# Rascunho GH-7')
-    expect(prepared.prompt).not.toContain('assinada.example')
+describe('prepareUnderstandTask', () => {
+  it('usa a tarefa local e monta a entrada com o código', async () => {
+    mocks.getTask.mockResolvedValue(task())
+    const prepared = await prepareUnderstandTask('0123456789abcdef01234567')
+    expect(mocks.getTask).toHaveBeenCalledWith('0123456789abcdef01234567')
+    expect(prepared).toMatchObject({ taskId: '0123456789abcdef01234567', title: 'Entender tarefa OPX-7' })
+    expect(prepared.prompt).toContain('# Tarefa OPX-7')
   })
 
-  it('rascunho enviado ou descartado responde 409 com a orienta\u00e7\u00e3o', async () => {
-    mocks.getDraftDetail.mockResolvedValueOnce(draft({ state: 'sent', goTaskCode: 'GO-DEV-99' }))
-    await expect(prepareUnderstandTask(DRAFT_ID)).rejects.toMatchObject({ status: 409, code: 'DRAFT_ALREADY_SENT', message: 'Rascunho j\u00e1 enviado: use a tarefa GO-DEV-99' })
-    mocks.getDraftDetail.mockResolvedValueOnce(draft({ state: 'discarded' }))
-    await expect(prepareUnderstandTask(DRAFT_ID)).rejects.toMatchObject({ status: 409, code: 'DRAFT_DISCARDED' })
-  })
-
-  it('feature indispon\u00edvel nem busca o rascunho', async () => {
+  it('feature indisponível nem busca a tarefa', async () => {
     mocks.availability.mockResolvedValue({ available: false, reason: 'desativada' })
-    await expect(prepareUnderstandTask(DRAFT_ID)).rejects.toMatchObject({ status: 409, message: 'desativada' })
-    expect(mocks.getDraftDetail).not.toHaveBeenCalled()
+    await expect(prepareUnderstandTask('0123456789abcdef01234567')).rejects.toMatchObject({ status: 409, message: 'desativada' })
+    expect(mocks.getTask).not.toHaveBeenCalled()
   })
 })

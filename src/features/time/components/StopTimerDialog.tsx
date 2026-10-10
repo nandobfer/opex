@@ -29,7 +29,7 @@ interface StopTimerDialogProps {
 const EMPTY: StopTimerForm = { adjust: false, startTime: "", endTime: "", description: "" }
 
 /**
- * Modal "Parar timer" (igual ao do Go! Sipal): tempo decorrido ao vivo, "Ajustar horários"
+ * Modal "Parar timer": tempo decorrido ao vivo, "Ajustar horários"
  * (início/fim) e descrição do trabalho realizado.
  */
 export function StopTimerDialog({ log, next, submitting, error, onConfirm, onCancel }: StopTimerDialogProps) {
@@ -73,7 +73,7 @@ export function StopTimerDialog({ log, next, submitting, error, onConfirm, onCan
                                     Só um timer por vez: pare o atual para iniciar <span className="font-mono text-foreground">{next.code}</span>.
                                 </>
                             ) : (
-                                "O apontamento é salvo no Go! Sipal."
+                                "O apontamento é salvo no Opex."
                             )}
                         </DialogDescription>
                     </DialogHeader>

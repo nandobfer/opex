@@ -4,7 +4,7 @@ import React from 'react'
 import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PersonRef, TaskDto, TaskListDto } from '@/features/tasks/types'
+import type { TaskDto, TaskListDto } from '@/features/tasks/types'
 
 const mocks = vi.hoisted(() => ({ post: vi.fn(), toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }))
 
@@ -12,7 +12,7 @@ vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion'
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { post: mocks.post, get: vi.fn(), patch: vi.fn() } }))
 vi.mock('sonner', () => ({ toast: mocks.toast }))
 
-import { bulkMoveUrlNeed, planBulkArchive, planBulkAssign, planBulkMove, planBulkPriority } from '@/features/tasks/bulk-items'
+import { planBulkArchive, planBulkMove, planBulkPriority } from '@/features/tasks/bulk-items'
 import { useBulkTasks } from '@/features/tasks/hooks/useBulkTasks'
 import { taskListKey } from '@/features/tasks/hooks/useTasks'
 import { useTaskSelection } from '@/features/tasks/hooks/useTaskSelection'
@@ -20,23 +20,24 @@ import { TaskTable } from '@/features/tasks/components/TaskTable'
 import { TaskBulkBar } from '@/features/tasks/components/TaskBulkBar'
 import { buildBoardColumns } from '@/features/tasks/board'
 
-const fer: PersonRef = { id: 'u1', name: 'Fer', email: null }
-const ana: PersonRef = { id: 'u2', name: 'Ana', email: null }
+const board = {
+  columns: [
+    { key: 'todo', name: 'A Fazer', color: 'zinc' as const, icon: 'inbox' as const, description: null, wipLimit: null },
+    { key: 'doing', name: 'Em Andamento', color: 'sky' as const, icon: 'clock' as const, description: null, wipLimit: null },
+  ],
+  layout: ['todo', 'doing'],
+}
 
 const task = (id: string, overrides: Partial<TaskDto> = {}): TaskDto => ({
   id,
-  code: `GO-DEV-${id}`,
-  title: `Tarefa ${id}`,
-  status: 'development',
+  code: `OPX-${id}`,
+  columnId: 'todo',
   order: Number(id),
+  title: `Tarefa ${id}`,
   taskType: 'feature',
   priority: 'medium',
-  product: null,
-  workPackage: null,
-  assignee: null,
-  commitUrl: null,
-  pullRequestUrl: null,
   archived: false,
+  project: null,
   createdAt: null,
   updatedAt: null,
   ...overrides,
@@ -45,25 +46,18 @@ const task = (id: string, overrides: Partial<TaskDto> = {}): TaskDto => ({
 beforeEach(() => vi.clearAllMocks())
 
 describe('montagem dos lotes', () => {
-  it('mover: pula as que já estão lá e as em Produção; URL só para quem precisa; desfazer volta status e ordem', () => {
-    const tasks = [task('1'), task('2', { taskType: 'analysis' }), task('3', { status: 'validation' }), task('4', { status: 'in_production' })]
-    expect(bulkMoveUrlNeed(tasks, 'validation')).toEqual({ requires: 'commit', count: 1 })
-    const plan = planBulkMove(tasks, 'validation', 'https://github.com/o/r/commit/abc')
-    expect(plan.items.map((item) => item.task.id)).toEqual(['1', '2'])
-    expect(plan.items[0]!.action).toMatchObject({ type: 'move', targetStatus: 'validation', commitUrl: 'https://github.com/o/r/commit/abc' })
-    expect(plan.items[1]!.action).toMatchObject({ commitUrl: undefined })
-    expect(plan.items[0]!.undo).toEqual({ action: { type: 'move', targetStatus: 'development', order: 1 }, patch: { status: 'development', order: 1 } })
-    expect(plan.note).toMatch(/1 em Produção/)
-    expect(planBulkMove([task('1')], 'in_production').items[0]!.undo).toBeNull()
+  it('mover: pula as que já estão lá; desfazer volta coluna e ordem', () => {
+    const tasks = [task('1'), task('2', { columnId: 'doing', order: 5 })]
+    const plan = planBulkMove(tasks, 'doing')
+    expect(plan.items.map((item) => item.task.id)).toEqual(['1'])
+    expect(plan.items[0]!.action).toEqual({ type: 'move', column: 'doing' })
+    expect(plan.items[0]!.undo).toEqual({ action: { type: 'move', column: 'todo' }, patch: { columnId: 'todo', order: 1 } })
   })
 
-  it('atribuir, prioridade e arquivar: só quem muda, com o valor anterior no desfazer', () => {
-    const tasks = [task('1', { assignee: fer }), task('2', { assignee: ana, priority: 'urgent', archived: true })]
-    const assign = planBulkAssign(tasks, fer)
-    expect(assign.items.map((item) => item.task.id)).toEqual(['2'])
-    expect(assign.items[0]!.undo?.action).toEqual({ type: 'assign', assignee: 'u2', assigneeName: 'Ana' })
-    expect(planBulkAssign(tasks, null).items).toHaveLength(2)
+  it('prioridade e arquivar: só quem muda, com o valor anterior no desfazer', () => {
+    const tasks = [task('1'), task('2', { priority: 'urgent', archived: true })]
     expect(planBulkPriority(tasks, 'urgent').items.map((item) => item.task.id)).toEqual(['1'])
+    expect(planBulkPriority(tasks, 'urgent').items[0]!.undo?.action).toEqual({ type: 'priority', priority: 'medium' })
     expect(planBulkArchive(tasks, true).items.map((item) => item.task.id)).toEqual(['1'])
   })
 })
@@ -80,8 +74,6 @@ describe('useTaskSelection', () => {
     expect(result.current.stateOf(ordered)).toBe(true)
     rerender({ ids: ['a', 'b'] })
     expect([...result.current.selected]).toEqual(['a', 'b'])
-    rerender({ ids: ['a', 'b', 'c', 'd'] })
-    expect([...result.current.selected]).toEqual(['a', 'b'])
     act(() => result.current.clear())
     expect(result.current.selected.size).toBe(0)
   })
@@ -90,7 +82,7 @@ describe('useTaskSelection', () => {
 describe('useBulkTasks', () => {
   const setup = (tasks: TaskDto[]) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const list: TaskListDto = { tasks, baseUrl: 'https://go', currentUserId: null, fetchedAt: '' }
+    const list: TaskListDto = { tasks, fetchedAt: '' }
     client.setQueryData(taskListKey(false), list)
     const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
     return { client, wrapper, priorities: () => client.getQueryData<TaskListDto>(taskListKey(false))!.tasks.map((t) => t.priority) }
@@ -110,7 +102,7 @@ describe('useBulkTasks', () => {
     expect(mocks.post).toHaveBeenCalledTimes(2)
     expect(mocks.post.mock.calls[0][1].items).toHaveLength(4)
     expect(priorities()).toEqual(['urgent', 'medium', 'urgent', 'urgent', 'urgent'])
-    expect(mocks.toast.warning).toHaveBeenCalledWith('Prioridade urgente: 4 atualizada(s), 1 com falha', expect.objectContaining({ description: expect.stringContaining('GO-DEV-2: Recusada') }))
+    expect(mocks.toast.warning).toHaveBeenCalledWith('Prioridade urgente: 4 atualizada(s), 1 com falha', expect.objectContaining({ description: expect.stringContaining('OPX-2: Recusada') }))
     expect(onDone.mock.calls[0][0].filter((r: { ok: boolean }) => r.ok)).toHaveLength(4)
 
     const undo = mocks.toast.warning.mock.calls[0][1].action
@@ -143,13 +135,11 @@ describe('TaskTable com seleção e edição na linha', () => {
       <>
         <TaskTable
           tasks={tasks}
-          columns={buildBoardColumns(undefined)}
+          columns={buildBoardColumns(board)}
           sort={{ column: 'code', direction: 'asc' }}
           onSortChange={vi.fn()}
-          currentUserId="u1"
           movingId={null}
           updatingId={null}
-          people={[fer, ana]}
           selection={selection}
           onMove={vi.fn()}
           onUpdate={onUpdate}
@@ -165,7 +155,7 @@ describe('TaskTable com seleção e edição na linha', () => {
     render(<Harness onUpdate={vi.fn()} onOpen={onOpen} />)
     fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar todas' }))
     expect(screen.getByTestId('count').textContent).toBe('3')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar GO-DEV-2' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar OPX-2' }))
     expect(screen.getByTestId('count').textContent).toBe('2')
     expect(screen.getByRole('checkbox', { name: 'Selecionar todas' }).getAttribute('aria-checked')).toBe('mixed')
     expect(onOpen).not.toHaveBeenCalled()
@@ -173,17 +163,16 @@ describe('TaskTable com seleção e edição na linha', () => {
 
   it('Shift+clique marca o intervalo', () => {
     render(<Harness onUpdate={vi.fn()} onOpen={vi.fn()} />)
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar GO-DEV-1' }))
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar GO-DEV-3' }), { shiftKey: true })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar OPX-1' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar OPX-3' }), { shiftKey: true })
     expect(screen.getByTestId('count').textContent).toBe('3')
   })
 
-  it('prioridade e responsável abrem o seletor sem abrir a tarefa', () => {
+  it('prioridade abre o seletor sem abrir a tarefa', () => {
     const onOpen = vi.fn()
     render(<Harness onUpdate={vi.fn()} onOpen={onOpen} />)
-    const row = screen.getByRole('row', { name: 'Abrir GO-DEV-1' })
+    const row = screen.getByRole('row', { name: 'Abrir OPX-1' })
     fireEvent.click(within(row).getByRole('button', { name: 'Prioridade: alterar' }))
-    fireEvent.click(within(row).getByRole('button', { name: 'Responsável: alterar' }))
     expect(onOpen).not.toHaveBeenCalled()
   })
 })
@@ -191,7 +180,7 @@ describe('TaskTable com seleção e edição na linha', () => {
 describe('TaskBulkBar', () => {
   it('aparece com a contagem; Desarquivar quando todas estão arquivadas; × limpa', () => {
     const onClear = vi.fn()
-    const props = { columns: buildBoardColumns(undefined), people: [fer], currentUserId: 'u1', progress: null, onMove: vi.fn(), onAssign: vi.fn(), onPriority: vi.fn(), onArchive: vi.fn(), onClear }
+    const props = { columns: buildBoardColumns(board), progress: null, onMove: vi.fn(), onPriority: vi.fn(), onArchive: vi.fn(), onClear }
     const { rerender } = render(<TaskBulkBar tasks={[]} {...props} />)
     expect(screen.queryByRole('toolbar')).toBeNull()
     rerender(<TaskBulkBar tasks={[task('1'), task('2')]} {...props} />)
@@ -206,4 +195,3 @@ describe('TaskBulkBar', () => {
     expect(onClear).toHaveBeenCalled()
   })
 })
-

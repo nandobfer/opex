@@ -1,4 +1,4 @@
-import { TASK_PRIORITY_LABELS, TASK_SORT_LABELS, TASK_TYPE_LABELS, UNASSIGNED } from "./constants"
+import { TASK_PRIORITY_LABELS, TASK_SORT_LABELS, TASK_TYPE_LABELS } from "./constants"
 import { DEFAULT_TASK_FILTERS, type TaskFilters } from "./filters"
 
 /**
@@ -17,12 +17,9 @@ export interface TaskFilterChip {
 }
 
 export interface TaskFilterChipContext {
-    /** id → nome (produtos, pessoas, pacotes, colunas). */
-    products: ReadonlyMap<string, string>
-    people: ReadonlyMap<string, string>
-    workPackages: ReadonlyMap<string, string>
+    /** id → nome (projetos) e chave → nome (colunas). */
+    projects: ReadonlyMap<string, string>
     columns: ReadonlyMap<string, string>
-    currentUserId: string | null
 }
 
 /** Valores além deste limite viram "N selecionados" (a lista completa fica no `title`). */
@@ -44,22 +41,10 @@ export function activeTaskFilterChips(filters: TaskFilters, ctx: TaskFilterChipC
     const search = filters.search.trim()
     if (search) chips.push({ key: "search", label: `Busca: "${search}"`, title: `Busca: "${search}"`, remove: { search: "" } })
 
-    // Remover o produto também limpa os pacotes (dependem do produto), como no seletor.
-    const products = multi("products", "Produto", filters.products.map((id) => nameOf(ctx.products, id)))
-    if (products) products.remove = { products: [], workPackages: [] }
-    chips.push(products)
-
-    chips.push(
-        multi(
-            "assignees",
-            "Responsável",
-            filters.assignees.map((id) => (id === UNASSIGNED ? "Sem responsável" : id === ctx.currentUserId ? `${nameOf(ctx.people, id)} (eu)` : nameOf(ctx.people, id))),
-        ),
-    )
-    chips.push(multi("statuses", "Status", filters.statuses.filter((key) => ctx.columns.has(key)).map((key) => ctx.columns.get(key)!)))
+    chips.push(multi("projects", "Projeto", filters.projects.map((id) => nameOf(ctx.projects, id))))
+    chips.push(multi("columns", "Coluna", filters.columns.filter((key) => ctx.columns.has(key)).map((key) => ctx.columns.get(key)!)))
     chips.push(multi("priorities", "Prioridade", filters.priorities.map((value) => TASK_PRIORITY_LABELS[value])))
     chips.push(multi("types", "Tipo", filters.types.map((value) => TASK_TYPE_LABELS[value])))
-    chips.push(multi("workPackages", "Pacote", filters.workPackages.map((id) => nameOf(ctx.workPackages, id))))
     if (filters.showArchived) chips.push({ key: "showArchived", label: "Arquivadas: mostrando", title: "Mostrando tarefas arquivadas", remove: { showArchived: false } })
     if (filters.sort !== DEFAULT_TASK_FILTERS.sort) {
         const label = `Ordem: ${TASK_SORT_LABELS[filters.sort]}`

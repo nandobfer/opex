@@ -25,17 +25,17 @@ interface CreateCentralDialogProps {
     existing: readonly CentralDto[]
 }
 
-const EMPTY: CreateCentralInput = { productId: "", productName: "", sessionDirectory: "" }
+const EMPTY: CreateCentralInput = { projectId: "", projectName: "", sessionDirectory: "" }
 
-/** Nova central: produto do Go! Sipal (um por central) + diretório das sessões. */
+/** Nova central: projeto (repositório vinculado, um por central) + diretório das sessões. */
 export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCentralDialogProps) {
     const router = useRouter()
     const options = useTaskOptions(open)
     const create = useCreateCentral()
     const form = useForm<CreateCentralInput>({ resolver: zodResolver(createCentralSchema), mode: "onChange", defaultValues: EMPTY })
-    const productName = useWatch({ control: form.control, name: "productName" })
+    const projectName = useWatch({ control: form.control, name: "projectName" })
     const errors = form.formState.errors
-    const taken = useMemo(() => new Set(existing.map((central) => central.productId)), [existing])
+    const taken = useMemo(() => new Set(existing.map((central) => central.projectId)), [existing])
 
     useEffect(() => {
         if (open) form.reset(EMPTY)
@@ -63,28 +63,28 @@ export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCent
                         <DialogTitle className="flex items-center gap-2">
                             <FolderGit2 className="h-4 w-4 text-primary" aria-hidden /> Nova central de desenvolvimento
                         </DialogTitle>
-                        <DialogDescription>Escolha o produto e o diretório do repositório dele na máquina do OpenCode. O resto você ajusta depois, nas configurações da central.</DialogDescription>
+                        <DialogDescription>Escolha o projeto (repositório vinculado) e o diretório dele na máquina do OpenCode. O resto você ajusta depois, nas configurações da central.</DialogDescription>
                     </DialogHeader>
 
-                    <Field id="central-product" label="Produto do Go! Sipal" error={errors.productId?.message ?? (options.isError ? apiErrorMessage(options.error, "Não foi possível listar os produtos") : undefined)}>
+                    <Field id="central-product" label="Projeto (repositório)" error={errors.projectId?.message ?? (options.isError ? apiErrorMessage(options.error, "Não foi possível listar os projetos") : undefined)}>
                         <SearchPicker<NamedRef>
-                            trigger={<FieldTrigger id="central-product" placeholder="Escolha o produto" value={productName || undefined} invalid={Boolean(errors.productId)} />}
-                            items={options.data?.products ?? []}
+                            trigger={<FieldTrigger id="central-product" placeholder="Escolha o projeto" value={projectName || undefined} invalid={Boolean(errors.projectId)} />}
+                            items={options.data?.projects ?? []}
                             getKey={(item) => item.id}
                             searchKeys={["name"]}
                             renderItem={(item) => <span className="truncate">{item.name}</span>}
-                            disabledReason={(item) => (taken.has(item.id) ? "Este produto já tem uma central" : false)}
+                            disabledReason={(item) => (taken.has(item.id) ? "Este projeto já tem uma central" : false)}
                             onPick={(item) => {
-                                form.setValue("productId", item.id, { shouldDirty: true, shouldValidate: true })
-                                form.setValue("productName", item.name, { shouldDirty: true, shouldValidate: true })
+                                form.setValue("projectId", item.id, { shouldDirty: true, shouldValidate: true })
+                                form.setValue("projectName", item.name, { shouldDirty: true, shouldValidate: true })
                             }}
                             loading={options.isLoading}
                             matchTriggerWidth
-                            placeholder="Buscar produto"
-                            searchLabel="Buscar produto"
-                            listLabel="Produtos"
-                            emptyText="Nenhum produto disponível"
-                            emptySearchText="Nenhum produto encontrado"
+                            placeholder="Buscar projeto"
+                            searchLabel="Buscar projeto"
+                            listLabel="Projetos"
+                            emptyText="Nenhum projeto disponível (vincule um repositório em Integrações › GitHub)"
+                            emptySearchText="Nenhum projeto encontrado"
                         />
                     </Field>
 

@@ -27,7 +27,7 @@ export function CentralsCard() {
             <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                 <div className="space-y-1.5">
                     <CardTitle className="text-base">Centrais de desenvolvimento</CardTitle>
-                    <CardDescription>Cada central liga um produto do Go! Sipal ao diretório (repositório) em que as sessões do OpenCode trabalham.</CardDescription>
+                    <CardDescription>Cada central liga um projeto (repositório vinculado) ao diretório (repositório) em que as sessões do OpenCode trabalham.</CardDescription>
                 </div>
                 <Button type="button" size="sm" className="shrink-0 gap-1.5" onClick={() => setCreating(true)}>
                     <Plus className="h-4 w-4" aria-hidden /> Nova central
@@ -67,7 +67,7 @@ function CentralRow({ central }: { central: CentralDto }) {
             <FolderGit2 className="h-5 w-5 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                    <span className="truncate font-medium">{central.productName}</span>
+                    <span className="truncate font-medium">{central.projectName}</span>
                     {!central.config.enabled && <span className="rounded bg-muted px-1.5 text-[11px] text-muted-foreground">desativada</span>}
                 </span>
                 <span className="block truncate font-mono text-xs text-muted-foreground">{central.config.sessionDirectory}</span>

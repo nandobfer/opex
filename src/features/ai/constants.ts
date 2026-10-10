@@ -31,8 +31,7 @@ export const DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS = [
 ].join("\n")
 
 export const UNDERSTAND_TASK_INCLUDE_LABELS = {
-    comments: { label: "Comentários", description: "Autor, data e texto de cada comentário" },
-    history: { label: "Histórico", description: "Mudanças de status, responsável e campos" },
-    timeLogs: { label: "Apontamentos de horas", description: "Quem trabalhou, quando e a descrição" },
-    plan: { label: "Plano de implementação", description: "Passos, complexidade e arquivos relacionados" },
+    comments: { label: "Comentários", description: "Data e texto de cada comentário" },
+    history: { label: "Histórico", description: "Mudanças de coluna, prioridade e campos" },
+    timeLogs: { label: "Apontamentos de horas", description: "Quando e a descrição" },
 } as const

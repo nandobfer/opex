@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 interface InDevelopmentProps {
     title: string
-    /** Por que ainda não existe (ex.: "Depende da integração Go! Sipal"). */
+    /** Por que ainda não existe (ex.: "Depende de uma integração externa"). */
     dependency?: string
     className?: string
     children?: ReactNode

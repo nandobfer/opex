@@ -11,20 +11,24 @@ import { useTaskSelection } from '@/features/tasks/hooks/useTaskSelection'
 import { buildBoardColumns } from '@/features/tasks/board'
 import { APP_SCROLL_CONTAINER_ID } from '@/hooks/usePageVirtualizer'
 
+const board = {
+  columns: [
+    { key: 'todo', name: 'A Fazer', color: 'zinc' as const, icon: 'inbox' as const, description: null, wipLimit: null },
+    { key: 'doing', name: 'Em Andamento', color: 'sky' as const, icon: 'clock' as const, description: null, wipLimit: null },
+  ],
+  layout: ['todo', 'doing'],
+}
+
 const task = (n: number): TaskDto => ({
   id: String(n).padStart(24, '0'),
-  code: `GO-DEV-${n}`,
-  title: `Tarefa ${n}`,
-  status: 'development',
+  code: `OPX-${n}`,
+  columnId: 'todo',
   order: n,
+  title: `Tarefa ${n}`,
   taskType: 'feature',
   priority: 'high',
-  product: { id: 'p1', name: 'CRM' },
-  workPackage: null,
-  assignee: null,
-  commitUrl: null,
-  pullRequestUrl: null,
   archived: false,
+  project: { id: 'p1', name: 'CRM', repo: 'o/crm', sigla: 'CRM' },
   createdAt: null,
   updatedAt: null,
 })
@@ -40,13 +44,11 @@ function Table({ tasks, select = false }: { tasks: TaskDto[]; select?: boolean }
       )}
       <TaskTable
         tasks={tasks}
-        columns={buildBoardColumns(undefined)}
+        columns={buildBoardColumns(board)}
         sort={{ column: 'code', direction: 'asc' }}
         onSortChange={vi.fn()}
-        currentUserId={null}
         movingId={null}
         updatingId={null}
-        people={[]}
         selection={selection}
         onMove={vi.fn()}
         onUpdate={vi.fn()}
@@ -58,7 +60,7 @@ function Table({ tasks, select = false }: { tasks: TaskDto[]; select?: boolean }
 
 /** Como no app: a página rola pelo `<main id="main-content">` do AppShell. */
 const inPage = (ui: React.ReactNode) => render(<main id={APP_SCROLL_CONTAINER_ID}>{ui}</main>)
-const renderedCodes = () => screen.queryAllByRole('row', { name: /^Abrir GO-DEV-/ }).map((row) => row.getAttribute('aria-label')!.replace('Abrir ', ''))
+const renderedCodes = () => screen.queryAllByRole('row', { name: /^Abrir OPX-/ }).map((row) => row.getAttribute('aria-label')!.replace('Abrir ', ''))
 
 describe('TaskTable rolando com a página', () => {
   it('sem altura máxima nem rolagem própria; cabeçalho fixo no topo da página', () => {
@@ -71,39 +73,36 @@ describe('TaskTable rolando com a página', () => {
   })
 
   it('acima de 50 linhas desenha só as visíveis e acompanha a rolagem da página (#main-content)', async () => {
-    // jsdom não tem layout: a área de rolagem "mede" 800px de altura.
     const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800)
     const tasks = Array.from({ length: 300 }, (_, i) => task(i + 1))
     inPage(<Table tasks={tasks} />)
     const first = renderedCodes()
     expect(first.length).toBeGreaterThan(0)
     expect(first.length).toBeLessThan(300)
-    expect(first[0]).toBe('GO-DEV-1')
+    expect(first[0]).toBe('OPX-1')
 
     const main = document.getElementById(APP_SCROLL_CONTAINER_ID)!
     await act(async () => {
-      // jsdom não rola de verdade: fixa a posição, sobe a tabela junto e dispara o evento.
       Object.defineProperty(main, 'scrollTop', { configurable: true, value: 48 * 200 })
       const table = screen.getByTestId('task-table')
       table.getBoundingClientRect = () => ({ top: -main.scrollTop, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: -main.scrollTop, toJSON: () => ({}) })
       fireEvent.scroll(main)
     })
     const after = renderedCodes()
-    expect(after).toContain('GO-DEV-201')
-    expect(after).not.toContain('GO-DEV-1')
+    expect(after).toContain('OPX-201')
+    expect(after).not.toContain('OPX-1')
     height.mockRestore()
   })
 
   it('colunas somem em telas estreitas (mesma classe no cabeçalho e na célula); prioridade vira ponto', () => {
     inPage(<Table tasks={[task(1)]} />)
     const header = (name: RegExp) => screen.getByRole('columnheader', { name })
-    expect(screen.queryByRole('columnheader', { name: /Pacote/ })).toBeNull()
     expect(header(/Atualizada/).className).toContain('hidden xl:table-cell')
     expect(header(/Tipo/).className).toContain('hidden lg:table-cell')
-    expect(header(/Produto/).className).toContain('hidden lg:table-cell')
+    expect(header(/Projeto/).className).toContain('hidden lg:table-cell')
     expect(header(/Issue/).className).toContain('hidden sm:table-cell')
     expect(header(/Prioridade/).className).toContain('hidden md:table-cell')
-    expect(header(/Status/).className).not.toContain('hidden')
+    expect(header(/Coluna/).className).not.toContain('hidden')
     expect(screen.getByTitle('CRM').className).toContain('hidden lg:table-cell')
     expect(screen.getByRole('img', { name: 'Prioridade Alta' }).className).toContain('md:hidden')
   })
@@ -129,14 +128,14 @@ describe('TaskTable rolando com a página', () => {
     const link = screen.getByRole('link', { name: 'Abrir issue sipal/app#42 no GitHub' })
     expect(link.textContent).toBe('#42')
     expect(link.closest('td')!.className).toContain('hidden sm:table-cell')
-    const row2 = screen.getByRole('row', { name: 'Abrir GO-DEV-2' })
+    const row2 = screen.getByRole('row', { name: 'Abrir OPX-2' })
     expect(row2.querySelector('a')).toBeNull()
   })
 
   it('ordena pela issue (número); sem issue fica depois na ordem crescente', () => {
     const issue = (number: number) => ({ url: `https://github.com/sipal/app/issues/${number}`, repo: 'sipal/app', number, state: 'open' as const, notice: null })
     const tasks = [task(1), { ...task(2), issue: issue(30) }, { ...task(3), issue: issue(7) }]
-    expect(sortTaskRows(tasks, { column: 'issue', direction: 'asc' }).map((t) => t.code)).toEqual(['GO-DEV-3', 'GO-DEV-2', 'GO-DEV-1'])
+    expect(sortTaskRows(tasks, { column: 'issue', direction: 'asc' }).map((t) => t.code)).toEqual(['OPX-3', 'OPX-2', 'OPX-1'])
   })
 
   it('com seleção, abre espaço no fim para a barra de ações flutuante', () => {

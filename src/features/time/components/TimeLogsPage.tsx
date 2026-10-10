@@ -1,10 +1,9 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { endOfDay, parseISO, startOfDay } from "date-fns"
-import { Clock, KeyRound, Loader2, RefreshCw } from "lucide-react"
+import { Clock, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,8 +14,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { listContainer } from "@/components/motion/presets"
 import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
-import { apiErrorCode, apiErrorMessage } from "@/lib/api"
-import { integrationPath } from "@/lib/integrations/catalog"
+import { apiErrorMessage } from "@/lib/api"
 import { formatMinutes } from "@/features/tasks/format"
 import { groupTimeLogsByDay } from "../grouping"
 import { useDeleteTimeLog, useTimeLogs, useUpdateTimeLog } from "../hooks/useTime"
@@ -29,10 +27,7 @@ import { useTimer } from "./TimerProvider"
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 const RANGE_SCHEMA = { from: urlFilterCodecs.string(), to: urlFilterCodecs.string() }
 
-/**
- * Minhas horas (`/tarefas/horas`): meus apontamentos no Go! Sipal por período (na URL), agrupados
- * por dia, com editar descrição/período, excluir e parar o timer ativo.
- */
+/** Minhas horas (`/tarefas/horas`): apontamentos locais por período (na URL), agrupados por dia. */
 export function TimeLogsPage() {
     const reduceMotion = useReducedMotion()
     const defaults = useMemo(() => {
@@ -59,8 +54,7 @@ export function TimeLogsPage() {
     const days = useMemo(() => groupTimeLogsByDay(logs), [logs])
     const totalMinutes = pages[0]?.totalMinutes ?? 0
     const total = pages[0]?.total ?? 0
-    const sessionMissing = logsQuery.isError && apiErrorCode(logsQuery.error) === "GO_SIPAL_SESSION"
-    const view = logsQuery.isLoading ? "loading" : sessionMissing ? "session" : logsQuery.isError ? "error" : logs.length === 0 ? "empty" : "list"
+    const view = logsQuery.isLoading ? "loading" : logsQuery.isError ? "error" : logs.length === 0 ? "empty" : "list"
 
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
@@ -71,7 +65,7 @@ export function TimeLogsPage() {
                     </span>
                     <div>
                         <h1 className="text-lg font-semibold md:text-2xl">Minhas horas</h1>
-                        <p className="text-sm text-muted-foreground">Apontamentos no Go! Sipal</p>
+                        <p className="text-sm text-muted-foreground">Seus apontamentos</p>
                     </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -94,9 +88,7 @@ export function TimeLogsPage() {
                     <div className="flex gap-6">
                         <div className="text-right">
                             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total no período</p>
-                            <p className="font-mono text-2xl font-bold text-primary">
-                                {logsQuery.data ? <AnimatedNumber value={totalMinutes} formatter={formatMinutes} /> : "—"}
-                            </p>
+                            <p className="font-mono text-2xl font-bold text-primary">{logsQuery.data ? <AnimatedNumber value={totalMinutes} formatter={formatMinutes} /> : "—"}</p>
                         </div>
                         <div className="text-right">
                             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apontamentos</p>
@@ -114,13 +106,6 @@ export function TimeLogsPage() {
                             <Skeleton className="h-20 w-full" />
                             <Skeleton className="h-20 w-full" />
                         </div>
-                    )}
-                    {view === "session" && (
-                        <EmptyState icon={KeyRound} title="Conecte-se ao Go! Sipal" description={apiErrorMessage(logsQuery.error, "Entre com o código enviado por e-mail.")}>
-                            <Button asChild size="sm">
-                                <Link href={integrationPath("go_sipal")}>Conectar ao Go! Sipal</Link>
-                            </Button>
-                        </EmptyState>
                     )}
                     {view === "error" && <ErrorState title="Não foi possível carregar os apontamentos" description={apiErrorMessage(logsQuery.error, "Tente novamente.")} onRetry={() => void logsQuery.refetch()} />}
                     {view === "empty" && <EmptyState icon={Clock} title="Nenhum apontamento neste período" description="Escolha outro período ou inicie um timer numa tarefa." />}
@@ -146,7 +131,7 @@ export function TimeLogsPage() {
                                                             await update.mutateAsync({ log, input: { kind: "description", description } })
                                                             return true
                                                         } catch (error) {
-                                                                                            toast.error(apiErrorMessage(error, "Não foi possível salvar a descrição"))
+                                                            toast.error(apiErrorMessage(error, "Não foi possível salvar a descrição"))
                                                             return false
                                                         }
                                                     }}
@@ -190,10 +175,10 @@ export function TimeLogsPage() {
                 log={deleting}
                 submitting={remove.isPending}
                 onClose={() => setDeleting(null)}
-                onSubmit={async (justification) => {
+                onSubmit={async () => {
                     if (!deleting) return
                     try {
-                        await remove.mutateAsync({ log: deleting, justification })
+                        await remove.mutateAsync({ log: deleting })
                         setDeleting(null)
                     } catch (error) {
                         toast.error(apiErrorMessage(error, "Não foi possível excluir o apontamento"))

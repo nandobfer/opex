@@ -3,20 +3,18 @@
 import { useEffect } from "react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
+import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { TIME_UPDATED_EVENT, type StopTimerInput, type UpdateTimeLogInput } from "../schemas"
 import type { TimeLogDto, TimeLogPageDto, TimeUpdatedEvent } from "../types"
 
-/** Controle de horas (Go! Sipal): consultas, iniciar/parar/editar/excluir e tempo real. */
+/** Controle de horas (local): consultas, iniciar/parar/editar/excluir e tempo real. */
 
 export const TIME_QUERY_KEY = "time"
 export const activeTimersKey = [TIME_QUERY_KEY, "active"] as const
 export const timeLogsKey = (from: string, to: string) => [TIME_QUERY_KEY, "logs", { from, to }] as const
-
-const sessionError = (error: unknown) => apiErrorCode(error) === "GO_SIPAL_SESSION"
 
 export function useActiveTimers(enabled = true) {
     return useQuery({
@@ -24,7 +22,6 @@ export function useActiveTimers(enabled = true) {
         queryFn: async () => unwrapApi((await api.get<ApiResponse<TimeLogDto[]>>("/time/active")).data),
         enabled,
         staleTime: 30_000,
-        retry: (count, error) => !sessionError(error) && count < 2,
     })
 }
 
@@ -35,7 +32,6 @@ export function useTimeLogs(range: { from: string; to: string }) {
             unwrapApi((await api.get<ApiResponse<TimeLogPageDto>>("/time/logs", { params: { from: range.from, to: range.to, page: pageParam } })).data),
         initialPageParam: 1,
         getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
-        retry: (count, error) => !sessionError(error) && count < 2,
     })
 }
 
@@ -72,7 +68,7 @@ export interface StartVariables {
     taskTitle: string
 }
 
-/** Inicia com resposta otimista (o timer já aparece rodando; some se o Go! Sipal recusar). */
+/** Inicia com resposta otimista (o timer já aparece rodando; some se o servidor recusar). */
 export function useStartTimer() {
     const queryClient = useQueryClient()
     const refresh = useRefreshTime()
@@ -86,7 +82,6 @@ export function useStartTimer() {
                 taskId,
                 taskCode,
                 taskTitle,
-                productName: null,
                 startTime: new Date().toISOString(),
                 endTime: null,
                 duration: null,
@@ -112,12 +107,12 @@ export interface StopVariables extends StopTimerInput {
     log: TimeLogDto
 }
 
-/** Para o timer; some na hora da lista de ativos (volta se o Go! Sipal recusar). */
+/** Para o timer; some na hora da lista de ativos (volta se o servidor recusar). */
 export function useStopTimer() {
     const queryClient = useQueryClient()
     const refresh = useRefreshTime()
     return useMutation<TimeLogDto, unknown, StopVariables, TimeLogDto[] | undefined>({
-        mutationFn: async ({ log, ...input }) => unwrapApi((await api.post<ApiResponse<TimeLogDto>>(`/time/${log.id}/stop`, { ...input, taskCode: log.taskCode ?? undefined })).data),
+        mutationFn: async ({ log, ...input }) => unwrapApi((await api.post<ApiResponse<TimeLogDto>>(`/time/${log.id}/stop`, input)).data),
         onMutate: async ({ log }) => {
             await queryClient.cancelQueries({ queryKey: activeTimersKey })
             const previous = queryClient.getQueryData<TimeLogDto[]>(activeTimersKey)
@@ -140,8 +135,8 @@ export function useUpdateTimeLog() {
 
 export function useDeleteTimeLog() {
     const refresh = useRefreshTime()
-    return useMutation<unknown, unknown, { log: TimeLogDto; justification: string }>({
-        mutationFn: async ({ log, justification }) => unwrapApi((await api.delete<ApiResponse<{ id: string }>>(`/time/${log.id}`, { data: { justification } })).data),
+    return useMutation<unknown, unknown, { log: TimeLogDto }>({
+        mutationFn: async ({ log }) => unwrapApi((await api.delete<ApiResponse<{ id: string }>>(`/time/${log.id}`)).data),
         onSuccess: () => toast.success("Apontamento excluído"),
         onSettled: (_data, _error, { log }) => refresh(log.taskId),
     })

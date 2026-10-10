@@ -2,7 +2,7 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
 
 /**
  * Desenvolvimento agêntico (Integrações › Provedores de IA › Desenvolvimento agêntico):
- * - `agentic_centrals`: uma central por produto do Go! Sipal, com o diretório das sessões e a
+ * - `agentic_centrals`: uma central por projeto (repositório vinculado), com o diretório das sessões e a
  *   configuração (validada pelo schema Zod `centralConfigSchema`);
  * - `agentic_workbenches`: uma mesa de trabalho por tarefa (etapa, sessão do OpenCode, worktree,
  *   porta da prévia, versões do plano e PR);
@@ -11,8 +11,8 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
 
 export interface IAgenticCentral {
     _id: Types.ObjectId
-    productId: string
-    productName: string
+    projectId: string
+    projectName: string
     config: Record<string, unknown>
     lastTest: { at: Date; ok: boolean; message: string } | null
     createdAt: Date
@@ -21,8 +21,8 @@ export interface IAgenticCentral {
 
 const AgenticCentralSchema = new Schema<IAgenticCentral>(
     {
-        productId: { type: String, required: true, unique: true },
-        productName: { type: String, required: true },
+        projectId: { type: String, required: true, unique: true },
+        projectName: { type: String, required: true },
         config: { type: Schema.Types.Mixed, default: {} },
         lastTest: { type: Schema.Types.Mixed, default: null },
     },

@@ -82,9 +82,8 @@ export const centralLogScope = (centralId: string) => `agentic:${centralId}`
 
 /** Seções da tarefa enviadas ao planejamento. */
 export const AGENTIC_INCLUDE_LABELS = {
-    comments: { label: "Comentários", description: "Autor, data e texto de cada comentário" },
-    history: { label: "Histórico", description: "Mudanças de status, responsável e campos" },
-    plan: { label: "Plano do Go! Sipal", description: "Passos, complexidade e arquivos do plano cadastrado" },
+    comments: { label: "Comentários", description: "Data e texto de cada comentário" },
+    history: { label: "Histórico", description: "Mudanças de coluna, prioridade e campos" },
 } as const
 
 /** Rotas da tela. */

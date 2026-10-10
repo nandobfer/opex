@@ -13,13 +13,13 @@ const LABEL = "Mesa de trabalho"
  * Botão de ícone da página da tarefa: abre a mesa de trabalho dela na Central de desenvolvimento. Com
  * mesa, o botão assume a cor da etapa e a dica mostra o chip da etapa.
  */
-export function WorkbenchButton({ taskId, productId }: { taskId: string; productId: string | null }) {
+export function WorkbenchButton({ taskId, projectId }: { taskId: string; projectId: string | null }) {
     const centrals = useCentrals()
-    const central = productId ? centrals.data?.find((item) => item.productId === productId) : undefined
+    const central = projectId ? centrals.data?.find((item) => item.projectId === projectId) : undefined
     const workbench = useWorkbenchByTask(central ? taskId : null)
 
     if (!central) {
-        const reason = centrals.isLoading ? "Carregando as centrais…" : "Nenhuma central de desenvolvimento para o produto desta tarefa"
+        const reason = centrals.isLoading ? "Carregando as centrais…" : "Nenhuma central de desenvolvimento para o projeto desta tarefa"
         return (
             <TooltipIconButton label={LABEL} disabledReason={reason}>
                 <Bot aria-hidden />

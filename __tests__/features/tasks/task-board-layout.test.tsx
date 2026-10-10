@@ -14,20 +14,25 @@ import { useTaskSelection } from '@/features/tasks/hooks/useTaskSelection'
 import { CONTENT_BLEED_X, CONTENT_PADDING_X } from '@/features/layout/content-padding'
 import { BULK_BAR_CLEARANCE, BULK_BAR_CLEARANCE_PX } from '@/features/tasks/components/TaskBulkBar'
 
+const board = {
+  columns: [
+    { key: 'todo', name: 'A Fazer', color: 'zinc' as const, icon: 'inbox' as const, description: null, wipLimit: null },
+    { key: 'doing', name: 'Em Andamento', color: 'sky' as const, icon: 'clock' as const, description: null, wipLimit: null },
+  ],
+  layout: ['todo', 'doing'],
+}
+const columns = buildBoardColumns(board)
+
 const task = (n: number): TaskDto => ({
   id: String(n).padStart(24, '0'),
-  code: `GO-DEV-${n}`,
-  title: `Tarefa ${n}`,
-  status: 'development',
+  code: `OPX-${n}`,
+  columnId: 'todo',
   order: n,
+  title: `Tarefa ${n}`,
   taskType: 'feature',
   priority: 'medium',
-  product: null,
-  workPackage: null,
-  assignee: null,
-  commitUrl: null,
-  pullRequestUrl: null,
   archived: false,
+  project: null,
   createdAt: null,
   updatedAt: null,
 })
@@ -37,13 +42,11 @@ function Board({ tasks }: { tasks: TaskDto[] }) {
   return (
     <TaskBoard
       tasks={tasks}
-      columns={buildBoardColumns(undefined)}
-      rawCounts={{ development: tasks.length }}
+      columns={columns}
+      rawCounts={{ todo: tasks.length }}
       sort="priority"
-      currentUserId={null}
       movingId={null}
       selection={selection}
-      highlightIds={new Set()}
       actions={{ onCreateAfter: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onShift: vi.fn() }}
       onMove={vi.fn()}
       onMoveMany={vi.fn()}
@@ -58,7 +61,7 @@ const classes = (value: string) => value.split(/\s+/).filter(Boolean)
 describe('kanban: altura e largura', () => {
   it('a lista de cards ocupa o resto da coluna (sem altura máxima chutada) e rola até o fim dela', () => {
     render(<Board tasks={[task(1), task(2)]} />)
-    const list = screen.getByTestId('column-cards-development')
+    const list = screen.getByTestId('column-cards-todo')
     expect(list.className).not.toMatch(/max-h/)
     expect(classes(list.className)).toEqual(expect.arrayContaining(['flex-1', 'basis-0', 'min-h-0', 'overflow-y-auto']))
   })
@@ -90,10 +93,10 @@ describe('kanban: altura e largura', () => {
     const board = screen.getByTestId('task-board')
     const before = board.className
     expect(screen.queryByTestId('bulk-bar-clearance')).toBeNull()
-    await act(async () => fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar GO-DEV-1' })))
+    await act(async () => fireEvent.click(screen.getByRole('checkbox', { name: 'Selecionar OPX-1' })))
     expect(board.className).toBe(before)
     const spacer = screen.getByTestId('bulk-bar-clearance')
-    expect(screen.getByTestId('column-cards-development').contains(spacer)).toBe(true)
+    expect(screen.getByTestId('column-cards-todo').contains(spacer)).toBe(true)
   })
 
   it('a página não reserva espaço para a barra (encolheria o quadro); tabela usa a mesma constante', () => {

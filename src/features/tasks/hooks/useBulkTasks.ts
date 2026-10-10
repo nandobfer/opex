@@ -64,7 +64,7 @@ export function useBulkTasks() {
             const results: BulkTaskResult[] = []
             for (let start = 0; start < items.length; start += BULK_CHUNK_SIZE) {
                 const chunk = items.slice(start, start + BULK_CHUNK_SIZE)
-                const body: BulkTasksInput = { items: chunk.map((item) => ({ id: item.task.id, code: item.task.code, fromStatus: item.task.status, action: item.action })) }
+                const body: BulkTasksInput = { items: chunk.map((item) => ({ id: item.task.id, action: item.action })) }
                 let chunkResults: BulkTaskResult[]
                 try {
                     chunkResults = unwrapApi((await api.post<ApiResponse<{ results: BulkTaskResult[] }>>("/tasks/bulk", body)).data).results
@@ -96,10 +96,8 @@ export function useBulkTasks() {
                       return [{ task: { ...item.task, ...item.patch }, action: item.undo.action, patch: item.undo.patch, undo: null }]
                   })
                 : []
-            const irreversible = options.undoable ? ok.length - undoItems.length : 0
             const notes = [
                 options.note,
-                irreversible > 0 ? `${irreversible} não pode(m) ser desfeita(s) (Em Produção é final).` : null,
                 ...failedResults.slice(0, 3).map((result) => `${byId.get(result.id)?.task.code ?? result.id}: ${result.error ?? "falhou"}`),
                 failedResults.length > 3 ? `e mais ${failedResults.length - 3} com falha` : null,
             ].filter(Boolean)

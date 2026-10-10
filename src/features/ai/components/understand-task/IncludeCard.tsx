@@ -15,7 +15,7 @@ export function IncludeCard({ form }: { form: UseFormReturn<UnderstandTaskSettin
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">O que enviar</CardTitle>
-                <CardDescription>Código, título, tipo, prioridade, status, produto, descrição, especificação, contexto, critérios de aceite e nomes dos anexos vão sempre. Em rascunhos (issues do GitHub), só Comentários se aplica: são os comentários da issue.</CardDescription>
+                <CardDescription>Código, título, tipo, prioridade, projeto, descrição e especificação vão sempre.</CardDescription>
             </CardHeader>
             <CardContent>
                 <div className={FORM_GRID_WIDE}>

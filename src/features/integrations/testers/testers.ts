@@ -6,8 +6,6 @@ import { ApiToken } from "@/lib/db/models/ApiToken"
 import { dbConnect } from "@/lib/db"
 import { getRawPusherServer } from "@/lib/pusher/server"
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
-import { GoSipalError } from "@/features/go-sipal/client"
-import { fetchGoSipalMe, sessionStatusOf } from "@/features/go-sipal/session/service"
 import { testAiHub, testGemini, testOpencode } from "@/features/ai/server/testers"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "./types"
 
@@ -92,44 +90,6 @@ const testCrons: IntegrationTester = async ({ emit }) => {
 }
 
 // ---------------------------------------------------------------------------
-// Go! Sipal: sessão (JWT) válida na plataforma + perfil de desenvolvedor + expiração
-// ---------------------------------------------------------------------------
-
-const testGoSipal: IntegrationTester = async ({ emit, signal }) => {
-    const config = await getIntegrationConfig("go_sipal")
-    if (!config.token) fail("Sem sessão: entre com o código enviado por e-mail no card \"Sessão Go! Sipal\"")
-    const session = sessionStatusOf(config.token, config.expiryWarningDays, Date.now())
-    if (session.status === "expired") fail("Sessão expirada: entre novamente com um novo código")
-
-    emit("step", `GET ${config.baseUrl}/api/auth/me`)
-    let user: Awaited<ReturnType<typeof fetchGoSipalMe>>
-    try {
-        user = await fetchGoSipalMe(stepSignal(signal, 20_000))
-    } catch (error) {
-        fail(error instanceof GoSipalError ? error.message : describeFetchError(error))
-    }
-    emit("success", `Sessão válida: ${user.name ?? user.email ?? "usuário"}${user.userType ? ` (${user.userType})` : ""}`)
-
-    const warnings: string[] = []
-    if (user.isDeveloper || user.isDevLeader) {
-        emit("success", user.isDevLeader ? "Perfil: líder de desenvolvimento" : "Perfil: desenvolvedor")
-    } else {
-        warnings.push("usuário sem acesso ao Centro de Desenvolvimento (não é desenvolvedor)")
-        emit("warn", "O usuário não é desenvolvedor: tarefas e timers do Centro de Desenvolvimento serão recusados (403)")
-    }
-    if (session.expiresAt) {
-        const when = session.expiresAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })
-        if (session.status === "expiring") {
-            warnings.push(`sessão expira em ${session.daysLeft} dia(s)`)
-            emit("warn", `Sessão expira em ${when} (${session.daysLeft} dia(s)): entre novamente para renovar`)
-        } else {
-            emit("info", `Sessão expira em ${when} (${session.daysLeft} dia(s))`)
-        }
-    }
-    return warnings.length ? warnResult(`Conectado com restrição: ${warnings.join("; ")}`) : "Sessão do Go! Sipal ativa"
-}
-
-// ---------------------------------------------------------------------------
 // GitHub: token válido (GET /user), limite de uso e permissão de escrita em Issues
 // ---------------------------------------------------------------------------
 
@@ -179,7 +139,6 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
     crons: testCrons,
-    go_sipal: testGoSipal,
     github: testGithub,
     ai: testAiHub,
     ai_opencode: testOpencode,

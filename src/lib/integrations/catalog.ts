@@ -1,7 +1,7 @@
 /**
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
- * Integrações ativas: Pusher, API interna, Crons, Go! Sipal, GitHub e Provedores de IA (hub `ai`
+ * Integrações ativas: Pusher, API interna, Crons, GitHub e Provedores de IA (hub `ai`
  * com os provedores `ai_opencode` e `ai_gemini`, que só aparecem dentro do hub).
  * `archflow` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
@@ -17,7 +17,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "go_sipal", "github", "ai", "ai_opencode", "ai_gemini"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -172,7 +172,6 @@ export interface CronJobConfig {
 }
 
 export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
-export const GO_SIPAL_TASK_SYNC_JOB_ID = "go-sipal-task-sync"
 export const GITHUB_ISSUE_SYNC_JOB_ID = "github-issue-sync"
 export const AGENTIC_PR_WATCH_JOB_ID = "agentic-pr-watch"
 
@@ -183,13 +182,6 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Verificação de status das integrações",
         kind: "internal",
         schedule: { type: "interval", minutes: 5 },
-        enabled: true,
-    },
-    {
-        id: GO_SIPAL_TASK_SYNC_JOB_ID,
-        label: "Sincronizar tarefas do Go! Sipal",
-        kind: "internal",
-        schedule: { type: "interval", minutes: 1 },
         enabled: true,
     },
     {
@@ -225,28 +217,6 @@ export const PUSHER_MODE_OPTIONS = [
     { value: "cluster", label: "Cluster Pusher" },
     { value: "host", label: "Host próprio" },
 ] as const satisfies readonly FieldOption[]
-
-// ---------------------------------------------------------------------------
-// Go! Sipal
-// ---------------------------------------------------------------------------
-
-export const GO_SIPAL_DEFAULT_URL = "https://go.sipal.com.br"
-export const GO_SIPAL_DEFAULT_WARNING_DAYS = 3
-
-/**
- * Campos da sessão, gravados SÓ pelo card "Sessão Go! Sipal" (login por código de e-mail). O
- * JWT é o segredo `token`; os demais descrevem o usuário conectado e o login pendente.
- */
-export const GO_SIPAL_SESSION_FIELDS = {
-    name: "sessionName",
-    email: "sessionEmail",
-    userType: "sessionUserType",
-    isDeveloper: "sessionIsDeveloper",
-    isDevLeader: "sessionIsDevLeader",
-    connectedAt: "sessionConnectedAt",
-    pendingEmail: "pendingEmail",
-    pendingRequestedAt: "pendingRequestedAt",
-} as const
 
 // ---------------------------------------------------------------------------
 // Provedores de IA
@@ -394,55 +364,9 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         secretFields: [{ key: "cronSecret", label: "Cron secret", description: "Bearer exigido pelas rotas /api/routines/*", env: ["CRON_SECRET"], required: true }],
     },
     {
-        id: "go_sipal",
-        name: "Go! Sipal",
-        description: "Tarefas, fluxo de trabalho e apontamento de horas do Centro de Desenvolvimento",
-        defaultEnvironment: "externo",
-        streamsDebugOverPusher: true,
-        publicFields: [
-            {
-                key: "baseUrl",
-                label: "URL da plataforma",
-                kind: "url",
-                defaultValue: GO_SIPAL_DEFAULT_URL,
-                placeholder: GO_SIPAL_DEFAULT_URL,
-                required: true,
-                urlOriginOnly: true,
-            },
-            {
-                key: "email",
-                label: "E-mail",
-                description: "Recebe o código de acesso (domínio autorizado no Go! Sipal)",
-                kind: "text",
-                placeholder: "nome@sipal.com.br",
-                required: true,
-            },
-            {
-                key: "expiryWarningDays",
-                label: "Aviso de expiração",
-                description: "Status fica amarelo quando faltar este número de dias para a sessão expirar",
-                kind: "number",
-                unit: "dias",
-                min: 1,
-                max: 27,
-                defaultValue: GO_SIPAL_DEFAULT_WARNING_DAYS,
-                required: true,
-            },
-            { key: GO_SIPAL_SESSION_FIELDS.name, label: "Nome", kind: "text", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.email, label: "E-mail da sessão", kind: "text", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.userType, label: "Tipo de usuário", kind: "text", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.isDeveloper, label: "Desenvolvedor", kind: "boolean", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.isDevLeader, label: "Líder de desenvolvimento", kind: "boolean", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.connectedAt, label: "Conectado em", kind: "text", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.pendingEmail, label: "Código enviado para", kind: "text", group: "card" },
-            { key: GO_SIPAL_SESSION_FIELDS.pendingRequestedAt, label: "Código enviado em", kind: "text", group: "card" },
-        ],
-        secretFields: [{ key: "token", label: "Token de sessão (JWT)", group: "card" }],
-    },
-    {
         id: "github",
         name: "GitHub",
-        description: "Issues de repositórios vinculados viram rascunhos de tarefas do Go! Sipal",
+        description: "Issues de repositórios vinculados viram tarefas dO Opex",
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
         publicFields: [
@@ -458,7 +382,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             {
                 key: "commentOnCreate",
                 label: "Comentar na issue ao criar a tarefa",
-                description: "Ao enviar um rascunho, comenta na issue com o código e o link da tarefa no Go! Sipal",
+                description: "Ao criar uma tarefa, comenta na issue com o código dela",
                 kind: "boolean",
                 defaultValue: true,
             },

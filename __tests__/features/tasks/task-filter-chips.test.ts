@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { activeTaskFilterChips, type TaskFilterChipContext } from '@/features/tasks/filter-chips'
 import { DEFAULT_TASK_FILTERS, type TaskFilters } from '@/features/tasks/filters'
-import { UNASSIGNED } from '@/features/tasks/constants'
 
 const ctx: TaskFilterChipContext = {
-  products: new Map([['p1', 'CRM Marketing'], ['p2', 'Go! Sipal']]),
-  people: new Map([['me', 'Fernando'], ['ana', 'Ana']]),
-  workPackages: new Map([['wp1', 'Sprint 12']]),
-  columns: new Map([['development', 'Desenvolvimento'], ['validation', 'Validação'], ['backlog', 'Backlog'], ['custom-abc', 'Revisar']]),
-  currentUserId: 'me',
+  projects: new Map([
+    ['p1', 'CRM Marketing'],
+    ['p2', 'Portal'],
+  ]),
+  columns: new Map([
+    ['todo', 'A Fazer'],
+    ['doing', 'Em Andamento'],
+    ['done', 'Concluído'],
+    ['col-abc', 'Revisar'],
+  ]),
 }
 const with_ = (patch: Partial<TaskFilters>): TaskFilters => ({ ...DEFAULT_TASK_FILTERS, ...patch })
 
@@ -17,34 +21,31 @@ describe('activeTaskFilterChips', () => {
     expect(activeTaskFilterChips(with_({ view: 'table' }), ctx)).toEqual([])
   })
 
-  it('rótulos com nomes, "(eu)", "Sem responsável" e coluna pessoal', () => {
+  it('rótulos com nomes de projeto, coluna, prioridade e tipo', () => {
     const chips = activeTaskFilterChips(
-      with_({ search: ' login ', products: ['p1'], assignees: ['me', UNASSIGNED], statuses: ['custom-abc'], priorities: ['high'], types: ['bugfix'], workPackages: ['wp1'], showArchived: true }),
+      with_({ search: ' login ', projects: ['p1'], columns: ['col-abc'], priorities: ['high'], types: ['bugfix'], showArchived: true }),
       ctx,
     )
     expect(chips.map((chip) => chip.label)).toEqual([
       'Busca: "login"',
-      'Produto: CRM Marketing',
-      'Responsável: Fernando (eu), Sem responsável',
-      'Status: Revisar',
+      'Projeto: CRM Marketing',
+      'Coluna: Revisar',
       'Prioridade: Alta',
       'Tipo: Correção',
-      'Pacote: Sprint 12',
       'Arquivadas: mostrando',
     ])
   })
 
   it('mais de 2 valores vira "N selecionados" com a lista completa no title', () => {
-    const [chip] = activeTaskFilterChips(with_({ statuses: ['backlog', 'development', 'validation'] }), ctx)
-    expect(chip!.label).toBe('Status: 3 selecionados')
-    expect(chip!.title).toBe('Status: Backlog, Desenvolvimento, Validação')
+    const [chip] = activeTaskFilterChips(with_({ columns: ['todo', 'doing', 'done'] }), ctx)
+    expect(chip!.label).toBe('Coluna: 3 selecionados')
+    expect(chip!.title).toBe('Coluna: A Fazer, Em Andamento, Concluído')
   })
 
-  it('remover: cada chip zera o próprio filtro; produto também limpa os pacotes', () => {
-    const chips = activeTaskFilterChips(with_({ products: ['p1'], workPackages: ['wp1'], showArchived: true }), ctx)
+  it('remover: cada chip zera o próprio filtro', () => {
+    const chips = activeTaskFilterChips(with_({ projects: ['p1'], showArchived: true }), ctx)
     const byKey = Object.fromEntries(chips.map((chip) => [chip.key, chip.remove]))
-    expect(byKey.products).toEqual({ products: [], workPackages: [] })
-    expect(byKey.workPackages).toEqual({ workPackages: [] })
+    expect(byKey.projects).toEqual({ projects: [] })
     expect(byKey.showArchived).toEqual({ showArchived: false })
   })
 
@@ -53,7 +54,7 @@ describe('activeTaskFilterChips', () => {
     expect(chip).toMatchObject({ key: 'sort', label: 'Ordem: Manual (arrastar)', subtle: true, remove: { sort: 'priority' } })
   })
 
-  it('status de coluna que não existe mais é ignorado', () => {
-    expect(activeTaskFilterChips(with_({ statuses: ['custom-removida'] }), ctx)).toEqual([])
+  it('coluna que não existe mais é ignorada', () => {
+    expect(activeTaskFilterChips(with_({ columns: ['sumiu'] }), ctx)).toEqual([])
   })
 })

@@ -58,7 +58,6 @@ export function TimeLogItem({ log, savingDescription, onSaveDescription, onEditP
                         <span className="truncate text-sm font-medium" title={log.taskTitle ?? undefined}>
                             {log.taskTitle ?? "Sem tarefa"}
                         </span>
-                        {log.productName && <span className="text-xs text-muted-foreground">· {log.productName}</span>}
                     </div>
 
                     <AnimatePresence mode="wait" initial={false}>

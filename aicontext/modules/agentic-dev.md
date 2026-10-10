@@ -1,9 +1,9 @@
 # Módulo: Desenvolvimento agêntico (`/desenvolvimento` + `/integracoes/ia`)
 
-Agentes do **OpenCode** (só ele) trabalham numa tarefa do Go! Sipal do plano ao merge. Cada
-tarefa tem uma **mesa de trabalho**; cada produto do Go! Sipal tem uma **central** que aponta o
-repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex rodam na mesma
-máquina.
+Agentes do **OpenCode** (só ele) trabalham numa tarefa dO Opex do plano ao merge. Cada
+uma tarefa tem uma **mesa de trabalho**; cada **projeto** (repositório vinculado no GitHub) tem uma
+**central** que aponta o repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex
+rodam na mesma máquina.
 
 Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
 `@opencode/client`) e `src/lib/ai/opencode-events.ts` (eventos normalizados, puro). Modelos em
@@ -17,8 +17,8 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
   limpeza) e **Pull Request**. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature
   ativa, exige o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
-- Card **Centrais de desenvolvimento**: lista (produto, diretório, repositório, mesas, bolinha do
-  último teste) e **Nova central** (produto do Go! Sipal — um por central — e diretório das
+- Card **Centrais de desenvolvimento**: lista (projeto, diretório, repositório, mesas, bolinha do
+  último teste) e **Nova central** (projeto — repositório vinculado, um por central — e diretório das
   sessões, caminho absoluto). Criar leva às configurações da central.
 
 ### Central (`/integracoes/ia/centrais/[id]`, `agentic_centrals`)
@@ -32,7 +32,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
-| Go! Sipal e conclusão | mover para Desenvolvimento ao abrir, iniciar o timer ao abrir (se não houver timer na tarefa), parar o timer ao concluir; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico, plano do Go! Sipal) |
+| Colunas e conclusão | coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; timers (iniciar ao abrir, parar ao concluir); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
@@ -46,7 +46,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 ## Central de desenvolvimento (`/desenvolvimento/[central]/[tarefa]`)
 
 - Item próprio no menu. Sem central na URL, abre a primeira. Três colunas:
-  **Centrais** | **Tarefas do produto** | **Mesa de trabalho**.
+  **Centrais** | **Tarefas do projeto** | **Mesa de trabalho**.
 - Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
   está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
@@ -57,12 +57,11 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   quantidade filtrada e o código da tarefa aberta. O conteúdo fica montado (rolagem e filtros se
   mantêm). Estado salvo em `localStorage` (`opex:dev-center-layout:v1`); abaixo de `lg` as
   colunas ficam empilhadas e sempre abertas.
-- Tarefas: do quadro do Go! Sipal filtradas pelo produto da central (sem rascunhos/arquivadas),
-  ordenadas pelo fluxo; filtros de **nome** (código/título, sem acento), **status** (padrão: tudo
-  menos Em Produção) e **responsável**, persistidos em `localStorage`
-  (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da mesa.
+- Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
+  ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
+  `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da mesa.
 - Tarefa sem mesa: **Abrir mesa e gerar o plano** (desabilitado com o motivo quando indisponível,
-  central desativada ou tarefa de outro produto).
+  central desativada ou tarefa de outro projeto).
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
 
@@ -97,7 +96,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
 - **Build**: emenda automática após a implementação. Porta reservada no banco (índice único) entre
   **4001 e 4098** pulando portas ocupadas no host (`allocatePreviewPort`); a IA roda
-  `<VAR>=<porta> docker compose -p <produto-código> [-f arquivo] up -d --build` no worktree e
+  `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
   (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia**,
   **Solicitar correção**, **Aprovar e abrir PR**.
@@ -107,12 +106,12 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Acompanhamento**: rotina `agentic-pr-watch` dos Crons (a cada 2 min, `pr-watch.ts`) consulta o
   PR no GitHub (repositório tirado da URL do PR). Revisões novas (`id` > `lastReviewId`) com
   `CHANGES_REQUESTED` viram texto (corpo + comentários de linha) para o planejador.
-- **Conclusão (merge)**: tarefa → **Validação** no Go! Sipal (`commitUrl` = commit do merge no
-  repositório vinculado, `pullRequestUrl`), timer parado (opção), limpeza pela IA (volta a sessão ao
+- **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver),
+  o timer é parado (opção), a limpeza é feita pela IA (volta a sessão ao
   diretório da central, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
   central) e a porta é liberada.
-- Abrir a mesa pode mover a tarefa para Desenvolvimento e iniciar o timer (opções da central);
-  falhas no Go! Sipal viram aviso na mesa, sem interromper.
+- Abrir a mesa pode mover a tarefa para a coluna configurada em "Ao abrir a mesa" e iniciar o timer
+  (opções da central); falhas ao mover/iniciar viram aviso na mesa, sem interromper.
 - **Permissões e perguntas** do agente aparecem na mesa (`pendingPermissions`/`pendingForms`):
   Aprovar uma vez / Aprovar sempre / Recusar; formulários desenhados pelos campos do OpenCode
   (texto, número, sim/não, opções, múltipla escolha) com Responder ou Dispensar.

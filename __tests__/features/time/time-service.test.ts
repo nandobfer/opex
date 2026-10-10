@@ -1,150 +1,90 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  config: { baseUrl: 'https://go.sipal.com.br', token: 'h.e30.s' as string | undefined, expiryWarningDays: 3 },
   recordAudit: vi.fn(),
   publish: vi.fn(),
-  tasks: [{ id: 'a'.repeat(24), code: 'GO-DEV-7' }],
-  snapshots: new Map<string, { signatures: Record<string, string> }>(),
+  models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }>; aggregate: (...args: unknown[]) => Promise<unknown[]> }>,
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
-vi.mock('@/lib/integrations/debug', () => ({
-  integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+vi.mock('@/lib/db', () => ({
+  dbConnect: vi.fn(),
+  recordAudit: mocks.recordAudit,
+  AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' },
 }))
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', MOVER: 'MOVER' } }))
 vi.mock('@/lib/pusher/channels', () => ({ appChannel: () => 'private-app', publishToChannels: mocks.publish }))
-vi.mock('@/features/tasks/server/service', async (original) => ({
-  ...(await original<typeof import('@/features/tasks/server/service')>()),
-  fetchAllTasks: async () => mocks.tasks,
-}))
-vi.mock('@/lib/db/models/GoSipalTaskSnapshot', () => ({
-  GoSipalTaskSnapshot: {
-    findOne: ({ key }: { key: string }) => ({ lean: async () => mocks.snapshots.get(key) ?? null }),
-    updateOne: async ({ key }: { key: string }, update: { $set: { signatures: Record<string, string> } }) => {
-      mocks.snapshots.set(key, { signatures: update.$set.signatures })
-    },
-  },
-}))
-
-import { deleteTimeLog, listActiveTimers, listTimeLogs, resetTaskCodesCache, startTimer, stopTimer, toTimeLogDto, updateTimeLog } from '@/features/time/server/service'
-import { syncGoSipalTasks } from '@/features/tasks/server/sync'
-
-const TASK = 'a'.repeat(24)
-const LOG = 'c'.repeat(24)
-const raw = (overrides: Record<string, unknown> = {}) => ({
-  _id: LOG,
-  task: { _id: TASK, title: 'Ajustar login', product: { _id: 'p1', name: 'GO' } },
-  startTime: '2026-10-08T12:00:00.000Z',
-  isActive: true,
-  ...overrides,
+vi.mock('@/lib/db/models/DevTask', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.devTask = memoryModel()
+  return { DevTask: mocks.models.devTask, TaskComment: memoryModel() }
 })
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-const fetchMock = vi.fn()
+vi.mock('@/lib/db/models/TimeLog', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.timeLog = memoryModel()
+  return { TimeLog: mocks.models.timeLog }
+})
+
+import { deleteTimeLog, listActiveTimers, listTimeLogs, startTimer, stopTimer, updateTimeLog } from '@/features/time/server/service'
+
+const reset = () => {
+  for (const model of Object.values(mocks.models)) model.docs.length = 0
+}
+const seedTask = async () => (await mocks.models.devTask.create({ code: 'OPX-7', title: 'Ajustar login', columnId: 'todo', order: 0, priority: 'high', archived: false }))._id as string
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.config.token = 'h.e30.s'
-  mocks.snapshots.clear()
-  resetTaskCodesCache()
-  vi.stubGlobal('fetch', fetchMock)
+  reset()
 })
 
-describe('normalização', () => {
-  it('toTimeLogDto: tarefa populada, código pelo quadro, duração e ativo', () => {
-    expect(toTimeLogDto(raw({ isActive: false, endTime: '2026-10-08T13:30:00.000Z', duration: 90, description: 'Feito' }), new Map([[TASK, 'GO-DEV-7']]))).toEqual({
-      id: LOG,
-      taskId: TASK,
-      taskCode: 'GO-DEV-7',
-      taskTitle: 'Ajustar login',
-      productName: 'GO',
-      startTime: '2026-10-08T12:00:00.000Z',
-      endTime: '2026-10-08T13:30:00.000Z',
-      duration: 90,
-      description: 'Feito',
-      active: false,
-    })
-    expect(toTimeLogDto({ _id: LOG })).toBeNull()
-    expect(toTimeLogDto(raw({ task: null }))).toMatchObject({ taskId: null, taskTitle: null })
-  })
-})
-
-describe('timers no Go! Sipal', () => {
-  it('iniciar: POST com a tarefa, auditoria e aviso; nada salvo aqui', async () => {
-    fetchMock.mockResolvedValue(json({ success: true, data: raw() }, 201))
-    const log = await startTimer({ taskId: TASK }, 'local')
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://go.sipal.com.br/api/dev-center/time-logs')
-    expect(JSON.parse(init.body)).toEqual({ taskId: TASK, elementType: 'devTask' })
-    expect(log).toMatchObject({ taskCode: 'GO-DEV-7', active: true })
-    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'ApontamentoGoSipal', acao: 'CRIAR' }))
-    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'time-updated', { taskIds: [TASK] })
+describe('timers locais', () => {
+  it('iniciar cria o apontamento ativo, audita e avisa a tela', async () => {
+    const taskId = await seedTask()
+    const log = await startTimer({ taskId }, 'local')
+    expect(log).toMatchObject({ taskId, taskCode: 'OPX-7', taskTitle: 'Ajustar login', active: true, duration: null })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'Apontamento', acao: 'CRIAR' }))
+    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'time-updated', { taskIds: [taskId] })
   })
 
-  it('iniciar recusado (já existe timer): 400 com a mensagem da plataforma', async () => {
-    fetchMock.mockResolvedValue(json({ error: 'Já existe um timer ativo para este item' }, 400))
-    await expect(startTimer({ taskId: TASK }, 'local')).rejects.toMatchObject({ status: 400, message: 'Já existe um timer ativo para este item' })
-    expect(mocks.recordAudit).not.toHaveBeenCalled()
+  it('tarefa inexistente → 404; já com timer → 409', async () => {
+    await expect(startTimer({ taskId: 'a'.repeat(24) }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
+    const taskId = await seedTask()
+    await startTimer({ taskId }, 'local')
+    await expect(startTimer({ taskId }, 'local')).rejects.toMatchObject({ status: 409, code: 'TIMER_RUNNING' })
   })
 
-  it('parar: PUT stop=true com início/fim/descrição ajustados', async () => {
-    fetchMock.mockResolvedValue(json({ success: true, data: raw({ isActive: false, endTime: '2026-10-08T13:00:00.000Z', duration: 60 }) }))
-    const log = await stopTimer(LOG, { description: 'Revisão', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:00:00.000Z' }, 'local')
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe(`https://go.sipal.com.br/api/dev-center/time-logs/${LOG}`)
-    expect(init.method).toBe('PUT')
-    expect(JSON.parse(init.body)).toEqual({ stop: true, description: 'Revisão', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:00:00.000Z' })
-    expect(log.duration).toBe(60)
-    await expect(stopTimer('pending-x', {}, 'local')).rejects.toMatchObject({ status: 404 })
+  it('parar calcula a duração e grava descrição', async () => {
+    const taskId = await seedTask()
+    const started = await startTimer({ taskId }, 'local')
+    const log = await stopTimer(started.id, { description: 'Revisão', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:30:00.000Z' }, 'local')
+    expect(log).toMatchObject({ duration: 90, description: 'Revisão', active: false })
+    await expect(stopTimer(started.id, { startTime: '2026-10-08T13:00:00.000Z', endTime: '2026-10-08T12:00:00.000Z' }, 'local')).rejects.toMatchObject({ status: 400 })
   })
 
-  it('ativos: lista só os ativos com código', async () => {
-    fetchMock.mockImplementation(async (url: string) => (url.endsWith('/active') ? json({ success: true, data: [raw(), raw({ _id: 'd'.repeat(24), isActive: false })] }) : json({})))
+  it('ativos lista só os ativos com o código da tarefa', async () => {
+    const taskId = await seedTask()
+    await startTimer({ taskId }, 'local')
     const active = await listActiveTimers()
     expect(active).toHaveLength(1)
-    expect(active[0]!.taskCode).toBe('GO-DEV-7')
+    expect(active[0]).toMatchObject({ taskId, taskCode: 'OPX-7', active: true })
   })
 
-  it('meus apontamentos: período e página na query; totais da plataforma', async () => {
-    fetchMock.mockResolvedValue(json({ success: true, data: [raw({ isActive: false, duration: 30 })], pagination: { page: 2, totalPages: 3, total: 250 }, summary: { totalMinutes: 4000 } }))
-    const page = await listTimeLogs({ from: '2026-10-01T03:00:00.000Z', to: '2026-10-09T02:59:59.999Z', page: 2 })
-    const url = new URL(fetchMock.mock.calls[0][0])
-    expect(url.pathname).toBe('/api/dev-center/time-logs')
-    expect(Object.fromEntries(url.searchParams)).toEqual({ limit: '100', page: '2', startDate: '2026-10-01T03:00:00.000Z', endDate: '2026-10-09T02:59:59.999Z' })
-    expect(page).toMatchObject({ page: 2, totalPages: 3, total: 250, totalMinutes: 4000 })
+  it('apontamentos: filtra por período, pagina e soma os minutos', async () => {
+    const taskId = await seedTask()
+    const log = await startTimer({ taskId }, 'local')
+    await stopTimer(log.id, { startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T13:00:00.000Z' }, 'local')
+    mocks.models.timeLog.aggregate = async () => [{ total: 60 }]
+    const page = await listTimeLogs({ from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T00:00:00.000Z', page: 1 })
+    expect(page).toMatchObject({ page: 1, totalPages: 1, total: 1, totalMinutes: 60 })
+    expect(page.logs[0]).toMatchObject({ taskId, taskCode: 'OPX-7', duration: 60 })
   })
 
-  it('editar período (com justificativa) e excluir (com justificativa)', async () => {
-    fetchMock.mockResolvedValue(json({ success: true, data: raw({ isActive: false }) }))
-    await updateTimeLog(LOG, { kind: 'period', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T12:30:00.000Z', justification: 'Esqueci de parar' }, 'local')
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T12:30:00.000Z', justification: 'Esqueci de parar' })
-    await updateTimeLog(LOG, { kind: 'description', description: 'Nova' }, 'local')
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ description: 'Nova' })
-    fetchMock.mockResolvedValue(json({ success: true }))
-    await deleteTimeLog(LOG, 'Duplicado', 'local')
-    expect(fetchMock.mock.calls[2][1].method).toBe('DELETE')
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ justification: 'Duplicado' })
+  it('editar descrição e período; excluir remove', async () => {
+    const taskId = await seedTask()
+    const log = await startTimer({ taskId }, 'local')
+    await updateTimeLog(log.id, { kind: 'description', description: 'Nova' }, 'local')
+    await updateTimeLog(log.id, { kind: 'period', startTime: '2026-10-08T12:00:00.000Z', endTime: '2026-10-08T12:30:00.000Z' }, 'local')
+    expect((await listActiveTimers())[0]).toMatchObject({ description: 'Nova', duration: 30 })
+    await deleteTimeLog(log.id, 'local')
+    expect(await listActiveTimers()).toHaveLength(0)
     expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ acao: 'EXCLUIR' }))
-  })
-})
-
-describe('sincronização de timers', () => {
-  it('timer iniciado/parado direto no go.sipal avisa a tela (time-updated)', async () => {
-    let active: unknown[] = []
-    fetchMock.mockImplementation(async (url: string) => (url.endsWith('/active') ? json({ data: active }) : json({ data: [] })))
-    await syncGoSipalTasks()
-    expect(mocks.publish).not.toHaveBeenCalled()
-
-    active = [raw()]
-    await syncGoSipalTasks()
-    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'time-updated', { taskIds: [TASK] })
-
-    mocks.publish.mockClear()
-    await syncGoSipalTasks()
-    expect(mocks.publish).not.toHaveBeenCalled()
-
-    active = []
-    await syncGoSipalTasks()
-    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'time-updated', { taskIds: [TASK] })
   })
 })

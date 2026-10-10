@@ -7,7 +7,7 @@ import { stopTimer } from "@/features/time/server/service"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** POST /api/time/[id]/stop — para o timer no Go! Sipal (início/fim/descrição opcionais). */
+/** POST /api/time/[id]/stop — para o timer (início/fim/descrição opcionais). */
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, stopTimerSchema)
     if (!body.ok) return body.response

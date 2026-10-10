@@ -20,7 +20,7 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Geral</CardTitle>
-                <CardDescription>Onde as sessões do OpenCode trabalham para o produto {central.productName}.</CardDescription>
+                <CardDescription>Onde as sessões do OpenCode trabalham para o produto {central.projectName}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
                 <FormToggleCard control={form.control} name="enabled" id="central-enabled" label="Central ativa" description="Desativada, a central aparece na Central de desenvolvimento, mas não abre nem executa mesas" />

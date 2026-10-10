@@ -1,5 +1,5 @@
 import { arrayMove } from "@dnd-kit/sortable"
-import { columnKeyOf, isCustomColumnKey } from "./board"
+import { columnKeyOf } from "./board"
 import type { TaskSortKey } from "./constants"
 import { computeDropOrderInList } from "./ordering"
 import type { TaskDto } from "./types"
@@ -10,10 +10,9 @@ import type { TaskDto } from "./types"
  */
 export type ColumnItems = Readonly<Record<string, readonly string[]>>
 
-/** Ordem usada na coluna: a local nas customizadas, a do Go! Sipal nas demais. */
-export function boardOrderOf(task: Pick<TaskDto, "order" | "localColumn" | "localOrder">, columnKey: string): number {
-    if (!isCustomColumnKey(columnKey)) return task.order
-    return task.localColumn === columnKey ? (task.localOrder ?? 0) : 0
+/** Ordem usada na coluna. */
+export function boardOrderOf(task: Pick<TaskDto, "order">): number {
+    return task.order
 }
 
 /**
@@ -72,7 +71,7 @@ export function finalDropPosition(
         .filter((id) => id !== task.id)
         .map((id) => {
             const other = byId.get(id)
-            return other ? boardOrderOf(other, target) : 0
+            return other ? boardOrderOf(other) : 0
         })
     return { items, order: computeDropOrderInList(orders, index) }
 }

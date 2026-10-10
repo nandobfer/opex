@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 /** GET /api/integrations/github/mappings — regras de tipo e prioridade. */
 export const GET = withRoute(async () => ok(await getMapping()))
 
-/** PUT /api/integrations/github/mappings — salva as regras (reaplica nos rascunhos pendentes). */
+/** PUT /api/integrations/github/mappings — salva as regras. */
 export const PUT = withRoute(async ({ req }) => {
     const body = await parseBody(req, mappingInputSchema)
     if (!body.ok) return body.response

@@ -73,7 +73,7 @@ export function CentralHeaderActions({ central, onDeleted }: { central: CentralD
             <AlertDialog open={confirming} onOpenChange={setConfirming}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir a central {central.productName}?</AlertDialogTitle>
+                        <AlertDialogTitle>Excluir a central {central.projectName}?</AlertDialogTitle>
                         <AlertDialogDescription>As mesas concluídas e a saída delas também são excluídas. Centrais com mesas em andamento não podem ser excluídas. O repositório e os worktrees não são tocados.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

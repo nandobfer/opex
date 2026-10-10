@@ -22,7 +22,7 @@ interface TimerButtonProps {
 }
 
 /**
- * ▶ inicia / ⏸ abre o modal de parar o timer da tarefa no Go! Sipal. Não propaga clique nem
+ * ▶ inicia / ⏸ abre o modal de parar o timer da tarefa. Não propaga clique nem
  * ponteiro: dentro de card/linha não abre a tarefa nem começa o arraste. Fora do `TimerProvider`
  * não aparece.
  */

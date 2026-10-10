@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { FolderGit2, RefreshCcw, Settings2, Shuffle, Users } from "lucide-react"
+import { FolderGit2, RefreshCcw, Settings2, Shuffle } from "lucide-react"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { ApiDocsCard } from "@/features/integrations/components/detail/ApiDocsCard"
@@ -15,10 +15,9 @@ import { SecretFieldsCard } from "@/features/integrations/components/detail/Secr
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { GITHUB_TABS, type GithubTab } from "../constants"
-import { useGithubLinks, useGithubPeople, useGithubRealtime } from "../hooks/useGithub"
+import { useGithubLinks, useGithubRealtime } from "../hooks/useGithub"
 import { GithubLinksTab } from "./links/GithubLinksTab"
 import { GithubMappingTab } from "./mapping/GithubMappingTab"
-import { GithubPeopleTab } from "./people/GithubPeopleTab"
 import { GithubSyncTab } from "./sync/GithubSyncTab"
 
 interface GithubEditorFormProps {
@@ -34,9 +33,8 @@ interface GithubEditorFormProps {
 }
 
 /**
- * Página da integração GitHub em abas: Geral (token e opções), Vínculos (repositório ↔ produto),
- * Mapeamento (tipo/prioridade), Pessoas (login → desenvolvedor) e Sincronização. Trocar de aba com
- * alterações pede descarte.
+ * Página da integração GitHub em abas: Geral (token e opções), Vínculos (repositório ↔ Opex),
+ * Mapeamento (tipo/prioridade) e Sincronização. Trocar de aba com alterações pede descarte.
  */
 export function GithubEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: GithubEditorFormProps) {
     useGithubRealtime()
@@ -44,7 +42,6 @@ export function GithubEditorForm({ def, data, draft, setDraft, dirty, pending, o
     const [resetKey, setResetKey] = useState(0)
     const configured = data.secrets.token?.configured === true
     const links = useGithubLinks()
-    const people = useGithubPeople()
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<GithubTab>(GITHUB_TABS, "geral", dirty || tabDirty, () => {
         onUndo()
         setTabDirty(false)
@@ -55,7 +52,6 @@ export function GithubEditorForm({ def, data, draft, setDraft, dirty, pending, o
         { id: "geral", label: "Geral", icon: Settings2 },
         { id: "vinculos", label: "Vínculos", icon: FolderGit2, badge: links.data?.length ?? null },
         { id: "mapeamento", label: "Mapeamento", icon: Shuffle },
-        { id: "pessoas", label: "Pessoas", icon: Users, badge: people.data?.filter((person) => !person.developerId).length || null },
         { id: "sincronizacao", label: "Sincronização", icon: RefreshCcw },
     ]
     const setPublic = (key: string, value: PublicFieldValue | "") => setDraft((prev) => ({ ...prev, publicValues: { ...prev.publicValues, [key]: value } }))
@@ -88,7 +84,6 @@ export function GithubEditorForm({ def, data, draft, setDraft, dirty, pending, o
                 )}
                 {tab === "vinculos" && <GithubLinksTab configured={configured} />}
                 {tab === "mapeamento" && <GithubMappingTab key={resetKey} configured={configured} onDirtyChange={setTabDirty} />}
-                {tab === "pessoas" && <GithubPeopleTab configured={configured} />}
                 {tab === "sincronizacao" && <GithubSyncTab configured={configured} />}
             </IntegrationTabs>
         </motion.form>

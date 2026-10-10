@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
     title: "Opex",
-    description: "Tarefas e apontamento de horas do Go! Sipal, com integrações",
+    description: "Tarefas e apontamento de horas, com integrações",
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

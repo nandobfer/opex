@@ -7,7 +7,7 @@ import { startTimer } from "@/features/time/server/service"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** POST /api/time/start — inicia o timer da tarefa no Go! Sipal. */
+/** POST /api/time/start — inicia o timer da tarefa. */
 export const POST = withRoute(async ({ req }) => {
     const body = await parseBody(req, startTimerSchema)
     if (!body.ok) return body.response
