@@ -150,5 +150,7 @@ e opções na própria aba da página "Provedores de IA".
 `__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (entrada e
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
-`task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
-seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo).
+`task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` e
+`task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
+substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os
+hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)").

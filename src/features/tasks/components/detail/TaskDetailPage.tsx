@@ -22,12 +22,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorCode, apiErrorMessage } from "@/lib/api"
-import { cn } from "@/lib/utils"
 import { TASKS_PATH } from "../../constants"
 import { useTaskBoard } from "../../hooks/useTaskBoard"
 import { useDeleteTask, useTaskDetail, useTaskOptions, useTasksRealtime, useUpdateTask } from "../../hooks/useTasks"
 import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
-import type { TaskDetailDto } from "../../types"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
 import { TaskSummaryButton } from "@/features/ai/components/task-summary/TaskSummaryButton"
@@ -36,17 +34,8 @@ import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
 import { TaskForm } from "../TaskForm"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
-import { CommentsSection, DescriptionSection, HistorySection, TimeLogsSection } from "./TaskDetailSections"
 import { TaskSummaryCard } from "./TaskSummaryCard"
-
-const TABS = [
-    { id: "description", label: "Descrição", render: DescriptionSection, count: null },
-    { id: "comments", label: "Comentários", render: CommentsSection, count: (task: TaskDetailDto) => task.comments.length },
-    { id: "history", label: "Histórico", render: HistorySection, count: (task: TaskDetailDto) => task.history.length },
-    { id: "time", label: "Horas", render: TimeLogsSection, count: (task: TaskDetailDto) => task.timeLogs.length },
-] as const
-
-type TabId = (typeof TABS)[number]["id"]
+import { TaskDetailTabs, type TaskDetailTabId } from "./TaskDetailTabs"
 
 /** Página da tarefa (`/tarefas/[id]`). */
 export function TaskDetailPage({ id }: { id: string }) {
@@ -59,7 +48,7 @@ export function TaskDetailPage({ id }: { id: string }) {
     const options = useTaskOptions(!query.isError)
     const update = useUpdateTask()
     const remove = useDeleteTask()
-    const [tab, setTab] = useState<TabId>("description")
+    const [tab, setTab] = useState<TaskDetailTabId>("description")
     const [editing, setEditing] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
     const task = query.data
@@ -153,33 +142,7 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                     }}
                                                 />
                                             ) : (
-                                                <>
-                                                    <div role="tablist" aria-label="Seções da tarefa" className="flex gap-1 overflow-x-auto border-b">
-                                                        {TABS.map((item) => {
-                                                            const active = tab === item.id
-                                                            const count = item.count?.(task)
-                                                            return (
-                                                                <button
-                                                                    key={item.id}
-                                                                    type="button"
-                                                                    role="tab"
-                                                                    aria-selected={active}
-                                                                    onClick={() => setTab(item.id)}
-                                                                    className={cn("relative whitespace-nowrap px-3 pb-2.5 pt-1 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-                                                                >
-                                                                    {item.label}
-                                                                    {count ? <span className="ml-1.5 rounded bg-muted px-1.5 font-mono text-[11px]">{count}</span> : null}
-                                                                    {active && <motion.span layoutId="task-detail-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
-                                                                </button>
-                                                            )
-                                                        })}
-                                                    </div>
-                                                    <AnimatePresence mode="wait" initial={false}>
-                                                        <motion.div key={tab} role="tabpanel" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.18 }}>
-                                                            {TABS.find((item) => item.id === tab)!.render({ task })}
-                                                        </motion.div>
-                                                    </AnimatePresence>
-                                                </>
+                                                <TaskDetailTabs task={task} value={tab} onValueChange={setTab} />
                                             )}
                                         </CardContent>
                                     </Card>
