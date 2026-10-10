@@ -3,6 +3,7 @@ import { IntegrationStatus, type IIntegrationStatus } from "@/lib/db/models/Inte
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
 import { listGeminiModels } from "./gemini"
+import { listJevModels } from "./jev"
 import { listOpencodeAgents, listOpencodeModels } from "./opencode"
 import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
 
@@ -47,7 +48,15 @@ export async function getAiProviderStatuses(): Promise<AiProviderStatusDto[]> {
 
 export async function listAiModels(providerId: AiProviderId, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiModelDto[]> {
     const { version } = await getIntegration(getAiProvider(providerId).integrationId)
-    return cached(`models:${providerId}:${version}`, () => (providerId === "opencode" ? listOpencodeModels(options.signal) : listGeminiModels(options.signal)), options.fresh === true)
+    return cached(
+        `models:${providerId}:${version}`,
+        () => {
+            if (providerId === "opencode") return listOpencodeModels(options.signal)
+            if (providerId === "gemini") return listGeminiModels(options.signal)
+            return listJevModels(options.signal)
+        },
+        options.fresh === true,
+    )
 }
 
 export async function listAiAgents(options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiAgentDto[]> {

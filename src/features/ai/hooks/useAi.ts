@@ -20,9 +20,10 @@ export const AI_QUERY_KEY = "ai"
 const key = (...parts: unknown[]) => [AI_QUERY_KEY, ...parts] as const
 const get = async <T,>(path: string) => unwrapApi((await api.get<ApiResponse<T>>(path)).data)
 
-/** Situação de cada provedor, derivada da lista de integrações (status ao vivo). */
+/** Situação dos provedores de texto, derivada da lista de integrações (status ao vivo). O JEV
+ * (decisão estruturada, sem geração de texto) não é oferecido às features de texto. */
 export function toProviderStatuses(integrations: readonly IntegrationListItemDto[]): AiProviderStatusDto[] {
-    return AI_PROVIDERS.map((provider) => {
+    return AI_PROVIDERS.filter((provider) => provider.supportsTextGeneration).map((provider) => {
         const item = integrations.find((integration) => integration.id === provider.integrationId)
         const configured = item?.configured === true
         return {
