@@ -119,3 +119,13 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
             return "Aguardando você"
     }
 }
+
+/**
+ * Motivo (pt-BR) pelo qual a mesa aguarda o **usuário** na lista da Central de desenvolvimento;
+ * `null` quando o agente trabalha, aguarda a vez do build (`build_queued`) ou a mesa concluiu
+ * (`done`). É o recorte de `workbenchWaitingReason` para o item da lista de tarefas/mesas.
+ */
+export function workbenchUserWaitReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number }): string | null {
+    if (input.stage === "done" || input.stage === "build_queued") return null
+    return workbenchWaitingReason(input)
+}

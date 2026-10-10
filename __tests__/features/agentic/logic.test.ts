@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions, workbenchProgressTone, workbenchWaitingReason } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -115,6 +115,31 @@ describe('workbenchWaitingReason', () => {
   it('falha e interrupção têm prioridade sobre pendências obsoletas', () => {
     expect(workbenchWaitingReason({ ...base, runState: 'failed', pendingPermissions: 1 })).toBe('A etapa falhou — use Tentar novamente')
     expect(workbenchWaitingReason({ ...base, runState: 'interrupted', pendingForms: 1 })).toBe('Execução interrompida — use Tentar novamente')
+  })
+})
+
+describe('workbenchUserWaitReason', () => {
+  const base = { stage: 'plan_review' as const, runState: 'idle' as const, pendingPermissions: 0, pendingForms: 0 }
+
+  it('esperas do usuário têm o mesmo motivo da lista de trabalhos em andamento', () => {
+    expect(workbenchUserWaitReason(base)).toBe('Aguardando revisão do plano')
+    expect(workbenchUserWaitReason({ ...base, stage: 'preview' })).toBe('Aguardando aprovação da prévia')
+    expect(workbenchUserWaitReason({ ...base, stage: 'pr_open' })).toBe('Aguardando revisão ou merge do PR')
+    expect(workbenchUserWaitReason({ ...base, stage: 'changes_requested' })).toBe('Aguardando descrever as mudanças')
+  })
+
+  it('permissão e pergunta pendentes valem mesmo durante o turno', () => {
+    expect(workbenchUserWaitReason({ ...base, stage: 'implementing', runState: 'running', pendingPermissions: 1 })).toBe('Aguardando você permitir uma ação')
+    expect(workbenchUserWaitReason({ ...base, stage: 'implementing', runState: 'running', pendingForms: 1 })).toBe('Aguardando você responder uma pergunta')
+  })
+
+  it('agente executando não tem motivo', () => {
+    expect(workbenchUserWaitReason({ ...base, stage: 'implementing', runState: 'running' })).toBeNull()
+  })
+
+  it('mesa concluída e mesa na fila do build não contam como espera do usuário', () => {
+    expect(workbenchUserWaitReason({ ...base, stage: 'done' })).toBeNull()
+    expect(workbenchUserWaitReason({ ...base, stage: 'build_queued' })).toBeNull()
   })
 })
 

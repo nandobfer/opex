@@ -109,7 +109,12 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
   `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da
-  mesa ou, sem mesa, a posição na fila ("Na fila · #N").
+  mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está **parada aguardando o
+  usuário**, o item mostra um **warning** (ícone de alerta, com o motivo na dica): revisão do plano,
+  aprovação da prévia, revisão/merge do PR, "mudanças pedidas no PR", permissão ou pergunta
+  pendente do agente, falha/interrupção (regra `workbenchUserWaitReason`; o chip de etapa deixa de
+  pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
+  **concluída** não gera warning.
 - Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa e um campo
   opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
   e exibidas como mensagem do usuário na saída). O botão **Abrir mesa e gerar o plano** desabilita com
