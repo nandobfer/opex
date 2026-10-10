@@ -24,7 +24,7 @@ type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correcti
 const FEEDBACK: Record<FeedbackAction, { button: string; title: string; placeholder: string; submit: string }> = {
     "revise-plan": { button: "Solicitar correção do plano", title: "O que precisa mudar no plano?", placeholder: "Ex.: não altere o schema; use o componente X; inclua testes de Y…", submit: "Enviar ao planejador" },
     "request-correction": { button: "Solicitar correção", title: "O que está errado?", placeholder: "Descreva o que não funcionou ou precisa mudar. Vai para o planejador, que refaz o plano.", submit: "Enviar ao planejador" },
-    "submit-pr-feedback": { button: "Descrever as mudanças", title: "O que a revisão do PR pediu?", placeholder: "A revisão pediu mudanças sem comentário: descreva o que precisa mudar.", submit: "Enviar ao planejador" },
+    "submit-pr-feedback": { button: "Descrever as mudanças", title: "O que o PR pediu?", placeholder: "O PR pediu mudanças sem comentário: descreva o que precisa mudar.", submit: "Enviar ao planejador" },
     reopen: { button: "Reabrir mesa", title: "O que fazer agora?", placeholder: "Descreva o ajuste ou a continuação. Vai para o planejador.", submit: "Reabrir e planejar" },
 }
 
@@ -60,7 +60,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 )}
                 {workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
                 )}
                 {workbench.stage === "build_queued" && (

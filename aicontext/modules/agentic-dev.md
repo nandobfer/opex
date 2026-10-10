@@ -135,7 +135,8 @@ planning → plan_review ─┬─ Solicitar correção do plano → planning
                         └─ Implementar → implementing → build_queued → building → preview
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
-pr_open ─┬─ revisão "pediu mudanças" com texto → planning (automático)
+pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
+         ├─ revisão "pediu mudanças" com texto → planning (automático)
          ├─ revisão sem texto → changes_requested (usuário descreve) → planning
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
@@ -166,8 +167,14 @@ done → Reabrir mesa (texto ao planejador) → planning
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
 - **Acompanhamento**: rotina `agentic-pr-watch` dos Crons (a cada 2 min, `pr-watch.ts`) consulta o
-  PR no GitHub (repositório tirado da URL do PR). Revisões novas (`id` > `lastReviewId`) com
-  `CHANGES_REQUESTED` viram texto (corpo + comentários de linha) para o planejador.
+  PR no GitHub (repositório tirado da URL do PR). Volta ao planejamento quando há:
+  - **comentário novo** que mencione `@opex` (`mentionsOpex`; `id` > `lastCommentId`) — na conversa
+    (`issues/{n}/comments`), na linha (`pulls/{n}/comments`) ou no corpo de uma revisão;
+  - **revisão nova** com `CHANGES_REQUESTED` (`id` > `lastReviewId`), mantida como antes.
+  As revisões relevantes viram texto (corpo + comentários de linha); os comentários soltos com `@opex`
+  entram como seção própria. Os cursores `lastReviewId`/`lastCommentId` são gravados a cada varredura;
+  mesas abertas antes desta rotina (sem `lastCommentId`) fazem uma 1ª varredura só de linha de base,
+  sem replanejar por comentários antigos.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver),
   a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose down`,
   `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
