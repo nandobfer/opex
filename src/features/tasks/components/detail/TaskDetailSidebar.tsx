@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, Clock, FolderKanban, Package, UserPen } from "lucide-react"
+import { CalendarClock, Clock, Github, Package, UserPen } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { fadeUp } from "@/components/motion/presets"
 import { formatDateTime, formatMinutes } from "../../format"
@@ -42,8 +42,15 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
                                 <TaskTypeBadge type={task.taskType} long />
                             </span>
                         </Row>
-                        <Row icon={FolderKanban} label="Projeto">
-                            {task.project?.name ?? "—"}
+                        <Row icon={Github} label="Repositório">
+                            {task.project ? (
+                                <span className="flex flex-col gap-0.5">
+                                    <span>{task.project.repo}</span>
+                                    <span className="text-xs text-muted-foreground">{task.project.name}</span>
+                                </span>
+                            ) : (
+                                "—"
+                            )}
                         </Row>
                         <Row icon={Clock} label="Horas apontadas">
                             <span className="font-mono">{formatMinutes(task.totalTimeLogged)}</span>

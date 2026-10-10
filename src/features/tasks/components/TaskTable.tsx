@@ -43,7 +43,7 @@ const COLUMNS: { key: TaskTableColumn; label: string; className: string }[] = [
     { key: "column", label: "Coluna", className: "w-[150px] md:w-[200px] xl:w-[240px]" },
     { key: "priority", label: "Prioridade", className: "w-[125px]" },
     { key: "type", label: "Tipo", className: "w-[100px]" },
-    { key: "project", label: "Projeto", className: "w-[130px]" },
+    { key: "project", label: "Repositório", className: "w-[130px]" },
     { key: "updatedAt", label: "Atualizada", className: "w-[120px]" },
 ]
 
@@ -73,7 +73,7 @@ function compare(a: TaskDto, b: TaskDto, column: TaskTableColumn, columnIndex: (
         case "type":
             return text(a.taskType ? TASK_TYPE_LABELS[a.taskType] : "").localeCompare(text(b.taskType ? TASK_TYPE_LABELS[b.taskType] : ""), "pt-BR")
         case "project":
-            return text(a.project?.name).localeCompare(text(b.project?.name), "pt-BR")
+            return text(a.project?.repo).localeCompare(text(b.project?.repo), "pt-BR")
         case "updatedAt":
             return (a.updatedAt ?? "").localeCompare(b.updatedAt ?? "")
     }
@@ -199,8 +199,8 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                 <td className={cn("px-3 py-2", hide("type"))}>
                     <TaskTypeBadge type={task.taskType} />
                 </td>
-                <td className={cn("max-w-0 truncate px-3 py-2 text-xs text-muted-foreground", hide("project"))} title={task.project?.name}>
-                    {task.project?.name ?? "—"}
+                <td className={cn("max-w-0 truncate px-3 py-2 text-xs text-muted-foreground", hide("project"))} title={task.project?.repo}>
+                    {task.project?.repo ?? "—"}
                 </td>
                 <td className={cn("whitespace-nowrap px-3 py-2 text-xs text-muted-foreground", hide("updatedAt"))}>
                     {task.updatedAt ? format(new Date(task.updatedAt), "dd/MM/yy HH:mm", { locale: ptBR }) : "—"}

@@ -68,8 +68,10 @@ semeado na primeira leitura (`ensureBoard`).
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Projeto**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. "Limpar"
-  zera os filtros, mantendo visão e ordenações.
+  erro com fuse.js), **Repositório**, **Coluna**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  filtro **Repositório** lista os vínculos (`owner/repo`, com avatar) e guarda o `projectId` — o
+  sistema infere o projeto a partir do repositório escolhido. "Limpar" zera os filtros, mantendo
+  visão e ordenações.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
@@ -78,8 +80,8 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; cards com código, tipo, título, projeto, prioridade e "Arquivada".
-- **Tabela** (`TaskTable`): Código, Issue, Título, Coluna ("Mover para…"), Prioridade, Tipo, Projeto,
-  Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
+- **Tabela** (`TaskTable`): Código, Issue, Título, Coluna ("Mover para…"), Prioridade, Tipo,
+  Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
   (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
@@ -112,7 +114,7 @@ tarefa.
   abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
 - Abas animadas: Descrição (descrição + especificação técnica em Markdown), Comentários (lista +
   formulário), Histórico (auditoria, mais recente primeiro), Horas (apontamentos; "Em andamento").
-- Lateral: prioridade editável, tipo, projeto, horas apontadas, criada e atualizada.
+- Lateral: prioridade editável, tipo, repositório, horas apontadas, criada e atualizada.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento

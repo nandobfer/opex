@@ -114,6 +114,14 @@ describe('TasksPage', () => {
     expect(mocks.invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
   })
 
+  it('o filtro Repositório lista os vínculos (owner/repo)', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros' }))
+    const group = screen.getByText('Repositório').closest('div')!
+    fireEvent.click(within(group).getByRole('button'))
+    expect(screen.getByText('o/portal')).toBeTruthy()
+  })
+
   it('erro mostra o aviso com tentar novamente', () => {
     mocks.list = { ...mocks.list, data: undefined, isError: true, error: new AxiosError('500', 'ERR', undefined, undefined, { status: 500, data: { success: false, error: 'Falha' } } as never) }
     renderPage()

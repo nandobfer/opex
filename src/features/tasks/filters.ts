@@ -2,7 +2,7 @@ import Fuse from "fuse.js"
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_SORT_KEYS, TASK_TYPES, TASK_VIEW_MODES, type TaskPriority, type TaskSortKey, type TaskType, type TaskViewMode } from "./constants"
 import { columnKeyOf, type BoardColumnView } from "./board"
-import type { TaskDto } from "./types"
+import type { ProjectRef, TaskDto } from "./types"
 
 /** Filtros e preferências da tela de Tarefas (salvos no navegador). Módulo puro. */
 
@@ -10,6 +10,7 @@ export const TASK_FILTERS_STORAGE_KEY = "opex:tasks-filters:v1"
 
 export interface TaskFilters {
     search: string
+    /** Ids dos projetos (repositórios vinculados). */
     projects: string[]
     /** Chaves de coluna. */
     columns: string[]
@@ -59,6 +60,26 @@ export function countActiveFilters(filters: TaskFilters): number {
         const value = filters[key]
         return Array.isArray(value) ? value.length > 0 : Boolean(value)
     }).length
+}
+
+/** Opção do filtro Repositório: `value` é o id do projeto (o repositório vinculado). */
+export interface TaskRepoOption {
+    value: string
+    label: string
+    project: ProjectRef
+}
+
+/**
+ * Repositórios do filtro de Tarefas: os projetos vinculados mais os citados nas tarefas (garante
+ * que nenhum repositório fique de fora antes de `options` carregar). `label` = `owner/repo`.
+ */
+export function taskRepoOptions(projects: readonly ProjectRef[], tasks: readonly TaskDto[]): TaskRepoOption[] {
+    const byId = new Map<string, ProjectRef>()
+    for (const project of projects) byId.set(project.id, project)
+    for (const task of tasks) if (task.project) byId.set(task.project.id, task.project)
+    return [...byId.values()]
+        .map((project) => ({ value: project.id, label: project.repo, project }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"))
 }
 
 const includesOrAll = <T>(selected: readonly T[], value: T) => selected.length === 0 || selected.includes(value)
