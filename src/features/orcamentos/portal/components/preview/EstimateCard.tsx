@@ -14,7 +14,7 @@ import type { DraftEstimateDto } from "@/features/orcamentos/types"
  * Card das horas e do custo estimados (2ª fase da IA). Enquanto a estimativa roda, mostra um
  * carregamento animado; ao concluir, os valores entram animados (`AnimatedNumber`).
  */
-export function EstimateCard({ estimate, estimating, error, onRetry }: { estimate: DraftEstimateDto | null; estimating: boolean; error: string | null; onRetry: () => void }) {
+export function EstimateCard({ estimate, estimating, status, error, onRetry }: { estimate: DraftEstimateDto | null; estimating: boolean; status?: string | null; error: string | null; onRetry: () => void }) {
     return (
         <Card>
             <CardHeader className="pb-3">
@@ -44,7 +44,7 @@ export function EstimateCard({ estimate, estimating, error, onRetry }: { estimat
                     ) : estimating ? (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3" aria-label="Calculando horas e custo">
                             <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Calculando horas e custo…
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {status ?? "Calculando horas e custo…"}
                             </p>
                             <div className="space-y-2">
                                 <motion.div className="h-6 rounded bg-muted" animate={{ opacity: [0.35, 1, 0.35] }} transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }} />

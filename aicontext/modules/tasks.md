@@ -86,15 +86,15 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; o card mostra no cabeçalho o código e, no rodapé, o ícone de prioridade (só o ícone
-  colorido, sem rótulo), a **estimativa real** de horas (`EstimateBadge`, quando a tarefa veio do
-  portal — ver `modules/orcamentos.md`), o chip de tipo e "Arquivada"; o título, o resumo de IA e o
-  repositório (`GithubRepoLabel`) ficam no corpo.
+  colorido, sem rótulo), a **estimativa real** de horas e o **faturamento** estimado (`EstimateBadge`,
+  quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo e "Arquivada"; o
+  título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`).
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA** e a
-  **estimativa real** de horas sob o título), Coluna ("Mover para…"), Prioridade, Tipo,
-  Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a página
-  (`usePageVirtualizer`).
+  **estimativa real** de horas e o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
+  Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com a
+  página (`usePageVirtualizer`).
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no

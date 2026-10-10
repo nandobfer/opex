@@ -1,22 +1,6 @@
 import { describe, expect, it } from "vitest"
-import {
-    buildBudgetEstimateInstructions,
-    buildBudgetEstimatePrompt,
-    buildBudgetPreviewInstructions,
-    buildBudgetPreviewPrompt,
-    buildEstimateContext,
-    extractJsonObject,
-    parseDraftPreview,
-    parseEstimateHours,
-    type EstimateStats,
-} from "@/features/orcamentos/preview-prompt"
+import { buildBudgetEstimateInstructions, buildBudgetEstimatePrompt, buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, extractJsonObject, parseDraftPreview, parseEstimateHours } from "@/features/orcamentos/preview-prompt"
 import type { DraftPreview } from "@/features/orcamentos/schemas"
-
-const stats: EstimateStats = {
-    globalAverageHours: 3.5,
-    totalTasks: 4,
-    byType: [{ taskType: "feature", label: "Nova Funcionalidade", averageHours: 4, count: 3 }],
-}
 
 const preview: DraftPreview = { title: "Corrigir X", taskType: "bugfix", priority: "high", technicalSpec: "## Passos", summary: "Corrige X" }
 
@@ -41,23 +25,19 @@ describe("prompt da prévia (fase 1)", () => {
     })
 })
 
-describe("prompt da estimativa (fase 2)", () => {
-    it("instrui a IA a responder somente estimatedHours", () => {
-        const instructions = buildBudgetEstimateInstructions("Você é um analista.")
+describe("prompt da estimativa (fase 2 — agente do OpenCode)", () => {
+    it("instrui o agente a usar as ferramentas e responder somente estimatedHours", () => {
+        const instructions = buildBudgetEstimateInstructions("Você é um estimador.")
         expect(instructions).toContain('"estimatedHours"')
         expect(instructions).not.toContain('"technicalSpec"')
+        expect(instructions.toLowerCase()).toContain("ferramentas")
     })
 
-    it("inclui a prévia e o histórico de horas no prompt", () => {
-        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "Ajustar rodapé", correction: null }, stats)
+    it("inclui a prévia e o pedido original no prompt", () => {
+        const prompt = buildBudgetEstimatePrompt(preview, { projectName: "acme/app", description: "Ajustar rodapé", correction: null })
         expect(prompt).toContain("Corrigir X")
         expect(prompt).toContain("Ajustar rodapé")
-        expect(prompt).toContain("Nova Funcionalidade: 4.0 h por tarefa")
-    })
-
-    it("sem histórico, orienta a estimar por conhecimento próprio", () => {
-        const context = buildEstimateContext({ globalAverageHours: 0, totalTasks: 0, byType: [] })
-        expect(context).toMatch(/não há histórico/i)
+        expect(prompt).toContain("Consulte o banco de dados")
     })
 })
 

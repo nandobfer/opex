@@ -5,25 +5,10 @@ import { draftEstimateSchema, draftPreviewSchema, type DraftPreview } from "./sc
  * Montagem dos prompts do orçamento da tarefa (módulo PURO), em DUAS fases:
  * 1. **Prévia**: a IA lê a descrição do cliente e devolve `title`, `taskType`, `priority`,
  *    `summary` e `technicalSpec`.
- * 2. **Estimativa**: a IA recebe a prévia + o histórico de horas dos agentes (injetado — sem
- *    ferramenta) e devolve `estimatedHours`.
+ * 2. **Estimativa**: um agente do OpenCode recebe a prévia + o pedido e devolve `estimatedHours`.
+ *    O agente roda tools no servidor (consulta ao banco via MCP) e pensa antes de responder — o
+ *    histórico de horas não é injetado no prompt.
  */
-
-export interface EstimateStat {
-    /** Chave do tipo de tarefa (`TASK_TYPES`). */
-    taskType: string
-    label: string
-    /** Média de horas por tarefa do tipo. */
-    averageHours: number
-    /** Quantidade de tarefas consideradas. */
-    count: number
-}
-
-export interface EstimateStats {
-    globalAverageHours: number
-    totalTasks: number
-    byType: EstimateStat[]
-}
 
 export interface BudgetPreviewInput {
     projectName: string
@@ -37,22 +22,6 @@ const MAX_DESCRIPTION = 20_000
 function clip(text: string, max = MAX_DESCRIPTION): string {
     const value = (text ?? "").trim()
     return value.length > max ? `${value.slice(0, max)}… (cortado)` : value
-}
-
-function formatHours(hours: number): string {
-    return `${hours.toFixed(1)} h`
-}
-
-/** Bloco de contexto com as horas históricas dos agentes (calibra a estimativa). */
-export function buildEstimateContext(stats: EstimateStats): string {
-    if (stats.totalTasks === 0) {
-        return "Ainda não há histórico de horas apontadas. Estime com base no seu conhecimento e em projetos semelhantes."
-    }
-    const lines = [
-        `Média geral: ${formatHours(stats.globalAverageHours)} por tarefa (${stats.totalTasks} tarefa(s) no histórico).`,
-        ...stats.byType.map((stat) => `${stat.label}: ${formatHours(stat.averageHours)} por tarefa (${stat.count}).`),
-    ]
-    return lines.join("\n")
 }
 
 /** Instruções de sistema da prévia (instruções configuradas + contrato de saída JSON). */
@@ -81,19 +50,21 @@ export function buildBudgetPreviewPrompt(input: BudgetPreviewInput): string {
     return parts.filter(Boolean).join("\n\n")
 }
 
-/** Instruções de sistema da estimativa (fase 2 — horas). */
+/** Instruções de sistema da estimativa (fase 2 — agente do OpenCode com tools). */
 export function buildBudgetEstimateInstructions(instructions: string): string {
     const contract = [
-        "Você recebe a prévia de uma tarefa e o histórico de horas já trabalhadas pelos agentes num repositório. Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente esta chave:",
-        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5), sua estimativa de esforço de implementação, calibrada pelo histórico.',
+        "Você estima o esforço de implementação de uma tarefa. Use as ferramentas disponíveis (consulta ao banco de dados, histórico de horas apontadas, tarefas semelhantes) para embasar a estimativa antes de responder.",
+        "Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente esta chave:",
+        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5), sua estimativa de esforço de implementação.',
     ].join("\n")
     return `${instructions.trim()}\n\n${contract}`
 }
 
-/** Prompt da estimativa: a prévia gerada + o pedido original + o histórico de horas dos agentes. */
-export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput, stats: EstimateStats): string {
+/** Prompt da estimativa: a prévia gerada + o pedido original (o agente consulta o histórico com as tools). */
+export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput): string {
     const parts = [
-        "# Prévia da tarefa",
+        "# Tarefa a estimar",
+        `Repositório: ${input.projectName}`,
         `Título: ${preview.title}`,
         `Tipo: ${preview.taskType ? TASK_TYPE_LABELS[preview.taskType] : "não classificado"}`,
         `Prioridade: ${TASK_PRIORITY_LABELS[preview.priority]}`,
@@ -102,8 +73,7 @@ export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPr
         "## Pedido original do cliente",
         clip(input.description),
         input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
-        `## Histórico de horas (agentes)\n${buildEstimateContext(stats)}`,
-        "Estime as horas de implementação desta tarefa usando o histórico como referência.",
+        "Consulte o banco de dados e o histórico de horas dos agentes com as ferramentas disponíveis e estime as horas de implementação desta tarefa.",
     ]
     return parts.filter(Boolean).join("\n\n")
 }

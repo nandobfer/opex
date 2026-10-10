@@ -8,22 +8,22 @@ import { useClientePortal } from "./ClientePortalContext"
 export interface BudgetReviewState {
     /** Fase 1 (prévia) em andamento. */
     generatingPreview: boolean
-    /** Texto da prévia conforme chega (streaming cru). */
-    text: string
     preview: DraftPreviewDto | null
     /** Fase 2 (estimativa de horas/custo) em andamento. */
     estimating: boolean
     estimate: DraftEstimateDto | null
-    error: string | null
+    /** Progresso corrente (ex.: ferramenta do agente em execução) — prévia ou estimativa. */
     notice: string | null
+    error: string | null
 }
 
-const INITIAL: BudgetReviewState = { generatingPreview: false, text: "", preview: null, estimating: false, estimate: null, error: null, notice: null }
+const INITIAL: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, notice: null, error: null }
 
 interface StreamEvent {
     type: string
-    text?: string
     message?: string
+    name?: string
+    state?: string
     preview?: DraftPreviewDto
     estimate?: DraftEstimateDto
 }
@@ -56,8 +56,8 @@ async function readNdjson(path: string, token: string, onEvent: (event: StreamEv
 }
 
 /**
- * Revisão da tarefa em DUAS fases: gera a prévia e, automaticamente ao concluí-la, estima as horas
- * e o orçamento (2ª requisição). Expõe o estado para a tela montar o layout.
+ * Revisão da tarefa em DUAS fases: gera a prévia (com skeleton, sem expor o JSON cru) e, ao
+ * concluí-la, dispara automaticamente a estimativa (agente do OpenCode, que consulta o banco).
  */
 export function useBudgetReview(draftId: string) {
     const { token } = useClientePortal()
@@ -65,10 +65,11 @@ export function useBudgetReview(draftId: string) {
 
     const runEstimate = useCallback(async () => {
         const outcome = { error: null as string | null }
-        setState((prev) => ({ ...prev, estimating: true, error: null }))
+        setState((prev) => ({ ...prev, estimating: true, notice: null, error: null }))
         try {
             await readNdjson(`/api/cliente/drafts/${draftId}/estimate`, token, (event) => {
                 if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
+                else if (event.type === "tool") setState((prev) => ({ ...prev, notice: event.state === "running" ? `Consultando (${event.name ?? "ferramenta"})…` : prev.notice }))
                 else if (event.type === "done") setState((prev) => ({ ...prev, estimating: false, estimate: event.estimate ?? null, notice: null }))
                 else if (event.type === "error") {
                     outcome.error = event.message ?? "Falha na estimativa"
@@ -86,9 +87,9 @@ export function useBudgetReview(draftId: string) {
         const outcome = { error: null as string | null }
         setState({ ...INITIAL, generatingPreview: true })
         try {
+            // Os deltas (JSON cru) não são exibidos: a tela mostra skeleton até o `done`.
             await readNdjson(`/api/cliente/drafts/${draftId}/preview`, token, (event) => {
-                if (event.type === "delta") setState((prev) => ({ ...prev, text: prev.text + (event.text ?? "") }))
-                else if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
+                if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
                 else if (event.type === "done") setState((prev) => ({ ...prev, generatingPreview: false, preview: event.preview ?? null, notice: null }))
                 else if (event.type === "error") {
                     outcome.error = event.message ?? "Falha na prévia"

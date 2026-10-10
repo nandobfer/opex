@@ -135,17 +135,22 @@ e opções na própria aba da página "Provedores de IA".
   variante/raciocínio, temperatura e máximo de tokens (só Gemini) e instruções (prompt de sistema).
   Regras ao salvar iguais às demais features (ativa exige provedor+modelo conectados; modelo,
   variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
-- A feature roda em **duas fases** (duas requisições NDJSON, ver `modules/orcamentos.md`):
-  1. **Prévia** (`parseDraftPreview`): a IA interpreta a **descrição enviada pelo cliente** e devolve
-     **JSON validado com Zod** — título, tipo, prioridade, especificação técnica (Markdown) e resumo
-     de 1 linha;
-  2. **Estimativa** (`parseEstimateHours`): a IA recebe a prévia + o pedido e devolve
-     `{ estimatedHours }` (H).
-  Como não há saída estruturada garantida, o JSON é extraído do texto e validado; inválido → evento
-  `error`. O cálculo exibido ao cliente (`H × fator × custo/hora`) é do servidor.
-- As horas da 2ª fase são calibradas pelo **histórico de horas dos agentes** (`estimateStats`,
-  agregado de `TimeLog.duration` por `DevTask.taskType`) injetado no prompt — **sem ferramenta** (o
-  `streamAi` não tem tool calling). Ver `modules/orcamentos.md`.
+- Gera **somente a prévia** da tarefa (1ª fase, `parseDraftPreview`): a IA interpreta a **descrição
+  enviada pelo cliente** e devolve **JSON validado com Zod** — título, tipo, prioridade,
+  especificação técnica (Markdown) e resumo de 1 linha. Como não há saída estruturada garantida, o
+  JSON é extraído do texto e validado; inválido → evento `error`. Ver `modules/orcamentos.md`.
+
+## Feature "Estimar prazos" (agente do OpenCode que consulta o banco)
+
+- Configuração em `ai_feature_settings` (`feature: "estimate-hours"`), schema Zod
+  `estimateHoursSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante e instruções.
+  É **exclusiva do OpenCode** (sem provedor nem amostragem): o agente roda as ferramentas no servidor
+  OpenCode (ex.: consulta ao banco via **MCP**) e pensa antes de responder. Ativar exige modelo;
+  modelo, variante e agente são conferidos no catálogo do OpenCode.
+- Usada na 2ª fase do portal (ver `modules/orcamentos.md`): recebe a prévia + o pedido e devolve
+  `{ estimatedHours }` (H), validado por `parseEstimateHours`. Os eventos de ferramenta do agente
+  (`tool`) são retransmitidos ao navegador pela `streamAi`. O cálculo exibido ao cliente
+  (`H × fator × custo/hora`) é do servidor.
 
 ## APIs
 
@@ -156,6 +161,7 @@ e opções na própria aba da página "Provedores de IA".
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
+| `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 
@@ -165,5 +171,6 @@ e opções na própria aba da página "Provedores de IA".
 estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
 `UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
 `task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` cobre a
-seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo). A
+seção de Descrição não sendo substituída pelo resumo e `task-summary-card` o card do resumo;
+`estimate-hours-settings` cobre a configuração de "Estimar prazos"). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`).

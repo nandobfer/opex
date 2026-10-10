@@ -5,8 +5,8 @@ import { loggerFor } from "@/lib/logger"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
 import { Project } from "@/lib/db/models/Project"
-import { loadBudgetPreviewSettings, availabilityOfBudgetPreview } from "@/features/ai/server/settings"
-import type { BudgetPreviewSettings } from "@/features/ai/schemas"
+import { loadBudgetPreviewSettings, availabilityOfBudgetPreview, loadEstimateHoursSettings, availabilityOfEstimateHours } from "@/features/ai/server/settings"
+import type { BudgetPreviewSettings, EstimateHoursSettings } from "@/features/ai/schemas"
 import type { DraftPreview } from "../schemas"
 import {
     buildBudgetEstimateInstructions,
@@ -15,17 +15,17 @@ import {
     buildBudgetPreviewPrompt,
     parseDraftPreview,
     parseEstimateHours,
-    type EstimateStats,
 } from "../preview-prompt"
 import type { DraftEstimateDto, DraftPreviewDto } from "../types"
-import { estimateStats } from "./estimate"
 import { getDraftDoc, saveDraftEstimate, saveDraftPreview } from "./portal"
 import type { ClienteOrcamentoDoc } from "./token"
 
 /**
  * Prévia e estimativa da tarefa do portal (SOMENTE servidor), em DUAS fases:
- * 1. `runBudgetPreview` gera a prévia (título, tipo, prioridade, resumo e especificação técnica);
- * 2. `runBudgetEstimate` estima as horas a partir da prévia + histórico de horas dos agentes.
+ * 1. `runBudgetPreview` gera a prévia (título, tipo, prioridade, resumo e especificação técnica)
+ *    com a feature "Orçamentos";
+ * 2. `runBudgetEstimate` roda um **agente do OpenCode** (feature "Estimar prazos") que consulta o
+ *    banco com as tools do servidor e devolve as horas.
  * O `streamAi` é reusado e a saída (JSON) é validada com Zod antes de gravar no rascunho.
  */
 
@@ -48,6 +48,7 @@ export type BudgetEstimateEvent =
     | { type: "error"; message: string }
 
 type ResolvedSettings = BudgetPreviewSettings & { provider: NonNullable<BudgetPreviewSettings["provider"]>; model: string }
+type ResolvedEstimateSettings = EstimateHoursSettings & { provider: "opencode"; model: string }
 
 export interface PreparedBudgetPreview {
     client: ClienteOrcamentoDoc
@@ -58,14 +59,29 @@ export interface PreparedBudgetPreview {
     title: string
 }
 
-export type PreparedBudgetEstimate = PreparedBudgetPreview
+export interface PreparedBudgetEstimate {
+    client: ClienteOrcamentoDoc
+    draftId: string
+    settings: ResolvedEstimateSettings
+    instructions: string
+    prompt: string
+    title: string
+}
 
-/** Confere a configuração exigida (erros viram resposta JSON antes de abrir o stream). */
+/** Confere a configuração da prévia (erros viram resposta JSON antes de abrir o stream). */
 async function requireSettings(): Promise<ResolvedSettings> {
     const { settings } = await loadBudgetPreviewSettings()
     const availability = await availabilityOfBudgetPreview(settings)
     if (!availability.available || !settings.provider || !settings.model) throw new DomainError(409, availability.reason ?? "Feature indisponível", "AI_FEATURE_UNAVAILABLE")
     return { ...settings, provider: settings.provider, model: settings.model }
+}
+
+/** Confere a configuração da estimativa (feature "Estimar prazos", exclusiva do OpenCode). */
+async function requireEstimateSettings(): Promise<ResolvedEstimateSettings> {
+    const { settings } = await loadEstimateHoursSettings()
+    const availability = await availabilityOfEstimateHours(settings)
+    if (!availability.available || !settings.model) throw new DomainError(409, availability.reason ?? "Feature indisponível", "AI_FEATURE_UNAVAILABLE")
+    return { ...settings, provider: "opencode", model: settings.model }
 }
 
 /** Monta a entrada da fase 1 (prévia) ANTES de abrir o stream. */
@@ -83,23 +99,18 @@ export async function prepareBudgetPreview(client: ClienteOrcamentoDoc, draftId:
     }
 }
 
-/** Monta a entrada da fase 2 (estimativa): exige a prévia já gerada. */
+/** Monta a entrada da fase 2 (estimativa): exige a prévia já gerada e usa o agente do OpenCode. */
 export async function prepareBudgetEstimate(client: ClienteOrcamentoDoc, draftId: string): Promise<PreparedBudgetEstimate> {
-    const settings = await requireSettings()
+    const settings = await requireEstimateSettings()
     const draft = await getDraftDoc(client, draftId)
     if (!draft.preview) throw new DomainError(409, "Gere a prévia antes de estimar", "DRAFT_WITHOUT_PREVIEW")
     const project = await Project.findById(draft.projectId).lean()
-    const stats: EstimateStats = await estimateStats()
     return {
         client,
         draftId,
         settings,
         instructions: buildBudgetEstimateInstructions(settings.instructions),
-        prompt: buildBudgetEstimatePrompt(
-            draft.preview as unknown as DraftPreview,
-            { projectName: project?.name ?? draft.projectId, description: draft.description, correction: draft.correction ?? null },
-            stats,
-        ),
+        prompt: buildBudgetEstimatePrompt(draft.preview as unknown as DraftPreview, { projectName: project?.name ?? draft.projectId, description: draft.description, correction: draft.correction ?? null }),
         title: `Orçamento ${client.name}`,
     }
 }
@@ -136,7 +147,7 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
 
     if (last?.type === "error") {
         dbg.error(`[orcamentos] ${last.message}`)
-        await logUsage(settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
+        await logUsage("budget-preview", settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
         yield { type: "error", message: last.message }
         return
     }
@@ -145,14 +156,14 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
     if (!preview) {
         const message = "A IA não devolveu uma prévia válida. Tente novamente ou ajuste as instruções."
         dbg.error(`[orcamentos] ${message}`)
-        await logUsage(settings, prepared.client, prepared.draftId, false, message, startedAt, last)
+        await logUsage("budget-preview", settings, prepared.client, prepared.draftId, false, message, startedAt, last)
         yield { type: "error", message }
         return
     }
 
     await saveDraftPreview(prepared.client, prepared.draftId, { ...preview, taskType: preview.taskType ?? null }, `${settings.provider}/${settings.model}`)
     dbg.success(`[orcamentos] prévia do rascunho ${prepared.draftId} concluída`)
-    await logUsage(settings, prepared.client, prepared.draftId, true, null, startedAt, last)
+    await logUsage("budget-preview", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
     yield { type: "done", preview: { ...preview, taskType: preview.taskType ?? null } }
 }
 
@@ -171,8 +182,6 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
         model: settings.model,
         agent: settings.agent,
         variant: settings.variant,
-        temperature: settings.temperature,
-        maxOutputTokens: settings.maxOutputTokens,
         instructions: prepared.instructions,
         prompt: prepared.prompt,
         title: prepared.title,
@@ -188,7 +197,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
 
     if (last?.type === "error") {
         dbg.error(`[orcamentos] ${last.message}`)
-        await logUsage(settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
+        await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
         yield { type: "error", message: last.message }
         return
     }
@@ -197,19 +206,20 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
     if (hours == null) {
         const message = "A IA não devolveu uma estimativa válida. Tente novamente."
         dbg.error(`[orcamentos] ${message}`)
-        await logUsage(settings, prepared.client, prepared.draftId, false, message, startedAt, last)
+        await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, false, message, startedAt, last)
         yield { type: "error", message }
         return
     }
 
     const estimate = await saveDraftEstimate(prepared.client, prepared.draftId, hours)
     dbg.success(`[orcamentos] estimativa do rascunho ${prepared.draftId} concluída (${hours} h)`)
-    await logUsage(settings, prepared.client, prepared.draftId, true, null, startedAt, last)
+    await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
     yield { type: "done", estimate }
 }
 
 async function logUsage(
-    settings: PreparedBudgetPreview["settings"],
+    feature: string,
+    settings: { provider: string; model: string },
     client: ClienteOrcamentoDoc,
     draftId: string,
     ok: boolean,
@@ -221,7 +231,7 @@ async function logUsage(
         await dbConnect()
         const usage = last?.type === "done" ? last.usage : null
         await AiUsageLog.create({
-            feature: "budget-preview",
+            feature,
             provider: settings.provider,
             model: settings.model,
             subject: `${String(client._id)}:${draftId}`,

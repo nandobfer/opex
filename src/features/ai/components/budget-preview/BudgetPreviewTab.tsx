@@ -26,8 +26,8 @@ const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(v
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
 /**
- * Aba "Orçamentos": provedor, modelo e instruções da IA que gera a prévia e a estimativa de horas
- * das tarefas enviadas pelo portal do cliente.
+ * Aba "Orçamentos": provedor, modelo e instruções da IA que gera a prévia da tarefa enviada pelo
+ * portal do cliente. A estimativa de horas é configurada em separado, na aba "Estimar prazos".
  */
 export function BudgetPreviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const query = useBudgetPreviewSettings()
@@ -72,7 +72,7 @@ export function BudgetPreviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                         name="enabled"
                         id="ai-budget-enabled"
                         label="Orçamentos"
-                        description="Gera a prévia da tarefa (título, tipo, prioridade, especificação, resumo) e a estimativa de horas a partir da descrição enviada pelo cliente no portal"
+                        description="Gera a prévia da tarefa (título, tipo, prioridade, especificação, resumo) a partir da descrição enviada pelo cliente no portal"
                     />
                     <AnimatePresence initial={false}>
                         {!dirty && !availability.available && availability.reason && (
@@ -88,8 +88,8 @@ export function BudgetPreviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-base">Estimativa e instruções</CardTitle>
-                    <CardDescription>A descrição do cliente é enviada como entrada, junto do histórico de horas dos agentes.</CardDescription>
+                    <CardTitle className="text-base">Instruções</CardTitle>
+                    <CardDescription>A descrição enviada pelo cliente é a entrada.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
                     <AnimatePresence initial={false}>

@@ -104,10 +104,10 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
                         <div className="space-y-4 lg:order-2 lg:col-span-1">
                             <RepoMetaCard repo={data.projectRepo} />
                             <TypePriorityMetaCard taskType={preview?.taskType ?? null} priority={preview?.priority ?? "medium"} loading={!preview && state.generatingPreview} />
-                            <EstimateCard estimate={estimate} estimating={state.estimating} error={estimateError} onRetry={() => void retryEstimate()} />
+                            <EstimateCard estimate={estimate} estimating={state.estimating} status={state.estimating ? state.notice : null} error={estimateError} onRetry={() => void retryEstimate()} />
                         </div>
                         <div className="space-y-4 lg:order-1 lg:col-span-3">
-                            <PreviewTitleCard preview={preview} description={data.description} generating={state.generatingPreview} text={state.text} notice={state.notice} />
+                            <PreviewTitleCard preview={preview} description={data.description} generating={state.generatingPreview} notice={state.notice} />
                             <PreviewSpecCard technicalSpec={preview?.technicalSpec ?? null} loading={!preview && state.generatingPreview} />
                         </div>
                     </div>

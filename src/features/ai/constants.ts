@@ -1,11 +1,11 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "orcamentos", "estimar-prazos", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview"] as const
+export const AI_FEATURE_IDS = ["understand-task", "task-summary", "budget-preview", "estimate-hours"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -54,6 +54,15 @@ export const DEFAULT_TASK_SUMMARY_INSTRUCTIONS = [
 export const DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS = [
     "Você é um analista de desenvolvimento sênior que interpreta pedidos de clientes e prepara uma tarefa para o time.",
     "Leia a descrição do cliente, categorizando o tipo, a prioridade, um título curto e uma especificação técnica objetiva.",
-    "Escreva em português do Brasil. As horas estimadas são de implementação e devem ser calibradas pelo histórico de horas informado.",
-    "Não invente requisitos: quando a descrição for ambígua, faça a interpretação mais razoável e seja conservador nas horas.",
+    "Escreva em português do Brasil.",
+    "Não invente requisitos: quando a descrição for ambígua, faça a interpretação mais razoável.",
+].join("\n")
+
+// ── Estimar prazos (agente OpenCode que consulta o banco) ─────────────────────
+
+export const DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS = [
+    "Você é um agente do OpenCode que estima o esforço (em horas) de uma tarefa de desenvolvimento para fins de orçamento.",
+    "Use as ferramentas disponíveis (consulta ao banco de dados, histórico de horas apontadas pelos agentes, tarefas semelhantes) para embasar a estimativa antes de responder.",
+    "Investigue o histórico do repositório e do tipo da tarefa, pense no esforço de implementação e responda em português do Brasil.",
+    "Seja conservador: quando houver incerteza, prefira uma estimativa um pouco maior.",
 ].join("\n")

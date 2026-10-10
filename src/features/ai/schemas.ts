@@ -4,6 +4,7 @@ import {
     DEFAULT_TASK_SUMMARY_INSTRUCTIONS,
     DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS,
     DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS,
+    DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
     TASK_SUMMARY_MAX_LENGTH_DEFAULT,
     TASK_SUMMARY_MAX_LENGTH_MAX,
     TASK_SUMMARY_MAX_LENGTH_MIN,
@@ -115,4 +116,28 @@ export const DEFAULT_BUDGET_PREVIEW_SETTINGS: BudgetPreviewSettings = {
     temperature: null,
     maxOutputTokens: null,
     instructions: DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS,
+}
+
+/** Configuração da feature "Estimar prazos" — agente do OpenCode que consulta o banco e estima as horas. */
+export const estimateHoursSettingsSchema = z
+    .object({
+        enabled: z.boolean(),
+        model: z.string().trim().max(200).nullable(),
+        agent: z.string().trim().max(100).nullable(),
+        variant: z.string().trim().max(50).nullable(),
+        instructions: z.string().trim().min(1, "Informe as instruções").max(8000, "Até 8.000 caracteres"),
+    })
+    .superRefine((value, ctx) => {
+        if (!value.enabled) return
+        if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
+    })
+
+export type EstimateHoursSettings = z.infer<typeof estimateHoursSettingsSchema>
+
+export const DEFAULT_ESTIMATE_HOURS_SETTINGS: EstimateHoursSettings = {
+    enabled: false,
+    model: null,
+    agent: null,
+    variant: null,
+    instructions: DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
 }

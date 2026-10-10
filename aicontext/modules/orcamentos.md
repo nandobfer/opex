@@ -4,8 +4,9 @@ Integração **Orçamentos** (`orcamentos`, rota `/integracoes/orcamentos`): o d
 e cada cliente ganha uma **URL fixa com token** para um **portal próprio, somente leitura**, sem
 sidebar, com o **mesmo kanban/tabela** das Tarefas (restrito aos repositórios escolhidos). O cliente
 pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
-prioridade, resumo e especificação técnica) e, em seguida, uma **estimativa de horas**, que o cliente
-**aprova ou corrige**. A aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
+prioridade, resumo e especificação técnica) e, em seguida, um **agente do OpenCode estima as horas**
+(consultando o banco com as ferramentas do servidor), que o cliente **aprova ou corrige**. A
+aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
 
 Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
 e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
@@ -64,31 +65,36 @@ enxuto), com `robots: noindex`.
   (`lg:grid-cols-4`):
   - **Coluna principal** (3/4): card com o **nome gerado pela IA como título**, o **resumo como
     subtítulo discreto** e, abaixo, a **descrição** do cliente (Markdown); card da **especificação
-    técnica**. Enquanto a prévia é gerada, mostra carregamento/streaming.
+    técnica**. Enquanto a prévia é gerada, mostra um **skeleton** (o JSON cru da IA nunca é exibido).
   - **Metadados** (1/4, e **acima** no mobile via `order`): **repositório**, **tipo + prioridade** e
     **horas e custo estimados** (`EstimateCard`). O card de horas tem um **carregamento animado**
-    enquanto a 2ª fase roda; ao concluir, os valores entram com `AnimatedNumber` (`H:mm` e `R$`); em
-    erro, mostra "Tentar novamente".
+    enquanto o agente pensa/consulta o banco (mostra o progresso, ex.: "Consultando (banco)…"); ao
+    concluir, os valores entram com `AnimatedNumber` (`H:mm` e `R$`); em erro, mostra "Tentar
+    novamente".
   - Card **"Ajustar ou aprovar"** em **largura total** abaixo do grid: **Solicitar correção** (texto
     que entra no próximo prompt) e **Aprovar tarefa**. **Não** há botão "Gerar novamente" — a
     geração é automática (prévia → estimativa).
 
 ## IA em duas fases
 
-- Feature **Orçamentos** em Provedores de IA (`ai_feature_settings`, `feature: "budget-preview"`),
-  schema `budgetPreviewSettingsSchema` — ver `modules/ai.md`.
-- **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`): monta a entrada, roda o `streamAi`
-  (NDJSON), valida o JSON com Zod (`parseDraftPreview`) e grava `preview` no rascunho no `done`,
-  **zerando `estimatedHours`** (nova correção ⇒ nova estimativa).
-- **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente depois
-  da prévia): exige a prévia (409 `DRAFT_WITHOUT_PREVIEW`), roda o `streamAi` com a prévia + o
-  pedido + o **histórico de horas dos agentes** e valida `{ estimatedHours }` (`parseEstimateHours`);
-  ao concluir grava as horas e devolve o orçamento (`saveDraftEstimate` → `H × fator × custo/hora`).
-- `preview-prompt.ts` (puro): contratos de saída das duas fases (`buildBudgetPreviewInstructions`/
-  `buildBudgetEstimateInstructions`), prompts (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt`)
-  e parsers. O histórico é **injetado no prompt** (sem ferramenta — o `streamAi` não tem tool
-  calling). `estimateStats()` (`server/estimate.ts`) agrega `TimeLog.duration` por `DevTask.taskType`.
-- Cada geração (fases) grava uma linha em `ai_usage_logs` (`feature: "budget-preview"`).
+- **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`), feature **Orçamentos**
+  (`budget-preview`): monta a entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod
+  (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours`** (nova
+  correção ⇒ nova estimativa). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
+  cru nunca é exibido.
+- **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
+  depois da prévia), feature **Estimar prazos** (`estimate-hours`): exige a prévia (409
+  `DRAFT_WITHOUT_PREVIEW`), roda o `streamAi` com um **agente do OpenCode** que **consulta o banco
+  com as ferramentas do servidor (MCP)** e pensa, e valida `{ estimatedHours }`
+  (`parseEstimateHours`); ao concluir grava as horas e devolve o orçamento (`saveDraftEstimate` →
+  `H × fator × custo/hora`). Os eventos de ferramenta (`tool`) são retransmitidos e o card de horas
+  mostra o progresso (ex.: "Consultando (banco)…").
+- `preview-prompt.ts` (puro): contratos de saída das duas fases
+  (`buildBudgetPreviewInstructions`/`buildBudgetEstimateInstructions`), prompts
+  (`buildBudgetPreviewPrompt`/`buildBudgetEstimatePrompt`) e parsers. O **histórico não é injetado**:
+  o agente da 2ª fase o consulta por conta própria via tool.
+- Cada geração grava uma linha em `ai_usage_logs` (`feature: "budget-preview"` na prévia;
+  `"estimate-hours"` na estimativa).
 
 ## Criação da tarefa (`server/portal.ts` → `createTaskWithIssue`)
 
@@ -136,4 +142,6 @@ pública (`/api/v1/*`).
 `__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt` (contratos/parsers
 das duas fases), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
 `orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa), `cliente-revisao`
-(cards da revisão), `copy-portal-url`, `markdown-field` e `cliente-task-table`.
+(cards da revisão), `copy-portal-url`, `markdown-field` e `cliente-task-table`. A configuração de
+"Estimar prazos" em `__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge`
+(faturamento no dono) em `__tests__/features/tasks/estimate-badge.test.tsx`.

@@ -1,5 +1,5 @@
 import type { AiUsage } from "@/lib/ai/stream"
-import type { BudgetPreviewSettings, TaskSummarySettings, UnderstandTaskSettings } from "./schemas"
+import type { BudgetPreviewSettings, EstimateHoursSettings, TaskSummarySettings, UnderstandTaskSettings } from "./schemas"
 
 export type { AiAgentDto, AiModelDto, AiProviderStatusDto } from "@/lib/ai/providers"
 
@@ -27,6 +27,14 @@ export interface TaskSummarySettingsDto {
 
 export interface BudgetPreviewSettingsDto {
     settings: BudgetPreviewSettings
+    /** Nada salvo ainda: valores iniciais do código. */
+    isDefault: boolean
+    availability: AiFeatureAvailability
+    updatedAt: string | null
+}
+
+export interface EstimateHoursSettingsDto {
+    settings: EstimateHoursSettings
     /** Nada salvo ainda: valores iniciais do código. */
     isDefault: boolean
     availability: AiFeatureAvailability
