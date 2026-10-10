@@ -16,7 +16,6 @@ import { DEV_CENTER_PATH } from "../../constants"
 import { pickActiveCentral } from "../../dev-center-central"
 import { useAgenticRealtime, useCentrals } from "../../hooks/useAgentic"
 import { useDevCenterCentral } from "../../hooks/useDevCenterCentral"
-import { useDevCenterLayout } from "../../hooks/useDevCenterLayout"
 import { AGENTIC_SETTINGS_HREF } from "../central/CentralPage"
 import { WorkbenchPane } from "../workbench/WorkbenchPane"
 import { TasksPane } from "./TasksPane"
@@ -40,7 +39,6 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     // As colunas ocupam exatamente a área visível do <main> (descontado o padding e o aviso de conexão).
     const sectionRef = useRef<HTMLElement>(null)
     const height = useScrollViewportHeight(sectionRef, list.length > 0)
-    const layout = useDevCenterLayout()
     const reduceMotion = useReducedMotion()
 
     // A central efetiva (da tarefa, salva ou a primeira) fica gravada no navegador.
@@ -85,7 +83,7 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
             className="flex min-h-0 flex-col gap-4 lg:h-[var(--dev-center-height,calc(100dvh-3rem))] lg:flex-row"
         >
             {central ? (
-                <TasksPane central={central} centrals={list} activeTaskId={taskId} collapsed={layout.tasksCollapsed} wide={layout.wide} onToggle={layout.toggleTasks} onSelectCentral={selectCentral} />
+                <TasksPane central={central} centrals={list} activeTaskId={taskId} onSelectCentral={selectCentral} />
             ) : (
                 <Skeleton className="h-96 lg:w-[340px] lg:shrink-0" />
             )}

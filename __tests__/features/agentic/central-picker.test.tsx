@@ -30,18 +30,12 @@ describe('CentralPicker', () => {
   it('campo: mostra owner/repo no gatilho e escolhe a central pela busca', async () => {
     const onSelect = vi.fn()
     const zipped = central('zip', { projectName: 'Compactado', repo: 'org/zip' })
-    render(<CentralPicker variant="field" centrals={[central('app'), zipped]} active={central('app')} index={index([repo('org/app'), repo('org/zip')])} onSelect={onSelect} />)
+    render(<CentralPicker centrals={[central('app'), zipped]} active={central('app')} index={index([repo('org/app'), repo('org/zip')])} onSelect={onSelect} />)
     expect(screen.getByText('org/app')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'org/app' }))
     fireEvent.click(await screen.findByRole('option', { name: 'org/zip' }))
     expect(onSelect).toHaveBeenCalledWith('zip')
-  })
-
-  it('faixa: mostra a sigla do repositório (avatar com a inicial)', () => {
-    render(<CentralPicker variant="rail" centrals={[central('app', { sigla: 'APP' })]} active={central('app', { sigla: 'APP' })} index={index([])} onSelect={vi.fn()} />)
-    const button = screen.getByRole('button', { name: 'Central org/app' })
-    expect(button.textContent).toContain('APP')
   })
 
   it('link de configuração aponta para as configurações da central', () => {

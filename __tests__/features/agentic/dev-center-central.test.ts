@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DEV_CENTER_CENTRAL, centralSigla, devCenterCentralSchema, pickActiveCentral } from '@/features/agentic/dev-center-central'
+import { DEFAULT_DEV_CENTER_CENTRAL, devCenterCentralSchema, pickActiveCentral } from '@/features/agentic/dev-center-central'
 import type { CentralDto } from '@/features/agentic/types'
 
 const central = (id: string, projectId: string, patch: Partial<CentralDto> = {}): CentralDto =>
@@ -25,10 +25,5 @@ describe('central selecionada da Central de desenvolvimento', () => {
 
   it('sem centrais devolve null', () => {
     expect(pickActiveCentral([], 'c1', null)).toBeNull()
-  })
-
-  it('sigla: usa a do projeto e cai no nome quando vazia', () => {
-    expect(centralSigla(central('c1', 'p1', { sigla: 'OPX' }))).toBe('OPX')
-    expect(centralSigla(central('c1', 'p1', { sigla: '', projectName: 'sap-painel' }))).toBe('SAP')
   })
 })

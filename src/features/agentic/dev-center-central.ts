@@ -24,8 +24,3 @@ export function pickActiveCentral(centrals: readonly CentralDto[], storedId: str
     }
     return centrals.find((central) => central.id === storedId) ?? centrals[0] ?? null
 }
-
-/** Abreviação exibida na faixa recolhida: a sigla do projeto ou as três primeiras letras do nome. */
-export function centralSigla(central: CentralDto): string {
-    return central.sigla || central.projectName.replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 3) || "PRJ"
-}

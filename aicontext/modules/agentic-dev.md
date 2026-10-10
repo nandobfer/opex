@@ -108,12 +108,8 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
-- A partir de `lg`, a coluna **Tarefas** recolhe (botão no cabeçalho) para uma faixa de 144 px, e a
-  mesa ocupa o espaço liberado (largura animada, `CollapsiblePane`). Faixa: o seletor da central
-  como **avatar + sigla do projeto** e, abaixo, a **lista das tarefas filtradas** — cada uma com a
-  **bolinha da coluna** (status) e o código, clicável para abrir a mesa. O conteúdo aberto fica
-  montado (rolagem e filtros se mantêm). Estado salvo em `localStorage`
-  (`opex:dev-center-layout:v2`); abaixo de `lg` as colunas ficam empilhadas e sempre abertas.
+- A coluna **Tarefas** tem **largura fixa de 340 px** a partir de `lg` (a mesa fica ao lado, no
+  espaço restante); abaixo de `lg` as colunas ficam empilhadas e a coluna ocupa a linha inteira.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
   ordem do quadro; filtros de **nome** (código/título, sem acento) e **coluna**, persistidos em
   `localStorage` (`opex:dev-center-filters:v1`). Lista virtualizada; cada tarefa mostra a etapa da

@@ -62,7 +62,7 @@ const workbench = (overrides: Partial<WorkbenchSummaryDto> = {}): WorkbenchSumma
   ...overrides,
 })
 
-async function renderPane(workbenches: WorkbenchSummaryDto[], collapsed = false) {
+async function renderPane(workbenches: WorkbenchSummaryDto[]) {
   mocks.get.mockImplementation(async (url: string) => {
     if (url === '/tasks') return ok({ tasks: [task()], fetchedAt: new Date().toISOString() })
     if (url === '/tasks/columns') return ok(board)
@@ -73,7 +73,7 @@ async function renderPane(workbenches: WorkbenchSummaryDto[], collapsed = false)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={client}>
-      <TasksPane central={central} centrals={[central]} activeTaskId={null} collapsed={collapsed} wide onToggle={() => {}} onSelectCentral={() => {}} />
+      <TasksPane central={central} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
     </QueryClientProvider>,
   )
   await screen.findAllByText('OPE-16')
@@ -117,15 +117,5 @@ describe('warning na lista de mesas da Central de desenvolvimento', () => {
     await renderPane([workbench({ stage: 'done', runState: 'idle' })])
     expect(screen.getByText('Concluída')).toBeTruthy()
     expect(screen.queryByRole('img', { name: /Aguardando/ })).toBeNull()
-  })
-})
-
-describe('faixa recolhida da coluna de tarefas', () => {
-  it('mostra avatar + sigla da central e o código das tarefas com a bolinha da coluna', async () => {
-    await renderPane([workbench()], true)
-    expect(screen.getByRole('button', { name: 'Central Opex' })).toBeTruthy()
-    const link = screen.getByRole('link', { name: 'OPE-16' })
-    expect(link.getAttribute('href')).toBe(`/desenvolvimento/${TASK}`)
-    expect(link.querySelector('span.rounded-full')).toBeTruthy()
   })
 })
