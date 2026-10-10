@@ -6,6 +6,7 @@ import {
   INTEGRATIONS,
   INTEGRATIONS_BASE_PATH,
   INTEGRATION_IDS,
+  TASK_TAGS_CONCLUDED_JOB_ID,
   getInDevelopmentIntegration,
   getIntegrationDef,
   hasCustomIntegrationPath,
@@ -51,13 +52,14 @@ describe('catálogo de integrações', () => {
     expect(INTEGRATIONS.filter((def) => !def.streamsDebugOverPusher).map((def) => def.id)).toEqual(['pusher'])
   })
 
-  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min) e tags de IA (3 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags'])
+  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min) e tags das concluídas (1 h, desligada)', () => {
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
     expect(DEFAULT_CRON_JOBS[4]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[5]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 3 } })
+    expect(DEFAULT_CRON_JOBS[6]).toMatchObject({ kind: 'internal', enabled: false, scope: 'pending', schedule: { type: 'interval', minutes: 60 } })
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue
     expect(jobs).toEqual(DEFAULT_CRON_JOBS)
   })

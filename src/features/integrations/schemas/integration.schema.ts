@@ -37,6 +37,7 @@ export const cronJobSchema = z
         path: z.string().trim().optional(),
         schedule: scheduleSchema,
         enabled: z.boolean(),
+        scope: z.enum(["pending", "all"]).optional(),
     })
     .superRefine((job, ctx) => {
         if (job.kind === "http" && (!job.path || !job.path.startsWith("/api/"))) {

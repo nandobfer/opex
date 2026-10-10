@@ -3,6 +3,7 @@ import { AiUsageLog } from "@/lib/db/models/Ai"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import type { CronJobScope } from "@/lib/integrations/catalog"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { AiProviderError } from "@/lib/ai/errors"
 import { askJevSystemOne } from "@/lib/ai/jev"
@@ -148,6 +149,26 @@ export async function generateTagsForInput(input: TaskTagsInput): Promise<string
     }
 }
 
+/** Tarefas que casam com o filtro; com `onlyPending`, só as que precisam de tags (sem hash ou desatualizadas). */
+async function findTasksForTags(filter: Record<string, unknown>, onlyPending: boolean) {
+    await dbConnect()
+    const docs = await DevTask.find(filter).select({ code: 1, title: 1, description: 1, tagsSourceHash: 1 }).lean()
+    if (!onlyPending) return docs
+    return docs.filter((task) => needsTags({ title: task.title, description: task.description ?? null, tagsSourceHash: task.tagsSourceHash ?? null }))
+}
+
+/** Gera as tags das tarefas informadas, em sequência, e resume o resultado. */
+async function tagTasks(tasks: readonly { _id: unknown }[]): Promise<string> {
+    let created = 0
+    let failed = 0
+    for (const task of tasks) {
+        const tags = await generateTaskTags(String(task._id))
+        if (tags) created++
+        else failed++
+    }
+    return `${created} tarefa(s) marcada(s)${failed ? `, ${failed} falha(s)` : ""}`
+}
+
 /**
  * Rotina "Tags de tarefas (IA)": enquanto a feature estiver ativa, gera as tags que faltam (ou
  * ficaram desatualizadas) nas tarefas não concluídas — cobre o backfill do ativar e as tarefas
@@ -158,20 +179,27 @@ export async function runTaskTagsBackfill(): Promise<string> {
     const availability = await availabilityOfTaskTags(settings)
     if (!availability.available) return "Pulada: tags de tarefas indisponíveis"
 
-    await dbConnect()
     const closed = await concludedColumnKeys()
     const filter: Record<string, unknown> = { archived: { $ne: true } }
     if (closed.length) filter.columnId = { $nin: closed }
-    const docs = await DevTask.find(filter).select({ code: 1, title: 1, description: 1, tagsSourceHash: 1 }).lean()
-    const pending = docs.filter((task) => needsTags({ title: task.title, description: task.description ?? null, tagsSourceHash: task.tagsSourceHash ?? null }))
+    const pending = await findTasksForTags(filter, true)
     if (pending.length === 0) return "Nenhuma tag pendente"
+    return tagTasks(pending)
+}
 
-    let created = 0
-    let failed = 0
-    for (const task of pending) {
-        const tags = await generateTaskTags(String(task._id))
-        if (tags) created++
-        else failed++
-    }
-    return `${created} tarefa(s) marcada(s)${failed ? `, ${failed} falha(s)` : ""}`
+/**
+ * Rotina "Tags de tarefas concluídas (IA)": gera as tags das tarefas nas colunas de conclusão.
+ * Escopo `pending` (padrão) só marca as que faltam/estão desatualizadas; `all` regenera todas. Roda
+ * desligada por padrão — use "Executar agora" nas Crons ou ligue-a para rodar de hora em hora.
+ */
+export async function runTaskTagsConcludedBackfill(scope: CronJobScope = "pending"): Promise<string> {
+    const { settings } = await loadTaskTagsSettings()
+    const availability = await availabilityOfTaskTags(settings)
+    if (!availability.available) return "Pulada: tags de tarefas indisponíveis"
+
+    const closed = await concludedColumnKeys()
+    if (closed.length === 0) return "Nenhuma coluna de conclusão configurada"
+    const tasks = await findTasksForTags({ archived: { $ne: true }, columnId: { $in: closed } }, scope === "pending")
+    if (tasks.length === 0) return scope === "pending" ? "Nenhuma tag pendente nas tarefas concluídas" : "Nenhuma tarefa concluída"
+    return tagTasks(tasks)
 }

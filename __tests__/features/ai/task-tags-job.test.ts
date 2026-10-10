@@ -24,7 +24,7 @@ vi.mock('@/features/tasks/server/service', () => ({ concludedColumnKeys: mocks.c
 
 import { DEFAULT_TASK_TAGS_SETTINGS, type TaskTagsSettings } from '@/features/ai/schemas'
 import { taskTagsSourceHash } from '@/features/ai/task-tags'
-import { generateTaskTags, runTaskTagsBackfill } from '@/features/ai/server/task-tags'
+import { generateTaskTags, runTaskTagsBackfill, runTaskTagsConcludedBackfill } from '@/features/ai/server/task-tags'
 
 const settings = (overrides: Partial<TaskTagsSettings> = {}): TaskTagsSettings => ({ ...DEFAULT_TASK_TAGS_SETTINGS, enabled: true, provider: 'gemini', model: 'gemini-3-flash', ...overrides })
 
@@ -87,6 +87,45 @@ describe('runTaskTagsBackfill', () => {
     const current = { title: 'Título B', description: 'Corpo B' }
     mocks.docs = [{ _id: 'b', code: 'OPX-2', title: current.title, description: current.description, tagsSourceHash: taskTagsSourceHash(current) }]
     expect(await runTaskTagsBackfill()).toBe('Nenhuma tag pendente')
+    expect(mocks.getTask).not.toHaveBeenCalled()
+  })
+})
+
+describe('runTaskTagsConcludedBackfill', () => {
+  it('com a feature indisponível, não varre nada', async () => {
+    mocks.availability.mockResolvedValue({ available: false, reason: 'desativada' })
+    expect(await runTaskTagsConcludedBackfill()).toContain('Pulada')
+    expect(mocks.find).not.toHaveBeenCalled()
+  })
+
+  it('sem colunas de conclusão configuradas, não varre nada', async () => {
+    mocks.concluded.mockResolvedValue([])
+    expect(await runTaskTagsConcludedBackfill()).toContain('Nenhuma coluna de conclusão')
+    expect(mocks.find).not.toHaveBeenCalled()
+  })
+
+  it('escopo "pending" varre só as concluídas sem tags atualizadas', async () => {
+    mocks.docs = [
+      { _id: 'a', code: 'OPX-1', title: 'Título A', description: 'Corpo A', tagsSourceHash: null },
+      { _id: 'b', code: 'OPX-2', title: 'Título B', description: 'Corpo B', tagsSourceHash: taskTagsSourceHash({ title: 'Título B', description: 'Corpo B' }) },
+    ]
+    expect(await runTaskTagsConcludedBackfill('pending')).toContain('1 tarefa(s) marcada(s)')
+    expect(mocks.find).toHaveBeenCalledWith({ archived: { $ne: true }, columnId: { $in: ['done'] } })
+    expect(mocks.getTask).toHaveBeenCalledTimes(1)
+    expect(mocks.getTask).toHaveBeenCalledWith('a')
+  })
+
+  it('escopo "all" regenera mesmo as concluídas já atualizadas', async () => {
+    const current = { title: 'Título B', description: 'Corpo B' }
+    mocks.docs = [{ _id: 'b', code: 'OPX-2', title: current.title, description: current.description, tagsSourceHash: taskTagsSourceHash(current) }]
+    expect(await runTaskTagsConcludedBackfill('all')).toContain('1 tarefa(s) marcada(s)')
+    expect(mocks.getTask).toHaveBeenCalledWith('b')
+  })
+
+  it('escopo "pending" sem pendentes devolve o aviso', async () => {
+    const current = { title: 'Título B', description: 'Corpo B' }
+    mocks.docs = [{ _id: 'b', code: 'OPX-2', title: current.title, description: current.description, tagsSourceHash: taskTagsSourceHash(current) }]
+    expect(await runTaskTagsConcludedBackfill('pending')).toContain('Nenhuma tag pendente nas tarefas concluídas')
     expect(mocks.getTask).not.toHaveBeenCalled()
   })
 })

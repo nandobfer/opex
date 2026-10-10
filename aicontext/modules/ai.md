@@ -155,6 +155,16 @@ e opções na própria aba da página "Provedores de IA".
   embasam a busca de tarefas semelhantes da estimativa. `POST /api/tasks/[id]/tags` gera/regenera as
   tags de uma tarefa (JSON `{ tags }`).
 
+- Rotina `ai-task-tags-concluded` ("Gerar tags de tarefas concluídas (IA)"): interna,
+  **desligada por padrão**, intervalo de **60 minutos**. "Executar agora" funciona mesmo desligada.
+  Processa somente tarefas nas colunas de conclusão configuradas, nunca arquivadas. O escopo fica
+  salvo na rotina: `pending` (padrão, "Só pendentes") processa apenas tarefas sem hash ou com
+  título/descrição alterados; `all` ("Todas") regenera inclusive tags atualizadas, útil após mudar
+  a taxonomia. Alterar o escopo exige salvar antes de executar. Sem colunas de conclusão ou sem
+  tarefas elegíveis, retorna um aviso sem chamar a IA. Respeita a disponibilidade da feature,
+  processa sequencialmente e contabiliza falhas sem interromper as demais tarefas. A geração
+  preserva `updatedAt`, publica `tasks-updated` e registra o uso de IA como na rotina original.
+
 ## Feature "Orçamentos" (prévia do portal do cliente)
 
 - Configuração em `ai_feature_settings` (`feature: "budget-preview"`), schema Zod
