@@ -13,7 +13,7 @@ import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchPro
 import { workbenchProgressTone } from "@/features/agentic/logic"
 import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
-import { ArchivedBadge, IssueNoticeBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
+import { ArchivedBadge, IssueNoticeBadge, TaskPriorityIcon, TaskTypeBadge } from "./TaskBadges"
 
 /** Seleção do card: checkbox (aparece ao passar o mouse; sempre visível quando há seleção). */
 export interface CardSelection {
@@ -88,7 +88,7 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                     />
                 )}
             </AnimatePresence>
-            <div className="mb-1.5 flex items-center gap-1.5">
+            <div data-testid="task-card-header" className="mb-1.5 flex items-center gap-1.5">
                 {selection && (
                     <SelectionCheckbox
                         checked={selected}
@@ -98,7 +98,6 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                     />
                 )}
                 <span className="font-mono text-[11px] font-semibold text-primary">{task.code}</span>
-                <TaskTypeBadge type={task.taskType} />
                 <span className="ml-auto flex items-center gap-1 text-muted-foreground">
                     {running && <RunningClock startTime={running.startTime} className="text-[10px] font-semibold text-success" />}
                     {moving && <Loader2 className="h-3 w-3 animate-spin" aria-label="Movendo" />}
@@ -128,9 +127,10 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                     <IssueNoticeBadge notice={task.issue.notice} />
                 </div>
             )}
-            <div className="flex items-center justify-between gap-1.5 border-t pt-2">
+            <div data-testid="task-card-footer" className="flex items-center justify-between gap-1.5 border-t pt-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-1">
-                    <TaskPriorityBadge priority={task.priority} />
+                    <TaskPriorityIcon priority={task.priority} />
+                    <TaskTypeBadge type={task.taskType} />
                     {task.archived && <ArchivedBadge />}
                 </div>
                 <span className="flex shrink-0 items-center gap-1.5">
