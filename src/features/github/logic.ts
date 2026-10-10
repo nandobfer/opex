@@ -1,5 +1,3 @@
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
 import { TASK_PRIORITIES, TASK_TYPES, type TaskPriority, type TaskType } from "@/features/tasks/constants"
 import type { GithubPriorityRule, GithubTypeRule } from "./schemas"
 
@@ -162,12 +160,54 @@ export function mapPriority(issue: Pick<GithubIssueLite, "labels">, rules: reado
     return { value: fallback, origin: "padrão" }
 }
 
-/** Descrição da tarefa: corpo da issue + rodapé fixo com o link. */
-export function buildTaskDescription(body: string, issue: { url: string; authorLogin: string; authorName: string | null; createdAt: string | Date | null }): string {
-    const when = issue.createdAt ? ` em ${format(new Date(issue.createdAt), "dd/MM/yyyy", { locale: ptBR })}` : ""
-    const who = issue.authorName ? `${issue.authorName} (@${issue.authorLogin})` : `@${issue.authorLogin}`
-    const text = body.trim()
-    return `${text ? `${text}\n\n` : ""}---\nIssue: ${issue.url}\nAberta por ${who}${when}`
+/**
+ * Descrição da tarefa a partir do corpo da issue: **verbatim** (sem rodapé). O vínculo bidirecional
+ * exige que os dois lados tenham o mesmo texto — a proveniência fica no botão "Abrir issue".
+ */
+export function taskDescriptionFromIssue(body: string | null | undefined): string {
+    return (body ?? "").trim()
+}
+
+// ---------------------------------------------------------------------------
+// Mapeamento reverso (tarefa → issue)
+// ---------------------------------------------------------------------------
+
+/** Labels a enviar à issue: a prioridade e o tipo viram labels pelas regras do mapeamento. */
+export function reverseLabels(
+    type: TaskType | null,
+    priority: TaskPriority | null,
+    mapping: { typeRules: readonly GithubTypeRule[]; priorityRules: readonly GithubPriorityRule[] },
+): string[] {
+    const labels = new Set<string>()
+    if (type) {
+        const rule = mapping.typeRules.find((item) => item.kind === "label" && item.taskType === type)
+        if (rule) labels.add(rule.value)
+    }
+    if (priority) {
+        const rule = mapping.priorityRules.find((item) => item.priority === priority)
+        if (rule) labels.add(rule.label)
+    }
+    return [...labels]
+}
+
+/** Estado da issue conforme a coluna da tarefa (só quando há coluna de conclusão configurada). */
+export function issueStateForColumn(columnKey: string, closedColumnKey: string | null): "open" | "closed" {
+    return closedColumnKey && columnKey === closedColumnKey ? "closed" : "open"
+}
+
+/**
+ * Coluna que a tarefa deve assumir conforme o estado da issue (`null` = sem mudança). Fechar leva à
+ * coluna de conclusão; reabrir tira da coluna de conclusão e volta à coluna de entrada.
+ */
+export function columnForIssueState(
+    state: "open" | "closed",
+    closedColumnKey: string | null,
+    entryColumnKey: string,
+    currentColumnKey: string,
+): string | null {
+    if (!closedColumnKey) return null
+    if (state === "closed") return currentColumnKey === closedColumnKey ? null : closedColumnKey
+    return currentColumnKey === closedColumnKey ? entryColumnKey : null
 }
 
 // ---------------------------------------------------------------------------

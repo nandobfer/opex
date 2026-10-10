@@ -16,6 +16,9 @@ export interface GithubLinkDto {
     entryColumnKey: string
     /** `null` = a coluna não existe mais. */
     entryColumnName: string | null
+    /** Coluna de conclusão ↔ issue fechada (ver `closedColumnName`). */
+    closedColumnKey: string | null
+    closedColumnName: string | null
     enabled: boolean
     initialImportAt: string | null
     lastSync: GithubSyncResultDto | null

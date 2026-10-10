@@ -172,3 +172,21 @@ describe('colunas do quadro', () => {
     expect((await getBoard()).columns.map((c) => c.key)).toEqual(['todo', 'doing'])
   })
 })
+
+
+describe('auditoria da sincronização do GitHub', () => {
+  it('descreve no histórico as alterações vindas do GitHub', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await mocks.models.audit.create({
+      entidade: 'Tarefa',
+      entidadeId: a.id,
+      acao: 'ATUALIZAR',
+      dadosAnteriores: { titulo: 'Antigo' },
+      dadosNovos: { titulo: 'Novo', origem: 'github' },
+      timestamp: new Date(),
+    })
+    const detail = await getTask(a.id)
+    expect(detail.history[0]?.description).toBe('Sincronizada do GitHub: alterou título')
+  })
+})

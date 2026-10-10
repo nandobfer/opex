@@ -18,6 +18,8 @@ export interface IProject {
     name: string
     sigla: string
     entryColumnKey: string
+    /** Coluna de conclusão ↔ issue fechada. `null` = a coluna não segue o estado da issue. */
+    closedColumnKey: string | null
     enabled: boolean
     /** Último número usado no código (`{SIGLA}-{n}`); incrementado a cada tarefa criada. */
     taskSeq: number
@@ -36,6 +38,7 @@ const ProjectSchema = new Schema<IProject>(
         name: { type: String, required: true },
         sigla: { type: String, required: true },
         entryColumnKey: { type: String, required: true, index: true },
+        closedColumnKey: { type: String, default: null },
         enabled: { type: Boolean, default: true },
         taskSeq: { type: Number, default: 0 },
         initialImportAt: { type: Date, default: null },

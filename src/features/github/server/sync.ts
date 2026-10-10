@@ -6,11 +6,12 @@ import { getIntegrationConfig } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { createTaskFromIssue } from "@/features/tasks/server/service"
 import { githubPaginate, githubRequestFull } from "../client"
-import { buildTaskDescription, mapPriority, mapTaskType, mentionsIssue, toIssueLite, type GithubIssueLite } from "../logic"
+import { columnForIssueState, mapPriority, mapTaskType, mentionsIssue, taskDescriptionFromIssue, toIssueLite, type GithubIssueLite } from "../logic"
 import type { GithubMappingDto } from "../types"
 import { errorMessage } from "./errors"
 import { createIssueLink, findIssueLink, updateIssueState } from "./issue-links"
 import { getMapping } from "./mappings"
+import { reconcileTaskIssue } from "./task-sync"
 import { publishGithubUpdated } from "./events"
 
 /**
@@ -18,9 +19,12 @@ import { publishGithubUpdated } from "./events"
  * repositório vinculado:
  * - 1ª execução: importa as issues ABERTAS;
  * - depois: só o que mudou desde a última leitura (`since` + ETag; 304 não gasta limite);
+ * - issue vinculada: sincronização bidirecional com last-write-wins (ver `task-sync.ts`) — se a
+ *   issue for mais recente que a tarefa, ela é aplicada na tarefa (coluna ↔ aberta/fechada pela
+ *   coluna de conclusão); se a tarefa for mais recente, ela é empurrada para a issue;
  * - issue que uma tarefa do projeto já cita (URL, `owner/repo#N` ou `#N`) só ganha o vínculo;
- * - issue nova vira uma tarefa dO Opex na coluna de entrada, com tipo/prioridade do mapeamento.
- * A coluna da tarefa é sempre gerida por você (sem transições automáticas).
+ * - issue nova vira uma tarefa dO Opex na coluna de entrada (ou na de conclusão, se já fechada),
+ *   com tipo/prioridade do mapeamento e a descrição verbatim.
  */
 
 interface LinkSyncResult {
@@ -36,7 +40,9 @@ export async function processIssue(project: ProjectDoc, issue: GithubIssueLite, 
     if (issue.isPullRequest) return
     const existingLink = await findIssueLink(project.repo, issue.number)
     if (existingLink) {
-        if (await updateIssueState(project.repo, issue.number, issue.state, issue.stateReason)) result.updated++
+        // Vinculada: last-write-wins (puxa da issue ou empurra a tarefa).
+        const status = await reconcileTaskIssue(project, issue, existingLink, mapping)
+        if (status !== "applied" && status !== "pushed" && (await updateIssueState(project.repo, issue.number, issue.state, issue.stateReason))) result.updated++
         return
     }
 
@@ -45,22 +51,43 @@ export async function processIssue(project: ProjectDoc, issue: GithubIssueLite, 
         .lean()
     const cited = tasks.find((task) => mentionsIssue([task.title, task.description, task.technicalSpec].filter(Boolean).join("\n"), project.repo, issue.number))
     if (cited) {
-        await createIssueLink({ repo: project.repo, number: issue.number, url: issue.htmlUrl, taskId: String(cited._id), taskCode: cited.code, state: issue.state, stateReason: issue.stateReason })
+        await createIssueLink({
+            repo: project.repo,
+            number: issue.number,
+            url: issue.htmlUrl,
+            taskId: String(cited._id),
+            taskCode: cited.code,
+            state: issue.state,
+            stateReason: issue.stateReason,
+            issueUpdatedAt: issue.updatedAt ? new Date(issue.updatedAt) : null,
+            origin: "github",
+        })
         result.linked++
         return
     }
 
     const type = mapTaskType(issue, mapping.typeRules)
     const priority = mapPriority(issue, mapping.priorityRules)
+    const columnId = columnForIssueState(issue.state, project.closedColumnKey ?? null, project.entryColumnKey, project.entryColumnKey) ?? project.entryColumnKey
     const task = await createTaskFromIssue({
         title: issue.title,
-        description: buildTaskDescription(issue.body, { url: issue.htmlUrl, authorLogin: issue.author.login, authorName: null, createdAt: issue.createdAt }),
+        description: taskDescriptionFromIssue(issue.body),
         projectId: String(project._id),
-        columnId: project.entryColumnKey,
+        columnId,
         taskType: type.value,
         priority: priority.value,
     })
-    await createIssueLink({ repo: project.repo, number: issue.number, url: issue.htmlUrl, taskId: task.id, taskCode: task.code, state: issue.state, stateReason: issue.stateReason })
+    await createIssueLink({
+        repo: project.repo,
+        number: issue.number,
+        url: issue.htmlUrl,
+        taskId: task.id,
+        taskCode: task.code,
+        state: issue.state,
+        stateReason: issue.stateReason,
+        issueUpdatedAt: issue.updatedAt ? new Date(issue.updatedAt) : null,
+        origin: "github",
+    })
     result.created++
 }
 

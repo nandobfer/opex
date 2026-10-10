@@ -61,16 +61,18 @@ const ACTION_LABELS: Record<string, string> = {
 function describeAudit(log: Pick<IAuditLog, "acao" | "dadosAnteriores" | "dadosNovos">): string {
     const before = (log.dadosAnteriores ?? {}) as Record<string, unknown>
     const after = (log.dadosNovos ?? {}) as Record<string, unknown>
+    const fromGithub = after.origem === "github"
     if (log.acao === "MOVER") {
         const from = before.coluna
         const to = after.coluna
-        return from ? `Movida de "${String(from)}" para "${String(to)}"` : `Movida para "${String(to ?? "")}"`
+        const text = from ? `Movida de "${String(from)}" para "${String(to)}"` : `Movida para "${String(to ?? "")}"`
+        return fromGithub ? `Sincronizada do GitHub: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text
     }
-    if (log.acao === "CRIAR") return `Tarefa criada${after.titulo ? ` (${String(after.titulo)})` : ""}`
+    if (log.acao === "CRIAR") return fromGithub ? `Tarefa criada do GitHub${after.titulo ? ` (${String(after.titulo)})` : ""}` : `Tarefa criada${after.titulo ? ` (${String(after.titulo)})` : ""}`
     if (log.acao === "EXCLUIR") return "Tarefa excluída"
     const changed = Object.keys(after).filter((key) => FIELD_LABELS[key] && String(before[key] ?? "") !== String(after[key] ?? ""))
     const label = changed.length ? changed.map((key) => FIELD_LABELS[key]).join(", ") : "campos"
-    return `Alterou ${label}`
+    return fromGithub ? `Sincronizada do GitHub: alterou ${label}` : `Alterou ${label}`
 }
 
 async function historyFor(taskId: string): Promise<TaskHistoryEntry[]> {
@@ -160,6 +162,8 @@ async function assertColumn(key: string): Promise<void> {
     if (!board.columns.some((column) => column.key === key)) throw new DomainError(400, "Coluna inválida", "COLUMN_NOT_FOUND")
 }
 
+export { assertColumn }
+
 async function endOrder(columnId: string, exceptId?: string): Promise<number> {
     const last = await DevTask.findOne({ columnId, ...(exceptId ? { _id: { $ne: exceptId } } : {}) })
         .sort({ order: -1 })
@@ -179,6 +183,8 @@ export interface CreateTaskOptions {
     actorId: string
     /** Força a ordem (usado por rotinas). Sem isto, vai para o fim da coluna. */
     order?: number
+    /** Origem da criação (a sincronização marca "github"). */
+    origin?: "opex" | "github"
 }
 
 export async function createTask(input: CreateTaskInput, options: CreateTaskOptions): Promise<TaskDto> {
@@ -205,13 +211,13 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         entidade: TASK_AUDIT_ENTITY,
         entidadeId: String(task._id),
         acao: AcaoAuditoria.CRIAR,
-        depois: { codigo: code, titulo: task.title, projeto: project.name, coluna: input.columnId },
+        depois: { codigo: code, titulo: task.title, projeto: project.name, coluna: input.columnId, ...(options.origin === "github" ? { origem: "github" } : {}) },
     })
     await publishTasksUpdated([String(task._id)])
     return toTaskDto(task.toObject(), project)
 }
 
-export async function updateTask(id: string, input: UpdateTaskInput, actorId: string, options: { publish?: boolean } = {}): Promise<void> {
+export async function updateTask(id: string, input: UpdateTaskInput, actorId: string, options: { publish?: boolean; origin?: "opex" | "github" } = {}): Promise<void> {
     assertTaskId(id)
     await dbConnect()
     const task = await DevTask.findById(id).lean()
@@ -257,13 +263,14 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     }
 
     if (Object.keys(set).length === 0) return
+    if (options.origin === "github") after.origem = "github"
     await DevTask.updateOne({ _id: id }, { $set: set })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: after })
     if (options.publish !== false) await publishTasksUpdated([id])
 }
 
 /** Mover a tarefa de coluna (e, opcionalmente, posição). */
-export async function moveTask(id: string, input: MoveTaskInput, actorId: string, options: { publish?: boolean } = {}): Promise<TaskDto | null> {
+export async function moveTask(id: string, input: MoveTaskInput, actorId: string, options: { publish?: boolean; origin?: "opex" | "github" } = {}): Promise<TaskDto | null> {
     assertTaskId(id)
     await dbConnect()
     const task = await DevTask.findById(id).lean()
@@ -280,7 +287,7 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
         entidadeId: id,
         acao: AcaoAuditoria.MOVER,
         antes: { codigo: task.code, coluna: columnNames.get(task.columnId) ?? task.columnId },
-        depois: { codigo: task.code, coluna: columnNames.get(input.targetColumn) ?? input.targetColumn, ordem: order },
+        depois: { codigo: task.code, coluna: columnNames.get(input.targetColumn) ?? input.targetColumn, ordem: order, ...(options.origin === "github" ? { origem: "github" } : {}) },
     })
     if (options.publish !== false) await publishTasksUpdated([id])
     const updated = await DevTask.findById(id).lean()
@@ -354,7 +361,7 @@ export async function runBulkTasks(input: BulkTasksInput, actorId: string): Prom
     return results
 }
 
-async function publishTasksUpdated(ids: string[]): Promise<void> {
+export async function publishTasksUpdated(ids: string[]): Promise<void> {
     if (ids.length) await publishToChannels([appChannel()], TASKS_UPDATED_EVENT, { ids })
 }
 
@@ -362,5 +369,5 @@ async function publishTasksUpdated(ids: string[]): Promise<void> {
 
 /** Cria a tarefa a partir de uma issue do GitHub (rotina). Devolve o DTO criado. */
 export async function createTaskFromIssue(input: { title: string; description: string; projectId: string; columnId: string; taskType: TaskType | null; priority: TaskPriority }): Promise<TaskDto> {
-    return createTask({ ...input, taskType: input.taskType, priority: input.priority }, { actorId: "system" })
+    return createTask({ ...input, taskType: input.taskType, priority: input.priority }, { actorId: "system", origin: "github" })
 }

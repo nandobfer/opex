@@ -14,6 +14,7 @@ export const repoName = z
 export const repoLinkInputSchema = z.object({
     repo: repoName,
     entryColumnKey: z.string({ error: "Escolha a coluna de entrada" }).regex(COLUMN_KEY_PATTERN, "Escolha uma coluna"),
+    closedColumnKey: z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida").nullable(),
     enabled: z.boolean(),
 })
 export type RepoLinkInput = z.input<typeof repoLinkInputSchema>

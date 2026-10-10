@@ -27,7 +27,7 @@ interface GithubLinkDialogProps {
     onClose: () => void
 }
 
-const EMPTY: RepoLinkInput = { repo: "", entryColumnKey: "", enabled: true }
+const EMPTY: RepoLinkInput = { repo: "", entryColumnKey: "", closedColumnKey: null, enabled: true }
 
 /**
  * Vínculo repositório ↔ Opex: repositório (lista do token) e a coluna de entrada das issues. O
@@ -41,13 +41,14 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
 
     useEffect(() => {
         if (!open) return
-        form.reset(link ? { repo: link.repo, entryColumnKey: link.entryColumnKey, enabled: link.enabled } : EMPTY)
+        form.reset(link ? { repo: link.repo, entryColumnKey: link.entryColumnKey, closedColumnKey: link.closedColumnKey, enabled: link.enabled } : EMPTY)
     }, [open, link, form])
 
-    const [repo, columnKey] = useWatch({ control: form.control, name: ["repo", "entryColumnKey"] })
+    const [repo, columnKey, closedColumnKey] = useWatch({ control: form.control, name: ["repo", "entryColumnKey", "closedColumnKey"] })
     const takenRepos = useMemo(() => new Set(links.filter((item) => item.id !== link?.id).map((item) => item.repo)), [links, link])
     const errors = form.formState.errors
     const selectedColumn = columns.find((column) => column.key === columnKey)
+    const selectedClosedColumn = columns.find((column) => column.key === closedColumnKey)
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && !submitting && onClose()}>
@@ -128,6 +129,47 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
                                 listLabel="Colunas"
                                 emptyText="Nenhuma coluna: crie uma no quadro de Tarefas"
                                 emptySearchText="Nenhuma coluna encontrada"
+                            />
+                        </Field>
+
+                        <Field id="link-closed-column" label="Coluna de conclusão">
+                            <SearchPicker
+                                trigger={
+                                    <FieldTrigger
+                                        id="link-closed-column"
+                                        placeholder="Opcional"
+                                        invalid={Boolean(errors.closedColumnKey)}
+                                        value={
+                                            selectedClosedColumn ? (
+                                                <span className="flex items-center gap-2">
+                                                    <ColumnIconView icon={selectedClosedColumn.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    {selectedClosedColumn.label}
+                                                </span>
+                                            ) : undefined
+                                        }
+                                    />
+                                }
+                                items={columns}
+                                getKey={(item) => item.key}
+                                searchKeys={["label"]}
+                                renderItem={(item) => (
+                                    <span className="flex items-center gap-2">
+                                        <span className={`h-2 w-2 rounded-full ${item.dot}`} aria-hidden />
+                                        <ColumnIconView icon={item.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
+                                        {item.label}
+                                    </span>
+                                )}
+                                onPick={(item) => form.setValue("closedColumnKey", item.key, { shouldValidate: true, shouldDirty: true })}
+                                matchTriggerWidth
+                                searchLabel="Buscar coluna de conclusão"
+                                listLabel="Colunas"
+                                emptyText="Nenhuma coluna: crie uma no quadro de Tarefas"
+                                emptySearchText="Nenhuma coluna encontrada"
+                                footer={
+                                    <button type="button" className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted" onClick={() => form.setValue("closedColumnKey", null, { shouldValidate: true, shouldDirty: true })}>
+                                        Sem coluna de conclusão
+                                    </button>
+                                }
                             />
                         </Field>
 

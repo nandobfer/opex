@@ -47,6 +47,10 @@ export interface IGithubIssueLink {
     issueStateReason: string | null
     /** Aviso exibido no card (ex.: "Issue fechada"). */
     notice: string | null
+    /** Último `updated_at` da issue que já conhecemos (marca d'água do last-write-wins). */
+    issueUpdatedAt: Date | null
+    /** De onde veio a última alteração sincronizada. */
+    lastOrigin: "opex" | "github" | null
     createdAt: Date
     updatedAt: Date
 }
@@ -61,6 +65,8 @@ const GithubIssueLinkSchema = new Schema<IGithubIssueLink>(
         issueState: { type: String, default: "open" },
         issueStateReason: { type: String, default: null },
         notice: { type: String, default: null },
+        issueUpdatedAt: { type: Date, default: null },
+        lastOrigin: { type: String, default: null },
     },
     { collection: "github_issue_links", versionKey: false, timestamps: true },
 )

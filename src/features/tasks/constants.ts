@@ -73,4 +73,5 @@ export const TASKS_UPDATED_EVENT = "tasks-updated"
 export const TASK_COLUMNS_UPDATED_EVENT = "task-columns-updated"
 
 export const TASKS_PATH = "/tarefas"
+export const TASK_NEW_PATH = "/tarefas/nova"
 export const taskPath = (id: string) => `${TASKS_PATH}/${id}`
