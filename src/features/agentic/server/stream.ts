@@ -5,11 +5,12 @@ import { getWorkbench } from "./workflow"
 const PING_MS = 15_000
 
 /**
- * Stream NDJSON da mesa. Ordem sem buracos: assina o barramento (guardando o que chega), grava o
- * pendente, lê tudo do banco e só então repassa os eventos ao vivo com `seq` maior que o último lido.
+ * Stream NDJSON de uma execução longa (mesa ou refinamento): assina o barramento (guardando o que
+ * chega), grava o pendente, lê tudo do banco e só então repassa os eventos ao vivo com `seq` maior
+ * que o último lido. `verify` confere a existência da execução (404 antes de abrir o stream).
  */
-export async function openWorkbenchStream(id: string, signal: AbortSignal): Promise<Response> {
-    await getWorkbench(id)
+export async function openEventStream(id: string, signal: AbortSignal, verify?: (id: string) => Promise<unknown>): Promise<Response> {
+    if (verify) await verify(id)
     const encoder = new TextEncoder()
     let cleanup = () => {}
     const stream = new ReadableStream<Uint8Array>({
@@ -67,4 +68,9 @@ export async function openWorkbenchStream(id: string, signal: AbortSignal): Prom
             "X-Accel-Buffering": "no",
         },
     })
+}
+
+/** Stream da mesa de trabalho: exige que a mesa exista. */
+export function openWorkbenchStream(id: string, signal: AbortSignal): Promise<Response> {
+    return openEventStream(id, signal, getWorkbench)
 }

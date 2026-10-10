@@ -68,4 +68,17 @@ describe('TaskDetailTabs', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Especificação técnica/ }))
     expect(screen.getByTestId('markdown').textContent).toBe('Detalhes técnicos')
   })
+
+  it('renderiza o slot do refinamento abaixo da especificação na aba ativa', () => {
+    render(<TaskDetailTabs task={task({ technicalSpec: 'Detalhes técnicos' })} value="spec" onValueChange={vi.fn()} specSlot={<div data-testid="spec-slot">Painel do refinamento</div>} />)
+    const panel = screen.getByTestId('spec-slot').parentElement
+    const content = panel?.textContent ?? ''
+    expect(content).toContain('Painel do refinamento')
+    expect(content.indexOf('Detalhes técnicos')).toBeLessThan(content.indexOf('Painel do refinamento'))
+  })
+
+  it('não renderiza o slot do refinamento fora da aba de especificação', () => {
+    render(<TaskDetailTabs task={task({ description: 'Corpo' })} value="description" onValueChange={vi.fn()} specSlot={<div data-testid="spec-slot" />} />)
+    expect(screen.queryByTestId('spec-slot')).toBeNull()
+  })
 })

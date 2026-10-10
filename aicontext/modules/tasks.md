@@ -145,14 +145,16 @@ tarefa.
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
-  **Entender tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e **Excluir**. **Editar**
-  abre o `TaskForm` **inline** no lugar das abas (não é mais modal); salvar/cancelar voltam à visão.
+  **Entender tarefa**, **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
+  **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
+  salvar/cancelar voltam à visão.
 - Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
 ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e **não substitui**
 a descrição.
 - Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
 animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
-  **Especificação técnica** (aba própria, em Markdown), Comentários (lista + formulário; cada
+  **Especificação técnica** (aba própria: a especificação atual em Markdown e, **abaixo**, o painel do
+  refinamento com IA — ver `modules/refinement.md`), Comentários (lista + formulário; cada
   comentário mostra o **nome do autor** — dono ou cliente, ver `modules/orcamentos.md`), Histórico
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
@@ -169,6 +171,12 @@ preservar o escopo de hooks de cada aba.
   servidor usa o fator e o custo/hora do próprio snapshot.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
+- **Refinar tarefa** (cabeçalho): abre a aba **Especificação técnica** e **inicia** o refinamento,
+em que um agente do OpenCode faz perguntas (mesmo sistema da mesa) e **reescreve a especificação
+técnica** da tarefa a cada rodada até ela ficar clara; o painel fica **abaixo da especificação**, com
+as perguntas logo abaixo da saída do agente. O agente roda em segundo plano e o refinamento é
+retomável. Bloqueado quando o projeto não tem uma central de desenvolvimento ativa
+(ver `modules/refinement.md`).
 - **Gerar resumo** (cabeçalho): modal com IA em streaming que grava o resumo de 1 linha da tarefa
   (ver `modules/ai.md`).
 - **Mesa de trabalho** (cabeçalho): leva à mesa da tarefa na Central de desenvolvimento
@@ -189,5 +197,6 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
 `task-summary-card`, `task-estimate-card` — a estimativa editável, o `clientId` do portal e o autor
-  dos comentários são cobertos em `tasks-service`) e `__tests__/hooks/usePersistentState.test.tsx`. As
-  **tags** têm testes próprios em `__tests__/features/tasks/tags.test.ts`.
+dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
+`__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão
+**Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).

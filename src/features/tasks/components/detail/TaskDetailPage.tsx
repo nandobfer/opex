@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -29,6 +29,8 @@ import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
 import { TaskSummaryButton } from "@/features/ai/components/task-summary/TaskSummaryButton"
+import { RefineTaskButton } from "@/features/refinement/components/RefineTaskButton"
+import { RefinementPanel } from "@/features/refinement/components/RefinementPanel"
 import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
@@ -51,6 +53,8 @@ export function TaskDetailPage({ id }: { id: string }) {
     const [tab, setTab] = useState<TaskDetailTabId>("description")
     const [editing, setEditing] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
+    const [startRefinement, setStartRefinement] = useState(false)
+    const clearStartRefinement = useCallback(() => setStartRefinement(false), [])
     const task = query.data
     const projects = options.data?.projects ?? []
 
@@ -107,6 +111,7 @@ export function TaskDetailPage({ id }: { id: string }) {
                                     <TimerIndicator />
                                     <TaskColumnMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, column) => flow.move(current, column)} size="default" />
                                     <UnderstandTaskButton taskId={task.id} taskCode={task.code} />
+                                    <RefineTaskButton taskId={task.id} onOpen={() => { setTab("spec"); setStartRefinement(true) }} />
                                     <TaskSummaryButton taskId={task.id} taskCode={task.code} />
                                     <WorkbenchButton taskId={task.id} projectId={task.project?.id ?? null} />
                                     {task.issue && <IssueIconButton url={task.issue.url} repo={task.issue.repo} number={task.issue.number} />}
@@ -142,7 +147,12 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                     }}
                                                 />
                                             ) : (
-                                                <TaskDetailTabs task={task} value={tab} onValueChange={setTab} />
+                                                <TaskDetailTabs
+                                                    task={task}
+                                                    value={tab}
+                                                    onValueChange={setTab}
+                                                    specSlot={<RefinementPanel taskId={task.id} taskCode={task.code} autoStart={startRefinement} onAutoStarted={clearStartRefinement} />}
+                                                />
                                             )}
                                         </CardContent>
                                     </Card>
