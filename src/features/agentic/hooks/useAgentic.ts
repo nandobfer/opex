@@ -7,10 +7,11 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
+import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput } from "../schemas"
-import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
 
@@ -88,6 +89,10 @@ export function useTestCentral(id: string) {
 
 export const useCentralWorkbenches = (centralId: string | null) =>
     useQuery({ queryKey: agenticKey("workbenches", centralId), queryFn: () => get<WorkbenchSummaryDto[]>(`/agentic/centrals/${centralId}/workbenches`), enabled: Boolean(centralId) })
+
+/** Fila da central: tarefas na coluna da fila ainda sem mesa, na ordem do kanban. */
+export const useCentralQueue = (centralId: string | null) =>
+    useQuery({ queryKey: agenticKey("queue", centralId), queryFn: () => get<QueueItemDto[]>(`/agentic/centrals/${centralId}/queue`), enabled: Boolean(centralId) })
 
 export const useWorkbenchByTask = (taskId: string | null) =>
     useQuery({ queryKey: agenticKey("workbench", taskId), queryFn: () => get<WorkbenchDto | null>(`/agentic/workbenches/by-task/${taskId}`), enabled: Boolean(taskId) })
@@ -192,9 +197,13 @@ export function useAgenticRealtime(): void {
         const name = appChannel()
         const channel = acquireChannel(name)
         const handler = () => void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY] })
+        // A fila muda quando tarefas mudam de coluna (mesmo sem abrir mesa): recarrega só a fila.
+        const queueHandler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("queue") })
         channel.bind(AGENTIC_UPDATED_EVENT, handler)
+        channel.bind(TASKS_UPDATED_EVENT, queueHandler)
         return () => {
             channel.unbind(AGENTIC_UPDATED_EVENT, handler)
+            channel.unbind(TASKS_UPDATED_EVENT, queueHandler)
             releaseChannel(name)
         }
     }, [queryClient])

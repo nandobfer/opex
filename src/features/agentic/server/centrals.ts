@@ -83,6 +83,10 @@ export async function updateCentral(id: string, config: CentralConfig, actorId: 
     await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: config })
     centralLogger(id).info("Configuração da central atualizada")
     await publishAgentic({ centralId: id })
+    // A coluna da fila ou o limite podem ter mudado: reavalia a fila da central (import dinâmico evita ciclo).
+    void import("./queue")
+        .then((queue) => queue.pumpCentralQueue(id))
+        .catch(() => undefined)
     return getCentral(id)
 }
 

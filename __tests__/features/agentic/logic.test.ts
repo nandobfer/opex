@@ -73,6 +73,11 @@ describe('parseCentralConfig', () => {
     const parsed = parseCentralConfig({ sessionDirectory: '/repo', environment: { previewPortMin: 5000, previewPortMax: 4000 } })
     expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
   })
+
+  it('a coluna da fila nasce desligada e é preservada quando salva', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo' }).columns.queue).toBeNull()
+    expect(parseCentralConfig({ sessionDirectory: '/repo', columns: { queue: 'fila' } }).columns.queue).toBe('fila')
+  })
 })
 
 describe('padrões da central', () => {

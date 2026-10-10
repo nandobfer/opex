@@ -111,6 +111,16 @@ export interface WorkbenchSummaryDto {
     updatedAt: string
 }
 
+/** Tarefa aguardando na fila da central. A posição segue a ordem dos cards na coluna do kanban. */
+export interface QueueItemDto {
+    taskId: string
+    code: string
+    title: string
+    columnId: string
+    /** 1-based, na ordem do card na coluna da fila. */
+    position: number
+}
+
 /** Linha do stream da mesa (NDJSON). `seq` existe nos eventos gravados; os transitórios não têm. */
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: WorkbenchStage; title: string; agent: string | null; model: string | null }

@@ -16,7 +16,7 @@ export function ColumnsSection({ form }: { form: CentralForm }) {
     const board = useTaskBoard()
     const control = form.control
 
-    const columnField = (name: "columns.onStart" | "columns.onPr" | "columns.onDone", id: string, label: string) => (
+    const columnField = (name: "columns.queue" | "columns.onStart" | "columns.onPr" | "columns.onDone", id: string, label: string, noneLabel = "Não mover") => (
         <Field id={id} label={label}>
             <Controller
                 control={control}
@@ -27,7 +27,7 @@ export function ColumnsSection({ form }: { form: CentralForm }) {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value={NONE}>Não mover</SelectItem>
+                            <SelectItem value={NONE}>{noneLabel}</SelectItem>
                             {board.columns.map((column) => (
                                 <SelectItem key={column.key} value={column.key}>
                                     {column.label}
@@ -42,6 +42,15 @@ export function ColumnsSection({ form }: { form: CentralForm }) {
 
     return (
         <>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Fila da central de desenvolvimento</CardTitle>
+                    <CardDescription>
+                        Ao mover um card para esta coluna, a mesa da tarefa entra na fila. Havendo vaga (limite de mesas abertas), a mesa abre na hora; senão, aguarda na ordem dos cards do kanban.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">{columnField("columns.queue", "central-col-queue", "Coluna que inicia a mesa automaticamente", "Nenhuma")}</CardContent>
+            </Card>
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Movimentação das colunas</CardTitle>

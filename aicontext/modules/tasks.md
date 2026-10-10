@@ -5,7 +5,9 @@ verdade** das tarefas: cria, edita, exclui, organiza em **kanban** ou **tabela**
 há plataforma externa — nada aqui espelha outro sistema.
 
 As colunas do quadro são **100% configuráveis** (criar, editar, reordenar, excluir); cada tarefa
-pertence a **uma** coluna. Não existem regras automáticas de transição.
+pertence a **uma** coluna. Não existem regras automáticas de transição — exceto a **coluna da fila**
+de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da tarefa automaticamente
+(ver `modules/agentic-dev.md`).
 
 ## Modelo (`src/lib/db/models/`)
 
@@ -36,11 +38,13 @@ semeado na primeira leitura (`ensureBoard`).
   (gera o código, vai para o fim da coluna), `updateTask` (campos; mudar de coluna leva ao fim dela),
   `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga comentários e apontamentos),
   `addComment`, `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um `tasks-updated`).
-  Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`.
+  Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`. Mudanças de
+  coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma central).
 - `columns.ts` (`COLUMN_AUDIT_ENTITY = "ColunaTarefas"`): `ensureBoard` (semeia o quadro padrão —
   A Fazer / Em Andamento / Concluído — na primeira execução), `getBoard`, `createColumn`,
-  `updateColumn`, `deleteColumn` (só vazia e que não seja coluna de entrada de um projeto),
-  `reorderColumns` (409 `COLUMNS_CHANGED` se a ordem não bate). Publica `task-columns-updated`.
+  `updateColumn`, `deleteColumn` (só vazia, que não seja coluna de entrada de um projeto —
+  `COLUMN_IN_USE` — nem coluna da fila de uma central — `COLUMN_QUEUE_IN_USE`), `reorderColumns`
+  (409 `COLUMNS_CHANGED` se a ordem não bate). Publica `task-columns-updated`.
 
 ### APIs do app
 
