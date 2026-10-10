@@ -29,6 +29,7 @@ import { CollapsiblePane, PaneToggle } from "./CollapsiblePane"
 import { TaskFilters } from "./TaskFilters"
 
 const ROW_HEIGHT = 64
+const RAIL_ROW_HEIGHT = 28
 
 interface TasksPaneProps {
     central: CentralDto
@@ -60,7 +61,8 @@ export function TasksPane({ central, centrals, activeTaskId, collapsed, wide, on
     const scrollRef = useRef<HTMLDivElement>(null)
     // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual devolve funções não memorizáveis (padrão do projeto)
     const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, overscan: 8 })
-    const activeCode = list.data?.tasks.find((task) => task.id === activeTaskId)?.code ?? null
+    const railScrollRef = useRef<HTMLDivElement>(null)
+    const railVirtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => railScrollRef.current, estimateSize: () => RAIL_ROW_HEIGHT, overscan: 8 })
     const reduceMotion = useReducedMotion()
 
     return (
@@ -74,14 +76,29 @@ export function TasksPane({ central, centrals, activeTaskId, collapsed, wide, on
                 <>
                     <PaneToggle label={LABEL} collapsed onToggle={onToggle} />
                     <CentralPicker variant="rail" centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
-                    <span className="rounded-full bg-muted px-1.5 font-mono text-[10px] tabular-nums text-muted-foreground" title={`${tasks.length} tarefas com os filtros atuais`}>
-                        {tasks.length}
-                    </span>
-                    {activeCode && (
-                        <span className="mt-1 font-mono text-xs font-semibold text-primary [writing-mode:vertical-rl]" title="Tarefa aberta">
-                            {activeCode}
-                        </span>
-                    )}
+                    <div role="separator" aria-hidden className="h-px w-8 shrink-0 bg-gradient-to-r from-transparent via-border to-transparent" />
+                    <div ref={railScrollRef} className="min-h-0 w-full flex-1 overflow-y-auto px-1" role="list" aria-label={`Tarefas de ${central.projectName}`}>
+                        <div className="relative w-full" style={{ height: railVirtualizer.getTotalSize() }}>
+                            {railVirtualizer.getVirtualItems().map((row) => {
+                                const task = tasks[row.index]!
+                                const column = columns.get(task.columnId)
+                                const active = task.id === activeTaskId
+                                return (
+                                    <div key={task.id} role="listitem" className="absolute inset-x-0" style={{ height: RAIL_ROW_HEIGHT, transform: `translateY(${row.start}px)` }}>
+                                        <Link
+                                            href={workbenchPath(task.id)}
+                                            aria-current={active ? "page" : undefined}
+                                            title={`${task.code} · ${task.title}${column ? ` · ${column.label}` : ""}`}
+                                            className={cn("flex h-full items-center gap-1.5 rounded-md px-1.5 transition-colors", active ? "bg-primary/15" : "hover:bg-muted/50")}
+                                        >
+                                            <span className={cn("h-2 w-2 shrink-0 rounded-full", column?.dot ?? "bg-muted-foreground/40")} aria-hidden />
+                                            <span className="truncate font-mono text-[11px] font-semibold text-primary">{task.code}</span>
+                                        </Link>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
                 </>
             }
         >

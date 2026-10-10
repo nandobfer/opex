@@ -4,7 +4,6 @@ import { Settings2 } from "lucide-react"
 import Link from "next/link"
 import { FieldTrigger } from "@/components/ui/field-trigger"
 import { SearchPicker } from "@/components/ui/search-picker"
-import { cn } from "@/lib/utils"
 import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
 import { GithubAvatar, GithubRepoLabel } from "@/features/github/components/shared"
 import type { GithubRepoLabelData, GithubRepoOption } from "@/features/github/types"
@@ -56,7 +55,7 @@ export function CentralPicker({ centrals, active, index, onSelect, variant }: Ce
     )
 }
 
-/** Gatilho estreito da faixa recolhida: avatar do repositório + sigla (dica com `owner/repo`). */
+/** Gatilho da faixa recolhida: avatar do repositório + sigla do projeto (dica com `owner/repo`). */
 function RailTrigger({ central, index }: { central: CentralDto; index: ReadonlyMap<string, GithubRepoOption> }) {
     const repo = centralRepoLabel(central, index)
     return (
@@ -64,10 +63,10 @@ function RailTrigger({ central, index }: { central: CentralDto; index: ReadonlyM
             type="button"
             title={repo.fullName}
             aria-label={`Central ${repo.fullName}`}
-            className={cn("flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary")}
+            className="flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-md px-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
         >
             <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} className="h-4 w-4" />
-            <span className="font-mono text-[9px] font-semibold leading-none">{centralSigla(central)}</span>
+            <span className="truncate font-mono text-[10px] font-semibold">{centralSigla(central)}</span>
         </button>
     )
 }
