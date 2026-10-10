@@ -15,12 +15,13 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   campos públicos, campos privados e as variáveis legadas do `.env`.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
   dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
-  `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode` e `ai_gemini` — ver
-  `modules/ai.md`).
+  `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode`, `ai_gemini` e
+  `ai_jev` — ver `modules/ai.md`).
 - **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
   `parent` e `configured`) e aparecem dentro da página da mãe; o voltar da página leva à mãe.
   Rotas próprias via `integrationPath` (`/integracoes/ia`, `/integracoes/ia/opencode`,
-  `/integracoes/ia/gemini`); `/integracoes/<id>` redireciona (`hasCustomIntegrationPath`).
+  `/integracoes/ia/gemini`, `/integracoes/ia/jev`); `/integracoes/<id>` redireciona
+  (`hasCustomIntegrationPath`).
 - `isIntegrationConfigured(def, resolved)` (`config.ts`): obrigatórios públicos visíveis e segredos
   legíveis preenchidos (não testa a conexão).
 - **Em desenvolvimento** (`IN_DEVELOPMENT_INTEGRATIONS`): `archflow` (Archflow — solicitar deploys
