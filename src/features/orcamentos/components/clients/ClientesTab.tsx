@@ -15,6 +15,9 @@ import { apiErrorMessage } from "@/lib/api"
 import { formatNumberBR } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
+import { useGithubRepoIndex } from "@/features/github/hooks/useGithub"
+import type { GithubRepoOption } from "@/features/github/types"
 import { formatFactorLabel } from "../../logic"
 import { useCreateCliente, useOrcamentoClients, useRegenerateClienteToken, useUpdateCliente } from "../../hooks/useOrcamentos"
 import type { ClienteOrcamentoDto } from "../../types"
@@ -26,6 +29,7 @@ import { RemoveClienteDialog } from "./RemoveClienteDialog"
 /** Aba Clientes: cadastro dos clientes do portal de Orçamentos. */
 export function ClientesTab() {
     const query = useOrcamentoClients()
+    const repoIndex = useGithubRepoIndex(true)
     const create = useCreateCliente()
     const update = useUpdateCliente()
     const regenerate = useRegenerateClienteToken()
@@ -62,7 +66,7 @@ export function ClientesTab() {
                         <AnimatePresence initial={false}>
                             {list.map((client) => (
                                 <motion.li key={client.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                                    <ClientRow client={client} portalPath={client.portalPath} onEdit={() => setEditing({ client })} onRegenerate={() => setConfirmRegen(client)} onRemove={() => setRemoving(client)} />
+                                    <ClientRow client={client} portalPath={client.portalPath} repoIndex={repoIndex} onEdit={() => setEditing({ client })} onRegenerate={() => setConfirmRegen(client)} onRemove={() => setRemoving(client)} />
                                 </motion.li>
                             ))}
                         </AnimatePresence>
@@ -120,7 +124,7 @@ export function ClientesTab() {
     )
 }
 
-function ClientRow({ client, portalPath, onEdit, onRegenerate, onRemove }: { client: ClienteOrcamentoDto; portalPath: string; onEdit: () => void; onRegenerate: () => void; onRemove: () => void }) {
+function ClientRow({ client, portalPath, repoIndex, onEdit, onRegenerate, onRemove }: { client: ClienteOrcamentoDto; portalPath: string; repoIndex: ReadonlyMap<string, GithubRepoOption>; onEdit: () => void; onRegenerate: () => void; onRemove: () => void }) {
     return (
         <div className={cn("flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start", !client.active && "opacity-60")}>
             <div className="min-w-0 flex-1 space-y-2">
@@ -139,7 +143,7 @@ function ClientRow({ client, portalPath, onEdit, onRegenerate, onRemove }: { cli
                     <div className="flex flex-wrap gap-1.5">
                         {client.projects.map((project) => (
                             <span key={project.id} className="inline-flex max-w-[240px] items-center rounded-md border px-1.5 py-0.5 text-xs">
-                                <GithubRepoLabel repo={{ fullName: project.repo, ownerAvatarUrl: null, description: null, private: false }} />
+                                <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} />
                             </span>
                         ))}
                     </div>

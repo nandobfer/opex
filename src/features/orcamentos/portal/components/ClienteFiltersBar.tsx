@@ -8,8 +8,10 @@ import { ListFilters } from "@/components/list/ListFilters"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "@/features/tasks/constants"
 import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type TaskFilters } from "@/features/tasks/filters"
 import type { BoardColumnView } from "@/features/tasks/board"
-import type { ProjectRef, TaskDto } from "@/features/tasks/types"
+import type { TaskDto } from "@/features/tasks/types"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelFrom, repoLabelIndex } from "@/features/orcamentos/logic"
+import type { ClienteRepoDto } from "@/features/orcamentos/types"
 
 const COL = "min-w-[160px] flex-1"
 
@@ -18,7 +20,7 @@ interface ClienteFiltersBarProps {
     setFilters: Dispatch<SetStateAction<TaskFilters>>
     total: number
     tasks: readonly TaskDto[]
-    projects: readonly ProjectRef[]
+    projects: readonly ClienteRepoDto[]
     columns: readonly BoardColumnView[]
 }
 
@@ -26,6 +28,7 @@ interface ClienteFiltersBarProps {
 export function ClienteFiltersBar({ filters, setFilters, total, tasks, projects, columns }: ClienteFiltersBarProps) {
     const set = <K extends keyof TaskFilters>(key: K) => (value: TaskFilters[K]) => setFilters((prev) => ({ ...prev, [key]: value }))
     const repoOptions = useMemo(() => taskRepoOptions(projects, tasks), [projects, tasks])
+    const repoIndex = useMemo(() => repoLabelIndex(projects), [projects])
     const clear = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
     return (
@@ -64,7 +67,7 @@ export function ClienteFiltersBar({ filters, setFilters, total, tasks, projects,
                     options={repoOptions.map((option) => ({ value: option.value, label: option.label }))}
                     renderLabel={(option) => {
                         const project = repoOptions.find((item) => item.value === option.value)?.project
-                        return project ? <GithubRepoLabel repo={{ fullName: project.repo, ownerAvatarUrl: null, description: null, private: false }} /> : option.label
+                        return project ? <GithubRepoLabel repo={repoLabelFrom(project.repo, repoIndex)} /> : option.label
                     }}
                     selected={filters.projects}
                     onSelect={set("projects")}

@@ -3,12 +3,13 @@
 import { AnimatePresence } from "framer-motion"
 import { columnKeyOf, type BoardColumnView } from "@/features/tasks/board"
 import { ColumnIconView } from "@/features/tasks/components/column-icons"
+import type { GithubRepoLabelData } from "@/features/github/types"
 import type { TaskDto } from "@/features/tasks/types"
 import { cn } from "@/lib/utils"
 import { ClienteTaskCard } from "./ClienteTaskCard"
 
 /** Quadro kanban somente leitura do portal do cliente (sem arrastar). */
-export function ClienteTaskBoard({ tasks, columns }: { tasks: readonly TaskDto[]; columns: readonly BoardColumnView[] }) {
+export function ClienteTaskBoard({ tasks, columns, repoIndex }: { tasks: readonly TaskDto[]; columns: readonly BoardColumnView[]; repoIndex?: ReadonlyMap<string, GithubRepoLabelData> }) {
     const grouped = new Map<string, TaskDto[]>()
     for (const column of columns) grouped.set(column.key, [])
     for (const task of tasks) grouped.get(columnKeyOf(task))?.push(task)
@@ -29,7 +30,7 @@ export function ClienteTaskBoard({ tasks, columns }: { tasks: readonly TaskDto[]
                         <div className="flex flex-col gap-2">
                             <AnimatePresence initial={false}>
                                 {items.map((task) => (
-                                    <ClienteTaskCard key={task.id} task={task} />
+                                    <ClienteTaskCard key={task.id} task={task} repoIndex={repoIndex} />
                                 ))}
                             </AnimatePresence>
                             {items.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Nenhuma tarefa</p>}

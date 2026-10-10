@@ -8,7 +8,8 @@ vi.mock("framer-motion", () => framerMotionMock())
 
 import { EstimateCard } from "@/features/orcamentos/portal/components/preview/EstimateCard"
 import { PreviewTitleCard } from "@/features/orcamentos/portal/components/preview/PreviewTitleCard"
-import type { DraftPreviewDto } from "@/features/orcamentos/types"
+import { RepoMetaCard } from "@/features/orcamentos/portal/components/preview/RepoMetaCard"
+import type { ClienteRepoDto, DraftPreviewDto } from "@/features/orcamentos/types"
 
 const preview: DraftPreviewDto = { title: "Ajustar o rodapé", taskType: "bugfix", priority: "medium", technicalSpec: "## Passos", summary: "Corrige o rodapé do site" }
 
@@ -41,5 +42,26 @@ describe("revisão da prévia (portal)", () => {
         render(<EstimateCard estimate={null} estimating={false} error="Falha na estimativa" onRetry={() => {}} />)
         expect(screen.getByText("Falha na estimativa")).toBeTruthy()
         expect(screen.getByRole("button", { name: /Tentar novamente/ })).toBeTruthy()
+    })
+
+    it("o card de repositório mostra o componente do GitHub: avatar, descrição e privacidade", () => {
+        const repo: ClienteRepoDto = { id: "p", name: "acme/app", repo: "acme/app", sigla: "APP", ownerAvatarUrl: "https://avatars.githubusercontent.com/u/1", description: "App do Acme", private: true }
+        const { container } = render(<RepoMetaCard repo={repo} />)
+        expect(screen.getByText("acme/app")).toBeTruthy()
+        expect(screen.getByText("App do Acme")).toBeTruthy()
+        expect(container.querySelector("img")?.getAttribute("src")).toBe("https://avatars.githubusercontent.com/u/1")
+        expect(container.querySelector('[aria-label="Privado"]')).toBeTruthy()
+    })
+
+    it("o card de repositório cai na inicial quando não há avatar", () => {
+        const repo: ClienteRepoDto = { id: "p", name: "acme/app", repo: "acme/app", sigla: "APP", ownerAvatarUrl: null, description: null, private: false }
+        const { container } = render(<RepoMetaCard repo={repo} />)
+        expect(container.querySelector("img")).toBeNull()
+        expect(container.querySelector("span[aria-hidden]")?.textContent).toBe("a")
+    })
+
+    it("o card de repositório mostra um traço quando não há repositório", () => {
+        render(<RepoMetaCard repo={null} />)
+        expect(screen.getByText("—")).toBeTruthy()
     })
 })

@@ -5,6 +5,9 @@
  * `(H × fator) × custo por hora`. A tela interna mostra a estimativa **real** (H).
  */
 
+import type { GithubRepoLabelData } from "@/features/github/types"
+import type { ClienteRepoDto } from "./types"
+
 export interface ClientEstimate {
     /** Horas reais estimadas pela IA (visão interna). */
     hours: number
@@ -37,4 +40,19 @@ export function formatHoursLabel(hours: number): string {
 export function formatFactorLabel(factor: number): string {
     const value = Number.isInteger(factor) ? String(factor) : factor.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
     return `${value}x`
+}
+
+/** Rótulo do GitHub a partir do repositório do cliente (usado pelo `GithubRepoLabel`). */
+export function repoLabel(repo: ClienteRepoDto): GithubRepoLabelData {
+    return { fullName: repo.repo, ownerAvatarUrl: repo.ownerAvatarUrl, description: repo.description, private: repo.private }
+}
+
+/** Índice `owner/repo` (minúsculo) → rótulo do GitHub, para os cards do portal. */
+export function repoLabelIndex(projects: readonly ClienteRepoDto[]): ReadonlyMap<string, GithubRepoLabelData> {
+    return new Map(projects.map((project) => [project.repo.toLowerCase(), repoLabel(project)]))
+}
+
+/** Rótulo de um repositório pelo índice; sem dado do GitHub, mantém a inicial. */
+export function repoLabelFrom(repo: string, index?: ReadonlyMap<string, GithubRepoLabelData>): GithubRepoLabelData {
+    return index?.get(repo.toLowerCase()) ?? { fullName: repo, ownerAvatarUrl: null, description: null, private: false }
 }

@@ -2,6 +2,17 @@ import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
 import type { ProjectRef, TaskListDto } from "@/features/tasks/types"
 
+/**
+ * Repositório do cliente no portal: o projeto (`ProjectRef`) mais os dados do GitHub que o
+ * `GithubRepoLabel` exibe (avatar, descrição e privacidade). O portal é público e autentica por
+ * token do cliente, então esses dados vêm no próprio DTO (enriquecidos no servidor).
+ */
+export interface ClienteRepoDto extends ProjectRef {
+    ownerAvatarUrl: string | null
+    description: string | null
+    private: boolean
+}
+
 /** Cliente do portal como a tela de administração o exibe (sem o hash; com o caminho do portal). */
 export interface ClienteOrcamentoDto {
     id: string
@@ -39,8 +50,8 @@ export interface OrcamentoDraftDto {
     id: string
     projectId: string
     projectName: string | null
-    /** `owner/repo` do repositório escolhido (para exibir no card de metadados). */
-    projectRepo: string | null
+    /** Repositório escolhido (dados do GitHub inclusos), para exibir no card de metadados. */
+    projectRepo: ClienteRepoDto | null
     description: string
     correction: string | null
     preview: DraftPreviewDto | null
@@ -65,6 +76,6 @@ export type ClienteTaskListDto = TaskListDto
 /** Opções do portal: repositórios permitidos ao cliente e o quadro (colunas). */
 export interface ClientePortalOptionsDto {
     clientName: string
-    projects: ProjectRef[]
+    projects: ClienteRepoDto[]
     board: TaskBoardDto
 }

@@ -56,26 +56,38 @@ recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que orig
 Fora do grupo `(app)` — **sem sidebar** (`src/app/cliente/layout.tsx`, largura total com padding
 enxuto), com `robots: noindex`.
 
+Os repositórios do portal (opções e rascunho) chegam **enriquecidos com os dados do GitHub**
+(avatar, descrição e privacidade) no próprio DTO do portal: o servidor casa `repo` com o índice de
+`listGithubRepos()` (cache de 5 min) em `server/portal.ts`, **best-effort** — sem token/API fora, o
+rótulo cai na inicial (o portal é público e não chama os endpoints de sessão do GitHub). Todos os
+pontos que exibem repositório no portal usam o `GithubRepoLabel` real (`repoLabel`/`repoLabelIndex`
++ `repoLabelFrom` de `logic.ts`): o formulário, o filtro, o card/linha da lista, o card da revisão e a
+aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
+
 - `/cliente?t=` — **lista** (`ClienteTasksPage`): cabeçalho com o nome do cliente, **Nova tarefa**,
   **Kanban | Tabela**, Atualizar e filtros (busca, Repositório, Coluna, Prioridade, Tipo). Mesmo
   visual das Tarefas, porém **somente leitura** (sem arrastar, sem editar, sem excluir). O filtro de
-  Repositório fica **limitado** aos repositórios do cliente. Cada card/linha mostra a estimativa do
-  cliente (`EstimateBadge` modo `client`: `H × fator` h e `R$ faturamento`).
-- `/cliente/nova?t=` — **nova tarefa** (`ClienteNovaTarefaPage`): repositório (só os permitidos) +
-  **descrição** em Markdown (`MarkdownField`). Ao avançar, cria o rascunho e vai para a revisão.
+  Repositório fica **limitado** aos repositórios do cliente. Cada card/linha mostra o repositório com
+  o `GithubRepoLabel` (avatar/descrição/privado) e a estimativa do cliente (`EstimateBadge` modo
+  `client`: `H × fator` h e `R$ faturamento`).
+- `/cliente/nova?t=` — **nova tarefa** (`ClienteNovaTarefaPage`): repositório (só os permitidos, no
+  `SearchPicker` com o `GithubRepoLabel` real) + **descrição** em Markdown (`MarkdownField`). Ao
+  avançar, cria o rascunho e vai para a revisão.
 - `/cliente/revisao/[draftId]?t=` — **revisão** (`ClienteRevisaoPage`), em duas colunas
   (`lg:grid-cols-4`):
   - **Coluna principal** (3/4): card com o **nome gerado pela IA como título**, o **resumo como
     subtítulo discreto** e, abaixo, a **descrição** do cliente (Markdown); card da **especificação
     técnica**. Enquanto a prévia é gerada, mostra um **skeleton** (o JSON cru da IA nunca é exibido).
-  - **Metadados** (1/4, e **acima** no mobile via `order`): **repositório**, **tipo + prioridade** e
-    **horas e custo estimados** (`EstimateCard`). O card de horas tem um **carregamento animado**
-    enquanto o agente pensa/consulta o banco (mostra o progresso, ex.: "Consultando (banco)…"); ao
-    concluir, os valores entram com `AnimatedNumber` (`H:mm` e `R$`); em erro, mostra "Tentar
-    novamente".
+  - **Metadados** (1/4, e **acima** no mobile via `order`): **repositório** (com o
+    `GithubRepoLabel` real no `RepoMetaCard`), **tipo + prioridade** e **horas e custo estimados**
+    (`EstimateCard`). O card de horas tem um **carregamento animado** enquanto o agente pensa/consulta
+    o banco (mostra o progresso, ex.: "Consultando (banco)…"); ao concluir, os valores entram com
+    `AnimatedNumber` (`H:mm` e `R$`); em erro, mostra "Tentar novamente".
   - Card **"Ajustar ou aprovar"** em **largura total** abaixo do grid: **Solicitar correção** (texto
     que entra no próximo prompt) e **Aprovar tarefa**. **Não** há botão "Gerar novamente" — a
-    geração é automática (prévia → estimativa).
+    geração é automática (prévia → estimativa). Ao **solicitar a correção**, a tela volta a exibir
+    **skeleton** na prévia e na estimativa (via `selectReviewView` de `useBudgetReview`) até chegarem
+    os novos valores — nunca reaproveita o resultado anterior do cache do rascunho.
 
 ## IA em duas fases
 
@@ -83,7 +95,8 @@ enxuto), com `robots: noindex`.
   (`budget-preview`): monta a entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod
   (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours`** (nova
   correção ⇒ nova estimativa). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
-  cru nunca é exibido.
+  cru nunca é exibido — e, na correção, prévia **e** estimativa voltam a skeleton até chegarem os
+  novos valores.
 - **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
   depois da prévia), feature **Estimar prazos** (`estimate-hours`): exige a prévia (409
   `DRAFT_WITHOUT_PREVIEW`), roda o `streamAi` com um **agente do OpenCode** que **consulta o banco

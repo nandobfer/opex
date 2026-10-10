@@ -3,6 +3,9 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { OrcamentoDraft, type IOrcamentoDraft, type IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { Project } from "@/lib/db/models/Project"
 import { createTaskWithIssue } from "@/features/github/server/task-issue"
+import { listGithubRepos } from "@/features/github/server/lookups"
+import type { GithubRepoOption } from "@/features/github/types"
+import type { ProjectRef } from "@/features/tasks/types"
 import { listTasksForProjects } from "@/features/tasks/server/service"
 import { getBoard } from "@/features/tasks/server/columns"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
@@ -10,7 +13,7 @@ import type { TaskDto, TaskListDto } from "@/features/tasks/types"
 import { DRAFT_AUDIT_ENTITY } from "../constants"
 import { computeClientEstimate, type ClientEstimate } from "../logic"
 import type { ClienteDraftInput } from "../schemas"
-import type { ClientePortalOptionsDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
+import type { ClientePortalOptionsDto, ClienteRepoDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
 import { clientProjects } from "./clients"
 import type { ClienteOrcamentoDoc } from "./token"
 
@@ -25,12 +28,32 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i
 
 const toEstimateDto = (estimate: ClientEstimate): DraftEstimateDto => ({ hours: estimate.hours, clientHours: estimate.clientHours, billingBrl: estimate.billingBrl })
 
+/**
+ * Índice `owner/repo` (minúsculo) → repositório do GitHub, best-effort: sem token configurado ou
+ * com a API fora, o portal segue funcionando com o rótulo sem avatar (o `GithubRepoLabel` cai na
+ * inicial). O resultado do `listGithubRepos` já é cacheado por 5 min.
+ */
+async function githubRepoIndex(): Promise<Map<string, GithubRepoOption>> {
+    try {
+        return new Map((await listGithubRepos()).map((repo) => [repo.fullName, repo]))
+    } catch {
+        return new Map()
+    }
+}
+
+/** Projeto + dados do GitHub (avatar, descrição e privacidade) para o `GithubRepoLabel` do portal. */
+function withGithubData(project: ProjectRef, index: Map<string, GithubRepoOption>): ClienteRepoDto {
+    const repo = index.get(project.repo.toLowerCase())
+    return { ...project, ownerAvatarUrl: repo?.ownerAvatarUrl ?? null, description: repo?.description ?? null, private: repo?.private ?? false }
+}
+
 export async function listClientTasks(client: ClienteOrcamentoDoc, includeArchived: boolean): Promise<TaskListDto> {
     return listTasksForProjects(client.projectIds ?? [], includeArchived)
 }
 
 export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<ClientePortalOptionsDto> {
-    return { clientName: client.name, projects: await clientProjects(client), board: await getBoard() }
+    const [projects, board, index] = await Promise.all([clientProjects(client), getBoard(), githubRepoIndex()])
+    return { clientName: client.name, projects: projects.map((project) => withGithubData(project, index)), board }
 }
 
 function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
@@ -40,14 +63,14 @@ function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
 }
 
 async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise<OrcamentoDraftDto> {
-    const project = await Project.findById(draft.projectId).lean()
+    const [project, index] = await Promise.all([Project.findById(draft.projectId).lean(), githubRepoIndex()])
     const preview = draftPreview(draft)
     const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
     return {
         id: String(draft._id),
         projectId: draft.projectId,
         projectName: project?.name ?? null,
-        projectRepo: project?.repo ?? null,
+        projectRepo: project ? withGithubData({ id: String(project._id), name: project.name, repo: project.repo, sigla: project.sigla }, index) : null,
         description: draft.description,
         correction: draft.correction ?? null,
         preview,

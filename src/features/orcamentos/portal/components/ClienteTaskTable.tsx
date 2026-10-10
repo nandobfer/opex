@@ -3,13 +3,15 @@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import type { GithubRepoLabelData } from "@/features/github/types"
+import { repoLabelFrom } from "@/features/orcamentos/logic"
 import { ArchivedBadge, TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
 import { EstimateBadge } from "@/features/tasks/components/EstimateBadge"
 import type { BoardColumnView } from "@/features/tasks/board"
 import type { TaskDto } from "@/features/tasks/types"
 
 /** Tabela somente leitura do portal do cliente. */
-export function ClienteTaskTable({ tasks, columns }: { tasks: readonly TaskDto[]; columns: readonly BoardColumnView[] }) {
+export function ClienteTaskTable({ tasks, columns, repoIndex }: { tasks: readonly TaskDto[]; columns: readonly BoardColumnView[]; repoIndex?: ReadonlyMap<string, GithubRepoLabelData> }) {
     const byKey = new Map(columns.map((column) => [column.key, column.label]))
     return (
         <div className="overflow-x-auto rounded-lg border">
@@ -41,7 +43,7 @@ export function ClienteTaskTable({ tasks, columns }: { tasks: readonly TaskDto[]
                             <td className="px-3 py-2"><TaskPriorityBadge priority={task.priority} /></td>
                             <td className="hidden px-3 py-2 lg:table-cell"><TaskTypeBadge type={task.taskType} /></td>
                             <td className="hidden px-3 py-2 md:table-cell">
-                                {task.project && <span className="inline-flex max-w-[220px]"><GithubRepoLabel repo={{ fullName: task.project.repo, ownerAvatarUrl: null, description: null, private: false }} /></span>}
+                                {task.project && <span className="inline-flex max-w-[220px]"><GithubRepoLabel repo={repoLabelFrom(task.project.repo, repoIndex)} /></span>}
                             </td>
                             <td className="px-3 py-2"><EstimateBadge estimate={task.estimate} mode="client" /></td>
                             <td className="hidden px-3 py-2 text-xs text-muted-foreground xl:table-cell">{task.updatedAt ? format(new Date(task.updatedAt), "dd/MM HH:mm", { locale: ptBR }) : "—"}</td>

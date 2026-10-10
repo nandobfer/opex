@@ -13,7 +13,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { clientePortalPath } from "../constants"
 import { useApproveDraft, useClienteDraft, useSetCorrection } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
-import { useBudgetReview } from "./useBudgetReview"
+import { selectReviewView, useBudgetReview } from "./useBudgetReview"
 import { CorrectionCard } from "./components/preview/CorrectionCard"
 import { EstimateCard } from "./components/preview/EstimateCard"
 import { PreviewSpecCard } from "./components/preview/PreviewSpecCard"
@@ -42,8 +42,11 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
 
     const data = draft.data
     const status = data?.status ?? "draft"
-    const preview = state.preview ?? data?.preview ?? null
-    const estimate = state.estimate ?? data?.estimate ?? null
+    // Enquanto a IA regenera (correção enviada, prévia ou estimativa), mostra skeleton no lugar do
+    // que era da geração anterior até chegar o novo valor — não reaproveita o cache do rascunho.
+    const view = selectReviewView(state, data, correction.isPending)
+    const preview = view.preview
+    const estimate = view.estimate
     const isDraft = status === "draft"
 
     useEffect(() => {

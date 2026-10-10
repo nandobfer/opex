@@ -2,12 +2,14 @@
 
 import { motion } from "framer-motion"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import type { GithubRepoLabelData } from "@/features/github/types"
+import { repoLabelFrom } from "@/features/orcamentos/logic"
 import { ArchivedBadge, TaskPriorityBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
 import { EstimateBadge } from "@/features/tasks/components/EstimateBadge"
 import type { TaskDto } from "@/features/tasks/types"
 
 /** Card da tarefa no portal do cliente (somente leitura). */
-export function ClienteTaskCard({ task }: { task: TaskDto }) {
+export function ClienteTaskCard({ task, repoIndex }: { task: TaskDto; repoIndex?: ReadonlyMap<string, GithubRepoLabelData> }) {
     return (
         <motion.article layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="space-y-2 rounded-lg border bg-card p-3">
             <div className="flex items-center justify-between gap-2">
@@ -21,7 +23,7 @@ export function ClienteTaskCard({ task }: { task: TaskDto }) {
             {task.summary && <p className="line-clamp-2 text-xs text-muted-foreground">{task.summary}</p>}
             {task.project && (
                 <div className="text-xs">
-                    <GithubRepoLabel repo={{ fullName: task.project.repo, ownerAvatarUrl: null, description: null, private: false }} />
+                    <GithubRepoLabel repo={repoLabelFrom(task.project.repo, repoIndex)} />
                 </div>
             )}
             <div className="flex flex-wrap items-center gap-1">
