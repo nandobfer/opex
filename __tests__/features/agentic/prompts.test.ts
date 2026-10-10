@@ -81,6 +81,14 @@ describe('mensagens das etapas', () => {
     expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12')).not.toContain('Informações adicionais')
     expect(planPrompt(config, ctx, '# Tarefa GO-DEV-12', '   ')).not.toContain('Informações adicionais')
   })
+
+  it('implementação anexa as informações adicionais informadas ao aprovar o plano', () => {
+    const withInfo = implementPrompt(config, ctx, 2, 'Use o componente X; não altere o schema.')
+    expect(withInfo).toContain('## Informações adicionais')
+    expect(withInfo).toContain('Use o componente X; não altere o schema.')
+    expect(implementPrompt(config, ctx, 2)).not.toContain('Informações adicionais')
+    expect(implementPrompt(config, ctx, 2, '   ')).not.toContain('Informações adicionais')
+  })
 })
 
 describe('leitura das respostas', () => {

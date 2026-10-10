@@ -135,15 +135,22 @@ export const createCentralSchema = z.object({
 })
 export type CreateCentralInput = z.infer<typeof createCentralSchema>
 
+/** Texto opcional do usuário (informações adicionais), no máximo 8.000 caracteres. */
+const optionalUserText = z.string().trim().max(8000, "Até 8.000 caracteres").optional()
+
 /** Texto do usuário enviado ao planejador (correção do plano, da prévia, do PR ou reabertura). */
 export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar").max(8000, "Até 8.000 caracteres") })
 export type FeedbackInput = z.infer<typeof feedbackSchema>
+
+/** Texto opcional anexado a uma ação (ex.: informações adicionais ao aprovar o plano de implementação). */
+export const optionalFeedbackSchema = z.object({ text: optionalUserText })
+export type OptionalFeedbackInput = z.infer<typeof optionalFeedbackSchema>
 
 export const startWorkbenchSchema = z.object({
     centralId: z.string().regex(/^[a-f0-9]{24}$/i),
     taskId: z.string().regex(/^[a-f0-9]{24}$/i),
     /** Informações adicionais opcionais digitadas ao abrir a mesa; vão no primeiro prompt do planejador. */
-    text: z.string().trim().max(8000, "Até 8.000 caracteres").optional(),
+    text: optionalUserText,
 })
 
 export const permissionReplySchema = z.object({

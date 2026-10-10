@@ -132,7 +132,7 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 
 ```
 planning → plan_review ─┬─ Solicitar correção do plano → planning
-                        └─ Implementar → implementing → build_queued → building → preview
+                        └─ Implementar (texto opcional) → implementing → build_queued → building → preview
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
 pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
@@ -155,6 +155,10 @@ done → Reabrir mesa (texto ao planejador) → planning
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
   sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
+  Ao aprovar o plano (ação **Implementar**), o usuário pode anexar **Informações adicionais**
+  opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
+  implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
+  comportamento das informações informadas na abertura da mesa.
 - **Build**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
@@ -231,7 +235,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement`, `approve`, `retry`, `interrupt` |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt` |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |

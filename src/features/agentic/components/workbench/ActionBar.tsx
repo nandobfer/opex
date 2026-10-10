@@ -36,6 +36,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
     const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl))
     const [composer, setComposer] = useState<FeedbackAction | null>(workbench.stage === "changes_requested" && workbench.runState === "idle" ? "submit-pr-feedback" : null)
     const [text, setText] = useState("")
+    const [additional, setAdditional] = useState("")
     const [confirm, setConfirm] = useState<"interrupt" | "approve" | null>(null)
     const pending = mutation.isPending
     const run = (action: WorkbenchAction, body?: string) =>
@@ -45,10 +46,13 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 onSuccess: () => {
                     setComposer(null)
                     setText("")
+                    setAdditional("")
                 },
             },
         )
     const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
+    // Ao aprovar o plano, o usuário pode anexar informações adicionais ao prompt de implementação.
+    const canImplement = actions.includes("implement")
 
     return (
         <div className="space-y-2 border-t p-3">
@@ -67,6 +71,15 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                     <motion.p key="build-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.
                     </motion.p>
+                )}
+                {!composer && canImplement && (
+                    <motion.div key="implement-info" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-1.5 overflow-hidden">
+                        <label htmlFor="workbench-implement-info" className="text-sm font-medium">
+                            Informações adicionais (opcional)
+                        </label>
+                        <Textarea id="workbench-implement-info" rows={3} maxLength={8000} value={additional} onChange={(event) => setAdditional(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
+                        <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto do plano aprovado, no prompt de implementação.</p>
+                    </motion.div>
                 )}
                 {composer && (
                     <motion.div key="composer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-2 overflow-hidden">
@@ -109,7 +122,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                 )
                             case "implement":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement")}>
+                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
                                         <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                     </Button>
                                 )
