@@ -49,7 +49,9 @@ recalcula o orçamento com o fator e o custo/hora **atuais** do cliente que orig
   vem no DTO de administração; a regeneração é a única ação que troca o token.
 - Formulário (`ClienteDialog`): **Nome**, **Repositórios** (múltipla escolha só entre os projetos
   vinculados — `GET /api/tasks/options`), **Custo por hora** (`MoneyInput`, 2 casas decimais),
-  **Fator de lucro** (≥ 1) e **Cliente ativo**.
+  **Fator de lucro** (≥ 1) e **Cliente ativo**. O seletor de **Repositórios** é o
+  `CadastroMultiSelect` (o **mesmo componente dos filtros das Tarefas**), com busca e as opções no
+  `GithubRepoLabel` real (avatar/descrição/privado) via `useGithubRepoIndex` da sessão.
 - Token: criar e regenerar devolvem o valor em claro + a URL (`ClientTokenDialog`); regenerar invalida
   o anterior na hora.
 - Regras: repositório precisa existir (400 `PROJECT_NOT_FOUND`); mutações auditadas
@@ -197,6 +199,7 @@ das duas fases), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/
 semelhantes + provedor de texto/JEV), `orcamentos-similar` (busca por tags com fallback e horas
 dos apontamentos), `cliente-revisao` (cards da revisão), `cliente-task-table`,
 `cliente-task-card`, `cliente-task-detail` (abas sem Histórico/Horas, estimativa inflada e comentários
-com autor), `copy-portal-url`, `markdown-field`. A configuração de "Estimar prazos" em
+com autor), `cliente-dialog` (seletor de repositórios com o `GithubRepoLabel`), `copy-portal-url`,
+`markdown-field`. A configuração de "Estimar prazos" em
 `__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge` (faturamento no dono) em
 `__tests__/features/tasks/estimate-badge.test.tsx`.

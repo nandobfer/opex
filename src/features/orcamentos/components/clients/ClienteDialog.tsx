@@ -1,17 +1,20 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Loader2 } from "lucide-react"
+import { Github, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { MoneyInput } from "@/components/ui/money-input"
-import { MultiAutocomplete } from "@/components/ui/multi-autocomplete"
 import { FormToggleCard } from "@/components/ui/toggle-card"
+import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
+import type { GithubRepoOption } from "@/features/github/types"
 import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
 import { clienteOrcamentoSchema, type ClienteOrcamentoInput } from "../../schemas"
 import type { ClienteOrcamentoDto } from "../../types"
@@ -21,6 +24,8 @@ interface ClienteDialogProps {
     /** Cliente em edição; `null` = novo. */
     client: ClienteOrcamentoDto | null
     submitting: boolean
+    /** Índice `owner/repo` do GitHub, para o rótulo real dos repositórios (`GithubRepoLabel`). */
+    repoIndex: ReadonlyMap<string, GithubRepoOption>
     onSubmit: (values: ClienteOrcamentoInput) => Promise<{ token?: string; item: ClienteOrcamentoDto } | null>
     onClose: () => void
 }
@@ -28,11 +33,13 @@ interface ClienteDialogProps {
 const EMPTY: ClienteOrcamentoInput = { name: "", projectIds: [], hourlyRate: 0, profitFactor: 1, active: true }
 
 /** Cadastro de um cliente do portal: nome, repositórios permitidos, custo/hora e fator de lucro. */
-export function ClienteDialog({ open, client, submitting, onSubmit, onClose }: ClienteDialogProps) {
+export function ClienteDialog({ open, client, submitting, repoIndex, onSubmit, onClose }: ClienteDialogProps) {
     const form = useForm<ClienteOrcamentoInput>({ resolver: zodResolver(clienteOrcamentoSchema), mode: "onChange", defaultValues: EMPTY })
     const options = useTaskOptions(open)
-    const projects = options.data?.projects ?? []
-    const repoOptions = projects.map((project) => ({ value: project.id, label: project.repo, description: project.name }))
+    const projects = useMemo(() => options.data?.projects ?? [], [options.data])
+    const repoOptions = useMemo(() => projects.map((project) => ({ value: project.id, label: project.repo })).sort((a, b) => a.label.localeCompare(b.label, "pt-BR")), [projects])
+    const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
+    const reposPlaceholder = options.isLoading ? "Carregando…" : options.isError ? "Não foi possível listar os repositórios" : projects.length === 0 ? "Nenhum repositório vinculado" : "Selecionar…"
     const errors = form.formState.errors
     const projectIds = useWatch({ control: form.control, name: "projectIds" })
 
@@ -68,15 +75,19 @@ export function ClienteDialog({ open, client, submitting, onSubmit, onClose }: C
                             control={form.control}
                             name="projectIds"
                             render={({ field }) => (
-                                <MultiAutocomplete
+                                <CadastroMultiSelect
                                     id="client-repos"
+                                    icon={Github}
+                                    placeholder={reposPlaceholder}
                                     options={repoOptions}
-                                    value={field.value}
-                                    onChange={field.onChange}
-                                    placeholder={projects.length ? "Buscar repositório…" : "Nenhum repositório vinculado"}
-                                    emptyText={options.isError ? "Não foi possível listar os repositórios" : "Nenhum repositório vinculado"}
-                                    loading={options.isLoading}
-                                    aria-label="Repositórios"
+                                    renderLabel={(option) => {
+                                        const project = projectById.get(option.value)
+                                        return project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : option.label
+                                    }}
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    searchable
+                                    searchPlaceholder="Buscar repositório..."
                                 />
                             )}
                         />
