@@ -2,7 +2,7 @@ import Fuse from "fuse.js"
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_SORT_KEYS, TASK_TYPES, TASK_VIEW_MODES, type TaskPriority, type TaskSortKey, type TaskType, type TaskViewMode } from "./constants"
 import { columnKeyOf, type BoardColumnView } from "./board"
-import type { ProjectRef, TaskDto } from "./types"
+import type { ProjectRef } from "./types"
 
 /** Filtros e preferências da tela de Tarefas (salvos no navegador). Módulo puro. */
 
@@ -70,10 +70,24 @@ export interface TaskRepoOption {
 }
 
 /**
+ * Campos que os filtros leem de uma tarefa (serve à lista interna e à do portal do cliente, que
+ * têm estimativas diferentes).
+ */
+export interface FilterableTask {
+    code: string
+    title: string
+    archived: boolean
+    priority: TaskPriority
+    taskType: TaskType | null
+    columnId: string
+    project: ProjectRef | null
+}
+
+/**
  * Repositórios do filtro de Tarefas: os projetos vinculados mais os citados nas tarefas (garante
  * que nenhum repositório fique de fora antes de `options` carregar). `label` = `owner/repo`.
  */
-export function taskRepoOptions(projects: readonly ProjectRef[], tasks: readonly TaskDto[]): TaskRepoOption[] {
+export function taskRepoOptions(projects: readonly ProjectRef[], tasks: readonly FilterableTask[]): TaskRepoOption[] {
     const byId = new Map<string, ProjectRef>()
     for (const project of projects) byId.set(project.id, project)
     for (const task of tasks) if (task.project) byId.set(task.project.id, task.project)
@@ -89,7 +103,7 @@ const includesOrAll = <T>(selected: readonly T[], value: T) => selected.length =
  * kanban esconde as colunas (ver `visibleColumns`). Busca tolera erro de digitação (fuse.js) e casa
  * código exato (ex.: "OPX-12").
  */
-export function applyTaskFilters(tasks: readonly TaskDto[], filters: TaskFilters, options: { ignoreColumn?: boolean } = {}): TaskDto[] {
+export function applyTaskFilters<T extends FilterableTask>(tasks: readonly T[], filters: TaskFilters, options: { ignoreColumn?: boolean } = {}): T[] {
     let result = tasks.filter(
         (task) =>
             (filters.showArchived || !task.archived) &&

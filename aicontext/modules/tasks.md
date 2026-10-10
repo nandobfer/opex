@@ -12,12 +12,16 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 ## Modelo (`src/lib/db/models/`)
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
-  taskType, priority, archived, summary, summarySourceHash, summaryUpdatedAt, estimate }`. `code` =
-  `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o resumo
-  de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele (detecta
-  desatualização) — ver `modules/ai.md`. `estimate` é o orçamento vindo do portal do cliente
-  (`null` fora dele) — ver `modules/orcamentos.md`.
-- `TaskComment` (`task_comments`): `{ taskId, content, createdAt }`.
+  taskType, priority, archived, clientId, summary, summarySourceHash, summaryUpdatedAt, estimate }`.
+  `code` = `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o
+  resumo de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele
+  (detecta desatualização) — ver `modules/ai.md`. `estimate` é o orçamento vindo do portal do cliente
+  (`null` fora dele) e `clientId` é o cliente que **solicitou** a tarefa (`null` fora do portal) — o
+  que define a lista do portal (o cliente só vê as dele). Ver `modules/orcamentos.md`.
+- `TaskComment` (`task_comments`): `{ taskId, content, authorType, authorName, createdAt }`. A origem
+  do comentário (`authorType: "owner" | "client"`) e o nome exibido (`authorName`: o dono vindo de
+  `APP_OWNER_NAME`/`getLocalUser()`, ou o nome do cliente no portal) permitem marcar quem comentou;
+  comentários antigos (sem autor) caem no dono. Ver `modules/orcamentos.md`.
 - `TaskBoardColumn` (`task_board_columns`) e `TaskBoardLayout` (`task_board_layout`, documento
   `board` com a ordem).
 - `Project` (`projects`): um repositório GitHub vinculado (ver `modules/github.md`).
@@ -38,12 +42,15 @@ semeado na primeira leitura (`ensureBoard`).
 
 - `service.ts` (`TASK_AUDIT_ENTITY = "Tarefa"`): `listTasks(includeArchived)` (junta projeto e issue),
   `getTask` (detalhe com comentários, histórico e horas), `getTaskOptions` (projetos), `createTask`
-  (gera o código, vai para o fim da coluna), `updateTask` (campos; mudar de coluna leva ao fim dela),
-  `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga comentários e apontamentos),
-  `addComment`, `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um `tasks-updated`).
-  Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`. Mudanças de
-  coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma central).
-  `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos resumos de IA).
+  (gera o código, vai para o fim da coluna; aceita `clientId` do portal), `updateTask` (campos; mudar
+  de coluna leva ao fim dela), `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga
+  comentários e apontamentos), `addComment` (grava a origem e o nome do autor via
+  `{ id, type, name }`), `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um
+  `tasks-updated`), `listTasksForClient(clientId, includeArchived)` (tarefas que um cliente do portal
+  solicitou). Toda mutação grava auditoria e publica `tasks-updated { ids }` no canal `private-app`.
+  Mudanças de coluna também avisam o desenvolvimento agêntico (a tarefa pode entrar na fila de uma
+  central). `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos resumos
+  de IA).
 - `columns.ts` (`COLUMN_AUDIT_ENTITY = "ColunaTarefas"`): `ensureBoard` (semeia o quadro padrão —
   A Fazer / Em Andamento / Concluído — na primeira execução), `getBoard`, `createColumn`,
   `updateColumn`, `deleteColumn` (só vazia, que não seja coluna de entrada de um projeto —
@@ -137,7 +144,8 @@ tarefa.
 a descrição.
 - Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
 animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
-**Especificação técnica** (aba própria, em Markdown), Comentários (lista + formulário), Histórico
+  **Especificação técnica** (aba própria, em Markdown), Comentários (lista + formulário; cada
+  comentário mostra o **nome do autor** — dono ou cliente, ver `modules/orcamentos.md`), Histórico
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
@@ -172,5 +180,5 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
 `task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`, `task-estimate-card` — a estimativa editável é coberta em `tasks-service` e
-`task-estimate-card`) e `__tests__/hooks/usePersistentState.test.tsx`.
+`task-summary-card`, `task-estimate-card` — a estimativa editável, o `clientId` do portal e o autor
+dos comentários são cobertos em `tasks-service`) e `__tests__/hooks/usePersistentState.test.tsx`.

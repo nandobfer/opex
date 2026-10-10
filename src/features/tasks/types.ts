@@ -60,6 +60,10 @@ export interface TaskIssueRef {
 export interface TaskComment {
     id: string
     content: string
+    /** Origem do comentário: o dono (app interno) ou o cliente (portal). */
+    authorType: "owner" | "client"
+    /** Nome exibido do autor (dono: `APP_OWNER_NAME`; cliente: nome do cliente). */
+    authorName: string
     createdAt: string | null
 }
 

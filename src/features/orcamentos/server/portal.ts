@@ -1,19 +1,19 @@
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
+import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoDraft, type IOrcamentoDraft, type IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { Project } from "@/lib/db/models/Project"
 import { createTaskWithIssue } from "@/features/github/server/task-issue"
 import { listGithubRepos } from "@/features/github/server/lookups"
 import type { GithubRepoOption } from "@/features/github/types"
-import type { ProjectRef } from "@/features/tasks/types"
-import { listTasksForProjects } from "@/features/tasks/server/service"
+import type { ProjectRef, TaskDetailDto, TaskDto } from "@/features/tasks/types"
+import { addComment, getTask, listTasksForClient } from "@/features/tasks/server/service"
 import { getBoard } from "@/features/tasks/server/columns"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
-import type { TaskDto, TaskListDto } from "@/features/tasks/types"
 import { DRAFT_AUDIT_ENTITY } from "../constants"
 import { computeClientEstimate, type ClientEstimate } from "../logic"
 import type { ClienteDraftInput } from "../schemas"
-import type { ClientePortalOptionsDto, ClienteRepoDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
+import type { ClientePortalOptionsDto, ClienteRepoDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskEstimateDto, ClienteTaskListDto, DraftEstimateDto, DraftPreviewDto, OrcamentoDraftDto } from "../types"
 import { clientProjects } from "./clients"
 import type { ClienteOrcamentoDoc } from "./token"
 
@@ -47,8 +47,61 @@ function withGithubData(project: ProjectRef, index: Map<string, GithubRepoOption
     return { ...project, ownerAvatarUrl: repo?.ownerAvatarUrl ?? null, description: repo?.description ?? null, private: repo?.private ?? false }
 }
 
-export async function listClientTasks(client: ClienteOrcamentoDoc, includeArchived: boolean): Promise<TaskListDto> {
-    return listTasksForProjects(client.projectIds ?? [], includeArchived)
+export async function listClientTasks(client: ClienteOrcamentoDoc, includeArchived: boolean): Promise<ClienteTaskListDto> {
+    const list = await listTasksForClient(String(client._id), includeArchived)
+    return { tasks: list.tasks.map(toClienteTaskDto), fetchedAt: list.fetchedAt }
+}
+
+/** Estimativa segura ao cliente: só horas infladas e faturamento (sem horas reais, fator, custo/hora ou modelo). */
+function toClienteEstimate(estimate: TaskDto["estimate"]): ClienteTaskEstimateDto | null {
+    return estimate ? { clientHours: estimate.clientHours, billingBrl: estimate.billingBrl } : null
+}
+
+/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo da estimativa. */
+export function toClienteTaskDto(task: TaskDto): ClienteTaskDto {
+    return { ...task, estimate: toClienteEstimate(task.estimate) }
+}
+
+/** Detalhe na visão do cliente: sem histórico, horas apontadas nem dados internos da estimativa. */
+export function toClienteTaskDetail(task: TaskDetailDto): ClienteTaskDetailDto {
+    return {
+        id: task.id,
+        code: task.code,
+        columnId: task.columnId,
+        order: task.order,
+        title: task.title,
+        summary: task.summary,
+        taskType: task.taskType,
+        priority: task.priority,
+        archived: task.archived,
+        project: task.project,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+        estimate: toClienteEstimate(task.estimate),
+        description: task.description,
+        technicalSpec: task.technicalSpec,
+        comments: task.comments,
+    }
+}
+
+/** Garante que a tarefa é do cliente (a que ele solicitou); caso contrário, 404 (não revela existência). */
+async function assertClientTask(client: ClienteOrcamentoDoc, id: string): Promise<void> {
+    await dbConnect()
+    if (!OBJECT_ID.test(id)) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+    const task = await DevTask.findById(id).lean()
+    if (!task || task.clientId !== String(client._id)) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
+}
+
+/** Detalhe da tarefa na visão do cliente (só as que ele solicitou). */
+export async function getClientTask(client: ClienteOrcamentoDoc, id: string): Promise<ClienteTaskDetailDto> {
+    await assertClientTask(client, id)
+    return toClienteTaskDetail(await getTask(id))
+}
+
+/** Comentário do cliente na tarefa (origem marcada com o nome do cliente). */
+export async function addClientComment(client: ClienteOrcamentoDoc, id: string, content: string): Promise<void> {
+    await assertClientTask(client, id)
+    await addComment(id, content, { id: client.name, type: "client", name: client.name })
 }
 
 export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<ClientePortalOptionsDto> {
@@ -149,6 +202,7 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
     }
     const task = await createTaskWithIssue(input, actorId, {
         origin: "client",
+        clientId: String(client._id),
         ...(estimate ? { estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } } : {}),
     })
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { status: "approved", taskId: task.id } })

@@ -12,7 +12,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { buildBoardColumns } from "@/features/tasks/board"
 import { applyTaskFilters, DEFAULT_TASK_FILTERS, type TaskFilters } from "@/features/tasks/filters"
 import { TaskViewSwitch } from "@/features/tasks/components/TaskViewSwitch"
-import { clienteNovaPath } from "../constants"
+import { clienteNovaPath, clienteTarefaPath } from "../constants"
 import { repoLabelIndex } from "../logic"
 import { useClienteOptions, useClienteTasks } from "./hooks"
 import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
@@ -58,7 +58,7 @@ function ClienteTasksView() {
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                     <h1 className="text-lg font-semibold md:text-2xl">{options.data?.clientName ?? "Portal"}</h1>
-                    <p className="text-sm text-muted-foreground">Acompanhamento das tarefas (somente leitura).</p>
+                    <p className="text-sm text-muted-foreground">Acompanhamento das tarefas que você solicitou (somente leitura).</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <TaskViewSwitch value={filters.view} onChange={(view) => setFilters((prev) => ({ ...prev, view }))} />
@@ -79,11 +79,11 @@ function ClienteTasksView() {
                 <>
                     <ClienteFiltersBar filters={filters} setFilters={setFilters} total={shown.length} tasks={allTasks} projects={options.data?.projects ?? []} columns={columns} />
                     {shown.length === 0 ? (
-                        <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas dos seus repositórios aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath(token))} />
+                        <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas que você solicitar aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath(token))} />
                     ) : filters.view === "kanban" ? (
-                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} />
+                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} />
                     ) : (
-                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} />
+                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} />
                     )}
                 </>
             )}

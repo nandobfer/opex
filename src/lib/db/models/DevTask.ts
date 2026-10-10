@@ -34,6 +34,12 @@ export interface IDevTask {
     taskType: string | null
     priority: string
     archived: boolean
+    /**
+     * Cliente de orçamento que **solicitou** a tarefa pelo portal (`OrcamentoClient._id`). `null`
+     * quando a tarefa não veio do portal. É o que define a lista do portal (o cliente só vê as que
+     * ele pediu — ver `modules/orcamentos.md`).
+     */
+    clientId: string | null
     /** Resumo de 1 linha gerado por IA (substitui a descrição na exibição). */
     summary: string | null
     /** Hash da fonte (título + descrição) do resumo atual; divergente = resumo desatualizado. */
@@ -70,6 +76,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         taskType: { type: String, default: null },
         priority: { type: String, default: "medium" },
         archived: { type: Boolean, default: false },
+        clientId: { type: String, default: null, index: true },
         summary: { type: String, default: null },
         summarySourceHash: { type: String, default: null },
         summaryUpdatedAt: { type: Date, default: null },
@@ -81,6 +88,10 @@ const DevTaskSchema = new Schema<IDevTask>(
 export interface ITaskComment {
     taskId: string
     content: string
+    /** Origem do comentário: o dono (app interno) ou o cliente (portal). */
+    authorType: "owner" | "client"
+    /** Nome exibido do autor (dono: `APP_OWNER_NAME`; cliente: nome do cliente). */
+    authorName: string | null
     createdAt: Date
 }
 
@@ -88,6 +99,8 @@ const TaskCommentSchema = new Schema<ITaskComment>(
     {
         taskId: { type: String, required: true, index: true },
         content: { type: String, required: true },
+        authorType: { type: String, default: "owner" },
+        authorName: { type: String, default: null },
         createdAt: { type: Date, default: () => new Date() },
     },
     { collection: "task_comments", versionKey: false },

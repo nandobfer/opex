@@ -13,6 +13,6 @@ const commentSchema = z.object({ content: z.string().trim().min(1, "Escreva um c
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, commentSchema)
     if (!body.ok) return body.response
-    await addComment(params.id, body.data.content, getLocalUser().id)
+    await addComment(params.id, body.data.content, { id: getLocalUser().id, type: "owner", name: getLocalUser().name })
     return created({ id: params.id })
 })

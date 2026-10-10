@@ -17,6 +17,8 @@ export const clientePortalPath = (token: string) => `${ORCAMENTOS_BASE_PATH}?${C
 export const clienteNovaPath = (token: string) => `${ORCAMENTOS_BASE_PATH}/nova?${CLIENTE_TOKEN_PARAM}=${encodeURIComponent(token)}`
 export const clienteRevisaoPath = (token: string, draftId: string) =>
     `${ORCAMENTOS_BASE_PATH}/revisao/${draftId}?${CLIENTE_TOKEN_PARAM}=${encodeURIComponent(token)}`
+export const clienteTarefaPath = (token: string, taskId: string) =>
+    `${ORCAMENTOS_BASE_PATH}/tarefa/${taskId}?${CLIENTE_TOKEN_PARAM}=${encodeURIComponent(token)}`
 
 /** Evento em `private-app` quando clientes de orçamento mudam. Payload: `{ scope }`. */
 export const ORCAMENTOS_UPDATED_EVENT = "orcamentos-updated"

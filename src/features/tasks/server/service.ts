@@ -5,6 +5,7 @@ import { DevTask, TaskComment, type IDevTask, type ITaskEstimate } from "@/lib/d
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { Project, type IProject } from "@/lib/db/models/Project"
 import { TimeLog } from "@/lib/db/models/TimeLog"
+import { getLocalUser } from "@/lib/local-user"
 import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskPriority, type TaskType } from "../constants"
@@ -156,10 +157,9 @@ export async function listTasks(includeArchived: boolean): Promise<TaskListDto> 
 }
 
 /** Tarefas dos repositórios de um cliente (portal). SOMENTE servidor. */
-export async function listTasksForProjects(projectIds: string[], includeArchived: boolean): Promise<TaskListDto> {
+export async function listTasksForClient(clientId: string, includeArchived: boolean): Promise<TaskListDto> {
     await dbConnect()
-    if (projectIds.length === 0) return { tasks: [], fetchedAt: new Date().toISOString() }
-    const docs = await DevTask.find({ projectId: { $in: projectIds }, ...(includeArchived ? {} : { archived: { $ne: true } }) })
+    const docs = await DevTask.find({ clientId, ...(includeArchived ? {} : { archived: { $ne: true } }) })
         .sort({ columnId: 1, order: 1 })
         .lean()
     const projects = new Map((await Project.find({ _id: { $in: [...new Set(docs.map((task) => task.projectId))] } }).lean()).map((project) => [String(project._id), project]))
@@ -185,7 +185,13 @@ export async function getTask(id: string): Promise<TaskDetailDto> {
         estimateClientName,
         description: task.description ?? null,
         technicalSpec: task.technicalSpec ?? null,
-        comments: comments.map((comment) => ({ id: String(comment._id), content: comment.content, createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : null })),
+        comments: comments.map((comment) => ({
+            id: String(comment._id),
+            content: comment.content,
+            authorType: comment.authorType === "client" ? "client" : "owner",
+            authorName: comment.authorName ?? (comment.authorType === "client" ? "Cliente" : getLocalUser().name),
+            createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : null,
+        })),
         history,
         timeLogs: time.logs,
         totalTimeLogged: time.total,
@@ -270,6 +276,8 @@ export interface CreateTaskOptions {
     order?: number
     /** Origem da criação (a sincronização marca "github"; o portal do cliente marca "client"). */
     origin?: "opex" | "github" | "client"
+    /** Cliente de orçamento que solicitou a tarefa (portal). */
+    clientId?: string
     /** Estimativa/orçamento vinda do portal do cliente (snapshot). */
     estimate?: TaskEstimateInput
 }
@@ -302,6 +310,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         taskType: input.taskType ?? null,
         priority: input.priority ?? "medium",
         archived: false,
+        clientId: options.clientId ?? null,
         estimate: options.estimate ? { ...options.estimate, generatedAt: new Date() } : null,
     })
     await recordAudit({
@@ -460,12 +469,21 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     await publishTasksUpdated([id])
 }
 
-export async function addComment(taskId: string, content: string, actorId: string): Promise<void> {
+/** Autor de um comentário (origem + nome exibido). */
+export interface CommentAuthor {
+    /** Identificador para a auditoria (dono: `local`; cliente: nome do cliente). */
+    id: string
+    type: "owner" | "client"
+    /** Nome exibido do autor. */
+    name: string
+}
+
+export async function addComment(taskId: string, content: string, author: CommentAuthor): Promise<void> {
     assertTaskId(taskId)
     await dbConnect()
     if (!(await DevTask.exists({ _id: taskId }))) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
-    await TaskComment.create({ taskId, content: content.trim() })
-    await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: taskId, acao: AcaoAuditoria.ATUALIZAR, depois: { comentario: "adicionado" } })
+    await TaskComment.create({ taskId, content: content.trim(), authorType: author.type, authorName: author.name })
+    await recordAudit({ userId: author.id, entidade: TASK_AUDIT_ENTITY, entidadeId: taskId, acao: AcaoAuditoria.ATUALIZAR, depois: { comentario: "adicionado" } })
     await publishTasksUpdated([taskId])
 }
 
