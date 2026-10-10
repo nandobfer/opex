@@ -135,13 +135,17 @@ e opções na própria aba da página "Provedores de IA".
   variante/raciocínio, temperatura e máximo de tokens (só Gemini) e instruções (prompt de sistema).
   Regras ao salvar iguais às demais features (ativa exige provedor+modelo conectados; modelo,
   variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
-- A IA interpreta a **descrição enviada pelo cliente** no portal e devolve **JSON validado com Zod**
-  (`parseDraftPreview` em `src/features/orcamentos/preview-prompt.ts`): título, tipo, prioridade,
-  especificação técnica (Markdown), resumo de 1 linha e **horas estimadas** (H). Como não há saída
-  estruturada garantida, o JSON é extraído do texto e validado; inválido → evento `error`.
-- As horas são calibradas pelo **histórico de horas dos agentes** (`estimateStats`, agregado de
-  `TimeLog.duration` por `DevTask.taskType`) injetado no prompt — **sem ferramenta** (o `streamAi`
-  não tem tool calling). Ver `modules/orcamentos.md`.
+- A feature roda em **duas fases** (duas requisições NDJSON, ver `modules/orcamentos.md`):
+  1. **Prévia** (`parseDraftPreview`): a IA interpreta a **descrição enviada pelo cliente** e devolve
+     **JSON validado com Zod** — título, tipo, prioridade, especificação técnica (Markdown) e resumo
+     de 1 linha;
+  2. **Estimativa** (`parseEstimateHours`): a IA recebe a prévia + o pedido e devolve
+     `{ estimatedHours }` (H).
+  Como não há saída estruturada garantida, o JSON é extraído do texto e validado; inválido → evento
+  `error`. O cálculo exibido ao cliente (`H × fator × custo/hora`) é do servidor.
+- As horas da 2ª fase são calibradas pelo **histórico de horas dos agentes** (`estimateStats`,
+  agregado de `TimeLog.duration` por `DevTask.taskType`) injetado no prompt — **sem ferramenta** (o
+  `streamAi` não tem tool calling). Ver `modules/orcamentos.md`.
 
 ## APIs
 

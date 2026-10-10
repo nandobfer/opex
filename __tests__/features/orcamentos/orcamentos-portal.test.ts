@@ -30,7 +30,7 @@ vi.mock("@/features/tasks/server/service", () => ({ listTasksForProjects: vi.fn(
 vi.mock("@/features/tasks/server/columns", () => ({ getBoard: vi.fn(async () => ({ columns: [], layout: [] })) }))
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 
-import { approveDraft, createDraft, getDraft, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
+import { approveDraft, createDraft, getDraft, saveDraftEstimate, saveDraftPreview, setDraftCorrection } from "@/features/orcamentos/server/portal"
 import type { ClienteOrcamentoDoc } from "@/features/orcamentos/server/token"
 import type { MemoryModel } from "../../helpers/memory-model"
 
@@ -40,7 +40,7 @@ const clients = () => mocks.clients as MemoryModel
 let projectId: string
 let client: ClienteOrcamentoDoc
 
-const preview = { title: "Corrigir X", taskType: "bugfix" as const, priority: "high" as const, technicalSpec: "## Passos", summary: "Corrige X", estimatedHours: 2 }
+const preview = { title: "Corrigir X", taskType: "bugfix" as const, priority: "high" as const, technicalSpec: "## Passos", summary: "Corrige X" }
 
 beforeEach(async () => {
     vi.clearAllMocks()
@@ -60,10 +60,23 @@ describe("portal do cliente", () => {
         await expect(createDraft(client, { projectId: "aaaaaaaaaaaaaaaaaaaaaaaa", description: "x" })).rejects.toMatchObject({ code: "PROJECT_NOT_ALLOWED" })
     })
 
-    it("grava a prévia e calcula as horas do cliente com o fator (H × fator) e o faturamento", async () => {
+    it("grava a prévia (sem estimativa) e, ao estimar, calcula H × fator e o faturamento", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
         const saved = await saveDraftPreview(client, draft.id, preview, "gemini/pro")
-        expect(saved.estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
+        expect(saved.preview).toMatchObject({ title: "Corrigir X" })
+        expect(saved.estimate).toBeNull()
+
+        const estimate = await saveDraftEstimate(client, draft.id, 2)
+        expect(estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
+        expect((await getDraft(client, draft.id)).estimate).toEqual({ hours: 2, clientHours: 20, billingBrl: 800 })
+    })
+
+    it("regravar a prévia (correção) zera a estimativa anterior", async () => {
+        const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
+        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        await saveDraftEstimate(client, draft.id, 2)
+        const again = await saveDraftPreview(client, draft.id, { ...preview, title: "Outro título" }, "gemini/pro")
+        expect(again.estimate).toBeNull()
     })
 
     it("registra a correção pedida pelo cliente", async () => {
@@ -75,6 +88,7 @@ describe("portal do cliente", () => {
     it("ao aprovar, cria a tarefa na coluna de entrada com a estimativa e marca o rascunho", async () => {
         const draft = await createDraft(client, { projectId, description: "Ajustar o rodapé" })
         await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        await saveDraftEstimate(client, draft.id, 2)
         mocks.createTaskWithIssue.mockResolvedValue({ id: "t1", code: "APP-1" })
 
         const task = await approveDraft(client, draft.id, "local")
@@ -93,5 +107,15 @@ describe("portal do cliente", () => {
     it("recusa aprovar sem prévia", async () => {
         const draft = await createDraft(client, { projectId, description: "x" })
         await expect(approveDraft(client, draft.id, "local")).rejects.toMatchObject({ code: "DRAFT_WITHOUT_PREVIEW" })
+    })
+
+    it("permite aprovar sem estimativa (a tarefa nasce sem orçamento)", async () => {
+        const draft = await createDraft(client, { projectId, description: "x" })
+        await saveDraftPreview(client, draft.id, preview, "gemini/pro")
+        mocks.createTaskWithIssue.mockResolvedValue({ id: "t2", code: "APP-2" })
+        await approveDraft(client, draft.id, "local")
+        const options = mocks.createTaskWithIssue.mock.calls[0][2] as { origin: string; estimate?: unknown }
+        expect(options.origin).toBe("client")
+        expect(options.estimate).toBeUndefined()
     })
 })

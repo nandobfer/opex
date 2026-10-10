@@ -2,11 +2,13 @@ import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
 import type { ProjectRef, TaskListDto } from "@/features/tasks/types"
 
-/** Cliente do portal como a tela de administração o exibe (sem o token). */
+/** Cliente do portal como a tela de administração o exibe (sem o hash; com o caminho do portal). */
 export interface ClienteOrcamentoDto {
     id: string
     name: string
     tokenPrefix: string
+    /** Caminho relativo do portal com o token (`/cliente?t=…`), para copiar a URL. */
+    portalPath: string
     projectIds: string[]
     /** Dados de repositório dos projetos escolhidos (para exibir `owner/repo`). */
     projects: ProjectRef[]
@@ -23,14 +25,13 @@ export interface CreatedClienteOrcamentoDto {
     item: ClienteOrcamentoDto
 }
 
-/** Prévia estruturada da tarefa (saída validada da IA). */
+/** Prévia estruturada da tarefa (saída validada da IA, sem as horas). */
 export interface DraftPreviewDto {
     title: string
     taskType: TaskType | null
     priority: TaskPriority
     technicalSpec: string
     summary: string
-    estimatedHours: number
 }
 
 /** Rascunho do portal (prévia + estado). */
@@ -38,6 +39,8 @@ export interface OrcamentoDraftDto {
     id: string
     projectId: string
     projectName: string | null
+    /** `owner/repo` do repositório escolhido (para exibir no card de metadados). */
+    projectRepo: string | null
     description: string
     correction: string | null
     preview: DraftPreviewDto | null

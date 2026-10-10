@@ -36,23 +36,25 @@ export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<Cli
 function draftPreview(draft: DraftDoc): DraftPreviewDto | null {
     const preview = draft.preview
     if (!preview) return null
-    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary, estimatedHours: preview.estimatedHours }
+    return { title: preview.title, taskType: (preview.taskType as DraftPreviewDto["taskType"]) ?? null, priority: preview.priority as DraftPreviewDto["priority"], technicalSpec: preview.technicalSpec, summary: preview.summary }
 }
 
 async function draftToDto(draft: DraftDoc, client: ClienteOrcamentoDoc): Promise<OrcamentoDraftDto> {
     const project = await Project.findById(draft.projectId).lean()
     const preview = draftPreview(draft)
+    const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
     return {
         id: String(draft._id),
         projectId: draft.projectId,
         projectName: project?.name ?? null,
+        projectRepo: project?.repo ?? null,
         description: draft.description,
         correction: draft.correction ?? null,
         preview,
         model: draft.model ?? null,
         status: draft.status,
         taskId: draft.taskId ?? null,
-        estimate: preview ? toEstimateDto(computeClientEstimate(preview.estimatedHours, client.profitFactor, client.hourlyRate)) : null,
+        estimate: estimatedHours != null ? toEstimateDto(computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate)) : null,
         createdAt: draft.createdAt ? new Date(draft.createdAt).toISOString() : null,
     }
 }
@@ -88,11 +90,18 @@ export async function setDraftCorrection(client: ClienteOrcamentoDoc, id: string
     return draftToDto({ ...draft, correction }, client)
 }
 
-/** Grava a prévia gerada pela IA (chamado ao fim do stream). */
+/** Grava a prévia gerada pela IA (chamado ao fim do stream). Zera a estimativa (nova correção). */
 export async function saveDraftPreview(client: ClienteOrcamentoDoc, id: string, preview: DraftPreviewDto, model: string | null): Promise<OrcamentoDraftDto> {
     await getDraftDoc(client, id)
-    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview, model } })
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { preview, estimatedHours: null, model } })
     return getDraft(client, id)
+}
+
+/** Grava a estimativa de horas (H) e devolve o orçamento do cliente (H × fator × custo/hora). */
+export async function saveDraftEstimate(client: ClienteOrcamentoDoc, id: string, estimatedHours: number): Promise<DraftEstimateDto> {
+    await getDraftDoc(client, id)
+    await OrcamentoDraft.updateOne({ _id: id }, { $set: { estimatedHours } })
+    return toEstimateDto(computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate))
 }
 
 export async function approveDraft(client: ClienteOrcamentoDoc, id: string, actorId: string): Promise<TaskDto> {
@@ -104,7 +113,8 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
 
     const preview = draft.preview as IOrcamentoDraftPreview
-    const estimate = computeClientEstimate(preview.estimatedHours, client.profitFactor, client.hourlyRate)
+    const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
+    const estimate = estimatedHours != null ? computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate) : null
     const input: CreateTaskInput = {
         title: preview.title,
         projectId: draft.projectId,
@@ -116,7 +126,7 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
     }
     const task = await createTaskWithIssue(input, actorId, {
         origin: "client",
-        estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null },
+        ...(estimate ? { estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } } : {}),
     })
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { status: "approved", taskId: task.id } })
     await recordAudit({ userId: actorId, entidade: DRAFT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { cliente: client.name, tarefa: task.code } })

@@ -4,7 +4,7 @@ import { OrcamentoClient, OrcamentoDraft, type IOrcamentoClient } from "@/lib/db
 import { Project } from "@/lib/db/models/Project"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import type { ProjectRef } from "@/features/tasks/types"
-import { CLIENTE_AUDIT_ENTITY, ORCAMENTOS_UPDATED_EVENT } from "../constants"
+import { CLIENTE_AUDIT_ENTITY, ORCAMENTOS_UPDATED_EVENT, clientePortalPath } from "../constants"
 import type { ClienteOrcamentoInput } from "../schemas"
 import type { ClienteOrcamentoDto, CreatedClienteOrcamentoDto } from "../types"
 import { newClientTokenValue } from "./token"
@@ -29,6 +29,7 @@ function toDto(doc: ClientDoc, projects: Map<string, ProjectRef>): ClienteOrcame
         id: String(doc._id),
         name: doc.name,
         tokenPrefix: doc.tokenPrefix,
+        portalPath: clientePortalPath(doc.token ?? ""),
         projectIds: doc.projectIds ?? [],
         projects: (doc.projectIds ?? []).map((id) => projects.get(id)).filter((item): item is ProjectRef => Boolean(item)),
         hourlyRate: doc.hourlyRate ?? 0,
@@ -72,6 +73,7 @@ export async function createClient(input: ClienteOrcamentoInput, actorId: string
     const { token, prefix, hash } = newClientTokenValue()
     const doc = (await OrcamentoClient.create({
         name: input.name,
+        token,
         tokenHash: hash,
         tokenPrefix: prefix,
         projectIds: [...new Set(input.projectIds)],
@@ -119,11 +121,11 @@ export async function regenerateClientToken(id: string, actorId: string): Promis
     await dbConnect()
     const before = await getClientDoc(id)
     const { token, prefix, hash } = newClientTokenValue()
-    await OrcamentoClient.updateOne({ _id: id }, { $set: { tokenHash: hash, tokenPrefix: prefix } })
+    await OrcamentoClient.updateOne({ _id: id }, { $set: { token, tokenHash: hash, tokenPrefix: prefix } })
     await recordAudit({ userId: actorId, entidade: CLIENTE_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { token: before.tokenPrefix }, depois: { token: prefix } })
     await publishAppEvent(ORCAMENTOS_UPDATED_EVENT, { scope: "clients" })
     const projects = await projectRefs(before.projectIds ?? [])
-    return { token, item: toDto({ ...before, tokenPrefix: prefix }, projects) }
+    return { token, item: toDto({ ...before, token, tokenPrefix: prefix }, projects) }
 }
 
 export async function deleteClient(id: string, actorId: string): Promise<void> {

@@ -3,13 +3,16 @@ import { Schema, model, models, type Model } from "mongoose"
 /**
  * Orçamentos dO Opex:
  * - `orcamento_clients`: clientes do portal, cada um com os repositórios permitidos, o custo por
- *   hora, o fator de lucro e o **hash** do token de acesso (o valor aparece uma única vez);
- * - `orcamento_drafts`: rascunho criado pelo portal (descrição + prévia da IA) até a aprovação.
+ *   hora, o fator de lucro e o token de acesso (o hash autentica; o valor em claro permite copiar
+ *   a URL do portal a qualquer momento);
+ * - `orcamento_drafts`: rascunho criado pelo portal (descrição + prévia da IA + estimativa de horas) até a aprovação.
  */
 
 export interface IOrcamentoClient {
     name: string
-    /** SHA-256 do token de acesso ao portal (o valor nunca é gravado). */
+    /** Valor do token de acesso ao portal (`cli_…`), para montar a URL copiável no painel. */
+    token: string
+    /** SHA-256 do token de acesso ao portal (usado na autenticação). */
     tokenHash: string
     /** Prefixo visível do token (ex.: `cli_ab12cd34`). */
     tokenPrefix: string
@@ -27,6 +30,7 @@ export interface IOrcamentoClient {
 const OrcamentoClientSchema = new Schema<IOrcamentoClient>(
     {
         name: { type: String, required: true },
+        token: { type: String, required: true },
         tokenHash: { type: String, required: true, index: true },
         tokenPrefix: { type: String, required: true },
         projectIds: { type: [String], default: [] },
@@ -43,8 +47,6 @@ export interface IOrcamentoDraftPreview {
     priority: string
     technicalSpec: string
     summary: string
-    /** Horas estimadas reais (H), antes do fator de lucro. */
-    estimatedHours: number
 }
 
 export interface IOrcamentoDraft {
@@ -54,6 +56,8 @@ export interface IOrcamentoDraft {
     /** Texto de correção pedido pelo cliente (vai junto do próximo prompt). */
     correction: string | null
     preview: IOrcamentoDraftPreview | null
+    /** Horas estimadas reais (H), antes do fator de lucro. `null` enquanto a estimativa não roda. */
+    estimatedHours: number | null
     /** Modelo que gerou a prévia (`provedor/modelo`). */
     model: string | null
     status: "draft" | "approved"
@@ -70,7 +74,6 @@ const OrcamentoDraftPreviewSchema = new Schema<IOrcamentoDraftPreview>(
         priority: { type: String, default: "medium" },
         technicalSpec: { type: String, default: "" },
         summary: { type: String, default: "" },
-        estimatedHours: { type: Number, default: 0 },
     },
     { _id: false },
 )
@@ -82,6 +85,7 @@ const OrcamentoDraftSchema = new Schema<IOrcamentoDraft>(
         description: { type: String, required: true },
         correction: { type: String, default: null },
         preview: { type: OrcamentoDraftPreviewSchema, default: null },
+        estimatedHours: { type: Number, default: null },
         model: { type: String, default: null },
         status: { type: String, default: "draft", index: true },
         taskId: { type: String, default: null },

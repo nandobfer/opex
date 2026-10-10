@@ -1,11 +1,12 @@
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASK_TYPES } from "@/features/tasks/constants"
-import { draftPreviewSchema, type DraftPreview } from "./schemas"
+import { draftEstimateSchema, draftPreviewSchema, type DraftPreview } from "./schemas"
 
 /**
- * Montagem do prompt da prévia/orçamento da tarefa (módulo PURO). A IA lê a descrição do cliente e
- * devolve um JSON com título, tipo, prioridade, especificação técnica, resumo e horas estimadas.
- * As horas são calibradas por estatísticas de horas já trabalhadas pelos agentes (injetadas no
- * prompt — sem ferramenta).
+ * Montagem dos prompts do orçamento da tarefa (módulo PURO), em DUAS fases:
+ * 1. **Prévia**: a IA lê a descrição do cliente e devolve `title`, `taskType`, `priority`,
+ *    `summary` e `technicalSpec`.
+ * 2. **Estimativa**: a IA recebe a prévia + o histórico de horas dos agentes (injetado — sem
+ *    ferramenta) e devolve `estimatedHours`.
  */
 
 export interface EstimateStat {
@@ -62,22 +63,47 @@ export function buildBudgetPreviewInstructions(instructions: string): string {
         `- "taskType": um de ${TASK_TYPES.map((type) => `"${type}"`).join(", ")} ou null quando não for possível classificar;`,
         '- "priority": "urgent", "high", "medium" ou "low";',
         '- "technicalSpec": string em Markdown, a especificação técnica do que deve ser feito;',
-        '- "summary": string, um resumo de UMA linha (sem Markdown);',
-        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5), sua estimativa de esforço.',
+        '- "summary": string, um resumo de UMA linha (sem Markdown).',
     ].join("\n")
     return `${instructions.trim()}\n\n${contract}`
 }
 
-/** Prompt com a tarefa do cliente e o histórico de horas dos agentes. */
-export function buildBudgetPreviewPrompt(input: BudgetPreviewInput, stats: EstimateStats): string {
+/** Prompt com a tarefa do cliente (fase 1 — prévia). */
+export function buildBudgetPreviewPrompt(input: BudgetPreviewInput): string {
     const parts = [
         "# Novo pedido do cliente",
         `Repositório: ${input.projectName}`,
         "## Descrição do cliente",
         clip(input.description),
         input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
+        "Interprete a descrição e gere a prévia da tarefa (título, tipo, prioridade, resumo e especificação técnica).",
+    ]
+    return parts.filter(Boolean).join("\n\n")
+}
+
+/** Instruções de sistema da estimativa (fase 2 — horas). */
+export function buildBudgetEstimateInstructions(instructions: string): string {
+    const contract = [
+        "Você recebe a prévia de uma tarefa e o histórico de horas já trabalhadas pelos agentes num repositório. Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente esta chave:",
+        '- "estimatedHours": número de horas (aceita fração, ex.: 2.5), sua estimativa de esforço de implementação, calibrada pelo histórico.',
+    ].join("\n")
+    return `${instructions.trim()}\n\n${contract}`
+}
+
+/** Prompt da estimativa: a prévia gerada + o pedido original + o histórico de horas dos agentes. */
+export function buildBudgetEstimatePrompt(preview: DraftPreview, input: BudgetPreviewInput, stats: EstimateStats): string {
+    const parts = [
+        "# Prévia da tarefa",
+        `Título: ${preview.title}`,
+        `Tipo: ${preview.taskType ? TASK_TYPE_LABELS[preview.taskType] : "não classificado"}`,
+        `Prioridade: ${TASK_PRIORITY_LABELS[preview.priority]}`,
+        preview.summary ? `Resumo: ${preview.summary}` : "",
+        preview.technicalSpec ? `## Especificação técnica\n${clip(preview.technicalSpec, 12_000)}` : "",
+        "## Pedido original do cliente",
+        clip(input.description),
+        input.correction ? `## Correção solicitada\n${clip(input.correction, 4000)}` : "",
         `## Histórico de horas (agentes)\n${buildEstimateContext(stats)}`,
-        "Interprete a descrição, gere a prévia e estime as horas de implementação usando o histórico como referência.",
+        "Estime as horas de implementação desta tarefa usando o histórico como referência.",
     ]
     return parts.filter(Boolean).join("\n\n")
 }
@@ -103,6 +129,18 @@ export function parseDraftPreview(text: string): DraftPreview | null {
     try {
         const parsed = draftPreviewSchema.safeParse(JSON.parse(json))
         return parsed.success ? parsed.data : null
+    } catch {
+        return null
+    }
+}
+
+/** Valida a saída da IA contra o schema da estimativa; `null` quando não for JSON válido. */
+export function parseEstimateHours(text: string): number | null {
+    const json = extractJsonObject(text)
+    if (!json) return null
+    try {
+        const parsed = draftEstimateSchema.safeParse(JSON.parse(json))
+        return parsed.success ? parsed.data.estimatedHours : null
     } catch {
         return null
     }

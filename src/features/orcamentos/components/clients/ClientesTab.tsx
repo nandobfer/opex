@@ -20,6 +20,7 @@ import { useCreateCliente, useOrcamentoClients, useRegenerateClienteToken, useUp
 import type { ClienteOrcamentoDto } from "../../types"
 import { ClienteDialog } from "./ClienteDialog"
 import { ClientTokenDialog } from "./ClientTokenDialog"
+import { CopyPortalUrlButton } from "./CopyPortalUrlButton"
 import { RemoveClienteDialog } from "./RemoveClienteDialog"
 
 /** Aba Clientes: cadastro dos clientes do portal de Orçamentos. */
@@ -61,7 +62,7 @@ export function ClientesTab() {
                         <AnimatePresence initial={false}>
                             {list.map((client) => (
                                 <motion.li key={client.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                                    <ClientRow client={client} onEdit={() => setEditing({ client })} onRegenerate={() => setConfirmRegen(client)} onRemove={() => setRemoving(client)} />
+                                    <ClientRow client={client} portalPath={client.portalPath} onEdit={() => setEditing({ client })} onRegenerate={() => setConfirmRegen(client)} onRemove={() => setRemoving(client)} />
                                 </motion.li>
                             ))}
                         </AnimatePresence>
@@ -119,7 +120,7 @@ export function ClientesTab() {
     )
 }
 
-function ClientRow({ client, onEdit, onRegenerate, onRemove }: { client: ClienteOrcamentoDto; onEdit: () => void; onRegenerate: () => void; onRemove: () => void }) {
+function ClientRow({ client, portalPath, onEdit, onRegenerate, onRemove }: { client: ClienteOrcamentoDto; portalPath: string; onEdit: () => void; onRegenerate: () => void; onRemove: () => void }) {
     return (
         <div className={cn("flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start", !client.active && "opacity-60")}>
             <div className="min-w-0 flex-1 space-y-2">
@@ -148,6 +149,7 @@ function ClientRow({ client, onEdit, onRegenerate, onRemove }: { client: Cliente
                 {client.updatedAt && <p className="text-xs text-muted-foreground">Atualizado {formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true, locale: ptBR })}</p>}
             </div>
             <div className="flex shrink-0 flex-wrap gap-1">
+                <CopyPortalUrlButton portalPath={portalPath} portalName={client.name} />
                 <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onEdit}>
                     <Pencil className="h-3.5 w-3.5" aria-hidden /> Editar
                 </Button>

@@ -1,0 +1,109 @@
+"use client"
+
+import { useCallback, useState } from "react"
+import { withBasePath } from "@/lib/base-path"
+import type { DraftEstimateDto, DraftPreviewDto } from "../types"
+import { useClientePortal } from "./ClientePortalContext"
+
+export interface BudgetReviewState {
+    /** Fase 1 (prévia) em andamento. */
+    generatingPreview: boolean
+    /** Texto da prévia conforme chega (streaming cru). */
+    text: string
+    preview: DraftPreviewDto | null
+    /** Fase 2 (estimativa de horas/custo) em andamento. */
+    estimating: boolean
+    estimate: DraftEstimateDto | null
+    error: string | null
+    notice: string | null
+}
+
+const INITIAL: BudgetReviewState = { generatingPreview: false, text: "", preview: null, estimating: false, estimate: null, error: null, notice: null }
+
+interface StreamEvent {
+    type: string
+    text?: string
+    message?: string
+    preview?: DraftPreviewDto
+    estimate?: DraftEstimateDto
+}
+
+/** Lê o NDJSON de um endpoint do portal e chama `onEvent` linha a linha. */
+async function readNdjson(path: string, token: string, onEvent: (event: StreamEvent) => void): Promise<void> {
+    const res = await fetch(withBasePath(path), { method: "POST", headers: { "Content-Type": "application/json", "x-client-token": token }, body: "{}" })
+    if (!res.ok || !res.body) {
+        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(payload?.error ?? "Não foi possível concluir a requisição")
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+        for (const line of lines) {
+            if (!line.trim()) continue
+            try {
+                onEvent(JSON.parse(line) as StreamEvent)
+            } catch {
+                // Linha parcial/inválida: ignora.
+            }
+        }
+    }
+}
+
+/**
+ * Revisão da tarefa em DUAS fases: gera a prévia e, automaticamente ao concluí-la, estima as horas
+ * e o orçamento (2ª requisição). Expõe o estado para a tela montar o layout.
+ */
+export function useBudgetReview(draftId: string) {
+    const { token } = useClientePortal()
+    const [state, setState] = useState<BudgetReviewState>(INITIAL)
+
+    const runEstimate = useCallback(async () => {
+        const outcome = { error: null as string | null }
+        setState((prev) => ({ ...prev, estimating: true, error: null }))
+        try {
+            await readNdjson(`/api/cliente/drafts/${draftId}/estimate`, token, (event) => {
+                if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
+                else if (event.type === "done") setState((prev) => ({ ...prev, estimating: false, estimate: event.estimate ?? null, notice: null }))
+                else if (event.type === "error") {
+                    outcome.error = event.message ?? "Falha na estimativa"
+                    setState((prev) => ({ ...prev, estimating: false, error: outcome.error }))
+                }
+            })
+        } catch (err) {
+            outcome.error = err instanceof Error ? err.message : "Falha na conexão com o servidor"
+        }
+        if (outcome.error) setState((prev) => (prev.estimating ? { ...prev, estimating: false, error: outcome.error } : prev))
+        return outcome.error === null
+    }, [draftId, token])
+
+    const start = useCallback(async () => {
+        const outcome = { error: null as string | null }
+        setState({ ...INITIAL, generatingPreview: true })
+        try {
+            await readNdjson(`/api/cliente/drafts/${draftId}/preview`, token, (event) => {
+                if (event.type === "delta") setState((prev) => ({ ...prev, text: prev.text + (event.text ?? "") }))
+                else if (event.type === "notice") setState((prev) => ({ ...prev, notice: event.message ?? null }))
+                else if (event.type === "done") setState((prev) => ({ ...prev, generatingPreview: false, preview: event.preview ?? null, notice: null }))
+                else if (event.type === "error") {
+                    outcome.error = event.message ?? "Falha na prévia"
+                    setState((prev) => ({ ...prev, generatingPreview: false, error: outcome.error }))
+                }
+            })
+        } catch (err) {
+            outcome.error = err instanceof Error ? err.message : "Falha na conexão com o servidor"
+        }
+        if (outcome.error) {
+            setState((prev) => (prev.generatingPreview ? { ...prev, generatingPreview: false, error: outcome.error } : prev))
+            return
+        }
+        await runEstimate()
+    }, [draftId, token, runEstimate])
+
+    return { state, start, retryEstimate: runEstimate }
+}

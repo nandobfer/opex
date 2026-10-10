@@ -34,13 +34,18 @@ export const clienteCorrectionSchema = z.object({
 })
 export type ClienteCorrectionInput = z.infer<typeof clienteCorrectionSchema>
 
-/** Prévia estruturada devolvida pela IA (validada antes de qualquer uso). */
+/** Prévia estruturada devolvida pela IA (validada antes de qualquer uso; sem as horas). */
 export const draftPreviewSchema = z.object({
     title: z.string().trim().min(1, "Título vazio").max(200),
     taskType: z.enum(TASK_TYPES).nullable(),
     priority: z.enum(TASK_PRIORITIES),
     technicalSpec: z.string().trim().max(50_000),
     summary: z.string().trim().max(400),
-    estimatedHours: z.number().min(0).max(10_000),
 })
 export type DraftPreview = z.infer<typeof draftPreviewSchema>
+
+/** Estimativa de horas devolvida pela IA na segunda fase (validada antes de qualquer uso). */
+export const draftEstimateSchema = z.object({
+    estimatedHours: z.number().min(0).max(10_000),
+})
+export type DraftEstimate = z.infer<typeof draftEstimateSchema>

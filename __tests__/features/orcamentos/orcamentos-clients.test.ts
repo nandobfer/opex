@@ -48,6 +48,7 @@ describe("clientes do portal", () => {
         const projectId = await seedProject()
         const created = await createClient({ name: "Acme", projectIds: [projectId], hourlyRate: 40, profitFactor: 10, active: true }, "local")
         expect(created.token.startsWith("cli_")).toBe(true)
+        expect(created.item.portalPath).toBe(`/cliente?t=${encodeURIComponent(created.token)}`)
         expect(created.item).toMatchObject({ name: "Acme", hourlyRate: 40, profitFactor: 10, active: true })
         expect(created.item.projects[0]).toMatchObject({ id: projectId, repo: "acme/app" })
         expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "ClienteOrcamento", acao: "CRIAR" }))
@@ -69,6 +70,9 @@ describe("clientes do portal", () => {
         const rotated = await regenerateClientToken(created.item.id, "local")
         expect(rotated.token.startsWith("cli_")).toBe(true)
         expect(rotated.token).not.toBe(created.token)
+        expect(rotated.item.portalPath).toContain(encodeURIComponent(rotated.token))
+        expect(rotated.item.portalPath).not.toContain(encodeURIComponent(created.token))
+        expect((await listClients())[0].portalPath).toContain(encodeURIComponent(rotated.token))
 
         await deleteClient(created.item.id, "local")
         expect(await listClients()).toHaveLength(0)
