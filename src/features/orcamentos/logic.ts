@@ -19,9 +19,12 @@ export interface ClientEstimate {
 
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
+/** Horas reais (H) normalizadas para exibição/gravação (nunca negativas, 2 casas). */
+export const roundHours = (value: number) => round2(Math.max(0, value || 0))
+
 /** Estimativa do cliente a partir das horas reais, do fator de lucro e do custo por hora. */
 export function computeClientEstimate(estimatedHours: number, profitFactor: number, hourlyRate: number): ClientEstimate {
-    const hours = round2(Math.max(0, estimatedHours || 0))
+    const hours = roundHours(estimatedHours)
     const factor = Math.max(1, profitFactor || 1)
     const rate = Math.max(0, hourlyRate || 0)
     const clientHours = round2(hours * factor)

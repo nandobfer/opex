@@ -7,7 +7,6 @@ import { askJevSystemOne } from "@/lib/ai/jev"
 import { describeAiError, streamAi, type AiStreamEvent } from "@/lib/ai/stream"
 import type { AiProviderId } from "@/lib/ai/providers"
 import { Project } from "@/lib/db/models/Project"
-import type { IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { generateTagsForInput } from "@/features/ai/server/task-tags"
 import { loadBudgetPreviewSettings, availabilityOfBudgetPreview, loadEstimateHoursSettings, availabilityOfEstimateHours } from "@/features/ai/server/settings"
 import type { BudgetPreviewSettings, EstimateHoursSettings } from "@/features/ai/schemas"
@@ -25,9 +24,8 @@ import {
 } from "../preview-prompt"
 import type { DraftEstimateDto, DraftPreviewDto, DraftTagDto } from "../types"
 import { findSimilarTasks } from "./similar"
-import { getDraftDoc, saveDraftEstimate, saveDraftPreview, saveDraftTags } from "./portal"
+import { getDraftDoc, saveDraftEstimate, saveDraftPreview, saveDraftTags, scopeSubject, scopeTitle, type DraftDoc, type DraftScope } from "./drafts"
 import { resolveTagViews } from "./tag-views"
-import type { ClienteOrcamentoDoc } from "./token"
 
 /**
  * Prévia e estimativa da tarefa do portal (SOMENTE servidor), em DUAS fases:
@@ -61,7 +59,7 @@ type ResolvedSettings = BudgetPreviewSettings & { provider: NonNullable<BudgetPr
 type ResolvedEstimateSettings = EstimateHoursSettings & { provider: AiProviderId; model: string }
 
 export interface PreparedBudgetPreview {
-    client: ClienteOrcamentoDoc
+    scope: DraftScope
     draftId: string
     settings: ResolvedSettings
     instructions: string
@@ -70,7 +68,7 @@ export interface PreparedBudgetPreview {
 }
 
 export interface PreparedBudgetEstimate {
-    client: ClienteOrcamentoDoc
+    scope: DraftScope
     draftId: string
     projectId: string
     settings: ResolvedEstimateSettings
@@ -96,7 +94,8 @@ async function requireEstimateSettings(): Promise<ResolvedEstimateSettings> {
 }
 
 /** Prévia persistida no rascunho no formato aceito pelo prompt (sem tags/clareza). */
-function draftPreviewInput(preview: IOrcamentoDraftPreview | null): DraftPreview | null {
+function draftPreviewInput(draft: DraftDoc): DraftPreview | null {
+    const preview = draft.preview
     if (!preview) return null
     return {
         title: preview.title,
@@ -108,32 +107,34 @@ function draftPreviewInput(preview: IOrcamentoDraftPreview | null): DraftPreview
 }
 
 /** Monta a entrada da fase 1 (prévia) ANTES de abrir o stream. */
-export async function prepareBudgetPreview(client: ClienteOrcamentoDoc, draftId: string): Promise<PreparedBudgetPreview> {
+export async function prepareBudgetPreview(scope: DraftScope, draftId: string): Promise<PreparedBudgetPreview> {
     const settings = await requireSettings()
-    const draft = await getDraftDoc(client, draftId)
+    const draft = await getDraftDoc(scope, draftId)
     const project = await Project.findById(draft.projectId).lean()
+    const projectName = project?.name ?? draft.projectId
     return {
-        client,
+        scope,
         draftId,
         settings,
         instructions: buildBudgetPreviewInstructions(settings.instructions),
         prompt: buildBudgetPreviewPrompt({
-            projectName: project?.name ?? draft.projectId,
+            projectName,
             description: draft.description,
             correction: draft.correction ?? null,
-            previousPreview: draftPreviewInput(draft.preview),
+            previousPreview: draftPreviewInput(draft),
         }),
-        title: `Orçamento ${client.name}`,
+        title: scopeTitle(scope, projectName),
     }
 }
 
 /** Monta a entrada da fase 2 (estimativa): exige a prévia já gerada. */
-export async function prepareBudgetEstimate(client: ClienteOrcamentoDoc, draftId: string): Promise<PreparedBudgetEstimate> {
+export async function prepareBudgetEstimate(scope: DraftScope, draftId: string): Promise<PreparedBudgetEstimate> {
     const settings = await requireEstimateSettings()
-    const draft = await getDraftDoc(client, draftId)
+    const draft = await getDraftDoc(scope, draftId)
     const stored = draft.preview
     if (!stored) throw new DomainError(409, "Gere a prévia antes de estimar", "DRAFT_WITHOUT_PREVIEW")
     const project = await Project.findById(draft.projectId).lean()
+    const projectName = project?.name ?? draft.projectId
     const preview: DraftPreviewDto = {
         title: stored.title,
         taskType: (stored.taskType as DraftPreviewDto["taskType"]) ?? null,
@@ -143,13 +144,13 @@ export async function prepareBudgetEstimate(client: ClienteOrcamentoDoc, draftId
         tags: stored.tags ?? [],
     }
     return {
-        client,
+        scope,
         draftId,
         projectId: draft.projectId,
         settings,
         preview,
-        input: { projectName: project?.name ?? draft.projectId, description: draft.description, correction: draft.correction ?? null },
-        title: `Orçamento ${client.name}`,
+        input: { projectName, description: draft.description, correction: draft.correction ?? null },
+        title: scopeTitle(scope, projectName),
     }
 }
 
@@ -185,7 +186,7 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
 
     if (last?.type === "error") {
         dbg.error(`[orcamentos] ${last.message}`)
-        await logUsage("budget-preview", settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
+        await logUsage("budget-preview", settings, prepared.scope, prepared.draftId, false, last.message, startedAt, null)
         yield { type: "error", message: last.message }
         return
     }
@@ -194,14 +195,14 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
     if (!preview) {
         const message = "A IA não devolveu uma prévia válida. Tente novamente ou ajuste as instruções."
         dbg.error(`[orcamentos] ${message}`)
-        await logUsage("budget-preview", settings, prepared.client, prepared.draftId, false, message, startedAt, last)
+        await logUsage("budget-preview", settings, prepared.scope, prepared.draftId, false, message, startedAt, last)
         yield { type: "error", message }
         return
     }
 
-    await saveDraftPreview(prepared.client, prepared.draftId, { ...preview, taskType: preview.taskType ?? null })
+    await saveDraftPreview(prepared.scope, prepared.draftId, { ...preview, taskType: preview.taskType ?? null })
     dbg.success(`[orcamentos] prévia do rascunho ${prepared.draftId} concluída`)
-    await logUsage("budget-preview", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
+    await logUsage("budget-preview", settings, prepared.scope, prepared.draftId, true, null, startedAt, last)
     yield { type: "done", preview: { ...preview, taskType: preview.taskType ?? null, tags: [] } }
 }
 
@@ -228,10 +229,10 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
                 taskType: prepared.preview.taskType,
                 projectName: prepared.input.projectName,
                 summary: prepared.preview.summary,
-            }, `${String(prepared.client._id)}:${prepared.draftId}`)
+            }, scopeSubject(prepared.scope, prepared.draftId))
             if (generated && generated.length) {
                 tags = generated
-                await saveDraftTags(prepared.client, prepared.draftId, generated)
+                await saveDraftTags(prepared.scope, prepared.draftId, generated)
             }
         }
 
@@ -244,7 +245,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
         let hours: number
         if (settings.provider === "jev") {
             yield { type: "notice", message: "Estimando com o JEV…" }
-            const response = await askJevSystemOne({ model: settings.model, state: prompt, questions: buildJevEstimateQuestions(), signal, tracking: { feature: "estimate-hours", subject: `${String(prepared.client._id)}:${prepared.draftId}` } })
+            const response = await askJevSystemOne({ model: settings.model, state: prompt, questions: buildJevEstimateQuestions(), signal, tracking: { feature: "estimate-hours", subject: scopeSubject(prepared.scope, prepared.draftId) } })
             const answer = response.answers?.[JEV_ESTIMATE_QUESTION_ID]
             if (!answer || answer.type !== "score") throw new Error("O JEV não devolveu a estimativa")
             hours = mapJevEstimateScore(answer.score)
@@ -274,7 +275,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
             }
             if (last?.type === "error") {
                 dbg.error(`[orcamentos] ${last.message}`)
-                await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, false, last.message, startedAt, null)
+                await logUsage("estimate-hours", settings, prepared.scope, prepared.draftId, false, last.message, startedAt, null)
                 yield { type: "error", message: last.message }
                 return
             }
@@ -282,21 +283,21 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
             if (parsed == null) {
                 const message = "A IA não devolveu uma estimativa válida. Tente novamente."
                 dbg.error(`[orcamentos] ${message}`)
-                await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, false, message, startedAt, last)
+                await logUsage("estimate-hours", settings, prepared.scope, prepared.draftId, false, message, startedAt, last)
                 yield { type: "error", message }
                 return
             }
             hours = parsed
         }
 
-        const estimate = await saveDraftEstimate(prepared.client, prepared.draftId, hours, `${settings.provider}/${settings.model}`)
+        const estimate = await saveDraftEstimate(prepared.scope, prepared.draftId, hours, `${settings.provider}/${settings.model}`)
         dbg.success(`[orcamentos] estimativa do rascunho ${prepared.draftId} concluída (${hours} h)`)
-        await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, true, null, startedAt, last)
+        await logUsage("estimate-hours", settings, prepared.scope, prepared.draftId, true, null, startedAt, last)
         yield { type: "done", estimate, tags: await resolveTagViews(tags) }
     } catch (error) {
         const message = describeAiError(error)
         dbg.error(`[orcamentos] ${message}`)
-        await logUsage("estimate-hours", settings, prepared.client, prepared.draftId, false, message, startedAt, last)
+        await logUsage("estimate-hours", settings, prepared.scope, prepared.draftId, false, message, startedAt, last)
         yield { type: "error", message }
     }
 }
@@ -304,7 +305,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
 async function logUsage(
     feature: string,
     settings: { provider: string; model: string },
-    client: ClienteOrcamentoDoc,
+    scope: DraftScope,
     draftId: string,
     ok: boolean,
     error: string | null,
@@ -320,7 +321,7 @@ async function logUsage(
             feature,
             provider: settings.provider,
             model: settings.model,
-            subject: `${String(client._id)}:${draftId}`,
+            subject: scopeSubject(scope, draftId),
             ok,
             error,
             inputTokens: usage?.inputTokens ?? null,

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { selectReviewView, type BudgetReviewState } from "@/features/orcamentos/portal/useBudgetReview"
+import { describe, expect, it, vi } from "vitest"
+import { readNdjson, selectReviewView, type BudgetReviewState } from "@/features/orcamentos/review"
 import type { OrcamentoDraftDto } from "@/features/orcamentos/types"
 
 const idle: BudgetReviewState = { generatingPreview: false, preview: null, estimating: false, estimate: null, tags: [], notice: null, error: null }
@@ -75,5 +75,30 @@ describe("selectReviewView (revisão da prévia)", () => {
     it("sem clareza (prévia vinda do banco), o preview não traz a avaliação", () => {
         const view = selectReviewView(idle, persisted, false)
         expect(view.preview?.clarity).toBeUndefined()
+    })
+})
+
+describe("readNdjson (transporte compartilhado do portal e do dono)", () => {
+    it("lê o NDJSON linha a linha e envia os cabeçalhos e o corpo", async () => {
+        const events: unknown[] = []
+        const body = '{"type":"start"}\n{"type":"done","estimate":{"hours":2}}\n'
+        const stream = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(body)); controller.close() } })
+        const fetchMock = vi.fn(async () => new Response(stream, { status: 200 }))
+        vi.stubGlobal("fetch", fetchMock)
+
+        await readNdjson("/api/tasks/drafts/d1/estimate", { headers: { "x-client-token": "t" }, body: { clientId: "c1" } }, (event) => events.push(event))
+
+        expect(events).toEqual([{ type: "start" }, { type: "done", estimate: { hours: 2 } }])
+        expect(fetchMock).toHaveBeenCalledWith(
+            "/api/tasks/drafts/d1/estimate",
+            expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "x-client-token": "t" }), body: JSON.stringify({ clientId: "c1" }) }),
+        )
+        vi.unstubAllGlobals()
+    })
+
+    it("erro antes do stream vira a mensagem pt-BR do servidor", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Gere a prévia antes de estimar" }), { status: 409 })))
+        await expect(readNdjson("/api/tasks/drafts/d1/estimate", {}, () => {})).rejects.toThrow("Gere a prévia antes de estimar")
+        vi.unstubAllGlobals()
     })
 })

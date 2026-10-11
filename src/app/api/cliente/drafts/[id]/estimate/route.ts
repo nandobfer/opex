@@ -1,5 +1,6 @@
 import { withRoute } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { clientScope } from "@/features/orcamentos/server/drafts"
 import { prepareBudgetEstimate, runBudgetEstimate, type BudgetEstimateEvent } from "@/features/orcamentos/server/preview"
 import { requireClient } from "@/features/orcamentos/server/token"
 
@@ -18,7 +19,7 @@ type Params = { id: string }
  */
 export const POST = withRoute<Params>(async ({ req, params }) => {
     const client = await requireClient(req)
-    const prepared = await prepareBudgetEstimate(client, params.id)
+    const prepared = await prepareBudgetEstimate(clientScope(client), params.id)
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {

@@ -1,0 +1,52 @@
+import { withRoute } from "@/lib/api/route"
+import { loggerFor } from "@/lib/logger"
+import { OWNER_SCOPE } from "@/features/orcamentos/server/drafts"
+import { requireOwnerDraftEditable } from "@/features/orcamentos/server/owner"
+import { prepareBudgetPreview, runBudgetPreview, type BudgetPreviewEvent } from "@/features/orcamentos/server/preview"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+const log = loggerFor({ module: "ai", feature: "budget-preview" })
+
+type Params = { id: string }
+
+/**
+ * POST /api/tasks/drafts/[id]/preview — gera a prévia da tarefa do dono com IA (NDJSON).
+ *
+ * Feature indisponível (409) ou rascunho inexistente (404) respondem JSON antes do stream. Senão,
+ * NDJSON: `start`, `delta`/`tool`/`notice` e um `done` (com a prévia) ou `error` final.
+ */
+export const POST = withRoute<Params>(async ({ req, params }) => {
+    await requireOwnerDraftEditable(params.id)
+    const prepared = await prepareBudgetPreview(OWNER_SCOPE, params.id)
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+            let open = true
+            const write = (event: BudgetPreviewEvent) => {
+                if (!open) return
+                try {
+                    controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+                } catch {
+                    open = false
+                }
+            }
+            try {
+                for await (const event of runBudgetPreview(prepared, req.signal)) write(event)
+            } catch (error) {
+                log.warn({ err: error instanceof Error ? error.message : error }, "[orcamentos] falha na prévia do dono")
+                write({ type: "error", message: error instanceof Error ? error.message : "Falha ao gerar a prévia" })
+            } finally {
+                if (open) controller.close()
+            }
+        },
+    })
+    return new Response(stream, {
+        headers: {
+            "Content-Type": "application/x-ndjson; charset=utf-8",
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    })
+})

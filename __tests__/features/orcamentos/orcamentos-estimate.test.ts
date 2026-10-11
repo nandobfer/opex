@@ -25,7 +25,13 @@ vi.mock("@/features/ai/server/task-tags", () => ({ generateTagsForInput: mocks.t
 vi.mock("@/features/ai/server/settings", () => ({ loadEstimateHoursSettings: mocks.loadEstimate, availabilityOfEstimateHours: mocks.availability }))
 vi.mock("@/features/orcamentos/server/similar", () => ({ findSimilarTasks: mocks.similar }))
 vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
-vi.mock("@/features/orcamentos/server/portal", () => ({ getDraftDoc: vi.fn(), saveDraftEstimate: mocks.saveEstimate, saveDraftPreview: vi.fn(), saveDraftTags: mocks.saveTags }))
+vi.mock("@/features/orcamentos/server/drafts", () => ({
+    getDraftDoc: vi.fn(),
+    saveDraftEstimate: mocks.saveEstimate,
+    saveDraftPreview: vi.fn(),
+    saveDraftTags: mocks.saveTags,
+    scopeSubject: (scope: { kind: "client"; clientId: string } | { kind: "owner" }, draftId: string) => (scope.kind === "client" ? `${scope.clientId}:${draftId}` : `owner:${draftId}`),
+}))
 
 import { DEFAULT_ESTIMATE_HOURS_SETTINGS, type EstimateHoursSettings } from "@/features/ai/schemas"
 import { runBudgetEstimate, type BudgetEstimateEvent, type PreparedBudgetEstimate } from "@/features/orcamentos/server/preview"
@@ -33,7 +39,7 @@ import { runBudgetEstimate, type BudgetEstimateEvent, type PreparedBudgetEstimat
 const settings = (over: Partial<EstimateHoursSettings> = {}): EstimateHoursSettings => ({ ...DEFAULT_ESTIMATE_HOURS_SETTINGS, enabled: true, provider: "gemini", model: "gemini-3-flash", similarLimit: 5, ...over })
 
 const prepared = (over: Partial<PreparedBudgetEstimate> = {}): PreparedBudgetEstimate => ({
-    client: { _id: "c1", name: "Acme", profitFactor: 2, hourlyRate: 100 } as PreparedBudgetEstimate["client"],
+    scope: { kind: "client", clientId: "c1", name: "Acme" } as PreparedBudgetEstimate["scope"],
     draftId: "d1",
     projectId: "p1",
     settings: settings() as PreparedBudgetEstimate["settings"],
@@ -54,7 +60,7 @@ beforeEach(() => {
     mocks.tags.mockResolvedValue(["api"])
     mocks.similar.mockResolvedValue([])
     mocks.saveTags.mockResolvedValue(undefined)
-    mocks.saveEstimate.mockImplementation(async (_client: unknown, _id: string, hours: number) => ({ hours, clientHours: hours * 2, billingBrl: 0 }))
+    mocks.saveEstimate.mockImplementation(async (_scope: unknown, _id: string, hours: number) => ({ hours, clientHours: hours * 2, billingBrl: 0 }))
     mocks.stream.mockImplementation(async function* () {
         yield { type: "delta", text: '{"estimatedHours":7}' }
         yield { type: "done", finishReason: "stop", durationMs: 5, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: null } }

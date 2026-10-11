@@ -7,8 +7,8 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 vi.mock("framer-motion", () => framerMotionMock())
 
 import { selectPreviewClarity, type PreviewClarityDto } from "@/features/orcamentos/clarity"
-import { ClarityCard } from "@/features/orcamentos/portal/components/preview/ClarityCard"
-import { CorrectionCard } from "@/features/orcamentos/portal/components/preview/CorrectionCard"
+import { ClarityCard } from "@/features/orcamentos/components/preview/ClarityCard"
+import { CorrectionCard } from "@/features/orcamentos/components/preview/CorrectionCard"
 
 const clear: PreviewClarityDto = {
     acceptanceCriteria: { status: "clear", detail: null },

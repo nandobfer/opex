@@ -5,7 +5,10 @@ import { Schema, model, models, type Model } from "mongoose"
  * - `orcamento_clients`: clientes do portal, cada um com os repositórios permitidos, o custo por
  *   hora, o fator de lucro e o token de acesso (o hash autentica; o valor em claro permite copiar
  *   a URL do portal a qualquer momento);
- * - `orcamento_drafts`: rascunho criado pelo portal (descrição + prévia da IA + estimativa de horas) até a aprovação.
+ * - `orcamento_drafts`: rascunho (descrição + prévia da IA + estimativa de horas) até a aprovação.
+ *   `clientId` identifica o **dono** do rascunho: preenchido = pedido pelo cliente no portal;
+ *   `null` = prévia aberta pelo próprio dono em `/tarefas/previa` (`estimateClientId` guarda, só no
+ *   rascunho do dono, o cliente escolhido para calcular o custo).
  */
 
 export interface IOrcamentoClient {
@@ -52,7 +55,17 @@ export interface IOrcamentoDraftPreview {
 }
 
 export interface IOrcamentoDraft {
-    clientId: string
+    /**
+     * Cliente que pediu a tarefa (portal). `null` = rascunho aberto pelo **dono** (`/tarefas/previa`).
+     * Sem um campo `origin`: todo rascunho legado tem `clientId`, então `null` identifica o dono sem
+     * ambiguidade e as consultas do portal (`{ clientId }`) não alcançam os rascunhos do dono.
+     */
+    clientId: string | null
+    /**
+     * Cliente escolhido **pelo dono** para o cálculo de custo da estimativa (opcional; o portal não
+     * usa e mantém `null`, pois o custo vem do próprio `clientId`).
+     */
+    estimateClientId: string | null
     projectId: string
     description: string
     /** Texto de correção pedido pelo cliente (vai junto do próximo prompt). */
@@ -83,7 +96,8 @@ const OrcamentoDraftPreviewSchema = new Schema<IOrcamentoDraftPreview>(
 
 const OrcamentoDraftSchema = new Schema<IOrcamentoDraft>(
     {
-        clientId: { type: String, required: true, index: true },
+        clientId: { type: String, default: null, index: true },
+        estimateClientId: { type: String, default: null },
         projectId: { type: String, required: true },
         description: { type: String, required: true },
         correction: { type: String, default: null },

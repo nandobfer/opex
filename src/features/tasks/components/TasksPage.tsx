@@ -7,7 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Clock, FilterX, ListTodo, Plus, RefreshCw } from "lucide-react"
+import { Clock, FilterX, ListTodo, Plus, RefreshCw, Sparkles } from "lucide-react"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { TIME_PATH } from "@/features/time/schemas"
 import {
@@ -29,7 +29,7 @@ import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, mergeVisibleOrder, type TaskColumnDto } from "../board"
-import { TASK_NEW_PATH, taskPath } from "../constants"
+import { TASK_NEW_PATH, TASK_PREVIEW_PATH, taskPath } from "../constants"
 import { applyTaskFilters, countActiveFilters, DEFAULT_TASK_FILTERS, knownColumns, TASK_FILTER_KEYS, TASK_FILTERS_STORAGE_KEY, taskFiltersSchema, visibleColumns, type TaskFilters } from "../filters"
 import { useColumnMutations, useTaskBoard } from "../hooks/useTaskBoard"
 import { TASKS_QUERY_KEY, useTaskList, useTaskOptions, useTasksRealtime, useUpdateTask } from "../hooks/useTasks"
@@ -175,6 +175,17 @@ export function TasksPage() {
                         </Link>
                     </Button>
                     <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 gap-2"
+                        onClick={() => router.push(TASK_PREVIEW_PATH)}
+                        disabled={projects.length === 0}
+                        title={projects.length === 0 ? "Vincule um repositório em Integrações › GitHub" : undefined}
+                    >
+                        <Sparkles className="h-4 w-4" aria-hidden /> Nova prévia
+                    </Button>
                     <Button type="button" size="sm" className="h-9 gap-2" onClick={() => router.push(TASK_NEW_PATH)} disabled={projects.length === 0} title={projects.length === 0 ? "Vincule um repositório em Integrações › GitHub" : undefined}>
                         <Plus className="h-4 w-4" aria-hidden /> Nova tarefa
                     </Button>

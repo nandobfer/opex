@@ -11,8 +11,10 @@ import { formatHoursLabel } from "@/features/orcamentos/logic"
 import type { DraftEstimateDto } from "@/features/orcamentos/types"
 
 /**
- * Card das horas e do custo estimados (2ª fase da IA). Enquanto a estimativa roda, mostra um
- * carregamento animado; ao concluir, os valores entram animados (`AnimatedNumber`).
+ * Card das horas e do custo estimados (2ª fase da IA), usado no portal do cliente. Enquanto a
+ * estimativa roda, mostra um carregamento animado; ao concluir, os valores entram animados
+ * (`AnimatedNumber`). Só exibe o que o cliente vê (`clientHours`/`billingBrl`); sem cliente, as
+ * linhas correspondentes simplesmente não aparecem.
  */
 export function EstimateCard({ estimate, estimating, status, error, onRetry }: { estimate: DraftEstimateDto | null; estimating: boolean; status?: string | null; error: string | null; onRetry: () => void }) {
     return (
@@ -24,22 +26,26 @@ export function EstimateCard({ estimate, estimating, status, error, onRetry }: {
                 <AnimatePresence mode="wait" initial={false}>
                     {estimate ? (
                         <motion.div key="done" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="space-y-3">
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Clock className="h-3.5 w-3.5" aria-hidden /> Prazo
-                                </span>
-                                <span className="font-mono font-medium">
-                                    <AnimatedNumber value={estimate.clientHours} formatter={(value) => `${formatHoursLabel(value)} h`} />
-                                </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-sm">
-                                <span className="flex items-center gap-1.5 text-muted-foreground">
-                                    <Wallet className="h-3.5 w-3.5" aria-hidden /> Orçamento
-                                </span>
-                                <span className="font-mono font-medium">
-                                    <AnimatedNumber value={estimate.billingBrl} formatter={(value) => `R$ ${formatNumberBR(value)}`} />
-                                </span>
-                            </div>
+                            {estimate.clientHours != null && (
+                                <div className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                        <Clock className="h-3.5 w-3.5" aria-hidden /> Prazo
+                                    </span>
+                                    <span className="font-mono font-medium">
+                                        <AnimatedNumber value={estimate.clientHours} formatter={(value) => `${formatHoursLabel(value)} h`} />
+                                    </span>
+                                </div>
+                            )}
+                            {estimate.billingBrl != null && (
+                                <div className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                        <Wallet className="h-3.5 w-3.5" aria-hidden /> Orçamento
+                                    </span>
+                                    <span className="font-mono font-medium">
+                                        <AnimatedNumber value={estimate.billingBrl} formatter={(value) => `R$ ${formatNumberBR(value)}`} />
+                                    </span>
+                                </div>
+                            )}
                         </motion.div>
                     ) : estimating ? (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3" aria-label="Calculando horas e custo">

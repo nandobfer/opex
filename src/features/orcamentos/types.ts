@@ -59,7 +59,7 @@ export interface DraftTagDto {
     label: string
 }
 
-/** Rascunho do portal (prévia + estado). */
+/** Rascunho (do portal do cliente ou do dono, em `/tarefas/previa`; prévia + estado). */
 export interface OrcamentoDraftDto {
     id: string
     projectId: string
@@ -76,14 +76,21 @@ export interface OrcamentoDraftDto {
     taskId: string | null
     /** Estimativa já calculada para exibição (horas reais e do cliente + faturamento). */
     estimate: DraftEstimateDto | null
+    /** Cliente escolhido para o custo da estimativa (só no rascunho do dono; portal: `null`). */
+    estimateClientId: string | null
+    /** Nome do cliente da estimativa (para exibir no seletor do dono). */
+    estimateClientName: string | null
     createdAt: string | null
 }
 
-/** Estimativa exibida no portal (horas com fator e faturamento). */
+/**
+ * Estimativa exibida na revisão da prévia. As horas reais (H) vêm sempre; `clientHours`/`billingBrl`
+ * são `null` quando nenhum cliente foi escolhido (o dono aproxima o custo escolhendo um cliente).
+ */
 export interface DraftEstimateDto {
     hours: number
-    clientHours: number
-    billingBrl: number
+    clientHours: number | null
+    billingBrl: number | null
 }
 
 /** Estimativa exibida ao cliente: só o que ele pode ver (horas infladas e faturamento). */

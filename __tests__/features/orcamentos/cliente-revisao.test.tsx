@@ -6,10 +6,10 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
 
-import { EstimateCard } from "@/features/orcamentos/portal/components/preview/EstimateCard"
-import { PreviewTitleCard } from "@/features/orcamentos/portal/components/preview/PreviewTitleCard"
-import { RepoMetaCard } from "@/features/orcamentos/portal/components/preview/RepoMetaCard"
-import { TypePriorityMetaCard } from "@/features/orcamentos/portal/components/preview/TypePriorityMetaCard"
+import { EstimateCard } from "@/features/orcamentos/components/preview/EstimateCard"
+import { PreviewTitleCard } from "@/features/orcamentos/components/preview/PreviewTitleCard"
+import { RepoMetaCard } from "@/features/orcamentos/components/preview/RepoMetaCard"
+import { TypePriorityMetaCard } from "@/features/orcamentos/components/preview/TypePriorityMetaCard"
 import type { ClienteRepoDto, DraftPreviewDto } from "@/features/orcamentos/types"
 
 const preview: DraftPreviewDto = { title: "Ajustar o rodapé", taskType: "bugfix", priority: "medium", technicalSpec: "## Passos", summary: "Corrige o rodapé do site" }
