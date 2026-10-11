@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   paginate: vi.fn(),
   merged: vi.fn(),
   feedback: vi.fn(),
+  conflict: vi.fn(),
   closed: vi.fn(),
   reopened: vi.fn(),
   saveCursors: vi.fn(),
@@ -18,13 +19,14 @@ vi.mock('@/features/agentic/server/log', () => ({ centralLogger: () => ({ info: 
 vi.mock('@/features/agentic/server/workflow', () => ({
   handlePrMerged: mocks.merged,
   handlePrFeedback: mocks.feedback,
+  handlePrConflict: mocks.conflict,
   handlePrClosed: mocks.closed,
   handlePrReopened: mocks.reopened,
   savePrCursors: mocks.saveCursors,
 }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
 
-import { mentionsOpex, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
+import { conflictUntried, mentionsOpex, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
 
 const workbench = (pr: Record<string, unknown> = {}) => ({
   _id: 'w1',
@@ -149,5 +151,51 @@ describe('watchPullRequests', () => {
     mocks.request.mockResolvedValueOnce({ state: 'closed', merged: false })
     await watchPullRequests()
     expect(mocks.closed).toHaveBeenCalledWith('w1')
+  })
+})
+
+describe('conflito de merge', () => {
+  it('PR aberto com mergeable false aciona a resolução automática', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.conflict).toHaveBeenCalledWith('w1', { baseBranch: 'main', headBranch: 'feat/x', baseSha: 'b1', headSha: 'h1' })
+    expect(mocks.feedback).not.toHaveBeenCalled()
+  })
+
+  it('mergeable true ou null (calculando) não aciona a resolução', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: null, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.conflict).not.toHaveBeenCalled()
+  })
+
+  it('mesmo estado (SHAs já tratados) não repete a resolução', async () => {
+    mocks.find.mockResolvedValue([workbench({ conflictBaseSha: 'b1', conflictHeadSha: 'h1' })])
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.conflict).not.toHaveBeenCalled()
+  })
+
+  it('mudança de head (novo push) libera nova tentativa', async () => {
+    mocks.find.mockResolvedValue([workbench({ conflictBaseSha: 'b1', conflictHeadSha: 'h1' })])
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h2' } })
+    await watchPullRequests()
+    expect(mocks.conflict).toHaveBeenCalledTimes(1)
+  })
+
+  it('feedback e conflito juntos: só o feedback é encaminhado nesta varredura', async () => {
+    respond({ issues: [{ id: 25, body: '@opex ajuste o filtro', user: { login: 'ana' } }] })
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.conflict).not.toHaveBeenCalled()
+  })
+
+  it('conflictUntried compara os SHAs de base e head', () => {
+    expect(conflictUntried({}, { base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })).toBe(true)
+    expect(conflictUntried({ conflictBaseSha: 'b1', conflictHeadSha: 'h1' }, { base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })).toBe(false)
+    expect(conflictUntried({ conflictBaseSha: 'b0', conflictHeadSha: 'h1' }, { base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })).toBe(true)
+    expect(conflictUntried({}, { base: { ref: 'main', sha: 'b1' }, head: null })).toBe(false)
   })
 })

@@ -60,6 +60,11 @@ describe('workbenchActions', () => {
     expect(workbenchActions('pr_open', 'interrupted', false, true)).toEqual([])
     expect(workbenchActions('plan_review', 'failed', false, true)).toEqual([])
   })
+
+  it('resolução de conflito é uma etapa de execução: parar, reconectar, tentar de novo e voltar ao plano', () => {
+    expect(workbenchActions('resolving_conflicts', 'running', false)).toEqual(['interrupt'])
+    expect(workbenchActions('resolving_conflicts', 'failed', false)).toEqual(['reconnect', 'retry', 'request-correction'])
+  })
 })
 
 describe('parseCentralConfig', () => {

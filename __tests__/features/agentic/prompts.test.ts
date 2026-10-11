@@ -5,6 +5,7 @@ import {
   buildPrompt,
   cleanupPrompt,
   composeProjectFor,
+  conflictPrompt,
   extractJsonBlock,
   extractPrUrl,
   formatPrFeedback,
@@ -62,6 +63,16 @@ describe('mensagens das etapas', () => {
     const update = prPrompt(config, ctx, task, { number: 7, url: 'https://github.com/org/app/pull/7' })
     expect(update).toContain('PR #7')
     expect(update).not.toContain('gh pr create')
+  })
+
+  it('resolução de conflito usa a branch real do PR e proíbe force-push e merge', () => {
+    const text = conflictPrompt(config, ctx, { number: 7, url: 'https://github.com/org/app/pull/7', baseBranch: 'develop', headBranch: 'feat/x' })
+    expect(text).toContain('PR #7')
+    expect(text).toContain('origin/develop')
+    expect(text).toContain('git push')
+    expect(text).toContain('force-push')
+    expect(text).not.toContain('gh pr create')
+    expect(text).toContain('"ok": true')
   })
 
   it('limpeza respeita as opções da central', () => {

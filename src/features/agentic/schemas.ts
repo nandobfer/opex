@@ -168,3 +168,5 @@ export type FormReplyInput = z.infer<typeof formReplySchema>
 /** Bloco JSON final pedido aos agentes de build, PR e limpeza. */
 export const buildResultSchema = z.object({ ok: z.boolean(), error: z.string().optional() })
 export const prResultSchema = z.object({ url: z.string().url(), number: z.number().int().positive().optional() })
+/** Bloco JSON final do agente de resolução de conflitos: `ok` confirma o push feito no próprio PR. */
+export const conflictResultSchema = z.object({ ok: z.boolean(), error: z.string().optional(), sha: z.string().regex(/^[0-9a-f]{7,40}$/i, "SHA inválido").optional() })

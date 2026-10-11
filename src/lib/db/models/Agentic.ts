@@ -47,6 +47,10 @@ export interface IWorkbenchPr {
     /** Maior id de comentário (conversa ou linha) já tratado; os novos com `@opex` voltam ao planejamento. */
     lastCommentId: number
     closedNotified: boolean
+    /** SHA da base do PR na última resolução de conflito iniciada (evita repetir o mesmo conflito). */
+    conflictBaseSha: string | null
+    /** SHA da branch do PR na última resolução de conflito iniciada; muda a cada push. */
+    conflictHeadSha: string | null
 }
 
 export interface IAgenticWorkbench {
