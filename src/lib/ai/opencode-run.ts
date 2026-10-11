@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
-import { describeToolInput, normalizeOpencodeEvent, toOpencodeModelRef, type OpencodeFormDto, type OpencodePermissionDto, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
+import { describeToolInput, normalizeOpencodeEvent, toOpencodeForm, toOpencodeModelRef, toOpencodePermission, type OpencodeFormDto, type OpencodePermissionDto, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 
 /**
  * Um turno de agente numa sessão longa do OpenCode (`@opencode/client`): troca agente/modelo, envia
@@ -29,6 +29,16 @@ export interface TurnRequest {
     timeoutMs: number
     /** Abortado = interromper (botão Parar, exclusão, desligamento). */
     signal: AbortSignal
+    /**
+     * Reconexão: acompanha a execução em andamento na sessão SEM enviar prompt e SEM trocar
+     * agente/modelo. Se a execução já terminou, o resultado é recuperado do histórico e fechado.
+     */
+    attach?: boolean
+    /**
+     * Instante (epoch ms) em que o turno começou; no modo `attach` delimita a execução acompanhada
+     * (resultado do OpenCode só conta se ficou ocioso depois dele). Padrão: agora.
+     */
+    startedAt?: number
 }
 
 /** Evento neutro de um turno; quem publica decide o canal (barramento da mesa, etc.). */
@@ -77,27 +87,53 @@ const INTERRUPT_GRACE_MS = 15_000
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+/**
+ * Reconstrói o texto do turno a partir do histórico da sessão (usado na reconexão: parte da saída
+ * pode ter passado antes de reatarmos). Junta as partes de texto das mensagens do assistente
+ * criadas depois de `sinceMs` (ou, sem marco, apenas a última). Best-effort: falha vira string vazia.
+ */
+async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceMs: number): Promise<string> {
+    try {
+        const response = await client.message.list({ sessionID: sessionId, type: "assistant", order: "desc", limit: 50 })
+        const items = [...(response.data ?? [])].reverse()
+        const relevant = sinceMs > 0 ? items.filter((item) => (item.time?.created ?? 0) >= sinceMs) : []
+        const chosen = relevant.length ? relevant : items.slice(-1)
+        return chosen
+            .flatMap((item) => (item.type === "assistant" ? (item.content ?? []) : []))
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("")
+    } catch {
+        return ""
+    }
+}
+
 type End = { outcome: TurnResult["outcome"]; message: string | null }
 
 export async function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks: TurnHooks = {}): Promise<TurnResult> {
     const { sessionId } = request
-    const startedAt = Date.now()
+    const attach = request.attach === true
+    const startedAt = request.startedAt ?? Date.now()
+    const beginAt = Date.now()
     const publish = (event: TurnEvent) => hooks.publish?.(event)
-    publish({ type: "turn", stage: request.stage, title: request.title, agent: request.agent.agent, model: request.agent.model })
+    // Na reconexão não há cabeçalho de turno novo (a execução é a mesma); só as alterações de estado.
+    if (!attach) publish({ type: "turn", stage: request.stage, title: request.title, agent: request.agent.agent, model: request.agent.model })
 
     let text = ""
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
 
-    // Agente e modelo da etapa (a sessão é a mesma do início ao fim).
-    try {
-        if (request.agent.agent) await client.session.switchAgent({ sessionID: sessionId, agent: request.agent.agent })
-        if (request.agent.model) await client.session.switchModel({ sessionID: sessionId, model: toOpencodeModelRef(request.agent.model, request.agent.variant) })
-    } catch (error) {
-        const result: TurnResult = { outcome: "failed", text: "", message: `Não foi possível selecionar o agente/modelo: ${message(error)}`, costUsd: 0, durationMs: Date.now() - startedAt }
-        publish({ type: "turn-end", outcome: "failed", message: result.message, durationMs: result.durationMs, costUsd: 0 })
-        return result
+    // Agente e modelo da etapa (a sessão é a mesma do início ao fim). Na reconexão, preserva o que já está na sessão.
+    if (!attach) {
+        try {
+            if (request.agent.agent) await client.session.switchAgent({ sessionID: sessionId, agent: request.agent.agent })
+            if (request.agent.model) await client.session.switchModel({ sessionID: sessionId, model: toOpencodeModelRef(request.agent.model, request.agent.variant) })
+        } catch (error) {
+            const result: TurnResult = { outcome: "failed", text: "", message: `Não foi possível selecionar o agente/modelo: ${message(error)}`, costUsd: 0, durationMs: Date.now() - beginAt }
+            publish({ type: "turn-end", outcome: "failed", message: result.message, durationMs: result.durationMs, costUsd: 0 })
+            return result
+        }
     }
 
     let resolveEnd: (end: End) => void = () => undefined
@@ -202,7 +238,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             }
             await sleep(RECONNECT_DELAY_MS)
             const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
-            if (info?.outcome && (info.time.idle ?? 0) >= startedAt) {
+            if (!finished && info?.outcome && (info.time.idle ?? 0) >= startedAt) {
                 publish({ type: "notice", level: "warn", message: "A conexão com o OpenCode caiu; parte da saída pode não ter sido exibida" })
                 finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null })
             }
@@ -224,10 +260,51 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     const timeout = setTimeout(() => void interrupt(`Tempo limite (${Math.round(request.timeoutMs / 60_000)} min) atingido`), request.timeoutMs)
     timeout.unref?.()
 
+    // Reconexão: confere o estado da sessão ANTES de acompanhar. Se a execução já terminou, recupera o
+    // resultado do histórico; se não há execução em andamento, não há o que reconectar.
+    if (attach) {
+        const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
+        if (!info) {
+            finish({ outcome: "failed", message: "A sessão do OpenCode não existe mais; reconectar não é possível (use Tentar novamente para criar outra)" })
+        } else {
+            // Perguntas e permissões que ficaram pendentes durante a queda: o SSE é só ao vivo, então
+            // restaura do estado atual da sessão (o hook deduplica por id).
+            const [forms, permissions] = await Promise.all([
+                client.session.form.list({ sessionID: sessionId }).catch(() => [] as unknown[]),
+                client.permission.list({ sessionID: sessionId }).catch(() => [] as unknown[]),
+            ])
+            for (const raw of permissions) {
+                const permission = toOpencodePermission(raw)
+                if (permission) {
+                    publish({ type: "permission", permission })
+                    await hooks.onPermission?.(permission)
+                }
+            }
+            for (const raw of forms) {
+                const form = toOpencodeForm(raw)
+                if (form) {
+                    publish({ type: "form", form })
+                    await hooks.onForm?.(form)
+                }
+            }
+            const active = await client.session.active().catch(() => null)
+            const running = Boolean(active && (active as Record<string, unknown>)[sessionId])
+            if (!running) {
+                const idle = info.time?.idle ?? 0
+                if (info.outcome && idle >= startedAt) {
+                    text = await recoverTurnText(client, sessionId, startedAt)
+                    finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null })
+                } else {
+                    finish({ outcome: "interrupted", message: "Não há execução em andamento nesta sessão do OpenCode" })
+                }
+            }
+        }
+    }
+
     try {
         await Promise.race([ready, sleep(READY_TIMEOUT_MS)])
         if (request.signal.aborted) finish({ outcome: "interrupted", message: "Interrompido antes de começar" })
-        else {
+        else if (!attach) {
             try {
                 await client.session.prompt({ sessionID: sessionId, text: request.text })
             } catch (error) {
@@ -235,7 +312,12 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             }
         }
         const end = await ended
-        const durationMs = Date.now() - startedAt
+        // Reconectado: o texto pode ter começado antes de reatar; recupera o turno inteiro do histórico.
+        if (attach && end.outcome === "succeeded") {
+            const recovered = await recoverTurnText(client, sessionId, startedAt)
+            if (recovered) text = recovered
+        }
+        const durationMs = Date.now() - beginAt
         publish({ type: "turn-end", outcome: end.outcome, message: end.message, durationMs, costUsd })
         return { outcome: end.outcome, text, message: end.message, costUsd, durationMs }
     } finally {

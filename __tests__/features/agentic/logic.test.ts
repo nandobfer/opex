@@ -42,10 +42,15 @@ describe('workbenchActions', () => {
     expect(workbenchActions('build_queued', 'idle', false)).toEqual([])
   })
 
-  it('executando só permite parar; falha permite tentar de novo', () => {
+  it('executando só permite parar; falha permite reconectar e tentar de novo', () => {
     expect(workbenchActions('implementing', 'running', false)).toEqual(['interrupt'])
-    expect(workbenchActions('building', 'failed', false)).toEqual(['retry', 'request-correction'])
-    expect(workbenchActions('planning', 'interrupted', false)).toEqual(['retry'])
+    expect(workbenchActions('building', 'failed', false)).toEqual(['reconnect', 'retry', 'request-correction'])
+    expect(workbenchActions('planning', 'interrupted', false)).toEqual(['reconnect', 'retry'])
+  })
+
+  it('sem sessão do OpenCode, não oferece Reconectar', () => {
+    expect(workbenchActions('planning', 'interrupted', false, false)).toEqual(['retry'])
+    expect(workbenchActions('building', 'failed', false, false)).toEqual(['retry', 'request-correction'])
   })
 })
 

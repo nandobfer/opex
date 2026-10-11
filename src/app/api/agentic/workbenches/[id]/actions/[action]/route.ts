@@ -1,20 +1,20 @@
 import { ok } from "@/lib/api/responses"
 import { DomainError, parseBody, withRoute } from "@/lib/api/route"
 import { feedbackSchema, optionalFeedbackSchema } from "@/features/agentic/schemas"
-import { approve, implement, interrupt, reopen, requestCorrection, retry, revisePlan, submitPrFeedback } from "@/features/agentic/server/workflow"
+import { approve, implement, interrupt, reconnect, reopen, requestCorrection, retry, revisePlan, submitPrFeedback } from "@/features/agentic/server/workflow"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const WITH_FEEDBACK = { "revise-plan": revisePlan, "request-correction": requestCorrection, "submit-pr-feedback": submitPrFeedback, reopen } as const
 const WITH_OPTIONAL_TEXT = { implement } as const
-const WITHOUT_BODY = { approve, retry, interrupt } as const
+const WITHOUT_BODY = { approve, retry, interrupt, reconnect } as const
 
 /**
  * POST /api/agentic/workbenches/[id]/actions/[action] — ações da mesa. `revise-plan`,
  * `request-correction`, `submit-pr-feedback` e `reopen` exigem `{ text }` (vai para o planejador);
  * `implement` aceita `{ text? }` (informações adicionais anexadas ao prompt de implementação);
- * `approve`, `retry` e `interrupt` não têm corpo. Responde na hora com a mesa: a saída do agente
+ * `approve`, `retry`, `interrupt` e `reconnect` não têm corpo. Responde na hora com a mesa: a saída do agente
  * chega pelo stream de eventos.
  */
 export const POST = withRoute<{ id: string; action: string }>(async ({ req, params }) => {

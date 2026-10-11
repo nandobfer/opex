@@ -45,6 +45,10 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
     `primary`, polegar animado (Framer Motion), `marks` clicáveis e `formatValue` (`aria-valuetext`).
   (A tela de Crons das integrações ainda usa `type="time"`; migrar quando for mexida.)
 - Campo rotulado com erro pt-BR: `Field` (`ui/field.tsx`).
+- **Perguntas do agente** (formulários e permissões do OpenCode) ficam em
+  `src/components/agent-questions/`: `AgentQuestionsCard` (formulário), `AgentQuestionOptions`
+  (cada opção numa linha selecionável, com a **descrição** abaixo do texto; rádio na escolha única e
+  caixa na múltipla) e `PermissionCard`. Compartilhados pela mesa de trabalho e pelo refinamento.
 - Componentes com responsabilidade única e até ~200 linhas; lógica em hooks da feature.
 - **Tailwind 4: variável CSS em valor arbitrário exige `var()`** — `max-h-[var(--radix-select-content-available-height)]`,
   nunca `max-h-[--radix-...]` (sintaxe do Tailwind 3, que o 4 ignora em silêncio).

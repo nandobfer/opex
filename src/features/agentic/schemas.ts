@@ -135,11 +135,11 @@ export const createCentralSchema = z.object({
 })
 export type CreateCentralInput = z.infer<typeof createCentralSchema>
 
-/** Texto opcional do usuário (informações adicionais), no máximo 8.000 caracteres. */
-const optionalUserText = z.string().trim().max(8000, "Até 8.000 caracteres").optional()
+/** Texto opcional do usuário (informações adicionais), sem limite de caracteres. */
+const optionalUserText = z.string().trim().optional()
 
 /** Texto do usuário enviado ao planejador (correção do plano, da prévia, do PR ou reabertura). */
-export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar").max(8000, "Até 8.000 caracteres") })
+export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar") })
 export type FeedbackInput = z.infer<typeof feedbackSchema>
 
 /** Texto opcional anexado a uma ação (ex.: informações adicionais ao aprovar o plano de implementação). */
@@ -160,7 +160,7 @@ export const permissionReplySchema = z.object({
 export type PermissionReplyInput = z.infer<typeof permissionReplySchema>
 
 export const formReplySchema = z.object({
-    answer: z.record(z.string(), z.union([z.string().max(8000), z.number(), z.boolean(), z.array(z.string().max(500)).max(50)])).optional(),
+    answer: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string().max(500)).max(50)])).optional(),
     cancel: z.boolean().optional(),
 })
 export type FormReplyInput = z.infer<typeof formReplySchema>

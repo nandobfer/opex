@@ -128,6 +128,7 @@ const ACTION_TOASTS: Partial<Record<WorkbenchAction, string>> = {
     approve: "Abrindo o Pull Request",
     "submit-pr-feedback": "Mudanças enviadas ao planejador",
     reopen: "Mesa reaberta",
+    reconnect: "Reconectando à sessão do agente",
     interrupt: "Interrompendo o agente",
 }
 
@@ -139,7 +140,8 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
         mutationFn: async ({ action, text }: { action: WorkbenchAction; text?: string }) =>
             unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, text === undefined ? {} : { text })).data),
         onMutate: async ({ action }) => {
-            if (!workbench || action === "interrupt") return { previous: workbench }
+            // Reconectar e interromper não marcam "executando" otimista: quem decide é o estado remoto.
+            if (!workbench || action === "interrupt" || action === "reconnect") return { previous: workbench }
             const key = agenticKey("workbench", workbench.taskId)
             await queryClient.cancelQueries({ queryKey: key })
             queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, runState: "running", error: null } : current))

@@ -60,6 +60,8 @@ export interface IAgenticWorkbench {
     error: string | null
     lastStage: string | null
     lastPrompt: { stage: string; text: string } | null
+    /** Instante em que o último turno começou (delimita a execução acompanhada ao reconectar). */
+    turnStartedAt: Date | null
     sessionId: string | null
     sessionDirectory: string | null
     branch: string | null
@@ -95,6 +97,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         error: { type: String, default: null },
         lastStage: { type: String, default: null },
         lastPrompt: { type: Schema.Types.Mixed, default: null },
+        turnStartedAt: { type: Date, default: null },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         branch: { type: String, default: null },

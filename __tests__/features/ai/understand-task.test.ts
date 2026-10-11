@@ -51,6 +51,13 @@ describe('entrada de "Entender tarefas"', () => {
     expect(prompt).toContain('… (cortado)')
   })
 
+  it('contexto integral (mesa e refinamento) envia descrição e especificação inteiras', () => {
+    const long = 'y'.repeat(7000)
+    const full = buildUnderstandTaskPrompt(task({ description: long, technicalSpec: long }), DEFAULT_UNDERSTAND_TASK_SETTINGS.include, { fullText: true })
+    expect(full).toContain(long)
+    expect(full).not.toContain('cortado')
+  })
+
   it('instruções: seções fixas ou texto livre', () => {
     const sections = buildUnderstandTaskInstructions({ instructions: 'Seja claro.', responseFormat: 'sections' })
     expect(sections.startsWith('Seja claro.')).toBe(true)

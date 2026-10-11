@@ -15,6 +15,8 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
   taskType, priority, archived, clientId, summary, summarySourceHash, summaryUpdatedAt, tags,
   tagsSourceHash, tagsUpdatedAt, estimate }`.
+  `description` e `technicalSpec` são Markdown **sem limite artificial de caracteres** (o schema não
+  corta nem recusa por tamanho; a mesa/refinamento enviam a tarefa inteira ao agente).
   `code` = `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o
   resumo de 1 linha gerado por IA e `summarySourceHash` é o hash de título+descrição usado nele
   (detecta desatualização) — ver `modules/ai.md`. `tags` são os **ids** da taxonomia fechada da

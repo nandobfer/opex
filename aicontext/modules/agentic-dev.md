@@ -163,10 +163,12 @@ done → Reabrir mesa (texto ao planejador) → planning
 
 - `runState`: `idle` | `running` | `failed` | `interrupted`. Ações por etapa em
   `workbenchActions` (mesma regra na tela e nas rotas): executando só **Parar**; falha/interrupção →
+  **Reconectar** (acompanha a sessão existente **sem** reenviar mensagem — ver "Reconectar"),
   **Tentar novamente** (reenvia a mensagem da etapa pedindo para retomar) e, depois do plano,
   **Voltar ao planejamento**.
 - **Planejamento**: só leitura; o texto do turno vira uma nova **versão do plano** (com o pedido que
-  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`) + link. As **Informações
+  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`, **sem cortes** — opção
+  `fullText`) + link. As **Informações
   adicionais** informadas ao abrir a mesa são anexadas ao **primeiro prompt** (seção própria, sem
   virar o "pedido" da versão 1) e aparecem como mensagem do usuário na saída.
 - **Implementação**: a branch (`branchNameFor`) e o caminho do worktree (`worktreePathFor`) são
@@ -215,7 +217,19 @@ done → Reabrir mesa (texto ao planejador) → planning
   viram aviso na mesa, sem interromper.
 - **Permissões e perguntas** do agente aparecem na mesa (`pendingPermissions`/`pendingForms`):
   Aprovar uma vez / Aprovar sempre / Recusar; formulários desenhados pelos campos do OpenCode
-  (texto, número, sim/não, opções, múltipla escolha) com Responder ou Dispensar.
+  (texto, número, sim/não, opções, múltipla escolha) com Responder ou Dispensar. As **opções** de uma
+  pergunta viram uma lista de **linhas selecionáveis** (`AgentQuestionOptions`): cada opção com o
+  texto e, abaixo, a **descrição** mais discreta; a linha inteira é o botão (rádio na escolha única,
+  caixa na múltipla). O card é compartilhado com o refinamento (`components/agent-questions/`).
+- **Reconectar** (`POST /workbenches/[id]/actions/reconnect`): quando a mesa aparece em falha/
+  interrupção mas o agente **continua rodando** no OpenCode (queda de conexão ou reinício do app),
+  religa o acompanhamento da **mesma sessão** — **sem** enviar prompt nem trocar agente/modelo. O app
+  confere a sessão no OpenCode (`session.get`/`session.active`): se ainda executa, volta a assinar o
+  SSE e segue até o fim; se já terminou durante a queda, **recupera o resultado do histórico**
+  (`message.list`) e aplica a transição da etapa **uma única vez**; se não há execução em andamento,
+  avisa e mantém o estado. Também **restaura perguntas e permissões** que ficaram pendentes (o SSE é
+  só ao vivo) e usa o `turnStartedAt` como marco do turno. Sem sessão, sem etapa de execução ou com
+  o agente indisponível, a ação responde 409 e a tela continua oferecendo **Tentar novamente**.
 - Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
 - **Excluir mesa**: interrompe, apaga a saída e libera a porta; worktree, branch, containers e PR
   ficam como estão.
@@ -253,7 +267,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt` |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
@@ -264,5 +278,7 @@ merge, reabrir, excluir).
 ## Testes
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
-andamento (`in-progress`), hub, runner com cliente falso, acompanhamento do PR, rota de ações, barra
-de ações) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.
+andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
+acompanhamento do PR, rota de ações, barra de ações), `__tests__/components/agent-questions.test.tsx`
+(perguntas com descrição das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o
+GitHub são sempre mockados.
