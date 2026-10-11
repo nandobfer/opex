@@ -11,6 +11,7 @@ import {
   implementPrompt,
   planPrompt,
   prPrompt,
+  reopenPrompt,
   slugify,
   worktreePathFor,
   type WorkbenchContext,
@@ -68,6 +69,18 @@ describe('mensagens das etapas', () => {
     expect(text).toContain('docker compose -p portal-go-dev-12 down')
     expect(text).not.toContain('git worktree remove')
     expect(text).not.toContain('git branch -D')
+  })
+
+  it('reabertura parte de uma sessão nova e inclui o plano anterior quando houver', () => {
+    const text = reopenPrompt(config, ctx, 'Ajuste o filtro de data')
+    expect(text).toContain('sessão NOVA')
+    expect(text).toContain(ctx.title)
+    expect(text).toContain('Ajuste o filtro de data')
+    expect(text).not.toContain('## Plano anterior')
+
+    const withPlan = reopenPrompt(config, ctx, 'Ajuste o filtro de data', '# Plano v1\n- passo 1')
+    expect(withPlan).toContain('## Plano anterior')
+    expect(withPlan).toContain('- passo 1')
   })
 
   it('instruções adicionais da central vão no fim', () => {

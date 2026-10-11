@@ -52,6 +52,14 @@ describe('workbenchActions', () => {
     expect(workbenchActions('planning', 'interrupted', false, false)).toEqual(['retry'])
     expect(workbenchActions('building', 'failed', false, false)).toEqual(['retry', 'request-correction'])
   })
+
+  it('mesa concluída (sessão desvinculada pela OPE-46) e etapas sem execução não oferecem Reconectar', () => {
+    // Concluir a mesa desvincula a sessão do OpenCode: só resta Reabrir.
+    expect(workbenchActions('done', 'idle', false, false)).toEqual(['reopen'])
+    // Reconectar exige uma etapa de execução em andamento, mesmo com sessão existente.
+    expect(workbenchActions('pr_open', 'interrupted', false, true)).toEqual([])
+    expect(workbenchActions('plan_review', 'failed', false, true)).toEqual([])
+  })
 })
 
 describe('parseCentralConfig', () => {

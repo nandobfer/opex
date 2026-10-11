@@ -203,9 +203,18 @@ done → Reabrir mesa (texto ao planejador) → planning
   é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
   tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
   down`, `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+- **Exclusão da sessão (OPE-46)**: ao concluir a mesa (depois da limpeza), a sessão do OpenCode é
+  **desvinculada** (`sessionId`/`sessionDirectory` = `null`, preservando todo o histórico da mesa no
+  Opex — planos, saída, PR, uso) e **excluída** no OpenCode (`session.remove`). Se a exclusão falhar
+  (OpenCode fora do ar etc.), o id fica em `pendingSessionDeletions` e a rotina **`agentic-queue-pump`**
+  (Crons) retoma a exclusão; sessão já inexistente conta como excluída (idempotente). Mesas sem sessão
+  concluem sem chamar o OpenCode, e ao excluir uma mesa as pendências são tentadas antes de apagar o
+  registro. Lógica em `server/session-cleanup.ts`.
 - **Reabrir mesa** (`done` → planejamento): a tarefa é movida para a coluna de desenvolvimento (a
   mesma "Ao abrir a mesa (implementação)"; sem ela, a coluna de entrada do vínculo) e a issue é
-  **reaberta** (mesma sincronização).
+  **reaberta** (mesma sincronização). Como a sessão anterior foi excluída, a mesa ganha uma **sessão
+  nova** no diretório da central e o prompt de reabertura avisa que é uma sessão nova e inclui o
+  último plano como contexto.
 - **Controle de horas agêntico**: a mesa abre/pausa/retoma/fecha o apontamento da tarefa conforme o
   agente trabalha ou espera o usuário (`timer-sync.ts`; ver `modules/time.md`). Não há controles
   manuais de timer e a central não tem mais as opções de timer.
@@ -231,8 +240,8 @@ done → Reabrir mesa (texto ao planejador) → planning
   só ao vivo) e usa o `turnStartedAt` como marco do turno. Sem sessão, sem etapa de execução ou com
   o agente indisponível, a ação responde 409 e a tela continua oferecendo **Tentar novamente**.
 - Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
-- **Excluir mesa**: interrompe, apaga a saída e libera a porta; worktree, branch, containers e PR
-  ficam como estão.
+- **Excluir mesa**: interrompe, apaga a saída, tenta excluir as sessões já pendentes e libera a
+  porta; worktree, branch, containers e PR ficam como estão.
 - Custo e tokens acumulados por mesa (`session.step.ended`).
 
 ## Saída ao vivo
@@ -278,7 +287,9 @@ merge, reabrir, excluir).
 ## Testes
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
+`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
-acompanhamento do PR, rota de ações, barra de ações), `__tests__/components/agent-questions.test.tsx`
-(perguntas com descrição das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o
-GitHub são sempre mockados.
+acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`) e
+conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`)),
+`__tests__/components/agent-questions.test.tsx` (perguntas com descrição das opções) e
+`__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.
