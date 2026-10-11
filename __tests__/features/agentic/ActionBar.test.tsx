@@ -91,4 +91,16 @@ describe('ActionBar', () => {
     render(<ActionBar workbench={workbench({ stage: 'changes_requested' })} />)
     expect(screen.getByLabelText('O que o PR pediu?')).toBeTruthy()
   })
+
+  it('mesa falha com sessão oferece Reconectar (sem reenviar) ao lado de Tentar novamente', () => {
+    render(<ActionBar workbench={workbench({ stage: 'planning', runState: 'interrupted', error: 'Conexão perdida' })} />)
+    fireEvent.click(screen.getByRole('button', { name: /Reconectar ao agente/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'reconnect', text: undefined }, expect.anything())
+    expect(screen.getByRole('button', { name: /Tentar novamente/ })).toBeTruthy()
+  })
+
+  it('mesa falha sem sessão não oferece Reconectar', () => {
+    render(<ActionBar workbench={workbench({ stage: 'planning', runState: 'interrupted', sessionId: null })} />)
+    expect(screen.queryByRole('button', { name: /Reconectar ao agente/ })).toBeNull()
+  })
 })

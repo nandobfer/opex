@@ -10,8 +10,18 @@ import type { UnderstandTaskSettings } from "./schemas"
 
 const MAX_TEXT = 6000
 
-function clip(text: string | null | undefined, max = MAX_TEXT): string {
+/**
+ * Opções de montagem da entrada. `fullText` envia descrição, especificação e comentários **sem
+ * cortes** — usado pelo desenvolvimento agêntico (mesa e refinamento), que precisam da tarefa
+ * inteira; o padrão (Entender tarefas) continua limitando o tamanho de textos muito longos.
+ */
+export interface UnderstandTaskPromptOptions {
+    fullText?: boolean
+}
+
+function clip(text: string | null | undefined, max = MAX_TEXT, full = false): string {
     const value = (text ?? "").trim()
+    if (full) return value
     return value.length > max ? `${value.slice(0, max)}… (cortado)` : value
 }
 
@@ -32,7 +42,8 @@ function section(title: string, body: string): string {
     return body ? `## ${title}\n${body}` : ""
 }
 
-export function buildUnderstandTaskPrompt(task: TaskDetailDto, include: UnderstandTaskSettings["include"]): string {
+export function buildUnderstandTaskPrompt(task: TaskDetailDto, include: UnderstandTaskSettings["include"], options: UnderstandTaskPromptOptions = {}): string {
+    const text = (value: string | null | undefined, max = MAX_TEXT) => clip(value, max, options.fullText === true)
     const facts = [
         `- Código: ${task.code}`,
         `- Tipo: ${task.taskType ? TASK_TYPE_LABELS[task.taskType] : "não informado"}`,
@@ -46,9 +57,9 @@ export function buildUnderstandTaskPrompt(task: TaskDetailDto, include: Understa
     const parts = [
         `# Tarefa ${task.code}: ${task.title}`,
         section("Dados", facts.join("\n")),
-        section("Descrição", clip(task.description)),
-        section("Especificação técnica", clip(task.technicalSpec)),
-        include.comments ? section("Comentários", task.comments.map((comment) => `### ${when(comment.createdAt)}\n${clip(comment.content, 3000)}`).join("\n\n")) : "",
+        section("Descrição", text(task.description)),
+        section("Especificação técnica", text(task.technicalSpec)),
+        include.comments ? section("Comentários", task.comments.map((comment) => `### ${when(comment.createdAt)}\n${text(comment.content, 3000)}`).join("\n\n")) : "",
         include.history ? section("Histórico", task.history.map((entry) => `- ${when(entry.createdAt)} — ${entry.description || entry.action}`).join("\n")) : "",
         include.timeLogs
             ? section("Apontamentos de horas", task.timeLogs.map((log) => `- ${when(log.startTime)}${log.duration ? ` (${log.duration} min)` : ""}${log.description ? `: ${log.description}` : ""}`).join("\n"))

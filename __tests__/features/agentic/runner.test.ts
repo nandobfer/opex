@@ -96,3 +96,84 @@ describe('runAgentTurn', () => {
     expect(result).toMatchObject({ outcome: 'interrupted', text: 'a' })
   })
 })
+
+/** Cliente falso para a reconexão: estado remoto (`get`/`active`) + histórico de mensagens. */
+function attachClient(options: { active?: boolean; idle?: number; outcome?: 'succeeded' | 'failed' | 'interrupted'; messages?: unknown[]; events?: Raw[]; forms?: unknown[]; permissions?: unknown[] } = {}) {
+  const client = {
+    session: {
+      switchAgent: vi.fn().mockResolvedValue(undefined),
+      switchModel: vi.fn().mockResolvedValue(undefined),
+      prompt: vi.fn().mockResolvedValue(undefined),
+      interrupt: vi.fn().mockResolvedValue({}),
+      get: vi.fn().mockResolvedValue({ time: { created: 0, updated: 0, idle: options.idle ?? 0 }, outcome: options.outcome, location: { directory: '/repo' } }),
+      active: vi.fn().mockResolvedValue(options.active ? { s1: { type: 'running' } } : {}),
+      form: { list: vi.fn().mockResolvedValue(options.forms ?? []) },
+    },
+    message: { list: vi.fn().mockResolvedValue({ data: options.messages ?? [], cursor: {} }) },
+    permission: { list: vi.fn().mockResolvedValue(options.permissions ?? []) },
+    event: {
+      subscribe: (opts: { onActivity?: () => void }) =>
+        (async function* () {
+          opts.onActivity?.()
+          yield { type: 'server.connected', data: {} }
+          for (const event of options.events ?? []) yield event
+        })(),
+    },
+  }
+  return client as unknown as OpencodeClient & typeof client
+}
+
+describe('runAgentTurn (reconexão)', () => {
+  it('acompanha a sessão em andamento sem reenviar prompt nem trocar agente/modelo', async () => {
+    const client = attachClient({ active: true, events: [ev('session.text.delta', { delta: 'concluindo…' }), ev('session.execution.succeeded')] })
+    const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 })
+    expect(client.session.prompt).not.toHaveBeenCalled()
+    expect(client.session.switchAgent).not.toHaveBeenCalled()
+    expect(client.session.switchModel).not.toHaveBeenCalled()
+    expect(result.outcome).toBe('succeeded')
+    const types = mocks.publish.mock.calls.map(([, payload]) => (payload as { type: string }).type)
+    expect(types).not.toContain('turn')
+    expect(types.at(-1)).toBe('turn-end')
+  })
+
+  it('recupera o resultado de uma execução que terminou durante a queda', async () => {
+    const client = attachClient({
+      active: false,
+      idle: 5000,
+      outcome: 'succeeded',
+      messages: [{ type: 'assistant', id: 'm1', time: { created: 5000 }, content: [{ type: 'text', text: '# Plano recuperado' }] }],
+    })
+    const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 })
+    expect(result).toMatchObject({ outcome: 'succeeded', text: '# Plano recuperado' })
+    expect(client.session.prompt).not.toHaveBeenCalled()
+  })
+
+  it('sem execução em andamento nem resultado recente, não cria sessão nem reenvia o prompt', async () => {
+    const client = attachClient({ active: false, idle: 100, outcome: 'succeeded' })
+    const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 })
+    expect(result).toMatchObject({ outcome: 'interrupted', message: expect.stringContaining('Não há execução em andamento') })
+    expect(client.session.prompt).not.toHaveBeenCalled()
+  })
+
+  it('sessão inexistente falha com mensagem clara', async () => {
+    const client = attachClient({})
+    client.session.get.mockResolvedValue(null)
+    const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 })
+    expect(result).toMatchObject({ outcome: 'failed', message: expect.stringContaining('não existe mais') })
+    expect(client.session.prompt).not.toHaveBeenCalled()
+  })
+
+  it('restaura perguntas e permissões que ficaram pendentes durante a queda', async () => {
+    const client = attachClient({
+      active: true,
+      permissions: [{ id: 'p1', sessionID: 's1', action: 'bash', resources: ['rm -rf /tmp/x'] }],
+      forms: [{ id: 'f1', sessionID: 's1', title: 'Como seguir?', fields: [{ key: 'q', type: 'string', title: 'Qual caminho?' }] }],
+      events: [ev('session.execution.succeeded')],
+    })
+    const onForm = vi.fn()
+    const onPermission = vi.fn()
+    await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 }, { onForm, onPermission })
+    expect(onPermission).toHaveBeenCalledWith({ id: 'p1', action: 'bash', resources: ['rm -rf /tmp/x'], message: null })
+    expect(onForm).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1', title: 'Como seguir?' }))
+  })
+})
