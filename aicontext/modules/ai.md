@@ -29,6 +29,17 @@ e opções na própria aba da página "Provedores de IA".
   "Estimar prazos" (um `score` fracionário de **tempo de execução**, interpolado para horas). Como
   não gera texto, o JEV continua
   **fora** das features de texto (flag `supportsTextGeneration`; ver `AI_TEXT_PROVIDER_IDS`).
+- **Uso do JEV**: `askJevSystemOne` exige contexto `tracking` (feature + referência opcional) e
+  grava uma única linha em `ai_usage_logs` antes do processamento de negócio, inclusive para tags
+  avulsas do portal. Registra o modelo efetivo, entrada/saída, total, duração e resultado da
+  requisição; falhas de negócio posteriores não apagam o uso nem geram outra linha JEV. Falha de
+  transporte sem métricas mantém tokens/custo `null`, nunca zero. Falha de telemetria é logada com
+  Pino sem interromper a IA. Auditoria `UsoIA`, seguida do evento `jev-usage-updated` em `private-app`.
+- **Custo JEV** (`src/lib/ai/jev-usage.ts`): `inputTokens × 0,042 / 1.000.000` USD (tarifa oficial
+  de entrada; saída gratuita). Grava a tarifa aplicada (`inputPricePerMillionUsd`) e origem `api`;
+  não arredonda por chamada nem recalcula custos antigos. Sem entrada conhecida, custo `null`;
+  sem ambos os contadores, total `null`. Retenção continua em **90 dias**; a migração
+  `ensure-ai-usage-indexes` garante índices, incluindo `provider + createdAt`, sem depender de autoIndex.
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
@@ -72,6 +83,24 @@ e opções na própria aba da página "Provedores de IA".
   (estado local, não vão à URL).
 - Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
   fuse.js, lista virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar).
+- Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
+  custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Filtro na URL
+  (`usageFrom`/`usageTo`) com `PresetDateRangeFilter`: padrão **Último mês** (um mês atrás até hoje),
+  atalhos Hoje/Última semana/Último mês e intervalo personalizado. As datas são convertidas do
+  fuso do navegador para ISO, incluindo o dia final inteiro. Limpar consulta todos os logs retidos.
+  Agregação no servidor, cache TanStack Query e atualização Pusher (inclusive ao reassinar após
+  reconexão); ação Atualizar disponível sem tempo real. Métricas desconhecidas são sinalizadas,
+  somas parciais não são apresentadas como medição completa. A tela informa a retenção de 90 dias.
+- **Reconstrução histórica JEV**: lote `jev-historical-2026-10-11-235088`, corte
+  `2026-10-11T02:46:58.230Z`: 149 logs sem métricas (141 tags + 8 estimativas) receberam rateio
+  uniforme de **235.088 tokens totais** e **US$ 0,0067** informados pelo dono a partir da plataforma.
+  Resíduos em tokens inteiros/nano-USD distribuídos por ordem de `createdAt` e `_id`. Entrada/saída
+  e tarifa continuam desconhecidos; custo histórico não é recalculado pela tarifa atual. Origem
+  `historical-allocation`, `reconciliationBatch` e `reconciledAt` identificam o lote. Datas, feature,
+  modelo e referências originais são preservados. A tela avisa que esse histórico e seus recortes
+  temporais são **aproximados** e podem absorver chamadas antigas não logadas. Backup dos documentos
+  originais em `ai_usage_log_reconciliations`, auditoria `UsoIA/IMPORTAR`; atualização condicionada
+  a métricas/lote ausentes permite retomada sem sobrescrever métricas reais nem repetir o rateio.
 
 ## Feature "Entender tarefas"
 
@@ -223,6 +252,7 @@ e opções na própria aba da página "Provedores de IA".
 | Rota | Descrição |
 |---|---|
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
+| `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
@@ -248,3 +278,10 @@ hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o r
 `orcamentos-similar`; `task-refinement-settings` cobre a configuração de "Refinar tarefa"). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o
 refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`).
+
+Uso JEV: `__tests__/lib/ai/jev-usage.test.ts` (normalização/custo/rateio),
+`jev-request-usage.test.ts` (persistência/auditoria/evento por requisição e falhas),
+`__tests__/features/ai/jev-usage.test.ts` (agregação/períodos), `jev-usage-route.test.ts`
+(API interna), `jev-usage-card.test.tsx` (painel/filtro/estados) e `jev-usage-hook.test.tsx`
+(consulta/tempo real/cleanup). Os testes de tags e estimativas verificam referências e ausência de
+logs JEV duplicados, inclusive tags avulsas e falha de negócio posterior à resposta.

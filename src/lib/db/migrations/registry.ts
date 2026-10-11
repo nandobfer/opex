@@ -7,10 +7,12 @@ import { seedIntegrationsFromEnv } from "./seed-integrations-from-env"
 import { repairIntegrationIndexes } from "./repair-integration-indexes"
 import { dropLegacyCollections } from "./drop-legacy-collections"
 import { backfillTaskClientId } from "./backfill-task-client-id"
+import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
     { name: "repair-integration-indexes", run: () => repairIntegrationIndexes() },
     { name: "drop-legacy-collections", run: () => dropLegacyCollections() },
     { name: "backfill-task-client-id", run: () => backfillTaskClientId() },
+    { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },
 )

@@ -228,7 +228,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
                 taskType: prepared.preview.taskType,
                 projectName: prepared.input.projectName,
                 summary: prepared.preview.summary,
-            })
+            }, `${String(prepared.client._id)}:${prepared.draftId}`)
             if (generated && generated.length) {
                 tags = generated
                 await saveDraftTags(prepared.client, prepared.draftId, generated)
@@ -244,7 +244,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
         let hours: number
         if (settings.provider === "jev") {
             yield { type: "notice", message: "Estimando com o JEV…" }
-            const response = await askJevSystemOne({ model: settings.model, state: prompt, questions: buildJevEstimateQuestions(), signal })
+            const response = await askJevSystemOne({ model: settings.model, state: prompt, questions: buildJevEstimateQuestions(), signal, tracking: { feature: "estimate-hours", subject: `${String(prepared.client._id)}:${prepared.draftId}` } })
             const answer = response.answers?.[JEV_ESTIMATE_QUESTION_ID]
             if (!answer || answer.type !== "score") throw new Error("O JEV não devolveu a estimativa")
             hours = mapJevEstimateScore(answer.score)
@@ -311,6 +311,8 @@ async function logUsage(
     startedAt: number,
     last: AiStreamEvent | null,
 ): Promise<void> {
+    // O JEV registra a requisição na camada HTTP, inclusive se o processamento posterior falhar.
+    if (settings.provider === "jev") return
     try {
         await dbConnect()
         const usage = last?.type === "done" ? last.usage : null

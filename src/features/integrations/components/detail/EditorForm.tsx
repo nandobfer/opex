@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "../../types"
 import { AiModelsCard } from "@/features/ai/components/AiModelsCard"
+import { JevUsageCard } from "@/features/ai/components/JevUsageCard"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
 import { ApiTokensCard } from "../internal-api/ApiTokensCard"
 import { ApiDocsCard } from "./ApiDocsCard"
@@ -66,6 +67,8 @@ export function EditorForm({ def, data, draft, setDraft, dirty, pending, onSave,
             )}
 
             {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
+
+            {def.id === "ai_jev" && <JevUsageCard />}
 
             {aiProvider && <AiModelsCard provider={aiProvider.id} dirty={dirty} />}
 

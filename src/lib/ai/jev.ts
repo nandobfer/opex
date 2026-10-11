@@ -2,14 +2,14 @@ import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import type { AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { recordJevUsage, type JevUsageContext } from "./record-jev-usage"
 
 /**
  * JEV (TypeSafe) — SOMENTE servidor.
  *
  * O JEV é um modelo "System One" de **decisão estruturada**: a API `POST /v1/systemone` recebe um
  * estado (`state`) e perguntas tipadas (`questions`) e devolve respostas estruturadas (`answers`),
- * sem geração de texto. Aqui fica só o núcleo da integração: a listagem de modelos/aliases por
- * `GET /v1/models` (autenticação Bearer). As features que usam o JEV entram depois.
+ * sem geração de texto. Cada avaliação registra tokens e custo uma única vez, no servidor.
  */
 
 export const JEV_API_URL = "https://api.typesafe.ai/v1"
@@ -101,6 +101,7 @@ export interface JevResponse {
 
 export interface JevSystemOneInput {
     model: string
+    tracking: JevUsageContext
     /** Estado avaliado: texto ou objeto JSON (as perguntas são julgadas contra ele). */
     state: unknown
     questions: Record<string, JevQuestion>
@@ -112,23 +113,40 @@ export interface JevSystemOneInput {
  * gera texto. Erros viram `AiProviderError` com mensagem acionável em pt-BR.
  */
 export async function askJevSystemOne(input: JevSystemOneInput): Promise<JevResponse> {
-    const apiKey = await getJevApiKey()
-    let res: Response
+    const startedAt = Date.now()
+    let body: JevResponse | undefined
+    let failure: string | null = null
     try {
-        res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/systemone`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ model: input.model, state: input.state, questions: input.questions }),
-            cache: "no-store",
-            signal: input.signal,
-        })
+        const apiKey = await getJevApiKey()
+        let res: Response
+        try {
+            res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/systemone`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ model: input.model, state: input.state, questions: input.questions }),
+                cache: "no-store",
+                signal: input.signal,
+            })
+        } catch (error) {
+            throw new AiProviderError(`Não foi possível conectar ao JEV: ${error instanceof Error ? error.message : String(error)}`)
+        }
+        if (res.status === 401 || res.status === 403) throw new AiProviderError(`O JEV recusou a API key (HTTP ${res.status})`)
+        if (res.status === 400 || res.status === 422) throw new AiProviderError(`O JEV recusou a requisição (HTTP ${res.status}): confira o modelo e as perguntas`)
+        if (!res.ok) throw new AiProviderError(`O JEV respondeu HTTP ${res.status}`)
+        body = (await res.json()) as JevResponse
+        if (!body?.answers) throw new AiProviderError("O JEV não devolveu respostas")
+        return body
     } catch (error) {
-        throw new AiProviderError(`Não foi possível conectar ao JEV: ${error instanceof Error ? error.message : String(error)}`)
+        failure = error instanceof Error ? error.message : String(error)
+        throw error
+    } finally {
+        await recordJevUsage({
+            ...input.tracking,
+            model: body?.model || input.model,
+            ok: failure === null,
+            error: failure,
+            durationMs: Date.now() - startedAt,
+            usage: body?.usage,
+        })
     }
-    if (res.status === 401 || res.status === 403) throw new AiProviderError(`O JEV recusou a API key (HTTP ${res.status})`)
-    if (res.status === 400) throw new AiProviderError("O JEV recusou a requisição (HTTP 400): confira o modelo e as perguntas")
-    if (!res.ok) throw new AiProviderError(`O JEV respondeu HTTP ${res.status}`)
-    const body = (await res.json()) as JevResponse
-    if (!body.answers) throw new AiProviderError("O JEV não devolveu respostas")
-    return body
 }

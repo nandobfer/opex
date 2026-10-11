@@ -9,12 +9,13 @@ const mocks = vi.hoisted(() => ({
     saveTags: vi.fn(),
     loadEstimate: vi.fn(),
     availability: vi.fn(),
+    usage: vi.fn(),
 }))
 
 type Err = Error & { status: number; code?: string }
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { create: vi.fn() } }))
+vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { create: mocks.usage } }))
 vi.mock("@/lib/db/models/Project", () => ({ Project: { findById: () => ({ lean: async () => null }) } }))
 vi.mock("@/lib/api/route", () => ({ DomainError: class DomainError extends Error implements Err { status: number; code?: string; constructor(status: number, message: string, code?: string) { super(message); this.status = status; this.code = code } } }))
 vi.mock("@/lib/integrations/debug", () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
@@ -64,6 +65,7 @@ describe("runBudgetEstimate (uma chamada, sem agente)", () => {
     it("garante as tags do rascunho, busca semelhantes e estima pelo provedor de texto", async () => {
         const events = await collect(prepared())
         expect(mocks.tags).toHaveBeenCalledOnce()
+        expect(mocks.tags).toHaveBeenCalledWith(expect.anything(), "c1:d1")
         expect(mocks.saveTags).toHaveBeenCalledWith(expect.anything(), "d1", ["api"])
         expect(mocks.similar).toHaveBeenCalledWith({ tags: ["api"], taskType: "bugfix", projectId: "p1", limit: 5 })
         expect(mocks.saveEstimate).toHaveBeenCalledWith(expect.anything(), "d1", 7, "gemini/gemini-3-flash")
@@ -76,7 +78,17 @@ describe("runBudgetEstimate (uma chamada, sem agente)", () => {
         mocks.jev.mockResolvedValue({ answers: { estimated_hours: { type: "score", score: 2, confidence: 1, legend: {}, probabilities: {} } } })
         const events = await collect(prepared({ settings: settings({ provider: "jev", model: "jev-latest" }) as PreparedBudgetEstimate["settings"] }))
         expect(mocks.jev).toHaveBeenCalledOnce()
+        expect(mocks.jev).toHaveBeenCalledWith(expect.objectContaining({ tracking: { feature: "estimate-hours", subject: "c1:d1" } }))
+        expect(mocks.usage).not.toHaveBeenCalled()
         expect(events.find((event) => event.type === "done")).toMatchObject({ type: "done", estimate: { hours: 0.25 } })
+    })
+
+    it("falha ao salvar após resposta JEV não cria outro log na feature", async () => {
+        mocks.jev.mockResolvedValue({ answers: { estimated_hours: { type: "score", score: 2 } }, usage: { input_tokens: 100, output_tokens: 20 } })
+        mocks.saveEstimate.mockRejectedValueOnce(new Error("Falha ao salvar"))
+        const events = await collect(prepared({ settings: settings({ provider: "jev", model: "jev-latest" }) as PreparedBudgetEstimate["settings"] }))
+        expect(events.find((event) => event.type === "error")).toMatchObject({ message: "Falha ao salvar" })
+        expect(mocks.usage).not.toHaveBeenCalled()
     })
 
     it("repassa o erro do provedor sem gravar estimativa", async () => {

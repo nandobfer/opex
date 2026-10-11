@@ -1,0 +1,14 @@
+import { ok, validationError } from "@/lib/api/responses"
+import { withRoute } from "@/lib/api/route"
+import { jevUsageQuerySchema } from "@/features/ai/jev-usage"
+import { getJevUsage } from "@/features/ai/server/jev-usage"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+/** Sessão interna; não é endpoint público por token. */
+export const GET = withRoute(async ({ req }) => {
+    const parsed = jevUsageQuerySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams))
+    if (!parsed.success) return validationError(parsed.error)
+    return ok(await getJevUsage(parsed.data))
+})

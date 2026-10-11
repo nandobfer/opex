@@ -36,6 +36,10 @@ export interface IAiUsageLog {
     outputTokens: number | null
     totalTokens: number | null
     costUsd: number | null
+    usageSource: "api" | "historical-allocation" | null
+    inputPricePerMillionUsd: number | null
+    reconciliationBatch: string | null
+    reconciledAt: Date | null
     durationMs: number
     createdAt: Date
 }
@@ -52,11 +56,17 @@ const AiUsageLogSchema = new Schema<IAiUsageLog>(
         outputTokens: { type: Number, default: null },
         totalTokens: { type: Number, default: null },
         costUsd: { type: Number, default: null },
+        usageSource: { type: String, enum: ["api", "historical-allocation", null], default: null },
+        inputPricePerMillionUsd: { type: Number, default: null },
+        reconciliationBatch: { type: String, default: null },
+        reconciledAt: { type: Date, default: null },
         durationMs: { type: Number, required: true },
         createdAt: { type: Date, default: () => new Date(), expires: 60 * 60 * 24 * 90 },
     },
     { collection: "ai_usage_logs", versionKey: false },
 )
+
+AiUsageLogSchema.index({ provider: 1, createdAt: -1 })
 
 if (process.env.NODE_ENV === "development") {
     delete models.AiFeatureSetting

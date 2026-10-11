@@ -69,7 +69,7 @@ async function logUsage(feature: string, provider: string, model: string, taskId
 async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]; streamed: AiStreamEvent | null }> {
     const { settings, taxonomy, input } = prepared
     if (settings.provider === "jev") {
-        const response = await askJevSystemOne({ model: settings.model, state: buildTaskTagsPrompt(input), questions: buildJevTagQuestions(taxonomy) })
+        const response = await askJevSystemOne({ model: settings.model, state: buildTaskTagsPrompt(input), questions: buildJevTagQuestions(taxonomy), tracking: { feature: "task-tags", subject: prepared.taskId || null } })
         return { tags: selectJevTags(response.answers, taxonomy, settings.jevThreshold, settings.maxTags), streamed: null }
     }
     if (settings.provider === "gemini" || settings.provider === "opencode") {
@@ -105,7 +105,7 @@ export async function runTaskTags(prepared: PreparedTaskTags): Promise<string[]>
     await dbConnect()
     await DevTask.updateOne({ _id: prepared.taskId }, { $set: { tags, tagsSourceHash: taskTagsSourceHash(prepared.source), tagsUpdatedAt: new Date() } }, { timestamps: false })
     await publishTasksUpdated([prepared.taskId])
-    await logUsage("task-tags", prepared.settings.provider, prepared.settings.model, prepared.taskId, true, null, startedAt, streamed?.type === "done" ? streamed.usage : null)
+    if (prepared.settings.provider !== "jev") await logUsage("task-tags", prepared.settings.provider, prepared.settings.model, prepared.taskId, true, null, startedAt, streamed?.type === "done" ? streamed.usage : null)
     dbg.success(`[tags-tarefas] ${prepared.taskCode} concluído (${tags.length} tag(s))`)
     return tags
 }
@@ -128,14 +128,14 @@ export async function generateTaskTags(taskId: string): Promise<string[] | null>
  * Gera tags a partir de uma entrada avulsa (ex.: a prévia do portal, que ainda não é uma tarefa).
  * Carrega a configuração da feature; `null` quando indisponível ou em falha.
  */
-export async function generateTagsForInput(input: TaskTagsInput): Promise<string[] | null> {
+export async function generateTagsForInput(input: TaskTagsInput, subject: string | null = null): Promise<string[] | null> {
     try {
         const { settings } = await loadTaskTagsSettings()
         const availability = await availabilityOfTaskTags(settings)
         if (!availability.available || !settings.provider || !settings.model) return null
         const prepared: PreparedTaskTags = {
             settings: { ...settings, provider: settings.provider, model: settings.model },
-            taskId: "",
+            taskId: subject ?? "",
             taskCode: input.title,
             source: { title: input.title, description: input.description },
             input,

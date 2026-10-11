@@ -10,11 +10,12 @@ const mocks = vi.hoisted(() => ({
   getTask: vi.fn(),
   stream: vi.fn(),
   jev: vi.fn(),
+  usage: vi.fn(),
   docs: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/Ai', () => ({ AiUsageLog: { create: vi.fn() } }))
+vi.mock('@/lib/db/models/Ai', () => ({ AiUsageLog: { create: mocks.usage } }))
 vi.mock('@/lib/db/models/DevTask', () => ({ DevTask: { find: mocks.find, updateOne: mocks.updateOne } }))
 vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
 vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.stream }))
@@ -24,7 +25,7 @@ vi.mock('@/features/tasks/server/service', () => ({ concludedColumnKeys: mocks.c
 
 import { DEFAULT_TASK_TAGS_SETTINGS, type TaskTagsSettings } from '@/features/ai/schemas'
 import { taskTagsSourceHash } from '@/features/ai/task-tags'
-import { generateTaskTags, runTaskTagsBackfill, runTaskTagsConcludedBackfill } from '@/features/ai/server/task-tags'
+import { generateTagsForInput, generateTaskTags, runTaskTagsBackfill, runTaskTagsConcludedBackfill } from '@/features/ai/server/task-tags'
 
 const settings = (overrides: Partial<TaskTagsSettings> = {}): TaskTagsSettings => ({ ...DEFAULT_TASK_TAGS_SETTINGS, enabled: true, provider: 'gemini', model: 'gemini-3-flash', ...overrides })
 
@@ -61,6 +62,16 @@ describe('generateTaskTags', () => {
     mocks.jev.mockResolvedValue({ answers: { tag_tarefas: { type: 'noul', noul: 0.9 }, tag_horas: { type: 'noul', noul: 0.2 } } })
     expect(await generateTaskTags('a')).toEqual(['tarefas'])
     expect(mocks.jev).toHaveBeenCalledOnce()
+    expect(mocks.jev).toHaveBeenCalledWith(expect.objectContaining({ tracking: { feature: 'task-tags', subject: 'a' } }))
+    expect(mocks.usage).not.toHaveBeenCalled()
+  })
+
+  it('tags avulsas do portal também enviam contexto para o registro centralizado', async () => {
+    mocks.loadSettings.mockResolvedValue({ settings: settings({ provider: 'jev', model: 'jev-latest' }) })
+    mocks.jev.mockResolvedValue({ answers: { tag_tarefas: { type: 'noul', noul: 0.9 } } })
+    expect(await generateTagsForInput({ title: 'Rodapé', description: 'Corpo', taskType: 'bugfix', projectName: null, summary: null }, 'client:draft')).toEqual(['tarefas'])
+    expect(mocks.jev).toHaveBeenCalledWith(expect.objectContaining({ tracking: { feature: 'task-tags', subject: 'client:draft' } }))
+    expect(mocks.usage).not.toHaveBeenCalled()
   })
 })
 
