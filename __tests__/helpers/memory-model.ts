@@ -16,11 +16,15 @@ function matchValue(actual: unknown, expected: unknown): boolean {
         const actualTime = actual == null ? null : asTime(actual)
         if ("$in" in ops && !(ops.$in as unknown[]).includes(actual)) return false
         if ("$ne" in ops && (actual ?? null) === ops.$ne) return false
+        if ("$exists" in ops) {
+            const present = actual !== undefined && actual !== null
+            if (Boolean(ops.$exists) !== present) return false
+        }
         if ("$lte" in ops && !(actualTime !== null && actualTime <= asTime(ops.$lte))) return false
         if ("$gte" in ops && !(actualTime !== null && actualTime >= asTime(ops.$gte))) return false
         if ("$lt" in ops && !(actualTime !== null && actualTime < asTime(ops.$lt))) return false
         if ("$gt" in ops && !(actualTime !== null && actualTime > asTime(ops.$gt))) return false
-        if ("$in" in ops || "$ne" in ops || "$lte" in ops || "$gte" in ops || "$lt" in ops || "$gt" in ops) return true
+        if ("$in" in ops || "$ne" in ops || "$exists" in ops || "$lte" in ops || "$gte" in ops || "$lt" in ops || "$gt" in ops) return true
     }
     if (Array.isArray(actual) && !Array.isArray(expected)) return actual.includes(expected)
     return (actual ?? null) === (expected ?? null) || String(actual) === String(expected)
@@ -29,8 +33,8 @@ function matchValue(actual: unknown, expected: unknown): boolean {
 const matches = (doc: Doc, filter: Doc) => Object.entries(filter).every(([key, value]) => matchValue(doc[key], value))
 
 function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
-    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc }
-    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset) Object.assign(doc, update)
+    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc; $pull?: Doc }
+    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset && !ops.$pull) Object.assign(doc, update)
     if (ops.$set) Object.assign(doc, ops.$set)
     if (inserting && ops.$setOnInsert) Object.assign(doc, ops.$setOnInsert)
     for (const [key, value] of Object.entries(ops.$inc ?? {})) doc[key] = ((doc[key] as number) ?? 0) + value
@@ -39,6 +43,11 @@ function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
         const list = Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []
         if (!list.includes(value)) list.push(value)
         doc[key] = list
+    }
+    for (const [key, value] of Object.entries(ops.$pull ?? {})) {
+        const list = Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []
+        const isDoc = value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)
+        doc[key] = list.filter((item) => (isDoc ? !matches(item as Doc, value as Doc) : !matchValue(item, value)))
     }
 }
 

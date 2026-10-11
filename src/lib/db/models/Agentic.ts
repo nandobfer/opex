@@ -62,6 +62,8 @@ export interface IAgenticWorkbench {
     lastPrompt: { stage: string; text: string } | null
     sessionId: string | null
     sessionDirectory: string | null
+    /** IDs de sessões do OpenCode já desvinculadas da mesa e ainda pendentes de exclusão. */
+    pendingSessionDeletions: string[]
     branch: string | null
     worktreePath: string | null
     composeProject: string | null
@@ -97,6 +99,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         lastPrompt: { type: Schema.Types.Mixed, default: null },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
+        pendingSessionDeletions: { type: [String], default: [] },
         branch: { type: String, default: null },
         worktreePath: { type: String, default: null },
         composeProject: { type: String, default: null },
