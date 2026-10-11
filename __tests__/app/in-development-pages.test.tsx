@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, notFound: mocks.notFound }))
 vi.mock("@/features/tasks/components/TasksPage", () => ({ TasksPage: () => <div data-testid="tasks" /> }))
+vi.mock("@/features/dashboard/components/DashboardPage", () => ({ DashboardPage: () => <div data-testid="dashboard" /> }))
 vi.mock("@/features/tasks/components/detail/TaskDetailPage", () => ({
     TaskDetailPage: ({ id }: { id: string }) => <div data-testid="task">{id}</div>,
 }))
@@ -24,6 +25,7 @@ vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
 
 import HomePage from "@/app/page"
 import UnknownPage from "@/app/(app)/[...rest]/page"
+import DashboardsPage from "@/app/(app)/dashboard/page"
 import TarefasPage from "@/app/(app)/tarefas/page"
 import TarefaPage from "@/app/(app)/tarefas/[id]/page"
 import IntegracaoPage from "@/app/(app)/integracoes/[id]/page"
@@ -33,9 +35,14 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
 describe("páginas do app", () => {
-    it("a raiz redireciona para a página inicial (Tarefas)", () => {
+    it("a raiz redireciona para a página inicial (Dashboards)", () => {
         HomePage()
         expect(mocks.redirect).toHaveBeenCalledWith(HOME_HREF)
+    })
+
+    it("Dashboards renderiza a tela da feature", () => {
+        render(<DashboardsPage />)
+        expect(screen.getByTestId("dashboard")).toBeTruthy()
     })
 
     it("Tarefas renderiza o quadro; /tarefas/[id] abre a página da tarefa", async () => {

@@ -8,12 +8,13 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento) e Sistema (Integrações)", () => {
+    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento) e Sistema (Integrações)", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
             ["inicio", undefined],
             ["sistema", "Sistema"],
         ])
         expect(APP_NAV_ITEMS.map((item) => [item.label, item.href])).toEqual([
+            ["Dashboards", "/dashboard"],
             ["Tarefas", "/tarefas"],
             ["Horas agênticas", "/tarefas/horas"],
             ["Financeiro", "/financeiro"],
@@ -24,6 +25,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
     })
 
     it("item ativo é o mais específico: Horas agênticas em /tarefas/horas, Tarefas em /tarefas/123", () => {
+        expect(activeNavHref("/dashboard", APP_NAV_ITEMS)).toBe("/dashboard")
         expect(activeNavHref("/tarefas/horas", APP_NAV_ITEMS)).toBe("/tarefas/horas")
         expect(activeNavHref("/tarefas/abc123", APP_NAV_ITEMS)).toBe("/tarefas")
         expect(activeNavHref("/tarefas", APP_NAV_ITEMS)).toBe("/tarefas")
@@ -31,8 +33,8 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         expect(activeNavHref("/outra", APP_NAV_ITEMS)).toBeNull()
     })
 
-    it("a página inicial é Tarefas e está no menu", () => {
-        expect(HOME_HREF).toBe("/tarefas")
+    it("a página inicial é Dashboards e está no menu", () => {
+        expect(HOME_HREF).toBe("/dashboard")
         expect(APP_NAV_ITEMS.some((item) => item.href === HOME_HREF)).toBe(true)
     })
 

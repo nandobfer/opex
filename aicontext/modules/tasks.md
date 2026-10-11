@@ -1,6 +1,7 @@
 # Módulo: Tarefas (`/tarefas`)
 
-Página inicial do app (`/` redireciona para `HOME_HREF = "/tarefas"`). O Opex é a **fonte de
+A página inicial do app é **Dashboards** (`/dashboard`); `/` redireciona para
+`HOME_HREF = "/dashboard"` (ver `modules/dashboard.md`). O Opex é a **fonte de
 verdade** das tarefas: cria, edita, exclui, organiza em **kanban** ou **tabela** e aponta horas. Não
 há plataforma externa — nada aqui espelha outro sistema.
 

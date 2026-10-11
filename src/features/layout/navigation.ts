@@ -1,4 +1,4 @@
-import { Banknote, Clock, ListTodo, Plug, Workflow } from "lucide-react"
+import { Banknote, Clock, LayoutDashboard, ListTodo, Plug, Workflow } from "lucide-react"
 import type { NavBadgeKey, NavItemDef, NavSectionDef } from "./types"
 
 /** Navegação do app, em seções. */
@@ -6,6 +6,7 @@ export const APP_NAV: readonly NavSectionDef[] = [
     {
         id: "inicio",
         items: [
+            { href: "/dashboard", label: "Dashboards", title: "Dashboards", icon: LayoutDashboard },
             { href: "/tarefas", label: "Tarefas", title: "Tarefas", icon: ListTodo },
             { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
             { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
@@ -19,7 +20,7 @@ export const APP_NAV: readonly NavSectionDef[] = [
     },
 ]
 
-export const HOME_HREF = "/tarefas"
+export const HOME_HREF = "/dashboard"
 
 /** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL). */
 export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
