@@ -210,8 +210,9 @@ repassar ao elemento DOM.)
   valor formatado em pt-BR (`valueFormatter`) e uma linha de contexto (`footer`: %, origem, o que
   fazer). Não desenhe gráfico em SVG à mão.
 - Os gráficos prontos do CRM (`BarsChart`, `DonutChart`, `TrendLineChart`, `RankedBarsCard`…) NÃO
-  foram copiados; ao precisar, copie de `~/code/crm-marketing-campanhas`
-  (`src/features/dashboard/components/charts/`) adaptando.
+  foram copiados (o CRM não está disponível nesta máquina); a tela Dashboards implementou os seus em
+  `src/features/dashboard/components/charts/` sobre a base acima, e novos gráficos devem reusar esses
+  componentes (copiando/adaptando de `~/code/crm-marketing-campanhas` quando ele estiver acessível).
 - Número sobreposto ao centro (rosca, medidor, anel) fica atrás do tooltip: `wrapperStyle=
   {TOOLTIP_ON_TOP}` no tooltip e `z-0` no número.
 - A tabela oculta fica num contêiner `relative` (e o `<main>` do `AppShell` é `relative`):

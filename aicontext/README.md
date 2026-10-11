@@ -38,6 +38,7 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 | Arquivo | Módulo | Quando consultar |
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
+| `modules/dashboard.md` | Dashboards | Página inicial (`/dashboard`, acima de Tarefas): KPIs e gráficos de tarefas, financeiro, horas agênticas e central de desenvolvimento, período global e tempo real |
 | `modules/auth.md` | Login e sessão | Tela `/login`, senha única (`APP_PASSWORD`), cookie assinado, guarda do middleware e logout |
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
 | `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |

@@ -12,9 +12,15 @@ export const fakeId = () => (++seq).toString(16).padStart(24, "0")
 function matchValue(actual: unknown, expected: unknown): boolean {
     if (expected && typeof expected === "object" && !Array.isArray(expected) && !(expected instanceof Date)) {
         const ops = expected as Record<string, unknown>
-        if ("$in" in ops) return (ops.$in as unknown[]).includes(actual)
-        if ("$ne" in ops) return (actual ?? null) !== ops.$ne
-        if ("$lte" in ops) return actual instanceof Date && actual <= (ops.$lte as Date)
+        const asTime = (value: unknown) => (value instanceof Date ? value.getTime() : new Date(value as string).getTime())
+        const actualTime = actual == null ? null : asTime(actual)
+        if ("$in" in ops && !(ops.$in as unknown[]).includes(actual)) return false
+        if ("$ne" in ops && (actual ?? null) === ops.$ne) return false
+        if ("$lte" in ops && !(actualTime !== null && actualTime <= asTime(ops.$lte))) return false
+        if ("$gte" in ops && !(actualTime !== null && actualTime >= asTime(ops.$gte))) return false
+        if ("$lt" in ops && !(actualTime !== null && actualTime < asTime(ops.$lt))) return false
+        if ("$gt" in ops && !(actualTime !== null && actualTime > asTime(ops.$gt))) return false
+        if ("$in" in ops || "$ne" in ops || "$lte" in ops || "$gte" in ops || "$lt" in ops || "$gt" in ops) return true
     }
     if (Array.isArray(actual) && !Array.isArray(expected)) return actual.includes(expected)
     return (actual ?? null) === (expected ?? null) || String(actual) === String(expected)
