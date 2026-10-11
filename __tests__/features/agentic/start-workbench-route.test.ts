@@ -28,9 +28,11 @@ describe('POST /api/agentic/workbenches', () => {
     expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, undefined)
   })
 
-  it('texto acima de 8.000 caracteres é rejeitado', async () => {
-    const res = await call({ centralId: CENTRAL, taskId: TASK, text: 'x'.repeat(8001) })
-    expect(res.status).toBe(400)
-    expect(mocks.startWorkbench).not.toHaveBeenCalled()
+  it('aceita informações adicionais sem limite artificial de caracteres', async () => {
+    mocks.startWorkbench.mockResolvedValue({ id: 'w1' })
+    const text = 'x'.repeat(20_000)
+    const res = await call({ centralId: CENTRAL, taskId: TASK, text })
+    expect(res.status).toBe(201)
+    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, text)
   })
 })

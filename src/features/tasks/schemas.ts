@@ -4,7 +4,7 @@ import { TASK_PRIORITIES, TASK_TYPES } from "./constants"
 
 const columnKey = z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida")
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
-const markdown = z.string().max(50_000, "Texto muito longo").optional()
+const markdown = z.string().optional()
 
 /** Tarefa (criar/editar). Mesmo schema no formulário e na API. */
 export const taskInputSchema = z.object({

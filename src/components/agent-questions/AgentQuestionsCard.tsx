@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { Textarea } from "@/components/ui/textarea"
 import type { OpencodeFormDto, OpencodeFormFieldDto } from "@/lib/ai/opencode-events"
+import { AgentQuestionOptions } from "./AgentQuestionOptions"
 
 type Answer = Record<string, string | number | boolean | string[]>
 
@@ -37,7 +37,7 @@ export function AgentQuestionsCard({ form, pending, onReply, onCancel }: { form:
                 <MessageCircleQuestion className="h-4 w-4 text-amber-300" aria-hidden /> {form.title}
             </p>
             {form.fields.map((field) => (
-                <FieldInput key={field.key} id={`form-${form.id}-${field.key}`} field={field} value={answer[field.key]} onChange={(value) => set(field.key, value)} />
+                <FieldInput key={field.key} id={`form-${form.id}-${field.key}`} field={field} value={answer[field.key]} pending={pending} onChange={(value) => set(field.key, value)} />
             ))}
             <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" size="sm" variant="outline" disabled={pending} onClick={onCancel}>
@@ -51,7 +51,7 @@ export function AgentQuestionsCard({ form, pending, onReply, onCancel }: { form:
     )
 }
 
-function FieldInput({ id, field, value, onChange }: { id: string; field: OpencodeFormFieldDto; value: Answer[string] | undefined; onChange: (value: Answer[string]) => void }) {
+function FieldInput({ id, field, value, pending, onChange }: { id: string; field: OpencodeFormFieldDto; value: Answer[string] | undefined; pending: boolean; onChange: (value: Answer[string]) => void }) {
     const label = (
         <Label htmlFor={id} className="text-xs">
             {field.title ?? field.key}
@@ -83,27 +83,28 @@ function FieldInput({ id, field, value, onChange }: { id: string; field: Opencod
             </label>
         )
     }
-    if (field.type === "multiselect") {
-        const selected = Array.isArray(value) ? value : []
+    // Opções (escolha única ou múltipla) como lista de linhas com a descrição de cada uma.
+    if (field.options.length > 0) {
+        const multiple = field.type === "multiselect"
+        const title = field.title ?? field.key
         return (
-            <fieldset className="space-y-1.5">
-                <legend className="text-xs font-medium">{field.title ?? field.key}</legend>
+            <div className="space-y-1.5">
+                <p id={`${id}-label`} className="text-xs font-medium">
+                    {title}
+                    {field.required && <span className="text-destructive"> *</span>}
+                </p>
                 {help}
-                {field.options.map((option) => (
-                    <label key={option.value} className="flex items-center gap-2 text-sm">
-                        <Checkbox checked={selected.includes(option.value)} onCheckedChange={(checked) => onChange(checked === true ? [...selected, option.value] : selected.filter((item) => item !== option.value))} />
-                        {option.label}
-                    </label>
-                ))}
-            </fieldset>
-        )
-    }
-    if (field.type === "string" && field.options.length > 0 && field.options.length <= 5 && !field.custom) {
-        return (
-            <div className="space-y-1">
-                {label}
-                {help}
-                <OptionTabs<string> id={id} options={field.options.map((option) => ({ value: option.value, label: option.label }))} value={typeof value === "string" ? value : ""} onChange={onChange} className="w-full" />
+                <AgentQuestionOptions
+                    id={`${id}-label`}
+                    options={field.options}
+                    multiple={multiple}
+                    disabled={pending}
+                    value={multiple ? (Array.isArray(value) ? value : []) : typeof value === "string" ? value : ""}
+                    onChange={onChange}
+                />
+                {field.custom && !multiple && (
+                    <Textarea id={id} rows={2} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} placeholder={field.placeholder ?? "Outra resposta…"} />
+                )}
             </div>
         )
     }
@@ -112,15 +113,6 @@ function FieldInput({ id, field, value, onChange }: { id: string; field: Opencod
         <div className="space-y-1">
             {label}
             {help}
-            {field.options.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                    {field.options.map((option) => (
-                        <Button key={option.value} type="button" size="sm" variant={value === option.value ? "default" : "outline"} className="h-7 text-xs" onClick={() => onChange(option.value)}>
-                            {option.label}
-                        </Button>
-                    ))}
-                </div>
-            )}
             {numeric ? (
                 <Input id={id} type="number" step={field.type === "integer" ? 1 : "any"} value={typeof value === "number" ? value : ""} onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))} placeholder={field.placeholder ?? undefined} />
             ) : (

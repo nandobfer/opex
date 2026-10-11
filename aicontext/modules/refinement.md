@@ -42,12 +42,14 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
 1. O botão do cabeçalho abre a aba **já com a intenção de iniciar**; o painel **inicia** o refinamento
    (idempotente: se já existir, apenas devolve o estado) e dispara um **turno** com a tarefa em
-   Markdown + o protocolo. Sem a intenção do botão (abrir a aba clicando nela), não inicia.
+   Markdown — **inteira, sem cortes** (`buildUnderstandTaskPrompt` com `fullText`) — + o protocolo.
+   Sem a intenção do botão (abrir a aba clicando nela), não inicia.
 2. O agente faz as perguntas pela **ferramenta nativa de perguntas do OpenCode, `question`** — a
    mesma que abre um formulário (mesmos campos da mesa: texto, número, sim/não, opções, múltipla
    escolha). A ferramenta pausa o turno até a resposta. O protocolo **proíbe** o agente de escrever
    as perguntas como texto. As perguntas pendentes aparecem no painel, **abaixo da saída do agente**,
-   para **Responder** ou **Dispensar**.
+   para **Responder** ou **Dispensar**; as **opções** viram uma lista de linhas selecionáveis com a
+   **descrição** de cada uma (mesmo card genérico da mesa).
 3. O usuário responde; a resposta vai para a **mesma sessão** (`session.form.reply`) e o agente
    continua.
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título

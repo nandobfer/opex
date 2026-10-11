@@ -67,17 +67,22 @@ export type WorkbenchAction =
     | "approve"
     | "submit-pr-feedback"
     | "reopen"
+    | "reconnect"
     | "retry"
     | "interrupt"
     | "open-preview"
 
-/** Ações disponíveis na mesa (os botões da tela e a guarda das rotas usam a mesma regra). */
-export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean): WorkbenchAction[] {
+/**
+ * Ações disponíveis na mesa (os botões da tela e a guarda das rotas usam a mesma regra).
+ * `hasSession` controla a oferta de **Reconectar** (só faz sentido com uma sessão do OpenCode já criada).
+ */
+export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true): WorkbenchAction[] {
     if (runState === "running") return ["interrupt"]
     if (runState === "failed" || runState === "interrupted") {
         if (!RUNNING_STAGES.includes(stage)) return []
-        // Falha depois do plano: tentar de novo ou voltar ao planejamento com uma correção.
-        return stage === "planning" || stage === "finishing" ? ["retry"] : ["retry", "request-correction"]
+        const reconnect: WorkbenchAction[] = hasSession ? ["reconnect"] : []
+        // Falha depois do plano: reconectar (sem reenviar), tentar de novo ou voltar ao planejamento com uma correção.
+        return stage === "planning" || stage === "finishing" ? [...reconnect, "retry"] : [...reconnect, "retry", "request-correction"]
     }
     switch (stage) {
         case "plan_review":

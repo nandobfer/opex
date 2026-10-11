@@ -22,6 +22,10 @@ export interface TurnRequest {
     timeoutMs: number
     /** Abortado = interromper (botão Parar, exclusão da mesa, desligamento). */
     signal: AbortSignal
+    /** Reconexão: acompanha a sessão sem enviar prompt nem trocar agente/modelo. */
+    attach?: boolean
+    /** Instante (epoch ms) do início do turno; delimita a execução acompanhada na reconexão. */
+    startedAt?: number
 }
 
 export interface TurnHooks {
@@ -49,6 +53,8 @@ export function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks
             text: request.text,
             timeoutMs: request.timeoutMs,
             signal: request.signal,
+            attach: request.attach,
+            startedAt: request.startedAt,
         },
         { ...hooks, publish },
     )

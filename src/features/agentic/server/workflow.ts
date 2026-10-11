@@ -74,7 +74,7 @@ async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId
 async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     const id = String(doc._id)
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
-    const error = "A execução foi perdida (o app reiniciou durante a etapa). Use Tentar novamente."
+    const error = "A execução foi perdida neste app (o app reiniciou durante a etapa). Tente novamente ou reconecte se o agente ainda estiver rodando."
     await AgenticWorkbench.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", error, pendingPermissions: [], pendingForms: [] } })
     await syncWorkbenchTimer(String(doc._id))
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
@@ -140,13 +140,18 @@ function assertAction(doc: IAgenticWorkbench, action: WorkbenchAction): void {
 }
 
 async function assertAvailable(centralId: string, workbenchId: string | null, config: CentralConfig): Promise<void> {
+    await assertAgenticReady(config)
+    // O limite é de mesas ABERTAS (não concluídas); a própria mesa não conta ao retomar um turno.
+    const open = await AgenticWorkbench.countDocuments({ centralId, stage: { $ne: "done" }, ...(workbenchId ? { _id: { $ne: workbenchId } } : {}) })
+    if (open >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) abertas ao mesmo tempo nesta central`, "CENTRAL_BUSY")
+}
+
+/** Disponibilidade para executar algo na central (feature/OpenCode + central ativa). Sem o limite de mesas. */
+async function assertAgenticReady(config: CentralConfig): Promise<void> {
     const { settings } = await loadAgenticSettings()
     const availability = await agenticAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? "Desenvolvimento agêntico indisponível", "AGENTIC_UNAVAILABLE")
     if (!config.enabled) throw new DomainError(409, "A central está desativada em Integrações › Provedores de IA", "CENTRAL_DISABLED")
-    // O limite é de mesas ABERTAS (não concluídas); a própria mesa não conta ao retomar um turno.
-    const open = await AgenticWorkbench.countDocuments({ centralId, stage: { $ne: "done" }, ...(workbenchId ? { _id: { $ne: workbenchId } } : {}) })
-    if (open >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) abertas ao mesmo tempo nesta central`, "CENTRAL_BUSY")
 }
 
 /** Abre a próxima mesa da fila da central (import dinâmico evita o ciclo estático com `queue.ts`). */
@@ -163,6 +168,8 @@ function pumpQueue(centralId: string): void {
 interface TurnPlan {
     stage: WorkbenchStage
     text: string
+    /** Reconexão: acompanha a execução em andamento sem enviar prompt nem trocar agente/modelo. */
+    attach?: boolean
 }
 
 interface LaunchOptions {
@@ -177,7 +184,9 @@ interface LaunchOptions {
 async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions = {}): Promise<void> {
     const id = String(loaded.doc._id)
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está trabalhando nesta mesa", "WORKBENCH_BUSY")
-    await assertAvailable(loaded.doc.centralId, id, loaded.config)
+    // A reconexão não abre uma mesa nova: só a disponibilidade importa (o limite de mesas não se aplica).
+    if (turn.attach) await assertAgenticReady(loaded.config)
+    else await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
     if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
     const controller = new AbortController()
@@ -187,9 +196,9 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             stage: turn.stage,
             runState: "running",
             error: null,
-            lastStage: turn.stage,
-            lastPrompt: turn,
             heartbeatAt: new Date(),
+            // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam válidos).
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, turnStartedAt: new Date() }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -212,11 +221,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
     while (turn) {
         const loaded = await loadAll(id)
         const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
-        if (turn !== first) await update(loaded.doc, { stage: turn.stage, runState: "running", error: null, lastStage: turn.stage, lastPrompt: turn, heartbeatAt: new Date() })
+        if (turn !== first) await update(loaded.doc, { stage: turn.stage, runState: "running", error: null, lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, heartbeatAt: new Date() })
         let next: TurnPlan | null = null
         try {
             const client = await getOpencodeClient()
-            const sessionId = await ensureSession(client, loaded)
+            const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
+            if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
             const { settings } = await loadAgenticSettings()
             const role = STAGE_ROLE[turn.stage] ?? "planning"
             const agent = resolveAgent(settings, loaded.config, role)
@@ -232,6 +242,8 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                     text: turn.text,
                     timeoutMs: turn.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
                     signal: controller.signal,
+                    attach: turn.attach,
+                    startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
                 },
                 turnHooks(loaded.doc),
             )
@@ -264,6 +276,8 @@ function turnHooks(doc: IAgenticWorkbench) {
     const changed = () => publishAgentic({ centralId: doc.centralId, workbenchId: String(doc._id), taskId: doc.taskId })
     return {
         onPermission: async (permission: unknown) => {
+            // Deduplica por id: a reconexão pode reenviar uma permissão que já está pendente.
+            await AgenticWorkbench.updateOne(filter, { $pull: { pendingPermissions: { id: (permission as { id?: string }).id } } })
             await AgenticWorkbench.updateOne(filter, { $push: { pendingPermissions: permission } })
             await syncWorkbenchTimer(String(doc._id))
             await changed()
@@ -274,6 +288,8 @@ function turnHooks(doc: IAgenticWorkbench) {
             await changed()
         },
         onForm: async (form: unknown) => {
+            // Deduplica por id: a reconexão pode reenviar uma pergunta que já está pendente.
+            await AgenticWorkbench.updateOne(filter, { $pull: { pendingForms: { id: (form as { id?: string }).id } } })
             await AgenticWorkbench.updateOne(filter, { $push: { pendingForms: form } })
             await syncWorkbenchTimer(String(doc._id))
             await changed()
@@ -406,8 +422,9 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
 // Ações da tela
 // ---------------------------------------------------------------------------
 
+/** A tarefa inteira (sem cortes) entregue ao planejador da mesa. */
 function taskMarkdown(task: TaskDetailDto, config: CentralConfig): string {
-    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false })
+    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false }, { fullText: true })
 }
 
 /** Efeitos na tarefa ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
@@ -550,6 +567,23 @@ export async function reopen(id: string, feedback: string): Promise<WorkbenchDto
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
     await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
+    return getWorkbench(id)
+}
+
+export async function reconnect(id: string): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    const doc = await reconcile(loaded.doc)
+    // Já há um turno vivo neste processo acompanhando a mesa: nada a reconectar.
+    if (isWorkbenchActive(id)) return getWorkbench(id)
+    assertAction(doc, "reconnect")
+    const stage = asStage(doc.stage)
+    if (!doc.sessionId) throw new DomainError(409, "Esta mesa não tem uma sessão do OpenCode para reconectar (use Tentar novamente)", "WORKBENCH_NO_SESSION")
+    if (!RUNNING_STAGES.includes(stage)) throw new DomainError(409, "A mesa não está numa etapa de execução para reconectar", "WORKBENCH_INVALID_STATE")
+    await assertAgenticReady(loaded.config)
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Reconectando à sessão do OpenCode sem reenviar a mensagem…" })
+    centralLogger(doc.centralId, doc.taskCode).info("Reconectando à sessão do OpenCode", { workbenchId: id, stage })
+    await launchTurn({ ...loaded, doc }, { stage, text: "", attach: true })
     return getWorkbench(id)
 }
 

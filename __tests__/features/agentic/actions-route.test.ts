@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
   implement: mocks.implement,
+  reconnect: mocks.reconnect,
   requestCorrection: vi.fn(),
   submitPrFeedback: vi.fn(),
   reopen: vi.fn(),
@@ -37,5 +38,12 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect((await call('implement', { text: 'Use o componente X' })).status).toBe(200)
     expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X')
     expect((await call('apagar-tudo')).status).toBe(404)
+  })
+
+  it('reconectar não tem corpo e devolve a mesa', async () => {
+    mocks.reconnect.mockResolvedValue({ id: 'w1' })
+    const res = await call('reconnect')
+    expect(res.status).toBe(200)
+    expect(mocks.reconnect).toHaveBeenCalledWith('w1')
   })
 })

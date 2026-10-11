@@ -60,7 +60,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <label htmlFor="workbench-start-context" className="text-sm font-medium">
                         Informações adicionais (opcional)
                     </label>
-                    <Textarea id="workbench-start-context" rows={5} maxLength={8000} value={text} onChange={(event) => setText(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
+                    <Textarea id="workbench-start-context" rows={5} value={text} onChange={(event) => setText(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
                     <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

@@ -60,6 +60,8 @@ export interface IAgenticWorkbench {
     error: string | null
     lastStage: string | null
     lastPrompt: { stage: string; text: string } | null
+    /** Instante em que o último turno começou (delimita a execução acompanhada ao reconectar). */
+    turnStartedAt: Date | null
     sessionId: string | null
     sessionDirectory: string | null
     /** IDs de sessões do OpenCode já desvinculadas da mesa e ainda pendentes de exclusão. */
@@ -97,6 +99,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         error: { type: String, default: null },
         lastStage: { type: String, default: null },
         lastPrompt: { type: Schema.Types.Mixed, default: null },
+        turnStartedAt: { type: Date, default: null },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         pendingSessionDeletions: { type: [String], default: [] },
