@@ -16,6 +16,7 @@ const STAGE_TONE: Record<WorkbenchStage, ToneName> = {
     opening_pr: "primary",
     pr_open: "amber",
     changes_requested: "amber",
+    resolving_conflicts: "primary",
     finishing: "primary",
     done: "emerald",
 }

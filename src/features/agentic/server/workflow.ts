@@ -25,9 +25,10 @@ import {
     reopenPrompt,
     revisePlanPrompt,
     worktreePathFor,
+    conflictPrompt,
     type WorkbenchContext,
 } from "../prompts"
-import { buildResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
+import { buildResultSchema, conflictResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
@@ -356,7 +357,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const found = parsed.success ? { url: parsed.data.url, number: parsed.data.number ?? extractPrUrl(parsed.data.url)?.number } : extractPrUrl(result.text)
             if (!found?.url || !found.number) throw new Error("O agente não informou a URL do Pull Request")
             const keep = doc.pr && doc.pr.number === found.number
-            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false }
+            const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false, conflictBaseSha: null, conflictHeadSha: null }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
             const prColumn = config.columns.onPr
@@ -369,6 +370,17 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 }
             }
             await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: pr.url } })
+            return null
+        }
+        case "resolving_conflicts": {
+            const parsed = conflictResultSchema.safeParse(extractJsonBlock(result.text))
+            if (!parsed.success || !parsed.data.ok) {
+                throw new Error(`A resolução do conflito não foi concluída: ${parsed.success ? (parsed.data.error ?? "o agente não confirmou a publicação") : "resposta sem o bloco JSON esperado"}`)
+            }
+            notice("success", `Conflito de merge do PR #${doc.pr?.number ?? ""} resolvido e enviado (push). O PR volta a aguardar revisão/merge.`)
+            if (doc.previewHealthy) notice("warn", "A prévia pode estar desatualizada em relação ao código publicado na resolução do conflito.")
+            // Volta a acompanhar o PR; a prévia aprovada deixa de valer para o código novo, quando havia uma.
+            await update(doc, { stage: "pr_open", runState: "idle", ...(doc.previewHealthy ? { previewHealthy: false } : {}) })
             return null
         }
         case "finishing": {
@@ -656,6 +668,35 @@ export async function handlePrFeedback(id: string, feedback: string): Promise<vo
         // Sem como replanejar agora (ex.: limite de mesas): guarda o pedido para o usuário reenviar.
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido:\n\n${feedback}` })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
+    }
+}
+
+/**
+ * Conflito de merge no PR: aciona o agente para resolver sozinho (merge da branch de destino) e
+ * atualizar o PR com push — sem nova aprovação do usuário. Grava os SHAs (base/head) tratados para
+ * não repetir o mesmo conflito a cada varredura; falha ao iniciar mantém a mesa elegível à próxima.
+ */
+export async function handlePrConflict(id: string, info: { baseBranch: string; headBranch: string; baseSha: string; headSha: string }): Promise<boolean> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    const pr = doc.pr
+    // Só age na mesa aberta e ociosa do mesmo PR aberto (nunca em cima de outra execução em andamento).
+    if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
+    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
+    await prepareHub(id)
+    const marked: IWorkbenchPr = { ...pr, conflictBaseSha: info.baseSha, conflictHeadSha: info.headSha }
+    try {
+        await launchTurn(
+            { ...loaded, doc: { ...doc, pr: marked } },
+            { stage: "resolving_conflicts", text: conflictPrompt(config, contextOf(loaded), { number: pr.number, url: pr.url, baseBranch: info.baseBranch, headBranch: info.headBranch }) },
+            { userText: `Conflito de merge no PR #${pr.number}: resolvendo automaticamente contra ${info.baseBranch}.`, extraSet: { pr: marked } },
+        )
+        centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: conflito de merge — resolução automática iniciada`, { workbenchId: id })
+        return true
+    } catch (error) {
+        // Sem como resolver agora (OpenCode indisponível, limite de mesas…): mantém elegível à próxima varredura.
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR #${pr.number} está com conflito de merge, mas a resolução não pôde começar (${errorText(error)}).` })
+        return false
     }
 }
 

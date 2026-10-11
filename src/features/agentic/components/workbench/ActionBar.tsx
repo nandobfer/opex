@@ -67,6 +67,11 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
                 )}
+                {workbench.stage === "resolving_conflicts" && workbench.runState === "running" && (
+                    <motion.p key="conflicts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O PR está com o merge bloqueado por conflito: o agente está integrando a branch de destino, resolvendo os conflitos e atualizando o PR. Você pode parar a qualquer momento.
+                    </motion.p>
+                )}
                 {workbench.stage === "build_queued" && (
                     <motion.p key="build-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.

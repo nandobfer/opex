@@ -178,6 +178,25 @@ export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { c
         .join("\n") + extra(config, "pr")
 }
 
+export function conflictPrompt(config: CentralConfig, ctx: WorkbenchContext, pr: { number: number; url: string; baseBranch: string; headBranch: string }): string {
+    const git = config.git
+    const validate = git.validateCommands.trim()
+    return [
+        `Você agora é o agente de RESOLUÇÃO DE CONFLITOS. O PR #${pr.number} (${pr.url}) está com o merge BLOQUEADO por conflito entre a branch ${pr.headBranch} e a branch de destino ${pr.baseBranch}. Resolva o conflito e atualize o PR — sem nova aprovação do usuário.`,
+        `- Trabalhe no worktree ${ctx.worktreePath}, na branch ${ctx.branch} (a branch do PR). Confirme o diretório atual e, se não for o worktree, ajuste antes de continuar.`,
+        `- \`git fetch origin\` para trazer o estado mais recente.`,
+        `- Integre a branch de destino por merge, preservando o histórico: \`git merge origin/${pr.baseBranch}\`. NÃO faça rebase nem force-push.`,
+        "- Resolva cada conflito preservando a intenção das alterações dos dois lados (não descarte nenhum dos lados). Rode os testes pertinentes quando ajudar a decidir.",
+        validate ? `- Antes de publicar, rode a validação e corrija o que falhar:\n\`\`\`sh\n${validate}\n\`\`\`` : "",
+        `- Conclua o merge com um commit seguindo a convenção do projeto (mantenha o código ${ctx.code} no título) e faça \`git push\` na branch do PR.`,
+        `- Comente um resumo da resolução no PR: \`gh pr comment ${pr.number} --body "..."\`. NÃO mencione @opex no comentário.`,
+        "- NÃO abra outro Pull Request, NÃO faça merge do PR, NÃO use force-push e NÃO descarte alterações locais.",
+        `- ${JSON_RULE} Formato: {"ok": true, "sha": "<sha publicado>"} quando o push concluir a resolução, ou {"ok": false, "error": "motivo"}.`,
+    ]
+        .filter(Boolean)
+        .join("\n") + extra(config, "pr")
+}
+
 export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext): string {
     const steps = [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,

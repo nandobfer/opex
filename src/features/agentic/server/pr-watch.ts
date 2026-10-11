@@ -4,19 +4,29 @@ import { githubPaginate, githubRequest } from "@/features/github/client"
 import { formatPrFeedback } from "../prompts"
 import { centralLogger } from "./log"
 import { closeOrphanWorkPeriods } from "./timer-sync"
-import { handlePrClosed, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
+import { handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
 
 /**
  * Rotina "Acompanhar PRs do desenvolvimento agêntico" (Integrações › Crons): para cada mesa com PR
  * aberto, consulta o GitHub — merge conclui a mesa; comentário novo com `@opex` (na conversa, na
- * linha ou no corpo de uma revisão) ou revisão pedindo mudanças volta ao planejamento.
+ * linha ou no corpo de uma revisão) ou revisão pedindo mudanças volta ao planejamento; merge
+ * bloqueado por conflito aciona a resolução automática no próprio PR.
  */
+
+interface GithubRef {
+    ref: string
+    sha: string
+}
 
 interface GithubPull {
     state: "open" | "closed"
     merged: boolean
     merged_at: string | null
     merge_commit_sha: string | null
+    /** `false` = conflito de merge (`null` = o GitHub ainda está calculando). */
+    mergeable?: boolean | null
+    base?: GithubRef | null
+    head?: GithubRef | null
 }
 
 interface GithubUserRef {
@@ -64,12 +74,23 @@ export function mentionsOpex(text: string): boolean {
     return /(?:^|[^\w@])@opex(?![\w-])/i.test(text)
 }
 
+/**
+ * Ainda não tentamos resolver ESTE estado do PR? Compara os SHAs (base e head) salvos na última
+ * resolução: um push (novo head) ou uma base nova libera outra tentativa; o mesmo estado não repete.
+ */
+export function conflictUntried(pr: { conflictBaseSha?: string | null; conflictHeadSha?: string | null }, pull: { base?: GithubRef | null; head?: GithubRef | null }): boolean {
+    const head = pull.head?.sha
+    if (!head) return false
+    return (pr.conflictBaseSha ?? null) !== (pull.base?.sha ?? null) || (pr.conflictHeadSha ?? null) !== head
+}
+
 export async function watchPullRequests(): Promise<string> {
     await dbConnect()
     const closedOrphans = await closeOrphanWorkPeriods().catch(() => 0)
     const docs = await AgenticWorkbench.find({ stage: "pr_open", runState: { $ne: "running" }, pr: { $ne: null } }).lean()
     let merged = 0
     let replans = 0
+    let conflicts = 0
     let failures = 0
     for (const doc of docs) {
         const id = String(doc._id)
@@ -103,44 +124,62 @@ export async function watchPullRequests(): Promise<string> {
             const freshReviews = reviews.filter((review) => review.id > lastReviewId)
             const freshIssue = issueComments.filter((comment) => comment.id > lastCommentId)
             const freshLine = reviewComments.filter((comment) => comment.id > lastCommentId)
-            if (!freshReviews.length && !freshIssue.length && !freshLine.length) continue
-            await savePrCursors(id, {
-                lastReviewId: freshReviews.length ? Math.max(...freshReviews.map((review) => review.id)) : lastReviewId,
-                lastCommentId: Math.max(lastCommentId, ...freshIssue.map((comment) => comment.id), ...freshLine.map((comment) => comment.id)),
-            })
+            let replanned = false
+            if (freshReviews.length || freshIssue.length || freshLine.length) {
+                await savePrCursors(id, {
+                    lastReviewId: freshReviews.length ? Math.max(...freshReviews.map((review) => review.id)) : lastReviewId,
+                    lastCommentId: Math.max(lastCommentId, ...freshIssue.map((comment) => comment.id), ...freshLine.map((comment) => comment.id)),
+                })
 
-            // Revisões novas: pedindo mudanças (comportamento mantido) ou mencionando `@opex` no corpo.
-            const relevantReviews = freshReviews.filter((review) => review.state === "CHANGES_REQUESTED" || mentionsOpex(review.body ?? ""))
-            const expanded = new Set(relevantReviews.map((review) => review.id))
-            const sections: PrFeedbackSection[] = await Promise.all(
-                relevantReviews.map(async (review) => {
-                    const comments = await githubPaginate<GithubReviewComment>(`/repos/${repo}/pulls/${pr.number}/reviews/${review.id}/comments?per_page=100`, { maxPages: 3 }).catch(() => [])
-                    return {
-                        author: review.user?.login ?? null,
-                        body: review.body ?? "",
-                        comments: comments.map((comment) => ({ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body })),
+                // Revisões novas: pedindo mudanças (comportamento mantido) ou mencionando `@opex` no corpo.
+                const relevantReviews = freshReviews.filter((review) => review.state === "CHANGES_REQUESTED" || mentionsOpex(review.body ?? ""))
+                const expanded = new Set(relevantReviews.map((review) => review.id))
+                const sections: PrFeedbackSection[] = await Promise.all(
+                    relevantReviews.map(async (review) => {
+                        const comments = await githubPaginate<GithubReviewComment>(`/repos/${repo}/pulls/${pr.number}/reviews/${review.id}/comments?per_page=100`, { maxPages: 3 }).catch(() => [])
+                        return {
+                            author: review.user?.login ?? null,
+                            body: review.body ?? "",
+                            comments: comments.map((comment) => ({ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body })),
+                        }
+                    }),
+                )
+                if (!baseline) {
+                    // Comentários soltos (conversa e linha) que mencionam `@opex`; os de linha de uma revisão já expandida ficam de fora.
+                    for (const comment of freshIssue) if (mentionsOpex(comment.body)) sections.push({ author: comment.user?.login ?? null, body: comment.body, comments: [] })
+                    for (const comment of freshLine) {
+                        if (expanded.has(comment.pull_request_review_id ?? -1) || !mentionsOpex(comment.body)) continue
+                        sections.push({ author: comment.user?.login ?? null, body: "", comments: [{ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body }] })
                     }
-                }),
-            )
-            if (!baseline) {
-                // Comentários soltos (conversa e linha) que mencionam `@opex`; os de linha de uma revisão já expandida ficam de fora.
-                for (const comment of freshIssue) if (mentionsOpex(comment.body)) sections.push({ author: comment.user?.login ?? null, body: comment.body, comments: [] })
-                for (const comment of freshLine) {
-                    if (expanded.has(comment.pull_request_review_id ?? -1) || !mentionsOpex(comment.body)) continue
-                    sections.push({ author: comment.user?.login ?? null, body: "", comments: [{ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body }] })
+                }
+
+                const feedback = formatPrFeedback(sections)
+                // Revisão sem texto continua indo para `changes_requested` (a mesa pede o motivo ao usuário).
+                if (relevantReviews.length || feedback.trim()) {
+                    log.warn(`PR #${pr.number}: pedido de mudança (comentário ou revisão)`, { workbenchId: id })
+                    await handlePrFeedback(id, feedback)
+                    replans++
+                    replanned = true
                 }
             }
+            // O feedback tem prioridade: não inicia a resolução de conflito na mesma varredura em que replanejou.
+            if (replanned) continue
 
-            const feedback = formatPrFeedback(sections)
-            // Revisão sem texto continua indo para `changes_requested` (a mesa pede o motivo ao usuário).
-            if (!relevantReviews.length && !feedback.trim()) continue
-            log.warn(`PR #${pr.number}: pedido de mudança (comentário ou revisão)`, { workbenchId: id })
-            await handlePrFeedback(id, feedback)
-            replans++
+            // Merge bloqueado por conflito: aciona a resolução automática no próprio PR (sem aprovação).
+            if (pull.mergeable === false && conflictUntried(pr, pull)) {
+                log.warn(`PR #${pr.number}: conflito de merge — resolvendo automaticamente`, { workbenchId: id })
+                const started = await handlePrConflict(id, {
+                    baseBranch: pull.base?.ref ?? "a branch de destino",
+                    headBranch: pull.head?.ref ?? doc.branch ?? "a branch do PR",
+                    baseSha: pull.base?.sha ?? "",
+                    headSha: pull.head?.sha ?? "",
+                })
+                if (started) conflicts++
+            }
         } catch (error) {
             failures++
             log.error(`Falha ao consultar o PR #${pr.number}`, error, { workbenchId: id })
         }
     }
-    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
+    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
 }

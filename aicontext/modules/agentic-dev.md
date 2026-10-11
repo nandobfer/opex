@@ -156,6 +156,7 @@ preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
 pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
          ├─ revisão "pediu mudanças" com texto → planning (automático)
          ├─ revisão sem texto → changes_requested (usuário descreve) → planning
+         ├─ merge bloqueado por conflito → resolving_conflicts (automático) → pr_open
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
 done → Reabrir mesa (texto ao planejador) → planning
@@ -197,6 +198,19 @@ done → Reabrir mesa (texto ao planejador) → planning
   entram como seção própria. Os cursores `lastReviewId`/`lastCommentId` são gravados a cada varredura;
   mesas abertas antes desta rotina (sem `lastCommentId`) fazem uma 1ª varredura só de linha de base,
   sem replanejar por comentários antigos.
+- **Conflito de merge (OPE-49)**: quando o PR aberto responde `mergeable: false` no GitHub, a rotina
+  aciona o agente para resolver o conflito **sozinho** (etapa `resolving_conflicts`, agente da etapa
+  **Pull Request**), **sem nova aprovação** do usuário. O prompt manda confirmar a branch do PR, fazer
+  `git fetch`, integrar a branch de **destino real do PR** por merge (preservando os dois lados),
+  rodar a validação, commitar e `git push` (nunca force-push) e comentar o resumo no PR (sem `@opex`);
+  é proibido abrir outro PR ou mergear. Ao concluir, a mesa volta a `pr_open` (a prévia aprovada deixa
+  de valer para o código novo). Para não repetir a cada varredura, os SHAs de base/head tratados ficam
+  em `pr.conflictBaseSha`/`pr.conflictHeadSha` (um push novo ou uma base nova libera outra tentativa);
+  `mergeable: null` (GitHub calculando) não dispara nada e o bloqueio por CI/regras/PR rascunho não é
+  confundido com conflito. `feedback` tem prioridade: na mesma varredura, um pedido de mudança vai ao
+  planejamento e o conflito fica para a próxima. Se a resolução não puder começar (OpenCode
+  indisponível, limite de mesas…), a mesa permanece elegível e o motivo vira aviso; falha/interrupção
+  do turno deixam **Tentar novamente** e **Voltar ao planejamento** na barra de ações.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
   é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
   tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
@@ -274,6 +288,6 @@ merge, reabrir, excluir).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
 andamento (`in-progress`), hub, runner com cliente falso, acompanhamento do PR, rota de ações, barra
-de ações, exclusão de sessão (`session-cleanup`) e conclusão da mesa com exclusão da sessão
-(`workflow-session-cleanup`)) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são
-sempre mockados.
+de ações, exclusão de sessão (`session-cleanup`), conclusão da mesa com exclusão da sessão
+(`workflow-session-cleanup`) e conflito de merge do PR (`workflow-pr-conflicts`)) e
+`__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

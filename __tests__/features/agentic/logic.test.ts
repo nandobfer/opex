@@ -47,6 +47,11 @@ describe('workbenchActions', () => {
     expect(workbenchActions('building', 'failed', false)).toEqual(['retry', 'request-correction'])
     expect(workbenchActions('planning', 'interrupted', false)).toEqual(['retry'])
   })
+
+  it('resolução de conflito é uma etapa de execução: parar, tentar de novo e voltar ao plano', () => {
+    expect(workbenchActions('resolving_conflicts', 'running', false)).toEqual(['interrupt'])
+    expect(workbenchActions('resolving_conflicts', 'failed', false)).toEqual(['retry', 'request-correction'])
+  })
 })
 
 describe('parseCentralConfig', () => {
