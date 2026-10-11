@@ -8,7 +8,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Tarefas, Horas agênticas, Central de desenvolvimento) e Sistema (Integrações)", () => {
+    it("seções Início (Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento) e Sistema (Integrações)", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
             ["inicio", undefined],
             ["sistema", "Sistema"],
@@ -16,6 +16,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         expect(APP_NAV_ITEMS.map((item) => [item.label, item.href])).toEqual([
             ["Tarefas", "/tarefas"],
             ["Horas agênticas", "/tarefas/horas"],
+            ["Financeiro", "/financeiro"],
             ["Central de desenvolvimento", "/desenvolvimento"],
             ["Integrações", "/integracoes"],
         ])
@@ -26,6 +27,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         expect(activeNavHref("/tarefas/horas", APP_NAV_ITEMS)).toBe("/tarefas/horas")
         expect(activeNavHref("/tarefas/abc123", APP_NAV_ITEMS)).toBe("/tarefas")
         expect(activeNavHref("/tarefas", APP_NAV_ITEMS)).toBe("/tarefas")
+        expect(activeNavHref("/financeiro", APP_NAV_ITEMS)).toBe("/financeiro")
         expect(activeNavHref("/outra", APP_NAV_ITEMS)).toBeNull()
     })
 
