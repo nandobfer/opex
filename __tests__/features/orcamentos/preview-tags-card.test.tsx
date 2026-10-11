@@ -6,7 +6,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
 
-import { PreviewTagsCard } from "@/features/orcamentos/portal/components/preview/PreviewTagsCard"
+import { PreviewTagsCard } from "@/features/orcamentos/components/preview/PreviewTagsCard"
 
 describe("PreviewTagsCard (portal)", () => {
     it("mostra os rótulos das tags da prévia", () => {

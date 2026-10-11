@@ -88,13 +88,22 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks/bulk` | `bulkTasksSchema`: ações `move` / `priority` / `archive` |
 | `GET /api/tasks/options` | Projetos |
 | `GET/POST /api/tasks/columns` · `PATCH/DELETE /api/tasks/columns/[key]` · `PUT /api/tasks/columns/order` | Colunas |
+| `POST /api/tasks/drafts` | Abre a prévia do dono (`clientId: null`); `clienteDraftSchema` |
+| `GET /api/tasks/drafts/[id]` | Rascunho da prévia (prévia + estimativa) |
+| `POST /api/tasks/drafts/[id]/correction` | Registra o ajuste pedido |
+| `POST /api/tasks/drafts/[id]/preview` | Gera a prévia com IA (NDJSON — 1ª fase) |
+| `POST /api/tasks/drafts/[id]/estimate` | Estima as horas com IA e calcula o custo (NDJSON); `{ clientId? }` recalcula **só o custo** |
+| `POST /api/tasks/drafts/[id]/approve` | Cria a tarefa conforme a prévia (corpo opcional `{ priority }`) |
 
 ## Tela `/tarefas` (`components/TasksPage.tsx`)
 
-- Cabeçalho: título com total animado, "atualizado às HH:mm:ss", **Nova tarefa**, **Kanban |
+- Cabeçalho: título com total animado, "atualizado às HH:mm:ss", **Nova prévia**, **Nova tarefa**, **Kanban |
   Tabela** (`TaskViewSwitch`) e **Atualizar**. `TimerIndicator` e "Minhas horas" ao lado.
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
+- **Nova prévia**: botão `variant="outline"` à esquerda de **Nova tarefa** (ícone `Sparkles`) que
+  abre `/tarefas/previa` — o fluxo de prévia por IA do portal do cliente, agora para o dono (ver
+  "Prévia de tarefa (dono)"). Sem repositório vinculado, fica desabilitado como **Nova tarefa**.
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
   erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
   filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
@@ -149,6 +158,37 @@ escolha do repositório define o `projectId`. Ao salvar, a tarefa **cria a issue
 vínculo (`createTaskWithIssue`, `features/github/server/task-issue.ts`); **falha do GitHub bloqueia**
 a criação (nenhuma tarefa é criada). O `TaskForm` também é usado na **edição inline** da página da
 tarefa.
+
+## Prévia de tarefa (dono) `/tarefas/previa`
+
+O dono usa o **mesmo fluxo de prévia por IA do portal do cliente** (ver `modules/orcamentos.md`),
+mas pelos endpoints internos (sessão, sem token de cliente):
+
+- `/tarefas/previa` — formulário (`OwnerPreviewFormPage`): **Repositório** (só os vinculados, no
+  `SearchPicker` com o `GithubRepoLabel` real) + **descrição** em Markdown (`MarkdownField`). Ao
+  avançar, abre o rascunho e segue para a revisão.
+- `/tarefas/previa/[draftId]` — revisão (`OwnerPreviewReviewPage`), espelhando a revisão do portal:
+  prévia (título/resumo/descrição e especificação técnica), repositório, tipo + **prioridade
+  editável**, tags, **clareza** e os cards de correção/aprovar. A diferença é o card de estimativa.
+- **Estimativa com cliente opcional** (`PreviewEstimateCard`): a IA estima sempre as **horas reais
+  (H)**; o **cliente** só define o custo. Sem cliente, o card mostra só as **horas estimadas**; com
+  cliente, acrescenta o **prazo** (`H × fator`) e o **faturamento** (`prazo × custo/hora`). O seletor
+  lista só clientes **ativos** cujo `projectIds` inclui o repositório do rascunho. Selecionar, trocar
+  ou limpar o cliente **reestima apenas o custo** — reusa as horas e o modelo já gravados, sem nova
+  chamada de IA.
+- **Aprovar**: cria a tarefa real com issue no GitHub (como no app). **Sem cliente**, a tarefa nasce
+  sem `clientId` e sem `estimate`; **com cliente**, grava o cliente e o snapshot do orçamento. A
+  prioridade escolhida na revisão sobrepõe a sugerida pela IA.
+- Correção, clareza (bloqueia aprovar em "faltam informações") e prioridade funcionam igual ao
+  portal; a correção regenera a prévia e **zera a estimativa**. O rascunho aprovado responde 409 a
+  correção, estimativa e nova aprovação.
+- O rascunho do dono tem `clientId: null` (não aparece no portal nem na lista de clientes) e pode
+  guardar um `estimateClientId` — ver `modules/orcamentos.md`.
+
+Servidor: `src/features/orcamentos/server/owner.ts` (criar/aprovar/reestimar) sobre os rascunhos
+compartilhados de `server/drafts.ts`. No cliente: `src/features/tasks/preview/` (páginas, hooks e
+`PreviewEstimateCard`) reusa a revisão compartilhada (`src/features/orcamentos/review.ts` +
+`hooks/useDraftReview.ts`) e os cards de `src/features/orcamentos/components/preview/`.
 
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
@@ -210,10 +250,13 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 ## Testes
 
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
-`task-columns`, `task-filter-chips`, `TasksPage`, `task-form`, `task-card`, `task-column-header`,
+`task-columns`, `task-filter-chips`, `TasksPage` — inclusive o botão **Nova prévia** —, `task-form`,
+`task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
 `task-summary-card`, `task-estimate-card`, `task-client-card` — a estimativa editável, o cliente da
 tarefa (adicionar/trocar/remover e as validações) e o autor
 dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
-`__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. O botão
+`__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. A **prévia
+do dono** (formulário, revisão e o card de estimativa com cliente opcional) em
+`__tests__/features/tasks/owner-preview.test.tsx`. O botão
 **Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).

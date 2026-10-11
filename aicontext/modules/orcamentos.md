@@ -22,10 +22,14 @@ e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; sem ele — dados l
   hourlyRate, profitFactor, active }`. O **token** (`cli_…`) é gravado em claro (`token`) para montar
   a **URL copiável** no painel; a autenticação usa o **hash SHA-256** (`tokenHash`) e o **prefixo
   visível** (`tokenPrefix`) é o que aparece na lista.
-- `OrcamentoDraft` (`orcamento_drafts`): `{ clientId, projectId, description, correction, preview,
-  estimatedHours, model, status: "draft" | "approved", taskId }`. `preview` = `{ title, taskType,
-  priority, technicalSpec, summary, tags }` (1ª fase da IA + tags da feature "Tags de tarefas");
-  `estimatedHours` (H) é gravado na 2ª fase.
+- `OrcamentoDraft` (`orcamento_drafts`): `{ clientId, estimateClientId, projectId, description,
+  correction, preview, estimatedHours, model, status: "draft" | "approved", taskId }`. `preview` =
+  `{ title, taskType, priority, technicalSpec, summary, tags }` (1ª fase da IA + tags da feature
+  "Tags de tarefas"); `estimatedHours` (H) é gravado na 2ª fase. `clientId` identifica o **dono do
+  rascunho**: preenchido = pedido pelo cliente no portal; `null` = prévia aberta pelo **dono** em
+  `/tarefas/previa` (não aparece no portal nem na lista de clientes). `estimateClientId` é o cliente
+  **opcional** que o dono escolhe só para o **cálculo do custo** (o portal mantém `null` e usa o
+  próprio `clientId`). Sem migração: todo rascunho legado tem `clientId`.
 - `DevTask.estimate` (subdocumento; `null` **quando a tarefa não tem cliente**): `{ hours, clientHours,
   billingBrl, factor, hourlyRate, model, generatedAt }` — snapshot gravado na aprovação do portal ou
   ao **definir/trocar o cliente na página da tarefa**. Ver `modules/tasks.md`.
@@ -33,6 +37,19 @@ e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; sem ele — dados l
   cliente) — tanto o que **solicitou** pelo portal quanto o que o dono **atribuiu/atualizou na página
   da tarefa**. É o que define a **lista do portal** (o cliente só vê as tarefas com o seu `clientId`;
   trocar/remover o cliente na tarefa muda o que o portal mostra). Ver `modules/tasks.md`.
+
+## Escopo do rascunho (`server/drafts.ts`)
+
+O portal (**cliente**) e a **prévia do dono** (`/tarefas/previa`) compartilham os rascunhos: o
+servidor isola cada um por um `DraftScope` — `client` filtra por `clientId`; `owner` por
+`clientId: null`. O escopo define o filtro das leituras/escritas (`getDraft`, correção, prévia, tags,
+estimativa) e o `subject` do uso de IA (`{clientId}:{draftId}` no portal, `owner:{draftId}` no dono).
+`resolveDraftClient` resolve o cliente da estimativa (`clientId` do portal ou `estimateClientId` do
+dono); **sem cliente**, a estimativa traz só as **horas reais** (`clientHours`/`billingBrl` nulos).
+`setDraftEstimateClient` valida o cliente escolhido pelo dono (ativo e com o repositório do
+rascunho) e `recomputeDraftEstimate` recalcula **só o custo** reusando as horas/modelo — sem IA. A
+criação e a aprovação ficam em `portal.ts` (token do cliente) e `owner.ts` (sessão), que reusam o
+mesmo núcleo; o fluxo do dono está em `modules/tasks.md` ("Prévia de tarefa (dono)").
 
 ## Autenticação do portal (`server/token.ts`)
 
@@ -212,19 +229,29 @@ migração `backfill-task-client-id` (a partir dos rascunhos aprovados).
 O token do cliente não é um **token de sistema**: o portal **não** entra na especificação OpenAPI
 pública (`/api/v1/*`).
 
+A **prévia do dono** usa os endpoints internos `/api/tasks/drafts/**` (autenticados pela sessão,
+sem token de cliente): `POST /api/tasks/drafts`, `GET .../[id]`, `.../[id]/correction`,
+`.../[id]/preview`, `.../[id]/estimate` (o corpo opcional `{ clientId }` recalcula só o custo) e
+`.../[id]/approve`. Ver `modules/tasks.md`.
+
 ## Arquivos
 
 - `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
   `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
   `formatHoursLabel`), `clarity.ts` (puro: `selectPreviewClarity` — clareza da prévia), `schemas.ts`,
-  `types.ts`, `preview-prompt.ts` (puro), `hooks/useOrcamentos.ts`,
+  `types.ts`, `preview-prompt.ts` (puro), `review.ts` (estado/NDJSON da revisão, compartilhado com a
+  prévia do dono), `hooks/useOrcamentos.ts`, `hooks/useDraftReview.ts` (orquestra as duas fases para
+  os dois consumidores), `server/drafts.ts` (rascunhos e `DraftScope`, compartilhados),
+  `server/owner.ts` (criação/aprovação/reestimativa da prévia do dono),
   `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa; só horas reais),
   `server/tag-views.ts` (resolve ids de tags em `{ id, label }` para o portal), `components/`
   (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
-  — `useBudgetReview` orquestra as duas fases e `useSetClienteTaskPriority` edita a prioridade —,
-  páginas e componentes; `portal/components/preview/`
-  tem `PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`, `TypePriorityMetaCard`, `EstimateCard`,
-  `ClarityCard` e `CorrectionCard`). A visão do cliente tem `ClienteTaskDetailPage`, `ClienteTaskTabs`,
+  — `useBudgetReview` (wrapper de `useDraftReview` com o token) e `useSetClienteTaskPriority` edita a
+  prioridade —, páginas e componentes). Os cards apresentacionais foram movidos para
+  `components/preview/` (`PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`,
+  `TypePriorityMetaCard`, `EstimateCard`, `ClarityCard` e `CorrectionCard`), reusados pela prévia do
+  dono em `src/features/tasks/preview/`. A visão do cliente tem `ClienteTaskDetailPage`,
+  `ClienteTaskTabs`,
   `ClienteTaskSidebar`, `ClienteEstimateCard`, `ClienteEstimateBadge` e `ClienteCommentsSection`, além
   dos tipos seguros `ClienteTaskDto`/`ClienteTaskDetailDto` (sem horas reais/fator/custo/modelo).
 - `src/app/(app)/integracoes/orcamentos/page.tsx`, `src/app/api/integrations/orcamentos/*`,
@@ -240,7 +267,10 @@ das duas fases), `orcamentos-clarity` (card da revisão: sucesso/aviso/erro e bl
 `orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa — inclusive a prioridade
 sobreposta —, editar a prioridade da própria tarefa, lista/detalhe do cliente por
 `clientId` e comentário com origem), `orcamentos-estimate` (estimativa em uma chamada: tags +
-semelhantes + provedor de texto/JEV), `orcamentos-similar` (busca por tags com fallback e horas
+semelhantes + provedor de texto/JEV), `orcamentos-owner-preview` (prévia do dono: escopo do rascunho,
+cliente opcional, custo recalculado sem IA e aprovação com/sem cliente), `orcamentos-review-view`
+(estado da revisão e leitura do NDJSON compartilhado, `readNdjson`), `orcamentos-similar` (busca por
+tags com fallback e horas
 dos apontamentos), `cliente-revisao` (cards da revisão, inclusive o tipo/prioridade editável),
 `cliente-task-table` (prioridade editável com handler e leitura sem ele),
 `cliente-task-card`, `cliente-task-detail` (abas sem Histórico/Horas, estimativa inflada, prioridade

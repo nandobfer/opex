@@ -52,6 +52,14 @@ export type ClienteTaskPriorityInput = z.infer<typeof clienteTaskPrioritySchema>
 export const clienteApproveSchema = z.object({ priority: z.enum(TASK_PRIORITIES).optional() })
 export type ClienteApproveInput = z.infer<typeof clienteApproveSchema>
 
+/**
+ * Estimativa da prévia do **dono** (`/tarefas/previa`): o cliente é **opcional** e só define o custo
+ * (`H × fator × custo/hora`). Ausente = mantém o cliente já escolhido; `null` = remove (o custo volta
+ * a `null`, só com as horas reais). A troca **não** refaz a IA: recalcula apenas o custo.
+ */
+export const ownerDraftEstimateSchema = z.object({ clientId: objectId.nullable().optional() })
+export type OwnerDraftEstimateInput = z.infer<typeof ownerDraftEstimateSchema>
+
 /** Dimensão da clareza (critérios de aceite ou localização) devolvida pela IA. */
 const previewClarityDimensionSchema = z.object({
     status: z.enum(PREVIEW_CLARITY_STATUSES).catch("vague"),

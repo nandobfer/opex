@@ -110,6 +110,12 @@ describe('TasksPage', () => {
     expect(mocks.push).toHaveBeenCalledWith('/tarefas/nova')
   })
 
+  it('Nova prévia navega para a prévia de tarefa do dono', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: /Nova prévia/ }))
+    expect(mocks.push).toHaveBeenCalledWith('/tarefas/previa')
+  })
+
   it('alternar para Tabela fica salvo no navegador', () => {
     const { unmount } = renderPage()
     fireEvent.click(screen.getByRole('radio', { name: /Tabela/ }))

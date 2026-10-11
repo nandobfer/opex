@@ -14,4 +14,12 @@ describe("guarda de acesso do portal do cliente", () => {
         expect(isPublicPath("/api/clientes")).toBe(false)
         expect(resolveAuthAction("/cliente", true)).toBe("allow")
     })
+
+    it("exige sessão para a prévia de tarefa do dono (páginas e APIs internas)", () => {
+        for (const path of ["/tarefas/previa", "/tarefas/previa/abc", "/api/tasks/drafts", "/api/tasks/drafts/abc/estimate", "/api/tasks/drafts/abc/approve"]) {
+            expect(isPublicPath(path)).toBe(false)
+            expect(resolveAuthAction(path, false)).toBe(path.startsWith("/api") ? "unauthorized" : "redirect")
+            expect(resolveAuthAction(path, true)).toBe("allow")
+        }
+    })
 })
