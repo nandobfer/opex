@@ -102,14 +102,19 @@ export function prChangesPrompt(config: CentralConfig, prUrl: string, feedback: 
     ].join("\n") + extra(config, "planning")
 }
 
-export function reopenPrompt(config: CentralConfig, ctx: WorkbenchContext, feedback: string): string {
+export function reopenPrompt(config: CentralConfig, ctx: WorkbenchContext, feedback: string, lastPlan: string | null = null): string {
+    const plan = (lastPlan ?? "").trim()
     return [
-        `A mesa da tarefa ${ctx.code} foi concluída (PR mergeado) e foi REABERTA pelo usuário. Volte ao PLANEJAMENTO no repositório principal (${ctx.sessionDirectory}).`,
+        `A mesa da tarefa ${ctx.code} (${ctx.title}) foi concluída (PR mergeado) e foi REABERTA pelo usuário. Volte ao PLANEJAMENTO no repositório principal (${ctx.sessionDirectory}).`,
+        "Esta é uma sessão NOVA do OpenCode: o histórico da conversa anterior não está mais disponível. Use o plano anterior (quando houver, abaixo) e o trabalho já presente na branch de destino como contexto.",
         "Considere que o trabalho anterior já está na branch de destino. Responda com um plano COMPLETO para o que foi pedido abaixo, sem alterar arquivos.",
         "",
         "## Pedido do usuário",
         feedback,
-    ].join("\n") + extra(config, "planning")
+        plan ? `\n## Plano anterior (última versão)\n${plan}` : "",
+    ]
+        .filter(Boolean)
+        .join("\n") + extra(config, "planning")
 }
 
 export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, additionalInfo: string | null = null): string {

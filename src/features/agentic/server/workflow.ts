@@ -36,6 +36,7 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { runAgentTurn, type TurnResult } from "./runner"
+import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { syncWorkbenchTimer } from "./timer-sync"
 
@@ -383,9 +384,21 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
 
 async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
     await releasePreviewPort(String(doc._id))
-    await update(doc, { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null })
+    const sessionId = doc.sessionId
+    // A mesa concluiu: desvincula a sessão e a registra como pendente de exclusão na MESMA atualização
+    // (a exclusão em si é tentada logo abaixo; se falhar, a pendência é retomada pela rotina de Crons).
+    await update(
+        doc,
+        { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null, sessionId: null, sessionDirectory: null },
+        sessionId ? { $addToSet: { pendingSessionDeletions: sessionId } } : {},
+    )
     publishWorkbenchEvent(String(doc._id), { type: "notice", level: "success", message: "Mesa de trabalho concluída" })
     centralLogger(doc.centralId, doc.taskCode).success("Mesa concluída", { workbenchId: String(doc._id) })
+    if (sessionId) {
+        const removed = await deleteWorkbenchSession(String(doc._id), sessionId).catch(() => false)
+        if (removed) publishWorkbenchEvent(String(doc._id), { type: "notice", level: "info", message: "Sessão do OpenCode excluída" })
+        else publishWorkbenchEvent(String(doc._id), { type: "notice", level: "info", message: "A sessão do OpenCode será excluída assim que o serviço estiver disponível" })
+    }
     pumpQueue(doc.centralId)
 }
 
@@ -536,7 +549,7 @@ export async function reopen(id: string, feedback: string): Promise<WorkbenchDto
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
-    await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
+    await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
     return getWorkbench(id)
 }
 
@@ -612,6 +625,8 @@ export async function deleteWorkbench(id: string): Promise<void> {
         if (doc.sessionId) await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
         abortWorkbenchRun(id, "Mesa excluída")
     }
+    // Não perde sessões já pendentes de exclusão: tenta apagá-las antes de remover a mesa.
+    await flushPendingSessionDeletions(doc).catch(() => undefined)
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })
     await syncWorkbenchTimer(id)
