@@ -17,6 +17,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
+- `src/app/(app)/financeiro/page.tsx`: Financeiro — faturamento das tarefas concluídas por cliente
+  (item próprio no menu; ver `modules/finance.md`), envolto no `RepoIndexProvider`.
 - `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[taskId]/page.tsx` (com `layout.tsx`
   que distribui o índice de repositórios): Central de desenvolvimento (item próprio no menu; ver
   `modules/agentic-dev.md`). A central vem do navegador e a tarefa da URL.
@@ -44,7 +46,7 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   que abre um **popover** com a ação **Sair** (`LogoutButton`, de `src/features/auth/`), que encerra
   a sessão e volta para `/login`; a versão fica na linha inferior da barra. Na gaveta do mobile
   (expandida) o rodapé mantém o dono, a versão e o "Sair" inline.
-- `navigation.ts`: `APP_NAV` (Tarefas, Minhas horas, Central de desenvolvimento; Sistema › Integrações), `HOME_HREF`,
+- `navigation.ts`: `APP_NAV` (Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento; Sistema › Integrações), `HOME_HREF`,
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 
 ## Regras
