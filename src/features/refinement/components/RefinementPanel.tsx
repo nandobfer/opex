@@ -65,7 +65,7 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
     const description = unavailable && !refinement
         ? (availability?.reason ?? "Refinar tarefa indisponível")
         : running
-          ? "O agente está lendo a tarefa e preparando as perguntas…"
+          ? (refinement?.finalizing ? "Consolidando a especificação técnica…" : "O agente está lendo a tarefa e preparando as perguntas…")
           : (waiting ?? (refinement?.sessionDirectory ? `Sessão em ${refinement.sessionDirectory}` : "O agente fará perguntas até a especificação técnica ficar clara."))
 
     return (
