@@ -39,6 +39,7 @@ import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
+import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
@@ -367,6 +368,11 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
         case "building": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) throw new Error(`O build falhou: ${parsed.data.error ?? "motivo não informado"}`)
+            // O agente cria o dump antes de publicar; aqui confirmamos que ele existe de fato.
+            if (doc.previewBackup) {
+                await assertPreviewBackup(client, doc.previewBackup, config.sessionDirectory)
+                notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
+            }
             const fresh = await AgenticWorkbench.findById(id).select({ port: 1 }).lean()
             if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
             const env = config.environment
@@ -446,6 +452,11 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
         case "finishing": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) notice("warn", `Limpeza incompleta: ${parsed.data.error ?? "motivo não informado"}`)
+            // A mesa só conclui quando o dump foi removido (idempotente: ausente conta como sucesso).
+            if (doc.previewBackup) {
+                await assertPreviewBackupRemoved(client, doc.previewBackup, config.sessionDirectory)
+                notice("info", "Backup do MongoDB da prévia removido.")
+            }
             await completeWorkbench(doc)
             return null
         }
@@ -461,7 +472,7 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
     // (a exclusão em si é tentada logo abaixo; se falhar, a pendência é retomada pela rotina de Crons).
     await update(
         doc,
-        { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null, sessionId: null, sessionDirectory: null },
+        { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null, previewBackup: null, sessionId: null, sessionDirectory: null },
         sessionId ? { $addToSet: { pendingSessionDeletions: sessionId } } : {},
     )
     publishWorkbenchEvent(String(doc._id), { type: "notice", level: "success", message: "Mesa de trabalho concluída" })
@@ -521,9 +532,13 @@ export async function startBuildTurn(id: string): Promise<boolean> {
     const loaded = await loadAll(id)
     if (asStage(loaded.doc.stage) !== "build_queued") return false
     const port = await allocatePreviewPort(id, loaded.config.environment.previewHost, { min: loaded.config.environment.previewPortMin, max: loaded.config.environment.previewPortMax })
+    // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e
+    // é preservado nas retentativas: o primeiro dump é o backup da mesa (OPE-54).
+    const backup = await reservePreviewBackup(loaded.doc, loaded.config)
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}` })
-    await launchTurn(loaded, { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port) }, { extraSet: { buildQueuedAt: null } })
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Backup do MongoDB da prévia em ${backup.dir}` })
+    await launchTurn(loaded, { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, backup) }, { extraSet: { buildQueuedAt: null } })
     return true
 }
 
@@ -620,7 +635,7 @@ export async function reopen(id: string, feedback: string): Promise<WorkbenchDto
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "reopen")
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
-    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null }, ...pastPr })
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
     await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
@@ -652,7 +667,7 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
-        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), { preview: Boolean(doc.previewUrl) }) }, { userText: "Tentar a limpeza novamente" })
+        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), doc.previewBackup ?? null, { preview: Boolean(doc.previewUrl) }) }, { userText: "Tentar a limpeza novamente" })
         return getWorkbench(id)
     }
     if (stage === "building") {
@@ -817,9 +832,10 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, prMergeado: pr.url } })
 
     const cleanup = config.cleanup
-    if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch) {
+    // O backup da prévia (OPE-54) exige a etapa de limpeza mesmo com toda a limpeza de ambiente desligada.
+    if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch || doc.previewBackup) {
         // Sem prévia (fluxo PR automático) não há ambiente a derrubar.
-        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), { preview: Boolean(doc.previewUrl) }) }
+        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview: Boolean(doc.previewUrl) }) }
     }
     return null
 }
@@ -837,6 +853,11 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
             return
         } catch (error) {
             publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Limpeza não iniciada: ${errorText(error)}` })
+            // Com backup pendente a mesa NÃO conclui sem a limpeza: fica em "finishing" para Tentar novamente.
+            if (doc.previewBackup) {
+                await update(doc, { stage: "finishing", runState: "failed", error: `A limpeza não pôde começar: ${errorText(error)}` })
+                return
+            }
         }
     }
     await completeWorkbench({ ...doc, pr })

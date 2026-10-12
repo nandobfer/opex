@@ -36,6 +36,18 @@ export interface IPlanVersion {
     createdAt: Date
 }
 
+/**
+ * Backup do MongoDB da prévia (OPE-54): o caminho é reservado ANTES do build e o agente cria o
+ * dump ali; o primeiro dump é preservado nas retentativas/correções e removido na conclusão.
+ */
+export interface IPreviewBackup {
+    /** Pasta exclusiva do ciclo de backup (fora do worktree, sob a raiz dos worktrees). */
+    dir: string
+    /** Arquivo `--archive` do mongodump dentro de `dir`. */
+    path: string
+    createdAt: Date
+}
+
 export interface IWorkbenchPr {
     number: number
     url: string
@@ -80,6 +92,8 @@ export interface IAgenticWorkbench {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
     agenticFlow: string
+    /** Backup do MongoDB da prévia (reservado no build); `null` quando a mesa não tem backup. */
+    previewBackup: IPreviewBackup | null
     plans: IPlanVersion[]
     pendingFeedback: string | null
     pr: IWorkbenchPr | null
@@ -117,6 +131,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
         agenticFlow: { type: String, default: "preview" },
+        previewBackup: { type: Schema.Types.Mixed, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
         pendingFeedback: { type: String, default: null },
         pr: { type: Schema.Types.Mixed, default: null },

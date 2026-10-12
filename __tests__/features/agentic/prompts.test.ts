@@ -22,12 +22,18 @@ const config = defaultCentralConfig('/home/u/app')
 const ctx: WorkbenchContext = {
   code: 'GO-DEV-12',
   title: 'Exportar relatório',
-  productName: 'Portal',
+  projectName: 'Portal',
   repo: 'org/app',
   sessionDirectory: '/home/u/app',
   worktreePath: '/home/u/app/worktrees/go-dev-12',
   branch: 'feat/go-dev-12-exportar-relatorio',
   composeProject: 'portal-go-dev-12',
+}
+
+/** Backup do MongoDB da prévia (OPE-54) usado pelos prompts de build e de limpeza. */
+const backup = {
+  dir: '/home/u/app/worktrees/.opex-backups/go-dev-12/ciclo-1',
+  path: '/home/u/app/worktrees/.opex-backups/go-dev-12/ciclo-1/opex-preview-backup.archive',
 }
 
 describe('nomes derivados da tarefa', () => {
@@ -52,9 +58,20 @@ describe('mensagens das etapas', () => {
   })
 
   it('build usa a variável e a porta reservada', () => {
-    const text = buildPrompt({ ...config, environment: { ...config.environment, portEnvVar: 'APP_PORT', composeFile: 'docker/compose.yml' } }, ctx, 4015)
+    const text = buildPrompt({ ...config, environment: { ...config.environment, portEnvVar: 'APP_PORT', composeFile: 'docker/compose.yml' } }, ctx, 4015, backup)
     expect(text).toContain('APP_PORT=4015 docker compose -p portal-go-dev-12 -f docker/compose.yml up -d --build')
     expect(text).toContain('4001–4098')
+  })
+
+  it('build manda criar o dump do MongoDB antes de publicar a prévia (OPE-54)', () => {
+    const text = buildPrompt(config, ctx, 4015, backup)
+    expect(text).toContain('## Backup do MongoDB (obrigatório ANTES de publicar a prévia)')
+    expect(text).toContain('mongodump')
+    expect(text).toContain(backup.dir)
+    expect(text).toContain(backup.path)
+    expect(text).toContain('REUTILIZE-O')
+    expect(text).toContain(`test -s '${backup.path}'`)
+    expect(text).toContain('{"ok": true} quando o dump existir')
   })
 
   it('PR novo usa gh pr create; PR existente só atualiza', () => {
@@ -76,10 +93,21 @@ describe('mensagens das etapas', () => {
   })
 
   it('limpeza respeita as opções da central', () => {
-    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: true, removeWorktree: false, deleteBranch: false } }, ctx)
+    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: true, removeWorktree: false, deleteBranch: false } }, ctx, null)
     expect(text).toContain('docker compose -p portal-go-dev-12 down')
     expect(text).not.toContain('git worktree remove')
     expect(text).not.toContain('git branch -D')
+  })
+
+  it('limpeza remove o backup mesmo com toda a limpeza de ambiente desligada (OPE-54)', () => {
+    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: false, removeWorktree: false, deleteBranch: false } }, ctx, backup)
+    expect(text).toContain(`rm -rf '${backup.dir}'`)
+    expect(text).toContain(backup.path)
+    expect(text).not.toContain('docker compose -p')
+  })
+
+  it('limpeza sem backup não menciona o dump', () => {
+    expect(cleanupPrompt(config, ctx, null)).not.toContain('opex-preview-backup.archive')
   })
 
   it('reabertura parte de uma sessão nova e inclui o plano anterior quando houver', () => {
@@ -151,7 +179,7 @@ describe('fluxos alternativos (prévia vs PR automático)', () => {
   })
 
   it('limpeza sem prévia não manda derrubar o ambiente, mas mantém o resto', () => {
-    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true } }, ctx, { preview: false })
+    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true } }, ctx, null, { preview: false })
     expect(text).not.toContain('docker compose')
     expect(text).toContain('session_move')
     expect(text).toContain('git worktree remove')

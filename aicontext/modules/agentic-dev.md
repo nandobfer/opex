@@ -9,7 +9,9 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
 `@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
 `src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
 tarefas, ver `modules/refinement.md`). Modelos em `src/lib/db/models/Agentic.ts`; a saída gravada
-(`agentic_events`) também é usada pelo refinamento.
+(`agentic_events`) também é usada pelo refinamento. O backup do MongoDB da prévia (OPE-54) tem
+caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferência em
+`src/features/agentic/server/preview-backup.ts`.
 
 ## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
 
@@ -42,7 +44,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
-| Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
+| Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
@@ -93,6 +95,33 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   ações além de excluir a mesa.
 - Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
   turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
+
+## Backup do MongoDB da prévia (OPE-54)
+
+Antes de publicar a prévia, o agente cria um **dump do banco MongoDB do próprio projeto** (não o do
+Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (caminhos puros),
+`server/preview-backup.ts` (reserva e conferência) e os prompts de build/limpeza.
+
+- **Caminho reservado antes do build**: ao iniciar o turno de build (`startBuildTurn`), a mesa
+  reserva uma pasta exclusiva do ciclo em `<pasta dos worktrees>/.opex-backups/<código>/<ciclo>/`
+  (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o prompt de build manda criar o dump ali
+  como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto e **sem
+  imprimir credenciais**. A pasta fica **fora do worktree**, então nunca entra em commit nem é
+  derrubada pelo `git worktree remove`.
+- **Primeiro dump preservado**: retentativas do build e correções da prévia **reutilizam** o arquivo
+  já criado (o prompt manda reutilizar quando existir; só cria quando não há nenhum). Reabrir a mesa
+  zera a reserva, então o próximo build começa um **ciclo novo** (pasta nova).
+- **Conferência no servidor**: ao fim do turno de build, o Opex confere na máquina do OpenCode
+  (`runOpencodeShell`, `test -s`) que o dump existe e não está vazio; sem ele o build **falha** — a
+  prévia não vale sem backup. O bloco JSON do agente não basta.
+- **Remoção na conclusão**: a etapa `finishing` sempre inclui a remoção do backup (mesmo com a
+  limpeza de ambiente desligada na central) e a mesa **só conclui** (`done`) depois de confirmar
+  (`test ! -e`) que o arquivo não existe mais. Enquanto o arquivo existir, a etapa falha e a mesa
+  oferece **Tentar novamente**; se a limpeza não puder nem começar, a mesa com backup fica em
+  `finishing` (não conclui).
+- Mesas abertas antes desta funcionalidade (sem `previewBackup`) seguem concluindo sem backup.
+- Fora do escopo: excluir (ou abandonar) uma mesa não remove o dump; a remoção automática é só na
+  conclusão após o merge.
 
 ## Central de desenvolvimento (`/desenvolvimento/[tarefa]`)
 
@@ -227,8 +256,9 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Merge automático (OPE-50)**: opção **"Merge automático"** nas configurações da central (aba Git e PR, `git.autoMerge`, padrão **desligada**; campos antigos caem nela pelo `parseCentralConfig`). Não combina com **PR rascunho** (o schema recusa as duas ligadas — `centralConfigSchema`, mesma regra na tela e na API). Com a opção ligada, a rotina `agentic-pr-watch` mergeia o **PR do próprio agente** assim que ele fica pronto no GitHub (`prMergeReady`: `mergeable: true`, `mergeable_state` `clean`/`behind`/`has_hooks` e fora do rascunho), na etapa **`merging_pr`** (agente da etapa **Pull Request**), sem nova aprovação. O prompt exige **merge commit** (`gh pr merge --merge`), proíbe `--admin`/`--auto`/squash/rebase/force-push e manda parar se o repositório recusar por verificações/revisões/regras (as proteções nunca são contornadas). O **bloco JSON do agente não basta**: o merge é confirmado no GitHub (`merged` + `merge_commit_sha`) antes de concluir. Confirmado o merge, o agente apaga a **branch remota de origem** na etapa **`deleting_pr_branch`** (`git push origin --delete <branch>`; branch já ausente conta como sucesso) — só quando a branch do PR é a esperada pela mesa; se divergir, a exclusão é cancelada com aviso. A exclusão remota é um passo próprio, independente de **"apagar a branch local"** da limpeza (`cleanup.deleteBranch`). Depois vem a **mesma conclusão** do merge manual: tarefa para a coluna "Ao concluir" (fecha a issue pelo vínculo), auditoria, limpeza e exclusão da sessão. Ligar a opção vale também para os **PRs já abertos** pelas mesas da central (verificados a cada varredura). Falha/interrupção em `merging_pr`/`deleting_pr_branch` deixa a mesa em **Tentar novamente**/**Reconectar** (sem "Voltar ao planejamento") e a mesa **não** fica em `pr_open`, então a varredura não repete a operação sozinha.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
   é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
-  tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
-  down`, `git worktree remove`, `git branch -D`, conforme a central) e a porta é liberada.
+  tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, remove o **backup do
+  MongoDB da prévia**, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
+  central) e a porta é liberada.
 - **Exclusão da sessão (OPE-46)**: ao concluir a mesa (depois da limpeza), a sessão do OpenCode é
   **desvinculada** (`sessionId`/`sessionDirectory` = `null`, preservando todo o histórico da mesa no
   Opex — planos, saída, PR, uso) e **excluída** no OpenCode (`session.remove`). Se a exclusão falhar
@@ -318,6 +348,7 @@ merge, reabrir, excluir).
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
-(`workflow-pr-conflicts`) e merge automático do PR (`pr-automation`), fluxo da mesa — Publicar
+(`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
+(`preview-backup` e `workflow-preview-backup`) e fluxo da mesa — Publicar
 prévia vs PR automático (`workflow-flow-mode`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.
