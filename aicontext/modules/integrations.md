@@ -16,13 +16,14 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
   dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
   `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode`, `ai_gemini` e
-  `ai_jev` — ver `modules/ai.md`) e `orcamentos` (Orçamentos: clientes do portal público — ver
-  `modules/orcamentos.md`).
+  `ai_jev` — ver `modules/ai.md`) e `orcamentos` (nome exibido **Clientes**: clientes do portal
+  público, rota `/integracoes/clientes` — ver `modules/orcamentos.md`).
 - **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
   `parent` e `configured`) e aparecem dentro da página da mãe; o voltar da página leva à mãe.
   Rotas próprias via `integrationPath` (`/integracoes/ia`, `/integracoes/ia/opencode`,
-  `/integracoes/ia/gemini`, `/integracoes/ia/jev`); `/integracoes/<id>` redireciona
-  (`hasCustomIntegrationPath`).
+  `/integracoes/ia/gemini`, `/integracoes/ia/jev`, `/integracoes/clientes`); `/integracoes/<id>`
+  redireciona (`hasCustomIntegrationPath`), e a rota legada `/integracoes/orcamentos` redireciona
+  para `/integracoes/clientes`.
 - `isIntegrationConfigured(def, resolved)` (`config.ts`): obrigatórios públicos visíveis e segredos
   legíveis preenchidos (não testa a conexão).
 - **Em desenvolvimento** (`IN_DEVELOPMENT_INTEGRATIONS`): `archflow` (Archflow — solicitar deploys
@@ -96,17 +97,19 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 ### Tela de listagem (`/integracoes`)
 
-- Tabela no padrão das listas (`src/components/list`): Status (bolinha animada com tooltip),
-  Nome + descrição truncada, Ambiente (badge).
-- Ações por linha: **Testar conexão**, **Debug** (desabilitado com motivo quando o debug está
-  desligado) e **Editar** (navega para a página da integração).
-- Linhas "Em desenvolvimento" (Archflow) no fim, sem ações.
+- Cards no padrão dos provedores de IA (mesmo desenho de `AiProvidersTab`): Status (bolinha animada
+  com tooltip), Nome + badges (Ambiente e "Não configurado"), descrição truncada e um chevron. **O
+  card inteiro é um link** para a página da integração (`integrationPath`) — não há mais botão
+  "Editar".
+- Ações por card (fora do link): **Testar conexão** e **Debug** (desabilitado com motivo quando o
+  debug está desligado).
+- Cards "Em desenvolvimento" (Archflow) no fim, sem ações.
 
 ### Página da integração (`/integracoes/[id]`)
 
 - Coluna do formulário: cabeçalho (voltar, nome + status, descrição, última alteração), cartões
   Geral (ambiente, modo debug), Documentação da API, Campos públicos, Campos privados (só com
-  segredos), na API interna **Tokens de sistema**, em Crons, Rotinas.
+  segredos), na API interna **Tokens de sistema**.
 - Rodapé (`border-t`, `justify-end`): **Desfazer** e **Salvar**, desabilitados sem alterações.
 - Com modo debug ligado, o cartão de Logs ocupa a coluna da direita (`sticky`, altura da área
   visível do `<main>` via `useScrollViewportHeight`). Abaixo de `xl` vai para baixo do formulário.
@@ -114,11 +117,13 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
   Geral, Vínculos, Mapeamento, Sincronização), Provedores de IA (`AiEditorForm`:
-  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico),
-  Orçamentos (`OrcamentosEditorForm`: Clientes, rota própria `/integracoes/orcamentos`) e a página da
-  central de desenvolvimento (`/integracoes/ia/centrais/[id]`). `useLocalTabs` é o irmão **sem URL** (mesmo
-  formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não podem
-  reutilizar `?aba` (já reservado para as abas externas de `AiEditorForm`).
+  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico), página de
+  cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
+  Crons (`CronsEditorForm`: Geral e Rotinas) e a página da central de desenvolvimento
+  (`/integracoes/ia/centrais/[id]`). A integração **Clientes** (`/integracoes/clientes`) **não tem
+  abas**: a lista de clientes aparece direto, sem card interno. `useLocalTabs` é o irmão **sem URL**
+  (mesmo formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não
+  podem reutilizar `?aba` (já reservado para as abas externas de `AiEditorForm`).
 - **Não use `layout` do framer-motion na grade/formulário desta página**: dentro do
   `<motion.main>` do `AppShell` a projeção mede errado e deixa a tela em branco às vezes.
 
@@ -135,7 +140,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   - **GitHub**: `GET /user` e `GET /rate_limit`; amarelo sem escopo `repo` (token clássico) ou com
     o limite de uso quase esgotado (ver `modules/github.md`).
   - **OpenCode / Gemini / Provedores de IA**: ver `modules/ai.md`.
-  - **Orçamentos**: sem serviço externo — só conta os clientes cadastrados (ver
+  - **Clientes**: sem serviço externo — só conta os clientes cadastrados (ver
     `modules/orcamentos.md`).
 - `warnResult(mensagem)` (`testers/types.ts`) grava status amarelo ("Disponível com restrição").
 
@@ -193,6 +198,12 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Executar agora** (com confirmação): executa a versão salva, só reivindica o lease
   (`runJobNow`), 404 rotina não salva, 409 em execução, falha da rotina → 200 `ok:false`.
   Auditado (`execucaoManual`, `resultado`, `mensagem`, `duracaoMs`).
+- **Página em abas** (`CronsEditorForm`): **Geral** (agendador, URL base interna, cron secret e
+  documentação) e **Rotinas** (lista). Na aba Rotinas há um campo de **busca** (Fuse.js) que filtra
+  a exibição sem mexer no rascunho. Cada rotina nasce **recolhida**: cabeçalho com nome, "Executar
+  agora" e o switch de status, mais a linha com a próxima e a última execução; ao expandir, aparecem
+  os campos de configuração (nome/caminho, agendamento, escopo e remover). Editar/excluir age sobre
+  a rotina original (identidade por referência), nunca pelo índice da lista filtrada.
 - Migração `repair-integration-indexes` (boot, idempotente): remove estados duplicados e cria os
   índices das coleções de integração.
 
@@ -220,7 +231,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   Hoje documenta `GET /api/v1/whoami` (confere o token; 200/401).
 - **Documentação gerenciada**: `managedSwaggerPath` fixa a `swaggerUrl` em
   `getInternalBaseUrl() + /api/openapi.json`; somente leitura (PATCH → 400).
-- Rotas públicas só de contrato: `GET /api/openapi.json` e `GET /api/docs` (Swagger UI).
+- Rotas públicas só de contrato: `GET /api/openapi.json` e `GET /api/docs` (Swagger UI). São
+  **públicas sem sessão** (`PUBLIC_ROUTES` em `src/features/auth/paths.ts`): expõem só o contrato,
+  nenhum dado. É o que permite o tester da API interna chamá-las pelo servidor sem cookie.
 - **Tokens de sistema** (`src/features/integrations/api-tokens/`, coleção `api_tokens`): card
   `ApiTokensCard` gera (nome; o valor `mt_sys_…` aparece **uma única vez**, `ApiTokenDialog`) e
   revoga (confirmação; não volta). Banco guarda só o hash SHA-256 e o prefixo visível; "último uso"
@@ -247,7 +260,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 | `GET/POST /api/integrations/internal_api/tokens` | Lista / gera token de sistema (valor só na resposta do POST) |
 | `DELETE /api/integrations/internal_api/tokens/[tokenId]` | Revoga token de sistema |
 | `GET /api/openapi.json` · `GET /api/docs` | Especificação e Swagger UI da API interna (públicas) |
-| `/api/integrations/orcamentos/clients*` | Clientes do portal de Orçamentos (ver `modules/orcamentos.md`) |
+| `/api/integrations/orcamentos/clients*` | Clientes do portal (ver `modules/orcamentos.md`) |
 | `/api/cliente/*` | Portal do cliente, autenticado pelo token do cliente (ver `modules/orcamentos.md`) |
 | `GET /api/v1/whoami` | Pública por token de sistema |
 | `/api/integrations/github/*` | Vínculos, mapeamento, sincronização e opções (ver `modules/github.md`) |

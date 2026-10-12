@@ -4,9 +4,6 @@ import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "../../types"
-import { AiModelsCard } from "@/features/ai/components/AiModelsCard"
-import { JevUsageCard } from "@/features/ai/components/JevUsageCard"
-import { aiProviderOfIntegration } from "@/lib/ai/providers"
 import { ApiTokensCard } from "../internal-api/ApiTokensCard"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
@@ -39,7 +36,6 @@ export function EditorForm({ def, data, draft, setDraft, dirty, pending, onSave,
     const secretFields = def.secretFields.filter((field) => !field.group)
     const regularFields = def.publicFields.filter((field) => field.kind !== "cron-jobs" && !field.group)
     const jobsField = def.publicFields.find((field) => field.kind === "cron-jobs")
-    const aiProvider = aiProviderOfIntegration(def.id)
 
     return (
         <motion.form
@@ -67,10 +63,6 @@ export function EditorForm({ def, data, draft, setDraft, dirty, pending, onSave,
             )}
 
             {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
-
-            {def.id === "ai_jev" && <JevUsageCard />}
-
-            {aiProvider && <AiModelsCard provider={aiProvider.id} dirty={dirty} />}
 
             {jobsField && (
                 <CronJobsCard

@@ -55,6 +55,7 @@ export function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks
             signal: request.signal,
             attach: request.attach,
             startedAt: request.startedAt,
+            consumption: { origin: "agentic", subject: request.workbenchId },
         },
         { ...hooks, publish },
     )

@@ -137,7 +137,7 @@ const testGithub: IntegrationTester = async ({ emit, signal }) => {
 }
 
 // ---------------------------------------------------------------------------
-// Orçamentos: sem serviço externo — só confere o cadastro de clientes
+// Clientes: sem serviço externo — só confere o cadastro de clientes
 // ---------------------------------------------------------------------------
 
 const testOrcamentos: IntegrationTester = async ({ emit }) => {
@@ -145,7 +145,7 @@ const testOrcamentos: IntegrationTester = async ({ emit }) => {
     const total = await OrcamentoClient.countDocuments()
     const active = await OrcamentoClient.countDocuments({ active: true })
     emit("info", `${total} cliente(s) cadastrado(s), ${active} ativo(s)`)
-    return `Portal de Orçamentos disponível (${active} cliente(s) ativo(s))`
+    return `Portal de clientes disponível (${active} cliente(s) ativo(s))`
 }
 
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {

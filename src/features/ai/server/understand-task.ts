@@ -54,6 +54,7 @@ export async function* runUnderstandTask(prepared: PreparedUnderstandTask, signa
         prompt: prepared.prompt,
         title: prepared.title,
         signal,
+        consumption: { origin: "understand-task", subject: prepared.taskId },
     })) {
         if (event.type === "done" || event.type === "error") last = event
         if (event.type === "tool") dbg.info(`[entender-tarefas] ferramenta ${event.name}: ${event.state}`)

@@ -6,7 +6,6 @@ import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { KeyRound, Pencil, Plus, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
@@ -41,17 +40,14 @@ export function ClientesTab() {
     const list = query.data ?? []
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-                <div className="space-y-1.5">
-                    <CardTitle className="text-base">Clientes</CardTitle>
-                    <CardDescription>Cada cliente acessa um portal somente leitura dos repositórios escolhidos e pode enviar novas tarefas.</CardDescription>
-                </div>
+        <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">Cada cliente acessa um portal somente leitura dos repositórios escolhidos e pode enviar novas tarefas.</p>
+            <div className="flex justify-end">
                 <Button type="button" size="sm" className="gap-1.5" onClick={() => setEditing({ client: null })}>
                     <Plus className="h-4 w-4" aria-hidden /> Novo cliente
                 </Button>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div>
                 {query.isLoading ? (
                     <div className="space-y-2">
                         <Skeleton className="h-20 w-full" />
@@ -72,7 +68,7 @@ export function ClientesTab() {
                         </AnimatePresence>
                     </ul>
                 )}
-            </CardContent>
+            </div>
 
             <ClienteDialog
                 open={editing !== null}
@@ -121,7 +117,7 @@ export function ClientesTab() {
             </AlertDialog>
 
             <RemoveClienteDialog client={removing} onClose={() => setRemoving(null)} />
-        </Card>
+        </div>
     )
 }
 

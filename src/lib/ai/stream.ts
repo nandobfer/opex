@@ -1,9 +1,11 @@
 import { streamText, type LanguageModel } from "ai"
+import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import { createGeminiProvider } from "./gemini"
 import { createOpencodeProvider } from "./opencode"
 import type { AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
+import { recordAiConsumption } from "./consumption"
 
 /**
  * Geração em streaming pela Vercel AI SDK — SOMENTE servidor. Ponto único das features: nenhuma
@@ -25,6 +27,8 @@ export interface AiStreamRequest {
     /** Título da sessão criada no OpenCode. */
     title?: string
     signal?: AbortSignal
+    /** Contexto do painel de consumo: origem (feature) e referência. Ausente = não medir. */
+    consumption?: { origin: string; subject?: string | null }
 }
 
 export interface AiUsage {
@@ -90,6 +94,8 @@ export function describeAiError(error: unknown): string {
 /** Gera em streaming; nunca lança — falhas viram um evento `error` final. */
 export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStreamEvent> {
     const startedAt = Date.now()
+    // Identidade única por geração: o caminho de streaming gera no máximo um `done` por chamada.
+    const consumptionKey = request.consumption ? `stream:${randomUUID()}` : null
     let prepared: PreparedModel
     try {
         prepared = await prepareModel(request)
@@ -154,16 +160,27 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                         failed = true
                         yield { type: "error", message: describeAiError(new Error(stepError ?? "O modelo terminou com erro")) }
                     } else if (!failed) {
+                        const usage = {
+                            inputTokens: numberOrNull(part.totalUsage.inputTokens),
+                            outputTokens: numberOrNull(part.totalUsage.outputTokens),
+                            totalTokens: numberOrNull(part.totalUsage.totalTokens),
+                            costUsd,
+                        }
+                        if (consumptionKey && request.consumption) {
+                            await recordAiConsumption({
+                                dedupKey: consumptionKey,
+                                provider: request.provider,
+                                origin: request.consumption.origin,
+                                subject: request.consumption.subject ?? null,
+                                model: request.model,
+                                ...usage,
+                            })
+                        }
                         yield {
                             type: "done",
                             finishReason: part.finishReason,
                             durationMs: Date.now() - startedAt,
-                            usage: {
-                                inputTokens: numberOrNull(part.totalUsage.inputTokens),
-                                outputTokens: numberOrNull(part.totalUsage.outputTokens),
-                                totalTokens: numberOrNull(part.totalUsage.totalTokens),
-                                costUsd,
-                            },
+                            usage,
                         }
                     }
                     break

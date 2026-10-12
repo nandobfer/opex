@@ -49,7 +49,11 @@ Rotas liberadas sem sessão:
 - `/api/v1/*` — API pública por token de sistema (`requireApiToken`);
 - `/cliente` e `/api/cliente/*` — portal do cliente de Orçamentos, autenticado pelo **token do
   cliente** (`requireClient`, `x-client-token` ou `?t=`; ver `modules/orcamentos.md`);
-- `/api/routines/*` — tick do agendador (token de cron).
+- `/api/routines/*` — tick do agendador (token de cron);
+- `/api/openapi.json` e `/api/docs` — documentação OpenAPI da API interna (só o contrato, nenhum
+  dado). É o que permite o **teste da integração API interna** chamar a especificação pelo servidor
+  sem cookie de sessão; as APIs internas vizinhas (ex.: `/api/integrations/*`, `/api/ai/*`) continuam
+  exigindo sessão.
 
 `next` é gravado sem o subcaminho público (`normalizePath` remove o `BASE_PATH`), e o formulário
 descarta destino externo (open redirect).

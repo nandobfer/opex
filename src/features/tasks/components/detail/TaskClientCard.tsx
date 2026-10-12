@@ -38,7 +38,7 @@ function ClientLabel({ client }: { client: ClienteOrcamentoDto }) {
  * Cliente da tarefa (coluna lateral): adiciona um cliente quando ainda não há, troca o atual ou o
  * remove. Ao adicionar/trocar, o servidor recalcula a estimativa com o fator de lucro e o custo/hora
  * do cliente escolhido (o campo de estimativa fica habilitado); ao remover, o cliente e a estimativa
- * somem. Clientes são cadastrados apenas em Integrações › Orçamentos.
+ * somem. Clientes são cadastrados apenas em Integrações › Clientes.
  */
 export function TaskClientCard({ task }: { task: TaskDetailDto }) {
     const clients = useOrcamentoClients()
@@ -108,7 +108,7 @@ export function TaskClientCard({ task }: { task: TaskDetailDto }) {
                         <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="text-sm text-muted-foreground">
                             Nenhum cliente ativo inclui o repositório da tarefa.{" "}
                             <Link href={ORCAMENTOS_PATH} className="text-primary underline-offset-4 hover:underline">
-                                Cadastre em Integrações › Orçamentos
+                                Cadastre em Integrações › Clientes
                             </Link>
                             .
                         </motion.p>

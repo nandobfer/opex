@@ -90,6 +90,9 @@ vira `interrupted` e o usuário retoma com **Continuar**.
   `resolved`, `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
   gravada), `pendingForms`/`pendingPermissions`, `pendingSessionDeletions` (sessões do OpenCode ainda
   pendentes de exclusão), `usage`, `sessionId`, `sessionDirectory`, `centralId`, `projectId`.
+- O `usage` acumula tokens/custo do refinamento; cada passo também vai para `ai_consumption_logs`
+  (origem `refinement`) para o painel de consumo do OpenCode — ver `modules/ai.md`, "Medição de
+  consumo".
 - Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar), **continue** (retoma na
   mesma sessão um turno interrompido/falho e, quando o refinamento encerrou **sem** a especificação,
   apenas consolida) e **restart** (Recomeçar: descarta a conversa e abre uma nova sessão; a

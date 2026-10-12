@@ -1,4 +1,5 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeToolInput, normalizeOpencodeEvent, toOpencodeForm, toOpencodeModelRef, toOpencodePermission, type OpencodeFormDto, type OpencodePermissionDto, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 
 /**
@@ -39,6 +40,8 @@ export interface TurnRequest {
      * (resultado do OpenCode só conta se ficou ocioso depois dele). Padrão: agora.
      */
     startedAt?: number
+    /** Contexto do painel de consumo: origem (ex.: `agentic`, `refinement`) e referência. */
+    consumption?: { origin: string; subject?: string | null }
 }
 
 /** Evento neutro de um turno; quem publica decide o canal (barramento da mesa, etc.). */
@@ -64,7 +67,7 @@ export interface TurnHooks {
     onFormClosed?: (id: string) => void | Promise<void>
     /** Cada pedaço de texto do agente (para acumular e extrair, ex.: a especificação). */
     onText?: (delta: string) => void | Promise<void>
-    onStep?: (usage: { costUsd: number; tokens: OpencodeTokenUsage }) => void | Promise<void>
+    onStep?: (usage: { costUsd: number; tokens: OpencodeTokenUsage; stepId?: string }) => void | Promise<void>
     onMoved?: (directory: string) => void | Promise<void>
     heartbeat?: () => void | Promise<void>
 }
@@ -186,7 +189,20 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 break
             case "step":
                 costUsd += event.costUsd
-                await hooks.onStep?.({ costUsd: event.costUsd, tokens: event.tokens })
+                await hooks.onStep?.({ costUsd: event.costUsd, tokens: event.tokens, stepId: event.stepId ?? undefined })
+                if (request.consumption && event.stepId) {
+                    await recordAiConsumption({
+                        dedupKey: `session:${request.consumption.origin}:${request.id}:${event.stepId}`,
+                        provider: "opencode",
+                        origin: request.consumption.origin,
+                        subject: request.consumption.subject ?? null,
+                        model: request.agent.model ?? "",
+                        inputTokens: event.tokens.input,
+                        outputTokens: event.tokens.output,
+                        totalTokens: event.tokens.input + event.tokens.output + event.tokens.reasoning,
+                        costUsd: event.costUsd,
+                    })
+                }
                 break
             case "notice":
                 publish({ type: "notice", level: "warn", message: event.message })

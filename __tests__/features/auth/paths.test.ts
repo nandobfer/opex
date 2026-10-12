@@ -8,6 +8,19 @@ describe("guarda de acesso", () => {
         }
     })
 
+    it("libera a documentação OpenAPI da API interna sem sessão (teste da integração)", () => {
+        for (const path of ["/api/openapi.json", "/api/docs"]) {
+            expect(isPublicPath(path)).toBe(true)
+            expect(resolveAuthAction(path, false)).toBe("allow")
+        }
+    })
+
+    it("a documentação liberada não abre as APIs internas vizinhas", () => {
+        for (const path of ["/api/integrations/internal_api", "/api/ai/providers/opencode/usage", "/api/openapi", "/api/docs/private"]) {
+            expect(resolveAuthAction(path, false)).toBe("unauthorized")
+        }
+    })
+
     it("sem sessão: página redireciona e API interna responde 401", () => {
         expect(resolveAuthAction("/tarefas", false)).toBe("redirect")
         expect(resolveAuthAction("/integracoes", false)).toBe("redirect")

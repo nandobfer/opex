@@ -8,6 +8,7 @@ import { repairIntegrationIndexes } from "./repair-integration-indexes"
 import { dropLegacyCollections } from "./drop-legacy-collections"
 import { backfillTaskClientId } from "./backfill-task-client-id"
 import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
+import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -15,4 +16,5 @@ registerMigrations(
     { name: "drop-legacy-collections", run: () => dropLegacyCollections() },
     { name: "backfill-task-client-id", run: () => backfillTaskClientId() },
     { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },
+    { name: "ensure-ai-consumption-indexes", run: () => ensureAiConsumptionIndexes() },
 )

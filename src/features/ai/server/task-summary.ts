@@ -100,6 +100,7 @@ export async function* runTaskSummary(prepared: PreparedTaskSummary, signal?: Ab
         prompt: prepared.prompt,
         title: prepared.title,
         signal,
+        consumption: { origin: "task-summary", subject: prepared.taskId },
     })) {
         if (event.type === "delta") {
             text += event.text

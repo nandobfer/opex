@@ -3,7 +3,7 @@
  * Integrações › Orçamentos; cada cliente acessa o portal público por `/cliente?t=<token>`.
  */
 
-export const ORCAMENTOS_PATH = "/integracoes/orcamentos"
+export const ORCAMENTOS_PATH = "/integracoes/clientes"
 
 /** Abas da página da integração Orçamentos. `clientes` é a padrão (omitida da URL). */
 export const ORCAMENTOS_TABS = ["clientes"] as const

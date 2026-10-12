@@ -5,10 +5,10 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 
-const mocks = vi.hoisted(() => ({ push: vi.fn(), useIntegrations: vi.fn(), testDialog: vi.fn(), debugDialog: vi.fn() }))
+const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn(), testDialog: vi.fn(), debugDialog: vi.fn() }))
 
 vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
+vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
 vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
 vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
@@ -31,7 +31,7 @@ vi.mock("framer-motion", () => {
         }
     return {
         AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-        motion: { tbody: passthrough("tbody"), tr: passthrough("tr"), span: passthrough("span"), div: passthrough("div") },
+        motion: { ul: passthrough("ul"), li: passthrough("li"), span: passthrough("span"), div: passthrough("div") },
     }
 })
 
@@ -59,10 +59,10 @@ describe("IntegrationList", () => {
             isLoading: false,
         })
         render(<IntegrationList />)
-        const row = screen.getByText("Pusher").closest("tr")!
+        const row = screen.getByText("Pusher").closest("li")!
         expect(within(row).getByText("Eventos em tempo real para as telas do app")).toBeTruthy()
         expect(within(row).getByText("Interno")).toBeTruthy()
-        expect(within(screen.getByText("Crons").closest("tr")!).getByText("Externo")).toBeTruthy()
+        expect(within(screen.getByText("Crons").closest("li")!).getByText("Externo")).toBeTruthy()
     })
 
     it("Debug fica desabilitado quando o modo debug está desligado", () => {
@@ -72,12 +72,11 @@ describe("IntegrationList", () => {
         expect(debug.hasAttribute("disabled")).toBe(true)
     })
 
-    it("editar navega para a página da integração; testar e debug abrem os modais", () => {
+    it("o card inteiro é um link para a página da integração; testar e debug abrem os modais", () => {
         mocks.useIntegrations.mockReturnValue({ data: [item({ debugMode: true })], isLoading: false })
         render(<IntegrationList />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Editar" }))
-        expect(mocks.push).toHaveBeenCalledWith("/integracoes/pusher")
+        expect(screen.getByText("Pusher").closest("a")!.getAttribute("href")).toBe("/integracoes/pusher")
 
         fireEvent.click(screen.getByRole("button", { name: "Testar conexão" }))
         expect(mocks.testDialog).toHaveBeenLastCalledWith("pusher")
@@ -94,15 +93,14 @@ describe("IntegrationList", () => {
         render(<IntegrationList />)
         expect(screen.queryByText("OpenCode")).toBeNull()
         expect(screen.queryByText("Gemini")).toBeNull()
-        fireEvent.click(within(screen.getByText("Provedores de IA").closest("tr")!).getByRole("button", { name: "Editar" }))
-        expect(mocks.push).toHaveBeenCalledWith("/integracoes/ia")
+        expect(within(screen.getByText("Provedores de IA").closest("li")!).getByText("Provedores de IA").closest("a")!.getAttribute("href")).toBe("/integracoes/ia")
     })
 
     it("Archflow aparece como Em desenvolvimento, sem ações", () => {
         mocks.useIntegrations.mockReturnValue({ data: [], isLoading: false })
         render(<IntegrationList />)
         for (const name of ["Archflow"]) {
-            const row = screen.getByText(name).closest("tr")!
+            const row = screen.getByText(name).closest("li")!
             expect(within(row).getByText("Em desenvolvimento")).toBeTruthy()
             expect(within(row).queryAllByRole("button")).toHaveLength(0)
         }

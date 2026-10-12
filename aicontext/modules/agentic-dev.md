@@ -339,7 +339,9 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
 - **Excluir mesa**: interrompe, apaga a saída, tenta excluir as sessões já pendentes e libera a
   porta; worktree, branch, containers e PR ficam como estão.
-- Custo e tokens acumulados por mesa (`session.step.ended`).
+- Custo e tokens acumulados por mesa (`session.step.ended`). Cada passo também é registrado em
+  `ai_consumption_logs` (origem `agentic`) para o painel de consumo do OpenCode — ver
+  `modules/ai.md`, "Medição de consumo".
 
 ## Saída ao vivo
 

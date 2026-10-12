@@ -75,6 +75,10 @@ Abas: **Geral** (token e opções), **Vínculos** (`GithubLinksTab` + `GithubLin
 Crons). As abas recarregam por `github-updated` (`useGithubRealtime`). Removidas as abas **Pessoas** e
 os rascunhos descartados.
 
+Na aba **Vínculos**, o título de cada vínculo é o `GithubRepoLabel` (avatar/nome do repositório) e há
+um campo de **busca** (Fuse.js sobre repositório/nome/sigla) que filtra a exibição, distinguindo
+"nenhum vínculo" de "nenhum resultado". O diálogo recebe sempre a lista completa.
+
 ## Item de repositório compartilhado
 
 `GithubRepoLabel` (`components/shared.tsx`) é o item único de repositório do app: **avatar real** do

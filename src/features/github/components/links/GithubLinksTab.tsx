@@ -1,19 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import Fuse from "fuse.js"
 import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AlertTriangle, ExternalLink, FolderGit2, Pencil, Plus, Trash2 } from "lucide-react"
+import { AlertTriangle, ExternalLink, FolderGit2, Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import { useGithubLinks, useSaveLink } from "../../hooks/useGithub"
-import type { GithubLinkDto } from "../../types"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
+import { useGithubLinks, useGithubRepoIndex, useSaveLink } from "../../hooks/useGithub"
+import type { GithubLinkDto, GithubRepoLabelData } from "../../types"
 import { NotConfiguredHint } from "../shared"
 import { GithubLinkDialog } from "./GithubLinkDialog"
 import { RemoveLinkDialog } from "./RemoveLinkDialog"
@@ -22,11 +26,16 @@ import { RemoveLinkDialog } from "./RemoveLinkDialog"
 export function GithubLinksTab({ configured }: { configured: boolean }) {
     const links = useGithubLinks()
     const save = useSaveLink()
+    const repoIndex = useGithubRepoIndex(configured)
     const [editing, setEditing] = useState<{ link: GithubLinkDto | null } | null>(null)
     const [removing, setRemoving] = useState<GithubLinkDto | null>(null)
+    const [term, setTerm] = useState("")
+
+    const list = useMemo(() => links.data ?? [], [links.data])
+    const fuse = useMemo(() => new Fuse(list, { keys: ["repo", "name", "sigla"], threshold: 0.35, ignoreLocation: true }), [list])
+    const visible = term.trim() ? fuse.search(term.trim()).map((result) => result.item) : list
 
     if (!configured) return <NotConfiguredHint />
-    const list = links.data ?? []
 
     return (
         <Card>
@@ -39,7 +48,7 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
                     <Plus className="h-4 w-4" aria-hidden /> Novo vínculo
                 </Button>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
                 {links.isLoading ? (
                     <div className="space-y-2">
                         <Skeleton className="h-20 w-full" />
@@ -50,15 +59,25 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
                 ) : list.length === 0 ? (
                     <EmptyState icon={FolderGit2} title="Nenhum repositório vinculado" description="Vincule um repositório para que as issues virem tarefas dO Opex." actionLabel="Novo vínculo" onAction={() => setEditing({ link: null })} />
                 ) : (
-                    <ul className="space-y-2">
-                        <AnimatePresence initial={false}>
-                            {list.map((link) => (
-                                <motion.li key={link.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                                    <LinkRow link={link} onEdit={() => setEditing({ link })} onRemove={() => setRemoving(link)} />
-                                </motion.li>
-                            ))}
-                        </AnimatePresence>
-                    </ul>
+                    <>
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                            <Input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Buscar repositório" aria-label="Buscar vínculo" className="pl-9" />
+                        </div>
+                        {visible.length === 0 ? (
+                            <p className="p-4 text-center text-sm text-muted-foreground">Nenhum vínculo encontrado</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                <AnimatePresence initial={false}>
+                                    {visible.map((link) => (
+                                        <motion.li key={link.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
+                                            <LinkRow link={link} repo={repoLabelOption(link.repo, repoIndex)} onEdit={() => setEditing({ link })} onRemove={() => setRemoving(link)} />
+                                        </motion.li>
+                                    ))}
+                                </AnimatePresence>
+                            </ul>
+                        )}
+                    </>
                 )}
             </CardContent>
 
@@ -82,13 +101,14 @@ export function GithubLinksTab({ configured }: { configured: boolean }) {
     )
 }
 
-function LinkRow({ link, onEdit, onRemove }: { link: GithubLinkDto; onEdit: () => void; onRemove: () => void }) {
+function LinkRow({ link, repo, onEdit, onRemove }: { link: GithubLinkDto; repo: GithubRepoLabelData; onEdit: () => void; onRemove: () => void }) {
     return (
         <div className={cn("flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-start", !link.enabled && "opacity-60")}>
             <div className="min-w-0 flex-1 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
-                    <a href={link.repoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-primary hover:underline">
-                        {link.repo} <ExternalLink className="h-3 w-3" aria-hidden />
+                    <a href={link.repoUrl} target="_blank" rel="noreferrer" className="flex min-w-0 max-w-full items-center gap-2 rounded-md px-1 py-0.5 text-primary hover:bg-primary/5">
+                        <GithubRepoLabel repo={repo} />
+                        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
                     </a>
                     <span className="rounded-full border px-1.5 font-mono text-[10px] uppercase text-muted-foreground" title="Sigla usada no código das tarefas">
                         {link.sigla}
