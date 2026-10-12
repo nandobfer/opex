@@ -197,6 +197,28 @@ export function conflictPrompt(config: CentralConfig, ctx: WorkbenchContext, pr:
         .join("\n") + extra(config, "pr")
 }
 
+export function mergePrPrompt(config: CentralConfig, ctx: WorkbenchContext, pr: { number: number; url: string; baseBranch: string }): string {
+    return [
+        `Você agora é o agente de MERGE. O PR #${pr.number} (${pr.url}) está pronto: sem conflitos e com as verificações exigidas satisfeitas. Faça o merge — sem nova aprovação do usuário.`,
+        `- Trabalhe no worktree ${ctx.worktreePath}, branch ${ctx.branch}. Confirme o diretório atual e, se não for o worktree, ajuste antes de continuar.`,
+        `- Faça o merge preservando o histórico: \`gh pr merge ${pr.number} --merge\`. NÃO use squash nem rebase.`,
+        `- NÃO use \`--admin\`, \`--auto\`, force-push nem contorne as proteções do repositório. Se o GitHub recusar (verificações, revisões obrigatórias, regras de branch), pare e informe o motivo.`,
+        "- NÃO apague a branch remota nesta etapa (a exclusão é um passo separado) e NÃO abra outro Pull Request.",
+        `- ${JSON_RULE} Formato: {"ok": true} quando o PR estiver mergeado, ou {"ok": false, "error": "motivo"}.`,
+    ].join("\n") + extra(config, "pr")
+}
+
+export function deletePrBranchPrompt(config: CentralConfig, ctx: WorkbenchContext, pr: { number: number; url: string; branch: string }): string {
+    return [
+        `O PR #${pr.number} (${pr.url}) foi mergeado. Apague a branch remota de origem \`${pr.branch}\` — sem nova aprovação do usuário.`,
+        `- Trabalhe no worktree ${ctx.worktreePath} (repositório do projeto). Confirme o diretório atual e, se não for o worktree, ajuste antes de continuar.`,
+        `- Apague só a branch remota de origem: \`git push origin --delete ${pr.branch}\`.`,
+        `- NUNCA apague a branch de destino \`${config.git.prTargetBranch}\` nem a branch padrão do repositório; apague apenas \`${pr.branch}\`.`,
+        "- Se a branch remota já não existir, considere a exclusão concluída (idempotente).",
+        `- ${JSON_RULE} Formato: {"ok": true} quando a branch remota tiver sido apagada (ou já não existir), ou {"ok": false, "error": "motivo"}.`,
+    ].join("\n") + extra(config, "pr")
+}
+
 export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext): string {
     const steps = [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,

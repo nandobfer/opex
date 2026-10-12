@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   merged: vi.fn(),
   feedback: vi.fn(),
   conflict: vi.fn(),
+  autoMerge: vi.fn(),
   closed: vi.fn(),
   reopened: vi.fn(),
   saveCursors: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   handlePrMerged: mocks.merged,
   handlePrFeedback: mocks.feedback,
   handlePrConflict: mocks.conflict,
+  handlePrAutoMerge: mocks.autoMerge,
   handlePrClosed: mocks.closed,
   handlePrReopened: mocks.reopened,
   savePrCursors: mocks.saveCursors,
@@ -197,5 +199,37 @@ describe('conflito de merge', () => {
     expect(conflictUntried({ conflictBaseSha: 'b1', conflictHeadSha: 'h1' }, { base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })).toBe(false)
     expect(conflictUntried({ conflictBaseSha: 'b0', conflictHeadSha: 'h1' }, { base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })).toBe(true)
     expect(conflictUntried({}, { base: { ref: 'main', sha: 'b1' }, head: null })).toBe(false)
+  })
+})
+
+describe('merge automático', () => {
+  it('PR pronto (mergeable true, estado clean e fora do rascunho) aciona o merge automático', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, mergeable_state: 'clean', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.autoMerge).toHaveBeenCalledWith('w1', { baseBranch: 'main' })
+    expect(mocks.conflict).not.toHaveBeenCalled()
+    expect(mocks.feedback).not.toHaveBeenCalled()
+  })
+
+  it('PR rascunho não é mergeado automaticamente', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, mergeable_state: 'clean', draft: true, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+
+  it('mergeable null (calculando) ou estado bloqueado não mergeia', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: null, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, mergeable_state: 'blocked', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+
+  it('feedback tem prioridade: pedido de mudança não mergeia na mesma varredura', async () => {
+    respond({ issues: [{ id: 25, body: '@opex ajuste o filtro', user: { login: 'ana' } }] })
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, mergeable_state: 'clean', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
   })
 })

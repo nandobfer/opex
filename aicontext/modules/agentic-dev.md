@@ -40,7 +40,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 |---|---|
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
-| Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, revisores, labels, comandos de preparo do worktree e de validação antes do PR |
+| Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
 | Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
@@ -157,6 +157,7 @@ pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → 
          ├─ revisão "pediu mudanças" com texto → planning (automático)
          ├─ revisão sem texto → changes_requested (usuário descreve) → planning
          ├─ merge bloqueado por conflito → resolving_conflicts (automático) → pr_open
+         ├─ merge automático (se ligado na central) → merging_pr → deleting_pr_branch → finishing (limpeza) → done
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
 done → Reabrir mesa (texto ao planejador) → planning
@@ -213,6 +214,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   planejamento e o conflito fica para a próxima. Se a resolução não puder começar (OpenCode
   indisponível, limite de mesas…), a mesa permanece elegível e o motivo vira aviso; falha/interrupção
   do turno deixam **Tentar novamente** e **Voltar ao planejamento** na barra de ações.
+- **Merge automático (OPE-50)**: opção **"Merge automático"** nas configurações da central (aba Git e PR, `git.autoMerge`, padrão **desligada**; campos antigos caem nela pelo `parseCentralConfig`). Não combina com **PR rascunho** (o schema recusa as duas ligadas — `centralConfigSchema`, mesma regra na tela e na API). Com a opção ligada, a rotina `agentic-pr-watch` mergeia o **PR do próprio agente** assim que ele fica pronto no GitHub (`prMergeReady`: `mergeable: true`, `mergeable_state` `clean`/`behind`/`has_hooks` e fora do rascunho), na etapa **`merging_pr`** (agente da etapa **Pull Request**), sem nova aprovação. O prompt exige **merge commit** (`gh pr merge --merge`), proíbe `--admin`/`--auto`/squash/rebase/force-push e manda parar se o repositório recusar por verificações/revisões/regras (as proteções nunca são contornadas). O **bloco JSON do agente não basta**: o merge é confirmado no GitHub (`merged` + `merge_commit_sha`) antes de concluir. Confirmado o merge, o agente apaga a **branch remota de origem** na etapa **`deleting_pr_branch`** (`git push origin --delete <branch>`; branch já ausente conta como sucesso) — só quando a branch do PR é a esperada pela mesa; se divergir, a exclusão é cancelada com aviso. A exclusão remota é um passo próprio, independente de **"apagar a branch local"** da limpeza (`cleanup.deleteBranch`). Depois vem a **mesma conclusão** do merge manual: tarefa para a coluna "Ao concluir" (fecha a issue pelo vínculo), auditoria, limpeza e exclusão da sessão. Ligar a opção vale também para os **PRs já abertos** pelas mesas da central (verificados a cada varredura). Falha/interrupção em `merging_pr`/`deleting_pr_branch` deixa a mesa em **Tentar novamente**/**Reconectar** (sem "Voltar ao planejamento") e a mesa **não** fica em `pr_open`, então a varredura não repete a operação sozinha.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
   é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
   tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, `docker compose
@@ -303,6 +305,6 @@ merge, reabrir, excluir).
 `__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
-conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`) e conflito de merge do PR
-(`workflow-pr-conflicts`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
+conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
+(`workflow-pr-conflicts`) e merge automático do PR (`pr-automation`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.
