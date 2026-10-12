@@ -17,8 +17,8 @@ import { isWorkbenchActive } from "./hub"
 
 /** Um build está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
 async function hasActiveBuild(): Promise<boolean> {
-    const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1 }).lean()
-    return building.some((item) => isWorkbenchActive(String(item._id)))
+    const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1 }).lean()
+    return building.some((item) => item.previewBuild?.method !== "github" && isWorkbenchActive(String(item._id)))
 }
 
 /** Mesas aguardando a vez do build, na ordem de chegada (FIFO). */

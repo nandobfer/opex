@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   publishAgentic: vi.fn(async () => undefined),
   loadCentral: vi.fn(),
-  repoForProject: vi.fn(async () => null),
+  repoForProject: vi.fn(),
+  shell: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
   syncTimer: vi.fn(async () => undefined),
   pumpQueue: vi.fn(async () => undefined),
   recordAudit: vi.fn(async () => undefined),
@@ -27,6 +28,7 @@ vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit,
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/ai/opencode-client', () => ({
+  runOpencodeShell: mocks.shell,
   getOpencodeClient: vi.fn(async () => ({
     session: {
       get: async () => ({ id: 'sess-1', location: { directory: '/home/u/app/worktrees/ope-53' } }),
@@ -74,7 +76,7 @@ vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
-import { implement, startWorkbench } from '@/features/agentic/server/workflow'
+import { implement, startWorkbench, retry } from '@/features/agentic/server/workflow'
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]
@@ -108,6 +110,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   model.docs.length = 0
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
+  mocks.repoForProject.mockResolvedValue(null)
   mocks.settings.mockResolvedValue({ settings: DEFAULT_AGENTIC_SETTINGS })
   mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) =>
     request.stage === 'opening_pr' ? succeeded('```json\n{"url":"https://github.com/org/app/pull/9","number":9}\n```') : succeeded('ok'),
@@ -152,5 +155,52 @@ describe('fluxo PR automático', () => {
     mocks.getTask.mockResolvedValue({ id: 't2', code: 'OPE-54', title: 'Outra', columnId: 'col', project: { id: 'p1' }, agenticFlow: 'preview' })
     await startWorkbench('c1', 't2')
     expect(model.docs[0]!.agenticFlow).toBe('preview')
+  })
+})
+
+describe('prévia GitHub Action', () => {
+  const remote = () => {
+    const config = defaultCentralConfig('/home/u/app')
+    config.environment.previewMethod = 'github'
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config })
+    mocks.repoForProject.mockResolvedValue({ repo: 'org/app', repoUrl: 'https://github.com/org/app' })
+    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) =>
+      succeeded(request.stage === 'building' ? '```json\n{"ok":true}\n```' : 'ok'),
+    )
+  }
+
+  it('encadeia build remoto sem fila e preserva a reserva da porta', async () => {
+    remote()
+    const wb = await workbench({ agenticFlow: 'preview', port: 4010 })
+    await implement(wb._id)
+    await waitForStage('preview')
+    expect(model.docs[0]!.buildQueuedAt ?? null).toBeNull()
+    expect(model.docs[0]!.previewBuild).toMatchObject({ method: 'github', statePath: expect.stringContaining('remote-preview-') })
+    expect(model.docs[0]!.previewUrl).toBe('http://localhost:4010')
+    expect(model.docs[0]!.pr).toBeNull()
+    expect(mocks.runTurn.mock.calls.map(([, r]) => r.stage)).toEqual(['implementing', 'building'])
+    expect(mocks.runTurn.mock.calls[1][1].text).toContain('scripts/preview-github.ts')
+  })
+
+  it('PR automático pula também o método remoto', async () => {
+    remote()
+    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) =>
+      succeeded(request.stage === 'opening_pr' ? '```json\n{"url":"https://github.com/org/app/pull/9","number":9}\n```' : 'ok'),
+    )
+    const wb = await workbench({ agenticFlow: 'auto_pr' })
+    await implement(wb._id)
+    await waitForStage('pr_open')
+    expect(mocks.allocatePort).not.toHaveBeenCalled()
+    expect(model.docs[0]!.previewBuild).toBeUndefined()
+  })
+
+  it('retentativa remota não entra na fila mesmo se a central agora estiver Local', async () => {
+    mocks.repoForProject.mockResolvedValue({ repo: 'org/app' })
+    mocks.runTurn.mockResolvedValue(succeeded('```json\n{"ok":true}\n```'))
+    const wb = await workbench({ stage: 'building', runState: 'failed', port: 4010, previewBuild: { method: 'github', attempt: 'old', statePath: '/tmp/old' }, lastPrompt: { stage: 'building', text: 'old' } })
+    await retry(wb._id)
+    await waitForStage('preview')
+    expect(model.docs[0]!.buildQueuedAt ?? null).toBeNull()
+    expect((model.docs[0]!.previewBuild as { attempt: string }).attempt).not.toBe('old')
   })
 })

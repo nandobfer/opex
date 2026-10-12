@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
+import { OptionTabs } from "@/components/ui/option-tabs"
+import { AnimatePresence, motion } from "framer-motion"
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../../constants"
 import type { CentralForm } from "./form"
 
@@ -17,15 +19,25 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
             <CardHeader>
                 <CardTitle className="text-base">Prévia (Docker Compose)</CardTitle>
                 <CardDescription>
-                    Cada mesa recebe uma porta livre entre {env.previewPortMin || PREVIEW_PORT_MIN} e {env.previewPortMax || PREVIEW_PORT_MAX}. O agente roda{" "}
+                    Cada mesa recebe uma porta livre entre {env.previewPortMin || PREVIEW_PORT_MIN} e {env.previewPortMax || PREVIEW_PORT_MAX}. {env.previewMethod === "github" ? "O GitHub constrói a imagem e o agente publica sem build local." : "O agente constrói no worktree."}{" "}
                     <code className="font-mono text-foreground">
-                        {env.portEnvVar || "PORT"}={env.previewPortMin || PREVIEW_PORT_MIN} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d --build
+                        {env.portEnvVar || "PORT"}={env.previewPortMin || PREVIEW_PORT_MIN} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}
                     </code>{" "}
                     no worktree.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <div className={FORM_GRID_WIDE}>
+                    <Field id="central-preview-method" label="Construir prévia">
+                        <OptionTabs id="central-preview-method" aria-label="Método de construção da prévia" value={env.previewMethod ?? "local"} options={[{ value: "local", label: "Local" }, { value: "github", label: "GitHub Action" }]} onChange={(value) => form.setValue("environment.previewMethod", value, { shouldDirty: true, shouldValidate: true })} />
+                    </Field>
+                    <AnimatePresence initial={false}>
+                        {env.previewMethod === "github" && <motion.div className="col-span-full space-y-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+                            <p className="text-sm text-muted-foreground">Testes e build no GitHub, sem fila local. A branch é publicada antes da aprovação, sem abrir PR. Instale o workflow e scripts com a skill setup-preview-workflow.</p>
+                            <Field id="central-preview-workflow" label="Workflow do GitHub" error={errors?.githubWorkflow?.message}><Input id="central-preview-workflow" {...form.register("environment.githubWorkflow")} /></Field>
+                            <Field id="central-preview-service" label="Serviço do Compose" error={errors?.previewService?.message}><Input id="central-preview-service" {...form.register("environment.previewService")} /></Field>
+                        </motion.div>}
+                    </AnimatePresence>
                     <Field id="central-env-compose" label="Arquivo do compose" error={errors?.composeFile?.message}>
                         <Input id="central-env-compose" className="font-mono" placeholder="Vazio: o padrão do projeto" {...form.register("environment.composeFile")} />
                     </Field>
