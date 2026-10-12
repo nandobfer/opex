@@ -168,3 +168,21 @@ describe('leitura das respostas', () => {
     expect(formatPrFeedback([{ author: 'ana', body: '  ', comments: [] }])).toBe('')
   })
 })
+
+describe('fluxos alternativos (prévia vs PR automático)', () => {
+  it('PR automático não afirma que a prévia foi aprovada', () => {
+    const task = { code: 'GO-DEV-12', title: 'Exportar' }
+    const auto = prPrompt(config, ctx, task, null, { fromPreview: false })
+    expect(auto).toContain('PR automático')
+    expect(auto).not.toContain('O usuário aprovou a prévia')
+    expect(prPrompt(config, ctx, task, null)).toContain('O usuário aprovou a prévia')
+  })
+
+  it('limpeza sem prévia não manda derrubar o ambiente, mas mantém o resto', () => {
+    const text = cleanupPrompt({ ...config, cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true } }, ctx, null, { preview: false })
+    expect(text).not.toContain('docker compose')
+    expect(text).toContain('session_move')
+    expect(text).toContain('git worktree remove')
+    expect(text).toContain('git branch -D')
+  })
+})

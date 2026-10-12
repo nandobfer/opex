@@ -64,6 +64,7 @@ vi.mock('@/lib/db/models/Orcamento', async () => {
 })
 
 import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
+import { updateTaskSchema } from '@/features/tasks/schemas'
 import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, setTaskClient, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
 const reset = () => {
@@ -426,5 +427,46 @@ describe('cliente da tarefa (editar na página da tarefa)', () => {
 
     const estimate = await updateTaskEstimate(a.id, { hours: 3 }, 'local')
     expect(estimate).toMatchObject({ hours: 3, factor: 2, hourlyRate: 100, clientHours: 6, billingBrl: 600 })
+  })
+})
+
+describe('fluxo da mesa da tarefa (agenticFlow)', () => {
+  it('nasce em "preview" e passa para "auto_pr" com auditoria e tempo real', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    expect((await getTask(a.id)).agenticFlow).toBe('preview')
+
+    mocks.recordAudit.mockClear()
+    mocks.publish.mockClear()
+    await updateTask(a.id, { agenticFlow: 'auto_pr' }, 'local')
+
+    expect((await getTask(a.id)).agenticFlow).toBe('auto_pr')
+    expect(mocks.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entidade: 'Tarefa',
+        entidadeId: a.id,
+        acao: 'ATUALIZAR',
+        antes: expect.objectContaining({ fluxo: 'Publicar prévia' }),
+        depois: expect.objectContaining({ fluxo: 'PR automático' }),
+      }),
+    )
+    expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
+  })
+
+  it('a mudança de fluxo não mexe em outros campos nem sincroniza com a issue do GitHub', async () => {
+    const pid = await seedProject()
+    const a = await create(pid, { title: 'Original' })
+    mocks.pushIssues.mockClear()
+
+    await updateTask(a.id, { agenticFlow: 'auto_pr' }, 'local')
+
+    expect(mocks.pushIssues).not.toHaveBeenCalled()
+    expect(await getTask(a.id)).toMatchObject({ title: 'Original', description: null, agenticFlow: 'auto_pr' })
+  })
+
+  it('o schema recusa fluxo desconhecido e aceita os dois válidos', () => {
+    expect(updateTaskSchema.safeParse({ agenticFlow: 'auto_pr' }).success).toBe(true)
+    expect(updateTaskSchema.safeParse({ agenticFlow: 'preview' }).success).toBe(true)
+    expect(updateTaskSchema.safeParse({ agenticFlow: 'turbo' }).success).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskType } from "./constants"
+import type { TaskAgenticFlow, TaskPriority, TaskType } from "./constants"
 
 /** Referência com nome (projeto). */
 export interface NamedRef {
@@ -48,6 +48,8 @@ export interface TaskDto {
     issue?: TaskIssueRef | null
     /** Estimativa/orçamento (portal do cliente) — `null` quando não houver. */
     estimate: TaskEstimate | null
+    /** Fluxo da mesa de trabalho escolhido na tela de desenvolvimento (padrão `preview`). */
+    agenticFlow: TaskAgenticFlow
 }
 
 export interface TaskIssueRef {

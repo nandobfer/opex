@@ -47,10 +47,11 @@ function toClienteEstimate(estimate: TaskDto["estimate"]): ClienteTaskEstimateDt
     return estimate ? { clientHours: estimate.clientHours, billingBrl: estimate.billingBrl } : null
 }
 
-/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo e as tags (internas). */
+/** Tarefa na visão do cliente (lista): remove as horas reais/fator/custo/modelo, as tags e o fluxo da mesa (internos). */
 export function toClienteTaskDto(task: TaskDto): ClienteTaskDto {
-    const { tags, ...rest } = task
+    const { tags, agenticFlow, ...rest } = task
     void tags
+    void agenticFlow
     return { ...rest, estimate: toClienteEstimate(task.estimate) }
 }
 

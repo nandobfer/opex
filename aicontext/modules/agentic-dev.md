@@ -162,7 +162,8 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   pendente do agente, falha/interrupção (regra `workbenchUserWaitReason`; o chip de etapa deixa de
   pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
   **concluída** não gera warning.
-- Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa e um campo
+- Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa, a
+  switch **Fluxo da mesa** (Publicar prévia / PR automático, ver "Fluxo da mesa") e um campo
   opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
   e exibidas como mensagem do usuário na saída). O botão **Abrir mesa e gerar o plano** desabilita com
   o motivo quando indisponível, com a central desativada ou com a tarefa de outro projeto; em fila,
@@ -179,7 +180,8 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 
 ```
 planning → plan_review ─┬─ Solicitar correção do plano → planning
-                        └─ Implementar (texto opcional) → implementing → build_queued → building → preview
+                        ├─ Implementar (fluxo Publicar prévia) → implementing → build_queued → building → preview
+                        └─ Implementar (fluxo PR automático)   → implementing → opening_pr → pr_open
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
 pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
@@ -210,6 +212,14 @@ done → Reabrir mesa (texto ao planejador) → planning
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
   comportamento das informações informadas na abertura da mesa.
+- **Fluxo da mesa (OPE-53)**: o estado inicial da mesa traz a switch **Fluxo da mesa** —
+  **Publicar prévia** (padrão) ou **PR automático** —, salva na hora na tarefa
+  (`DevTask.agenticFlow`, ajustável por `PATCH /api/tasks/[id]`) e copiada para a mesa ao abrir
+  (`agenticFlow`; registros antigos caem em `preview`). Em **PR automático** a implementação vai
+  **direto** ao PR (etapa `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a
+  prévia e a aprovação: nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do
+  plano continua obrigatória nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR
+  automático.
 - **Build**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
@@ -338,6 +348,7 @@ merge, reabrir, excluir).
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
-(`workflow-pr-conflicts`), merge automático do PR (`pr-automation`) e backup da prévia
-(`preview-backup` e `workflow-preview-backup`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
+(`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
+(`preview-backup` e `workflow-preview-backup`) e fluxo da mesa — Publicar
+prévia vs PR automático (`workflow-flow-mode`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

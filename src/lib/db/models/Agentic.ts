@@ -90,6 +90,8 @@ export interface IAgenticWorkbench {
     buildQueuedAt: Date | null
     previewUrl: string | null
     previewHealthy: boolean | null
+    /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
+    agenticFlow: string
     /** Backup do MongoDB da prévia (reservado no build); `null` quando a mesa não tem backup. */
     previewBackup: IPreviewBackup | null
     plans: IPlanVersion[]
@@ -128,6 +130,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         buildQueuedAt: { type: Date, default: null },
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
+        agenticFlow: { type: String, default: "preview" },
         previewBackup: { type: Schema.Types.Mixed, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
         pendingFeedback: { type: String, default: null },

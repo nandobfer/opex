@@ -1,7 +1,7 @@
 import type { IAgenticCentral, IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { WORKBENCH_STAGES, RUN_STATES, type RunState, type WorkbenchStage } from "../constants"
-import { parseCentralConfig } from "../logic"
+import { parseCentralConfig, asAgenticFlow } from "../logic"
 import type { CentralDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
@@ -46,6 +46,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         port: doc.port ?? null,
         previewUrl: doc.previewUrl ?? null,
         previewHealthy: doc.previewHealthy ?? null,
+        agenticFlow: asAgenticFlow(doc.agenticFlow),
         buildQueuePosition,
         plans: (doc.plans ?? []).map((plan) => ({ version: plan.version, text: plan.text, feedback: plan.feedback ?? null, createdAt: new Date(plan.createdAt).toISOString() })),
         pr: doc.pr ? { number: doc.pr.number, url: doc.pr.url, state: doc.pr.state, mergedAt: iso(doc.pr.mergedAt) } : null,

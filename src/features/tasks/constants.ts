@@ -74,6 +74,19 @@ export const TASK_SORT_LABELS: Record<TaskSortKey, string> = {
 export const TASK_VIEW_MODES = ["kanban", "table"] as const
 export type TaskViewMode = (typeof TASK_VIEW_MODES)[number]
 
+/**
+ * Fluxo de execução escolhido para a mesa de trabalho da tarefa (estado inicial da mesa).
+ * `preview`: sobe a prévia e espera a aprovação antes de abrir o PR (comportamento padrão).
+ * `auto_pr`: pula a prévia e abre o PR assim que a implementação termina.
+ */
+export const TASK_AGENTIC_FLOWS = ["preview", "auto_pr"] as const
+export type TaskAgenticFlow = (typeof TASK_AGENTIC_FLOWS)[number]
+
+export const TASK_AGENTIC_FLOW_LABELS: Record<TaskAgenticFlow, string> = {
+    preview: "Publicar prévia",
+    auto_pr: "PR automático",
+}
+
 /** Evento Pusher (canal `private-app`) quando tarefas mudam. Payload: `{ ids: string[] }`. */
 export const TASKS_UPDATED_EVENT = "tasks-updated"
 

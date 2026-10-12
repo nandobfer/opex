@@ -52,6 +52,11 @@ export interface IDevTask {
     tagsUpdatedAt: Date | null
     /** Estimativa/orçamento do portal do cliente (`null` quando não veio do portal). */
     estimate: ITaskEstimate | null
+    /**
+     * Fluxo da mesa de trabalho escolhido na tela de desenvolvimento: `"preview"` (sobe a prévia,
+     * padrão) ou `"auto_pr"` (pula a prévia e abre o PR ao fim da implementação).
+     */
+    agenticFlow: string
     createdAt: Date
     updatedAt: Date
 }
@@ -89,6 +94,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         tagsSourceHash: { type: String, default: null },
         tagsUpdatedAt: { type: Date, default: null },
         estimate: { type: TaskEstimateSchema, default: null },
+        agenticFlow: { type: String, default: "preview" },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },
 )

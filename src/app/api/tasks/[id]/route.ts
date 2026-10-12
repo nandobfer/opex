@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic"
 /** GET /api/tasks/[id] — tarefa completa (comentários, histórico, horas). */
 export const GET = withRoute<{ id: string }>(async ({ params }) => ok(await getTask(params.id)))
 
-/** PATCH /api/tasks/[id] — edita título, descrição, especificação, tipo, prioridade, projeto ou coluna. */
+/** PATCH /api/tasks/[id] — edita título, descrição, especificação, tipo, prioridade, projeto, coluna ou o fluxo da mesa (`agenticFlow`). */
 export const PATCH = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, updateTaskSchema)
     if (!body.ok) return body.response

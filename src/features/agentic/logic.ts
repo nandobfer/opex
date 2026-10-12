@@ -1,7 +1,11 @@
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, type AgentRole, type RunState, type WorkbenchStage } from "./constants"
+import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { centralConfigSchema, defaultCentralConfig, type AgentConfig, type AgenticSettings, type CentralConfig } from "./schemas"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
+
+/** Fluxo da mesa salvo (tarefa/mesa) → valor conhecido; qualquer registro antigo cai em `preview`. */
+export const asAgenticFlow = (value: string | null | undefined): TaskAgenticFlow => (value === "auto_pr" ? "auto_pr" : "preview")
 
 /**
  * Agente efetivo de uma etapa: o override da central vale campo a campo (agente vazio usa o

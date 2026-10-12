@@ -27,7 +27,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <WorkbenchHeader workbench={workbench} central={central} connected={connected} />
-            <StageSteps stage={workbench.stage} runState={workbench.runState} />
+            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} />
             <div role="tablist" aria-label="Visão da mesa" className="flex gap-1 border-b px-4">
                 {tabs.map((tab) => (
                     <button

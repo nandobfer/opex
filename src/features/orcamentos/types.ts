@@ -105,7 +105,7 @@ export interface ClienteTaskEstimateDto {
  * Tarefa na visão do cliente (lista): igual ao `TaskDto` interno, mas a estimativa **não** traz as
  * horas reais, o fator, o custo/hora nem o modelo — o cliente só vê o tempo inflado e o faturamento.
  */
-export interface ClienteTaskDto extends Omit<TaskDto, "estimate" | "tags"> {
+export interface ClienteTaskDto extends Omit<TaskDto, "estimate" | "tags" | "agenticFlow"> {
     estimate: ClienteTaskEstimateDto | null
 }
 

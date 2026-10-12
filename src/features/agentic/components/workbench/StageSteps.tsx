@@ -3,14 +3,19 @@
 import { motion } from "framer-motion"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { WORKBENCH_STEPS, type RunState, type WorkbenchStage } from "../../constants"
 
-/** Passos da mesa (Plano → Implementação → Prévia → PR → Concluída) com o atual em destaque. */
-export function StageSteps({ stage, runState }: { stage: WorkbenchStage; runState: RunState }) {
-    const current = WORKBENCH_STEPS.findIndex((step) => (step.stages as readonly WorkbenchStage[]).includes(stage))
+/**
+ * Passos da mesa (Plano → Implementação → Prévia → PR → Concluída) com o atual em destaque. No
+ * fluxo **PR automático** a prévia não existe e o passo "Prévia" sai da trilha.
+ */
+export function StageSteps({ stage, runState, flow = "preview" }: { stage: WorkbenchStage; runState: RunState; flow?: TaskAgenticFlow }) {
+    const steps = flow === "auto_pr" ? WORKBENCH_STEPS.filter((step) => step.id !== "preview") : WORKBENCH_STEPS
+    const current = steps.findIndex((step) => (step.stages as readonly WorkbenchStage[]).includes(stage))
     return (
         <ol className="flex items-center gap-1 overflow-x-auto border-b px-4 py-2.5" aria-label="Etapas da mesa">
-            {WORKBENCH_STEPS.map((step, index) => {
+            {steps.map((step, index) => {
                 const done = index < current || stage === "done"
                 const active = index === current && stage !== "done"
                 return (
