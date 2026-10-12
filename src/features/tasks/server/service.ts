@@ -33,7 +33,7 @@ const projectRef = (project: IProject | null): ProjectRef | null =>
     project ? { id: String((project as unknown as { _id: unknown })._id), name: project.name, repo: project.repo, sigla: project.sigla } : null
 
 /** Snapshot da estimativa/orçamento da tarefa no formato do DTO (visões interna e do cliente). */
-function toEstimateDto(estimate: ITaskEstimate): TaskEstimate {
+export function toEstimateDto(estimate: ITaskEstimate): TaskEstimate {
     return {
         hours: estimate.hours ?? 0,
         clientHours: estimate.clientHours ?? 0,
@@ -152,16 +152,18 @@ async function resolveProjectClient(projectId: string): Promise<{ name: string; 
 }
 
 /**
- * Cliente de orçamento da tarefa: o `clientId` **gravado nela** tem precedência; sem ele (dados
- * legados, anteriores à edição do cliente), cai no cliente ativo que inclui o repositório.
+ * Cliente de orçamento da tarefa: o `clientId` **gravado nela** tem precedência. Sem cliente
+ * explícito (`null` — tarefa do dono ou cliente removido), **não** há inflação; apenas registros
+ * **legados** (sem o campo `clientId`) caem no cliente ativo que inclui o repositório.
  */
-async function resolveTaskClient(task: { clientId?: string | null; projectId: string }): Promise<{ name: string; profitFactor: number; hourlyRate: number } | null> {
+export async function resolveTaskClient(task: { clientId?: string | null; projectId: string }): Promise<{ name: string; profitFactor: number; hourlyRate: number } | null> {
     if (task.clientId) {
         const client = await OrcamentoClient.findById(task.clientId).lean()
         if (client) {
             return { name: client.name, profitFactor: Math.max(1, client.profitFactor ?? 1), hourlyRate: Math.max(0, client.hourlyRate ?? 0) }
         }
     }
+    if (task.clientId === null) return null
     return resolveProjectClient(task.projectId)
 }
 
@@ -411,22 +413,30 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
 }
 
 /**
- * Edita as horas estimadas de uma tarefa do portal e recalcula as horas do cliente (`H × fator`) e o
- * faturamento (`horas do cliente × custo/hora`) com o fator e o custo/hora **atuais** do cliente que
- * originou a tarefa (fallback para o snapshot se o cliente não existir).
+ * Edita as horas estimadas de uma tarefa (existe ou não estimativa prévia): recalcula o prazo do
+ * cliente (`H × fator`) e o faturamento (`horas do cliente × custo/hora`) com o fator e o custo/hora
+ * **atuais** do cliente da tarefa. **Sem cliente**, o snapshot fica neutro (fator 1, custo 0) e só
+ * as horas reais valem — a edição cria a estimativa quando a tarefa ainda não tinha.
  */
 export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateInput, actorId: string): Promise<TaskEstimate> {
     assertTaskId(id)
     await dbConnect()
     const task = await DevTask.findById(id).lean()
     if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
-    if (!task.estimate) throw new DomainError(409, "A tarefa não tem estimativa para editar", "TASK_WITHOUT_ESTIMATE")
 
     const client = await resolveTaskClient(task)
-    const factor = client?.profitFactor ?? Math.max(1, task.estimate.factor ?? 1)
-    const hourlyRate = client?.hourlyRate ?? Math.max(0, task.estimate.hourlyRate ?? 0)
+    const factor = client ? client.profitFactor : 1
+    const hourlyRate = client ? client.hourlyRate : 0
     const next = computeClientEstimate(input.hours, factor, hourlyRate)
-    const estimate: ITaskEstimate = { ...task.estimate, hours: next.hours, clientHours: next.clientHours, billingBrl: next.billingBrl, factor, hourlyRate }
+    const estimate: ITaskEstimate = {
+        hours: next.hours,
+        clientHours: next.clientHours,
+        billingBrl: next.billingBrl,
+        factor,
+        hourlyRate,
+        model: task.estimate?.model ?? null,
+        generatedAt: task.estimate?.generatedAt ? new Date(task.estimate.generatedAt) : new Date(),
+    }
 
     await DevTask.updateOne({ _id: id }, { $set: { estimate } })
     await recordAudit({
@@ -434,7 +444,7 @@ export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateIn
         entidade: TASK_AUDIT_ENTITY,
         entidadeId: id,
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { codigo: task.code, horasEstimadas: task.estimate.hours ?? 0, faturamentoEstimado: task.estimate.billingBrl ?? 0 },
+        antes: { codigo: task.code, horasEstimadas: task.estimate?.hours ?? 0, faturamentoEstimado: task.estimate?.billingBrl ?? 0 },
         depois: { codigo: task.code, horasEstimadas: next.hours, faturamentoEstimado: next.billingBrl },
     })
     await publishTasksUpdated([id])
@@ -444,7 +454,8 @@ export async function updateTaskEstimate(id: string, input: UpdateTaskEstimateIn
 /**
  * Define, troca ou remove o cliente da tarefa. Ao definir/trocar, recalcula a estimativa com o fator
  * de lucro e o custo/hora do cliente escolhido, **preservando as horas** já estimadas (ou `0` quando
- * ainda não havia estimativa); ao remover (`null`), zera o cliente e a estimativa. Só aceita cliente
+ * ainda não havia estimativa); ao remover (`null`), **preserva as horas reais** e zera a inflação
+ * (fator 1, custo 0) — a estimativa só desaparece se a tarefa não tinha nenhuma. Só aceita cliente
  * **ativo** que inclua o repositório da tarefa (mesma regra do portal).
  */
 export async function setTaskClient(id: string, clientId: string | null, actorId: string): Promise<{ clientId: string | null; estimate: TaskEstimate | null }> {
@@ -457,17 +468,22 @@ export async function setTaskClient(id: string, clientId: string | null, actorId
 
     if (clientId === null) {
         if ((task.clientId ?? null) === null && !task.estimate) return { clientId: null, estimate: null }
-        await DevTask.updateOne({ _id: id }, { $set: { clientId: null, estimate: null } })
+        // Preserva as horas reais; sem cliente, o fator e o custo/hora ficam neutros (não infla).
+        const hours = task.estimate?.hours ?? 0
+        const estimate: ITaskEstimate | null = task.estimate
+            ? { hours, clientHours: hours, billingBrl: 0, factor: 1, hourlyRate: 0, model: task.estimate.model ?? null, generatedAt: task.estimate.generatedAt ? new Date(task.estimate.generatedAt) : new Date() }
+            : null
+        await DevTask.updateOne({ _id: id }, { $set: { clientId: null, estimate } })
         await recordAudit({
             userId: actorId,
             entidade: TASK_AUDIT_ENTITY,
             entidadeId: id,
             acao: AcaoAuditoria.ATUALIZAR,
             antes: { codigo: task.code, cliente: beforeName },
-            depois: { codigo: task.code, cliente: null, estimativa: "removida" },
+            depois: { codigo: task.code, cliente: null, estimativa: estimate ? "mantida (sem cliente)" : "removida" },
         })
         await publishTasksUpdated([id])
-        return { clientId: null, estimate: null }
+        return { clientId: null, estimate: estimate ? toEstimateDto(estimate) : null }
     }
 
     const client = await OrcamentoClient.findById(clientId).lean()
