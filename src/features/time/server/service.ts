@@ -159,7 +159,35 @@ export async function listActiveTimers(): Promise<TimeLogDto[]> {
     return logs.map((log) => toDto(log, tasks.get(log.taskId)))
 }
 
-export async function listTimeLogs(query: { from?: string; to?: string; page: number }): Promise<TimeLogPageDto> {
+/**
+ * Recorte por repositório/tipo: os filtros são da **tarefa** (não do apontamento), então resolve
+ * primeiro os ids das tarefas que atendem e restringe os apontamentos por `taskId`. `null` quando
+ * não há filtro; lista vazia quando nenhuma tarefa atende (nenhum apontamento passa).
+ */
+async function taskIdsForFilters(projects: readonly string[], types: readonly string[]): Promise<string[] | null> {
+    if (projects.length === 0 && types.length === 0) return null
+    const filter: Record<string, unknown> = {}
+    if (projects.length) filter.projectId = { $in: [...projects] }
+    if (types.length) filter.taskType = { $in: [...types] }
+    const docs = await DevTask.find(filter).select({ _id: 1 }).lean()
+    return docs.map((doc) => String(doc._id))
+}
+
+export interface ListTimeLogsParams {
+    from?: string
+    to?: string
+    page: number
+    /** Ids dos projetos (repositórios vinculados); vazio = todos. */
+    projects?: readonly string[]
+    /** Tipos de tarefa; vazio = todos. */
+    types?: readonly string[]
+}
+
+/**
+ * Apontamentos do período (mais recente primeiro), paginados, com os totais **do conjunto
+ * filtrado**. O recorte de repositório/tipo usa a classificação **atual** da tarefa.
+ */
+export async function listTimeLogs(query: ListTimeLogsParams): Promise<TimeLogPageDto> {
     await dbConnect()
     const filter: Record<string, unknown> = {}
     if (query.from || query.to) {
@@ -168,6 +196,8 @@ export async function listTimeLogs(query: { from?: string; to?: string; page: nu
             ...(query.to ? { $lte: new Date(query.to) } : {}),
         }
     }
+    const taskIds = await taskIdsForFilters(query.projects ?? [], query.types ?? [])
+    if (taskIds) filter.taskId = { $in: taskIds }
     const [logs, total] = await Promise.all([
         TimeLog.find(filter)
             .sort({ startTime: -1 })

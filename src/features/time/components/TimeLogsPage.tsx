@@ -3,46 +3,55 @@
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { endOfDay, parseISO, startOfDay } from "date-fns"
-import { Clock, Loader2, RefreshCw } from "lucide-react"
+import { Clock, FilterX, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DATE_PRESET, PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
+import { DATE_PRESET } from "@/components/ui/preset-date-range-filter"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { listContainer } from "@/components/motion/presets"
-import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
+import { useUrlFilters } from "@/hooks/useUrlFilters"
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
 import { apiErrorMessage } from "@/lib/api"
+import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
 import { formatMinutes } from "@/features/tasks/format"
 import { formatCostUsd } from "../format"
+import { hasTimeLogFilters, TIME_LOG_FILTER_SCHEMA, type TimeLogFilters } from "../filters"
 import { groupTimeLogsByDay, groupTimeLogsByTask } from "../grouping"
 import { useTimeLogs } from "../hooks/useTime"
+import { TimeLogFiltersBar } from "./TimeLogFiltersBar"
 import { TimeLogTaskGroup } from "./TimeLogTaskGroup"
 import { TimerIndicator } from "./TimerIndicator"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
-const RANGE_SCHEMA = { from: urlFilterCodecs.string(), to: urlFilterCodecs.string() }
 
 /**
- * Horas agênticas (`/tarefas/horas`): apontamentos das mesas por período (na URL), agrupados por dia
- * e, dentro de cada dia, por task/mesa (grupos expansíveis, recolhidos por padrão). **Somente leitura**
- * — o timer é controlado pela mesa de trabalho; aqui só se consulta.
+ * Horas agênticas (`/tarefas/horas`): apontamentos das mesas por período, repositório e tipo de
+ * tarefa (tudo na URL e recortado pela API), agrupados por dia e, dentro de cada dia, por task/mesa
+ * (grupos expansíveis, recolhidos por padrão). **Somente leitura** — o timer é controlado pela mesa
+ * de trabalho; aqui só se consulta.
  */
 export function TimeLogsPage() {
     const reduceMotion = useReducedMotion()
-    const defaults = useMemo(() => {
-        const range = DATE_PRESET.week.getRange()
-        return { from: range.startDate, to: range.endDate }
-    }, [])
-    const [range, setRange] = useUrlFilters(defaults, RANGE_SCHEMA)
+    const defaults = useMemo<TimeLogFilters>(
+        () => {
+            const range = DATE_PRESET.week.getRange()
+            return { from: range.startDate, to: range.endDate, projects: [], types: [] }
+        },
+        [],
+    )
+    const [filters, setFilters, resetFilters] = useUrlFilters(defaults, TIME_LOG_FILTER_SCHEMA)
+    const options = useTaskOptions()
     const query = useMemo(
         () => ({
-            from: range.from ? startOfDay(parseISO(range.from)).toISOString() : "",
-            to: range.to ? endOfDay(parseISO(range.to)).toISOString() : "",
+            from: filters.from ? startOfDay(parseISO(filters.from)).toISOString() : "",
+            to: filters.to ? endOfDay(parseISO(filters.to)).toISOString() : "",
+            projects: filters.projects,
+            types: filters.types,
         }),
-        [range.from, range.to],
+        [filters.from, filters.to, filters.projects, filters.types],
     )
     const logsQuery = useTimeLogs(query)
     const { sentinelRef, supported } = useInfiniteScroll({
@@ -68,6 +77,7 @@ export function TimeLogsPage() {
     const totalMinutes = pages[0]?.totalMinutes ?? 0
     const totalCostUsd = pages[0]?.totalCostUsd ?? 0
     const total = pages[0]?.total ?? 0
+    const filtering = hasTimeLogFilters(filters)
     const view = logsQuery.isLoading ? "loading" : logsQuery.isError ? "error" : logs.length === 0 ? "empty" : "list"
 
     return (
@@ -93,25 +103,29 @@ export function TimeLogsPage() {
                 </div>
             </header>
 
+            <TimeLogFiltersBar
+                filters={filters}
+                setFilters={setFilters}
+                onClear={resetFilters}
+                total={total}
+                projects={options.data?.projects ?? []}
+                projectsError={options.isError}
+                onRetryProjects={() => void options.refetch()}
+            />
+
             <Card>
-                <CardContent className="flex flex-col gap-4 pt-6 md:flex-row md:items-end md:justify-between">
-                    <div className="flex flex-col gap-2 md:w-[320px]">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Período</span>
-                        <PresetDateRangeFilter startDate={range.from} endDate={range.to} onChange={(next) => setRange({ from: next.startDate, to: next.endDate })} />
+                <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-3">
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total no período</p>
+                        <p className="font-mono text-2xl font-bold text-primary">{logsQuery.data ? <AnimatedNumber value={totalMinutes} formatter={formatMinutes} /> : "—"}</p>
                     </div>
-                    <div className="flex gap-6">
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total no período</p>
-                            <p className="font-mono text-2xl font-bold text-primary">{logsQuery.data ? <AnimatedNumber value={totalMinutes} formatter={formatMinutes} /> : "—"}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apontamentos</p>
-                            <p className="font-mono text-2xl font-bold">{logsQuery.data ? <AnimatedNumber value={total} /> : "—"}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Custo</p>
-                            <p className="font-mono text-2xl font-bold">{logsQuery.data ? formatCostUsd(totalCostUsd) : "—"}</p>
-                        </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apontamentos</p>
+                        <p className="font-mono text-2xl font-bold">{logsQuery.data ? <AnimatedNumber value={total} /> : "—"}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Custo</p>
+                        <p className="font-mono text-2xl font-bold">{logsQuery.data ? formatCostUsd(totalCostUsd) : "—"}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -126,7 +140,15 @@ export function TimeLogsPage() {
                         </div>
                     )}
                     {view === "error" && <ErrorState title="Não foi possível carregar os apontamentos" description={apiErrorMessage(logsQuery.error, "Tente novamente.")} onRetry={() => void logsQuery.refetch()} />}
-                    {view === "empty" && <EmptyState icon={Clock} title="Nenhum apontamento neste período" description="Abra uma mesa de trabalho para o tempo começar a ser registrado." />}
+                    {view === "empty" && (
+                        <EmptyState
+                            icon={filtering ? FilterX : Clock}
+                            title={filtering ? "Nenhum apontamento com estes filtros" : "Nenhum apontamento neste período"}
+                            description={filtering ? "Ajuste ou limpe os filtros para ver mais apontamentos." : "Abra uma mesa de trabalho para o tempo começar a ser registrado."}
+                            actionLabel={filtering ? "Limpar filtros" : undefined}
+                            onAction={filtering ? resetFilters : undefined}
+                        />
+                    )}
                     {view === "list" && (
                         <div className="space-y-6">
                             {dayGroups.map(({ day, groups }) => (
