@@ -11,7 +11,7 @@ function loginRequest(origin: string, headers: Record<string, string> = {}) {
   return new NextRequest(`${origin}/api/auth/login`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ password: 'senha-secreta' }),
+    body: JSON.stringify({ identifier: 'fernando', password: 'senha-secreta' }),
   })
 }
 
@@ -20,23 +20,48 @@ function logoutRequest(origin: string, headers: Record<string, string> = {}) {
 }
 
 beforeEach(() => {
-  process.env.APP_PASSWORD = 'senha-secreta'
+  process.env.ADMIN_USER = 'fernando'
+  process.env.ADMIN_EMAIL = 'dono@opex.dev'
+  process.env.ADMIN_PASSWORD = 'senha-secreta'
   process.env.AUTH_SECRET = 'segredo-de-teste'
   resetRateLimit('local')
 })
 
 afterEach(() => {
-  delete process.env.APP_PASSWORD
+  delete process.env.ADMIN_USER
+  delete process.env.ADMIN_EMAIL
+  delete process.env.ADMIN_PASSWORD
   delete process.env.AUTH_SECRET
 })
 
 describe('POST /api/auth/login: cookie de sessão', () => {
-  it('acesso HTTP (IP:porta) emite o cookie SEM Secure', async () => {
+  it('acesso HTTP (IP:porta) emite o cookie SEM Secure e manda o dono para /dashboard', async () => {
     const res = await login(loginRequest('http://217.77.3.47:7001'), noParams)
     const setCookie = res.headers.get('set-cookie') ?? ''
     expect(res.status).toBe(200)
     expect(setCookie).toContain('opex_session=')
     expect(setCookie).not.toMatch(/;\s*Secure/i)
+    const body = await res.json()
+    expect(body.data).toMatchObject({ authenticated: true, redirectTo: '/dashboard' })
+  })
+
+  it('aceita o email do dono como identificador', async () => {
+    const request = new NextRequest('http://localhost/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier: 'dono@opex.dev', password: 'senha-secreta' }),
+    })
+    const res = await login(request, noParams)
+    expect(res.status).toBe(200)
+  })
+
+  it('recusa a senha errada com 401', async () => {
+    const request = new NextRequest('http://localhost/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ identifier: 'fernando', password: 'errada' }),
+    })
+    const res = await login(request, noParams)
+    expect(res.status).toBe(401)
+    expect(res.headers.get('set-cookie')).toBeNull()
   })
 
   it('acesso atrás de proxy TLS (x-forwarded-proto) emite o cookie COM Secure', async () => {

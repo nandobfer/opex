@@ -8,9 +8,11 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { useDashboard, useDashboardRealtime } from "../hooks/useDashboard"
 import { useDashboardPeriod } from "../hooks/useDashboardPeriod"
+import { TaskCreationActions } from "@/features/tasks/components/TaskCreationActions"
+import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { AgenticHoursSection } from "./AgenticHoursSection"
 import { DashboardHeader } from "./DashboardHeader"
-import { DashboardKpis } from "./DashboardKpis"
+import { DashboardKpis, dashboardKpiItems } from "./DashboardKpis"
 import { DashboardSkeleton } from "./DashboardSkeleton"
 import { DevCenterSection } from "./DevCenterSection"
 import { FinanceSection } from "./FinanceSection"
@@ -34,7 +36,20 @@ export function DashboardPage() {
 
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className="space-y-6">
-            <DashboardHeader period={period} onPeriodChange={setPeriod} onRefresh={refresh} refreshing={query.isFetching} />
+            <DashboardHeader
+                title="Dashboards"
+                description="Visão geral de tarefas, financeiro, horas agênticas e desenvolvimento"
+                actions={
+                    <>
+                        <TimerIndicator />
+                        <TaskCreationActions />
+                    </>
+                }
+                period={period}
+                onPeriodChange={setPeriod}
+                onRefresh={refresh}
+                refreshing={query.isFetching}
+            />
 
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} {...swap} className="space-y-6">
@@ -45,7 +60,7 @@ export function DashboardPage() {
                     {view === "empty" && <EmptyState icon={LayoutDashboard} title="Nada para mostrar" description="Ajuste o período ou cadastre tarefas para ver os indicadores." />}
                     {view === "ready" && data && (
                         <>
-                            <DashboardKpis kpis={data.kpis} />
+                            <DashboardKpis items={dashboardKpiItems(data.kpis)} />
                             <TasksOverviewSection data={data} />
                             <FinanceSection data={data} />
                             <AgenticHoursSection data={data} />

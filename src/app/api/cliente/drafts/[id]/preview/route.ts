@@ -1,8 +1,8 @@
 import { withRoute } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { requireClientActor } from "@/features/auth/server/context"
 import { clientScope } from "@/features/orcamentos/server/drafts"
 import { prepareBudgetPreview, runBudgetPreview, type BudgetPreviewEvent } from "@/features/orcamentos/server/preview"
-import { requireClient } from "@/features/orcamentos/server/token"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,8 +18,8 @@ type Params = { id: string }
  * `start`, `delta`/`tool`/`notice` à medida que chegam e um `done` (com a prévia) ou `error` final.
  */
 export const POST = withRoute<Params>(async ({ req, params }) => {
-    const client = await requireClient(req)
-    const prepared = await prepareBudgetPreview(clientScope(client), params.id)
+    const actor = await requireClientActor(req)
+    const prepared = await prepareBudgetPreview(clientScope(actor.client), params.id)
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {

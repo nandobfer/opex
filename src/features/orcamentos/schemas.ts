@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
 import { PREVIEW_CLARITY_STATUSES, type PreviewClarityDto } from "./clarity"
+import { USERNAME_PATTERN } from "./logic"
 
 /** Schemas do módulo Orçamentos — os MESMOS usados na tela, na API e no portal. */
 
@@ -100,3 +101,45 @@ export const draftEstimateSchema = z.object({
     estimatedHours: z.number().min(0).max(10_000),
 })
 export type DraftEstimate = z.infer<typeof draftEstimateSchema>
+
+/**
+ * Usuário de cliente (criar/editar). `email` e `password` são opcionais (o usuário padrão começa sem
+ * os dois, entrando só por URL). Senha **sem regra mínima**; na edição, vazio = manter a atual.
+ */
+export const clienteUserSchema = z.object({
+    username: z.string().trim().regex(USERNAME_PATTERN, "3 a 40 caracteres: letras, números, ponto, hífen ou sublinhado"),
+    email: z.union([z.string().trim().email("Email inválido").max(200), z.literal("")]).optional(),
+    password: z.string().max(200, "Máximo de 200 caracteres").optional(),
+    admin: z.boolean(),
+})
+export type ClienteUserInput = z.infer<typeof clienteUserSchema>
+
+/** Entrada do portal: seleção do cliente na sessão. */
+export const clienteSelectSchema = z.object({ clientId: objectId })
+export type ClienteSelectInput = z.infer<typeof clienteSelectSchema>
+
+const isoDate = z.string().trim().min(1).refine((value) => !Number.isNaN(new Date(value).getTime()), "Data inválida")
+
+/** Fuso IANA do navegador (ex.: `America/Sao_Paulo`); ausente → o servidor usa UTC. */
+const ianaTimeZone = z.string().refine((value) => {
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: value })
+        return true
+    } catch {
+        return false
+    }
+}, "Fuso horário inválido")
+
+const projectIdList = z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? [...new Set(value.split(",").map((id) => id.trim()).filter((id) => objectId.safeParse(id).success))] : []))
+
+/** Período do dashboard do portal (ISO opcional) e o fuso do navegador. */
+export const clientePeriodQuerySchema = z.object({ from: isoDate.optional(), to: isoDate.optional(), timeZone: ianaTimeZone.optional() })
+export type ClientePeriodQuery = z.infer<typeof clientePeriodQuerySchema>
+
+/** Financeiro do cliente: período + filtro opcional de repositórios (ids por vírgula). */
+export const clienteFinanceQuerySchema = z.object({ from: isoDate.optional(), to: isoDate.optional(), projectIds: projectIdList })
+export type ClienteFinanceQuery = z.infer<typeof clienteFinanceQuerySchema>

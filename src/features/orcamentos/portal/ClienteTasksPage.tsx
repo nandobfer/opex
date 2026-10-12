@@ -14,28 +14,19 @@ import { applyTaskFilters, DEFAULT_TASK_FILTERS, type TaskFilters } from "@/feat
 import { TaskViewSwitch } from "@/features/tasks/components/TaskViewSwitch"
 import { clienteNovaPath, clienteTarefaPath } from "../constants"
 import { repoLabelIndex } from "../logic"
-import { useClienteOptions, useClienteTasks, useSetClienteTaskPriority } from "./hooks"
-import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
+import { useClienteOptions, useClienteRealtime, useClienteTasks, useSetClienteTaskPriority } from "./hooks"
 import { ClienteFiltersBar } from "./components/ClienteFiltersBar"
 import { ClienteTaskBoard } from "./components/ClienteTaskBoard"
 import { ClienteTaskTable } from "./components/ClienteTaskTable"
 
-/** Portal do cliente: lista somente leitura das tarefas dos repositórios permitidos. */
-export function ClienteTasksPage({ token }: { token: string }) {
-    return (
-        <ClientePortalProvider token={token}>
-            <ClienteTasksView />
-        </ClientePortalProvider>
-    )
-}
-
-function ClienteTasksView() {
-    const { token } = useClientePortal()
+/** Portal do cliente: lista somente leitura das tarefas que ele solicitou. */
+export function ClienteTasksPage() {
     const router = useRouter()
     const options = useClienteOptions()
     const [filters, setFilters] = useState<TaskFilters>(DEFAULT_TASK_FILTERS)
     const tasks = useClienteTasks(filters.showArchived)
     const priority = useSetClienteTaskPriority()
+    useClienteRealtime()
 
     const columns = useMemo(() => buildBoardColumns(options.data?.board), [options.data])
     const repoIndex = useMemo(() => repoLabelIndex(options.data?.projects ?? []), [options.data])
@@ -58,12 +49,12 @@ function ClienteTasksView() {
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-5">
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
-                    <h1 className="text-lg font-semibold md:text-2xl">{options.data?.clientName ?? "Portal"}</h1>
+                    <h1 className="text-lg font-semibold md:text-2xl">Tarefas</h1>
                     <p className="text-sm text-muted-foreground">Acompanhamento das tarefas que você solicitou (somente leitura).</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <TaskViewSwitch value={filters.view} onChange={(view) => setFilters((prev) => ({ ...prev, view }))} />
-                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => router.push(clienteNovaPath(token))}>
+                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => router.push(clienteNovaPath())}>
                         <Plus className="h-4 w-4" aria-hidden /> Nova tarefa
                     </Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={tasks.isFetching}>
@@ -80,11 +71,11 @@ function ClienteTasksView() {
                 <>
                     <ClienteFiltersBar filters={filters} setFilters={setFilters} total={shown.length} tasks={allTasks} projects={options.data?.projects ?? []} columns={columns} />
                     {shown.length === 0 ? (
-                        <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas que você solicitar aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath(token))} />
+                        <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas que você solicitar aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath())} />
                     ) : filters.view === "kanban" ? (
-                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} />
+                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(task.id)} />
                     ) : (
-                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(token, task.id)} onUpdate={(task, change) => priority.mutate({ task, priority: change.priority })} updating={priority.isPending} />
+                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(task.id)} onUpdate={(task, change) => priority.mutate({ task, priority: change.priority })} updating={priority.isPending} />
                     )}
                 </>
             )}

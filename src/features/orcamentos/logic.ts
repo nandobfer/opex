@@ -55,6 +55,29 @@ export function repoLabelIndex(projects: readonly ClienteRepoDto[]): ReadonlyMap
     return new Map(projects.map((project) => [project.repo.toLowerCase(), repoLabel(project)]))
 }
 
+/** Regra de username: 3–40 caracteres, letras/números e `.`/`-`/`_`. */
+export const USERNAME_PATTERN = /^[a-zA-Z0-9._-]{3,40}$/
+
+/** Slug do nome do cliente para o **username padrão**: minúsculo, sem acento, palavras por `-`. */
+export function usernameFromName(name: string): string {
+    const base = name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+    return base || "cliente"
+}
+
+const SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+
+/** Sufixo **alfabético** curto (não numérico) para desempatar usernames em colisão. */
+export function randomUsernameSuffix(length = 4, random: () => number = Math.random): string {
+    let out = ""
+    for (let i = 0; i < length; i++) out += SUFFIX_ALPHABET[Math.floor(random() * SUFFIX_ALPHABET.length)] ?? "a"
+    return out
+}
+
 /** Rótulo de um repositório pelo índice; sem dado do GitHub, mantém a inicial. */
 export function repoLabelFrom(repo: string, index?: ReadonlyMap<string, GithubRepoLabelData>): GithubRepoLabelData {
     return index?.get(repo.toLowerCase()) ?? { fullName: repo, ownerAvatarUrl: null, description: null, private: false }

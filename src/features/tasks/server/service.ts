@@ -8,12 +8,15 @@ import { TimeLog } from "@/lib/db/models/TimeLog"
 import { getLocalUser } from "@/lib/local-user"
 import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
+import { clientChannel } from "@/lib/pusher/channel-names"
 import { TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
 import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
 import { computeClientEstimate } from "@/features/orcamentos/logic"
+import { CLIENTE_TASKS_UPDATED_EVENT } from "@/features/orcamentos/constants"
 import { taskTagsSourceHash } from "@/features/ai/task-tags"
+import { logger } from "@/lib/logger"
 
 /**
  * Tarefas dO Opex — a fonte de verdade. CRUD sobre `dev_tasks`; o código é sequencial por projeto
@@ -627,7 +630,18 @@ export async function runBulkTasks(input: BulkTasksInput, actorId: string): Prom
 }
 
 export async function publishTasksUpdated(ids: string[]): Promise<void> {
-    if (ids.length) await publishToChannels([appChannel()], TASKS_UPDATED_EVENT, { ids })
+    if (!ids.length) return
+    await publishToChannels([appChannel()], TASKS_UPDATED_EVENT, { ids })
+    // O portal do cliente também precisa saber: publica no canal do cliente de cada tarefa afetada.
+    try {
+        const tasks = await DevTask.find({ _id: { $in: ids } })
+            .select({ clientId: 1 })
+            .lean()
+        const clientIds = [...new Set(tasks.map((task) => task.clientId).filter((id): id is string => Boolean(id)))]
+        if (clientIds.length) await publishToChannels(clientIds.map((clientId) => clientChannel(clientId)), CLIENTE_TASKS_UPDATED_EVENT, { ids })
+    } catch (error) {
+        logger.warn({ err: error }, "[pusher] Falha ao publicar no canal do cliente")
+    }
 }
 
 // ── Uso por rotinas (sync do GitHub) ───────────────────────────────────────

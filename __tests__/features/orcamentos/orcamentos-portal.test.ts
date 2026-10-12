@@ -234,21 +234,21 @@ describe("lista e detalhe do portal (visão do cliente)", () => {
         await expect(getClientTask(client, String(other._id))).rejects.toMatchObject({ code: "TASK_NOT_FOUND" })
     })
 
-    it("comenta marcando a origem como o nome do cliente", async () => {
+    it("comenta marcando a origem como o usuário do portal", async () => {
         const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
-        await addClientComment(client, String(doc._id), "Olá")
-        expect(mocks.addComment).toHaveBeenCalledWith(String(doc._id), "Olá", { id: "Acme", type: "client", name: "Acme" })
+        await addClientComment(client, String(doc._id), "Olá", { id: "user-1", name: "ana" })
+        expect(mocks.addComment).toHaveBeenCalledWith(String(doc._id), "Olá", { id: "user-1", type: "client", name: "ana" })
     })
 
     it("edita a prioridade da própria tarefa reusando o updateTask com origem client", async () => {
         const doc = await (mocks.devTasks as MemoryModel).create({ clientId: String(client._id) })
-        await setClientTaskPriority(client, String(doc._id), "urgent")
-        expect(mocks.updateTask).toHaveBeenCalledWith(String(doc._id), { priority: "urgent" }, "Acme", { origin: "client" })
+        await setClientTaskPriority(client, String(doc._id), "urgent", "user-1")
+        expect(mocks.updateTask).toHaveBeenCalledWith(String(doc._id), { priority: "urgent" }, "user-1", { origin: "client" })
     })
 
     it("recusa (404) editar a prioridade de tarefa de outro cliente", async () => {
         const other = await (mocks.devTasks as MemoryModel).create({ clientId: "outro" })
-        await expect(setClientTaskPriority(client, String(other._id), "low")).rejects.toMatchObject({ code: "TASK_NOT_FOUND" })
+        await expect(setClientTaskPriority(client, String(other._id), "low", "user-1")).rejects.toMatchObject({ code: "TASK_NOT_FOUND" })
         expect(mocks.updateTask).not.toHaveBeenCalled()
     })
 })

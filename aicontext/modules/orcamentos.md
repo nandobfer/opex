@@ -1,289 +1,213 @@
-# Módulo: Orçamentos (portal do cliente)
+# Módulo: Orçamentos (clientes e portal do cliente)
 
-Integração **Clientes** (id técnico `orcamentos`, nome exibido "Clientes", rota
-`/integracoes/clientes`; a rota legada `/integracoes/orcamentos` redireciona): o dono cadastra
-**clientes** e cada cliente ganha uma **URL fixa com token** para um **portal próprio** (quase todo
-somente leitura — a única edição do cliente é a **prioridade** da tarefa, ver "Prioridade do
-cliente"), sem
-sidebar, com o **mesmo kanban/tabela** das Tarefas, restrito aos repositórios escolhidos e **apenas
-às tarefas que o cliente solicitou**. O cliente pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
-prioridade, resumo e especificação técnica); em seguida a IA **classifica a tarefa com tags**
-(feature "Tags de tarefas") e **estima as horas por tarefas semelhantes** — uma única chamada, sem
-agente —, que o cliente **aprova ou corrige**. A aprovação cria a tarefa de verdade (com issue no GitHub, como no app).
+Integração **Clientes** (`orcamentos`, rota `/integracoes/clientes`): o dono cadastra **clientes** e
+cada cliente ganha um **usuário padrão** e uma **URL** para um **portal próprio**, agora **autenticado
+por sessão** (`/cliente`) com **sidebar** (Dashboard, Tarefas e, para o **admin** do cliente,
+Financeiro e Usuários). O cliente acompanha as tarefas que solicitou (quase todo somente leitura — a
+edição do cliente é a **prioridade**), pode **enviar uma nova tarefa** (a IA gera prévia, tags e
+estimativa, que ele aprova ou corrige) e, sendo admin, vê o **custo** e gere **usuários**.
 
-Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
-e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
-real (H). Na **página da tarefa** o **cliente é editável** (adicionar/trocar/remover) e as horas
-estimadas também; ao salvar, gerar por IA ou trocar o cliente, o servidor recalcula o orçamento com o
-fator de lucro e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; `null` = sem cliente, sem
-inflação; só registros legados sem o campo caem no `OrcamentoClient` ativo cujo `projectIds` inclui o
-repositório). Ver `modules/tasks.md`.
+Logins e sessões: `aicontext/modules/auth.md`.
 
-## Modelo (`src/lib/db/models/Orcamento.ts`)
+## Papéis e terminologia
+
+- **Dono**: vê **"Faturamento"** e as **horas reais**; administra todos os clientes e usuários.
+- **Cliente**: vê **"Custo"**; as horas são sempre **infladas** (`H × fator de lucro`) e o
+  `custo = horas infladas × custo/hora`. Nunca vê horas reais, fator, custo/hora, modelo de IA,
+  histórico interno ou horas apontadas.
+- **Não-admin do cliente**: vê apenas as horas infladas — **nenhum valor em R$**; o menu **Financeiro**
+  e a aba **Usuários** ficam ocultos e as rotas correspondentes são bloqueadas no servidor.
+- **Admin do cliente**: vê o custo e a aba Usuários (CRUD dos usuários do cliente).
+
+## Modelos
 
 - `OrcamentoClient` (`orcamento_clients`): `{ name, token, tokenHash, tokenPrefix, projectIds[],
-  hourlyRate, profitFactor, active }`. O **token** (`cli_…`) é gravado em claro (`token`) para montar
-  a **URL copiável** no painel; a autenticação usa o **hash SHA-256** (`tokenHash`) e o **prefixo
-  visível** (`tokenPrefix`) é o que aparece na lista.
+  hourlyRate, profitFactor, active }`. O **token** (`cli_…`) é gravado em claro (`token`) para montar a
+  **URL copiável**; a autenticação usa o **hash SHA-256** (`tokenHash`) e o **prefixo visível**
+  (`tokenPrefix`).
+- `User` (`users`, `src/lib/db/models/User.ts`): usuários **globais** de cliente —
+  `{ username (único), email (único quando presente), passwordHash (scrypt; nulo = só entra por URL),
+  memberships: [{ clientId, admin }], token/tokenHash/tokenPrefix, defaultForClientId, active }`.
+  A flag **admin é por vínculo**. O **usuário padrão** (`defaultForClientId` preenchido) não guarda
+  token próprio: entra pelo **token do cliente**.
 - `OrcamentoDraft` (`orcamento_drafts`): `{ clientId, estimateClientId, projectId, description,
-  correction, preview, estimatedHours, model, status: "draft" | "approved", taskId }`. `preview` =
-  `{ title, taskType, priority, technicalSpec, summary, tags }` (1ª fase da IA + tags da feature
-  "Tags de tarefas"); `estimatedHours` (H) é gravado na 2ª fase. `clientId` identifica o **dono do
-  rascunho**: preenchido = pedido pelo cliente no portal; `null` = prévia aberta pelo **dono** em
-  `/tarefas/previa` (não aparece no portal nem na lista de clientes). `estimateClientId` é o cliente
-  **opcional** que o dono escolhe só para o **cálculo do custo** (o portal mantém `null` e usa o
-  próprio `clientId`). Sem migração: todo rascunho legado tem `clientId`.
-- `DevTask.estimate` (subdocumento; `null` = **ainda não estimada** e independe de cliente): `{ hours,
-  clientHours, billingBrl, factor, hourlyRate, model, generatedAt }` — snapshot gravado na aprovação
-  do portal, na **edição manual** das horas, na **estimativa por IA** da tarefa ou ao **definir/trocar
-  o cliente na página da tarefa** (sem cliente, fica neutro: fator 1 e custo 0, só as horas reais).
-  Ver `modules/tasks.md`.
-- `DevTask.clientId`: o **cliente de orçamento da tarefa** (`OrcamentoClient._id`; `null` = sem
-  cliente) — tanto o que **solicitou** pelo portal quanto o que o dono **atribuiu/atualizou na página
-  da tarefa**. É o que define a **lista do portal** (o cliente só vê as tarefas com o seu `clientId`;
-  trocar/remover o cliente na tarefa muda o que o portal mostra). Ver `modules/tasks.md`.
+  correction, preview, estimatedHours, model, status, taskId }`. `clientId` identifica o **dono do
+  rascunho**: preenchido = pedido pelo cliente; `null` = prévia do dono em `/tarefas/previa`.
+  `estimateClientId` é o cliente **opcional** que o dono escolhe só para o **cálculo do custo**.
+- `DevTask.estimate` (subdocumento; `null` = ainda não estimada, independe de cliente): `{ hours,
+  clientHours, billingBrl, factor, hourlyRate, model, generatedAt }` — **snapshot** gravado na
+  aprovação do portal, na edição manual das horas, na estimativa por IA ou ao definir/trocar o cliente
+  da tarefa (sem cliente: fator 1, custo 0, só as horas reais). Mudar fator/custo/hora **não**
+  recalcula tarefas antigas.
+- `DevTask.clientId`: o cliente de orçamento da tarefa (`null` = sem cliente) — define a lista do
+  portal. Ver `aicontext/modules/tasks.md`.
 
-## Escopo do rascunho (`server/drafts.ts`)
+## Usuários de cliente (`server/users.ts`)
 
-O portal (**cliente**) e a **prévia do dono** (`/tarefas/previa`) compartilham os rascunhos: o
-servidor isola cada um por um `DraftScope` — `client` filtra por `clientId`; `owner` por
-`clientId: null`. O escopo define o filtro das leituras/escritas (`getDraft`, correção, prévia, tags,
-estimativa) e o `subject` do uso de IA (`{clientId}:{draftId}` no portal, `owner:{draftId}` no dono).
-`resolveDraftClient` resolve o cliente da estimativa (`clientId` do portal ou `estimateClientId` do
-dono); **sem cliente**, a estimativa traz só as **horas reais** (`clientHours`/`billingBrl` nulos).
-`setDraftEstimateClient` valida o cliente escolhido pelo dono (ativo e com o repositório do
-rascunho) e `recomputeDraftEstimate` recalcula **só o custo** reusando as horas/modelo — sem IA. A
-criação e a aprovação ficam em `portal.ts` (token do cliente) e `owner.ts` (sessão), que reusam o
-mesmo núcleo; o fluxo do dono está em `modules/tasks.md` ("Prévia de tarefa (dono)").
+- Todo cliente **nasce com o usuário padrão**: `username = slug(name)` (sufixo **alfabético curto** em
+  colisão), `memberships = [{ clientId, admin: true }]`, **sem email e sem senha**, entrando pela URL
+  do cliente. Editável depois (email/senha/username) pelo dono e pelo admin do cliente.
+- **Senha** com scrypt (`src/features/auth/server/password.ts`), **sem regra mínima** e **sem
+  "esqueci a senha"** (o dono/admin redefine). Email é **opcional** e único quando presente.
+- **URL por usuário**: cada usuário tem token próprio (`usr_…`) e **Copiar URL**; regenerar invalida o
+  anterior na hora. O **usuário padrão** usa o token do cliente — regenerá-lo é feito na aba **Token**
+  do cliente (e é **recusado** na lista de usuários).
+- **Regras de gestão**:
+  - o **dono** gerencia tudo (credenciais globais, vínculos e tokens);
+  - o **admin do cliente** gerencia o próprio vínculo e usuários **exclusivos** do cliente; usuário
+    **compartilhado** com outro cliente é somente leitura para ele (`SHARED_USER`);
+  - excluir remove o **vínculo**; sem outros vínculos o usuário é **excluído**. O **padrão não pode ser
+    excluído** aqui (`DEFAULT_USER`) — só na exclusão do cliente.
 
-## Autenticação do portal (`server/token.ts`)
+## Clientes (tela `/integracoes/clientes`)
 
-- `newClientTokenValue()` gera `cli_<base64url>`; `hashClientToken` = SHA-256.
-- `requireClient(req)` lê o token do header **`x-client-token`** (preferido) ou da query **`?t=`**;
-  401 `UNAUTHENTICATED` sem token ou token inválido/desativado. Páginas do portal recebem o token por
-  `?t=` e o repassam.
-- O middleware libera `/cliente` e `/api/cliente` sem sessão (ver `modules/auth.md`).
-
-## Clientes (tela `/integracoes/clientes`, `server/clients.ts`)
-
-- `OrcamentosEditorForm` (integração sem campos públicos nem segredos — toda a configuração são os
-  clientes) **sem abas e sem card interno**: o título da página já é "Clientes", então a lista aparece
-  direto (só a descrição, o botão **Novo cliente** e a lista). Lista com nome, prefixo do token,
-  custo/hora, fator e repositórios; ações **Copiar URL**, **Editar**, **Token** (regenerar, com
-  confirmação) e **Excluir** (confirmação).
-- **Copiar URL** (`CopyPortalUrlButton`): copia `${origem}${withBasePath(portalPath)}` — a URL do
-  portal **sem trocar o token** — com feedback visual (Check + toast). O `portalPath` (`/cliente?t=…`)
-  vem no DTO de administração; a regeneração é a única ação que troca o token.
-- Formulário (`ClienteDialog`): **Nome**, **Repositórios** (múltipla escolha só entre os projetos
-  vinculados — `GET /api/tasks/options`), **Custo por hora** (`MoneyInput`, 2 casas decimais),
-  **Fator de lucro** (≥ 1) e **Cliente ativo**. O seletor de **Repositórios** é o
-  `CadastroMultiSelect` (o **mesmo componente dos filtros das Tarefas**), com busca e as opções no
-  `GithubRepoLabel` real (avatar/descrição/privado) via `useGithubRepoIndex` da sessão.
-- Token: criar e regenerar devolvem o valor em claro + a URL (`ClientTokenDialog`); regenerar invalida
-  o anterior na hora.
-- Regras: repositório precisa existir (400 `PROJECT_NOT_FOUND`); mutações auditadas
-  (`ClienteOrcamento`) e publicam `orcamentos-updated { scope: "clients" }` em `private-app`.
+- Aba **Clientes**: a lista mostra um **card por cliente**; o **card inteiro é um link** para a página
+  de configuração e mantém apenas o botão **Copiar URL** (a URL do **usuário padrão** = token do
+  cliente).
+- **Página de configuração** (`/integracoes/clientes/[clientId]`) com abas:
+  - **Configurações** — dados do cliente (custo/hora, fator, repositórios, situação), **Editar**
+    (`ClienteDialog`) e a **zona de risco** com **Excluir** (`RemoveClienteDialog`);
+  - **Usuários** — lista + criação/edição/exclusão/copiar URL/regenerar (mesmos componentes do portal);
+  - **Token** — prefixo, **Copiar URL** e **Regenerar token** (com aviso: invalida a URL do cliente e
+    do usuário padrão).
+- **Pré-visualizar portal** no cabeçalho: entra no portal como o cliente (cookie de prévia).
+- Regras: repositório precisa existir (`PROJECT_NOT_FOUND`); mutações auditadas (`ClienteOrcamento`) e
+  publicam `orcamentos-updated { scope }` em `private-app`.
 
 ## Portal (`/cliente`)
 
-Fora do grupo `(app)` — **sem sidebar** (`src/app/cliente/layout.tsx`, largura total com padding
-enxuto), com `robots: noindex`.
+- **Entrada** `/cliente`: com `?t=` redireciona para o handler que troca o token por sessão; com
+  sessão de cliente e cliente selecionado vai direto ao dashboard; com vários clientes (ou sem
+  seleção) ou como **dono** mostra a **escolha de cliente**.
+- **Layout autenticado** (`src/app/cliente/(portal)/`): reusa o `AppShell` com a navegação do portal
+  (`clienteNav`) — **Dashboard, Tarefas** e, para o admin, **Financeiro e Usuários** — e a **barra de
+  contexto** (`ClienteContextBar`): seletor de cliente (troca sem novo login), aviso de
+  pré-visualização e atalho de volta ao Opex. Sem itens internos do dono.
+- Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
+  `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin).
+- **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com
+  "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa.
+- **Página da tarefa**: detalhes equivalentes aos do dono, **exceto Histórico e Horas apontadas**;
+  abas Descrição, Especificação técnica e Comentários; coluna lateral com prioridade editável e a
+  estimativa do cliente (só `H × fator` e o custo). O **autor** dos comentários/ações é o **usuário**
+  (não o nome do cliente); em pré-visualização, o dono.
+- **Tempo real**: canal privado `private-client-{clientId}` (`src/lib/pusher/channel-auth.ts`).
+  Eventos publicados **só pelo servidor**, depois da mutação e da auditoria; o cliente invalida as
+  tarefas (`useClienteRealtime`). O dono (e a sincronização do GitHub) publica nos canais dos clientes
+  afetados.
+- Sem tokens nas URLs internas: as telas usam o **cookie de sessão** (axios do portal com
+  `x-client-id`, usado na pré-visualização do dono).
 
-Os repositórios do portal (opções e rascunho) chegam **enriquecidos com os dados do GitHub**
-(avatar, descrição e privacidade) no próprio DTO do portal: o servidor casa `repo` com o índice de
-`listGithubRepos()` (cache de 5 min) em `server/portal.ts`, **best-effort** — sem token/API fora, o
-rótulo cai na inicial (o portal é público e não chama os endpoints de sessão do GitHub). Todos os
-pontos que exibem repositório no portal usam o `GithubRepoLabel` real (`repoLabel`/`repoLabelIndex`
-+ `repoLabelFrom` de `logic.ts`): o formulário, o filtro, o card/linha da lista, o card da revisão e a
-aba **Clientes** (esta usa o `useGithubRepoIndex` da sessão).
+## Dashboard e Financeiro do cliente
 
-- `/cliente?t=` — **lista** (`ClienteTasksPage`): cabeçalho com o nome do cliente, **Nova tarefa**,
-  **Kanban | Tabela**, Atualizar e filtros (busca, Repositório, Coluna, Prioridade, Tipo). Mostra
-  **somente as tarefas que o cliente solicitou** (filtro por `clientId` no servidor), com o mesmo
-  visual das Tarefas, porém **somente leitura** (sem arrastar, sem editar metadados, sem excluir) —
-  **exceto a prioridade**, editável na coluna Prioridade da tabela (ver "Prioridade do cliente"). O filtro de
-  Repositório fica **limitado** aos repositórios do cliente. Cada card/linha é um **link** para a
-  página da tarefa e mostra o repositório com o `GithubRepoLabel` (avatar/descrição/privado) e a
-  estimativa do cliente (`ClienteEstimateBadge`: `H × fator` h e `R$ faturamento` — nunca as horas
-  reais).
-- `/cliente/tarefa/[id]?t=` — **página da tarefa** (`ClienteTaskDetailPage`), quase toda somente
-  leitura (só a prioridade é editável), com os detalhes equivalentes aos do dono, **exceto Histórico e
-  Horas apontadas** (dados internos: auditoria, horas reais apontadas, tokens, custo em USD e modelo
-  agêntico). Abas próprias (`ClienteTaskTabs`): **Descrição**, **Especificação técnica** e
-  **Comentários** (o cliente pode comentar — ver abaixo). Acima do conteúdo, o **Resumo (IA)** em card
-  próprio (`TaskSummaryCard`). Coluna lateral (`ClienteTaskSidebar`): prioridade **editável**
-  (`TaskPriorityMenu` — ver "Prioridade do cliente"), tipo, repositório, criada/atualizada e a
-  **estimativa** (`ClienteEstimateCard`): o cliente vê **só o prazo inflado** (`H × fator`) e o
-  faturamento; **não** vê as horas reais, o fator, o custo/hora nem o modelo. Acesso validado por
-  `clientId` (tarefa de outro cliente devolve 404 `TASK_NOT_FOUND`). Sem Pusher: o portal é público e
-  atualiza pelo botão **Atualizar** (e revalida o detalhe ao comentar).
-- **Comentários** no portal (`ClienteCommentsSection`): lista (Markdown) e formulário. Cada comentário
-  mostra o **nome do autor** — o nome do cliente (comentário do portal) ou o do dono
-  (`APP_OWNER_NAME`/`getLocalUser()`, comentário do app). A origem vai gravada em `TaskComment`
-  (`authorType`/`authorName`); o formulário interno (`CommentsSection`) exibe o mesmo nome.
-- `/cliente/nova?t=` — **nova tarefa** (`ClienteNovaTarefaPage`): repositório (só os permitidos, no
-  `SearchPicker` com o `GithubRepoLabel` real) + **descrição** em Markdown (`MarkdownField`). Ao
-  avançar, cria o rascunho e vai para a revisão.
-- `/cliente/revisao/[draftId]?t=` — **revisão** (`ClienteRevisaoPage`), em duas colunas
-  (`lg:grid-cols-4`):
-  - **Coluna principal** (3/4): card com o **nome gerado pela IA como título**, o **resumo como
-    subtítulo discreto** e, abaixo, a **descrição** do cliente (Markdown); card da **especificação
-    técnica**. Enquanto a prévia é gerada, mostra um **skeleton** (o JSON cru da IA nunca é exibido).
-  - **Metadados** (1/4, e **acima** no mobile via `order`): **repositório** (com o
-    `GithubRepoLabel` real no `RepoMetaCard`), **tipo + prioridade editável** (a escolhida vale ao
-    aprovar — ver "Prioridade do cliente") e **horas e custo estimados**
-    (`EstimateCard`). O card de horas tem um **carregamento animado** enquanto o agente pensa/consulta
-    o banco (mostra o progresso, ex.: "Consultando (banco)…"); ao concluir, os valores entram com
-    `AnimatedNumber` (`H:mm` e `R$`); em erro, mostra "Tentar novamente".
-  - **Card de clareza** (`ClarityCard`) em **largura total**, acima do card de ajuste: **um único
-    card que alterna** entre **sucesso** (critérios de aceite e localização claros → "pode
-    aprovar"), **aviso** (alguma dimensão vaga → "dá para enviar", mas lista o que detalhar) e
-    **erro** (alguma dimensão ausente → submissão **bloqueada**, orientando o cliente a usar o campo
-    de solicitar ajuste). A avaliação vem da IA a cada geração e é **transitória** (não é gravada no
-    rascunho); sem avaliação (prévia lida do banco), o card cai em **aviso**.
-  - Card **"Ajustar ou aprovar"** em **largura total** abaixo do grid: **Solicitar correção** (texto
-    que entra no próximo prompt) e **Aprovar tarefa**. O botão **Aprovar tarefa** fica
-    **desabilitado** quando a clareza está em erro (só a correção continua liberada). **Não** há botão
-    "Gerar novamente" — a geração é automática (prévia → estimativa). Ao **solicitar a correção**, a
-    tela volta a exibir **skeleton** na prévia e na estimativa (via `selectReviewView` de
-    `useBudgetReview`) até chegarem os novos valores — nunca reaproveita o resultado anterior do cache
-    do rascunho.
+As duas telas do portal **reutilizam a apresentação** do dono (cabeçalho, KPIs, gráficos e o kit de
+listas) — os componentes visuais vêm de `src/features/dashboard/` e `src/features/finance/`, só as
+consultas e os DTOs são próprios do portal (autorizados e recortados pelo cliente).
+
+- **Dashboard** (`GET /api/cliente/dashboard?from&to&timeZone`): KPIs de tarefas do cliente (ativas,
+  criadas e concluídas no período — conclusão derivada da auditoria, colunas de conclusão do GitHub) e
+  o bloco **Visão geral de tarefas** com os **mesmos gráficos** do dono: rosca **Por coluna** (cores do
+  quadro), barras **Por tipo**, barras ranqueadas **Por projeto** e a linha **Criadas × concluídas**.
+  Única diferença: o cartão **Por tipo** conta as **tags** da tarefa (com "Sem tags" para as não
+  classificadas), não o tipo — o rótulo da tag é resolvido no servidor pela taxonomia
+  (`resolveTagViews`); cada tag conta uma vez por tarefa, então uma tarefa com várias tags aparece em
+  várias barras. Para o **admin** entram os KPIs de **Custo** e **Horas** e o bloco **Financeiro**
+  (custo por repositório, evolução mensal e horas por repositório), sempre com as horas **infladas**.
+  **Sem** horas agênticas, custo de IA ou mesas. Período: as **mesmas opções** do dono
+  (`features/dashboard/period.ts` — 7/30/90 dias ou mês atual, padrão 30 dias), persistidas com chave
+  própria do portal (`opex:cliente:dashboard:period:v1`); o fuso IANA do navegador define os buckets.
+- **Financeiro** (`GET /api/cliente/financeiro?from&to&projectIds`, admin): **custo** das tarefas
+  concluídas, agrupado por **repositório**, no **mesmo padrão** do Financeiro do dono — filtros no
+  `ListFilters` (Período com `PresetDateRangeFilter` e Repositórios com `CadastroMultiSelect`), com
+  `from`/`to`/`projectIds` na **URL** (`useUrlFilters`, padrão mês corrente), cartão de totais (Custo,
+  Horas e Tarefas), botão Atualizar e grupos **expansíveis**. Usa o snapshot (`clientHours`/`billingBrl`)
+  e reusa a regra de conclusão do Financeiro do dono (`completionTimestamps`). Nunca expõe horas reais,
+  fator ou custo por hora. Período ou fuso inválido → **400** (`validationError`).
+- **Usuários** (`/cliente/usuarios`, admin): CRUD dos usuários do cliente (mesmos componentes do dono),
+  com as regras de permissão acima.
 
 ## Prioridade do cliente
 
 O cliente **edita a prioridade** das tarefas que solicitou, nos mesmos três pontos onde o dono edita:
-
-- **Revisão da prévia** (`TypePriorityMetaCard`): a prioridade sugerida pela IA vira um
-  `TaskPriorityMenu`; a escolha é **aplicada ao aprovar** (`POST .../approve` com `{ priority }`) — não
-  altera o rascunho antes disso. Solicitar correção regenera a prévia e **descarta** a escolha.
-- **Página da tarefa** (`ClienteTaskSidebar`) e **tabela da lista** (`ClienteTaskTable`): a prioridade é
-  editável **na hora** (`TaskPriorityMenu`); o card do kanban segue **somente leitura**.
-
-Nas edições imediatas o portal chama `PATCH /api/cliente/tasks/[id]` (`setClientTaskPriority`), que
-valida a posse (`assertClientTask` — 404 `TASK_NOT_FOUND` para tarefa de outro cliente) e **reusa o
-`updateTask`** do núcleo com `origin: "client"`: grava auditoria (`Tarefa`, prioridade antes/depois,
-ator = **nome do cliente**), publica `tasks-updated` (o dono vê em tempo real no app) e **empurra a
-prioridade para a issue do GitHub**. No cliente as mutações são **otimistas** (TanStack Query) com
-reversão e toast em caso de falha, sobre os mesmos DTOs seguros (sem horas reais/fator/custo/modelo).
+**revisão da prévia** (aplicada ao aprovar), **página da tarefa** e **tabela da lista**. O portal chama
+`PATCH /api/cliente/tasks/[id]` (`setClientTaskPriority`), que valida a posse (`TASK_NOT_FOUND`),
+**reusa o `updateTask`** com `origin: "client"`, grava auditoria (`Tarefa`, ator = **usuário**),
+publica `tasks-updated` e empurra a prioridade para a issue do GitHub. No cliente as mutações são
+**otimistas** (TanStack Query) com reversão e toast.
 
 ## IA em duas fases
 
-- **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`), feature **Orçamentos**
-  (`budget-preview`): monta a entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod
-  (`parseDraftPreview`) e grava `preview` no rascunho no `done`, **zerando `estimatedHours` e as
-  tags** (nova correção ⇒ nova estimativa e novas tags). A saída inclui ainda **`clarity`** — a
-  avaliação de clareza de `acceptanceCriteria` (critérios de aceite) e `location` (localização),
-  com estados `clear`/`vague`/`missing` — que é **transitória**: trafega no stream para o card da
-  revisão e **não** é gravada no rascunho (`saveDraftPreview` remove o campo). A IA também escreve as
-  seções **"## Critérios de aceite"** e **"## Localização"** dentro da especificação técnica. Na
-  **correção**, o prompt recebe a **prévia atual** e pede para **ajustar somente o que foi
-  solicitado** (só refaz tudo se a correção pedir explicitamente). No cliente, a geração mostra um **skeleton de carregamento** — o JSON
-  cru nunca é exibido — e, na correção, prévia **e** estimativa voltam a skeleton até chegarem os
-  novos valores.
-- **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`, disparada automaticamente
-  depois da prévia), feature **Estimar prazos** (`estimate-hours`): exige a prévia (409
-  `DRAFT_WITHOUT_PREVIEW`); garante as **tags** do rascunho (feature "Tags de tarefas"), pré-busca em
-  `dev_tasks` as **tarefas semelhantes** por tags (fallback por tipo/projeto, `server/similar.ts`) —
-  **só tarefas com horas reais apontadas** (`TimeLog`), descartando as sem apontamento — e faz **uma
-  única chamada** ancorada na **mediana** do histórico: provedor de texto (valida
-  `{ estimatedHours }`, `parseEstimateHours`) ou **JEV** (um `score` fracionário de tempo de execução
-  interpolado para horas). Ao concluir grava as horas **e o modelo** que as gerou
-  (`saveDraftEstimate` → `H × fator × custo/hora`) e devolve as **tags** no `done`. O rascunho mostra
-  o progresso ("Classificando…", "Buscando tarefas semelhantes…").
-- A revisão exibe as **tags** da prévia em um card próprio (`PreviewTagsCard`, com os rótulos
-  resolvidos no servidor por `resolveTagViews`).
-- `preview-prompt.ts` (puro): contratos de saída das duas fases
-  (`buildBudgetPreviewInstructions`/`buildBudgetEstimateInstructions`), prompts
-  (`buildBudgetPreviewPrompt` — inclui a **prévia atual** e a instrução de ajuste mínimo quando há
-  correção — / `buildBudgetEstimatePrompt` — este último recebe as tarefas semelhantes
-  e a **âncora do histórico**, `estimateAnchor`), parsers e helpers do JEV (`buildJevEstimateQuestions`,
-  `mapJevEstimateScore`).
-- Cada geração grava uma linha em `ai_usage_logs` (`feature: "budget-preview"` na prévia;
-  `"estimate-hours"` na estimativa).
+- **Fase 1 — prévia** (`POST /api/cliente/drafts/[id]/preview`), feature **Orçamentos**: monta a
+  entrada, roda o `streamAi` (NDJSON), valida o JSON com Zod (`parseDraftPreview`) e grava `preview`
+  (zerando horas e tags). A saída inclui `clarity` (critérios de aceite e localização), **transitória**
+  (não persistida) e usada pelo `ClarityCard`.
+- **Fase 2 — estimativa** (`POST /api/cliente/drafts/[id]/estimate`), feature **Estimar prazos**:
+  exige a prévia, garante as tags, busca **tarefas semelhantes** por tags (fallback por tipo/projeto,
+  só com horas reais apontadas) e faz **uma única chamada** ancorada na mediana do histórico. Grava as
+  horas **e o modelo** (`H × fator × custo/hora`).
+- Cada geração grava uma linha em `ai_usage_logs`.
 
 ## Criação da tarefa (`server/portal.ts` → `createTaskWithIssue`)
 
-Aprovar exige a **prévia** (409 `DRAFT_WITHOUT_PREVIEW`) e usa `createTaskWithIssue` (mesma rota do
-app: **cria a issue no GitHub antes de persistir** — falha do GitHub bloqueia) com
-`origin: "client"` e **`clientId` do cliente** (o que define a lista do portal), além das **tags** do
-rascunho (`tags` de `createTask`, sem gerar de novo). Quando há estimativa,
-envia o `estimate` (snapshot: horas reais, horas do cliente, faturamento, fator, custo/hora e modelo);
-**sem estimativa, a tarefa nasce sem o `estimate`** (só quando o rascunho nunca foi estimado). O
-rascunho vira `approved` com `taskId` e registra
-auditoria (`RascunhoOrcamento`, ação `APROVAR`). A tarefa nasce na **coluna de entrada** do projeto
-(`entryColumnKey`). Tarefas pedidas **antes** da marcação por `clientId` são retroalimentadas pela
-migração `backfill-task-client-id` (a partir dos rascunhos aprovados).
+Aprovar exige a **prévia** (`DRAFT_WITHOUT_PREVIEW`) e usa `createTaskWithIssue` (**cria a issue no
+GitHub antes de persistir** — falha do GitHub bloqueia) com `origin: "client"` e o `clientId` do
+cliente, além das **tags** do rascunho. Quando há estimativa, envia o `estimate` (snapshot). O
+rascunho vira `approved` com `taskId` e registra auditoria (`RascunhoOrcamento`). A tarefa nasce na
+**coluna de entrada** do projeto.
+
+## Migração
+
+A migração `backfill-client-users` (roda no `dbConnect()`, idempotente) cria o **usuário padrão** de
+cada cliente existente, preservando os **tokens/URLs** já em uso. Tarefas pedidas antes da marcação por
+`clientId` são retroalimentadas por `backfill-task-client-id`.
 
 ## APIs
 
 | Rota | Descrição |
 |---|---|
 | `GET/POST /api/integrations/orcamentos/clients` | Lista / cria cliente (POST devolve o token) |
-| `PATCH/DELETE /api/integrations/orcamentos/clients/[id]` | Edita / exclui cliente e seus rascunhos |
-| `POST /api/integrations/orcamentos/clients/[id]/token` | Regenera o token (invalida o anterior) |
-| `GET /api/cliente/options` | Nome do cliente, repositórios permitidos e quadro (colunas) |
-| `GET /api/cliente/tasks[?includeArchived=true]` | Tarefas **que o cliente solicitou** (por `clientId`), na visão do cliente |
-| `GET /api/cliente/tasks/[id]` | Detalhe da tarefa na visão do cliente (sem histórico, horas apontadas nem dados internos da estimativa) |
-| `PATCH /api/cliente/tasks/[id]` | O cliente edita a **prioridade** da própria tarefa (`{ priority }`) |
-| `POST /api/cliente/tasks/[id]/comments` | Comentário do cliente (origem marcada pelo nome do cliente) |
-| `POST /api/cliente/drafts` | Abre um rascunho (repositório + descrição) |
-| `GET /api/cliente/drafts/[id]` | Rascunho (prévia + estimativa) |
-| `POST /api/cliente/drafts/[id]/correction` | Registra a correção pedida |
-| `POST /api/cliente/drafts/[id]/preview` | Gera a prévia com IA (NDJSON — 1ª fase) |
-| `POST /api/cliente/drafts/[id]/estimate` | Estima horas e custo com IA (NDJSON — 2ª fase) |
-| `POST /api/cliente/drafts/[id]/approve` | Cria a tarefa conforme a prévia aprovada (corpo opcional `{ priority }` sobrepõe a prioridade sugerida pela IA) |
+| `GET/PATCH/DELETE /api/integrations/orcamentos/clients/[id]` | Detalhe / edita / exclui o cliente |
+| `POST /api/integrations/orcamentos/clients/[id]/token` | Regenera o token do cliente (invalida o anterior) |
+| `GET/POST /api/integrations/orcamentos/clients/[id]/users` | Lista / cria usuário do cliente (dono) |
+| `PATCH/DELETE .../clients/[id]/users/[userId]` | Edita / remove o vínculo do usuário (dono) |
+| `POST .../clients/[id]/users/[userId]/token` | Regenera o token próprio do usuário (dono) |
+| `GET /api/cliente/session` | Cliente selecionado, usuário, papel e clientes do usuário |
+| `GET /api/cliente/options` | Nome do cliente, repositórios permitidos e quadro |
+| `GET /api/cliente/tasks[?includeArchived=true]` | Tarefas que o cliente solicitou |
+| `GET /api/cliente/tasks/[id]` | Detalhe na visão do cliente |
+| `PATCH /api/cliente/tasks/[id]` | Prioridade da própria tarefa (`{ priority }`) |
+| `POST /api/cliente/tasks/[id]/comments` | Comentário do usuário do portal |
+| `GET /api/cliente/dashboard?from&to&timeZone` | Distribuições de tarefas (custo e horas só para admin) |
+| `GET /api/cliente/financeiro?from&to&projectIds` | Custo por repositório (admin) |
+| `GET/POST /api/cliente/usuarios` | Lista / cria usuário (admin do cliente) |
+| `PATCH/DELETE /api/cliente/usuarios/[id]` | Edita / remove vínculo (admin do cliente) |
+| `POST /api/cliente/usuarios/[id]/token` | Regenera o token próprio (admin do cliente) |
+| `POST /api/cliente/drafts` · `GET .../[id]` · `.../correction` · `.../preview` · `.../estimate` · `.../approve` | Rascunho, prévia e aprovação |
 
-O token do cliente não é um **token de sistema**: o portal **não** entra na especificação OpenAPI
-pública (`/api/v1/*`).
-
-A **prévia do dono** usa os endpoints internos `/api/tasks/drafts/**` (autenticados pela sessão,
-sem token de cliente): `POST /api/tasks/drafts`, `GET .../[id]`, `.../[id]/correction`,
-`.../[id]/preview`, `.../[id]/estimate` (o corpo opcional `{ clientId }` recalcula só o custo) e
-`.../[id]/approve`. Ver `modules/tasks.md`.
+Como o portal é autenticado por **sessão**, ele **não** entra na especificação OpenAPI pública
+(`/api/v1/*`). A **prévia do dono** continua nos endpoints internos `/api/tasks/drafts/**`.
 
 ## Arquivos
 
-- `src/features/orcamentos/` — `constants.ts` (`clientePortalPath`, `clienteNovaPath`,
-  `clienteRevisaoPath`, `clienteTarefaPath`), `logic.ts` (puro: `computeClientEstimate`,
-  `formatHoursLabel`), `clarity.ts` (puro: `selectPreviewClarity` — clareza da prévia), `schemas.ts`,
-  `types.ts`, `preview-prompt.ts` (puro), `review.ts` (estado/NDJSON da revisão, compartilhado com a
-  prévia do dono), `hooks/useOrcamentos.ts`, `hooks/useDraftReview.ts` (orquestra as duas fases para
-  os dois consumidores), `server/drafts.ts` (rascunhos e `DraftScope`, compartilhados),
-  `server/owner.ts` (criação/aprovação/reestimativa da prévia do dono),
-  `server/similar.ts` (tarefas semelhantes por tags/tipo/projeto para a estimativa; só horas reais),
-  `server/tag-views.ts` (resolve ids de tags em `{ id, label }` para o portal), `components/`
-  (editor da integração, clientes e `CopyPortalUrlButton`) e `portal/` (contexto, hooks
-  — `useBudgetReview` (wrapper de `useDraftReview` com o token) e `useSetClienteTaskPriority` edita a
-  prioridade —, páginas e componentes). Os cards apresentacionais foram movidos para
-  `components/preview/` (`PreviewTitleCard`, `PreviewSpecCard`, `RepoMetaCard`,
-  `TypePriorityMetaCard`, `EstimateCard`, `ClarityCard` e `CorrectionCard`), reusados pela prévia do
-  dono em `src/features/tasks/preview/`. A visão do cliente tem `ClienteTaskDetailPage`,
-  `ClienteTaskTabs`,
-  `ClienteTaskSidebar`, `ClienteEstimateCard`, `ClienteEstimateBadge` e `ClienteCommentsSection`, além
-  dos tipos seguros `ClienteTaskDto`/`ClienteTaskDetailDto` (sem horas reais/fator/custo/modelo).
-- `src/app/(app)/integracoes/clientes/page.tsx` (e a rota legada
-  `src/app/(app)/integracoes/orcamentos/page.tsx`, que redireciona),
-  `src/app/api/integrations/orcamentos/*`, `src/app/cliente/*` e `src/app/api/cliente/*`.
-- `src/components/ui/markdown-field.tsx` — campo Markdown com barra de formatação e abas
-  Escrever/Visualizar (reusado no `TaskForm` e no portal).
+- `src/features/orcamentos/` — `constants.ts` (caminhos e vocabulário, `CLIENTE_COST_LABEL`),
+  `logic.ts` (puro: `computeClientEstimate`, `formatHoursLabel`, `usernameFromName`,
+  `randomUsernameSuffix`), `clarity.ts`, `schemas.ts`, `types.ts` (DTOs incl. `ClienteUserDto`,
+  `ClienteSessionDto`, `ClienteFinanceDto`, `ClienteDashboardDto`), `preview-prompt.ts`, `review.ts`,
+  hooks, `server/{clients,drafts,users,token,portal,owner,preview,similar,tag-views,estimate-hours,
+  portal-dashboard,portal-aggregate,portal-finance}.ts`, `components/` (editor, clientes, **users/**
+  compartilhado) e `portal/` (contexto de sessão, shell, picker, páginas Dashboard/Tarefas/Financeiro/
+  Usuários, `period.ts`, `useClientePeriod.ts`, `filters.ts`, `components/`).
+- `src/app/cliente/(portal)/**` (layout autenticado e sub-rotas) e `src/app/cliente/page.tsx`
+  (entrada); `src/app/api/cliente/**`; `src/app/(app)/integracoes/clientes/[clientId]/page.tsx`.
+- `src/lib/db/models/User.ts` e `src/lib/db/migrations/backfill-client-users.ts`.
 
 ## Testes
 
-`__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt` (contratos/parsers
-das duas fases), `orcamentos-clarity` (card da revisão: sucesso/aviso/erro e bloqueio), `clarity-card`
-(cards e gate do botão), `portal-auth`, `orcamentos-token`, `orcamentos-clients` (token/`portalPath`),
-`orcamentos-portal` (prévia, estimativa, aprovar com e sem estimativa — inclusive a prioridade
-sobreposta —, editar a prioridade da própria tarefa, lista/detalhe do cliente por
-`clientId` e comentário com origem), `orcamentos-estimate` (estimativa em uma chamada: tags +
-semelhantes + provedor de texto/JEV), `orcamentos-owner-preview` (prévia do dono: escopo do rascunho,
-cliente opcional, custo recalculado sem IA e aprovação com/sem cliente), `orcamentos-review-view`
-(estado da revisão e leitura do NDJSON compartilhado, `readNdjson`), `orcamentos-similar` (busca por
-tags com fallback e horas
-dos apontamentos), `cliente-revisao` (cards da revisão, inclusive o tipo/prioridade editável),
-`cliente-task-table` (prioridade editável com handler e leitura sem ele),
-`cliente-task-card`, `cliente-task-detail` (abas sem Histórico/Horas, estimativa inflada, prioridade
-editável e comentários com autor), `cliente-dialog` (seletor de repositórios com o `GithubRepoLabel`),
-`copy-portal-url`,
-`markdown-field`. A configuração de "Estimar prazos" em
-`__tests__/features/ai/estimate-hours-settings.test.ts`; o `EstimateBadge` (faturamento no dono) em
-`__tests__/features/tasks/estimate-badge.test.tsx`.
+`__tests__/features/orcamentos/`: `orcamentos-logic`, `orcamentos-preview-prompt`, `orcamentos-clarity`,
+`clarity-card`, `portal-auth`, `orcamentos-token`, `orcamentos-clients`, `orcamentos-portal`,
+`orcamentos-estimate`, `orcamentos-owner-preview`, `orcamentos-review-view`, `orcamentos-similar`,
+**`users-service`** (usuário padrão, colisão de username, email duplicado, permissões de vínculo,
+padrão não excluível), **`portal-cost`** (custo por repositório), **`portal-period`** (período/marca do
+portal e filtros do financeiro), **`portal-dashboard`** (agregações puras: tags e resumo financeiro),
+**`cliente-dashboard-page`** e **`cliente-finance-page`** (apresentação compartilhada com o dono),
+`cliente-*` (cards/listas/detalhe), `cliente-dialog`, `copy-portal-url`, `markdown-field`.

@@ -1,35 +1,42 @@
 /**
- * Guarda de acesso: decide, por caminho, o que a ausência de sessão permite. Função **pura** e
- * testável — o `middleware` apenas aplica a decisão.
+ * Guarda de acesso: decide, por caminho e por **tipo de sessão**, o que pode passar. Função **pura**
+ * e testável — o `middleware` apenas aplica a decisão.
  *
  * Rota pública = acessível sem sessão. São públicas:
- * - a tela de login e as rotas internas de auth (`/login`, `/api/auth/login`, `/api/auth/logout`);
+ * - a tela de login e as rotas internas de auth (`/login`, `/api/auth/login`, `/api/auth/logout`,
+ *   `/api/auth/client-login` — a entrada do portal por token);
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
- * - o **portal do cliente** (`/cliente` e `/api/cliente/*`), autenticado pelo token do cliente
- *   (`requireClient`);
  * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
- *   contrato, nenhum dado. O teste da integração "API interna" as chama sem cookie de sessão.
+ *   contrato, nenhum dado;
+ * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de
+ *   cliente do usuário logado ou deixa o middleware decidir. As sub-rotas do portal exigem sessão.
  *
- * Tudo o mais (páginas e APIs internas) exige o cookie de sessão.
+ * A partir da entrada, a decisão considera o `kind` da sessão (`src/features/auth/session.ts`):
+ * - `admin`: app completo **e** o portal (pré-visualização);
+ * - `client`: só o portal (`/cliente/*` e `/api/cliente/*`), mais as rotas de auth internas
+ *   (`/api/auth/*`) e o auth do Pusher (`/api/pusher/auth`); o app interno responde com redirect
+ *   (páginas) ou 401 (APIs).
  */
 
 import { BASE_PATH } from "@/lib/base-path"
-
-export type AuthAction = "allow" | "redirect" | "unauthorized"
+import type { SessionPayload } from "./session"
 
 /** Rotas liberadas sem sessão (comparação exata). */
 export const PUBLIC_ROUTES: readonly string[] = [
     "/login",
     "/api/auth/login",
     "/api/auth/logout",
+    "/api/auth/client-login",
+    // Entrada do portal: resolve o token (`?t=`) antes de exigir sessão nas sub-rotas.
+    "/cliente",
     // Documentação OpenAPI (contrato público; sem dados). Ver `src/app/api/openapi.json` e `api/docs`.
     "/api/openapi.json",
     "/api/docs",
 ]
 
-/** Prefixos de rota liberados sem sessão (API pública por token, portal do cliente e tick de cron). */
-export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/cliente", "/cliente"]
+/** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */
+export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines"]
 
 /**
  * Caminho sem o subcaminho público (`BASE_PATH`), com barra inicial e sem barra final.
@@ -55,8 +62,37 @@ export function isApiPath(pathname: string): boolean {
     return normalizePath(pathname).startsWith("/api/")
 }
 
-/** Autenticado ou rota liberada → `allow`; API interna → `unauthorized`; página → `redirect`. */
-export function resolveAuthAction(pathname: string, authenticated: boolean): AuthAction {
-    if (authenticated || isPublicPath(pathname)) return "allow"
-    return isApiPath(pathname) ? "unauthorized" : "redirect"
+/** Caminho do portal do cliente (páginas `/cliente/*` e APIs `/api/cliente/*`). */
+export function isClientPath(pathname: string): boolean {
+    const path = normalizePath(pathname)
+    return path === "/cliente" || path.startsWith("/cliente/") || path === "/api/cliente" || path.startsWith("/api/cliente/")
+}
+
+/** Rotas de auth internas (`/api/auth/*`): exigem sessão, mas valem para os dois tipos de sessão. */
+export function isAuthPath(pathname: string): boolean {
+    return normalizePath(pathname).startsWith("/api/auth/")
+}
+
+/** Rotas de API liberadas também para a sessão de cliente (a própria rota confere o canal/papel). */
+export const CLIENT_ALLOWED_API: readonly string[] = ["/api/pusher/auth"]
+
+export type AuthAction = "allow" | "redirect" | "unauthorized"
+
+export interface AuthDecision {
+    action: AuthAction
+    /** Para `redirect`: destino interno (sem `basePath`). */
+    redirectTo?: string
+}
+
+/**
+ * Decide o que fazer com a requisição: `allow` (segue), `redirect` (página sem acesso) ou
+ * `unauthorized` (API sem acesso). `session` é o payload verificado do cookie, ou `null`.
+ */
+export function resolveAuthDecision(pathname: string, session: SessionPayload | null): AuthDecision {
+    if (isPublicPath(pathname)) return { action: "allow" }
+    if (!session) return isApiPath(pathname) ? { action: "unauthorized" } : { action: "redirect", redirectTo: "/login" }
+    if (session.kind === "admin") return { action: "allow" }
+    // Sessão de cliente: o portal, as rotas de auth internas (ex.: escolher cliente) e o auth do Pusher.
+    if (isClientPath(pathname) || isAuthPath(pathname) || CLIENT_ALLOWED_API.includes(normalizePath(pathname))) return { action: "allow" }
+    return isApiPath(pathname) ? { action: "unauthorized" } : { action: "redirect", redirectTo: "/cliente" }
 }

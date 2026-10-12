@@ -1,3 +1,4 @@
+import type { DashboardColumnSlice, DashboardProjectSlice, DashboardTimelinePoint } from "@/features/dashboard/types"
 import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
 import type { ProjectRef, TaskComment, TaskDto } from "@/features/tasks/types"
@@ -130,4 +131,115 @@ export interface ClientePortalOptionsDto {
     clientName: string
     projects: ClienteRepoDto[]
     board: TaskBoardDto
+}
+
+/** Vínculo de um usuário com um cliente (a flag `admin` é por vínculo). */
+export interface ClientMembershipDto {
+    clientId: string
+    clientName: string | null
+    admin: boolean
+}
+
+/** Usuário de cliente como a gestão (dono ou admin do cliente) o exibe. */
+export interface ClienteUserDto {
+    id: string
+    username: string
+    email: string | null
+    /** `true` quando é admin no cliente em escopo (a lista é sempre de um cliente). */
+    admin: boolean
+    /** Usuário padrão do cliente: usa o token do cliente e não pode ser excluído. */
+    isDefault: boolean
+    /** URL de login do usuário (`/cliente?t=…`), para o botão Copiar URL. */
+    portalPath: string
+    active: boolean
+    /** Todos os vínculos do usuário (para exibir que ele é compartilhado com outros clientes). */
+    memberships: ClientMembershipDto[]
+    createdAt: string | null
+}
+
+/** Resposta da criação de usuário: o token próprio aparece uma única vez (o padrão não tem). */
+export interface CreatedClienteUserDto {
+    token: string | null
+    item: ClienteUserDto
+}
+
+/** Cliente selecionável pelo usuário no portal (tela de escolha). */
+export interface ClienteSelectableDto {
+    id: string
+    name: string
+    admin: boolean
+}
+
+/** Sessão do portal: usuário logado + cliente selecionado + papel no cliente. */
+export interface ClienteSessionDto {
+    clientId: string
+    clientName: string
+    isAdmin: boolean
+    user: { id: string; username: string; email: string | null }
+    /** Clientes do usuário (seletor de troca no portal). */
+    clients: ClienteSelectableDto[]
+}
+
+/** Tarefa concluída na visão de **custo** do cliente (sem horas reais). */
+export interface ClienteCostTaskDto {
+    id: string
+    code: string
+    title: string
+    repo: string | null
+    projectId: string | null
+    clientHours: number
+    costBrl: number
+    completedAt: string
+}
+
+/** Grupo de custo do cliente por repositório. */
+export interface ClienteCostGroupDto {
+    projectId: string | null
+    repo: string
+    taskCount: number
+    totalClientHours: number
+    totalCostBrl: number
+    tasks: ClienteCostTaskDto[]
+}
+
+/** Custo por repositório e período (financeiro do cliente). `/api/cliente/financeiro`. */
+export interface ClienteFinanceDto {
+    from: string | null
+    to: string | null
+    groups: ClienteCostGroupDto[]
+    totals: { taskCount: number; totalClientHours: number; totalCostBrl: number }
+}
+
+/** Contagem de tarefas por **tag** (`tag: null` = tarefas sem tag). */
+export interface ClienteTagSlice {
+    tag: string | null
+    /** Rótulo da tag na taxonomia; id da tag quando ela já saiu da taxonomia. */
+    label: string
+    count: number
+}
+
+/** Resumo financeiro do dashboard do cliente (presente só para o **admin** do cliente). */
+export interface ClienteDashboardFinanceDto {
+    totals: { totalCostBrl: number; totalClientHours: number; taskCount: number }
+    /** Custo e horas (infladas) por repositório. */
+    byProject: Array<{ projectId: string | null; repo: string; costBrl: number; clientHours: number; taskCount: number }>
+    /** Evolução mensal do custo dentro do período. */
+    timeline: Array<{ bucket: string; costBrl: number }>
+}
+
+/**
+ * Dashboard do portal do cliente: mesmas distribuições do dashboard do dono (coluna, tipo/projeto e
+ * série criadas × concluídas), porém no recorte do cliente e com **tags** no lugar do tipo. O bloco
+ * `finance` (custo e horas infladas) só é preenchido para o **admin**; `null` para os demais.
+ */
+export interface ClienteDashboardDto {
+    range: { from: string; to: string }
+    tasksCreated: number
+    tasksActive: number
+    tasksCompleted: number
+    byColumn: DashboardColumnSlice[]
+    byTag: ClienteTagSlice[]
+    byProject: DashboardProjectSlice[]
+    timeline: DashboardTimelinePoint[]
+    finance: ClienteDashboardFinanceDto | null
 }

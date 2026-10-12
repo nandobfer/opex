@@ -11,13 +11,14 @@ Regras gerais do Opex. Leia antes de qualquer implementação.
 
 ## Conceito do Projeto
 
-- App Next.js único, de **uso pessoal**: um único usuário (o dono, `APP_OWNER_NAME`). Pode ser
-  publicado na internet atrás de uma tela de login com **senha única** (`APP_PASSWORD`, ver
-  `modules/auth.md`) — sem cadastro e sem usuários.
-- Sem usuários, permissões, empresas ou multiusuário: o login é só uma senha compartilhada. Não
-  introduza usuários/papéis/`companyId` sem pedido explícito.
-- Toda ação é atribuída ao usuário local (`getLocalUser()` de `src/lib/local-user.ts`, id
-  `local`) na auditoria e nos campos `createdBy`/`updatedBy`.
+- App Next.js único, de **uso pessoal**: um único **dono** (o admin, `ADMIN_USER`/`ADMIN_EMAIL` +
+  `ADMIN_PASSWORD`, exibido como `APP_OWNER_NAME`). Pode ser publicado na internet atrás da tela de
+  login (`/login`, ver `modules/auth.md`).
+- Usuários só existem no **portal do cliente** de Orçamentos (login por URL ou username/email + senha,
+  `modules/orcamentos.md`); o app do dono não tem cadastro, cargos nem `companyId`. Não introduza
+  permissões no app do dono sem pedido explícito.
+- Toda ação do **dono** é atribuída ao usuário local (`getLocalUser()` de `src/lib/local-user.ts`, id
+  `local`) na auditoria e nos campos `createdBy`/`updatedBy`; no portal, ao **usuário** de cliente.
 - Integrações externas (GitHub, provedores de IA, Archflow) são configuradas na tela de Integrações;
   credenciais (ex.: token do GitHub) ficam cifradas no banco, no documento da integração.
 - A experiência do usuário é prioridade: animações com Framer Motion, resposta otimista e tempo
@@ -129,9 +130,7 @@ fix(integrations): corrige teste do Pusher em modo host
 
 ## Segurança
 
-- Mesmo atrás do login (senha única), NUNCA exponha secrets no client-side nem devolva valores de
-  campos privados.
+- Mesmo atrás do login, NUNCA exponha secrets no client-side nem devolva valores de campos privados.
 - Valide inputs no servidor com Zod.
-- O app pode ser exposto à internet **somente** atrás da tela de login (senha única, ver
-  `modules/auth.md`). Outros sistemas acessam endpoints públicos por token de sistema
-  (Integrações › API interna).
+- O app pode ser exposto à internet **somente** atrás da tela de login (ver `modules/auth.md`).
+  Outros sistemas acessam endpoints públicos por token de sistema (Integrações › API interna).

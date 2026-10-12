@@ -2,12 +2,12 @@
 
 Esta pasta contém documentação estruturada para desenvolvimento assistido por IA no Opex.
 
-O Opex é um app Next.js **de uso pessoal** (um único usuário, protegido por um login com senha
-única; roda localmente, em Docker ou publicado na internet) para acompanhar as tarefas do Centro
-de Desenvolvimento do **Go!
-Sipal** e apontar horas, com um módulo de **Integrações** para guardar credenciais e configurar os
-serviços usados. O core (tema/componentes, layout, integrações, Pusher, crons) foi copiado do CRM
-Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
+O Opex é um app Next.js **de uso pessoal** (um único dono, protegido por login com credenciais
+`ADMIN_*`; roda localmente, em Docker ou publicado na internet) para gerenciar as tarefas e apontar
+horas, com um módulo de **Integrações** para guardar credenciais e configurar os serviços usados. Os
+**usuários** existem apenas no **portal do cliente** de Orçamentos (login por URL/usuário). O core
+(tema/componentes, layout, integrações, Pusher, crons) foi copiado do CRM Marketing Campanhas
+(`~/code/crm-marketing-campanhas`, branch `dev`).
 
 ## Índice de Arquivos
 
@@ -39,13 +39,13 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
 | `modules/dashboard.md` | Dashboards | Página inicial (`/dashboard`, acima de Tarefas): KPIs e gráficos de tarefas, financeiro, horas agênticas e central de desenvolvimento, período global e tempo real |
-| `modules/auth.md` | Login e sessão | Tela `/login`, senha única (`APP_PASSWORD`), cookie assinado, guarda do middleware e logout |
+| `modules/auth.md` | Login, usuários e sessão | O dono (`ADMIN_*`), usuários de cliente (scrypt), cookie assinado com tipo de sessão, guarda do middleware, entrada do portal por URL e logout |
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
 | `modules/time.md` | Controle de horas | Controle de horas agêntico: períodos das mesas (abre/pausa/fecha), uso (tokens/custo), Horas agênticas (`/tarefas/horas`, somente leitura) |
 | `modules/integrations.md` | Integrações e agendador | Pusher, API interna (OpenAPI + tokens de sistema), Crons, GitHub; abas na página da integração; Archflow em desenvolvimento |
 | `modules/ai.md` | Provedores de IA | OpenCode, Gemini e JEV (decisão estruturada), `/integracoes/ia`, abas por provedor (Configuração/Modelos/Consumo) e painel de consumo do OpenCode, features "Entender tarefas", "Resumos de tarefas", "Tags de tarefas", "Orçamentos" (prévia), "Estimar prazos" (tarefas semelhantes; provedor configurável) e "Refinar tarefa" (aba de configuração) |
 | `modules/refinement.md` | Refinar tarefa | Botão na página da tarefa que abre a aba "Especificação técnica", sessão longa do OpenCode que faz perguntas e reescreve a especificação técnica, retomada em segundo plano |
-| `modules/orcamentos.md` | Orçamentos | Integração **Clientes** (`/integracoes/clientes`; id `orcamentos`), clientes com token, portal público do cliente (`/cliente`), prévia por IA + tags + estimativa por tarefas semelhantes e criação da tarefa |
+| `modules/orcamentos.md` | Orçamentos (clientes e portal) | Integração **Clientes** (`/integracoes/clientes`; id `orcamentos`), clientes com usuários e token, portal autenticado por sessão (`/cliente`) com sidebar (Dashboard, Tarefas, Financeiro, Usuários), custo × faturamento, prévia por IA + tags + estimativa e criação da tarefa |
 | `modules/finance.md` | Financeiro | Faturamento das tarefas concluídas por cliente (`/financeiro`, somente leitura): valor pelo snapshot da estimativa, conclusão derivada da auditoria e filtros de período, clientes e repositórios |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |

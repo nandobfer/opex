@@ -30,50 +30,65 @@ function Wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
+function fillCredentials(password = "senha-secreta") {
+    fireEvent.change(screen.getByLabelText("Usuário ou email"), { target: { value: "fernando" } })
+    fireEvent.change(screen.getByLabelText("Senha"), { target: { value: password } })
+}
+
 describe("formulário de login", () => {
-    it("exige a senha e não chama a API com o campo vazio", async () => {
+    it("exige identificador e senha e não chama a API com os campos vazios", async () => {
         render(<LoginForm />, { wrapper: Wrapper })
         fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
-        expect(await screen.findByRole("alert")).toBeTruthy()
+        expect(await screen.findAllByRole("alert")).not.toHaveLength(0)
         expect(mocks.post).not.toHaveBeenCalled()
     })
 
-    it("envia a senha e navega para a página inicial ao entrar", async () => {
+    it("envia as credenciais e navega para a página inicial ao entrar", async () => {
         mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true } } })
         render(<LoginForm />, { wrapper: Wrapper })
 
-        fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "senha-secreta" } })
+        fillCredentials()
         fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 
-        await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/auth/login", { password: "senha-secreta" }))
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/auth/login", { identifier: "fernando", password: "senha-secreta" }))
         await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(HOME_HREF))
     })
 
+    it("usa o destino do servidor (usuário de cliente vai para o portal)", async () => {
+        mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true, redirectTo: "/cliente" } } })
+        render(<LoginForm />, { wrapper: Wrapper })
+
+        fillCredentials()
+        fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
+
+        await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/cliente"))
+    })
+
     it("respeita o destino informado em next", async () => {
-        mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true } } })
+        mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true, redirectTo: "/dashboard" } } })
         render(<LoginForm nextPath="/integracoes" />, { wrapper: Wrapper })
 
-        fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "senha" } })
+        fillCredentials("senha")
         fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 
         await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/integracoes"))
     })
 
-    it("ignora destino externo (open redirect) e cai na página inicial", async () => {
-        mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true } } })
+    it("ignora destino externo (open redirect) e cai no destino do servidor", async () => {
+        mocks.post.mockResolvedValue({ data: { success: true, data: { authenticated: true, redirectTo: "/dashboard" } } })
         render(<LoginForm nextPath="//evil.example" />, { wrapper: Wrapper })
 
-        fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "senha" } })
+        fillCredentials("senha")
         fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 
         await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith(HOME_HREF))
     })
 
-    it("mostra erro quando a senha é recusada e não navega", async () => {
+    it("mostra erro quando as credenciais são recusadas e não navega", async () => {
         mocks.post.mockRejectedValue(new Error("401"))
         render(<LoginForm />, { wrapper: Wrapper })
 
-        fireEvent.change(screen.getByLabelText("Senha"), { target: { value: "errada" } })
+        fillCredentials("errada")
         fireEvent.click(screen.getByRole("button", { name: "Entrar" }))
 
         await waitFor(() => expect(mocks.toastError).toHaveBeenCalled())

@@ -1,13 +1,20 @@
 import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
+import { requireAdminSession } from "@/features/auth/server/context"
 import { getLocalUser } from "@/lib/local-user"
 import { clienteOrcamentoSchema } from "@/features/orcamentos/schemas"
-import { deleteClient, updateClient } from "@/features/orcamentos/server/clients"
+import { deleteClient, getClientDto, updateClient } from "@/features/orcamentos/server/clients"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type Params = { id: string }
+
+/** GET /api/integrations/orcamentos/clients/[id] — dados de um cliente (página de configuração do dono). */
+export const GET = withRoute<Params>(async ({ req, params }) => {
+    await requireAdminSession(req)
+    return ok(await getClientDto(params.id))
+})
 
 /** PATCH /api/integrations/orcamentos/clients/[id] — edita o cliente. */
 export const PATCH = withRoute<Params>(async ({ req, params }) => {

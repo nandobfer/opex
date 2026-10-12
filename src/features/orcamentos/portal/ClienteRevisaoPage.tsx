@@ -11,11 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import type { TaskPriority } from "@/features/tasks/constants"
-import { clientePortalPath } from "../constants"
+import { clienteTarefasPath } from "../constants"
 import { PREVIEW_CLARITY_DIMENSION_LABELS, selectPreviewClarity } from "../clarity"
 import { selectReviewView } from "../review"
 import { useApproveDraft, useClienteDraft, useSetCorrection } from "./hooks"
-import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
 import { useBudgetReview } from "./useBudgetReview"
 import { ClarityCard } from "../components/preview/ClarityCard"
 import { CorrectionCard } from "../components/preview/CorrectionCard"
@@ -27,16 +26,7 @@ import { TypePriorityMetaCard } from "../components/preview/TypePriorityMetaCard
 import { PreviewTagsCard } from "../components/preview/PreviewTagsCard"
 
 /** Revisão da prévia da IA: metadados à parte, prévia em destaque; aprovar ou solicitar correção. */
-export function ClienteRevisaoPage({ token, draftId }: { token: string; draftId: string }) {
-    return (
-        <ClientePortalProvider token={token}>
-            <ClienteRevisaoView draftId={draftId} />
-        </ClientePortalProvider>
-    )
-}
-
-function ClienteRevisaoView({ draftId }: { draftId: string }) {
-    const { token } = useClientePortal()
+export function ClienteRevisaoPage({ draftId }: { draftId: string }) {
     const router = useRouter()
     const draft = useClienteDraft(draftId)
     const { state, start, retryEstimate } = useBudgetReview(draftId)
@@ -85,7 +75,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
     const approveDraft = async () => {
         try {
             await approve.mutateAsync(priorityOverride ?? undefined)
-            router.push(clientePortalPath(token))
+            router.push(clienteTarefasPath())
         } catch {
             // Erro exibido abaixo.
         }
@@ -99,7 +89,7 @@ function ClienteRevisaoView({ draftId }: { draftId: string }) {
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-5">
             <header className="space-y-3">
                 <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
-                    <Link href={clientePortalPath(token)}>
+                    <Link href={clienteTarefasPath()}>
                         <ArrowLeft className="h-4 w-4" aria-hidden /> Tarefas
                     </Link>
                 </Button>
