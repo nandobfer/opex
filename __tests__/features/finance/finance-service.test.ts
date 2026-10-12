@@ -118,3 +118,50 @@ describe("listFinanceByClient", () => {
         expect(result.groups[0]).toMatchObject({ clientId: null, clientName: "Cliente removido", taskCount: 1 })
     })
 })
+
+describe("listFinanceByClient — filtros de cliente e repositório", () => {
+    async function seedCompleted(overrides: Record<string, unknown> = {}) {
+        const seeded = await seedDoneTask(overrides)
+        await mocks.models.audit.create({ entidade: "Tarefa", entidadeId: String(seeded.task._id), acao: "MOVER", dadosNovos: { coluna: "Concluído" }, timestamp: new Date("2026-10-05T12:00:00.000Z") })
+        return seeded
+    }
+
+    it("filtra pelos clientes selecionados e mantém os totais coerentes", async () => {
+        const a = await seedCompleted({ code: "AP-1" })
+        await seedCompleted({ code: "AP-2" })
+        await mocks.models.column.create({ key: "done", name: "Concluído" })
+
+        const result = await listFinanceByClient({ ...RANGE, clientIds: [a.clientId] })
+
+        expect(result.groups).toHaveLength(1)
+        expect(result.groups[0].clientId).toBe(a.clientId)
+        expect(result.totals.taskCount).toBe(1)
+        expect(result.totals.totalBillingBrl).toBe(400)
+    })
+
+    it("filtra pelos repositórios selecionados", async () => {
+        await seedCompleted({ code: "AP-1" })
+        const b = await seedCompleted({ code: "AP-2" })
+        await mocks.models.column.create({ key: "done", name: "Concluído" })
+
+        const result = await listFinanceByClient({ ...RANGE, projectIds: [String(b.task.projectId)] })
+
+        expect(result.totals.taskCount).toBe(1)
+        expect(result.groups[0].tasks[0].code).toBe("AP-2")
+    })
+
+    it("combina cliente e repositório (E): sem interseção devolve vazio", async () => {
+        const a = await seedCompleted({ code: "AP-1" })
+        const b = await seedCompleted({ code: "AP-2" })
+        await mocks.models.column.create({ key: "done", name: "Concluído" })
+
+        expect((await listFinanceByClient({ ...RANGE, clientIds: [a.clientId], projectIds: [String(b.task.projectId)] })).groups).toEqual([])
+    })
+
+    it("seleção sem tarefas correspondentes devolve vazio", async () => {
+        await seedCompleted()
+        await mocks.models.column.create({ key: "done", name: "Concluído" })
+
+        expect((await listFinanceByClient({ ...RANGE, clientIds: ["a".repeat(24)] })).groups).toEqual([])
+    })
+})
