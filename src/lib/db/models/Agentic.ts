@@ -88,6 +88,7 @@ export interface IAgenticWorkbench {
     port: number | null
     /** Instante em que a mesa entrou na fila global do build (`null` fora da fila); define a ordem FIFO. */
     buildQueuedAt: Date | null
+    previewBuild?: { method: "local" | "github"; attempt?: string; statePath?: string } | null
     previewUrl: string | null
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
@@ -128,6 +129,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         composeProject: { type: String, default: null },
         port: { type: Number, default: null },
         buildQueuedAt: { type: Date, default: null },
+        previewBuild: { type: Schema.Types.Mixed, default: null },
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
         agenticFlow: { type: String, default: "preview" },

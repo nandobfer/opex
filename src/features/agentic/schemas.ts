@@ -68,6 +68,9 @@ export const centralConfigSchema = z.object({
         validateCommands: optionalText(2000),
     }),
     environment: z.object({
+        previewMethod: z.enum(["local", "github"]).default("local"),
+        githubWorkflow: z.string().trim().min(1, "Informe o workflow").max(100).regex(/^[A-Za-z0-9_.-]+\.ya?ml$/, "Informe um arquivo YAML").default("preview.yml"),
+        previewService: z.string().trim().min(1, "Informe o serviço").max(80).regex(/^[A-Za-z0-9_-]+$/, "Serviço inválido").default("app"),
         composeFile: optionalText(300),
         portEnvVar: z.string().trim().min(1, "Informe a variável").max(60).regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "Nome de variável inválido"),
         previewHost: z.string().trim().min(1, "Informe o endereço").max(200).regex(/^[A-Za-z0-9.-]+$/, "Informe só o host (ex.: localhost ou 192.168.0.64)"),
@@ -125,7 +128,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         columns: { queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },

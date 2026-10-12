@@ -148,7 +148,7 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     return withInfo + extra(config, "implementation")
 }
 
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths): string {
+export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths, remote?: { attempt: string; statePath: string }): string {
     const env = config.environment
     const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
     const command = `${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
@@ -168,10 +168,16 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
         `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
         "- Se não conseguir identificar o banco ou o dump falhar, NÃO suba a prévia e responda com o bloco JSON de falha abaixo.",
         "",
-        `- Confira o docker compose do projeto${file ? ` (${env.composeFile.trim()})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada 4001–4098; nunca outra).`,
-        `- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`,
+        `- Confira o docker compose do projeto${file ? ` (${env.composeFile.trim()})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada ${env.previewPortMin}–${env.previewPortMax}; nunca outra).`,
+        ...(remote ? [
+            "## Construção no GitHub Action (sem build local e sem abrir PR)",
+            "- Este modo autoriza publicar a branch da tarefa antes da aprovação. Confirme que todas as alterações estão commitadas, seguindo o versionamento do projeto. Nunca envie .env, dump ou credenciais.",
+            `- Execute no worktree: \`npx tsx scripts/preview-github.ts ${shellQuote(remote.statePath)} ${shellQuote(remote.attempt)}\`. O script publica a branch, dispara o workflow, espera testes + build, valida o artefato e publica localmente sem build/pull.`,
+            "- O workflow e o script precisam estar instalados com a skill setup-preview-workflow. Se estiverem ausentes, informe o erro; NÃO faça build local como fallback.",
+            "- Não dispare workflow manualmente nem publique container fora do script. Reconectar retoma o run registrado. Em erro de código, informe a falha; uma correção exige nova tentativa/SHA.",
+        ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
         `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`docker compose -p ${ctx.composeProject} logs --tail 100\` se falhar).`,
-        "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
+        remote ? "- Informe a URL da execução e o diagnóstico quando falhar. Não substitua a porta ou a imagem por outra tentativa." : "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
         `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
     ].join("\n") + extra(config, "build")
 }

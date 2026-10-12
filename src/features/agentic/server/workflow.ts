@@ -44,6 +44,7 @@ import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { syncWorkbenchTimer } from "./timer-sync"
+import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } from "./remote-preview"
 
 /**
  * Fluxo da mesa de trabalho: planejar → (corrigir) → implementar → subir a prévia → (corrigir) →
@@ -260,11 +261,15 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                 costUsd: result.costUsd,
             })
             if (result.outcome !== "succeeded") {
+                if (turn.stage === "building") await invalidateRemotePreview(client, loaded.doc, loaded.config.sessionDirectory)
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
             }
             next = await afterTurn(client, await loadAll(id), turn.stage, result)
         } catch (error) {
+            if (turn.stage === "building" && loaded.doc.previewBuild?.method === "github") {
+                await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory).catch(() => undefined)
+            }
             log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
             await prepareHub(id)
             publishWorkbenchEvent(id, { type: "notice", level: "error", message: errorText(error) })
@@ -361,11 +366,17 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 return { stage: "opening_pr", text: prPrompt(config, ctx, { code: doc.taskCode, title: doc.taskTitle }, pr, { fromPreview: false }) }
             }
             // Entra na fila global do build (um build por vez); a porta é reservada quando a vez chega.
+            if (config.environment.previewMethod === "github") {
+                notice("info", "Implementação concluída. Iniciando testes e build no GitHub, sem fila local.")
+                return prepareBuildTurn(loaded, "github")
+            }
+            await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: { method: "local" } } })
             await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
             notice("info", "Implementação concluída. Aguardando a vez do build — um build por vez.")
             return null
         }
         case "building": {
+            await assertRemotePreview(client, doc, config.sessionDirectory)
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) throw new Error(`O build falhou: ${parsed.data.error ?? "motivo não informado"}`)
             // O agente cria o dump antes de publicar; aqui confirmamos que ele existe de fato.
@@ -378,7 +389,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const env = config.environment
             const previewUrl = `http://${env.previewHost}:${fresh.port}`
             const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
-            if (!healthy && !parsed.success) throw new Error(`A prévia não respondeu em ${previewUrl}`)
+            if (!healthy && (doc.previewBuild?.method === "github" || !parsed.success)) throw new Error(`A prévia não respondeu em ${previewUrl}`)
             notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O agente concluiu o build, mas ${previewUrl} não respondeu ao app`)
             await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
             return null
@@ -531,6 +542,13 @@ async function applyReopenEffects(id: string, loaded: Loaded): Promise<void> {
 export async function startBuildTurn(id: string): Promise<boolean> {
     const loaded = await loadAll(id)
     if (asStage(loaded.doc.stage) !== "build_queued") return false
+    const turn = await prepareBuildTurn(loaded, "local")
+    await launchTurn(loaded, turn, { extraSet: { buildQueuedAt: null } })
+    return true
+}
+
+async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Promise<TurnPlan> {
+    const id = String(loaded.doc._id)
     const port = await allocatePreviewPort(id, loaded.config.environment.previewHost, { min: loaded.config.environment.previewPortMin, max: loaded.config.environment.previewPortMax })
     // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e
     // é preservado nas retentativas: o primeiro dump é o backup da mesa (OPE-54).
@@ -538,8 +556,14 @@ export async function startBuildTurn(id: string): Promise<boolean> {
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}` })
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Backup do MongoDB da prévia em ${backup.dir}` })
-    await launchTurn(loaded, { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, backup) }, { extraSet: { buildQueuedAt: null } })
-    return true
+    let remote: { attempt: string; statePath: string } | undefined
+    if (method === "github") {
+        if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
+        remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, contextOf(loaded))
+    } else {
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local" }, buildQueuedAt: null } })
+    }
+    return { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, backup, remote) }
 }
 
 export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
@@ -611,6 +635,7 @@ export async function implement(id: string, additionalInfo?: string): Promise<Wo
 export async function requestCorrection(id: string, feedback: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "request-correction")
+    await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
     await launchTurn(loaded, { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
     return getWorkbench(id)
 }
@@ -671,6 +696,11 @@ export async function retry(id: string): Promise<WorkbenchDto> {
         return getWorkbench(id)
     }
     if (stage === "building") {
+        if (doc.previewBuild?.method === "github") {
+            const turn = await prepareBuildTurn({ ...loaded, doc }, "github")
+            await launchTurn({ ...loaded, doc }, turn, { userText: "Tentar build remoto novamente" })
+            return getWorkbench(id)
+        }
         // O build não corre solto: volta para a fila global e o motor decide a vez (um build por vez).
         await update(doc, { stage: "build_queued", runState: "idle", error: null, buildQueuedAt: new Date() })
         pumpBuildQueue()
@@ -683,6 +713,10 @@ export async function retry(id: string): Promise<WorkbenchDto> {
 
 export async function interrupt(id: string): Promise<WorkbenchDto> {
     const doc = await loadWorkbench(id)
+    if (doc.previewBuild?.method === "github" && doc.stage === "building") {
+        const loaded = await loadAll(id)
+        await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory)
+    }
     if (!isWorkbenchActive(id)) {
         await reconcile(doc)
         return getWorkbench(id)
@@ -727,6 +761,10 @@ export async function replyForm(id: string, formId: string, input: FormReplyInpu
 
 export async function deleteWorkbench(id: string): Promise<void> {
     const doc = await loadWorkbench(id)
+    if (doc.previewBuild?.method === "github") {
+        const loaded = await loadAll(id)
+        await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory)
+    }
     if (isWorkbenchActive(id)) {
         if (doc.sessionId) await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
         abortWorkbenchRun(id, "Mesa excluída")

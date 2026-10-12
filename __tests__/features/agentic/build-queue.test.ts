@@ -42,6 +42,14 @@ describe('fila do build — posições', () => {
 })
 
 describe('pumpBuildQueue — um build por vez', () => {
+  it('build remoto vivo não ocupa a fila local', async () => {
+    await mocks.models.workbench.create({ stage: 'building', runState: 'running', previewBuild: { method: 'github' } })
+    const next = await queued(new Date('2026-01-01T10:00:00Z'))
+    mocks.isActive.mockReturnValue(true)
+    mocks.startBuildTurn.mockResolvedValue(true)
+    await pumpBuildQueue()
+    expect(mocks.startBuildTurn).toHaveBeenCalledWith(next)
+  })
   it('inicia só o mais antigo da fila (FIFO) e não dispara os demais', async () => {
     const first = await queued(new Date('2026-01-01T10:00:00Z'))
     await queued(new Date('2026-01-01T10:01:00Z'))

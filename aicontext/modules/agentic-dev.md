@@ -79,7 +79,45 @@ conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fi
 
 ## Fila do build (um build por vez)
 
-A subida da prévia usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
+### Método da prévia: Local ou GitHub Action
+
+Na central → Ambiente, `environment.previewMethod` seleciona **Local** (padrão, inclusive
+registros antigos) ou **GitHub Action**. O seletor segmentado mostra workflow (`githubWorkflow`,
+padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no modo remoto.
+
+- **Local:** implementação → `build_queued` → `building`. Mantém fila global e build no servidor.
+- **GitHub Action:** implementação → `building`, diretamente, sem fila. Builds remotos podem
+  rodar em paralelo e não bloqueiam builds locais. PR automático continua pulando os dois métodos.
+- O método é salvo por tentativa em `previewBuild`; trocar configuração não altera o build em
+  andamento. Retentativa remota também pula fila, mesmo se a configuração mudou depois.
+- A etapa continua sendo um turno do agente Build na sessão da mesa. O agente cria/reutiliza o
+  backup obrigatório e executa `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree.
+  O workflow e o runner devem estar instalados no projeto com a skill global
+  `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
+- O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
+  branch da mesa e SHA imutável. Dispara `workflow_dispatch` na branch padrão; nenhum push/PR
+  dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
+- A porta permanece reservada no banco, dentro da faixa da central. O GitHub não escolhe portas.
+  Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
+  e confirmação de publicação. A URL do run aparece nos logs da sessão; reconexão pode retomar
+  o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+- O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup e
+  worktree, revalida porta e importa a imagem. Publica com override Compose por tentativa,
+  `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta ocupada por outra
+  aplicação falha; container da própria mesa pode ser recriado. Não há fallback para build local.
+- Cancelamento, exclusão, correção e nova tentativa invalidam o estado antigo; o runner verifica
+  a reserva lógica durante a espera e imediatamente antes da publicação. Timeout/falha também
+  invalidam a tentativa. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
+  A reserva/invalidação e o Compose compartilham `flock` por mesa, evitando corrida entre uma
+  execução antiga e uma nova publicação. Host Linux precisa de `flock` (util-linux).
+- Credenciais de GitHub vêm do `gh` autenticado no host do OpenCode (mesmo requisito dos PRs).
+  Token precisa permitir Actions e push. Nenhum secret SSH/produção, .env ou dump vai ao GitHub.
+  Variables públicas do build são de repositório; configurar plataforma e URLs apropriadas à prévia.
+- A limpeza remove a pasta do backup (estado, artefatos e override) e derruba Compose/libera porta
+  conforme as opções atuais. CI obrigatório do PR e testes da main permanecem independentes;
+  reaproveitamento de resultados por SHA não foi introduzido.
+
+A subida da prévia **Local** usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
 centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
 
 - A mesa vai para a etapa **`build_queued`** ("Na fila do build") e aguarda; a posição (1-based)
@@ -180,7 +218,8 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 
 ```
 planning → plan_review ─┬─ Solicitar correção do plano → planning
-                        ├─ Implementar (fluxo Publicar prévia) → implementing → build_queued → building → preview
+                        ├─ Implementar (prévia Local) → implementing → build_queued → building → preview
+                        ├─ Implementar (prévia GitHub Action) → implementing → building → preview
                         └─ Implementar (fluxo PR automático)   → implementing → opening_pr → pr_open
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
@@ -207,7 +246,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Implementação**: a branch (`branchNameFor`) e o caminho do worktree (`worktreePathFor`) são
   definidos pelo app; **a IA** cria o worktree a partir de `origin/<base>` (ou reutiliza), **move a
   sessão** com a ferramenta `session_move` do OpenCode, roda o preparo e implementa (commits locais,
-  sem push). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
+  sem push nesta etapa; no modo remoto o turno Build publica a branch). Ao fim o app confere o diretório da sessão; se não moveu, move pelo cliente (aviso).
   Ao aprovar o plano (ação **Implementar**), o usuário pode anexar **Informações adicionais**
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
@@ -220,7 +259,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   prévia e a aprovação: nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do
   plano continua obrigatória nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR
   automático.
-- **Build**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
+- **Build Local**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
   (`allocatePreviewPort`); a IA roda
