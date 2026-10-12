@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { DEFAULT_CRON_JOBS, getIntegrationDef } from '@/lib/integrations/catalog'
+import { DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, getIntegrationDef } from '@/lib/integrations/catalog'
 
 describe('buildIntegrationUpdateSchema', () => {
   it('aceita somente os campos da própria integração', () => {
@@ -45,7 +45,8 @@ describe('buildIntegrationUpdateSchema', () => {
 
   it('valida o escopo das rotinas internas que aceitam escopo', () => {
     const schema = buildIntegrationUpdateSchema(getIntegrationDef('crons'))
-    const concluded = DEFAULT_CRON_JOBS[DEFAULT_CRON_JOBS.length - 1]
+    // A rotina com escopo é escolhida **por id**: novas rotinas internas podem entrar no fim da lista.
+    const concluded = DEFAULT_CRON_JOBS.find((job) => job.id === TASK_TAGS_CONCLUDED_JOB_ID)!
     expect(concluded.scope).toBe('pending')
     expect(schema.safeParse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).success).toBe(true)
     expect(schema.parse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).publicValues?.jobs).toEqual([{ ...concluded, scope: 'all' }])

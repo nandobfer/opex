@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ATTACHMENT_CLEANUP_JOB_ID,
   DEFAULT_CRON_JOBS,
   HEALTH_CHECK_JOB_ID,
   IN_DEVELOPMENT_INTEGRATIONS,
@@ -52,14 +53,15 @@ describe('catálogo de integrações', () => {
     expect(INTEGRATIONS.filter((def) => !def.streamsDebugOverPusher).map((def) => def.id)).toEqual(['pusher'])
   })
 
-  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min) e tags das concluídas (1 h, desligada)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID])
+  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada) e anexos abandonados (30 min)', () => {
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
     expect(DEFAULT_CRON_JOBS[4]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[5]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 3 } })
     expect(DEFAULT_CRON_JOBS[6]).toMatchObject({ kind: 'internal', enabled: false, scope: 'pending', schedule: { type: 'interval', minutes: 60 } })
+    expect(DEFAULT_CRON_JOBS[7]).toMatchObject({ id: ATTACHMENT_CLEANUP_JOB_ID, kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 30 } })
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue
     expect(jobs).toEqual(DEFAULT_CRON_JOBS)
   })
