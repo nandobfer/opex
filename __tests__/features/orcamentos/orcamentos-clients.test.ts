@@ -32,7 +32,7 @@ vi.mock("@/lib/db/models/User", async () => {
     return { User: mocks.users }
 })
 
-import { createClient, deleteClient, listClients, regenerateClientToken, updateClient } from "@/features/orcamentos/server/clients"
+import { createClient, deleteClient, getClientDto, listClients, regenerateClientToken, updateClient } from "@/features/orcamentos/server/clients"
 import type { MemoryModel } from "../../helpers/memory-model"
 
 const projects = () => mocks.projects as MemoryModel
@@ -82,5 +82,20 @@ describe("clientes do portal", () => {
 
         await deleteClient(created.item.id, "local")
         expect(await listClients()).toHaveLength(0)
+    })
+})
+
+describe("detalhe de um cliente (página de configuração)", () => {
+    it("devolve os dados do cliente com os repositórios resolvidos", async () => {
+        const projectId = await seedProject()
+        const created = await createClient({ name: "Acme", projectIds: [projectId], hourlyRate: 40, profitFactor: 10, active: true }, "local")
+
+        const detail = await getClientDto(created.item.id)
+        expect(detail).toMatchObject({ id: created.item.id, name: "Acme", hourlyRate: 40, profitFactor: 10, active: true })
+        expect(detail.projects[0]).toMatchObject({ id: projectId, repo: "acme/app" })
+    })
+
+    it("cliente inexistente devolve CLIENT_NOT_FOUND", async () => {
+        await expect(getClientDto("aaaaaaaaaaaaaaaaaaaaaaaa")).rejects.toMatchObject({ code: "CLIENT_NOT_FOUND" })
     })
 })
