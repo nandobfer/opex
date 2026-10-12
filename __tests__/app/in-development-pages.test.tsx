@@ -62,7 +62,7 @@ describe("páginas do app", () => {
         render(await IntegracaoPage({ params: Promise.resolve({ id: "crons" }) }))
         expect(screen.getByTestId("detail").textContent).toBe("crons")
 
-        for (const id of ["archflow", "smtp"]) {
+        for (const id of ["archflow", "linx"]) {
             await expect(IntegracaoPage({ params: Promise.resolve({ id }) })).rejects.toThrow("NEXT_NOT_FOUND")
         }
     })

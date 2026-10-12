@@ -27,7 +27,9 @@ describe('autorização dos canais privados', () => {
 
     expect(isChannelAuthorized('private-integration-pusher', ADMIN)).toBe(true)
     expect(isChannelAuthorized('private-integration-crons', ADMIN)).toBe(true)
-    expect(isChannelAuthorized('private-integration-smtp', ADMIN)).toBe(false)
+    expect(isChannelAuthorized('private-integration-smtp', ADMIN)).toBe(true)
+    expect(isChannelAuthorized('private-integration-storage_s3', ADMIN)).toBe(true)
+    expect(isChannelAuthorized('private-integration-inexistente', ADMIN)).toBe(false)
     expect(isChannelAuthorized('private-integration-pusher', CLIENT('c1'))).toBe(false)
   })
 

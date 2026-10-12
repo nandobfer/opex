@@ -15,9 +15,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   campos públicos, campos privados e as variáveis legadas do `.env`.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
   dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
-  `modules/github.md`) e `ai` (Provedores de IA, com os provedores `ai_opencode`, `ai_gemini` e
-  `ai_jev` — ver `modules/ai.md`) e `orcamentos` (nome exibido **Clientes**: clientes do portal
-  público, rota `/integracoes/clientes` — ver `modules/orcamentos.md`).
+  `modules/github.md`), `ai` (Provedores de IA, com os provedores `ai_opencode`, `ai_gemini` e
+  `ai_jev` — ver `modules/ai.md`), `orcamentos` (nome exibido **Clientes**: clientes do portal
+  público, rota `/integracoes/clientes` — ver `modules/orcamentos.md`) e `smtp` (SMTP) e
+  `storage_s3` (Storage S3).
 - **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
   `parent` e `configured`) e aparecem dentro da página da mãe; o voltar da página leva à mãe.
   Rotas próprias via `integrationPath` (`/integracoes/ia`, `/integracoes/ia/opencode`,
@@ -139,6 +140,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   - **Crons**: cron secret, agendador ativo e estado de cada rotina.
   - **GitHub**: `GET /user` e `GET /rate_limit`; amarelo sem escopo `repo` (token clássico) ou com
     o limite de uso quase esgotado (ver `modules/github.md`).
+  - **SMTP**: `transporter.verify()`; sem host configurado falha avisando que os envios estão em
+    modo simulado.
+  - **Storage S3**: `HeadBucket` no bucket configurado (exige endpoint e credenciais).
   - **OpenCode / Gemini / Provedores de IA**: ver `modules/ai.md`.
   - **Clientes**: sem serviço externo — só conta os clientes cadastrados (ver
     `modules/orcamentos.md`).
@@ -241,6 +245,25 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - Endpoint público novo: rota com `withRoute` + `requireApiToken(req)` (401
   `UNAUTHENTICATED`), documentada na especificação e em `PUBLIC_TOKEN_ROUTES` **no mesmo commit**.
 
+### Serviços do core: SMTP e Storage S3
+
+- **SMTP** (`src/lib/email/mailer.ts`): a configuração da integração é resolvida a cada envio e o
+  transporter é recriado quando a `version` muda. Porta padrão **587**; a porta **465** usa TLS
+  direto (`secure`). Sem usuário/senha, o transporte é criado sem autenticação e o remetente vazio
+  usa o usuário. Sem host, os envios ficam em **modo simulado** (só log) e `isMockMode()` expõe
+  isso. Exporta `sendEmail`, `verifyConnection`, `getSmtpConfig` e `isMockMode`. Hoje nenhum fluxo
+  do app envia e-mail — o serviço existe para consumo futuro, com o teste de conexão na tela de
+  Integrações.
+- **Storage S3** (`src/lib/storage/s3.ts`): cliente MinIO/S3 compatível (`forcePathStyle`), criado
+  a partir do **Endpoint** interno e recriado quando a configuração muda. As URLs assinadas (SigV4)
+  têm duas audiências: `browser` (upload direto e mídia) assina com o **Endpoint público** quando
+  configurado — o subcaminho do proxy entra só na URL, sem afetar a assinatura — e `server` usa o
+  Endpoint interno. Exporta `uploadFile`, `getFileUrl`, `getUploadUrl`, `getFileStream`,
+  `getFileObject`, `headFile`, `checkBucket` e `getSignedUrlExpiresIn`. A expiração da URL assinada
+  é configurável (60 s a 7 dias, padrão 1 h).
+- As duas integrações são **novas** no Opex: não declaram `env` e são configuradas só em
+  `/integracoes`. Nenhum dos testes de conexão envia e-mail nem grava objeto.
+
 ### Planejado (em desenvolvimento)
 
 - **Archflow**: plataforma de arquitetura para solicitar deploys em QA e PRD.
@@ -277,7 +300,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 ## Testes
 
-`__tests__/lib/integrations/*`, `__tests__/features/integrations/*`,
-`__tests__/features/public-api/public-api-openapi.test.ts` e
+`__tests__/lib/integrations/*`, `__tests__/lib/email/mailer.test.ts`, `__tests__/lib/storage/*`,
+`__tests__/features/integrations/*`, `__tests__/features/public-api/public-api-openapi.test.ts` e
 `__tests__/lib/pusher/channel-auth.test.ts`. O setup do Vitest faz mock de
 `@/lib/integrations/store` (store vazio → todos leem o `.env`).

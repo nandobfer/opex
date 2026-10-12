@@ -119,6 +119,29 @@ describe("IntegrationDetailPage", () => {
         expect(mocks.mutateAsync).toHaveBeenCalledWith({ publicValues: { appId: "app-c" } })
     })
 
+    it("integração genérica (Storage S3) desenha os campos do catálogo e envia só o que mudou", async () => {
+        mocks.useIntegration.mockReturnValue({
+            data: detail({
+                id: "storage_s3",
+                name: "Storage S3",
+                publicValues: { endpoint: "http://minio:9000", publicEndpoint: null, region: "us-east-1", bucket: "default", signedUrlExpiresSeconds: 3600 },
+                secrets: {
+                    accessKey: { configured: true, source: "db", unreadable: false },
+                    secretKey: { configured: true, source: "db", unreadable: false },
+                },
+            }),
+            isLoading: false,
+            isError: false,
+        })
+        render(<IntegrationDetailPage id="storage_s3" />)
+        expect(screen.getByText("Storage S3")).toBeTruthy()
+        fireEvent.change(screen.getByLabelText(/^Bucket/), { target: { value: "arquivos" } })
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: /Salvar/ }))
+        })
+        expect(mocks.mutateAsync).toHaveBeenCalledWith({ publicValues: { bucket: "arquivos" } })
+    })
+
     it("o rodapé de edição está sempre disponível (sem permissões)", () => {
         render(<IntegrationDetailPage id="pusher" />)
         expect(screen.getByRole("button", { name: /Salvar/ })).toBeTruthy()
