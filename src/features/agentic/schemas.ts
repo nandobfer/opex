@@ -60,6 +60,8 @@ export const centralConfigSchema = z.object({
         commitPattern: optionalText(200).min(1, "Informe o padrão"),
         prTitlePattern: optionalText(200).min(1, "Informe o padrão"),
         prDraft: z.boolean(),
+        /** Merge automático do PR pelo agente (merge commit + exclusão da branch remota); não combina com PR rascunho. */
+        autoMerge: z.boolean(),
         prReviewers: nameList,
         prLabels: nameList,
         setupCommands: optionalText(2000),
@@ -96,6 +98,9 @@ export const centralConfigSchema = z.object({
     if (value.environment.previewPortMin > value.environment.previewPortMax) {
         ctx.addIssue({ code: "custom", path: ["environment", "previewPortMax"], message: "A porta final deve ser maior ou igual à inicial" })
     }
+    if (value.git.autoMerge && value.git.prDraft) {
+        ctx.addIssue({ code: "custom", path: ["git", "autoMerge"], message: "O merge automático não combina com abrir o PR como rascunho: desligue uma das opções" })
+    }
 })
 export type CentralConfig = z.infer<typeof centralConfigSchema>
 export type CentralConfigInput = z.input<typeof centralConfigSchema>
@@ -114,6 +119,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             commitPattern: "feat: {title} ({code})",
             prTitlePattern: "{title} ({code})",
             prDraft: false,
+            autoMerge: false,
             prReviewers: [],
             prLabels: [],
             setupCommands: "",

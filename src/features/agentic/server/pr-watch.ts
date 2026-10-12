@@ -1,10 +1,11 @@
 import { dbConnect } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { githubPaginate, githubRequest } from "@/features/github/client"
+import { prMergeReady } from "../logic"
 import { formatPrFeedback } from "../prompts"
 import { centralLogger } from "./log"
 import { closeOrphanWorkPeriods } from "./timer-sync"
-import { handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
+import { handlePrAutoMerge, handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
 
 /**
  * Rotina "Acompanhar PRs do desenvolvimento agêntico" (Integrações › Crons): para cada mesa com PR
@@ -25,6 +26,10 @@ interface GithubPull {
     merge_commit_sha: string | null
     /** `false` = conflito de merge (`null` = o GitHub ainda está calculando). */
     mergeable?: boolean | null
+    /** Estado de verificações/regras: `clean`, `blocked`, `unstable`, `dirty`, `behind`, `unknown`… */
+    mergeable_state?: string | null
+    /** PR ainda como rascunho (não pode ser mergeado automaticamente). */
+    draft?: boolean | null
     base?: GithubRef | null
     head?: GithubRef | null
 }
@@ -91,6 +96,7 @@ export async function watchPullRequests(): Promise<string> {
     let merged = 0
     let replans = 0
     let conflicts = 0
+    let autoMerges = 0
     let failures = 0
     for (const doc of docs) {
         const id = String(doc._id)
@@ -175,11 +181,20 @@ export async function watchPullRequests(): Promise<string> {
                     headSha: pull.head?.sha ?? "",
                 })
                 if (started) conflicts++
+                continue
+            }
+
+            // Merge automático (OPE-50): a central pode mandar o agente mergear o próprio PR.
+            // Só quando o PR está pronto (sem conflito, sem bloqueios e fora do rascunho); a mesa segue
+            // elegível enquanto o GitHub não liberar as verificações/regras.
+            if (prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft })) {
+                const started = await handlePrAutoMerge(id, { baseBranch: pull.base?.ref ?? "a branch de destino" })
+                if (started) autoMerges++
             }
         } catch (error) {
             failures++
             log.error(`Falha ao consultar o PR #${pr.number}`, error, { workbenchId: id })
         }
     }
-    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
+    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${autoMerges ? `; ${autoMerges} com merge automático iniciado` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
 }

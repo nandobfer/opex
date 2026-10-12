@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, reopenTargetColumn, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
-import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
   const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } } }
@@ -65,6 +65,13 @@ describe('workbenchActions', () => {
     expect(workbenchActions('resolving_conflicts', 'running', false)).toEqual(['interrupt'])
     expect(workbenchActions('resolving_conflicts', 'failed', false)).toEqual(['reconnect', 'retry', 'request-correction'])
   })
+
+  it('merge automático e exclusão da branch remota não têm "voltar ao planejamento"', () => {
+    expect(workbenchActions('merging_pr', 'running', false)).toEqual(['interrupt'])
+    expect(workbenchActions('merging_pr', 'failed', false)).toEqual(['reconnect', 'retry'])
+    expect(workbenchActions('deleting_pr_branch', 'interrupted', false)).toEqual(['reconnect', 'retry'])
+    expect(workbenchActions('deleting_pr_branch', 'failed', false, false)).toEqual(['retry'])
+  })
 })
 
 describe('parseCentralConfig', () => {
@@ -73,6 +80,9 @@ describe('parseCentralConfig', () => {
     expect(parsed.sessionDirectory).toBe('/repo')
     expect(parsed.git.baseBranch).toBe('dev')
     expect(parsed.git.prTargetBranch).toBe('main')
+    // Merge automático nasce desligado e é preservado quando salvo (compatibilidade com centrais antigas).
+    expect(parsed.git.autoMerge).toBe(false)
+    expect(parseCentralConfig({ sessionDirectory: '/repo', git: { autoMerge: true } }).git.autoMerge).toBe(true)
     expect(parsed.cleanup).toEqual({ teardownEnvironment: true, removeWorktree: true, deleteBranch: true })
   })
 
@@ -99,8 +109,7 @@ describe('parseCentralConfig', () => {
   })
 })
 
-describe('padrões da central', () => {
-  it('worktreeRoot nasce como <diretório das sessões>/worktrees', () => {
+describe('padrões da central', () => {  it('worktreeRoot nasce como <diretório das sessões>/worktrees', () => {
     expect(defaultCentralConfig('/home/u/app').worktreeRoot).toBe('/home/u/app/worktrees')
     expect(defaultCentralConfig('/').worktreeRoot).toBe('')
   })
@@ -183,5 +192,38 @@ describe('workbenchProgressTone', () => {
     expect(workbenchProgressTone({ running: false, runState: 'failed' })).toBe('failed')
     expect(workbenchProgressTone({ running: false, runState: 'idle' })).toBe('waiting')
     expect(workbenchProgressTone({ running: false, runState: 'interrupted' })).toBe('waiting')
+  })
+})
+
+describe('prMergeReady', () => {
+  it('PR sem conflito e sem bloqueios, fora do rascunho, está pronto', () => {
+    expect(prMergeReady({ mergeable: true, mergeableState: 'clean', draft: false })).toBe(true)
+    expect(prMergeReady({ mergeable: true, mergeableState: 'behind' })).toBe(true)
+    expect(prMergeReady({ mergeable: true, mergeableState: 'has_hooks' })).toBe(true)
+  })
+
+  it('rascunho, conflito, cálculo pendente e bloqueios não autorizam o merge', () => {
+    expect(prMergeReady({ mergeable: true, mergeableState: 'clean', draft: true })).toBe(false)
+    expect(prMergeReady({ mergeable: false, mergeableState: 'dirty' })).toBe(false)
+    expect(prMergeReady({ mergeable: null, mergeableState: 'clean' })).toBe(false)
+    expect(prMergeReady({ mergeable: true, mergeableState: 'blocked' })).toBe(false)
+    expect(prMergeReady({ mergeable: true, mergeableState: 'unstable' })).toBe(false)
+    expect(prMergeReady({ mergeable: true })).toBe(false)
+  })
+})
+
+describe('configuração do merge automático', () => {
+  it('nasce desligado no padrão da central', () => {
+    expect(defaultCentralConfig('/x').git.autoMerge).toBe(false)
+  })
+
+  it('não combina com abrir o PR como rascunho (mesmo schema da tela e da API)', () => {
+    const base = defaultCentralConfig('/repo')
+    const parsed = centralConfigSchema.safeParse({ ...base, git: { ...base.git, autoMerge: true, prDraft: true } })
+    expect(parsed.success).toBe(false)
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]!.path).toEqual(['git', 'autoMerge'])
+    }
+    expect(centralConfigSchema.safeParse({ ...base, git: { ...base.git, autoMerge: true, prDraft: false } }).success).toBe(true)
   })
 })

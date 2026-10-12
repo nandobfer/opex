@@ -26,12 +26,14 @@ export const WORKBENCH_STAGES = [
     "pr_open",
     "changes_requested",
     "resolving_conflicts",
+    "merging_pr",
+    "deleting_pr_branch",
     "finishing",
     "done",
 ] as const
 export type WorkbenchStage = (typeof WORKBENCH_STAGES)[number]
 
-export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "building", "opening_pr", "resolving_conflicts", "finishing"]
+export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "building", "opening_pr", "resolving_conflicts", "merging_pr", "deleting_pr_branch", "finishing"]
 
 export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     planning: "Planejando",
@@ -44,6 +46,8 @@ export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     pr_open: "PR aberto",
     changes_requested: "Mudanças pedidas no PR",
     resolving_conflicts: "Resolvendo conflitos",
+    merging_pr: "Mergeando o PR",
+    deleting_pr_branch: "Excluindo a branch remota",
     finishing: "Concluindo",
     done: "Concluída",
 }
@@ -55,6 +59,8 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
     building: "build",
     opening_pr: "pr",
     resolving_conflicts: "pr",
+    merging_pr: "pr",
+    deleting_pr_branch: "pr",
     finishing: "build",
 }
 
@@ -63,7 +69,7 @@ export const WORKBENCH_STEPS = [
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },
     { id: "implement", label: "Implementação", stages: ["implementing"] },
     { id: "preview", label: "Prévia", stages: ["build_queued", "building", "preview"] },
-    { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested", "resolving_conflicts"] },
+    { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "merging_pr", "deleting_pr_branch"] },
     { id: "done", label: "Concluída", stages: ["finishing", "done"] },
 ] as const satisfies readonly { id: string; label: string; stages: readonly WorkbenchStage[] }[]
 
