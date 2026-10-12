@@ -1,8 +1,9 @@
 /**
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
- * Integrações ativas: Pusher, API interna, Crons, GitHub e Provedores de IA (hub `ai`
- * com os provedores `ai_opencode`, `ai_gemini` e `ai_jev`, que só aparecem dentro do hub).
+ * Integrações ativas: Pusher, API interna, Crons, GitHub, Provedores de IA (hub `ai`
+ * com os provedores `ai_opencode`, `ai_gemini` e `ai_jev`, que só aparecem dentro do hub), Clientes,
+ * SMTP e Storage S3.
  * `archflow` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
  * Fonte única dos metadados: nome, descrição, ambiente padrão e campos. É módulo PURO (sem
@@ -17,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev", "orcamentos"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev", "orcamentos", "smtp", "storage_s3"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -516,6 +517,45 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         publicFields: [],
         secretFields: [],
+    },
+    {
+        id: "smtp",
+        name: "SMTP",
+        description: "Envio de e-mails transacionais",
+        defaultEnvironment: "interno",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "host", label: "Host", kind: "text", required: true },
+            { key: "port", label: "Porta", kind: "number", defaultValue: 587, min: 1, max: 65535, required: true },
+            { key: "user", label: "Usuário", kind: "text" },
+            { key: "from", label: "Remetente", kind: "text", placeholder: "Opex <nao-responda@exemplo.com>" },
+        ],
+        secretFields: [{ key: "password", label: "Senha" }],
+    },
+    {
+        id: "storage_s3",
+        name: "Storage S3",
+        description: "Armazenamento de arquivos em MinIO/S3 compatível",
+        defaultEnvironment: "interno",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "endpoint", label: "Endpoint", kind: "url", required: true },
+            {
+                key: "publicEndpoint",
+                label: "Endpoint público (navegador)",
+                kind: "url",
+                placeholder: "http://localhost:9000",
+                description:
+                    "Endereço do storage visto pelo navegador, usado nas URLs assinadas de upload e mídia. Preencha quando o Endpoint for um nome interno (ex.: container Docker). Vazio = usa o Endpoint.",
+            },
+            { key: "region", label: "Região", kind: "text", defaultValue: "us-east-1", required: true },
+            { key: "bucket", label: "Bucket", kind: "text", defaultValue: "default", required: true },
+            { key: "signedUrlExpiresSeconds", label: "Expiração da URL assinada", kind: "number", unit: "s", defaultValue: 3600, min: 60, max: 604_800 },
+        ],
+        secretFields: [
+            { key: "accessKey", label: "Access key", required: true },
+            { key: "secretKey", label: "Secret key", required: true },
+        ],
     },
 ]
 

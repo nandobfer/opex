@@ -8,6 +8,8 @@ import { dbConnect } from "@/lib/db"
 import { getRawPusherServer } from "@/lib/pusher/server"
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import { testAiHub, testGemini, testJev, testOpencode } from "@/features/ai/server/testers"
+import { verifyConnection } from "@/lib/email/mailer"
+import { checkBucket } from "@/lib/storage/s3"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -148,6 +150,40 @@ const testOrcamentos: IntegrationTester = async ({ emit }) => {
     return `Portal de clientes disponível (${active} cliente(s) ativo(s))`
 }
 
+// ---------------------------------------------------------------------------
+// SMTP: transporter.verify()
+// ---------------------------------------------------------------------------
+
+const testSmtp: IntegrationTester = async ({ emit }) => {
+    const config = await getIntegrationConfig("smtp")
+    if (!config.host) fail("Host SMTP não configurado (envios estão em modo simulado)")
+    emit("step", `Conectando em ${config.host}:${config.port}${config.port === 465 ? " (TLS)" : ""}`)
+    try {
+        await verifyConnection()
+    } catch (error) {
+        fail(`Servidor SMTP recusou: ${describeFetchError(error)}`)
+    }
+    emit("success", "Servidor SMTP aceitou a conexão e a autenticação")
+    return "SMTP pronto para enviar e-mails"
+}
+
+// ---------------------------------------------------------------------------
+// Storage S3: HeadBucket
+// ---------------------------------------------------------------------------
+
+const testStorage: IntegrationTester = async ({ emit }) => {
+    const config = await getIntegrationConfig("storage_s3")
+    if (!config.endpoint || !config.accessKey || !config.secretKey) fail("Endpoint ou credenciais do Storage não configurados")
+    emit("step", `Verificando o bucket "${config.bucket}" em ${config.endpoint}`)
+    try {
+        await checkBucket()
+    } catch (error) {
+        fail(`Bucket inacessível: ${describeFetchError(error)}`)
+    }
+    emit("success", `Bucket "${config.bucket}" acessível`)
+    return "Storage S3 acessível"
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -158,4 +194,6 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     ai_gemini: testGemini,
     ai_jev: testJev,
     orcamentos: testOrcamentos,
+    smtp: testSmtp,
+    storage_s3: testStorage,
 }

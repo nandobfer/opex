@@ -94,6 +94,34 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect((await getIntegrationConfig('crons')).jobs).toEqual(DEFAULT_CRON_JOBS)
   })
 
+  it('SMTP e Storage S3: defaults do código, sem fallback do .env', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(null)
+    const smtp = await getIntegrationConfig('smtp')
+    expect(smtp.host).toBeUndefined()
+    expect(smtp.port).toBe(587)
+
+    const s3 = await getIntegrationConfig('storage_s3')
+    expect(s3.endpoint).toBeUndefined()
+    expect(s3.region).toBe('us-east-1')
+    expect(s3.bucket).toBe('default')
+    expect(s3.signedUrlExpiresSeconds).toBe(3600)
+  })
+
+  it('SMTP e Storage S3: o banco vence o default e os segredos vêm do banco', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(
+      stored({
+        integrationId: 'storage_s3',
+        publicValues: { endpoint: 'http://minio:9000', bucket: 'arquivos' },
+        secretValues: { accessKey: encryptSecret('ak'), secretKey: encryptSecret('sk') },
+      }),
+    )
+    const s3 = await getIntegration('storage_s3')
+    expect(s3.values.endpoint).toBe('http://minio:9000')
+    expect(s3.values.bucket).toBe('arquivos')
+    expect(s3.values.accessKey).toBe('ak')
+    expect(s3.secretSources.accessKey).toBe('db')
+  })
+
   it('API interna não tem campos nem segredos (documentação gerenciada)', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(null)
     const integration = await getIntegration('internal_api')

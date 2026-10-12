@@ -66,6 +66,21 @@ describe('buildIntegrationUpdateSchema', () => {
     expect(schema.safeParse({ secrets: { cronSecret: { action: 'set', value: 'senha com espaços' } } }).success).toBe(true)
   })
 
+  it('SMTP e Storage S3 validam os próprios campos e limites', () => {
+    const smtp = buildIntegrationUpdateSchema(getIntegrationDef('smtp'))
+    expect(smtp.safeParse({ publicValues: { host: 'smtp.exemplo.com', port: 465 } }).success).toBe(true)
+    expect(smtp.safeParse({ publicValues: { port: 70000 } }).error?.issues[0].message).toMatch(/máximo/)
+    expect(smtp.safeParse({ publicValues: { bucket: 'x' } }).success).toBe(false)
+    expect(smtp.safeParse({ secrets: { password: { action: 'set', value: 'segredo' } } }).success).toBe(true)
+
+    const s3 = buildIntegrationUpdateSchema(getIntegrationDef('storage_s3'))
+    expect(s3.safeParse({ publicValues: { endpoint: 'http://minio:9000', signedUrlExpiresSeconds: 60 } }).success).toBe(true)
+    expect(s3.safeParse({ publicValues: { endpoint: 'nao-e-url' } }).error?.issues[0].message).toMatch(/URL inválida/)
+    expect(s3.safeParse({ publicValues: { signedUrlExpiresSeconds: 30 } }).error?.issues[0].message).toMatch(/mínimo/)
+    expect(s3.safeParse({ secrets: { secret: { action: 'clear' } } }).success).toBe(false)
+    expect(s3.safeParse({ secrets: { secretKey: { action: 'clear' } } }).success).toBe(true)
+  })
+
   it('campo público do tipo token aceita qualquer valor (sem mínimo nem restrição de espaços)', () => {
     const base = getIntegrationDef('pusher')
     const schema = buildIntegrationUpdateSchema({

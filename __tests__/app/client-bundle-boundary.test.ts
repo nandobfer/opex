@@ -12,7 +12,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 const ROOT = process.cwd()
 const SRC = join(ROOT, 'src')
 const SERVER_PACKAGES = ['mongoose', 'mongodb', 'pino', 'pusher', 'node:', 'fs', 'crypto']
-const SERVER_PATHS = ['src/lib/db/', 'src/lib/logger', 'src/lib/pusher/server', 'src/lib/integrations/store', 'src/lib/crypto/']
+const SERVER_PATHS = ['src/lib/db/', 'src/lib/logger', 'src/lib/pusher/server', 'src/lib/integrations/store', 'src/lib/crypto/', 'src/lib/email/', 'src/lib/storage/']
 const IMPORT = /(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g
 const TYPE_ONLY = /^\s*(?:import|export)\s+type\s/
 

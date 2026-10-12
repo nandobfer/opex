@@ -44,6 +44,16 @@ export interface IntegrationConfigMap {
     ai_gemini: { apiKey?: string }
     ai_jev: { apiKey?: string }
     orcamentos: Record<string, never>
+    smtp: { host?: string; port: number; user?: string; from?: string; password?: string }
+    storage_s3: {
+        endpoint?: string
+        publicEndpoint?: string
+        region: string
+        bucket: string
+        signedUrlExpiresSeconds: number
+        accessKey?: string
+        secretKey?: string
+    }
 }
 
 export type SecretSource = "db" | "env" | "none"

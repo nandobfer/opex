@@ -145,7 +145,7 @@ describe('POST /api/integrations/[id]/test', () => {
   })
 
   it('integração desconhecida não executa o teste', async () => {
-    const res = await testPOST(new NextRequest('http://x', { method: 'POST' }), params('smtp'))
+    const res = await testPOST(new NextRequest('http://x', { method: 'POST' }), params('linx'))
     expect(res.status).toBe(404)
     expect(mocks.runIntegrationTest).not.toHaveBeenCalled()
   })

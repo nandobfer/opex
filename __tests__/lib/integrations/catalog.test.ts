@@ -17,7 +17,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_jev', 'orcamentos']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -93,6 +93,28 @@ describe('catálogo de integrações', () => {
     expect(getIntegrationDef('ai_gemini').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
+  })
+
+  it('SMTP e Storage S3: campos, defaults e sem .env', () => {
+    const smtp = getIntegrationDef('smtp')
+    expect(smtp.name).toBe('SMTP')
+    expect(smtp.defaultEnvironment).toBe('interno')
+    expect(integrationPath('smtp')).toBe('/integracoes/smtp')
+    expect([...smtp.publicFields, ...smtp.secretFields].every((field) => !field.env)).toBe(true)
+    expect(smtp.publicFields.find((field) => field.key === 'host')).toMatchObject({ required: true })
+    expect(smtp.publicFields.find((field) => field.key === 'port')?.defaultValue).toBe(587)
+    expect(smtp.secretFields).toEqual([expect.objectContaining({ key: 'password' })])
+
+    const s3 = getIntegrationDef('storage_s3')
+    expect(s3.name).toBe('Storage S3')
+    expect(s3.defaultEnvironment).toBe('interno')
+    expect(integrationPath('storage_s3')).toBe('/integracoes/storage_s3')
+    expect([...s3.publicFields, ...s3.secretFields].every((field) => !field.env)).toBe(true)
+    expect(s3.publicFields.find((field) => field.key === 'endpoint')).toMatchObject({ kind: 'url', required: true })
+    expect(s3.publicFields.find((field) => field.key === 'region')?.defaultValue).toBe('us-east-1')
+    expect(s3.publicFields.find((field) => field.key === 'bucket')?.defaultValue).toBe('default')
+    expect(s3.publicFields.find((field) => field.key === 'signedUrlExpiresSeconds')?.defaultValue).toBe(3600)
+    expect(s3.secretFields.map((field) => field.key)).toEqual(['accessKey', 'secretKey'])
   })
 
   it('isCardManagedField só reconhece o grupo "card"', () => {
