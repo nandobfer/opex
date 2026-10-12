@@ -1,6 +1,7 @@
 import { getOpencodeClient, runOpencodeShell, type OpencodeShellResult } from "@/lib/ai/opencode-client"
 import { loadCentral, repoForProject, saveCentralTest } from "./centrals"
 import { centralLogger } from "./log"
+import { shellQuote } from "../preview-backup"
 import type { CentralCheck, CentralTestOutcome } from "../types"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 
@@ -10,9 +11,6 @@ import { agenticAvailability, loadAgenticSettings } from "./settings"
  * log da central (o terminal da página mostra em tempo real).
  */
 
-
-/** Aspas simples para o shell. */
-export const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`
 
 const firstLine = (result: OpencodeShellResult) => result.output.split("\n").find((line) => line.trim())?.trim() ?? ""
 

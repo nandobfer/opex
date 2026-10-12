@@ -1,4 +1,5 @@
 import type { AgentRole } from "./constants"
+import { backupExistsCommand, shellQuote } from "./preview-backup"
 import type { CentralConfig } from "./schemas"
 
 /**
@@ -15,6 +16,12 @@ export interface WorkbenchContext {
     worktreePath: string
     branch: string
     composeProject: string
+}
+
+/** Caminhos do backup do MongoDB da prévia usados nos prompts (OPE-54). */
+export interface PreviewBackupPaths {
+    dir: string
+    path: string
 }
 
 /** Texto sem acento, minúsculo, só `[a-z0-9-]`. */
@@ -141,7 +148,7 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     return withInfo + extra(config, "implementation")
 }
 
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number): string {
+export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths): string {
     const env = config.environment
     const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
     const command = `${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
@@ -149,11 +156,23 @@ export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: 
     return [
         "Você agora é o agente de BUILD. Suba a prévia da implementação com Docker Compose, no worktree.",
         `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
+        "",
+        "## Backup do MongoDB (obrigatório ANTES de publicar a prévia)",
+        "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
+        `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
+        `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
+\`\`\`sh
+mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>" --archive=${shellQuote(backup.path)} --gzip
+\`\`\`
+  (se o \`mongodump\` só existir num container, rode-o no container com acesso ao MongoDB).`,
+        `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
+        "- Se não conseguir identificar o banco ou o dump falhar, NÃO suba a prévia e responda com o bloco JSON de falha abaixo.",
+        "",
         `- Confira o docker compose do projeto${file ? ` (${env.composeFile.trim()})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada 4001–4098; nunca outra).`,
         `- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`,
         `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`docker compose -p ${ctx.composeProject} logs --tail 100\` se falhar).`,
         "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
-        `- ${JSON_RULE} Formato: {"ok": true} quando a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
+        `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
     ].join("\n") + extra(config, "build")
 }
 
@@ -219,9 +238,10 @@ export function deletePrBranchPrompt(config: CentralConfig, ctx: WorkbenchContex
     ].join("\n") + extra(config, "pr")
 }
 
-export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext): string {
+export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext, backup: PreviewBackupPaths | null): string {
     const steps = [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,
+        backup ? `- Apague o backup do MongoDB da prévia (obrigatório): \`rm -rf ${shellQuote(backup.dir)}\` — o arquivo ${shellQuote(backup.path)} não pode continuar existindo.` : "",
         config.cleanup.teardownEnvironment ? `- Derrube a prévia: \`docker compose -p ${ctx.composeProject} down --remove-orphans\` (rode no worktree, se ele ainda existir).` : "",
         config.cleanup.removeWorktree ? `- Remova o worktree: \`git worktree remove --force ${ctx.worktreePath}\` e depois \`git worktree prune\`.` : "",
         config.cleanup.deleteBranch ? `- Apague a branch local \`${ctx.branch}\` (\`git branch -D ${ctx.branch}\`); não apague a remota.` : "",
