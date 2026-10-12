@@ -55,4 +55,9 @@ describe('OptionTabs', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('não quebra o rótulo em duas linhas (whitespace-nowrap)', () => {
+    render(<Harness />)
+    expect(screen.getByRole('radio', { name: 'Pessoa jurídica' }).classList.contains('whitespace-nowrap')).toBe(true)
+  })
 })

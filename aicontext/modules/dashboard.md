@@ -3,7 +3,9 @@
 Página inicial dO Opex (`/` redireciona para `HOME_HREF = "/dashboard"`), **acima de "Tarefas"** no
 menu. Reúne KPIs e gráficos de quatro blocos — **Visão geral de tarefas**, **Financeiro**, **Horas
 agênticas** e **Central de desenvolvimento** — num **único período global** e atualizados em tempo
-real pelo Pusher. **Somente leitura**: nenhuma escrita nem auditoria.
+real pelo Pusher. Os **indicadores são somente leitura** (nenhuma escrita nem auditoria); o cabeçalho
+traz **atalhos globais** de criação e o indicador **Trabalhos em andamento** (ver “Cabeçalho e
+atalhos globais”).
 
 ## Endpoint `GET /api/dashboard`
 
@@ -46,6 +48,24 @@ real pelo Pusher. **Somente leitura**: nenhuma escrita nem auditoria.
   sempre **mensal**. O **fuso do navegador** (`Intl…timeZone`) é enviado ao servidor para a virada de
   dia/semana. Buckets sem eventos entram como zero.
 
+## Cabeçalho e atalhos globais
+
+O cabeçalho (`DashboardHeader`) reúne o título, o **período global** e o botão **Atualizar**, além de:
+
+- **Trabalhos em andamento** (`TimerIndicator`, ver `modules/time.md`): as mesas executando ou
+  aguardando ação humana; cada item abre a mesa de trabalho.
+- **Nova prévia** e **Nova tarefa** (`TaskCreationActions`, ver `modules/tasks.md`): os mesmos atalhos
+  da tela de Tarefas, nas páginas `/tarefas/previa` e `/tarefas/nova`; ficam desabilitados sem
+  repositório vinculado.
+
+Os atalhos **independem do período** e continuam disponíveis durante o carregamento ou erro dos
+indicadores. O período é um `OptionTabs` que **não quebra linha**: o grupo não encolhe (`shrink-0`) e
+os rótulos usam `whitespace-nowrap`, para o grupo inteiro passar à linha seguinte sem “Mês atual”
+quebrar em duas linhas.
+
+O `layout.tsx` da rota monta `TimerProvider` e `WorkbenchProgressProvider` (somente leitura) para
+alimentar o indicador — os mesmos contextos do layout de Tarefas.
+
 ## Tempo real
 
 `useDashboardRealtime()` assina `private-app` e invalida a consulta em `tasks-updated`,
@@ -65,5 +85,5 @@ recharts, desligada com movimento reduzido.
 
 `src/features/dashboard/{types,schemas,period,logic,format}.ts`,
 `src/features/dashboard/server/service.ts`, `src/features/dashboard/hooks/{useDashboard,useDashboardPeriod}.ts`,
-`src/features/dashboard/components/**`, `src/app/(app)/dashboard/page.tsx`,
+`src/features/dashboard/components/**`, `src/app/(app)/dashboard/{page,layout}.tsx`,
 `src/app/api/dashboard/route.ts`. Testes em `__tests__/features/dashboard/`.
