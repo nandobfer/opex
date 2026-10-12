@@ -35,9 +35,20 @@ complementar a Horas agênticas (`/tarefas/horas`, que trata do tempo de execuç
    tarefas por **data de conclusão desc**. A tela mostra os **totais gerais** do período (faturamento
    R$, horas do cliente e quantidade de tarefas) e, em cada grupo, os totais equivalentes.
 8. **Horas.** Em cada tarefa, aparecem as **duas**: `hours` (H real) e `clientHours` (H × fator).
+9. **Filtros de cliente e repositório (multisseleção).** Dois filtros opcionais, aplicados **na API**
+   (não no navegador):
+   - **Clientes** — ids de `OrcamentoClient` (inclui clientes **inativos**);
+   - **Repositórios** — ids de `Project` (repositório vinculado, o `DevTask.projectId`).
+   Sem seleção, o filtro significa **todos**. Dentro de um filtro as opções somam (**OU**) e filtros
+   diferentes se cruzam (**E**), sempre combinados com o período. As seleções ficam na **URL**
+   (`clientIds`/`projectIds`, ids separados por vírgula) junto do período, e cada mudança refaz a
+   consulta. Os **totais** (gerais e por grupo) refletem só o que passou pelos filtros.
+   O grupo **"Cliente removido"** continua aparecendo quando **não** há filtro de clientes; com filtro
+   de clientes ele não é oferecido como opção (não há registro para selecionar).
 
 Candidatas da busca: `DevTask` com `columnId ∈ colunas de conclusão`, `archived ≠ true`,
-`clientId ≠ null` e `estimate ≠ null`.
+`clientId ≠ null`, `estimate ≠ null` e, quando houver seleção, `clientId ∈ clientIds` e/ou
+`projectId ∈ projectIds`.
 
 ## Contrato (`types.ts`)
 
@@ -47,30 +58,41 @@ totalBillingBrl, tasks }`), `FinanceTotalsDto` e `FinanceByClientDto` (`{ from, 
 
 ## Backend
 
-- `schemas.ts` — `financeQuerySchema` (`from`/`to` ISO opcionais) e `FINANCE_PATH`.
+- `schemas.ts` — `financeQuerySchema` (`from`/`to` ISO opcionais; `clientIds`/`projectIds` como
+  **listas de ids separadas por vírgula**, com deduplicação e id malformado recusado) e `FINANCE_PATH`.
 - `logic.ts` (**puro**, testável sem banco):
   - `completionTimestamps(logs, closedKeys, nameToKey)` — reduz os logs de auditoria ao maior
     timestamp "para dentro de conclusão" por tarefa;
   - `aggregateFinance(tasks, clientsById, range)` — agrupa, resolve nome/"Cliente removido", soma,
     arredonda a 2 casas e ordena grupos e tarefas.
-- `server/service.ts` — `listFinanceByClient({ from, to })`: `dbConnect()` → `concludedColumnKeys()`
-  (vazio ⇒ vazio) → `TaskBoardColumn` (nome → key) → tarefas candidatas → `AuditLog` (MOVER/ATUALIZAR,
+- `server/service.ts` — `listFinanceByClient({ from, to, clientIds, projectIds })`: `dbConnect()` →
+  `concludedColumnKeys()` (vazio ⇒ vazio) → `TaskBoardColumn` (nome → key) → tarefas candidatas
+  (aplicando `$in` de `clientId`/`projectId` quando há seleção) → `AuditLog` (MOVER/ATUALIZAR,
   `timestamp ≤ to`) → `completionTimestamps` → filtro `[from, to]` → `OrcamentoClient` (nomes) →
   `aggregateFinance`. Reusa `concludedColumnKeys` de `features/tasks/server/service.ts` e `ProjectRef`
-  de `features/tasks/types.ts`.
-- Rota `GET /api/financeiro?from&to` (`src/app/api/financeiro/route.ts`, `withRoute` + `ok`), protegida
-  pelo middleware (não é API pública por token e **não** entra no OpenAPI `/api/v1/*`).
+  de `features/tasks/types.ts`. Os filtros são **opcionais** (o dashboard chama só com `from`/`to`).
+- Rota `GET /api/financeiro?from&to&clientIds&projectIds` (`src/app/api/financeiro/route.ts`, `withRoute`
+  + `ok`), protegida pelo middleware (não é API pública por token e **não** entra no OpenAPI `/api/v1/*`).
 
 ## Frontend
 
 - `src/app/(app)/financeiro/page.tsx` — envolve a página no `RepoIndexProvider` (para o
   `GithubRepoLabel` real) e renderiza `<FinancePage/>`.
-- `hooks/useFinance.ts` — `useFinanceByClient` (TanStack Query sobre `/financeiro`) e
-  `useFinanceRealtime` (assina `private-app`; invalida o cache em `tasks-updated` e
-  `orcamentos-updated` — nunca publica eventos).
-- `components/FinancePage.tsx` — período na URL (`useUrlFilters`; padrão = mês corrente), card com
-  `PresetDateRangeFilter` e totais (`AnimatedNumber`), botão Atualizar e estados
-  loading/erro/vazio/lista (Framer Motion).
+- `hooks/useFinance.ts` — `useFinanceByClient(filters)` (TanStack Query sobre `/financeiro`, com a
+  chave de cache derivada da consulta normalizada) e `useFinanceRealtime` (assina `private-app`;
+  invalida o cache do financeiro **e as opções dos filtros** em `tasks-updated` e `orcamentos-updated`
+  — nunca publica eventos).
+- `filters.ts` (**puro**) — `FinanceFilters` (período + `clientIds`/`projectIds`), `FINANCE_FILTER_SCHEMA`
+  (codecs da URL), `defaultFinanceFilters` (mês corrente), `financeQuery`/`financeHttpParams`
+  (normalização dos ids e parâmetros da API) e os construtores das opções (`financeClientOptions`,
+  `financeRepoOptions`).
+- `components/FinanceFiltersBar.tsx` — `ListFilters` do projeto com os grupos **Período**
+  (`PresetDateRangeFilter`), **Clientes** e **Repositórios** (`CadastroMultiSelect` com busca); Limpar
+  restaura o mês corrente e zera as seleções.
+- `components/FinancePage.tsx` — filtros na URL (`useUrlFilters`; padrão = mês corrente), cartão de
+  totais (`AnimatedNumber`), botão Atualizar e estados loading/erro/vazio/lista (Framer Motion). O
+  vazio distingue "sem conclusões no período" de "sem resultados para os filtros" (com ação de limpar a
+  seleção). As opções vêm de `useOrcamentoClients` (clientes) e `useTaskOptions` (projetos).
 - `components/FinanceClientGroup.tsx` — grupo de cliente **expansível** (recolhido por padrão;
   abertura animada por Framer Motion, respeitando movimento reduzido): nome, contagem, horas do
   cliente e faturamento.
@@ -83,5 +105,8 @@ totalBillingBrl, tasks }`), `FinanceTotalsDto` e `FinanceByClientDto` (`{ from, 
 `__tests__/features/finance/`: `finance-logic` (derivação da conclusão por nome/key, maior timestamp,
 agrupamento, "Cliente removido", ordenação e totais), `finance-service` (agrupamento pelo snapshot,
 vazio sem colunas de conclusão, filtro pelo período, tarefas arquivadas/sem cliente/sem evento
-ignoradas, cliente removido) e `finance-page` (totais, expansão do cliente, vazio e erro). A navegação
-é coberta em `__tests__/features/layout/navigation.test.ts`.
+ignoradas, cliente removido e os **filtros de cliente/repositório** — OU dentro do filtro, E entre
+filtros e seleção sem resultado), `finance-filters` (normalização dos ids, parâmetros HTTP, período ISO
+em início/fim do dia e opções ordenadas), `finance-schemas` (listas por vírgula sem duplicatas e id malformado), `finance-route` (encaminhamento dos parâmetros e 400 para id malformado) e `finance-page` (totais,
+filtros de clientes/repositórios, seleção lida da URL, vazio com filtros, expansão do cliente, vazio e
+erro). A navegação é coberta em `__tests__/features/layout/navigation.test.ts`.

@@ -129,7 +129,7 @@ export function TaskClientCard({ task }: { task: TaskDetailDto }) {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remover o cliente de {task.code}?</AlertDialogTitle>
-                        <AlertDialogDescription>A estimativa e o faturamento somem da tarefa. Se ela veio do portal, deixa de aparecer para o cliente.</AlertDialogDescription>
+                        <AlertDialogDescription>As horas reais estimadas permanecem na tarefa; o prazo e o faturamento do cliente somem. Se ela veio do portal, deixa de aparecer para o cliente.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>

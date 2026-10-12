@@ -8,12 +8,26 @@ import type { FinanceByClientDto } from '@/features/finance/types'
 
 const mocks = vi.hoisted(() => ({
   query: { data: undefined as unknown, isLoading: false, isError: false, isFetching: false, error: null as unknown, refetch: vi.fn() },
+  filters: null as unknown,
+  clients: { data: [] as unknown[] },
+  taskOptions: { data: { projects: [] as unknown[] } },
 }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/finance/hooks/useFinance', () => ({
-  useFinanceByClient: () => mocks.query,
+  useFinanceByClient: (filters: unknown) => {
+    mocks.filters = filters
+    return mocks.query
+  },
   useFinanceRealtime: vi.fn(),
+}))
+vi.mock('@/features/orcamentos/hooks/useOrcamentos', () => ({
+  useOrcamentoClients: () => mocks.clients,
+  orcamentoClientsKey: ['orcamentos', 'clients'],
+}))
+vi.mock('@/features/tasks/hooks/useTasks', () => ({
+  useTaskOptions: () => mocks.taskOptions,
+  TASKS_QUERY_KEY: 'tasks',
 }))
 
 import { FinancePage } from '@/features/finance/components/FinancePage'
@@ -46,6 +60,8 @@ const data = (): FinanceByClientDto => ({
   totals: { taskCount: 1, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400 },
 })
 
+const emptyData = (): FinanceByClientDto => ({ ...data(), groups: [], totals: { taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } })
+
 const renderPage = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -55,7 +71,11 @@ const renderPage = () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.history.replaceState(null, '', '/financeiro')
   mocks.query = { data: data(), isLoading: false, isError: false, isFetching: false, error: null, refetch: vi.fn() }
+  mocks.filters = null
+  mocks.clients = { data: [{ id: 'c1', name: 'Acme', active: true }] }
+  mocks.taskOptions = { data: { projects: [{ id: 'p1', name: 'Portal', repo: 'o/portal', sigla: 'POR' }] } }
 })
 
 describe('FinancePage', () => {
@@ -64,6 +84,30 @@ describe('FinancePage', () => {
     expect(screen.getByRole('heading', { name: 'Financeiro' })).toBeTruthy()
     expect(screen.getAllByText('R$ 400,00').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: /Acme/ })).toBeTruthy()
+  })
+
+  it('renderiza os filtros de Período, Clientes e Repositórios', () => {
+    renderPage()
+    expect(screen.getByText('Período')).toBeTruthy()
+    expect(screen.getByText('Clientes')).toBeTruthy()
+    expect(screen.getByText('Repositórios')).toBeTruthy()
+    expect(screen.getByText('1 REGISTROS')).toBeTruthy()
+  })
+
+  it('lê clientes e repositórios da URL e consulta o financeiro com eles', () => {
+    const clientId = 'a'.repeat(24)
+    const projectId = 'b'.repeat(24)
+    window.history.replaceState(null, '', `/financeiro?clientIds=${clientId}&projectIds=${projectId}`)
+    renderPage()
+    expect(mocks.filters).toMatchObject({ clientIds: [clientId], projectIds: [projectId] })
+  })
+
+  it('sem resultados com filtros ativos mostra o aviso específico com a ação de limpar', () => {
+    window.history.replaceState(null, '', `/financeiro?clientIds=${'a'.repeat(24)}`)
+    mocks.query = { ...mocks.query, data: emptyData() }
+    renderPage()
+    expect(screen.getByText('Nenhuma tarefa para os filtros selecionados')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Limpar seleção' })).toBeTruthy()
   })
 
   it('expande o cliente para listar as tarefas concluídas', async () => {
@@ -80,7 +124,7 @@ describe('FinancePage', () => {
   })
 
   it('sem tarefas concluídas mostra o estado vazio', () => {
-    mocks.query = { ...mocks.query, data: { ...data(), groups: [], totals: { taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } } }
+    mocks.query = { ...mocks.query, data: emptyData() }
     renderPage()
     expect(screen.getByText('Nenhuma tarefa concluída neste período')).toBeTruthy()
   })

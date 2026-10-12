@@ -23,9 +23,11 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
   feature "Tags de tarefas" e `tagsSourceHash` é o hash equivalente das tags (ver `modules/ai.md`).
   `clientId` é o cliente de orçamento **da tarefa** — o que a **solicitou** pelo portal ou o que o
   dono **atribuiu/atualizou na página da tarefa** (`null` = sem cliente) — e é o que define a lista
-  do portal (o cliente só vê as dele). `estimate` é o orçamento (snapshot: horas reais, horas do
-  cliente, fator, custo/hora e faturamento) e existe **se e somente se** houver cliente: adicionar
-  cliente cria a estimativa e remover o cliente zera as duas coisas. Ver `modules/orcamentos.md`.
+  do portal (o cliente só vê as dele). `estimate` é a estimativa da tarefa (snapshot: horas reais,
+  horas do cliente, fator, custo/hora e faturamento) e **não depende do cliente**: sem cliente ela
+  guarda só as **horas reais** (fator 1, custo 0, sem inflação); com cliente, o prazo e o faturamento
+  são inflados. `estimate: null` significa **ainda não estimada** (a edição manual ou a IA cria).
+  Ver `modules/orcamentos.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, authorType, authorName, createdAt }`. A origem
   do comentário (`authorType: "owner" | "client"`) e o nome exibido (`authorName`: o dono vindo de
   `APP_OWNER_NAME`/`getLocalUser()`, ou o nome do cliente no portal) permitem marcar quem comentou;
@@ -81,8 +83,9 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial; inclui `agenticFlow` — fluxo da mesa, ajustável só pela tela de desenvolvimento) |
-| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
-| `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove cliente e estimativa) |
+| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — grava as horas reais (cria a estimativa se não existir) e recalcula prazo/faturamento com o cliente da tarefa |
+| `POST /api/tasks/[id]/estimate/generate` | Estima as horas com IA (NDJSON; reusa "Estimar prazos") e grava o snapshot |
+| `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove o cliente e a inflação, **preservando as horas reais**) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
@@ -125,8 +128,8 @@ semeado na primeira leitura (`ensureBoard`).
   fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; o card mostra no cabeçalho o código e, no rodapé, o ícone de prioridade (só o ícone
-  colorido, sem rótulo), a **estimativa real** de horas e o **faturamento** estimado (`EstimateBadge`,
-  quando a tarefa veio do portal — ver `modules/orcamentos.md`), o chip de tipo, as **tags** e "Arquivada"; o
+  colorido, sem rótulo), a **estimativa real** de horas e, **com cliente**, o **faturamento estimado**
+  (`EstimateBadge` — ver `modules/orcamentos.md`), o chip de tipo, as **tags** e "Arquivada"; o
   título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
@@ -135,7 +138,7 @@ semeado na primeira leitura (`ensureBoard`).
   clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
   `modules/agentic-dev.md`, "Trabalhos em andamento").
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA**, as **tags** e a
-  **estimativa real** de horas e o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
+  **estimativa real** de horas e, com cliente, o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
   Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com
   a página (`usePageVirtualizer`). Na célula do código, o **motivo de espera** de uma mesa é o
   mesmo **link para a mesa** do card do kanban.
@@ -183,8 +186,8 @@ mas pelos endpoints internos (sessão, sem token de cliente):
   ou limpar o cliente **reestima apenas o custo** — reusa as horas e o modelo já gravados, sem nova
   chamada de IA.
 - **Aprovar**: cria a tarefa real com issue no GitHub (como no app). **Sem cliente**, a tarefa nasce
-  sem `clientId` e sem `estimate`; **com cliente**, grava o cliente e o snapshot do orçamento. A
-  prioridade escolhida na revisão sobrepõe a sugerida pela IA.
+  sem `clientId`, mas **preserva as horas reais** estimadas (snapshot neutro); **com cliente**, grava
+  o cliente e o snapshot inflado. A prioridade escolhida na revisão sobrepõe a sugerida pela IA.
 - Correção, clareza (bloqueia aprovar em "faltam informações") e prioridade funcionam igual ao
   portal; a correção regenera a prévia e **zera a estimativa**. O rascunho aprovado responde 409 a
   correção, estimativa e nova aprovação.
@@ -220,17 +223,20 @@ preservar o escopo de hooks de cada aba.
   remover pede confirmação. Adicionar/trocar grava o `clientId` e **habilita o campo de estimativa**
   (`useSetTaskClient` → `PATCH /api/tasks/[id]/client`): o servidor recalcula o orçamento com o fator
   de lucro e o custo/hora do cliente escolhido, **preservando as horas** já estimadas (começando em
-  **0** quando ainda não havia estimativa). Remover zera `clientId` e `estimate` e o campo some.
-  Clientes são cadastrados **apenas** em Integrações › Orçamentos (o card traz o link no estado vazio).
-- **Estimativa** (`TaskEstimateCard`, coluna lateral; só em tarefas que vieram do portal): as
-  **horas estimadas** (originais, H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`);
-  o **prazo do cliente** (`H × fator`) e o **faturamento estimado** (`horas do cliente × custo/hora`)
-  são recalculados com o fator e o custo/hora **atuais** do cliente que originou a tarefa
-  (`resolveTaskClient`: o cliente **da tarefa**, o `clientId` gravado; sem ele — dados legados —, o
-  `OrcamentoClient` ativo cujo `projectIds` inclui o repositório) e
-  animados com `AnimatedNumber`; mostra também o **cliente** (`estimateClientName`). Salvar grava
-  auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`; sem cliente, o
-  servidor usa o fator e o custo/hora do próprio snapshot.
+  **0** quando ainda não havia estimativa). Remover zera `clientId` e a inflação, **preservando as
+  horas reais** na estimativa. Clientes são cadastrados **apenas** em Integrações › Orçamentos (o
+  card traz o link no estado vazio).
+- **Estimativa** (`TaskEstimateCard`, coluna lateral; **sempre visível**, com ou sem cliente): as
+  **horas reais** (H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`; salvar **cria**
+  a estimativa quando a tarefa ainda não tinha) e podem ser **geradas por IA** pelo botão **Estimar
+  com IA** / **Regerar com IA** (`useGenerateTaskEstimate` → `POST /api/tasks/[id]/estimate/generate`,
+  que reusa "Estimar prazos" — ver `modules/ai.md`; o progresso e o erro aparecem no próprio card).
+  **Com cliente**, o **prazo** (`H × fator`) e o **faturamento estimado** (`prazo × custo/hora`) são
+  recalculados com o fator e o custo/hora **atuais** do cliente **da tarefa** (`resolveTaskClient`:
+  o `clientId` gravado; `null` = sem cliente, **sem** inflação; só registros legados sem o campo caem
+  no `OrcamentoClient` ativo do repositório) e animados com `AnimatedNumber`; mostra também o
+  **cliente** (`estimateClientName`). **Sem cliente**, exibe só as horas reais. Salvar/gerar grava
+  auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
 - **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Refinar tarefa** (cabeçalho): abre a aba **Especificação técnica** e **inicia** o refinamento,
@@ -260,7 +266,8 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `task-creation-actions` (os atalhos compartilhados com o Dashboard), `task-form`,
 `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`, `task-estimate-card`, `task-client-card` — a estimativa editável, o cliente da
+`task-summary-card`, `task-estimate-card`, `task-estimate-generate`, `task-client-card` — a
+estimativa (sempre visível, edição manual e geração por IA na tarefa), o cliente da
 tarefa (adicionar/trocar/remover e as validações) e o autor
 dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
 `__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. A **prévia
