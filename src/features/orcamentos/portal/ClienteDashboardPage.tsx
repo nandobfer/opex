@@ -14,7 +14,7 @@ import { formatBrl, formatCount, formatHours } from "@/features/dashboard/format
 import { CLIENTE_COST_LABEL } from "../constants"
 import { useClientePortal } from "./ClientePortalContext"
 import { ClienteFinanceSection } from "./components/ClienteFinanceSection"
-import { ClienteNewPreviewButton } from "./components/ClienteNewPreviewButton"
+import { ClienteTaskCreationButton } from "./components/ClienteTaskCreationButton"
 import { ClienteTasksOverviewSection } from "./components/ClienteTasksOverviewSection"
 import { useClienteDashboard, useClienteRealtime } from "./hooks"
 import { useClientePeriod } from "./useClientePeriod"
@@ -54,7 +54,7 @@ export function ClienteDashboardPage() {
 
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className="space-y-6">
-            <DashboardHeader title="Dashboard" description="Visão das suas tarefas no período" actions={<ClienteNewPreviewButton />} period={period} onPeriodChange={setPeriod} onRefresh={refresh} refreshing={query.isFetching} />
+            <DashboardHeader title="Dashboard" description="Visão das suas tarefas no período" actions={<ClienteTaskCreationButton appearance="preview" />} period={period} onPeriodChange={setPeriod} onRefresh={refresh} refreshing={query.isFetching} />
 
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} {...swap} className="space-y-6">

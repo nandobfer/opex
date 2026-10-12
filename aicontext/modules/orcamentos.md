@@ -87,6 +87,12 @@ Logins e sessões: `aicontext/modules/auth.md`.
   `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin).
 - **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com
   "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa.
+- **Atalho de criação**: Tarefas e Dashboard usam o **mesmo** botão (`ClienteTaskCreationButton`), que
+  abre `/cliente/nova`. No Dashboard ele aparece como **"Nova prévia"** (`outline`, ícone `Sparkles`)
+  e em Tarefas como **"Nova tarefa"** (`default`, ícone `Plus`) — só o rótulo e o estilo mudam, a
+  navegação é a mesma. O atalho **não** depende de repositório liberado: quem não tem repositório
+  segue para a página de criação, onde recebe a orientação (o portal não tem criação manual de
+  tarefa; tudo começa pela prévia por IA).
 - **Página da tarefa**: detalhes equivalentes aos do dono, **exceto Histórico e Horas apontadas**;
   abas Descrição, Especificação técnica e Comentários; coluna lateral com prioridade editável e a
   estimativa do cliente (só `H × fator` e o custo). O **autor** dos comentários/ações é o **usuário**
@@ -210,4 +216,6 @@ Como o portal é autenticado por **sessão**, ele **não** entra na especificaç
 padrão não excluível), **`portal-cost`** (custo por repositório), **`portal-period`** (período/marca do
 portal e filtros do financeiro), **`portal-dashboard`** (agregações puras: tags e resumo financeiro),
 **`cliente-dashboard-page`** e **`cliente-finance-page`** (apresentação compartilhada com o dono),
-`cliente-*` (cards/listas/detalhe), `cliente-dialog`, `copy-portal-url`, `markdown-field`.
+**`cliente-task-creation-button`** (botão de criação compartilhado por Tarefas/Dashboard),
+**`cliente-tasks-page`** (tela de Tarefas), `cliente-*` (cards/listas/detalhe), `cliente-dialog`,
+`copy-portal-url`, `markdown-field`.
