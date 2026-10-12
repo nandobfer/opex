@@ -5,13 +5,13 @@ import { Check, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { clientePortalPath } from "../../constants"
+import { clienteLoginPath } from "../../constants"
 import { CopyPortalUrlButton, portalUrlFrom } from "./CopyPortalUrlButton"
 
 /** Token do cliente exibido logo após criar/regenerar (o servidor guarda o valor para o link). */
 export function ClientTokenDialog({ token, clientName, onClose }: { token: string | null; clientName: string; onClose: () => void }) {
     const [copied, setCopied] = useState(false)
-    const url = token ? portalUrlFrom(clientePortalPath(token)) : ""
+    const url = token ? portalUrlFrom(clienteLoginPath(token)) : ""
 
     const copyToken = async () => {
         try {
@@ -35,7 +35,7 @@ export function ClientTokenDialog({ token, clientName, onClose }: { token: strin
                         <p className="text-xs font-medium text-muted-foreground">Endereço do portal</p>
                         <div className="flex items-center gap-2">
                             <Input readOnly value={url} className="font-mono text-xs" onFocus={(event) => event.target.select()} />
-                            <CopyPortalUrlButton portalPath={clientePortalPath(token ?? "")} portalName={clientName} className="shrink-0 border" />
+                            <CopyPortalUrlButton portalPath={clienteLoginPath(token ?? "")} portalName={clientName} className="shrink-0 border" />
                         </div>
                     </div>
                     <div className="space-y-1.5">

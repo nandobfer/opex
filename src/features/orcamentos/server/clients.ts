@@ -4,10 +4,11 @@ import { OrcamentoClient, OrcamentoDraft, type IOrcamentoClient } from "@/lib/db
 import { Project } from "@/lib/db/models/Project"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import type { ProjectRef } from "@/features/tasks/types"
-import { CLIENTE_AUDIT_ENTITY, ORCAMENTOS_UPDATED_EVENT, clientePortalPath } from "../constants"
+import { CLIENTE_AUDIT_ENTITY, ORCAMENTOS_UPDATED_EVENT, clienteLoginPath } from "../constants"
 import type { ClienteOrcamentoInput } from "../schemas"
 import type { ClienteOrcamentoDto, CreatedClienteOrcamentoDto } from "../types"
-import { newClientTokenValue } from "./token"
+import { newClientTokenValue, type ClienteOrcamentoDoc } from "./token"
+import { ensureDefaultUser, removeClientUsers } from "./users"
 
 /**
  * Clientes do portal de Orçamentos (SOMENTE servidor): CRUD com auditoria e evento em `private-app`.
@@ -29,7 +30,7 @@ function toDto(doc: ClientDoc, projects: Map<string, ProjectRef>): ClienteOrcame
         id: String(doc._id),
         name: doc.name,
         tokenPrefix: doc.tokenPrefix,
-        portalPath: clientePortalPath(doc.token ?? ""),
+        portalPath: clienteLoginPath(doc.token ?? ""),
         projectIds: doc.projectIds ?? [],
         projects: (doc.projectIds ?? []).map((id) => projects.get(id)).filter((item): item is ProjectRef => Boolean(item)),
         hourlyRate: doc.hourlyRate ?? 0,
@@ -82,6 +83,8 @@ export async function createClient(input: ClienteOrcamentoInput, actorId: string
         active: input.active,
     })) as unknown as ClientDoc
     await recordAudit({ userId: actorId, entidade: CLIENTE_AUDIT_ENTITY, entidadeId: String(doc._id), acao: AcaoAuditoria.CRIAR, depois: auditView(input) })
+    // Todo cliente nasce com o **usuário padrão** (username do nome, admin, sem email/senha, token = do cliente).
+    await ensureDefaultUser(doc)
     await publishAppEvent(ORCAMENTOS_UPDATED_EVENT, { scope: "clients" })
     const projects = await projectRefs(doc.projectIds)
     return { token, item: toDto(doc, projects) }
@@ -132,8 +135,23 @@ export async function deleteClient(id: string, actorId: string): Promise<void> {
     await dbConnect()
     const before = await getClientDoc(id)
     await Promise.all([OrcamentoClient.deleteOne({ _id: id }), OrcamentoDraft.deleteMany({ clientId: id })])
+    // Remove os vínculos dos usuários com este cliente (o **padrão** incluído); órfãos são excluídos.
+    await removeClientUsers(id)
     await recordAudit({ userId: actorId, entidade: CLIENTE_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { nome: before.name } })
     await publishAppEvent(ORCAMENTOS_UPDATED_EVENT, { scope: "clients" })
+}
+
+/** Doc do cliente por id (para a página de configuração). */
+export async function getClient(id: string): Promise<ClienteOrcamentoDoc> {
+    await dbConnect()
+    return getClientDoc(id)
+}
+
+/** DTO de um cliente (página de configuração). */
+export async function getClientDto(id: string): Promise<ClienteOrcamentoDto> {
+    const doc = await getClient(id)
+    const projects = await projectRefs(doc.projectIds ?? [])
+    return toDto(doc, projects)
 }
 
 /** Nomes dos projetos do cliente (para a tela do portal). Exportado para reúso no portal. */

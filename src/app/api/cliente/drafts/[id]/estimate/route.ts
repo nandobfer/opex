@@ -1,8 +1,8 @@
 import { withRoute } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
+import { requireClientActor } from "@/features/auth/server/context"
 import { clientScope } from "@/features/orcamentos/server/drafts"
 import { prepareBudgetEstimate, runBudgetEstimate, type BudgetEstimateEvent } from "@/features/orcamentos/server/preview"
-import { requireClient } from "@/features/orcamentos/server/token"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,8 +18,8 @@ type Params = { id: string }
  * JSON. Senão, NDJSON: `start`, eventos de progresso e um `done` (com o orçamento) ou `error` final.
  */
 export const POST = withRoute<Params>(async ({ req, params }) => {
-    const client = await requireClient(req)
-    const prepared = await prepareBudgetEstimate(clientScope(client), params.id)
+    const actor = await requireClientActor(req)
+    const prepared = await prepareBudgetEstimate(clientScope(actor.client), params.id)
     const encoder = new TextEncoder()
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {

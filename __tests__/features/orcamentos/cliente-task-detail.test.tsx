@@ -9,7 +9,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 vi.mock("framer-motion", () => framerMotionMock())
 
 import type { ClienteTaskDetailDto } from "@/features/orcamentos/types"
-import { ClientePortalProvider } from "@/features/orcamentos/portal/ClientePortalContext"
+import { ClientePortalProvider, type ClientePortalSession } from "@/features/orcamentos/portal/ClientePortalContext"
 import { ClienteCommentsSection } from "@/features/orcamentos/portal/components/ClienteCommentsSection"
 import { ClienteTaskSidebar } from "@/features/orcamentos/portal/components/ClienteTaskSidebar"
 import { ClienteTaskTabs } from "@/features/orcamentos/portal/components/ClienteTaskTabs"
@@ -36,11 +36,13 @@ const task: ClienteTaskDetailDto = {
     ],
 }
 
+const session: ClientePortalSession = { clientId: "c1", clientName: "Acme", isAdmin: false, preview: false, user: { id: "u1", username: "acme", email: null }, clients: [] }
+
 function Providers({ children }: { children: ReactNode }) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return (
         <QueryClientProvider client={queryClient}>
-            <ClientePortalProvider token="cli_token">{children}</ClientePortalProvider>
+            <ClientePortalProvider session={session}>{children}</ClientePortalProvider>
         </QueryClientProvider>
     )
 }

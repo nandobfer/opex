@@ -27,18 +27,24 @@ Ver `use-sempre-que-desenvolver.md`, "Estrutura de Arquivos".
 
 ## Decisões Arquiteturais Importantes
 
-### 1. Login por senha única, sem usuários nem permissões
+### 1. Login do dono (`ADMIN_*`) e usuários só no portal do cliente
 
-**Decisão**: o app tem uma tela de login com **uma senha compartilhada** (`APP_PASSWORD`) e um
-cookie de sessão assinado (`AUTH_SECRET`); não há cadastro, usuários, cargos nem empresas. Toda
-ação continua sendo do usuário local (`getLocalUser()`, id `local`, nome `APP_OWNER_NAME`).
+**Decisão**: o app do dono tem uma tela de login com as credenciais `ADMIN_USER`/`ADMIN_EMAIL` +
+`ADMIN_PASSWORD` e um cookie de sessão assinado (`AUTH_SECRET`, com `kind: "admin"`); não há cadastro,
+usuários nem cargos no app do dono. Os **usuários** existem apenas no **portal do cliente** de
+Orçamentos (`users`, senha scrypt), com a flag `admin` **por vínculo**; quem está no portal usa
+`kind: "client"` e fica restrito a `/cliente/*`. Toda ação do dono continua sendo do usuário local
+(`getLocalUser()`, id `local`, nome `APP_OWNER_NAME`).
 
-**Motivo**: o app passou a ser publicado na internet, então a tela inicial precisa barrar acesso.
-O core copiado do CRM teve Clerk, `@sipal/permissions` e multiempresa removidos, e não foram
-reintroduzidos — só a senha única. Detalhes em `modules/auth.md`.
+**Motivo**: o app é publicado na internet e passou a hospedar um portal para clientes (OPE-51). O core
+copiado do CRM teve Clerk, `@sipal/permissions` e multiempresa removidos; usuários e permissões foram
+reintroduzidos **só no portal**, com o mínimo necessário. Detalhes em `modules/auth.md` e
+`modules/orcamentos.md`.
 
-**Consequência**: páginas e APIs internas exigem a sessão (guarda em `src/middleware.ts`); a API
-pública por token de sistema (`/api/v1/*`) e o tick de cron (`/api/routines/*`) seguem liberados.
+**Consequência**: páginas e APIs internas exigem a sessão (guarda em `src/middleware.ts`, por tipo de
+sessão); a API pública por token de sistema (`/api/v1/*`), o tick de cron (`/api/routines/*`), a
+entrada do portal (`/cliente`) e a documentação OpenAPI seguem liberados. Papéis finos (admin do
+cliente, visibilidade de R$) são conferidos no servidor Node, em cada requisição.
 
 ### 2. Banco de Dados: MongoDB + Mongoose
 

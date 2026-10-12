@@ -1,9 +1,15 @@
 /**
- * Sessão de login do Opex — cookie assinado, sem estado no servidor e **sem usuário**.
+ * Sessão de login do Opex — cookie assinado, sem estado no servidor.
  *
- * O app passou a ser publicado na internet e tem uma única senha (`APP_PASSWORD`). Depois de
- * validar a senha, o servidor emite um cookie `httpOnly` com um token `payload.assinatura`
- * (HMAC-SHA256). O payload só carrega `iat`/`exp` — não há usuário, papel nem permissão.
+ * Há **dois tipos de sessão**, discriminados por `kind`:
+ * - `admin`: o **dono** do Opex (credenciais `ADMIN_*` do `.env`) — acessa o app completo e pode
+ *   pré-visualizar o portal do cliente;
+ * - `client`: um **usuário de cliente** (`userId`) — acessa só o portal, no cliente selecionado
+ *   (`clientId`, opcional enquanto ele não escolheu).
+ *
+ * O cookie carrega `payload.assinatura` (HMAC-SHA256). O payload é **mínimo** (`iat`/`exp`/`kind` e
+ * os ids): papéis finos (admin do cliente, visibilidade de R$) são conferidos no servidor Node, com
+ * acesso ao banco, em cada requisição.
  *
  * Implementado com a **Web Crypto** (`crypto.subtle`), que roda tanto no runtime Edge do
  * `middleware` quanto no runtime Node das rotas: é o mesmo código nos dois lados. Módulo
@@ -23,11 +29,25 @@ export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
-interface SessionPayload {
+export type SessionKind = "admin" | "client"
+
+export interface SessionPayload {
     /** Emitido em (epoch em segundos). */
     iat: number
     /** Expira em (epoch em segundos). */
     exp: number
+    /** Tipo de sessão. Cookie antigo (sem `kind`) é recusado, exigindo novo login. */
+    kind: SessionKind
+    /** Usuário de cliente (`kind: "client"`). */
+    userId?: string
+    /** Cliente selecionado (`kind: "client"`), enquanto não escolhido fica ausente. */
+    clientId?: string
+}
+
+export interface SessionInput {
+    kind: SessionKind
+    userId?: string
+    clientId?: string
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -51,41 +71,51 @@ async function importKey(secret: string): Promise<CryptoKey> {
 /** Assina um novo token de sessão válido por `maxAgeSeconds` a partir de `now`. */
 export async function createSessionToken(
     secret: string,
+    session: SessionInput,
     now: number = Date.now(),
     maxAgeSeconds: number = SESSION_MAX_AGE_SECONDS,
 ): Promise<string> {
     const iat = Math.floor(now / 1000)
-    const payload: SessionPayload = { iat, exp: iat + maxAgeSeconds }
+    const payload: SessionPayload = { iat, exp: iat + maxAgeSeconds, kind: session.kind }
+    if (session.kind === "client") {
+        if (session.userId) payload.userId = session.userId
+        if (session.clientId) payload.clientId = session.clientId
+    }
     const encoded = base64UrlEncode(encoder.encode(JSON.stringify(payload)))
     const signature = await crypto.subtle.sign("HMAC", await importKey(secret), encoder.encode(encoded))
     return `${encoded}.${base64UrlEncode(new Uint8Array(signature))}`
 }
 
 /**
- * Verifica assinatura e validade. Devolve `false` para token ausente, malformado, adulterado ou
- * vencido — nunca lança. A comparação da assinatura é feita pelo próprio `crypto.subtle.verify`
- * (tempo constante).
+ * Verifica assinatura e validade e devolve o payload. Devolve `null` para token ausente, malformado,
+ * adulterado, vencido ou de versão antiga (sem `kind`) — nunca lança. A comparação da assinatura é
+ * feita pelo próprio `crypto.subtle.verify` (tempo constante).
  */
-export async function verifySessionToken(
+export async function readSessionToken(
     token: string | undefined | null,
     secret: string,
     now: number = Date.now(),
-): Promise<boolean> {
-    if (!token || !secret) return false
+): Promise<SessionPayload | null> {
+    if (!token || !secret) return null
     const [encoded, signature] = token.split(".")
-    if (!encoded || !signature) return false
+    if (!encoded || !signature) return null
     try {
-        const validSignature = await crypto.subtle.verify(
-            "HMAC",
-            await importKey(secret),
-            base64UrlDecode(signature),
-            encoder.encode(encoded),
-        )
-        if (!validSignature) return false
+        const validSignature = await crypto.subtle.verify("HMAC", await importKey(secret), base64UrlDecode(signature), encoder.encode(encoded))
+        if (!validSignature) return null
         const payload = JSON.parse(decoder.decode(base64UrlDecode(encoded))) as Partial<SessionPayload>
-        if (typeof payload.exp !== "number") return false
-        return payload.exp * 1000 > now
+        if (typeof payload.exp !== "number" || payload.exp * 1000 <= now) return null
+        if (payload.kind !== "admin" && payload.kind !== "client") return null
+        if (payload.kind === "client" && typeof payload.userId !== "string") return null
+        return payload as SessionPayload
     } catch {
-        return false
+        return null
     }
+}
+
+/**
+ * Atalho booleano sobre `readSessionToken` (sessão válida, de qualquer tipo). Usado pelo middleware,
+ * que só decide entre barrar e permitir — os papéis finos são conferidos no servidor Node.
+ */
+export async function verifySessionToken(token: string | undefined | null, secret: string, now: number = Date.now()): Promise<boolean> {
+    return (await readSessionToken(token, secret, now)) !== null
 }

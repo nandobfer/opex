@@ -91,20 +91,20 @@ export async function getClientTask(client: ClienteOrcamentoDoc, id: string): Pr
     return toClienteTaskDetail(await getTask(id))
 }
 
-/** Comentário do cliente na tarefa (origem marcada com o nome do cliente). */
-export async function addClientComment(client: ClienteOrcamentoDoc, id: string, content: string): Promise<void> {
+/** Comentário do cliente na tarefa (origem marcada pelo **usuário** do portal). */
+export async function addClientComment(client: ClienteOrcamentoDoc, id: string, content: string, author: { id: string; name: string }): Promise<void> {
     await assertClientTask(client, id)
-    await addComment(id, content, { id: client.name, type: "client", name: client.name })
+    await addComment(id, content, { id: author.id, type: "client", name: author.name })
 }
 
 /**
  * Edita a prioridade de uma tarefa na visão do cliente (só as que ele solicitou). Reusa o `updateTask`
  * do núcleo: grava auditoria (`origem: "client"`), publica `tasks-updated` (o dono vê em tempo real)
- * e empurra a prioridade para a issue do GitHub. O ator da auditoria é o nome do cliente.
+ * e empurra a prioridade para a issue do GitHub. O ator da auditoria é o **usuário** do portal.
  */
-export async function setClientTaskPriority(client: ClienteOrcamentoDoc, id: string, priority: TaskPriority): Promise<void> {
+export async function setClientTaskPriority(client: ClienteOrcamentoDoc, id: string, priority: TaskPriority, actorId: string): Promise<void> {
     await assertClientTask(client, id)
-    await updateTask(id, { priority }, client.name, { origin: "client" })
+    await updateTask(id, { priority }, actorId, { origin: "client" })
 }
 
 export async function getClientOptions(client: ClienteOrcamentoDoc): Promise<ClientePortalOptionsDto> {

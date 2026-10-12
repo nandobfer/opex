@@ -18,21 +18,11 @@ import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { clienteDraftSchema, type ClienteDraftInput } from "../schemas"
 import { repoLabel } from "../logic"
-import { clientePortalPath, clienteRevisaoPath } from "../constants"
+import { clienteRevisaoPath, clienteTarefasPath } from "../constants"
 import { useClienteOptions, useCreateDraft } from "./hooks"
-import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
 
 /** Nova tarefa do portal: repositório permitido + descrição formatada. */
-export function ClienteNovaTarefaPage({ token }: { token: string }) {
-    return (
-        <ClientePortalProvider token={token}>
-            <ClienteNovaTarefaView />
-        </ClientePortalProvider>
-    )
-}
-
-function ClienteNovaTarefaView() {
-    const { token } = useClientePortal()
+export function ClienteNovaTarefaPage() {
     const router = useRouter()
     const options = useClienteOptions()
     const create = useCreateDraft()
@@ -44,7 +34,7 @@ function ClienteNovaTarefaView() {
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-5">
             <header className="space-y-3">
                 <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
-                    <Link href={clientePortalPath(token)}>
+                    <Link href={clienteTarefasPath()}>
                         <ArrowLeft className="h-4 w-4" aria-hidden /> Tarefas
                     </Link>
                 </Button>
@@ -78,7 +68,7 @@ function ClienteNovaTarefaView() {
                             onSubmit={form.handleSubmit(async (values) => {
                                 try {
                                     const draft = await create.mutateAsync(values)
-                                    router.push(clienteRevisaoPath(token, draft.id))
+                                    router.push(clienteRevisaoPath(draft.id))
                                 } catch {
                                     // Erro mostrado no campo/estado.
                                 }
@@ -126,7 +116,7 @@ function ClienteNovaTarefaView() {
 
                             <div className="flex justify-end gap-2 border-t pt-6">
                                 <Button type="button" variant="ghost" asChild disabled={create.isPending}>
-                                    <Link href={clientePortalPath(token)}>Cancelar</Link>
+                                    <Link href={clienteTarefasPath()}>Cancelar</Link>
                                 </Button>
                                 <Button type="submit" disabled={create.isPending || !form.formState.isValid}>
                                     {create.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}

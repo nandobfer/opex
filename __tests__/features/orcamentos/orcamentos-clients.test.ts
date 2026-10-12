@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     clients: null as unknown,
     drafts: null as unknown,
     projects: null as unknown,
+    users: null as unknown,
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -24,6 +25,11 @@ vi.mock("@/lib/db/models/Project", async () => {
     const { memoryModel } = await import("../../helpers/memory-model")
     mocks.projects = memoryModel()
     return { Project: mocks.projects }
+})
+vi.mock("@/lib/db/models/User", async () => {
+    const { memoryModel } = await import("../../helpers/memory-model")
+    mocks.users = memoryModel()
+    return { User: mocks.users }
 })
 
 import { createClient, deleteClient, listClients, regenerateClientToken, updateClient } from "@/features/orcamentos/server/clients"

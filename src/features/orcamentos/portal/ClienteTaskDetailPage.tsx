@@ -12,30 +12,21 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { ArchivedBadge, TaskTypeBadge } from "@/features/tasks/components/TaskBadges"
 import { TaskSummaryCard } from "@/features/tasks/components/detail/TaskSummaryCard"
-import { clientePortalPath } from "../constants"
+import { clienteTarefasPath } from "../constants"
 import { repoLabelIndex } from "../logic"
-import { ClientePortalProvider, useClientePortal } from "./ClientePortalContext"
-import { useClienteOptions, useClienteTask, useSetClienteTaskPriority } from "./hooks"
+import { useClienteOptions, useClienteRealtime, useClienteTask, useSetClienteTaskPriority } from "./hooks"
 import { ClienteTaskSidebar } from "./components/ClienteTaskSidebar"
 import { ClienteTaskTabs, type ClienteTaskTabId } from "./components/ClienteTaskTabs"
 
 /** Página da tarefa do cliente (`/cliente/tarefa/[id]`): detalhes equivalentes, somente leitura. */
-export function ClienteTaskDetailPage({ token, id }: { token: string; id: string }) {
-    return (
-        <ClientePortalProvider token={token}>
-            <ClienteTaskDetailView id={id} />
-        </ClientePortalProvider>
-    )
-}
-
-function ClienteTaskDetailView({ id }: { id: string }) {
+export function ClienteTaskDetailPage({ id }: { id: string }) {
     const reduceMotion = useReducedMotion()
-    const { token } = useClientePortal()
     const query = useClienteTask(id)
     const options = useClienteOptions()
     const priority = useSetClienteTaskPriority()
     const [tab, setTab] = useState<ClienteTaskTabId>("description")
     const task = query.data
+    useClienteRealtime()
     const repoIndex = useMemo(() => repoLabelIndex(options.data?.projects ?? []), [options.data])
 
     const view = query.isLoading ? "loading" : query.isError ? (apiErrorCode(query.error) === "TASK_NOT_FOUND" ? "missing" : "error") : "ready"
@@ -44,7 +35,7 @@ function ClienteTaskDetailView({ id }: { id: string }) {
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
             <div className="flex items-center justify-between gap-2">
                 <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
-                    <Link href={clientePortalPath(token)}>
+                    <Link href={clienteTarefasPath()}>
                         <ArrowLeft className="h-4 w-4" aria-hidden /> Tarefas
                     </Link>
                 </Button>
@@ -70,7 +61,7 @@ function ClienteTaskDetailView({ id }: { id: string }) {
                     {view === "missing" && (
                         <EmptyState icon={FileSearch} title="Tarefa não encontrada" description="Ela pode ter sido removida ou não faz parte das tarefas que você solicitou.">
                             <Button asChild size="sm" variant="outline">
-                                <Link href={clientePortalPath(token)}>Voltar para Tarefas</Link>
+                                <Link href={clienteTarefasPath()}>Voltar para Tarefas</Link>
                             </Button>
                         </EmptyState>
                     )}

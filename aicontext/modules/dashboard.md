@@ -87,3 +87,12 @@ recharts, desligada com movimento reduzido.
 `src/features/dashboard/server/service.ts`, `src/features/dashboard/hooks/{useDashboard,useDashboardPeriod}.ts`,
 `src/features/dashboard/components/**`, `src/app/(app)/dashboard/{page,layout}.tsx`,
 `src/app/api/dashboard/route.ts`. Testes em `__tests__/features/dashboard/`.
+
+## Dashboard do **cliente** (portal)
+
+O portal tem um dashboard **próprio** (`/cliente/dashboard`, `GET /api/cliente/dashboard`), filtrado
+pelo cliente da sessão: KPIs de tarefas (ativas, criadas e concluídas no período — conclusão derivada
+da auditoria) e distribuições por coluna/prioridade/tipo. O bloco de **custo** só aparece para o
+**admin** do cliente. **Não** inclui horas agênticas, custo de IA, mesas de trabalho nem faturas do
+dono (dados internos). Serviço em `src/features/orcamentos/server/portal-dashboard.ts`; detalhes em
+`modules/orcamentos.md`.

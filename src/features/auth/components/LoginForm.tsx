@@ -27,15 +27,16 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
     const [revealed, setRevealed] = useState(false)
     const form = useForm<LoginInput>({
         resolver: zodResolver(loginSchema),
-        defaultValues: { password: "" },
+        defaultValues: { identifier: "", password: "" },
         mode: "onTouched",
     })
+    const identifierError = form.formState.errors.identifier?.message
     const passwordError = form.formState.errors.password?.message
 
     const onSubmit = form.handleSubmit((values) => {
         login.mutate(values, {
-            onSuccess: () => {
-                router.replace(safeNext(nextPath) ?? HOME_HREF)
+            onSuccess: (result) => {
+                router.replace(safeNext(nextPath) ?? result.redirectTo ?? HOME_HREF)
             },
             onError: (error) => {
                 const message = apiErrorMessage(error, "Não foi possível entrar. Tente novamente.")
@@ -47,13 +48,15 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
 
     return (
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
+            <Field id="login-identifier" label="Usuário ou email" error={identifierError}>
+                <Input id="login-identifier" autoComplete="username" autoFocus disabled={login.isPending} aria-invalid={identifierError ? true : undefined} {...form.register("identifier")} />
+            </Field>
             <Field id="login-password" label="Senha" error={passwordError}>
                 <div className="relative">
                     <Input
                         id="login-password"
                         type={revealed ? "text" : "password"}
                         autoComplete="current-password"
-                        autoFocus
                         disabled={login.isPending}
                         aria-invalid={passwordError ? true : undefined}
                         className="pr-10"

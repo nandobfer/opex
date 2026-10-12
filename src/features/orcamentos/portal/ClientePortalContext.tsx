@@ -2,18 +2,28 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react"
 import type { AxiosInstance } from "axios"
-import { createClientPortalApi } from "./api"
+import type { ClienteSelectableDto } from "../types"
+import { createClientePortalApi } from "./api"
 
-interface ClientePortalContextValue {
-    token: string
+export interface ClientePortalSession {
+    clientId: string
+    clientName: string
+    isAdmin: boolean
+    /** `true` quando o **dono** está pré-visualizando a visão do cliente. */
+    preview: boolean
+    user: { id: string; username: string; email: string | null }
+    clients: ClienteSelectableDto[]
+}
+
+interface ClientePortalContextValue extends ClientePortalSession {
     api: AxiosInstance
 }
 
 const ClientePortalContext = createContext<ClientePortalContextValue | null>(null)
 
-/** Provê o token do cliente e o axios autenticado para as telas do portal. */
-export function ClientePortalProvider({ token, children }: { token: string; children: ReactNode }) {
-    const value = useMemo<ClientePortalContextValue>(() => ({ token, api: createClientPortalApi(token) }), [token])
+/** Provê a sessão do portal (cliente, usuário e papel) e o axios autenticado por cookie. */
+export function ClientePortalProvider({ session, children }: { session: ClientePortalSession; children: ReactNode }) {
+    const value = useMemo<ClientePortalContextValue>(() => ({ ...session, api: createClientePortalApi(session.clientId) }), [session])
     return <ClientePortalContext.Provider value={value}>{children}</ClientePortalContext.Provider>
 }
 

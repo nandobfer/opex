@@ -5,9 +5,9 @@
  */
 
 import { logger } from "@/lib/logger"
-import { appChannel } from "./channel-names"
+import { appChannel, clientChannel } from "./channel-names"
 
-export { appChannel, integrationChannel } from "./channel-names"
+export { appChannel, integrationChannel, clientChannel } from "./channel-names"
 
 /**
  * Publica no canal do app. Nunca lança: falha de tempo real é logada e não desfaz a mutação já
@@ -15,6 +15,11 @@ export { appChannel, integrationChannel } from "./channel-names"
  */
 export async function publishAppEvent(event: string, payload: Record<string, unknown>): Promise<void> {
     await publishToChannels([appChannel()], event, payload)
+}
+
+/** Publica no canal do **portal do cliente** (dados das telas do cliente). */
+export async function publishClientEvent(clientId: string, event: string, payload: Record<string, unknown>): Promise<void> {
+    await publishToChannels([clientChannel(clientId)], event, payload)
 }
 
 export async function publishToChannels(channels: string[], event: string, payload: Record<string, unknown>): Promise<void> {

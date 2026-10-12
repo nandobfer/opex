@@ -18,7 +18,7 @@ const LoginParticleBackground = dynamic(() => import("./LoginParticleBackground"
  * **acima** do `bg-background` e **abaixo** do conteúdo (`z-10`) — sem z-index negativo, que
  * esconderia as partículas atrás do fundo opaco.
  */
-export function LoginPage({ nextPath }: { nextPath?: string }) {
+export function LoginPage({ nextPath, notice }: { nextPath?: string; notice?: string }) {
     return (
         <main className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10">
             <div
@@ -35,6 +35,10 @@ export function LoginPage({ nextPath }: { nextPath?: string }) {
             >
                 <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">Opex</h1>
                 <p className="mt-2 text-base text-muted-foreground sm:text-lg">nandoburgos.dev</p>
+
+                {notice && (
+                    <p className="mt-4 w-full rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-center text-sm text-warning">{notice}</p>
+                )}
 
                 <div className="mt-8 w-full rounded-xl border border-border/70 bg-card/80 p-6 shadow-[0_0_50px_-18px_hsl(var(--primary))] backdrop-blur-md">
                     <LoginForm nextPath={nextPath} />

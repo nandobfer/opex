@@ -30,7 +30,28 @@ function matchValue(actual: unknown, expected: unknown): boolean {
     return (actual ?? null) === (expected ?? null) || String(actual) === String(expected)
 }
 
-const matches = (doc: Doc, filter: Doc) => Object.entries(filter).every(([key, value]) => matchValue(doc[key], value))
+/**
+ * Resolve um caminho com pontos (`memberships.clientId`) num documento. Ao entrar num array, aplica
+ * o restante do caminho a cada elemento e devolve a lista de valores (semântica de array do Mongo).
+ */
+function getPath(doc: Doc, path: string): unknown {
+    const parts = path.split(".")
+    let current: unknown = doc
+    for (let index = 0; index < parts.length; index++) {
+        if (Array.isArray(current)) {
+            const rest = parts.slice(index).join(".")
+            return current.flatMap((item) => {
+                const value = getPath(item as Doc, rest)
+                return value === undefined ? [] : [value]
+            })
+        }
+        if (current == null) return undefined
+        current = (current as Doc)[parts[index]!]
+    }
+    return current
+}
+
+const matches = (doc: Doc, filter: Doc) => Object.entries(filter).every(([key, value]) => matchValue(getPath(doc, key), value))
 
 function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
     const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc; $pull?: Doc }
@@ -119,6 +140,7 @@ export function memoryModel() {
                     spec = value
                     return chain
                 },
+                collation: () => chain,
                 select: () => chain,
                 lean: async () => {
                     const found = first(filter, spec)

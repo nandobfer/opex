@@ -2,12 +2,13 @@
 
 Guia normativo para qualquer IA que trabalhe neste repositório.
 
-O **Opex** é um app Next.js **de uso pessoal**: um único usuário (o dono), protegido por um login
-com **senha única** (sem cadastro e sem usuários) e que pode ser publicado na internet. É a **fonte
-de verdade** das suas tarefas: gerenciar tarefas, apontar horas e automatizar o desenvolvimento, com
-um módulo de **Integrações** para configurar serviços e guardar credenciais. O core (tema,
-componentes, layout, integrações, Pusher, crons) foi copiado do CRM Marketing Campanhas
-(`~/code/crm-marketing-campanhas`, branch `dev`).
+O **Opex** é um app Next.js **de uso pessoal**: um único **dono**, protegido por um login com
+credenciais do `.env` (`ADMIN_USER`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`) e que pode ser publicado na
+internet. É a **fonte de verdade** das suas tarefas: gerenciar tarefas, apontar horas e automatizar o
+desenvolvimento, com um módulo de **Integrações** para configurar serviços e guardar credenciais. O
+app também hospeda o **portal do cliente** de Orçamentos (`/cliente`), onde existem **usuários**
+(login por URL ou username/email). O core (tema, componentes, layout, integrações, Pusher, crons) foi
+copiado do CRM Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 
 ## 1. Ordem obrigatória de leitura
 
@@ -29,13 +30,14 @@ Antes de implementar, leia nesta ordem:
   - `src/features`: regras e fluxos de negócio
   - `src/lib`: infraestrutura compartilhada (banco, logger, Pusher, integrações, constantes)
   - `src/components`: UI genérica e reutilizável
-- **Login por senha única, sem usuários, permissões, empresas ou multiusuário.** O app tem uma
-tela de login (`/login`, senha `APP_PASSWORD`, sessão assinada por `AUTH_SECRET`; ver
-`aicontext/modules/auth.md`), mas não há cadastro, cargos, `companyId`, slug nem guardas de
-permissão. Não introduza usuários/papéis sem pedido explícito do usuário. Toda ação continua sendo
-do usuário local (`getLocalUser()` de `src/lib/local-user.ts`).
-- **O app só pode ser exposto à internet atrás do login** (senha única). Outros sistemas acessam
-  endpoints públicos por **token de sistema** (Integrações › API interna).
+- **Login do dono por credenciais do `.env`** (`ADMIN_USER`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`, sessão
+assinada por `AUTH_SECRET`; ver `aicontext/modules/auth.md`). O app do dono **não** tem cadastro,
+cargos, `companyId`, slug nem guardas de permissão. Toda ação do dono é do usuário local
+(`getLocalUser()` de `src/lib/local-user.ts`). **Usuários existem apenas no portal do cliente** de
+Orçamentos (flag `admin` por vínculo, senha scrypt); não introduza perfis/permissões no app do dono
+sem pedido explícito.
+- **O app só pode ser exposto à internet atrás do login** (dono ou usuário de cliente). Outros
+  sistemas acessam endpoints públicos por **token de sistema** (Integrações › API interna).
 - Credenciais de serviços externos (ex.: token do GitHub, chaves dos provedores de IA) ficam como
   **campo privado da integração** (cifrado no banco); nunca no código, no navegador ou em `.env`
   versionado.
@@ -232,8 +234,10 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
 - Framework: Next.js 16 + React 19
 - Linguagem: TypeScript 5 em modo strict
 - UI: Tailwind CSS 4 + Shadcn/ui + Radix, tema escuro fixo (primária `#8000FF`)
-- Auth: login por senha única (`APP_PASSWORD` + `AUTH_SECRET`), sessão em cookie assinado, guarda
-  em `src/middleware.ts`; API pública por token de sistema (`aicontext/modules/auth.md`)
+- Auth: login do dono (`ADMIN_USER`/`ADMIN_EMAIL`/`ADMIN_PASSWORD`) e usuários de cliente (scrypt),
+sessão em cookie assinado com `kind` (`admin`/`client`), guarda em `src/middleware.ts` e papéis finos
+no servidor Node (`src/features/auth/server/context.ts`); API pública por token de sistema
+(`aicontext/modules/auth.md`, `aicontext/modules/orcamentos.md`)
 - Banco: MongoDB + Mongoose
 - Estado assíncrono: TanStack Query (com resposta otimista nas mutações de efeito imediato)
 - HTTP no cliente: axios do projeto (`baseURL: '/api'`)
@@ -308,7 +312,8 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
 ## 9. Checklist mínimo antes de encerrar
 
 1. Li o contexto certo em `aicontext/`.
-2. Não introduzi autenticação, permissões nem multiempresa sem pedido explícito.
+2. Não introduzi autenticação, permissões nem multiempresa **no app do dono** sem pedido explícito.
+   (Usuários e a flag `admin` por vínculo existem só no portal do cliente.)
 3. Mantive tipos, validação, auditoria e logging quando aplicável.
 4. Segredos (tokens, JWT) ficaram só em campo privado de integração, nunca no cliente.
 5. Segui o fluxo obrigatório da seção 4 (implementar → documentar → testar).

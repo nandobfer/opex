@@ -110,3 +110,12 @@ filtros e seleção sem resultado), `finance-filters` (normalização dos ids, p
 em início/fim do dia e opções ordenadas), `finance-schemas` (listas por vírgula sem duplicatas e id malformado), `finance-route` (encaminhamento dos parâmetros e 400 para id malformado) e `finance-page` (totais,
 filtros de clientes/repositórios, seleção lida da URL, vazio com filtros, expansão do cliente, vazio e
 erro). A navegação é coberta em `__tests__/features/layout/navigation.test.ts`.
+
+## Financeiro do **cliente** (portal)
+
+O portal tem a sua versão (`/cliente/financeiro`, `GET /api/cliente/financeiro`, só para o **admin** do
+cliente): **custo** das tarefas concluídas, agrupado por **repositório**, com filtro de período (mês
+atual padrão) e de repositórios. Reusa a mesma regra de conclusão (`completionTimestamps`) e o snapshot
+(`clientHours`/`billingBrl`), mas **nunca** expõe horas reais, fator ou custo/hora — o termo é
+**"Custo"**. Serviço em `src/features/orcamentos/server/portal-finance.ts` (`groupCostByProject` é
+puro e testado); detalhes em `modules/orcamentos.md`.

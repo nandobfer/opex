@@ -55,9 +55,14 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 - Novo item de menu: entrada em `APP_NAV` + página em `src/app/(app)/<rota>/page.tsx` (página
   "Em desenvolvimento" enquanto não existir).
-- Não há permissões nem multiusuário, mas toda página e API interna exige a sessão: a guarda fica
-  em `src/middleware.ts` (`resolveAuthAction`), liberando só `/login`, `/api/auth/*`, `/api/v1/*` e
-  `/api/routines/*`. Todo item do menu é sempre visível depois do login.
+-  Não há permissões nem multiusuário **no app do dono**, mas toda página e API interna exige a
+   sessão: a guarda fica em `src/middleware.ts` e na decisão pura `resolveAuthDecision`
+   (`src/features/auth/paths.ts`). O dono (`kind: "admin"`) passa em tudo; o **usuário de cliente**
+   (`kind: "client"`) fica restrito ao portal (`/cliente/*`, `/api/cliente/*`). Ver
+   `modules/auth.md` e `modules/orcamentos.md`.
+- O **portal do cliente** tem casca própria (`ClientePortalShell`), reaproveitando o `AppShell` com a
+   navegação `clienteNav`: Dashboard, Tarefas e, para o admin do cliente, Financeiro e Usuários. Os
+   itens internos do dono (Horas agênticas, Central de desenvolvimento, Integrações) não aparecem lá.
 - Espaçamento horizontal do conteúdo: `CONTENT_PADDING_X` (`px-4 md:px-6 lg:px-8`, em
   `src/features/layout/content-padding.ts`), usado pelo `AppShell`. Para um bloco ir até a borda do
   conteúdo (ex.: kanban rolando para os lados), use `CONTENT_BLEED_X` — nunca repita os valores.
