@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ListTodo, Plus, RefreshCw } from "lucide-react"
+import { ListTodo, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
@@ -16,6 +16,7 @@ import { clienteNovaPath, clienteTarefaPath } from "../constants"
 import { repoLabelIndex } from "../logic"
 import { useClienteOptions, useClienteRealtime, useClienteTasks, useSetClienteTaskPriority } from "./hooks"
 import { ClienteFiltersBar } from "./components/ClienteFiltersBar"
+import { ClienteTaskCreationButton } from "./components/ClienteTaskCreationButton"
 import { ClienteTaskBoard } from "./components/ClienteTaskBoard"
 import { ClienteTaskTable } from "./components/ClienteTaskTable"
 
@@ -54,9 +55,7 @@ export function ClienteTasksPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                     <TaskViewSwitch value={filters.view} onChange={(view) => setFilters((prev) => ({ ...prev, view }))} />
-                    <Button type="button" size="sm" className="h-9 gap-2" onClick={() => router.push(clienteNovaPath())}>
-                        <Plus className="h-4 w-4" aria-hidden /> Nova tarefa
-                    </Button>
+                    <ClienteTaskCreationButton />
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={tasks.isFetching}>
                         <RefreshCw className="h-4 w-4" aria-hidden /> Atualizar
                     </Button>

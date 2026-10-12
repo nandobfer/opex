@@ -119,6 +119,19 @@ describe("ClienteDashboardPage", () => {
         expect(mocks.push).toHaveBeenCalledWith("/cliente/nova")
     })
 
+    it("sem repositório liberado, o atalho Nova prévia segue acionável (mesmo comportamento do de Tarefas)", () => {
+        // Regressão: antes o atalho do dashboard ficava desabilitado sem repositório; agora é o mesmo
+        // botão de Tarefas e não depende de repositórios liberados.
+        mocks.options = { data: { projects: [] } }
+        render(<ClienteDashboardPage />)
+
+        const button = screen.getByRole("button", { name: /Nova prévia/ }) as HTMLButtonElement
+        expect(button.disabled).toBe(false)
+        expect(button.hasAttribute("title")).toBe(false)
+        fireEvent.click(button)
+        expect(mocks.push).toHaveBeenCalledWith("/cliente/nova")
+    })
+
     it("esqueleto durante o carregamento e erro acionável", () => {
         mocks.query = { data: undefined, isLoading: true, isError: false, isFetching: true, error: null, refetch: vi.fn() }
         render(<ClienteDashboardPage />)
