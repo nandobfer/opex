@@ -55,6 +55,9 @@ do usuário local (`getLocalUser()` de `src/lib/local-user.ts`).
 - Mensagens para usuário, erros acionáveis e estados vazios devem estar em pt-BR.
 - Nunca execute comandos de build (`pnpm build`, `pnpm run build`, `next build` ou equivalentes)
   sem solicitação explícita do usuário. Valide normalmente com TypeScript, ESLint e Vitest.
+- **Nunca execute a suíte completa de testes sem solicitação explícita do usuário.** Ao
+  desenvolver, execute apenas os testes específicos do código afetado, selecionando explicitamente
+  os arquivos e/ou casos pertinentes; não rode comandos de testes sem filtro.
 - Não use filas (BullMQ), Valkey/Redis nem workers dedicados. Trabalho periódico é rotina do
   agendador interno (Integrações › Crons: `setInterval` no `instrumentation.ts`).
 - O projeto é um app Next.js único com pnpm. Não transforme o repositório em monorepo.
@@ -212,6 +215,8 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
    - **Feature nova**: caminho feliz + ao menos um caso de borda relevante.
    - **Fix**: ao menos um teste de regressão que falharia com o bug antigo e agora passa.
 4. Foque em comportamento e regra de negócio, não em detalhes de implementação.
+5. Execute apenas os testes específicos do código afetado, com seleção explícita de arquivos
+   e/ou casos. A suíte completa só pode ser executada quando solicitada explicitamente pelo usuário.
 
 ### Entregáveis ao final de toda tarefa
 
@@ -262,6 +267,9 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
 ## 6. Padrão de testes
 
 - Escreva testes em `__tests__/`.
+- Ao desenvolver, rode apenas os testes específicos do código afetado. Nunca execute a suíte
+  completa (inclusive comandos sem filtro como `pnpm test` ou `vitest run`) sem solicitação
+  explícita do usuário.
 - Foque em comportamento e regra de negócio, não em detalhes de implementação.
 - Use `vi`, `describe`, `it`, `expect`, `beforeEach` e helpers locais conforme os testes
   existentes.
@@ -305,6 +313,8 @@ Não considere a tarefa concluída se qualquer etapa foi pulada.
 4. Segredos (tokens, JWT) ficaram só em campo privado de integração, nunca no cliente.
 5. Segui o fluxo obrigatório da seção 4 (implementar → documentar → testar).
 6. Escrevi testes Vitest cobrindo a mudança (ou justifiquei explicitamente por que não).
+   Executei apenas os testes específicos do código afetado; a suíte completa só foi executada
+   se solicitada explicitamente pelo usuário.
 7. Se criei, alterei ou removi endpoint público por token, atualizei a especificação OpenAPI no
    mesmo commit.
 8. Usei só tokens do tema escuro (nada de cor hardcoded).
