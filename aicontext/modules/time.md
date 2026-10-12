@@ -70,10 +70,11 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
 ## Tela (somente leitura)
 
-- `TimerProvider` (em `src/app/(app)/tarefas/layout.tsx`): expõe os períodos ativos (`active`,
+- `TimerProvider` (em `src/app/(app)/tarefas/layout.tsx` e em
+  `src/app/(app)/dashboard/layout.tsx`): expõe os períodos ativos (`active`,
   `timerOf`) e o tempo real; **não** tem mais iniciar/parar. `useTimer()` fora do provider devolve
   `null`.
-- `WorkbenchProgressProvider` (mesmo layout, do desenvolvimento agêntico) compartilha as **mesas em
+- `WorkbenchProgressProvider` (mesmos layouts, do desenvolvimento agêntico) compartilha as **mesas em
   andamento**: executando (período ativo) ou pausadas aguardando ação humana. É a fonte do destaque
   das tarefas e da lista de trabalhos em andamento.
 - Tarefa em andamento (agente executando): card com borda e brilho verde pulsando + cronômetro ao
@@ -82,7 +83,8 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 - Tarefa cuja mesa **aguarda ação** (revisão do plano, aprovação da prévia, PR, permissão/pergunta,
   falha ou interrupção): card e linha destacados em **warning** (`--color-warning`; `failed` em
   destructive) com o motivo em pt-BR; a linha também ganha faixa à esquerda.
-- `TimerIndicator`: no topo de Tarefas, da página da tarefa e de Horas agênticas — ícone girando +
+- `TimerIndicator`: no topo de Tarefas, da página da tarefa, de Horas agênticas e do **Dashboards**
+  — ícone girando +
   cronômetro quando algum agente executa, ou aviso em warning quando **só** há mesas aguardando ação.
   Clique abre a lista **"Trabalhos em andamento"** (o popover **se dimensiona pelo conteúdo**,
   limitado à largura da viewport, para não quebrar linhas sem necessidade): cada item é um botão que

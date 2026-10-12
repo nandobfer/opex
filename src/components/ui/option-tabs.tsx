@@ -96,7 +96,7 @@ export function OptionTabs<T extends string>({
                         onClick={() => select(index)}
                         onKeyDown={(event) => onKeyDown(event, index)}
                         className={cn(
-                            "flex-1 rounded-md font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+                            "flex-1 whitespace-nowrap rounded-md font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
                             size === "xs" ? "px-2 py-1 text-[11px]" : size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
                             isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                         )}

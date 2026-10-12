@@ -104,6 +104,10 @@ semeado na primeira leitura (`ensureBoard`).
 
 - Cabeçalho: título com total animado, "atualizado às HH:mm:ss", **Nova prévia**, **Nova tarefa**, **Kanban |
   Tabela** (`TaskViewSwitch`) e **Atualizar**. `TimerIndicator` e "Minhas horas" ao lado.
+- **Nova prévia** e **Nova tarefa** são os `TaskCreationActions`
+  (`components/TaskCreationActions.tsx`), **compartilhados com o Dashboard**
+  (`modules/dashboard.md`): mesmos botões e destinos, com `enabled` amarrado à disponibilidade dos
+  dados na tela hospedeira.
 - **Nova tarefa**: navega para a página própria `/tarefas/nova` (sem repositório vinculado, o botão
   fica desabilitado — "Vincule um repositório em Integrações › GitHub").
 - **Nova prévia**: botão `variant="outline"` à esquerda de **Nova tarefa** (ícone `Sparkles`) que
@@ -258,7 +262,8 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 ## Testes
 
 `__tests__/features/tasks/` (`tasks-logic`, `tasks-service`, `task-move-flow`, `tasks-bulk`,
-`task-columns`, `task-filter-chips`, `TasksPage` — inclusive o botão **Nova prévia** —, `task-form`,
+`task-columns`, `task-filter-chips`, `TasksPage` — inclusive o botão **Nova prévia** —,
+`task-creation-actions` (os atalhos compartilhados com o Dashboard), `task-form`,
 `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
 `task-summary-card`, `task-estimate-card`, `task-estimate-generate`, `task-client-card` — a

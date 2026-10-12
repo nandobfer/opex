@@ -260,7 +260,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   (ex.: `grid-cols-[1fr_96px]` para Cidade + UF), sem limitar a largura do conjunto.
 - Escolha única numa lista pequena (2–4 opções) usa `OptionTabs` (`src/components/ui/option-tabs.tsx`),
   que ocupa a largura toda — nunca chips do tamanho do texto. Em linhas de tabela/lista use `size="xs"` com rótulos curtos e o texto completo em `title` de cada opção (vira dica
-  e nome acessível), para o seletor e o campo (`h-8`) caberem na mesma linha do item.
+  e nome acessível), para o seletor e o campo (`h-8`) caberem na mesma linha do item. Os rótulos usam
+  `whitespace-nowrap` (nunca quebram dentro do botão); num cabeçalho, mantenha o grupo com `shrink-0`
+  para ele passar inteiro à linha seguinte em vez de espremer as opções.
 - Escolha de **um** item numa lista grande ou rica (ex.: tarefa) usa
   `SearchPicker` (`ui/search-picker.tsx`) em vez de `Select`: popover com busca (local fuse.js por
   `searchKeys` ou no servidor por `onSearchChange`), opções ricas via `renderItem`, ↑/↓ +

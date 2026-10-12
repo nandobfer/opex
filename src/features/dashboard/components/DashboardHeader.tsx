@@ -4,9 +4,15 @@ import { motion } from "framer-motion"
 import { LayoutDashboard, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { OptionTabs } from "@/components/ui/option-tabs"
+import { TaskCreationActions } from "@/features/tasks/components/TaskCreationActions"
+import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { DASHBOARD_PERIOD_LABELS, DASHBOARD_PERIODS, type DashboardPeriod } from "../period"
 
-/** Cabeçalho da tela: título, seletor do período global e botão Atualizar (com rotação animada). */
+/**
+ * Cabeçalho da tela: título, atalhos globais (**Nova prévia**, **Nova tarefa** e **Trabalhos em
+ * andamento**), o seletor do período global (que não quebra linha) e o botão Atualizar (com rotação
+ * animada). Os atalhos são independentes do período e do carregamento dos indicadores.
+ */
 export function DashboardHeader({
     period,
     onPeriodChange,
@@ -30,8 +36,11 @@ export function DashboardHeader({
                 </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+                <TimerIndicator />
+                <TaskCreationActions />
                 <OptionTabs
                     aria-label="Período"
+                    className="shrink-0"
                     value={period}
                     onChange={onPeriodChange}
                     options={DASHBOARD_PERIODS.map((value) => ({ value, label: DASHBOARD_PERIOD_LABELS[value] }))}
