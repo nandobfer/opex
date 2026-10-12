@@ -49,6 +49,7 @@ Marketing Campanhas (`~/code/crm-marketing-campanhas`, branch `dev`).
 | `modules/finance.md` | Financeiro | Faturamento das tarefas concluídas por cliente (`/financeiro`, somente leitura): valor pelo snapshot da estimativa e conclusão derivada da auditoria |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
+| `modules/deployment.md` | Deploy (CI/CD) | GitHub Actions (testes, build da imagem no runner, transferência por SCP e recriação via Compose), configuração de secrets/variables e rollback |
 
 Novos módulos ganham um arquivo aqui quando forem implementados, conforme o fluxo obrigatório do
 `AGENTS.md`.
