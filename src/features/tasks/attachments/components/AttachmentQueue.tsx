@@ -15,19 +15,23 @@ export function AttachmentQueue({
     onCancel,
     onRetry,
     onDismiss,
+    hideInline = false,
 }: {
     items: readonly AttachmentUploadItem[]
     onCancel: (id: string) => void
     onRetry: (id: string) => void
     onDismiss: (id: string) => void
+    /** Esconde a mídia enviada pelo campo Markdown (o progresso dela aparece no próprio campo). */
+    hideInline?: boolean
 }) {
     const reduceMotion = useReducedMotion()
-    if (items.length === 0) return null
+    const visible = hideInline ? items.filter((item) => !item.inline) : items
+    if (visible.length === 0) return null
 
     return (
         <ul className="mt-3 space-y-2" aria-label="Envios de anexos">
             <AnimatePresence initial={false}>
-                {items.map((item) => {
+                {visible.map((item) => {
                     const kind = attachmentKindOf(item.mimeType)
                     const done = item.status === "done"
                     const failed = item.status === "error"

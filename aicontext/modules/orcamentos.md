@@ -119,7 +119,8 @@ da tarefa ou o do próprio envio). Um anexo de outro cliente responde 404 (não 
   tarefa criada (`moveAttachmentsToTask`).
 - **Excluir**: o portal **não** exclui anexo vinculado. O cliente só remove o que ele mesmo enviou e
   ainda não foi vinculado (na prática, antes de salvar a nova tarefa). Mídia **colada** na descrição
-  entra pelo mesmo caminho (`MarkdownField.uploadFile`) e, portanto, no mesmo rascunho.
+  entra pela mesma fila (`MarkdownField.uploads`) e, portanto, no mesmo rascunho — e o formulário
+  **não salva** enquanto houver envio em andamento.
 - **Tempo real**: o dono publica `cliente-tasks-updated` no canal do cliente quando os anexos mudam; a
   tela invalida a lista (também ao reconectar).
 

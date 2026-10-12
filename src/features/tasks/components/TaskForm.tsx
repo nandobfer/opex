@@ -10,7 +10,7 @@ import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { FormFooter } from "@/components/ui/form-footer"
 import { Input } from "@/components/ui/input"
-import { MarkdownField, type MarkdownUploadFile } from "@/components/ui/markdown-field"
+import { MarkdownField, type MarkdownUploads } from "@/components/ui/markdown-field"
 import { SearchPicker } from "@/components/ui/search-picker"
 import type { BoardColumnView } from "../board"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "../constants"
@@ -29,12 +29,14 @@ interface TaskFormProps {
     /** Coluna inicial da nova tarefa. */
     defaultColumnKey?: string
     submitting: boolean
+    /** Anexos em envio: salvar agora perderia a mídia colada na descrição. */
+    uploading?: boolean
     onSubmit: (values: TaskFormValues) => Promise<void> | void
     onCancel: () => void
     /** Bloco de anexos do formulário (criação → pendentes; edição → os da tarefa). */
     attachments?: ReactNode
     /** Colar/arrastar mídia na descrição (envia e insere a referência do anexo). */
-    uploadFile?: MarkdownUploadFile
+    uploads?: MarkdownUploads
 }
 
 type TypeOption = { value: string; label: string }
@@ -55,7 +57,7 @@ const emptyValues = (projectId: string, columnKey: string): TaskFormValues => ({
  * pré-visualização e metadados (repositório, coluna, tipo e prioridade) em autocomplete com chips.
  * Sem o campo de especificação técnica.
  */
-export function TaskForm({ mode, task, projects, columns, defaultColumnKey, submitting, onSubmit, onCancel, attachments, uploadFile }: TaskFormProps) {
+export function TaskForm({ mode, task, projects, columns, defaultColumnKey, submitting, uploading = false, onSubmit, onCancel, attachments, uploads }: TaskFormProps) {
     const form = useForm<TaskFormValues>({
         resolver: zodResolver(taskFormSchema),
         mode: "onChange",
@@ -127,7 +129,7 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                 <Controller
                     control={form.control}
                     name="description"
-                    render={({ field }) => <MarkdownField id="task-description" value={field.value ?? ""} onChange={field.onChange} rows={8} placeholder="Markdown aceito" invalid={Boolean(errors.description)} uploadFile={uploadFile} />}
+                    render={({ field }) => <MarkdownField id="task-description" value={field.value ?? ""} onChange={field.onChange} rows={8} placeholder="Markdown aceito" invalid={Boolean(errors.description)} uploads={uploads} />}
                 />
             </Field>
 
@@ -208,10 +210,15 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
             </div>
 
             <FormFooter>
+                {uploading && (
+                    <p className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Enviando anexos…
+                    </p>
+                )}
                 <Button type="button" variant="ghost" onClick={onCancel} disabled={submitting}>
                     Cancelar
                 </Button>
-                <Button type="submit" disabled={submitting || !form.formState.isValid}>
+                <Button type="submit" disabled={submitting || uploading || !form.formState.isValid}>
                     {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}
                     {mode === "edit" ? "Salvar" : "Criar tarefa"}
                 </Button>

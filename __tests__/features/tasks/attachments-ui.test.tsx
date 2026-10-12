@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 
 import { Markdown } from '@/components/ui/markdown'
-import { MarkdownField } from '@/components/ui/markdown-field'
+import { MarkdownField, type MarkdownUploadItem, type MarkdownUploads } from '@/components/ui/markdown-field'
 import { AttachmentDropzone } from '@/features/tasks/attachments/components/AttachmentDropzone'
 import { AttachmentList } from '@/features/tasks/attachments/components/AttachmentList'
 import type { TaskAttachmentDto } from '@/features/tasks/attachments/types'
@@ -109,37 +109,81 @@ describe('mídia de anexo no Markdown', () => {
 })
 
 describe('colar mídia na descrição', () => {
+  const pastedFile = () => new File(['x'], 'foto.png', { type: 'image/png' })
+
   it('envia o arquivo colado e insere a referência sem perder o texto digitado', async () => {
     let resolveUpload: (markdown: string) => void = () => {}
-    const uploadFile = vi.fn(
-      () =>
-        new Promise<string>((resolve) => {
-          resolveUpload = resolve
-        }),
-    )
+    const enqueue = vi.fn(() => ({
+      id: 'j1',
+      markdown: new Promise<string>((resolve) => {
+        resolveUpload = resolve
+      }),
+    }))
+    const uploads: MarkdownUploads = {
+      enqueue,
+      items: [{ id: 'j1', name: 'foto.png', progress: 30, status: 'uploading' }],
+      retry: vi.fn(),
+      cancel: vi.fn(),
+      dismiss: vi.fn(),
+    }
     const onChange = vi.fn()
-    const { rerender } = render(<MarkdownField value="texto inicial" onChange={onChange} uploadFile={uploadFile} />)
+    const { rerender } = render(<MarkdownField value="texto inicial" onChange={onChange} uploads={uploads} />)
 
     const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Markdown aceito')
-    fireEvent.paste(textarea, { clipboardData: { files: [new File(['x'], 'foto.png', { type: 'image/png' })] } })
+    fireEvent.paste(textarea, { clipboardData: { files: [pastedFile()] } })
 
-    await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(1))
-    expect((await screen.findByText(/Enviando foto.png/)) as HTMLElement).toBeTruthy()
+    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(1))
+    expect(screen.getByText(/Enviando foto.png/)).toBeTruthy()
+    expect(screen.getByText('30%')).toBeTruthy()
 
     // O usuário continua digitando enquanto o upload acontece.
-    rerender(<MarkdownField value="texto inicial e mais" onChange={onChange} uploadFile={uploadFile} />)
+    rerender(<MarkdownField value="texto inicial e mais" onChange={onChange} uploads={uploads} />)
     resolveUpload('![foto.png](/api/attachments/' + 'd'.repeat(24) + '/content)')
 
     await waitFor(() => expect(onChange).toHaveBeenCalled())
     const inserted = onChange.mock.calls[0][0] as string
     expect(inserted).toContain('texto inicial e mais')
     expect(inserted).toContain(`/api/attachments/${'d'.repeat(24)}/content`)
+    await waitFor(() => expect(screen.queryByText(/Enviando foto.png/)).toBeNull())
   })
 
-  it('sem uploadFile, colar arquivo não interfere', () => {
+  it('mostra a falha, deixa tentar de novo e só insere a referência quando a confirmação conclui', async () => {
+    const erro = 'Não foi possível confirmar o arquivo no storage. Tente novamente em instantes.'
+    let resolveUpload: (markdown: string) => void = () => {}
+    const enqueue = vi.fn(() => ({
+      id: 'j1',
+      markdown: new Promise<string>((resolve) => {
+        resolveUpload = resolve
+      }),
+    }))
+    const retry = vi.fn()
+    const base = { enqueue, retry, cancel: vi.fn(), dismiss: vi.fn() }
+    const onChange = vi.fn()
+    const { rerender } = render(<MarkdownField value="texto" onChange={onChange} uploads={{ ...base, items: [] }} />)
+
+    fireEvent.paste(screen.getByPlaceholderText('Markdown aceito'), { clipboardData: { files: [pastedFile()] } })
+    await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(1))
+
+    // A fila marca a falha: nada entrou na descrição e o erro fica visível com a ação de tentar de novo.
+    const failed: MarkdownUploadItem[] = [{ id: 'j1', name: 'foto.png', progress: 100, status: 'error', error: erro }]
+    rerender(<MarkdownField value="texto" onChange={onChange} uploads={{ ...base, items: failed }} />)
+    expect(screen.getByText(/Falha ao enviar foto.png/)).toBeTruthy()
+    expect(screen.getByText(erro)).toBeTruthy()
+    expect(onChange).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByLabelText('Tentar enviar foto.png novamente'))
+    expect(retry).toHaveBeenCalledWith('j1')
+
+    // A nova tentativa reaproveita o arquivo já enviado: quando a confirmação conclui, a referência entra.
+    resolveUpload(`![foto.png](/api/attachments/${'e'.repeat(24)}/content)`)
+    await waitFor(() => expect(onChange).toHaveBeenCalled())
+    expect(onChange.mock.calls[0][0] as string).toContain(`/api/attachments/${'e'.repeat(24)}/content`)
+  })
+
+  it('sem uploads, colar arquivo não interfere', () => {
     const onChange = vi.fn()
     render(<MarkdownField value="texto" onChange={onChange} />)
-    fireEvent.paste(screen.getByPlaceholderText('Markdown aceito'), { clipboardData: { files: [new File(['x'], 'foto.png')] } })
+    fireEvent.paste(screen.getByPlaceholderText('Markdown aceito'), { clipboardData: { files: [pastedFile()] } })
     expect(onChange).not.toHaveBeenCalled()
   })
 })

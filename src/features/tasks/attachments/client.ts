@@ -2,6 +2,7 @@
 
 import axios, { type AxiosInstance } from "axios"
 import { unwrapApi } from "@/lib/api"
+import { fallbackAttachmentName } from "@/lib/attachments"
 import type { ApiResponse } from "@/lib/types/api"
 import { ATTACHMENT_FALLBACK_MIME } from "./constants"
 import type { AttachmentReserveInput } from "./schemas"
@@ -69,13 +70,35 @@ export async function uploadAttachment(
     client: AttachmentClient,
     input: { file: File; target?: AttachmentTarget; onProgress?: (percent: number) => void; signal?: AbortSignal },
 ): Promise<TaskAttachmentDto> {
+    const task = await startAttachmentUpload(client, input)
+    return client.complete(task.reservationId)
+}
+
+/** O que a confirmação precisa para repetir sem enviar o arquivo de novo. */
+export interface AttachmentUploadTask {
+    /** Id da reserva (a confirmação usa este id). */
+    reservationId: string
+    /** O PUT foi aceito pelo storage; repetir a partir daqui refaz **só** a confirmação. */
+    uploaded: boolean
+}
+
+/**
+ * Reserva a URL assinada e envia o arquivo direto ao storage, **sem** confirmar. Devolve o necessário
+ * para repetir a confirmação sem novo envio quando o PUT já foi aceito; se o PUT falhar, libera a
+ * reserva. Arquivo **sem nome** (mídia colada da área de transferência) ganha um nome padrão do tipo.
+ */
+export async function startAttachmentUpload(
+    client: AttachmentClient,
+    input: { file: File; target?: AttachmentTarget; onProgress?: (percent: number) => void; signal?: AbortSignal },
+): Promise<AttachmentUploadTask> {
     const mimeType = input.file.type || ATTACHMENT_FALLBACK_MIME
-    const reservation = await client.reserve({ name: input.file.name, size: input.file.size, mimeType, ...input.target })
+    const name = input.file.name?.trim() || fallbackAttachmentName(mimeType)
+    const reservation = await client.reserve({ name, size: input.file.size, mimeType, ...input.target })
     try {
         await client.uploadToSignedUrl({ url: reservation.url, file: input.file, mimeType, onProgress: input.onProgress, signal: input.signal })
     } catch (error) {
         await client.cancel(reservation.id).catch(() => undefined)
         throw error
     }
-    return client.complete(reservation.id)
+    return { reservationId: reservation.id, uploaded: true }
 }

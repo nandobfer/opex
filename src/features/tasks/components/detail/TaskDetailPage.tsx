@@ -36,6 +36,7 @@ import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
 import { TaskForm } from "../TaskForm"
 import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
+import { useOwnerAttachmentClient, useTaskDescriptionUploads } from "../../attachments/hooks"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
 import { TaskSummaryCard } from "./TaskSummaryCard"
 import { TaskDetailTabs, type TaskDetailTabId } from "./TaskDetailTabs"
@@ -51,6 +52,9 @@ export function TaskDetailPage({ id }: { id: string }) {
     const options = useTaskOptions(!query.isError)
     const update = useUpdateTask()
     const remove = useDeleteTask()
+    const attachmentClient = useOwnerAttachmentClient()
+    // Mídia colada na descrição entra já vinculada à tarefa (aba Anexos).
+    const descriptionUploads = useTaskDescriptionUploads(attachmentClient, id)
     const [tab, setTab] = useState<TaskDetailTabId>("description")
     const [editing, setEditing] = useState(false)
     const [confirmDelete, setConfirmDelete] = useState(false)
@@ -137,7 +141,9 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                     projects={projects}
                                                     columns={board.columns}
                                                     submitting={update.isPending}
+                                                    uploading={descriptionUploads.active > 0}
                                                     attachments={<TaskAttachmentsTab task={task} />}
+                                                    uploads={descriptionUploads.media}
                                                     onCancel={() => setEditing(false)}
                                                     onSubmit={async (values) => {
                                                         try {

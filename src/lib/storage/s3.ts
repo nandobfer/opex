@@ -20,6 +20,41 @@ const dbg = integrationDebug("storage_s3")
  */
 export type SignedUrlAudience = "browser" | "server"
 
+/** Como o storage respondeu a uma operação. */
+export type StorageErrorKind = "not_found" | "forbidden" | "unavailable"
+
+export interface StorageErrorInfo {
+    kind: StorageErrorKind
+    /** Status HTTP da resposta (quando houve uma). */
+    httpStatus: number | null
+    /** Nome/código do erro do SDK. */
+    code: string | null
+}
+
+/** Códigos que provam que o objeto não existe (não confundir com recusa de acesso). */
+const STORAGE_NOT_FOUND_CODES = new Set(["NotFound", "NoSuchKey"])
+const STORAGE_FORBIDDEN_CODES = new Set(["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "AuthorizationHeaderMalformed"])
+/** Problema de configuração da integração (não é um arquivo ausente): nunca descarta o envio. */
+const STORAGE_CONFIG_CODES = new Set(["NoSuchBucket"])
+
+/**
+ * Classifica a falha de uma operação no storage.
+ *
+ * **403 nunca significa "objeto ausente"**: serviços S3 compatíveis respondem 403 para objeto
+ * inexistente quando a credencial não tem permissão de listar o bucket (foi o observado no Storage
+ * S3 do projeto). Só `404`/`NoSuchKey` provam ausência; o resto é recusa de acesso ou indisponibilidade
+ * e o objeto pode estar lá.
+ */
+export function storageErrorInfo(error: unknown): StorageErrorInfo {
+    const candidate = error as { name?: unknown; Code?: unknown; $metadata?: { httpStatusCode?: unknown } } | null
+    const code = typeof candidate?.name === "string" ? candidate.name : typeof candidate?.Code === "string" ? candidate.Code : null
+    const httpStatus = typeof candidate?.$metadata?.httpStatusCode === "number" ? candidate.$metadata.httpStatusCode : null
+    const notFound = httpStatus === 404 || (code !== null && STORAGE_NOT_FOUND_CODES.has(code))
+    const misconfigured = code !== null && STORAGE_CONFIG_CODES.has(code)
+    const forbidden = !notFound && !misconfigured && (httpStatus === 401 || httpStatus === 403 || (code !== null && STORAGE_FORBIDDEN_CODES.has(code)))
+    return { kind: notFound && !misconfigured ? "not_found" : forbidden ? "forbidden" : "unavailable", httpStatus, code }
+}
+
 let cached: { version: string; client: S3Client; publicClient: S3Client; publicPrefix: string } | null = null
 
 /**

@@ -276,6 +276,14 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
   server-side) e marca `ready`. Confirmar de novo é idempotente; arquivo acima de **100 MB**, vazio
   ou ausente é descartado (objeto e registro). A promoção impede que uma URL de upload ainda válida
   sobrescreva um anexo já confirmado.
+- **Falha de storage não destrói o envio** (`storageErrorInfo` de `src/lib/storage/s3.ts`): só
+  **404/`NoSuchKey`** provam que o objeto não chegou (descarta a reserva e responde 400 "envie de
+  novo"). **403 é recusa de acesso, não ausência** — o Storage S3 do projeto responde 403 para objeto
+  inexistente e o HEAD sem corpo chega ao SDK como `UnknownError`; 403, rede, tempo esgotado e 5xx
+  respondem **502** (`ATTACHMENT_STORAGE_UNAVAILABLE`) **preservando a reserva e o objeto temporário**,
+  e a nova tentativa refaz **só a confirmação** (sem reenviar o arquivo). O mesmo vale para a leitura
+  do conteúdo (403/5xx → 502; 404 → "anexo não encontrado"). Cada operação (`head`, `copy`, `get`,
+  `delete`) é logada separadamente com status HTTP, código e `attachmentId`, sem segredos.
 - **Limites**: qualquer tipo de arquivo, **100 MB por arquivo** (`ATTACHMENT_MAX_BYTES`), sem limite
   de quantidade. O tamanho é validado no navegador e **de novo** na confirmação — a URL assinada de
   `PUT` não impõe limite durante a transferência.
@@ -295,9 +303,18 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
 - **Formulário**: na criação os arquivos são enviados **antes** de o registro existir e ficam
   pendentes; os ids vão em `attachmentIds` no `POST /api/tasks` (`createTaskWithIssue` valida os
   anexos **antes** de criar a issue no GitHub e vincula depois). O `TaskForm` recebe o bloco de
-  anexos (`attachments`); em edição, o mesmo bloco da aba (upload já vinculado à tarefa). Colar ou
-  arrastar mídia no campo Markdown envia o arquivo e insere a referência no cursor, sem sobrescrever
-  o texto digitado durante o envio (`MarkdownField.uploadFile`).
+  anexos (`attachments`); em edição, o mesmo bloco da aba (upload já vinculado à tarefa) **e** o
+  envio pela descrição (`uploads`, ligado na página da tarefa com `target` da tarefa, então a mídia
+  colada já nasce vinculada). Enquanto há envio em andamento o formulário **não salva**
+  (`uploading`/`active`: botão desabilitado e aviso "Enviando anexos…").
+- **Mídia colada ou arrastada na descrição** (`MarkdownField.uploads`): o arquivo entra na **mesma
+  fila** da aba Anexos (progresso real, cancelar, tentar de novo) e a referência vai para a posição
+  do cursor **só quando a confirmação conclui** — nada é inserido na falha. O campo mostra o envio
+  inline ("Enviando"/"Confirmando", progresso) e, ao falhar, a mensagem pt-BR com **tentar de novo**
+  (que reaproveita o arquivo já enviado) e **descartar**; a fila da página não repete o item. O texto
+  digitado durante o envio é preservado e arquivo sem nome (colado) ganha nome padrão por tipo
+  (`fallbackAttachmentName`, ex.: `imagem-colada.png`). Sem `uploads`, colar arquivo não interfere no
+  campo.
 - **Exclusão**: o dono exclui qualquer anexo (com confirmação); o usuário do portal só o que ele
   mesmo enviou e ainda **não vinculado**. Excluir a tarefa remove os objetos e os registros fora da
   resposta (`runAfterResponse`). A rotina **`task-attachments-cleanup`** (30 min) remove uploads
@@ -332,7 +349,12 @@ dos comentários são cobertos em `tasks-service`; as **tags** têm testes próp
 **anexos** têm testes próprios em `__tests__/features/tasks/attachments-service.test.ts` (reserva,
 confirmação/promoção, limite, idempotência, vínculo, visibilidade e limpeza),
 `__tests__/features/tasks/attachments-ui.test.tsx` (área de envio, lista/exclusão, mídia no Markdown
-e colar mídia) e `__tests__/lib/attachments.test.ts` (contrato puro). A **prévia
+  e colar mídia — inclusive a falha visível com nova tentativa) e `__tests__/lib/attachments.test.ts`
+  (contrato puro). A **fila** (recuperação sem novo envio, erro definitivo, arquivo recusado) tem
+  testes próprios em `__tests__/features/tasks/attachments-upload-queue.test.tsx`; a classificação
+  das falhas do storage, em `__tests__/lib/storage/s3.test.ts`. As **falhas do storage** na
+  confirmação (403 preserva, 404 descarta, cópia recuperável, leitura 502/404) estão em
+  `attachments-service.test.ts`. A **prévia
 do dono** (formulário, revisão e o card de estimativa com cliente opcional) em
 `__tests__/features/tasks/owner-preview.test.tsx`. O botão
 **Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).

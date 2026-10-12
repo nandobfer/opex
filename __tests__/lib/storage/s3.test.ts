@@ -36,7 +36,7 @@ vi.mock('@aws-sdk/client-s3', () => {
   }
 })
 
-import { checkBucket, copyFile, deleteFile, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, uploadFile } from '@/lib/storage/s3'
+import { checkBucket, copyFile, deleteFile, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, storageErrorInfo, uploadFile } from '@/lib/storage/s3'
 
 const base = { endpoint: 'http://minio:9000', region: 'us-east-1', bucket: 'opex', signedUrlExpiresSeconds: 3600, accessKey: 'ak', secretKey: 'sk' }
 
@@ -151,5 +151,32 @@ describe('serviço de storage (S3)', () => {
 
     expect(lastCommand().input).toEqual({ Bucket: 'opex', Key: 'attachments/1/clip.mp4', Range: 'bytes=0-99' })
     expect(file.contentRange).toBe('bytes 0-99/1000')
+  })
+})
+
+describe('classificação das falhas do storage', () => {
+  const failure = (name: string, httpStatusCode?: number) => Object.assign(new Error(name), { name, ...(httpStatusCode ? { $metadata: { httpStatusCode } } : {}) })
+
+  it('403 é recusa de acesso, nunca "objeto ausente"', () => {
+    // O Storage S3 do projeto responde 403 (e não 404) para objeto inexistente; o HEAD sem corpo
+    // chega ao SDK como UnknownError. Tratar isso como ausência destruía envios recuperáveis.
+    expect(storageErrorInfo(failure('UnknownError', 403))).toEqual({ kind: 'forbidden', httpStatus: 403, code: 'UnknownError' })
+    expect(storageErrorInfo(failure('AccessDenied', 403)).kind).toBe('forbidden')
+    expect(storageErrorInfo(failure('SignatureDoesNotMatch')).kind).toBe('forbidden')
+  })
+
+  it('404 e NoSuchKey provam a ausência do objeto', () => {
+    expect(storageErrorInfo(failure('NoSuchKey', 404))).toEqual({ kind: 'not_found', httpStatus: 404, code: 'NoSuchKey' })
+    expect(storageErrorInfo(failure('NotFound', 404)).kind).toBe('not_found')
+    expect(storageErrorInfo(failure('NoSuchKey')).kind).toBe('not_found')
+  })
+
+  it('erro de rede, tempo esgotado ou 5xx é indisponibilidade (o objeto pode estar lá)', () => {
+    expect(storageErrorInfo(failure('InternalError', 500)).kind).toBe('unavailable')
+    expect(storageErrorInfo(failure('TimeoutError')).kind).toBe('unavailable')
+    expect(storageErrorInfo(new Error('ECONNRESET')).kind).toBe('unavailable')
+    expect(storageErrorInfo(null).kind).toBe('unavailable')
+    // Bucket inexistente é problema de configuração, não de um arquivo ausente.
+    expect(storageErrorInfo(failure('NoSuchBucket', 404))).toEqual({ kind: 'unavailable', httpStatus: 404, code: 'NoSuchBucket' })
   })
 })

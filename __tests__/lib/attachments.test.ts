@@ -3,6 +3,7 @@ import {
     attachmentContentPath,
     attachmentKindOf,
     attachmentMarkdown,
+    fallbackAttachmentName,
     formatAttachmentSize,
     isAttachmentReferenced,
     isInlineAttachmentMime,
@@ -49,6 +50,18 @@ describe("contrato dos anexos", () => {
         expect(formatAttachmentSize(0)).toBe("0 B")
         expect(formatAttachmentSize(2048)).toBe("2 KB")
         expect(formatAttachmentSize(1024 * 1024 * 3.5)).toBe("3,5 MB")
+    })
+
+    it("dá um nome padrão para a mídia colada, que chega sem nome", () => {
+        expect(fallbackAttachmentName("image/png")).toBe("imagem-colada.png")
+        expect(fallbackAttachmentName("image/jpeg")).toBe("imagem-colada.jpeg")
+        expect(fallbackAttachmentName("video/mp4")).toBe("video-colado.mp4")
+        expect(fallbackAttachmentName("audio/mpeg")).toBe("audio-colado.mpeg")
+        expect(fallbackAttachmentName("application/pdf")).toBe("arquivo-colado.pdf")
+        // Sem extensão útil (mime genérico ou ausente), o nome fica só com a base.
+        expect(fallbackAttachmentName("application/octet-stream")).toBe("arquivo-colado")
+        expect(fallbackAttachmentName("image/png; charset=binary")).toBe("imagem-colada.png")
+        expect(fallbackAttachmentName(null)).toBe("arquivo-colado")
     })
 
     it("detecta o anexo referenciado na descrição", () => {

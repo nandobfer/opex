@@ -24,6 +24,17 @@ vi.mock("@/lib/storage/s3", () => ({
     headFile: mocks.headFile,
     getUploadUrl: mocks.getUploadUrl,
     getFileObject: mocks.getFileObject,
+    // Mesma regra do serviço real: 403 é recusa de acesso (não "objeto ausente") e configuração
+    // errada (NoSuchBucket) não descarta o envio.
+    storageErrorInfo: (error: unknown) => {
+        const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } } | null
+        const code = candidate?.name ?? null
+        const httpStatus = candidate?.$metadata?.httpStatusCode ?? null
+        const misconfigured = code === "NoSuchBucket"
+        const notFound = !misconfigured && (httpStatus === 404 || code === "NotFound" || code === "NoSuchKey")
+        const forbidden = !notFound && !misconfigured && (httpStatus === 401 || httpStatus === 403 || code === "AccessDenied")
+        return { kind: notFound ? "not_found" : forbidden ? "forbidden" : "unavailable", httpStatus, code }
+    },
 }))
 vi.mock("@/features/tasks/server/service", () => ({ publishTasksUpdated: mocks.publish, TASK_AUDIT_ENTITY: "Tarefa" }))
 vi.mock("@/lib/db/models/TaskAttachment", async () => {
@@ -148,12 +159,13 @@ describe("anexos — reserva e confirmação", () => {
         expect(attachments().docs).toHaveLength(0)
     })
 
-    it("recusa quando o objeto não chegou ao storage", async () => {
-        mocks.headFile.mockRejectedValue(new Error("NotFound"))
+    it("erro de rede na conferência preserva o envio (502, sem descartar a reserva)", async () => {
+        mocks.headFile.mockRejectedValue(new Error("ECONNRESET"))
         const { id } = await reserve()
 
-        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_NOT_UPLOADED", status: 400 })
-        expect(attachments().docs).toHaveLength(0)
+        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_STORAGE_UNAVAILABLE", status: 502 })
+        expect(attachments().docs).toHaveLength(1)
+        expect(attachments().docs[0].status).toBe("pending")
     })
 
     it("cancela um envio ainda não confirmado (do próprio autor)", async () => {
@@ -231,6 +243,69 @@ describe("anexos — consulta, conteúdo e exclusão", () => {
         await deleteAttachment(owner, vinculado)
         expect(attachments().docs.some((item) => String(item._id) === vinculado)).toBe(false)
         expect(mocks.deleteFile).toHaveBeenCalledWith("attachments/definitiva/foto.png")
+    })
+})
+
+describe("anexos — falhas do storage na confirmação", () => {
+    const failure = (name: string, httpStatus?: number) => Object.assign(new Error(name), { name, ...(httpStatus ? { $metadata: { httpStatusCode: httpStatus } } : {}) })
+
+    it("403 na conferência preserva a reserva e o objeto (não descarta o envio)", async () => {
+        mocks.headFile.mockRejectedValue(failure("UnknownError", 403))
+        const { id } = await reserve()
+
+        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_STORAGE_UNAVAILABLE", status: 502 })
+
+        expect(attachments().docs).toHaveLength(1)
+        expect(attachments().docs[0].status).toBe("pending")
+        expect(mocks.copyFile).not.toHaveBeenCalled()
+        expect(mocks.deleteFile).not.toHaveBeenCalled()
+    })
+
+    it("repetir a confirmação depois de um 403 conclui o anexo sem novo envio", async () => {
+        mocks.headFile.mockRejectedValueOnce(failure("AccessDenied", 403)).mockResolvedValue({ contentLength: 2048, contentType: "image/png" })
+        const { id } = await reserve()
+
+        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_STORAGE_UNAVAILABLE" })
+        const attachment = await completeAttachmentUpload(owner, id)
+
+        expect(attachment.id).toBe(id)
+        expect(attachment.size).toBe(2048)
+        expect(attachments().docs[0].status).toBe("ready")
+        expect(mocks.copyFile).toHaveBeenCalledTimes(1)
+    })
+
+    it("404 na conferência prova a ausência: descarta a reserva e manda enviar de novo", async () => {
+        mocks.headFile.mockRejectedValue(failure("NoSuchKey", 404))
+        const { id } = await reserve()
+
+        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_NOT_UPLOADED", status: 400 })
+
+        expect(attachments().docs).toHaveLength(0)
+        expect(mocks.deleteFile).toHaveBeenCalledWith(`attachments/tmp/${id}/foto.png`)
+    })
+
+    it("falha ao promover o arquivo mantém o envio recuperável (e a nova tentativa promove)", async () => {
+        mocks.headFile.mockResolvedValue({ contentLength: 2048, contentType: "image/png" })
+        mocks.copyFile.mockRejectedValueOnce(failure("InternalError", 500))
+        const { id } = await reserve()
+
+        await expect(completeAttachmentUpload(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_STORAGE_UNAVAILABLE", status: 502 })
+        expect(attachments().docs[0].status).toBe("pending")
+
+        const attachment = await completeAttachmentUpload(owner, id)
+
+        expect(attachment.id).toBe(id)
+        expect(attachments().docs[0].status).toBe("ready")
+    })
+
+    it("indisponibilidade ao ler o conteúdo vira 502; ausência comprovada, 404", async () => {
+        const id = await seedAttachment()
+
+        mocks.getFileObject.mockRejectedValue(failure("UnknownError", 403))
+        await expect(readAttachmentContent(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_STORAGE_UNAVAILABLE", status: 502 })
+
+        mocks.getFileObject.mockRejectedValue(failure("NoSuchKey", 404))
+        await expect(readAttachmentContent(owner, id)).rejects.toMatchObject({ code: "ATTACHMENT_NOT_FOUND", status: 404 })
     })
 })
 

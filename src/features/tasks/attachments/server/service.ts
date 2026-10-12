@@ -6,7 +6,7 @@ import { TaskAttachment, type ITaskAttachment } from "@/lib/db/models/TaskAttach
 import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoDraft } from "@/lib/db/models/Orcamento"
 import { logger } from "@/lib/logger"
-import { copyFile, deleteFile, getFileObject, getUploadUrl, headFile } from "@/lib/storage/s3"
+import { copyFile, deleteFile, getFileObject, getUploadUrl, headFile, storageErrorInfo } from "@/lib/storage/s3"
 import { TASK_AUDIT_ENTITY } from "@/features/tasks/server/service"
 import {
     ATTACHMENT_AUDIT_ENTITY,
@@ -28,6 +28,11 @@ import type { AttachmentActor } from "./actor"
  * **temporária**; a confirmação confere o objeto no storage (tamanho e tipo reais), **promove** o
  * arquivo para a chave definitiva (cópia server-side) e marca `ready`. Assim uma URL de upload ainda
  * válida não pode sobrescrever um anexo já confirmado.
+ *
+ * Falha de storage **não** destrói o envio: só a ausência comprovada do objeto (`404`/`NoSuchKey`)
+ * descarta a reserva; recusa de acesso (`403`, que neste storage também é a resposta para objeto
+ * inexistente sem permissão de listar) e indisponibilidade viram `502` com a reserva preservada, para
+ * repetir a confirmação sem reenviar o arquivo.
  */
 
 export type AttachmentDoc = ITaskAttachment & { _id: unknown }
@@ -182,7 +187,11 @@ export async function completeAttachmentUpload(actor: AttachmentActor, id: strin
     try {
         head = await headFile(doc.uploadKey)
     } catch (error) {
-        logger.warn({ err: error, attachmentId: String(doc._id) }, "[attachments] Objeto ausente na confirmação")
+        const info = storageErrorInfo(error)
+        logger.warn({ err: error, attachmentId: String(doc._id), operation: "head", httpStatus: info.httpStatus, code: info.code, kind: info.kind }, "[attachments] Falha ao conferir o objeto na confirmação")
+        // Só a ausência comprovada descarta o envio: recusa de acesso, rede ou 5xx preservam a reserva
+        // e o objeto temporário, para o usuário repetir a confirmação sem enviar tudo de novo.
+        if (info.kind !== "not_found") throw new DomainError(502, "Não foi possível confirmar o arquivo no storage. Tente novamente em instantes.", "ATTACHMENT_STORAGE_UNAVAILABLE")
         await discardUpload(doc)
         throw new DomainError(400, "O arquivo não chegou ao storage. Envie de novo.", "ATTACHMENT_NOT_UPLOADED")
     }
@@ -197,7 +206,13 @@ export async function completeAttachmentUpload(actor: AttachmentActor, id: strin
         throw new DomainError(413, "Arquivo maior que 100 MB.", "ATTACHMENT_TOO_LARGE")
     }
 
-    await copyFile(doc.uploadKey, doc.key)
+    try {
+        await copyFile(doc.uploadKey, doc.key)
+    } catch (error) {
+        const info = storageErrorInfo(error)
+        logger.warn({ err: error, attachmentId: String(doc._id), operation: "copy", httpStatus: info.httpStatus, code: info.code, kind: info.kind }, "[attachments] Falha ao promover o objeto para a chave definitiva")
+        throw new DomainError(502, "Não foi possível finalizar o arquivo no storage. Tente novamente em instantes.", "ATTACHMENT_STORAGE_UNAVAILABLE")
+    }
     await removeObjectQuietly(doc.uploadKey)
     const mimeType = (head.contentType?.trim() || doc.mimeType || ATTACHMENT_FALLBACK_MIME).toLowerCase()
     await TaskAttachment.updateOne({ _id: doc._id }, { $set: { status: "ready", size, mimeType } })
@@ -248,7 +263,15 @@ export interface AttachmentContent {
 export async function readAttachmentContent(actor: AttachmentActor, id: string, options: { range?: string; download?: boolean } = {}): Promise<AttachmentContent> {
     const doc = await getAttachmentDoc(id)
     if (doc.status !== "ready" || !canReach(actor, doc)) throw new DomainError(404, "Anexo não encontrado", "ATTACHMENT_NOT_FOUND")
-    const file = await getFileObject(doc.key, { range: options.range })
+    let file
+    try {
+        file = await getFileObject(doc.key, { range: options.range })
+    } catch (error) {
+        const info = storageErrorInfo(error)
+        logger.warn({ err: error, attachmentId: String(doc._id), operation: "get", httpStatus: info.httpStatus, code: info.code, kind: info.kind }, "[attachments] Falha ao ler o objeto do storage")
+        if (info.kind === "not_found") throw new DomainError(404, "Anexo não encontrado", "ATTACHMENT_NOT_FOUND")
+        throw new DomainError(502, "Não foi possível carregar o anexo. Tente novamente em instantes.", "ATTACHMENT_STORAGE_UNAVAILABLE")
+    }
     const mimeType = file.contentType?.trim() || doc.mimeType || ATTACHMENT_FALLBACK_MIME
     return {
         body: file.body,

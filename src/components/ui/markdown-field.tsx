@@ -2,17 +2,37 @@
 
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Bold, Code2, Eye, Heading2, Image as ImageIcon, Italic, Link2, List, Loader2, Pencil, Quote } from "lucide-react"
+import { AlertCircle, Bold, Code2, Eye, Heading2, Image as ImageIcon, Italic, Link2, List, Loader2, Pencil, Quote, RotateCcw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
+import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 /**
- * Envia um arquivo colado/arrastado no campo e devolve o Markdown a inserir na posição do cursor
- * (ex.: a referência do anexo). Sem esta função, colar arquivos não faz nada.
+ * Estado de um envio exibido inline no campo. A fila de anexos da feature satisfaz este contrato.
  */
-export type MarkdownUploadFile = (file: File, onProgress?: (percent: number) => void) => Promise<string>
+export interface MarkdownUploadItem {
+    id: string
+    name: string
+    progress: number
+    status: "queued" | "uploading" | "confirming" | "done" | "error" | "canceled"
+    error?: string
+}
+
+/**
+ * Envio de mídia colada/arrastada no campo. A **mesma** fila usada pelo resto da tela é passada
+ * pronta: o campo enfileira o arquivo, acompanha o progresso, mostra a falha e deixa tentar de novo
+ * (reaproveitando o arquivo já enviado) ou dispensar.
+ */
+export interface MarkdownUploads {
+    /** Enfileira o arquivo e resolve com a referência de Markdown da mídia confirmada. */
+    enqueue: (file: File) => { id: string; markdown: Promise<string> }
+    items: readonly MarkdownUploadItem[]
+    retry: (id: string) => void
+    cancel: (id: string) => void
+    dismiss: (id: string) => void
+}
 
 interface MarkdownFieldProps {
     id?: string
@@ -23,8 +43,8 @@ interface MarkdownFieldProps {
     invalid?: boolean
     /** Classe do contêiner. */
     className?: string
-    /** Habilita colar/arrastar mídia direto no campo (ver `MarkdownUploadFile`). */
-    uploadFile?: MarkdownUploadFile
+    /** Habilita colar/arrastar mídia direto no campo (ver `MarkdownUploads`). */
+    uploads?: MarkdownUploads
 }
 
 interface ToolAction {
@@ -47,18 +67,26 @@ const TOOLS: ToolAction[] = [
 /**
  * Campo de texto Markdown com barra de formatação (negrito, itálico, título, link, imagem, lista,
  * citação e código) e abas Escrever/Visualizar. Reusado no formulário de tarefa (interno), na prévia
- * e no portal do cliente. Com `uploadFile`, colar ou arrastar uma mídia envia o arquivo e insere a
- * referência do anexo na posição do cursor.
+ * e no portal do cliente. Com `uploads`, colar ou arrastar uma mídia envia o arquivo e insere a
+ * referência do anexo na posição do cursor — com progresso, falha visível e nova tentativa.
  */
-export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Markdown aceito", invalid, className, uploadFile }: MarkdownFieldProps) {
+export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Markdown aceito", invalid, className, uploads }: MarkdownFieldProps) {
     const ref = useRef<HTMLTextAreaElement>(null)
     const [tab, setTab] = useState<"write" | "preview">("write")
-    const [pending, setPending] = useState<{ id: string; name: string; progress: number }[]>([])
+    /** Mídias enviadas por ESTE campo: a lista inline acompanha a fila pelos ids. */
+    const [jobs, setJobs] = useState<{ id: string; name: string }[]>([])
     // O valor mais recente: a inserção da referência acontece depois do envio, com o texto já digitado.
     const valueRef = useRef(value)
+    const mounted = useRef(true)
     useEffect(() => {
         valueRef.current = value
     }, [value])
+    useEffect(
+        () => () => {
+            mounted.current = false
+        },
+        [],
+    )
 
     const apply = (tool: ToolAction) => {
         const el = ref.current
@@ -88,27 +116,37 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
         onChange(`${before}${lead}${markdown}${trail}${after}`)
     }
 
+    const dismiss = (jobId: string) => {
+        uploads?.dismiss(jobId)
+        setJobs((prev) => prev.filter((job) => job.id !== jobId))
+    }
+
+    /** Envia cada mídia e insere a referência **quando o servidor confirma** (nada é inserido na falha). */
     const sendFiles = (files: File[], position: number) => {
-        if (!uploadFile || files.length === 0) return
-        const local = files.map((file) => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, name: file.name || "mídia colada", progress: 0 }))
-        setPending((prev) => [...prev, ...local])
-        void Promise.allSettled(
-            files.map((file, index) => {
-                const entry = local[index]!
-                return uploadFile(file, (progress) => setPending((prev) => prev.map((item) => (item.id === entry.id ? { ...item, progress } : item))))
-            }),
-        ).then((results) => {
-            const inserted = results.filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled").map((result) => result.value.trim()).filter(Boolean)
-            if (inserted.length) insertAt(position, inserted.join("\n\n"))
-            setPending((prev) => prev.filter((item) => !local.some((entry) => entry.id === item.id)))
-        })
+        if (!uploads || files.length === 0) return
+        for (const file of files) {
+            const { id, markdown } = uploads.enqueue(file)
+            if (!id) continue
+            setJobs((prev) => [...prev, { id, name: file.name || "mídia colada" }])
+            void markdown
+                .then((reference) => {
+                    if (!mounted.current) return
+                    insertAt(position, reference.trim())
+                    setJobs((prev) => prev.filter((job) => job.id !== id))
+                })
+                // A falha fica visível na lista inline (tentar de novo / descartar): a promessa só é
+                // rejeitada ao cancelar ou descartar, para a nova tentativa ainda inserir a referência.
+                .catch(() => undefined)
+        }
     }
 
     const handleFiles = (event: { preventDefault: () => void }, files: File[], position: number) => {
-        if (!uploadFile || files.length === 0) return
+        if (!uploads || files.length === 0) return
         event.preventDefault()
         sendFiles(files, position)
     }
+
+    const pending = uploads ? jobs.flatMap((job) => (uploads.items.some((item) => item.id === job.id) ? [{ job, item: uploads.items.find((item) => item.id === job.id)! }] : [])) : []
 
     return (
         <div className={cn("space-y-2", className)}>
@@ -166,7 +204,7 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
                                     handleFiles(event, files, event.currentTarget.selectionStart)
                                 }}
                                 onDragOver={(event) => {
-                                    if (uploadFile) event.preventDefault()
+                                    if (uploads) event.preventDefault()
                                 }}
                             />
                         </div>
@@ -179,16 +217,40 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
             </AnimatePresence>
             <AnimatePresence>
                 {pending.length > 0 && (
-                    <motion.ul initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="space-y-1" aria-label="Mídias sendo enviadas">
-                        {pending.map((item) => (
-                            <li key={item.id} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
-                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                                <span className="truncate" title={item.name}>
-                                    Enviando {item.name}…
-                                </span>
-                                <span className="ml-auto shrink-0">{item.progress}%</span>
-                            </li>
-                        ))}
+                    <motion.ul initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="space-y-1" aria-label="Mídias enviadas pela descrição" aria-live="polite">
+                        {pending.map(({ job, item }) => {
+                            const failed = item.status === "error"
+                            const canceled = item.status === "canceled"
+                            const settled = failed || canceled
+                            return (
+                                <li key={job.id} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                                    {settled ? <AlertCircle className="h-3 w-3 shrink-0 text-destructive" aria-hidden /> : <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />}
+                                    <span className="min-w-0 truncate" title={job.name}>
+                                        {failed ? `Falha ao enviar ${job.name}` : canceled ? `Envio de ${job.name} cancelado` : `${item.status === "confirming" ? "Confirmando" : "Enviando"} ${job.name}…`}
+                                    </span>
+                                    {failed && item.error && (
+                                        <span className="min-w-0 truncate text-destructive" title={item.error}>
+                                            {item.error}
+                                        </span>
+                                    )}
+                                    {settled ? (
+                                        <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => uploads?.retry(job.id)} aria-label={`Tentar enviar ${job.name} novamente`} title="Tentar novamente">
+                                                <RotateCcw className="h-3 w-3" aria-hidden />
+                                            </Button>
+                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => dismiss(job.id)} aria-label={`Descartar ${job.name}`} title="Descartar">
+                                                <X className="h-3 w-3" aria-hidden />
+                                            </Button>
+                                        </span>
+                                    ) : (
+                                        <span className="ml-auto flex shrink-0 items-center gap-2">
+                                            <Progress value={item.progress} className="h-1 w-16" />
+                                            <span className="w-8 text-right">{item.progress}%</span>
+                                        </span>
+                                    )}
+                                </li>
+                            )
+                        })}
                     </motion.ul>
                 )}
             </AnimatePresence>

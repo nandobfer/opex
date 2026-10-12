@@ -4,18 +4,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { AxiosInstance } from "axios"
 import { toast } from "sonner"
-import api, { apiErrorMessage } from "@/lib/api"
-import { formatAttachmentSize } from "@/lib/attachments"
+import api, { apiErrorCode, apiErrorMessage } from "@/lib/api"
+import { fallbackAttachmentName, formatAttachmentSize } from "@/lib/attachments"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
+import type { MarkdownUploads } from "@/components/ui/markdown-field"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
-import { createAttachmentClient, uploadAttachment, type AttachmentClient, type AttachmentTarget } from "./client"
+import { createAttachmentClient, startAttachmentUpload, type AttachmentClient, type AttachmentTarget, type AttachmentUploadTask } from "./client"
 import { ATTACHMENT_FALLBACK_MIME, ATTACHMENT_MAX_BYTES, ATTACHMENT_UPLOAD_CONCURRENCY } from "./constants"
 import type { TaskAttachmentDto } from "./types"
 
 /** Anexos: consultas, fila de upload com progresso e atualização em tempo real. */
 
 export const ATTACHMENTS_QUERY_KEY = "attachments"
+
+/**
+ * Códigos que provam que a reserva morreu (objeto ausente, vazio ou acima do limite): a próxima
+ * tentativa começa com uma reserva nova. As demais falhas (ex.: storage indisponível) preservam a
+ * reserva e o arquivo já enviado, e a nova tentativa refaz **só** a confirmação.
+ */
+const DEAD_RESERVATION_CODES = new Set(["ATTACHMENT_NOT_UPLOADED", "ATTACHMENT_EMPTY", "ATTACHMENT_TOO_LARGE"])
 
 export const attachmentsKey = (target: AttachmentTarget) => [ATTACHMENTS_QUERY_KEY, target.taskId ?? null, target.draftId ?? null] as const
 
@@ -80,6 +88,8 @@ export interface AttachmentUploadItem {
     error?: string
     /** Prévia local (só imagem), liberada ao sair da fila. */
     previewUrl: string | null
+    /** Mídia vinda do campo Markdown (colada/arrastada): o campo mostra o progresso no cursor. */
+    inline: boolean
 }
 
 export interface AttachmentUploadQueue {
@@ -87,6 +97,10 @@ export interface AttachmentUploadQueue {
     /** Envios em andamento (fila + transferência + confirmação). */
     active: number
     upload: (files: File[] | FileList) => void
+    /** Envia a mídia do campo Markdown e resolve com a referência pronta (ou rejeita ao cancelar). */
+    enqueueMedia: (file: File) => { id: string; markdown: Promise<string> }
+    /** A fila no formato do campo Markdown (progresso, erro, tentar de novo, dispensar). */
+    media: MarkdownUploads
     retry: (id: string) => void
     cancel: (id: string) => void
     dismiss: (id: string) => void
@@ -98,15 +112,29 @@ function localId(): string {
     return `u${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
 }
 
+interface UploadWaiters {
+    resolve: (attachment: TaskAttachmentDto) => void
+    reject: (error: unknown) => void
+}
+
 interface UploadJob {
     file: File
     controller: AbortController
+    /** Reserva com o PUT já aceito: a nova tentativa depois disto refaz **só** a confirmação. */
+    task: AttachmentUploadTask | null
+    /** Quem espera a referência do Markdown (mídia colada): sobrevive à nova tentativa. */
+    waiters: UploadWaiters[]
 }
 
 /**
  * Fila de upload dos anexos: reserva a URL assinada, envia direto ao storage com **progresso real**,
  * confirma no servidor e só então entrega o anexo (`onUploaded`). A quantidade de arquivos não tem
  * limite; os envios simultâneos são poucos para não saturar a rede.
+ *
+ * **Tentar de novo não reenvia o arquivo** quando o PUT já foi aceito: a reserva é reaproveitada e
+ * apenas a confirmação se repete. Falha de storage (recusa de acesso/indisponibilidade) mantém o
+ * envio recuperável; só as falhas definitivas (objeto ausente, vazio ou acima do limite) descartam a
+ * reserva.
  */
 export function useAttachmentUploads(options: {
     client: AttachmentClient
@@ -152,17 +180,26 @@ export function useAttachmentUploads(options: {
             const { file, controller } = job
             patch(id, { status: "uploading", progress: 0, error: undefined })
             try {
-                const attachment = await uploadAttachment(latest.current.client, {
-                    file,
-                    target: latest.current.target,
-                    signal: controller.signal,
-                    onProgress: (progress) => patch(id, { progress, ...(progress >= 100 ? { status: "confirming" as const } : {}) }),
-                })
+                const task =
+                    job.task ??
+                    (await startAttachmentUpload(latest.current.client, {
+                        file,
+                        target: latest.current.target,
+                        signal: controller.signal,
+                        onProgress: (progress) => patch(id, { progress, ...(progress >= 100 ? { status: "confirming" as const } : {}) }),
+                    }))
+                job.task = task
+                const attachment = await latest.current.client.complete(task.reservationId)
                 patch(id, { status: "done", progress: 100 })
+                for (const waiter of job.waiters.splice(0)) waiter.resolve(attachment)
                 latest.current.onUploaded?.(attachment)
             } catch (error) {
                 if (controller.signal.aborted) patch(id, { status: "canceled" })
-                else patch(id, { status: "error", error: apiErrorMessage(error, "Falha ao enviar o arquivo") })
+                else {
+                    const code = apiErrorCode(error)
+                    if (code && DEAD_RESERVATION_CODES.has(code)) job.task = null
+                    patch(id, { status: "error", error: apiErrorMessage(error, "Falha ao enviar o arquivo") })
+                }
             } finally {
                 running.current = Math.max(0, running.current - 1)
                 pump()
@@ -170,38 +207,60 @@ export function useAttachmentUploads(options: {
         }
     }, [patch, pump])
 
-    const upload = useCallback(
-        (input: File[] | FileList) => {
-            const next: AttachmentUploadItem[] = []
-            for (const file of Array.from(input)) {
-                if (file.size === 0) {
-                    toast.error(`"${file.name}" está vazio`)
-                    continue
-                }
-                if (file.size > latest.current.maxBytes) {
-                    toast.error(`"${file.name}" tem ${formatAttachmentSize(file.size)}: o limite por arquivo é ${formatAttachmentSize(latest.current.maxBytes)}`)
-                    continue
-                }
-                const id = localId()
-                jobs.current.set(id, { file, controller: new AbortController() })
-                queue.current.push(id)
-                const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null
-                if (previewUrl) previews.current.set(id, previewUrl)
-                next.push({
+    /** Valida, cria o envio e devolve o id (ou `null` quando o arquivo é recusado na hora). */
+    const enqueue = useCallback(
+        (file: File, inline: boolean): string | null => {
+            if (file.size === 0) {
+                toast.error(`"${file.name}" está vazio`)
+                return null
+            }
+            if (file.size > latest.current.maxBytes) {
+                toast.error(`"${file.name}" tem ${formatAttachmentSize(file.size)}: o limite por arquivo é ${formatAttachmentSize(latest.current.maxBytes)}`)
+                return null
+            }
+            const id = localId()
+            jobs.current.set(id, { file, controller: new AbortController(), task: null, waiters: [] })
+            queue.current.push(id)
+            const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null
+            if (previewUrl) previews.current.set(id, previewUrl)
+            setItems((prev) => [
+                ...prev,
+                {
                     id,
-                    name: file.name,
+                    name: file.name || fallbackAttachmentName(file.type),
                     size: file.size,
                     mimeType: file.type || ATTACHMENT_FALLBACK_MIME,
                     progress: 0,
                     status: "queued",
                     previewUrl,
-                })
-            }
-            if (next.length === 0) return
-            setItems((prev) => [...prev, ...next])
+                    inline,
+                },
+            ])
             pump()
+            return id
         },
         [pump],
+    )
+
+    const upload = useCallback(
+        (input: File[] | FileList) => {
+            for (const file of Array.from(input)) enqueue(file, false)
+        },
+        [enqueue],
+    )
+
+    const enqueueMedia = useCallback(
+        (file: File) => {
+            const id = enqueue(file, true)
+            // Arquivo recusado na hora (vazio ou acima do limite): o campo nem acompanha a promessa.
+            if (!id) return { id: "", markdown: Promise.resolve("") }
+            const job = jobs.current.get(id)!
+            const markdown = new Promise<string>((resolve, reject) => {
+                job.waiters.push({ resolve: (attachment) => resolve(attachment.markdown), reject })
+            })
+            return { id, markdown }
+        },
+        [enqueue],
     )
 
     const retry = useCallback(
@@ -222,12 +281,15 @@ export function useAttachmentUploads(options: {
             if (!job) return
             job.controller.abort()
             queue.current = queue.current.filter((item) => item !== id)
+            for (const waiter of job.waiters.splice(0)) waiter.reject(new Error("Envio cancelado"))
             patch(id, { status: "canceled" })
         },
         [patch],
     )
 
     const dismiss = useCallback((id: string) => {
+        const job = jobs.current.get(id)
+        for (const waiter of job?.waiters.splice(0) ?? []) waiter.reject(new Error("Envio descartado"))
         const preview = previews.current.get(id)
         if (preview) {
             URL.revokeObjectURL(preview)
@@ -239,7 +301,10 @@ export function useAttachmentUploads(options: {
 
     useEffect(
         () => () => {
-            for (const job of jobs.current.values()) job.controller.abort()
+            for (const job of jobs.current.values()) {
+                job.controller.abort()
+                for (const waiter of job.waiters.splice(0)) waiter.reject(new Error("Tela desmontada"))
+            }
             for (const preview of previews.current.values()) URL.revokeObjectURL(preview)
             previews.current.clear()
         },
@@ -247,8 +312,9 @@ export function useAttachmentUploads(options: {
     )
 
     const active = items.filter((item) => item.status === "queued" || item.status === "uploading" || item.status === "confirming").length
+    const media = useMemo<MarkdownUploads>(() => ({ enqueue: enqueueMedia, items, retry, cancel, dismiss }), [enqueueMedia, items, retry, cancel, dismiss])
 
-    return { items, active, upload, retry, cancel, dismiss }
+    return { items, active, upload, enqueueMedia, media, retry, cancel, dismiss }
 }
 
 // ── Anexos pendentes do formulário ─────────────────────────────────────────
@@ -259,11 +325,11 @@ export interface PendingAttachments {
     attachments: TaskAttachmentDto[]
     /** Ids dos anexos confirmados (`attachmentIds` do formulário). */
     ids: string[]
-    /** Envios em andamento. */
+    /** Envios em andamento (fila + mídia colada na descrição). */
     active: number
     upload: (files: File[] | FileList) => void
-    /** Envia um arquivo colado na descrição e devolve o Markdown a inserir. */
-    uploadFile: (file: File, onProgress?: (percent: number) => void) => Promise<string>
+    /** Estado dos envios para o campo Markdown (mídia colada entra na mesma fila e na mesma lista). */
+    media: MarkdownUploads
     retry: (id: string) => void
     cancel: (id: string) => void
     dismiss: (id: string) => void
@@ -273,20 +339,11 @@ export interface PendingAttachments {
 /**
  * Anexos enviados **antes** de o registro existir (criação da tarefa ou da prévia). Os arquivos
  * ficam pendentes até o salvamento levar os ids (`attachmentIds`); também é o caminho da mídia
- * colada na descrição, para que ela entre na mesma lista.
+ * colada na descrição, que entra na mesma fila e na mesma lista.
  */
 export function usePendingAttachments(client: AttachmentClient): PendingAttachments {
     const [attachments, setAttachments] = useState<TaskAttachmentDto[]>([])
     const queue = useAttachmentUploads({ client, onUploaded: (attachment) => setAttachments((prev) => [...prev, attachment]) })
-
-    const uploadFile = useCallback(
-        async (file: File, onProgress?: (percent: number) => void) => {
-            const attachment = await uploadAttachment(client, { file, onProgress })
-            setAttachments((prev) => [...prev, attachment])
-            return attachment.markdown
-        },
-        [client],
-    )
 
     const remove = useCallback(
         async (attachment: TaskAttachmentDto) => {
@@ -297,5 +354,38 @@ export function usePendingAttachments(client: AttachmentClient): PendingAttachme
     )
 
     const ids = useMemo(() => attachments.map((attachment) => attachment.id), [attachments])
-    return { items: queue.items, attachments, ids, active: queue.active, upload: queue.upload, uploadFile, retry: queue.retry, cancel: queue.cancel, dismiss: queue.dismiss, remove }
+    return {
+        items: queue.items,
+        attachments,
+        ids,
+        active: queue.active,
+        upload: queue.upload,
+        media: queue.media,
+        retry: queue.retry,
+        cancel: queue.cancel,
+        dismiss: queue.dismiss,
+        remove,
+    }
+}
+
+// ── Mídia colada na descrição de uma tarefa existente ──────────────────────
+
+export interface TaskDescriptionUploads {
+    media: MarkdownUploads
+    /** Envios em andamento (bloqueiam o salvamento até os anexos entrarem). */
+    active: number
+}
+
+/**
+ * Mídia colada/arrastada no campo de descrição de uma tarefa **existente**: o arquivo já entra
+ * vinculado à tarefa (aba Anexos) e a referência vai para o cursor.
+ */
+export function useTaskDescriptionUploads(client: AttachmentClient, taskId: string): TaskDescriptionUploads {
+    const queryClient = useQueryClient()
+    const target = useMemo(() => ({ taskId }), [taskId])
+    const onUploaded = useCallback(() => {
+        void queryClient.invalidateQueries({ queryKey: [ATTACHMENTS_QUERY_KEY] })
+    }, [queryClient])
+    const queue = useAttachmentUploads({ client, target, onUploaded })
+    return { media: queue.media, active: queue.active }
 }

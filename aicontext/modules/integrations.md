@@ -265,7 +265,13 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   `getFileObject` (com `Range` opcional, para a reprodução de mídia), `headFile`, `copyFile`
   (promoção server-side de um objeto temporário à chave definitiva, usada pelos anexos),
   `deleteFile`, `checkBucket` e `getSignedUrlExpiresIn`. A expiração da URL assinada
-  é configurável (60 s a 7 dias, padrão 1 h).
+  é configurável (60 s a 7 dias, padrão 1 h). `storageErrorInfo(error)` classifica a falha de uma
+  operação em `not_found` (404/`NoSuchKey` — ausência comprovada), `forbidden` (401/403/
+  `AccessDenied` — recusa de acesso) e `unavailable` (rede, tempo esgotado, 5xx e configuração
+  inválida). **403 nunca é tratado como objeto ausente**: este Storage S3 responde 403 para objeto
+  inexistente (o HEAD sem corpo chega ao SDK como `UnknownError`), então classificar 403 como ausência
+  descartaria envios recuperáveis; quem consome a classificação são os anexos
+  (`modules/tasks.md`, "Anexos da tarefa").
 - As duas integrações são **novas** no Opex: não declaram `env` e são configuradas só em
   `/integracoes`. Nenhum dos testes de conexão envia e-mail nem grava objeto.
 

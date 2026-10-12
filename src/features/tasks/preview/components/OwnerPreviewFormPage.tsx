@@ -131,7 +131,7 @@ export function OwnerPreviewFormPage() {
                                             rows={10}
                                             invalid={Boolean(errors.description)}
                                             placeholder="Descreva a tarefa ou o problema (Markdown, imagens por URL, links...)"
-                                            uploadFile={pending.uploadFile}
+                                            uploads={pending.media}
                                         />
                                     )}
                                 />
@@ -141,11 +141,16 @@ export function OwnerPreviewFormPage() {
                                 <PendingAttachmentsField state={pending} />
                             </Field>
 
-                            <div className="flex flex-wrap justify-end gap-2 border-t pt-6">
+                            <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-6">
+                                {pending.active > 0 && (
+                                    <p className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Enviando anexos…
+                                    </p>
+                                )}
                                 <Button type="button" variant="ghost" asChild disabled={create.isPending}>
                                     <Link href={TASKS_PATH}>Cancelar</Link>
                                 </Button>
-                                <Button type="submit" disabled={create.isPending || !form.formState.isValid}>
+                                <Button type="submit" disabled={create.isPending || pending.active > 0 || !form.formState.isValid}>
                                     {create.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}
                                     Avançar
                                 </Button>

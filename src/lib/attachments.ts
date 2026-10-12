@@ -65,6 +65,24 @@ export function safeAttachmentName(name: string): string {
     return clean || "arquivo"
 }
 
+/** Extensão segura derivada do mime (`[a-z0-9]`, até 8 caracteres); vazia quando não há uma útil. */
+function safeExtension(mimeType: string | null | undefined): string {
+    const subtype = (mimeType ?? "").split(";")[0]!.trim().toLowerCase().split("/")[1] ?? ""
+    const clean = subtype.replace(/^x-/, "").replace(/[^a-z0-9]/g, "")
+    if (!clean || clean === "octetstream") return ""
+    return `.${clean.slice(0, 8)}`
+}
+
+/**
+ * Nome para um arquivo que chega **sem nome** — mídia colada da área de transferência, em que o
+ * navegador não informa nome. O storage precisa de uma chave estável e a referência, de um rótulo.
+ */
+export function fallbackAttachmentName(mimeType: string | null | undefined): string {
+    const kind = attachmentKindOf(mimeType)
+    const base = kind === "image" ? "imagem-colada" : kind === "video" ? "video-colado" : kind === "audio" ? "audio-colado" : "arquivo-colado"
+    return `${base}${safeExtension(mimeType)}`
+}
+
 /** Tamanho legível (pt-BR). */
 export function formatAttachmentSize(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"

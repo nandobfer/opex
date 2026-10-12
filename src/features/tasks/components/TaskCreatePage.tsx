@@ -68,8 +68,9 @@ export function TaskCreatePage() {
                             projects={projects}
                             columns={board.columns}
                             submitting={create.isPending}
+                            uploading={pending.active > 0}
                             attachments={<PendingAttachmentsField state={pending} />}
-                            uploadFile={pending.uploadFile}
+                            uploads={pending.media}
                             onCancel={() => router.push(TASKS_PATH)}
                             onSubmit={async (values) => {
                                 try {

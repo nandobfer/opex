@@ -34,7 +34,7 @@ export function PendingAttachmentsField({ state }: { state: PendingAttachments }
     return (
         <div className="space-y-4">
             <AttachmentDropzone onFiles={state.upload}>
-                <AttachmentQueue items={state.items} onCancel={state.cancel} onRetry={state.retry} onDismiss={state.dismiss} />
+                <AttachmentQueue items={state.items} onCancel={state.cancel} onRetry={state.retry} onDismiss={state.dismiss} hideInline />
             </AttachmentDropzone>
             <AttachmentList attachments={state.attachments} canDelete deleting={removing} onDelete={(attachment) => void onDelete(attachment)} />
         </div>
