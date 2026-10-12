@@ -16,9 +16,21 @@ import type { FinanceByClientDto, FinanceTotalsDto } from "../types"
 
 const emptyTotals = (): FinanceTotalsDto => ({ taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 })
 
-export async function listFinanceByClient(range: { from?: string; to?: string }): Promise<FinanceByClientDto> {
+/** Filtros do serviço: período ISO e listas de ids (vazio/ausente = todos). */
+export interface FinanceFilterRange {
+    from?: string
+    to?: string
+    /** Ids dos clientes (`OrcamentoClient._id`). */
+    clientIds?: readonly string[]
+    /** Ids dos projetos (repositórios vinculados). */
+    projectIds?: readonly string[]
+}
+
+export async function listFinanceByClient(range: FinanceFilterRange): Promise<FinanceByClientDto> {
     const from = range.from ?? null
     const to = range.to ?? null
+    const clientIds = range.clientIds ?? []
+    const projectIds = range.projectIds ?? []
     await dbConnect()
 
     const closedKeys = await concludedColumnKeys()
@@ -29,12 +41,17 @@ export async function listFinanceByClient(range: { from?: string; to?: string })
         .lean()
     const nameToKey = new Map(columns.map((column) => [column.name, column.key]))
 
-    const candidates = await DevTask.find({
+    const candidateFilter: Record<string, unknown> = {
         columnId: { $in: closedKeys },
         archived: { $ne: true },
         clientId: { $ne: null },
         estimate: { $ne: null },
-    }).lean()
+    }
+    // Filtros opcionais da tela: sem seleção, todos os clientes/repositórios entram.
+    if (clientIds.length > 0) candidateFilter.clientId = { $in: [...clientIds] }
+    if (projectIds.length > 0) candidateFilter.projectId = { $in: [...projectIds] }
+
+    const candidates = await DevTask.find(candidateFilter).lean()
     if (candidates.length === 0) return { from, to, groups: [], totals: emptyTotals() }
 
     const ids = candidates.map((task) => String(task._id))

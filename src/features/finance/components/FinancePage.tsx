@@ -2,49 +2,42 @@
 
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { endOfDay, format, parseISO, startOfDay } from "date-fns"
-import { Banknote, Loader2, RefreshCw } from "lucide-react"
+import { Banknote, Filter, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { listContainer } from "@/components/motion/presets"
-import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
+import { useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
+import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
+import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
+import { defaultFinanceFilters, FINANCE_FILTER_SCHEMA, hasSelectionFilters } from "../filters"
 import { formatBillingBrl, formatHours } from "../format"
 import { useFinanceByClient, useFinanceRealtime } from "../hooks/useFinance"
 import { FinanceClientGroup } from "./FinanceClientGroup"
+import { FinanceFiltersBar } from "./FinanceFiltersBar"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
-const RANGE_SCHEMA = { from: urlFilterCodecs.string(), to: urlFilterCodecs.string() }
-
-/** Mês corrente (dia 1 → hoje), em `yyyy-MM-dd` — padrão ao abrir a tela. */
-function currentMonth(): { from: string; to: string } {
-    const today = new Date()
-    return { from: format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd"), to: format(today, "yyyy-MM-dd") }
-}
 
 /**
  * Financeiro (`/financeiro`): faturamento das tarefas **concluídas** agrupado por **cliente**, por
- * período (na URL; padrão = mês corrente). Cada cliente é expansível para listar as tarefas.
- * **Somente leitura** — o valor é o snapshot da estimativa e a conclusão vem da auditoria.
+ * período e filtros de cliente/repositório (na URL; período padrão = mês corrente). Cada cliente é
+ * expansível para listar as tarefas. **Somente leitura** — o valor é o snapshot da estimativa e a
+ * conclusão vem da auditoria.
  */
 export function FinancePage() {
     const reduceMotion = useReducedMotion()
-    const defaults = useMemo(() => currentMonth(), [])
-    const [range, setRange] = useUrlFilters(defaults, RANGE_SCHEMA)
-    const query = useMemo(
-        () => ({
-            from: range.from ? startOfDay(parseISO(range.from)).toISOString() : "",
-            to: range.to ? endOfDay(parseISO(range.to)).toISOString() : "",
-        }),
-        [range.from, range.to],
-    )
-    const financeQuery = useFinanceByClient(query)
+    const defaults = useMemo(() => defaultFinanceFilters(), [])
+    const [filters, setFilters, resetFilters] = useUrlFilters(defaults, FINANCE_FILTER_SCHEMA)
+    const financeQuery = useFinanceByClient(filters)
     useFinanceRealtime()
+
+    // Opções dos filtros (carregam independentemente do resultado financeiro).
+    const clientsQuery = useOrcamentoClients()
+    const projectsQuery = useTaskOptions()
 
     // Grupos abertos manualmente. Começam recolhidos.
     const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
@@ -56,8 +49,11 @@ export function FinancePage() {
             return next
         })
 
+    const clearSelection = () => setFilters((prev) => ({ ...prev, clientIds: [], projectIds: [] }))
+
     const data = financeQuery.data
     const totals = data?.totals
+    const hasSelection = hasSelectionFilters(filters)
     const view = financeQuery.isLoading ? "loading" : financeQuery.isError ? "error" : !data || data.groups.length === 0 ? "empty" : "list"
 
     return (
@@ -80,25 +76,28 @@ export function FinancePage() {
                 </Button>
             </header>
 
+            <FinanceFiltersBar
+                filters={filters}
+                setFilters={setFilters}
+                onClear={resetFilters}
+                total={totals?.taskCount}
+                clients={clientsQuery.data ?? []}
+                projects={projectsQuery.data?.projects ?? []}
+            />
+
             <Card>
-                <CardContent className="flex flex-col gap-4 pt-6 md:flex-row md:items-end md:justify-between">
-                    <div className="flex flex-col gap-2 md:w-[320px]">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Período</span>
-                        <PresetDateRangeFilter startDate={range.from} endDate={range.to} onChange={(next) => setRange({ from: next.startDate, to: next.endDate })} />
+                <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Faturamento no período</p>
+                        <p className="font-mono text-2xl font-bold text-primary">{data ? <AnimatedNumber value={totals?.totalBillingBrl ?? 0} formatter={formatBillingBrl} /> : "—"}</p>
                     </div>
-                    <div className="flex gap-6">
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Faturamento no período</p>
-                            <p className="font-mono text-2xl font-bold text-primary">{data ? <AnimatedNumber value={totals?.totalBillingBrl ?? 0} formatter={formatBillingBrl} /> : "—"}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Horas (cliente)</p>
-                            <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.totalClientHours ?? 0} formatter={formatHours} /> : "—"}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tarefas</p>
-                            <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.taskCount ?? 0} /> : "—"}</p>
-                        </div>
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Horas (cliente)</p>
+                        <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.totalClientHours ?? 0} formatter={formatHours} /> : "—"}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tarefas</p>
+                        <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.taskCount ?? 0} /> : "—"}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -113,7 +112,18 @@ export function FinancePage() {
                         </div>
                     )}
                     {view === "error" && <ErrorState title="Não foi possível carregar o financeiro" description={apiErrorMessage(financeQuery.error, "Tente novamente.")} onRetry={() => void financeQuery.refetch()} />}
-                    {view === "empty" && <EmptyState icon={Banknote} title="Nenhuma tarefa concluída neste período" description="Conclua tarefas com estimativa para vê-las aqui, agrupadas por cliente." />}
+                    {view === "empty" &&
+                        (hasSelection ? (
+                            <EmptyState
+                                icon={Filter}
+                                title="Nenhuma tarefa para os filtros selecionados"
+                                description="Ajuste os filtros de cliente ou repositório, ou limpe a seleção para ver todas as tarefas do período."
+                                actionLabel="Limpar seleção"
+                                onAction={clearSelection}
+                            />
+                        ) : (
+                            <EmptyState icon={Banknote} title="Nenhuma tarefa concluída neste período" description="Conclua tarefas com estimativa para vê-las aqui, agrupadas por cliente." />
+                        ))}
                     {view === "list" && (
                         <motion.div variants={listContainer} initial="hidden" animate="visible" className="space-y-2">
                             <AnimatePresence initial={false}>
