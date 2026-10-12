@@ -60,6 +60,27 @@ export function pickPreviewPort(used: Iterable<number>, min = PREVIEW_PORT_MIN, 
     return null
 }
 
+/**
+ * Pré-requisitos do merge automático informados pelo GitHub. `mergeable_state` é o estado de
+ * verificações/revisões (`clean`, `blocked`, `unstable`, `dirty`, `unknown`…).
+ */
+export interface PrMergeState {
+    mergeable?: boolean | null
+    mergeableState?: string | null
+    draft?: boolean | null
+}
+
+/**
+ * PR pronto para o merge automático: sem conflito (`mergeable: true`), fora do rascunho e sem
+ * bloqueios pendentes (`blocked`/`unstable`) nem base desatualizada em relação às regras. Estados
+ * `null` (GitHub calculando) e de bloqueio não autorizam o merge.
+ */
+export function prMergeReady(pr: PrMergeState): boolean {
+    if (pr.draft) return false
+    if (pr.mergeable !== true) return false
+    return pr.mergeableState === "clean" || pr.mergeableState === "behind" || pr.mergeableState === "has_hooks"
+}
+
 export type WorkbenchAction =
     | "revise-plan"
     | "implement"
@@ -82,7 +103,9 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
         if (!RUNNING_STAGES.includes(stage)) return []
         const reconnect: WorkbenchAction[] = hasSession ? ["reconnect"] : []
         // Falha depois do plano: reconectar (sem reenviar), tentar de novo ou voltar ao planejamento com uma correção.
-        return stage === "planning" || stage === "finishing" ? [...reconnect, "retry"] : [...reconnect, "retry", "request-correction"]
+        // Merge e exclusão da branch remota não têm "voltar ao planejamento": só reconectar e tentar de novo.
+        if (stage === "planning" || stage === "finishing" || stage === "merging_pr" || stage === "deleting_pr_branch") return [...reconnect, "retry"]
+        return [...reconnect, "retry", "request-correction"]
     }
     switch (stage) {
         case "plan_review":

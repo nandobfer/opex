@@ -72,6 +72,16 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O PR está com o merge bloqueado por conflito: o agente está integrando a branch de destino, resolvendo os conflitos e atualizando o PR. Você pode parar a qualquer momento.
                     </motion.p>
                 )}
+                {workbench.stage === "merging_pr" && workbench.runState === "running" && (
+                    <motion.p key="merging" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Merge automático ligado: o agente está mergeando o PR (preservando o histórico). Se o GitHub recusar por bloqueios, a mesa avisa e você decide.
+                    </motion.p>
+                )}
+                {workbench.stage === "deleting_pr_branch" && workbench.runState === "running" && (
+                    <motion.p key="deleting-branch" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O PR foi mergeado: o agente está apagando a branch remota de origem.
+                    </motion.p>
+                )}
                 {workbench.stage === "build_queued" && (
                     <motion.p key="build-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.

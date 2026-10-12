@@ -6,6 +6,7 @@ import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client
 import { getLocalUser } from "@/lib/local-user"
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
 import { getTask, moveTask } from "@/features/tasks/server/service"
+import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
@@ -15,9 +16,11 @@ import {
     buildPrompt,
     cleanupPrompt,
     composeProjectFor,
+    deletePrBranchPrompt,
     extractJsonBlock,
     extractPrUrl,
     implementPrompt,
+    mergePrPrompt,
     planPrompt,
     prChangesPrompt,
     previewCorrectionPrompt,
@@ -399,6 +402,41 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             await update(doc, { stage: "pr_open", runState: "idle", ...(doc.previewHealthy ? { previewHealthy: false } : {}) })
             return null
         }
+        case "merging_pr": {
+            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
+            if (parsed.success && !parsed.data.ok) throw new Error(`O merge não foi concluído: ${parsed.data.error ?? "motivo não informado"}`)
+            const pr = doc.pr
+            if (!pr) throw new Error("A mesa não tem um Pull Request para mergear")
+            if (!ctx.repo) throw new Error("A mesa não tem um repositório do GitHub vinculado")
+            const pull = await fetchPullMerge(ctx.repo, pr.number)
+            // O bloco JSON do agente não basta: o merge é confirmado no GitHub antes de concluir.
+            if (!pull.merged) throw new Error(`O GitHub não confirmou o merge do PR #${pr.number}. Verifique se ele ainda tem bloqueios (verificações, revisões obrigatórias ou regras de branch).`)
+            const merged: IWorkbenchPr = { ...pr, state: "merged", mergedAt: pull.merged_at ? new Date(pull.merged_at) : new Date(), mergeCommitSha: pull.merge_commit_sha }
+            const headBranch = pull.head?.ref ?? null
+            if (config.git.autoMerge && doc.branch && headBranch === doc.branch) {
+                await update(doc, { pr: merged })
+                notice("info", `PR #${pr.number} mergeado; apagando a branch remota ${headBranch}.`)
+                return { stage: "deleting_pr_branch", text: deletePrBranchPrompt(config, ctx, { number: pr.number, url: pr.url, branch: headBranch }) }
+            }
+            if (config.git.autoMerge && headBranch && headBranch !== doc.branch) {
+                notice("warn", `A branch do PR (${headBranch}) não é a esperada (${doc.branch}); a exclusão automática da branch remota foi cancelada.`)
+            }
+            const next = await afterMerge(loaded, merged)
+            if (next) return next
+            await completeWorkbench({ ...doc, pr: merged })
+            return null
+        }
+        case "deleting_pr_branch": {
+            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
+            if (parsed.success && !parsed.data.ok) throw new Error(`A exclusão da branch remota não foi concluída: ${parsed.data.error ?? "motivo não informado"}`)
+            const pr = doc.pr
+            if (!pr) throw new Error("A mesa não tem um Pull Request para concluir")
+            const merged: IWorkbenchPr = { ...pr, state: "merged", mergedAt: pr.mergedAt ?? new Date(), mergeCommitSha: pr.mergeCommitSha ?? null }
+            const next = await afterMerge(loaded, merged)
+            if (next) return next
+            await completeWorkbench({ ...doc, pr: merged })
+            return null
+        }
         case "finishing": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) notice("warn", `Limpeza incompleta: ${parsed.data.error ?? "motivo não informado"}`)
@@ -734,14 +772,28 @@ export async function handlePrConflict(id: string, info: { baseBranch: string; h
     }
 }
 
-/** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */
-export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeCommitSha: string | null }): Promise<void> {
-    const loaded = await loadAll(id)
+interface GithubPullMerge {
+    merged: boolean
+    merged_at: string | null
+    merge_commit_sha: string | null
+    head?: { ref: string } | null
+}
+
+/** Estado de merge do PR no GitHub (confirmação server-side do merge e da branch de origem). */
+function fetchPullMerge(repo: string, number: number): Promise<GithubPullMerge> {
+    return githubRequest<GithubPullMerge>(`/repos/${repo}/pulls/${number}`)
+}
+
+/**
+ * Efeitos comuns depois do merge: grava o estado, avisa, move a tarefa para a coluna de conclusão
+ * (fechando a issue pelo vínculo), audita e devolve o turno de LIMPEZA quando a central o exige.
+ * `null` significa que a mesa pode ser concluída na hora.
+ */
+async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | null> {
     const { doc, config } = loaded
+    const id = String(doc._id)
     const log = centralLogger(doc.centralId, doc.taskCode)
-    await prepareHub(id)
     const notice = (level: "info" | "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
-    const pr = { ...doc.pr!, state: "merged" as const, mergedAt: merge.mergedAt, mergeCommitSha: merge.mergeCommitSha }
     await update(doc, { pr })
     notice("success", `PR #${pr.number} mergeado`)
 
@@ -759,14 +811,56 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
 
     const cleanup = config.cleanup
     if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch) {
+        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded)) }
+    }
+    return null
+}
+
+/** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */
+export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeCommitSha: string | null }): Promise<void> {
+    const loaded = await loadAll(id)
+    const { doc } = loaded
+    await prepareHub(id)
+    const pr: IWorkbenchPr = { ...doc.pr!, state: "merged", mergedAt: merge.mergedAt, mergeCommitSha: merge.mergeCommitSha }
+    const next = await afterMerge(loaded, pr)
+    if (next) {
         try {
-            await launchTurn({ ...loaded, doc: { ...doc, pr } }, { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded)) })
+            await launchTurn({ ...loaded, doc: { ...doc, pr } }, next)
             return
         } catch (error) {
-            notice("warn", `Limpeza não iniciada: ${errorText(error)}`)
+            publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Limpeza não iniciada: ${errorText(error)}` })
         }
     }
     await completeWorkbench({ ...doc, pr })
+}
+
+/**
+ * Merge automático (OPE-50): com a opção ligada na central, aciona o agente para fazer o merge do
+ * PR aberto e pronto (etapa `merging_pr`, agente da etapa Pull Request), sem nova aprovação. Falha
+ * ao iniciar mantém a mesa elegível à próxima varredura.
+ */
+export async function handlePrAutoMerge(id: string, info: { baseBranch: string }): Promise<boolean> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    const pr = doc.pr
+    if (!config.git.autoMerge) return false
+    // Só age na mesa aberta e ociosa acompanhando o PR (nunca em cima de outra execução em andamento).
+    if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
+    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
+    if (!doc.branch) return false
+    await prepareHub(id)
+    try {
+        await launchTurn(
+            { ...loaded, doc },
+            { stage: "merging_pr", text: mergePrPrompt(config, contextOf(loaded), { number: pr.number, url: pr.url, baseBranch: info.baseBranch }) },
+            { userText: `Merge automático habilitado na central: mergeando o PR #${pr.number}.` },
+        )
+        centralLogger(doc.centralId, doc.taskCode).info(`PR #${pr.number}: merge automático iniciado`, { workbenchId: id })
+        return true
+    } catch (error) {
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O merge automático do PR #${pr.number} não pôde começar (${errorText(error)}).` })
+        return false
+    }
 }
 
 /** PR fechado sem merge: avisa uma vez (a mesa continua aberta para decidir o que fazer). */

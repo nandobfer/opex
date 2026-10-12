@@ -36,6 +36,22 @@ export function GitSection({ form }: { form: CentralForm }) {
                         {text("prTitlePattern", "Padrão do título do PR", false)}
                     </div>
                     <FormToggleCard control={form.control} name="git.prDraft" id="central-git-draft" label="Abrir como rascunho" description="O PR nasce como draft (gh pr create --draft)" onLabel="Sim" offLabel="Não" />
+                    <div className="space-y-1.5">
+                        <FormToggleCard
+                            control={form.control}
+                            name="git.autoMerge"
+                            id="central-git-auto-merge"
+                            label="Merge automático"
+                            description="O agente resolve conflitos, faz o merge (merge commit) e apaga a branch remota assim que o PR fica pronto — inclusive para os PRs já abertos pelas mesas desta central. Respeita as proteções do repositório e não combina com abrir o PR como rascunho."
+                            onLabel="Sim"
+                            offLabel="Não"
+                        />
+                        {errors?.autoMerge?.message && (
+                            <p className="text-xs text-destructive" role="alert">
+                                {errors.autoMerge.message}
+                            </p>
+                        )}
+                    </div>
                     <div className={FORM_GRID_WIDE}>
                         <Field id="central-git-reviewers" label="Revisores" error={errors?.prReviewers?.message}>
                             <Controller control={form.control} name="git.prReviewers" render={({ field }) => <ChipInput id="central-git-reviewers" value={field.value} onChange={field.onChange} placeholder="login do GitHub e Enter" max={20} />} />
