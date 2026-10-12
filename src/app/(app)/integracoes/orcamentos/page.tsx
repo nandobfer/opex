@@ -1,6 +1,7 @@
-import { IntegrationDetailPage } from "@/features/integrations/components/IntegrationDetailPage"
+import { redirect } from "next/navigation"
+import { integrationPath } from "@/lib/integrations/catalog"
 
-/** Integração Orçamentos: cadastro dos clientes do portal público. */
+/** Rota legada: a integração "Orçamentos" passou a se chamar "Clientes" (`/integracoes/clientes`). */
 export default function OrcamentosPage() {
-    return <IntegrationDetailPage id="orcamentos" />
+    redirect(integrationPath("orcamentos"))
 }

@@ -13,6 +13,9 @@ import { buildIntegrationPatch, draftFrom, type Draft } from "./draft"
 import { GithubEditorForm } from "@/features/github/components/GithubEditorForm"
 import { AiEditorForm } from "@/features/ai/components/AiEditorForm"
 import { OrcamentosEditorForm } from "@/features/orcamentos/components/OrcamentosEditorForm"
+import { aiProviderOfIntegration } from "@/lib/ai/providers"
+import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
+import { CronsEditorForm } from "./CronsEditorForm"
 import { EditorForm } from "./EditorForm"
 import { ExplorerPane } from "./ExplorerPane"
 import { LogsPanel } from "./LogsPanel"
@@ -103,6 +106,31 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                     />
                 ) : id === "orcamentos" ? (
                     <OrcamentosEditorForm key="form" def={def} data={data} />
+                ) : aiProviderOfIntegration(id) ? (
+                    <AiProviderEditorForm
+                        key="form"
+                        def={def}
+                        data={data}
+                        draft={draft}
+                        setDraft={setDraft}
+                        dirty={dirty}
+                        pending={mutation.isPending}
+                        onSave={save}
+                        onUndo={() => setDraft(draftFrom(data))}
+                    />
+                ) : id === "crons" ? (
+                    <CronsEditorForm
+                        key="form"
+                        def={def}
+                        data={data}
+                        draft={draft}
+                        setDraft={setDraft}
+                        dirty={dirty}
+                        pending={mutation.isPending}
+                        onSave={save}
+                        onUndo={() => setDraft(draftFrom(data))}
+                        onExplore={() => setExploring(true)}
+                    />
                 ) : (
                     <EditorForm
                         key="form"

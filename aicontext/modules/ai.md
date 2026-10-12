@@ -67,6 +67,15 @@ e opções na própria aba da página "Provedores de IA".
   interromper e executar comandos de verificação. Ver `modules/agentic-dev.md`. O **refinamento de
   tarefas** (`modules/refinement.md`) usa o mesmo cliente e o mesmo **runner genérico de turno**
   (`src/lib/ai/opencode-run.ts`, compartilhado com a mesa).
+- **Medição de consumo** (`src/lib/ai/consumption.ts`, coleção `ai_consumption_logs`): uma linha por
+  etapa/geração, prospectiva e **separada** dos acumuladores das features (`ai_usage_logs`), das
+  mesas (`agentic_workbenches.usage`/`time_logs`) e dos refinamentos (`task_refinements.usage`) —
+  nunca soma duas vezes o mesmo gasto. `streamAi` registra no `done` quando recebe
+  `consumption: { origin, subject }`; o runner genérico de sessão (`opencode-run.ts`) registra a cada
+  `session.step.ended`, com `dedupKey` estável (`session:{origem}:{execução}:{stepId}`) — reconexão
+  não duplica. Métricas ausentes ficam `null`. Falha de telemetria não interrompe a geração. Publica
+  `ai-consumption-updated` em `private-app`. A medição começou com o painel: o histórico anterior não
+  é somado (decisão "precisão daqui em diante").
 
 ## Página `/integracoes/ia`
 
@@ -81,8 +90,10 @@ e opções na própria aba da página "Provedores de IA".
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
   (estado local, não vão à URL).
-- Página do provedor: editor genérico + card **Modelos disponíveis** (somente leitura, busca
-  fuse.js, lista virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar).
+- Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
+  ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
+  virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**
+  (OpenCode e JEV; o Gemini não tem essa aba). Trocar de aba com alterações pede descarte.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Filtro na URL
   (`usageFrom`/`usageTo`) com `PresetDateRangeFilter`: padrão **Último mês** (um mês atrás até hoje),
@@ -91,6 +102,12 @@ e opções na própria aba da página "Provedores de IA".
   Agregação no servidor, cache TanStack Query e atualização Pusher (inclusive ao reassinar após
   reconexão); ação Atualizar disponível sem tempo real. Métricas desconhecidas são sinalizadas,
   somas parciais não são apresentadas como medição completa. A tela informa a retenção de 90 dias.
+- Em `/integracoes/ia/opencode`, a aba **Consumo** mostra o card **Consumo do OpenCode**: uma
+  **tabela por origem** (cada feature de IA, refinamento e mesa de desenvolvimento) com chamadas,
+  tokens de entrada/saída/total e custo em USD, mais a linha **Total**. Mesmo filtro de período do
+  JEV (`usageFrom`/`usageTo`, padrão Último mês). Métricas ausentes aparecem como `—` (nunca zero).
+  O painel informa desde quando há medição e que o uso anterior não é somado (ver "Medição de
+  consumo").
 - **Reconstrução histórica JEV**: lote `jev-historical-2026-10-11-235088`, corte
   `2026-10-11T02:46:58.230Z`: 149 logs sem métricas (141 tags + 8 estimativas) receberam rateio
   uniforme de **235.088 tokens totais** e **US$ 0,0067** informados pelo dono a partir da plataforma.
@@ -256,6 +273,7 @@ e opções na própria aba da página "Provedores de IA".
 |---|---|
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna); intervalo inválido → 400; sem limites → logs retidos |
+| `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |

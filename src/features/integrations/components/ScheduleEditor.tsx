@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TimePicker } from "@/components/ui/time-picker"
 import { cn } from "@/lib/utils"
 import {
     describeSchedule,
@@ -123,12 +124,11 @@ export function ScheduleEditor({ value, onChange, disabled }: ScheduleEditorProp
                 {"time" in value && (
                     <>
                         <span className={CONNECTOR}>às</span>
-                        <Input
-                            type="time"
+                        <TimePicker
                             className={CONTROL}
                             aria-label="Horário"
                             value={value.time}
-                            onChange={(event) => onChange({ ...value, time: event.target.value })}
+                            onChange={(time) => onChange({ ...value, time })}
                             disabled={disabled}
                         />
                     </>

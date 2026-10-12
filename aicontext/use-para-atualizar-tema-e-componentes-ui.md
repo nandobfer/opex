@@ -43,7 +43,7 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
     `isDisabled`), `listbox` com setas/Home/End — para painéis inline;
   - `Slider` (`ui/slider.tsx`, `@radix-ui/react-slider`): trilho `muted`, preenchimento e polegar
     `primary`, polegar animado (Framer Motion), `marks` clicáveis e `formatValue` (`aria-valuetext`).
-  (A tela de Crons das integrações ainda usa `type="time"`; migrar quando for mexida.)
+  (A tela de Crons das integrações foi migrada para o `TimePicker`.)
 - Campo rotulado com erro pt-BR: `Field` (`ui/field.tsx`).
 - **Perguntas do agente** (formulários e permissões do OpenCode) ficam em
   `src/components/agent-questions/`: `AgentQuestionsCard` (formulário), `AgentQuestionOptions`

@@ -108,7 +108,7 @@ export function TaskClientCard({ task }: { task: TaskDetailDto }) {
                         <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="text-sm text-muted-foreground">
                             Nenhum cliente ativo inclui o repositório da tarefa.{" "}
                             <Link href={ORCAMENTOS_PATH} className="text-primary underline-offset-4 hover:underline">
-                                Cadastre em Integrações › Orçamentos
+                                Cadastre em Integrações › Clientes
                             </Link>
                             .
                         </motion.p>

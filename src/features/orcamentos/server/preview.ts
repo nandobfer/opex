@@ -175,6 +175,7 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
         prompt: prepared.prompt,
         title: prepared.title,
         signal,
+        consumption: { origin: "budget-preview", subject: scopeSubject(prepared.scope, prepared.draftId) },
     })) {
         if (event.type === "delta") text += event.text
         if (event.type === "done" || event.type === "error") last = event
@@ -263,6 +264,7 @@ export async function* runBudgetEstimate(prepared: PreparedBudgetEstimate, signa
                 prompt,
                 title: prepared.title,
                 signal,
+                consumption: { origin: "estimate-hours", subject: scopeSubject(prepared.scope, prepared.draftId) },
             })) {
                 if (event.type === "delta") {
                     text += event.text

@@ -4,6 +4,20 @@
 export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
+/**
+ * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
+ * (omitida da URL). O Gemini não gera consumo próprio medido aqui, então não tem a aba Consumo.
+ */
+export const AI_PROVIDER_TABS = ["configuracao", "modelos", "consumo"] as const
+export type AiProviderTab = (typeof AI_PROVIDER_TABS)[number]
+
+/** Abas mostradas em cada provedor. [`configuracao`, `modelos`] ou com `consumo`. */
+export const AI_PROVIDER_TAB_IDS: Record<"opencode" | "gemini" | "jev", readonly AiProviderTab[]> = {
+    opencode: ["configuracao", "modelos", "consumo"],
+    gemini: ["configuracao", "modelos"],
+    jev: ["configuracao", "modelos", "consumo"],
+}
+
 /** Features do app que usam IA (uma configuração salva por feature). */
 export const AI_FEATURE_IDS = ["understand-task", "task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]

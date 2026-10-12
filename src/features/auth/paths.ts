@@ -5,9 +5,11 @@
  * Rota pública = acessível sem sessão. São públicas:
  * - a tela de login e as rotas internas de auth (`/login`, `/api/auth/login`, `/api/auth/logout`);
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
- * - o **portal do cliente** de Orçamentos (`/cliente` e `/api/cliente/*`), autenticado pelo token do
- *   cliente (`requireClient`);
- * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`.
+ * - o **portal do cliente** (`/cliente` e `/api/cliente/*`), autenticado pelo token do cliente
+ *   (`requireClient`);
+ * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`;
+ * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
+ *   contrato, nenhum dado. O teste da integração "API interna" as chama sem cookie de sessão.
  *
  * Tudo o mais (páginas e APIs internas) exige o cookie de sessão.
  */
@@ -17,7 +19,14 @@ import { BASE_PATH } from "@/lib/base-path"
 export type AuthAction = "allow" | "redirect" | "unauthorized"
 
 /** Rotas liberadas sem sessão (comparação exata). */
-export const PUBLIC_ROUTES: readonly string[] = ["/login", "/api/auth/login", "/api/auth/logout"]
+export const PUBLIC_ROUTES: readonly string[] = [
+    "/login",
+    "/api/auth/login",
+    "/api/auth/logout",
+    // Documentação OpenAPI (contrato público; sem dados). Ver `src/app/api/openapi.json` e `api/docs`.
+    "/api/openapi.json",
+    "/api/docs",
+]
 
 /** Prefixos de rota liberados sem sessão (API pública por token, portal do cliente e tick de cron). */
 export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/cliente", "/cliente"]

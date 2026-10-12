@@ -98,6 +98,7 @@ describe("escopo das tags de concluídas", () => {
     it("permite editar o escopo mesmo com a rotina desligada", () => {
         const onChange = vi.fn()
         render(<CronJobsEditor value={[concluded]} onChange={onChange} savedJobs={[concluded]} canRun />)
+        fireEvent.click(screen.getByRole("button", { name: "Tags concluídas" }))
         fireEvent.click(screen.getByRole("radio", { name: "Todas" }))
         expect(onChange).toHaveBeenCalledWith([{ ...concluded, scope: "all" }])
         expect(runNowBlockReason({ ...concluded, scope: "all" }, [concluded], true, false)).toBe("Salve as alterações antes de executar")
@@ -106,7 +107,29 @@ describe("escopo das tags de concluídas", () => {
 
     it("não oferece escopo em outras rotinas", () => {
         render(<CronJobsEditor value={[job]} onChange={vi.fn()} savedJobs={[job]} canRun />)
+        fireEvent.click(screen.getByRole("button", { name: "Cancelar negociações" }))
         expect(screen.queryByRole("radio", { name: "Todas" })).toBeNull()
+    })
+})
+
+describe("rotinas recolhidas e busca", () => {
+    const jobs: CronJobConfig[] = [
+        job,
+        { id: "rotina-b", label: "Rotina B", kind: "internal", schedule: { type: "interval", minutes: 5 }, enabled: true },
+    ]
+
+    it("inicia recolhida e expande os campos ao clicar no nome", () => {
+        render(<CronJobsEditor value={jobs} onChange={vi.fn()} savedJobs={jobs} canRun />)
+        expect(screen.queryByLabelText("Caminho")).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Cancelar negociações" }))
+        expect(screen.getByLabelText("Caminho")).toBeTruthy()
+    })
+
+    it("a busca filtra as rotinas exibidas", () => {
+        render(<CronJobsEditor value={jobs} onChange={vi.fn()} savedJobs={jobs} canRun />)
+        fireEvent.change(screen.getByLabelText("Buscar rotina"), { target: { value: "Cancelar" } })
+        expect(screen.queryByText("Rotina B")).toBeNull()
+        expect(screen.getByText("Cancelar negociações")).toBeTruthy()
     })
 })
 

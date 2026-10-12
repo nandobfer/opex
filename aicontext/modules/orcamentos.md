@@ -1,8 +1,10 @@
 # Módulo: Orçamentos (portal do cliente)
 
-Integração **Orçamentos** (`orcamentos`, rota `/integracoes/orcamentos`): o dono cadastra **clientes**
-e cada cliente ganha uma **URL fixa com token** para um **portal próprio** (quase todo somente leitura
-— a única edição do cliente é a **prioridade** da tarefa, ver "Prioridade do cliente"), sem
+Integração **Clientes** (id técnico `orcamentos`, nome exibido "Clientes", rota
+`/integracoes/clientes`; a rota legada `/integracoes/orcamentos` redireciona): o dono cadastra
+**clientes** e cada cliente ganha uma **URL fixa com token** para um **portal próprio** (quase todo
+somente leitura — a única edição do cliente é a **prioridade** da tarefa, ver "Prioridade do
+cliente"), sem
 sidebar, com o **mesmo kanban/tabela** das Tarefas, restrito aos repositórios escolhidos e **apenas
 às tarefas que o cliente solicitou**. O cliente pode **enviar uma nova tarefa** descrevendo o pedido; a IA gera uma **prévia** (título, tipo,
 prioridade, resumo e especificação técnica); em seguida a IA **classifica a tarefa com tags**
@@ -59,12 +61,13 @@ mesmo núcleo; o fluxo do dono está em `modules/tasks.md` ("Prévia de tarefa (
   `?t=` e o repassam.
 - O middleware libera `/cliente` e `/api/cliente` sem sessão (ver `modules/auth.md`).
 
-## Clientes (tela `/integracoes/orcamentos`, `server/clients.ts`)
+## Clientes (tela `/integracoes/clientes`, `server/clients.ts`)
 
-- Aba **Clientes** (`OrcamentosEditorForm`, integração sem campos públicos nem segredos — toda a
-  configuração são os clientes). Lista com nome, prefixo do token, custo/hora, fator e repositórios;
-  ações **Copiar URL**, **Editar**, **Token** (regenerar, com confirmação) e **Excluir**
-  (confirmação).
+- `OrcamentosEditorForm` (integração sem campos públicos nem segredos — toda a configuração são os
+  clientes) **sem abas e sem card interno**: o título da página já é "Clientes", então a lista aparece
+  direto (só a descrição, o botão **Novo cliente** e a lista). Lista com nome, prefixo do token,
+  custo/hora, fator e repositórios; ações **Copiar URL**, **Editar**, **Token** (regenerar, com
+  confirmação) e **Excluir** (confirmação).
 - **Copiar URL** (`CopyPortalUrlButton`): copia `${origem}${withBasePath(portalPath)}` — a URL do
   portal **sem trocar o token** — com feedback visual (Check + toast). O `portalPath` (`/cliente?t=…`)
   vem no DTO de administração; a regeneração é a única ação que troca o token.
@@ -254,8 +257,9 @@ sem token de cliente): `POST /api/tasks/drafts`, `GET .../[id]`, `.../[id]/corre
   `ClienteTaskTabs`,
   `ClienteTaskSidebar`, `ClienteEstimateCard`, `ClienteEstimateBadge` e `ClienteCommentsSection`, além
   dos tipos seguros `ClienteTaskDto`/`ClienteTaskDetailDto` (sem horas reais/fator/custo/modelo).
-- `src/app/(app)/integracoes/orcamentos/page.tsx`, `src/app/api/integrations/orcamentos/*`,
-  `src/app/cliente/*` e `src/app/api/cliente/*`.
+- `src/app/(app)/integracoes/clientes/page.tsx` (e a rota legada
+  `src/app/(app)/integracoes/orcamentos/page.tsx`, que redireciona),
+  `src/app/api/integrations/orcamentos/*`, `src/app/cliente/*` e `src/app/api/cliente/*`.
 - `src/components/ui/markdown-field.tsx` — campo Markdown com barra de formatação e abas
   Escrever/Visualizar (reusado no `TaskForm` e no portal).
 

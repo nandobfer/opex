@@ -510,7 +510,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     },
     {
         id: "orcamentos",
-        name: "Orçamentos",
+        name: "Clientes",
         description: "Clientes do portal público: repositórios, custo por hora e fator de lucro",
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
@@ -543,7 +543,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,
     ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
-    orcamentos: `${INTEGRATIONS_BASE_PATH}/orcamentos`,
+    orcamentos: `${INTEGRATIONS_BASE_PATH}/clientes`,
 }
 
 export function integrationPath(id: IntegrationId): string {

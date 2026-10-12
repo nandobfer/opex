@@ -85,6 +85,7 @@ async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]
             instructions: buildTaskTagsInstructions(settings, taxonomy, settings.maxTags),
             prompt: buildTaskTagsPrompt(input),
             title: `Tags da tarefa ${prepared.taskCode}`,
+            consumption: { origin: "task-tags", subject: prepared.taskId || null },
         })) {
             if (event.type === "delta") text += event.text
             if (event.type === "done" || event.type === "error") last = event

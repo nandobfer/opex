@@ -52,7 +52,7 @@ export type OpencodeSessionEvent =
     | { kind: "tool-progress"; id: string; output: string | null }
     | { kind: "tool-done"; id: string; output: string }
     | { kind: "tool-error"; id: string; message: string; output: string }
-    | { kind: "step"; costUsd: number; tokens: OpencodeTokenUsage }
+    | { kind: "step"; stepId: string | null; costUsd: number; tokens: OpencodeTokenUsage }
     | { kind: "notice"; message: string }
     | { kind: "permission"; permission: OpencodePermissionDto }
     | { kind: "permission-replied"; id: string }
@@ -173,7 +173,7 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
             return id ? { kind: "tool-error", id, message: errorMessage(data.error, "Falha na ferramenta"), output: toolContentText(data.content) } : null
         case "session.step.ended": {
             const tokens = isObj(data.tokens) ? data.tokens : {}
-            return { kind: "step", costUsd: num(data.cost), tokens: { input: num(tokens.input), output: num(tokens.output), reasoning: num(tokens.reasoning) } }
+            return { kind: "step", stepId: str(data.assistantMessageID) ?? str(event.id), costUsd: num(data.cost), tokens: { input: num(tokens.input), output: num(tokens.output), reasoning: num(tokens.reasoning) } }
         }
         case "session.step.failed":
             return { kind: "notice", message: `Passo do modelo falhou: ${errorMessage(data.error, "erro desconhecido")}` }

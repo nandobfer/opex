@@ -119,11 +119,11 @@ describe("TaskClientCard", () => {
         expect(mocks.mutate).toHaveBeenCalledWith(globex.id)
     })
 
-    it("sem cliente elegível: orienta a cadastrar em Integrações › Orçamentos", () => {
+    it("sem cliente elegível: orienta a cadastrar em Integrações › Clientes", () => {
         mocks.clients = [client({ id: "d".repeat(24), name: "Globex", projectIds: [OTHER_ID] })]
         render(<TaskClientCard task={task()} />)
         expect(screen.getByText(/Nenhum cliente ativo inclui o repositório da tarefa/)).toBeTruthy()
         const link = screen.getByRole("link", { name: /Cadastre em Integrações/ })
-        expect(link.getAttribute("href")).toBe("/integracoes/orcamentos")
+        expect(link.getAttribute("href")).toBe("/integracoes/clientes")
     })
 })

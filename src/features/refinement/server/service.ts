@@ -269,7 +269,7 @@ async function executeTurn(id: string, text: string, controller: AbortController
         log.info({ refinementId: id, agent: settings.agent, model: settings.model, attempt }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
         result = await runAgentTurn(
             client,
-            { id, sessionId, stage: REFINEMENT_STAGE_LABEL, title: REFINEMENT_STAGE_LABEL, agent: { agent: settings.agent, model: settings.model, variant: settings.variant }, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal },
+            { id, sessionId, stage: REFINEMENT_STAGE_LABEL, title: REFINEMENT_STAGE_LABEL, agent: { agent: settings.agent, model: settings.model, variant: settings.variant }, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "refinement", subject: doc.taskId } },
             { ...hooks, publish },
         )
         textOut = result.text || accumulated.text
