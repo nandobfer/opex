@@ -113,10 +113,14 @@ jobs:
         with:
           name: opex-image
 
+      # Este job não usa pnpm; `package-manager-cache: false` evita que o
+      # setup-node detecte o `packageManager` do package.json e tente cachear
+      # exigindo o binário do pnpm (que não está instalado aqui).
       - name: Configurar Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+          package-manager-cache: false
 
       - name: Preparar credenciais SSH
         env:

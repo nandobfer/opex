@@ -40,7 +40,9 @@ Workflow `CI/CD` (`.github/workflows/ci-cd.yml`), com três jobs encadeados:
 ## Deploy no servidor
 
 O job `deploy` prepara a chave SSH e o `known_hosts` (de **GitHub Secrets**), valida o checksum
-local e roda `npx tsx scripts/deploy-production.ts`. O script (`scripts/deploy-production.ts`) faz,
+local e roda `npx tsx scripts/deploy-production.ts`. Ele **não usa pnpm**: o `setup-node` roda com
+`package-manager-cache: false` para não detectar o `packageManager` do `package.json` e exigir o
+binário do pnpm (que não é instalado nesse job). O script (`scripts/deploy-production.ts`) faz,
 em ordem, e falha na primeira inconsistência:
 
 1. **Pré-requisitos locais:** confere que a chave, o `known_hosts`, o arquivo da imagem e os
