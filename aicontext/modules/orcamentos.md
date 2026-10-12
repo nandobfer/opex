@@ -14,9 +14,10 @@ agente —, que o cliente **aprova ou corrige**. A aprovação cria a tarefa de 
 Fonte de verdade do cálculo: a IA estima as **horas reais (H)**; o **cliente** vê `H × fator de lucro`
 e o **faturamento** = `(H × fator) × custo por hora` (sempre em R$); o **app** mostra a estimativa
 real (H). Na **página da tarefa** o **cliente é editável** (adicionar/trocar/remover) e as horas
-estimadas também; ao salvar ou trocar o cliente, o servidor recalcula o orçamento com o fator de lucro
-e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; sem ele — dados legados —, o
-`OrcamentoClient` ativo cujo `projectIds` inclui o repositório). Ver `modules/tasks.md`.
+estimadas também; ao salvar, gerar por IA ou trocar o cliente, o servidor recalcula o orçamento com o
+fator de lucro e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; `null` = sem cliente, sem
+inflação; só registros legados sem o campo caem no `OrcamentoClient` ativo cujo `projectIds` inclui o
+repositório). Ver `modules/tasks.md`.
 
 ## Modelo (`src/lib/db/models/Orcamento.ts`)
 
@@ -32,9 +33,11 @@ e o custo/hora do cliente **da tarefa** (`DevTask.clientId`; sem ele — dados l
   `/tarefas/previa` (não aparece no portal nem na lista de clientes). `estimateClientId` é o cliente
   **opcional** que o dono escolhe só para o **cálculo do custo** (o portal mantém `null` e usa o
   próprio `clientId`). Sem migração: todo rascunho legado tem `clientId`.
-- `DevTask.estimate` (subdocumento; `null` **quando a tarefa não tem cliente**): `{ hours, clientHours,
-  billingBrl, factor, hourlyRate, model, generatedAt }` — snapshot gravado na aprovação do portal ou
-  ao **definir/trocar o cliente na página da tarefa**. Ver `modules/tasks.md`.
+- `DevTask.estimate` (subdocumento; `null` = **ainda não estimada** e independe de cliente): `{ hours,
+  clientHours, billingBrl, factor, hourlyRate, model, generatedAt }` — snapshot gravado na aprovação
+  do portal, na **edição manual** das horas, na **estimativa por IA** da tarefa ou ao **definir/trocar
+  o cliente na página da tarefa** (sem cliente, fica neutro: fator 1 e custo 0, só as horas reais).
+  Ver `modules/tasks.md`.
 - `DevTask.clientId`: o **cliente de orçamento da tarefa** (`OrcamentoClient._id`; `null` = sem
   cliente) — tanto o que **solicitou** pelo portal quanto o que o dono **atribuiu/atualizou na página
   da tarefa**. É o que define a **lista do portal** (o cliente só vê as tarefas com o seu `clientId`;
@@ -205,7 +208,8 @@ app: **cria a issue no GitHub antes de persistir** — falha do GitHub bloqueia)
 `origin: "client"` e **`clientId` do cliente** (o que define a lista do portal), além das **tags** do
 rascunho (`tags` de `createTask`, sem gerar de novo). Quando há estimativa,
 envia o `estimate` (snapshot: horas reais, horas do cliente, faturamento, fator, custo/hora e modelo);
-**sem estimativa, a tarefa nasce sem o `estimate`**. O rascunho vira `approved` com `taskId` e registra
+**sem estimativa, a tarefa nasce sem o `estimate`** (só quando o rascunho nunca foi estimado). O
+rascunho vira `approved` com `taskId` e registra
 auditoria (`RascunhoOrcamento`, ação `APROVAR`). A tarefa nasce na **coluna de entrada** do projeto
 (`entryColumnKey`). Tarefas pedidas **antes** da marcação por `clientId` são retroalimentadas pela
 migração `backfill-task-client-id` (a partir dos rascunhos aprovados).

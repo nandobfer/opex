@@ -235,15 +235,18 @@ e opções na própria aba da página "Provedores de IA".
   `estimateHoursSettingsSchema`: ativa, provedor (texto ou **JEV**), modelo, agente/variante
   (OpenCode), temperatura e máximo de tokens (só provedores que amostram), **quantas tarefas
   semelhantes** considerar (`similarLimit`) e instruções. Regras ao salvar iguais às demais features.
-- Usada na 2ª fase do portal (ver `modules/orcamentos.md`). `H` é o **tempo de execução observado**
+- Usada na 2ª fase do portal (ver `modules/orcamentos.md`) e no botão **Estimar com IA** da **tarefa
+  existente** (`POST /api/tasks/[id]/estimate/generate`, que estima a partir dos dados da própria
+  tarefa; ver `modules/tasks.md`). `H` é o **tempo de execução observado**
   (não esforço humano), ancorado nas **horas reais apontadas** das tarefas semelhantes: `server/similar.ts`
   só considera tarefas **com apontamento** (`TimeLog`) e o prompt injeta a **mediana** como âncora
   (`estimateAnchor`); tarefas sem horas e a estimativa anterior da IA ficam de fora. É uma **única
   chamada** (sem agente/tools): provedores de texto devolvem `{ estimatedHours }` (validado por
   `parseEstimateHours`) e o **JEV** responde um `score` de 10 níveis de tempo (posição fracionária de
   0 a 9) que é **interpolado** para horas entre as âncoras (`mapJevEstimateScore`); `saveDraftEstimate`
-  grava as horas **e o modelo** que as gerou. O cálculo exibido ao cliente (`H × fator × custo/hora`)
-  é do servidor.
+  grava as horas **e o modelo** que as gerou; o núcleo é compartilhado (`server/estimate-hours.ts`)
+  entre o rascunho e a tarefa existente. O cálculo exibido ao cliente (`H × fator × custo/hora`) é do
+  servidor.
 
 ## Feature "Refinar tarefa" (agente do OpenCode que conduz perguntas)
 

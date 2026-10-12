@@ -38,7 +38,7 @@ function ClientLabel({ client }: { client: ClienteOrcamentoDto }) {
  * Cliente da tarefa (coluna lateral): adiciona um cliente quando ainda não há, troca o atual ou o
  * remove. Ao adicionar/trocar, o servidor recalcula a estimativa com o fator de lucro e o custo/hora
  * do cliente escolhido (o campo de estimativa fica habilitado); ao remover, o cliente e a estimativa
- * somem. Clientes são cadastrados apenas em Integrações › Orçamentos.
+ * somem. Clientes são cadastrados apenas em Integrações › Clientes.
  */
 export function TaskClientCard({ task }: { task: TaskDetailDto }) {
     const clients = useOrcamentoClients()
@@ -129,7 +129,7 @@ export function TaskClientCard({ task }: { task: TaskDetailDto }) {
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Remover o cliente de {task.code}?</AlertDialogTitle>
-                        <AlertDialogDescription>A estimativa e o faturamento somem da tarefa. Se ela veio do portal, deixa de aparecer para o cliente.</AlertDialogDescription>
+                        <AlertDialogDescription>As horas reais estimadas permanecem na tarefa; o prazo e o faturamento do cliente somem. Se ela veio do portal, deixa de aparecer para o cliente.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>

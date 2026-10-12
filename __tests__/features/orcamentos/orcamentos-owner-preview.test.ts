@@ -136,6 +136,18 @@ describe("prévia do dono (servidor)", () => {
         expect(after.taskId).toBe("t1")
     })
 
+    it("aprovar sem cliente preserva as horas reais estimadas (snapshot neutro, sem clientId)", async () => {
+        const draft = await createOwnerDraft({ projectId, description: "Ajustar o rodapé" })
+        await saveDraftPreview(OWNER_SCOPE, draft.id, preview)
+        await saveDraftEstimate(OWNER_SCOPE, draft.id, 3, "gemini/pro")
+        mocks.createTaskWithIssue.mockResolvedValue({ id: "t5", code: "APP-5" })
+
+        await approveOwnerDraft(draft.id, "local")
+        const options = mocks.createTaskWithIssue.mock.calls[0][2] as { clientId?: unknown; estimate?: unknown }
+        expect(options.clientId).toBeUndefined()
+        expect(options.estimate).toMatchObject({ hours: 3, clientHours: 3, billingBrl: 0, factor: 1, hourlyRate: 0, model: "gemini/pro" })
+    })
+
     it("aprovar com cliente grava o cliente e o snapshot do orçamento", async () => {
         const draft = await createOwnerDraft({ projectId, description: "Ajustar o rodapé" })
         await saveDraftPreview(OWNER_SCOPE, draft.id, preview)

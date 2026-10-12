@@ -23,6 +23,12 @@ describe("EstimateBadge", () => {
         expect(screen.getByText("20:00 h · R$ 800,00")).toBeTruthy()
     })
 
+    it("sem cliente (custo/hora zero) mostra só as horas reais, sem o faturamento", () => {
+        render(<EstimateBadge estimate={{ ...estimate, clientHours: 2, billingBrl: 0, factor: 1, hourlyRate: 0 }} />)
+        expect(screen.getByText("2:00 h")).toBeTruthy()
+        expect(screen.queryByText(/R\$/)).toBeNull()
+    })
+
     it("sem estimativa não renderiza nada", () => {
         const { container } = render(<EstimateBadge estimate={null} />)
         expect(container.textContent).toBe("")

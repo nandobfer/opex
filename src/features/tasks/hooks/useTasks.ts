@@ -174,7 +174,8 @@ export function useUpdateTaskEstimate(taskId: string, code: string) {
 
 /**
  * Define, troca ou remove o cliente da tarefa (`PATCH /api/tasks/[id]/client`). O servidor recalcula
- * a estimativa (fator de lucro e custo/hora do cliente); `null` remove o cliente e a estimativa.
+ * a estimativa (fator de lucro e custo/hora do cliente); `null` remove o cliente e mantém as horas
+ * reais (sem inflação). A tela atualiza na hora com o resultado do servidor.
  */
 export function useSetTaskClient(taskId: string, code: string) {
     const queryClient = useQueryClient()
@@ -182,7 +183,9 @@ export function useSetTaskClient(taskId: string, code: string) {
         mutationFn: async (clientId: string | null) =>
             unwrapApi((await api.patch<ApiResponse<{ clientId: string | null; estimate: TaskEstimate | null }>>(`/tasks/${taskId}/client`, { clientId })).data),
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível atualizar o cliente")),
-        onSuccess: (_data, clientId) => {
+        onSuccess: (data, clientId) => {
+            // Atualiza o detalhe na hora (o nome do cliente chega na revalidação).
+            queryClient.setQueryData<TaskDetailDto>(taskDetailKey(taskId), (prev) => (prev ? { ...prev, clientId: data.clientId, estimate: data.estimate } : prev))
             toast.success(clientId ? `Cliente de ${code} atualizado` : `Cliente de ${code} removido`)
             void queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY, "list"] })
             void queryClient.invalidateQueries({ queryKey: taskDetailKey(taskId) })

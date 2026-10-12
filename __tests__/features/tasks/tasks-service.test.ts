@@ -277,10 +277,11 @@ describe('auditoria da sincronização do GitHub', () => {
 })
 
 describe('estimativa da tarefa (portal do cliente)', () => {
-  it('recalcula horas do cliente e faturamento com o cliente que originou a tarefa', async () => {
+  it('recalcula horas do cliente e faturamento com o cliente da tarefa', async () => {
     const pid = await seedProject()
-    await seedClient({ projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
+    const clientId = await seedClient({ projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
     const a = await createEstimated(pid, { hours: 5 })
+    await setTaskClient(a.id, clientId, 'local')
     mocks.recordAudit.mockClear()
     mocks.publish.mockClear()
 
@@ -302,18 +303,30 @@ describe('estimativa da tarefa (portal do cliente)', () => {
     expect(detail.estimateClientName).toBe('ACME')
   })
 
-  it('sem cliente que inclua o repositório, usa o fator e o custo/hora do snapshot', async () => {
+  it('sem cliente, mantém só as horas reais (fator 1, sem faturamento)', async () => {
     const pid = await seedProject()
     const a = await createEstimated(pid, { hours: 5, factor: 3, hourlyRate: 50 })
     const estimate = await updateTaskEstimate(a.id, { hours: 2 }, 'local')
-    expect(estimate).toMatchObject({ hours: 2, clientHours: 6, billingBrl: 300, factor: 3, hourlyRate: 50 })
+    expect(estimate).toMatchObject({ hours: 2, clientHours: 2, billingBrl: 0, factor: 1, hourlyRate: 0 })
     expect((await getTask(a.id)).estimateClientName).toBeNull()
   })
 
-  it('tarefa sem estimativa devolve 409; id inválido, 404', async () => {
+  it('tarefa sem cliente (clientId null) não herda o cliente do repositório', async () => {
+    const pid = await seedProject()
+    await seedClient({ projectIds: [pid], profitFactor: 9, hourlyRate: 999 })
+    const a = await createEstimated(pid, { hours: 2 })
+    const estimate = await updateTaskEstimate(a.id, { hours: 2 }, 'local')
+    expect(estimate).toMatchObject({ hours: 2, clientHours: 2, billingBrl: 0, factor: 1, hourlyRate: 0 })
+    expect((await getTask(a.id)).estimateClientName).toBeNull()
+  })
+
+  it('cria a estimativa numa tarefa que ainda não tinha; id inválido é 404', async () => {
     const pid = await seedProject()
     const a = await create(pid)
-    await expect(updateTaskEstimate(a.id, { hours: 1 }, 'local')).rejects.toMatchObject({ status: 409, code: 'TASK_WITHOUT_ESTIMATE' })
+    expect((await getTask(a.id)).estimate).toBeNull()
+    const estimate = await updateTaskEstimate(a.id, { hours: 4 }, 'local')
+    expect(estimate).toMatchObject({ hours: 4, clientHours: 4, billingBrl: 0, factor: 1, hourlyRate: 0 })
+    expect((await getTask(a.id)).estimate).toMatchObject({ hours: 4 })
     await expect(updateTaskEstimate('nope', { hours: 1 }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
   })
 })
@@ -386,18 +399,21 @@ describe('cliente da tarefa (editar na página da tarefa)', () => {
     expect(detail.estimateClientName).toBe('Globex')
   })
 
-  it('remove o cliente: zera o clientId e a estimativa e publica a mudança', async () => {
+  it('remove o cliente: preserva as horas reais (sem inflação) e publica a mudança', async () => {
     const pid = await seedProject()
-    const clientId = await seedClient({ projectIds: [pid] })
+    const clientId = await seedClient({ projectIds: [pid], profitFactor: 2, hourlyRate: 100 })
     const a = await createEstimated(pid, { hours: 4 })
     await setTaskClient(a.id, clientId, 'local')
+    expect((await getTask(a.id)).estimate).toMatchObject({ hours: 4, clientHours: 8, billingBrl: 800 })
     mocks.publish.mockClear()
 
     const result = await setTaskClient(a.id, null, 'local')
-    expect(result).toEqual({ clientId: null, estimate: null })
+    expect(result.clientId).toBeNull()
+    expect(result.estimate).toMatchObject({ hours: 4, clientHours: 4, billingBrl: 0, factor: 1, hourlyRate: 0 })
     const detail = await getTask(a.id)
     expect(detail.clientId).toBeNull()
-    expect(detail.estimate).toBeNull()
+    expect(detail.estimate).toMatchObject({ hours: 4 })
+    expect(detail.estimateClientName).toBeNull()
     expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
   })
 
