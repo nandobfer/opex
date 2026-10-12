@@ -58,6 +58,11 @@ O cabeçalho (`DashboardHeader`) reúne o título, o **período global** e o bot
   da tela de Tarefas, nas páginas `/tarefas/previa` e `/tarefas/nova`; ficam desabilitados sem
   repositório vinculado.
 
+O `DashboardHeader` é de **apresentação** (props `title`, `description`, `icon` e `actions`): o dono
+injeta `TimerIndicator` + `TaskCreationActions` e o portal do cliente injeta só o seu **Nova prévia**
+(ver “Dashboard do cliente”). A apresentação dos KPIs (`DashboardKpis`) também é compartilhada — o dono
+monta os itens com `dashboardKpiItems(kpis)` e o portal com o recorte dele.
+
 Os atalhos **independem do período** e continuam disponíveis durante o carregamento ou erro dos
 indicadores. O período é um `OptionTabs` que **não quebra linha**: o grupo não encolhe (`shrink-0`) e
 os rótulos usam `whitespace-nowrap`, para o grupo inteiro passar à linha seguinte sem “Mês atual”
@@ -90,9 +95,14 @@ recharts, desligada com movimento reduzido.
 
 ## Dashboard do **cliente** (portal)
 
-O portal tem um dashboard **próprio** (`/cliente/dashboard`, `GET /api/cliente/dashboard`), filtrado
-pelo cliente da sessão: KPIs de tarefas (ativas, criadas e concluídas no período — conclusão derivada
-da auditoria) e distribuições por coluna/prioridade/tipo. O bloco de **custo** só aparece para o
-**admin** do cliente. **Não** inclui horas agênticas, custo de IA, mesas de trabalho nem faturas do
-dono (dados internos). Serviço em `src/features/orcamentos/server/portal-dashboard.ts`; detalhes em
-`modules/orcamentos.md`.
+O portal tem um dashboard **próprio** (`/cliente/dashboard`, `GET /api/cliente/dashboard`) com a
+**mesma apresentação** do dashboard do dono: reusa o `DashboardHeader` (título com ícone, atalho
+**Nova prévia**, período global `OptionTabs` e Atualizar), a linha de KPIs (`DashboardKpis`) e os
+gráficos de `components/charts/` (rosca por coluna, barras por tipo, barras ranqueadas por projeto e a
+linha criadas × concluídas) — o cartão **Por tipo** conta as **tags** da tarefa, não o tipo. O período
+usa as mesmas opções do dono (`period.ts`) com **chave própria** de persistência
+(`opex:cliente:dashboard:period:v1`) e envia o fuso do navegador. O bloco de **custo** (custo por
+repositório, evolução mensal e horas por repositório) só aparece para o **admin** do cliente. **Não**
+inclui horas agênticas, custo de IA, mesas de trabalho nem faturas do dono (dados internos). Serviço em
+`src/features/orcamentos/server/portal-dashboard.ts` (agregações puras em `portal-aggregate.ts`);
+detalhes em `modules/orcamentos.md`.

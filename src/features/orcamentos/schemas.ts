@@ -118,15 +118,26 @@ export type ClienteUserInput = z.infer<typeof clienteUserSchema>
 export const clienteSelectSchema = z.object({ clientId: objectId })
 export type ClienteSelectInput = z.infer<typeof clienteSelectSchema>
 
-const isoDate = z.string().trim().min(1)
+const isoDate = z.string().trim().min(1).refine((value) => !Number.isNaN(new Date(value).getTime()), "Data inválida")
+
+/** Fuso IANA do navegador (ex.: `America/Sao_Paulo`); ausente → o servidor usa UTC. */
+const ianaTimeZone = z.string().refine((value) => {
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: value })
+        return true
+    } catch {
+        return false
+    }
+}, "Fuso horário inválido")
+
 const projectIdList = z
     .string()
     .trim()
     .optional()
     .transform((value) => (value ? [...new Set(value.split(",").map((id) => id.trim()).filter((id) => objectId.safeParse(id).success))] : []))
 
-/** Período do dashboard/financeiro do portal (ISO opcional). */
-export const clientePeriodQuerySchema = z.object({ from: isoDate.optional(), to: isoDate.optional() })
+/** Período do dashboard do portal (ISO opcional) e o fuso do navegador. */
+export const clientePeriodQuerySchema = z.object({ from: isoDate.optional(), to: isoDate.optional(), timeZone: ianaTimeZone.optional() })
 export type ClientePeriodQuery = z.infer<typeof clientePeriodQuerySchema>
 
 /** Financeiro do cliente: período + filtro opcional de repositórios (ids por vírgula). */

@@ -1,154 +1,99 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { motion } from "framer-motion"
-import { Banknote, CheckCircle2, LayoutList, ListTodo, RefreshCw } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useCallback } from "react"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { LayoutDashboard } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
-import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { apiErrorMessage } from "@/lib/api"
-import { formatBillingBrl, formatHours } from "@/features/finance/format"
-import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "@/features/tasks/constants"
+import { DashboardHeader } from "@/features/dashboard/components/DashboardHeader"
+import { DashboardKpis, type DashboardKpiItem } from "@/features/dashboard/components/DashboardKpis"
+import { formatBrl, formatCount, formatHours } from "@/features/dashboard/format"
 import { CLIENTE_COST_LABEL } from "../constants"
 import { useClientePortal } from "./ClientePortalContext"
-import { useClienteDashboard } from "./hooks"
-import { CLIENTE_PERIOD_OPTIONS, clientPeriodRange, type ClientePeriod } from "./period"
+import { ClienteFinanceSection } from "./components/ClienteFinanceSection"
+import { ClienteNewPreviewButton } from "./components/ClienteNewPreviewButton"
+import { ClienteTasksOverviewSection } from "./components/ClienteTasksOverviewSection"
+import { useClienteDashboard, useClienteRealtime } from "./hooks"
+import { useClientePeriod } from "./useClientePeriod"
 
-/** Dashboard do cliente: KPIs de tarefas e, para o admin, o bloco de **custo** (sem dados internos). */
+const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
+
+/**
+ * Dashboard do portal do cliente: **mesma apresentação** do dashboard do dono (cabeçalho com ícone,
+ * atalho de criação, período global e botão Atualizar; KPIs; gráficos), porém restrito ao cliente da
+ * sessão. Os KPIs mostram tarefas ativas, criadas e concluídas no período e, para o **admin** do
+ * cliente, o **custo** e as horas infladas. Nada de horas agênticas, custo de IA ou mesas.
+ */
 export function ClienteDashboardPage() {
+    const reduceMotion = useReducedMotion()
     const { isAdmin } = useClientePortal()
-    const [now] = useState(() => new Date())
-    const [period, setPeriod] = useState<ClientePeriod>("month")
-    const range = useMemo(() => clientPeriodRange(period, now), [period, now])
-    const query = useClienteDashboard(range.from, range.to)
+    const { period, setPeriod, ready, range, timeZone } = useClientePeriod()
+    useClienteRealtime()
+    const query = useClienteDashboard({ from: range.from, to: range.to, timeZone }, ready)
+
     const data = query.data
+    const view = !ready || query.isLoading ? "loading" : query.isError ? "error" : !data ? "empty" : "ready"
+    const refresh = useCallback(() => void query.refetch(), [query])
+
+    const kpis: DashboardKpiItem[] = data
+        ? [
+              { label: "Tarefas ativas", hint: "Não arquivadas", value: data.tasksActive, formatter: formatCount },
+              { label: "Criadas", hint: "No período", value: data.tasksCreated, formatter: formatCount },
+              { label: "Concluídas", hint: "No período", value: data.tasksCompleted, formatter: formatCount },
+              ...(data.finance
+                  ? [
+                        { label: CLIENTE_COST_LABEL, hint: "No período", value: data.finance.totals.totalCostBrl, formatter: formatBrl },
+                        { label: "Horas", hint: "No período", value: data.finance.totals.totalClientHours, formatter: formatHours },
+                    ]
+                  : []),
+          ]
+        : []
 
     return (
-        <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-5">
-            <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                    <h1 className="text-lg font-semibold md:text-2xl">Dashboard</h1>
-                    <p className="text-sm text-muted-foreground">Visão das suas tarefas no período.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Select value={period} onValueChange={(value) => setPeriod(value as ClientePeriod)}>
-                        <SelectTrigger className="h-9 w-[170px]" aria-label="Período">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {CLIENTE_PERIOD_OPTIONS.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={() => void query.refetch()} disabled={query.isFetching}>
-                        <RefreshCw className="h-4 w-4" aria-hidden /> Atualizar
-                    </Button>
-                </div>
-            </header>
+        <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className="space-y-6">
+            <DashboardHeader title="Dashboard" description="Visão das suas tarefas no período" actions={<ClienteNewPreviewButton />} period={period} onPeriodChange={setPeriod} onRefresh={refresh} refreshing={query.isFetching} />
 
-            {query.isLoading ? (
-                <div className="grid gap-4 sm:grid-cols-3">
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-24 w-full" />
-                </div>
-            ) : query.isError || !data ? (
-                <ErrorState title="Não foi possível carregar o dashboard" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
-            ) : (
-                <>
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        <StatCard icon={ListTodo} label="Tarefas ativas" value={data.tasksActive} />
-                        <StatCard icon={LayoutList} label="Criadas no período" value={data.tasksCreated} />
-                        <StatCard icon={CheckCircle2} label="Concluídas no período" value={data.tasksCompleted} />
-                    </div>
-
-                    {isAdmin && data.cost && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-base">{CLIENTE_COST_LABEL}</CardTitle>
-                                <CardDescription>Custo das suas tarefas concluídas no período.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="grid gap-4 sm:grid-cols-3">
-                                <StatBox label={`${CLIENTE_COST_LABEL} total`} value={formatBillingBrl(data.cost.totalCostBrl)} icon={Banknote} />
-                                <StatBox label="Horas" value={`${formatHours(data.cost.totalClientHours)} h`} />
-                                <StatBox label="Tarefas concluídas" value={String(data.cost.completedTasks)} />
-                            </CardContent>
-                        </Card>
+            <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={view} {...swap} className="space-y-6">
+                    {view === "loading" && <ClienteDashboardSkeleton admin={isAdmin} />}
+                    {view === "error" && <ErrorState title="Não foi possível carregar o dashboard" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={refresh} />}
+                    {view === "empty" && <EmptyState icon={LayoutDashboard} title="Nada para mostrar" description="Ajuste o período ou crie uma nova prévia para ver os indicadores." />}
+                    {view === "ready" && data && (
+                        <>
+                            <DashboardKpis items={kpis} />
+                            <ClienteTasksOverviewSection data={data} />
+                            {data.finance && <ClienteFinanceSection data={data.finance} />}
+                        </>
                     )}
-
-                    <div className="grid gap-4 lg:grid-cols-3">
-                        <DistributionCard title="Por coluna" items={data.byColumn.map((item) => ({ label: item.label, count: item.count }))} emptyText="Sem tarefas ativas." />
-                        <DistributionCard title="Por prioridade" items={data.byPriority.map((item) => ({ label: TASK_PRIORITY_LABELS[item.priority as TaskPriority] ?? item.priority, count: item.count }))} emptyText="Sem tarefas ativas." />
-                        <DistributionCard title="Por tipo" items={data.byType.map((item) => ({ label: item.type ? (TASK_TYPE_LABELS[item.type as TaskType] ?? item.type) : "Sem tipo", count: item.count }))} emptyText="Sem tarefas ativas." />
-                    </div>
-                </>
-            )}
+                </motion.div>
+            </AnimatePresence>
         </motion.section>
     )
 }
 
-function StatCard({ icon: Icon, label, value }: { icon: typeof ListTodo; label: string; value: number }) {
+/** Esqueleto no formato real da tela (KPIs + quatro gráficos; o custo só para o admin). */
+function ClienteDashboardSkeleton({ admin }: { admin: boolean }) {
     return (
-        <Card>
-            <CardContent className="flex items-center gap-3 pt-6">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
-                    <Icon className="h-5 w-5" aria-hidden />
-                </span>
-                <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-                    <p className="text-2xl font-semibold">
-                        <AnimatedNumber value={value} />
-                    </p>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function StatBox({ label, value, icon: Icon }: { label: string; value: string; icon?: typeof Banknote }) {
-    return (
-        <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-                {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />} {label}
-            </p>
-            <p className="mt-1 text-xl font-semibold">{value}</p>
+        <div className="space-y-6" aria-label="Carregando dashboard">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                {Array.from({ length: admin ? 5 : 3 }, (_, index) => (
+                    <Card key={index}>
+                        <CardContent className="flex flex-col gap-2 p-4">
+                            <Skeleton className="h-3 w-20" />
+                            <Skeleton className="h-6 w-14" />
+                            <Skeleton className="h-3 w-24" />
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                {Array.from({ length: 4 }, (_, index) => (
+                    <Skeleton key={index} className="h-[300px] w-full" />
+                ))}
+            </div>
         </div>
-    )
-}
-
-function DistributionCard({ title, items, emptyText }: { title: string; items: ReadonlyArray<{ label: string; count: number }>; emptyText: string }) {
-    const max = Math.max(1, ...items.map((item) => item.count))
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-base">{title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-                {items.length === 0 ? (
-                    <EmptyState icon={LayoutList} title={emptyText} />
-                ) : (
-                    <ul className="space-y-2">
-                        {items.map((item) => (
-                            <li key={item.label} className="space-y-1">
-                                <div className="flex items-center justify-between gap-2 text-sm">
-                                    <span className="truncate">{item.label}</span>
-                                    <span className="font-mono text-muted-foreground">{item.count}</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                    <motion.div initial={{ width: 0 }} animate={{ width: `${(item.count / max) * 100}%` }} transition={{ duration: 0.3 }} className="h-full rounded-full bg-primary" />
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </CardContent>
-        </Card>
     )
 }

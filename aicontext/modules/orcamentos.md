@@ -100,14 +100,29 @@ Logins e sessões: `aicontext/modules/auth.md`.
 
 ## Dashboard e Financeiro do cliente
 
-- **Dashboard** (`GET /api/cliente/dashboard`): KPIs de tarefas do cliente (ativas, criadas e
-  concluídas no período — conclusão derivada da auditoria, colunas de conclusão do GitHub) e
-  distribuições por **coluna, prioridade e tipo**. O bloco de **custo** só aparece para o **admin**.
-  **Sem** horas agênticas, custo de IA ou mesas de trabalho. Períodos: mês atual (padrão), 30 e 90 dias.
-- **Financeiro** (`GET /api/cliente/financeiro`, admin): **custo** das tarefas concluídas, agrupado
-  por **repositório**, com filtro de período (mês atual padrão) e de repositórios. Usa o snapshot
-  (`clientHours`/`billingBrl`) e reusa a regra de conclusão do Financeiro do dono
-  (`completionTimestamps`). Nunca expõe horas reais.
+As duas telas do portal **reutilizam a apresentação** do dono (cabeçalho, KPIs, gráficos e o kit de
+listas) — os componentes visuais vêm de `src/features/dashboard/` e `src/features/finance/`, só as
+consultas e os DTOs são próprios do portal (autorizados e recortados pelo cliente).
+
+- **Dashboard** (`GET /api/cliente/dashboard?from&to&timeZone`): KPIs de tarefas do cliente (ativas,
+  criadas e concluídas no período — conclusão derivada da auditoria, colunas de conclusão do GitHub) e
+  o bloco **Visão geral de tarefas** com os **mesmos gráficos** do dono: rosca **Por coluna** (cores do
+  quadro), barras **Por tipo**, barras ranqueadas **Por projeto** e a linha **Criadas × concluídas**.
+  Única diferença: o cartão **Por tipo** conta as **tags** da tarefa (com "Sem tags" para as não
+  classificadas), não o tipo — o rótulo da tag é resolvido no servidor pela taxonomia
+  (`resolveTagViews`); cada tag conta uma vez por tarefa, então uma tarefa com várias tags aparece em
+  várias barras. Para o **admin** entram os KPIs de **Custo** e **Horas** e o bloco **Financeiro**
+  (custo por repositório, evolução mensal e horas por repositório), sempre com as horas **infladas**.
+  **Sem** horas agênticas, custo de IA ou mesas. Período: as **mesmas opções** do dono
+  (`features/dashboard/period.ts` — 7/30/90 dias ou mês atual, padrão 30 dias), persistidas com chave
+  própria do portal (`opex:cliente:dashboard:period:v1`); o fuso IANA do navegador define os buckets.
+- **Financeiro** (`GET /api/cliente/financeiro?from&to&projectIds`, admin): **custo** das tarefas
+  concluídas, agrupado por **repositório**, no **mesmo padrão** do Financeiro do dono — filtros no
+  `ListFilters` (Período com `PresetDateRangeFilter` e Repositórios com `CadastroMultiSelect`), com
+  `from`/`to`/`projectIds` na **URL** (`useUrlFilters`, padrão mês corrente), cartão de totais (Custo,
+  Horas e Tarefas), botão Atualizar e grupos **expansíveis**. Usa o snapshot (`clientHours`/`billingBrl`)
+  e reusa a regra de conclusão do Financeiro do dono (`completionTimestamps`). Nunca expõe horas reais,
+  fator ou custo por hora. Período ou fuso inválido → **400** (`validationError`).
 - **Usuários** (`/cliente/usuarios`, admin): CRUD dos usuários do cliente (mesmos componentes do dono),
   com as regras de permissão acima.
 
@@ -162,7 +177,7 @@ cada cliente existente, preservando os **tokens/URLs** já em uso. Tarefas pedid
 | `GET /api/cliente/tasks/[id]` | Detalhe na visão do cliente |
 | `PATCH /api/cliente/tasks/[id]` | Prioridade da própria tarefa (`{ priority }`) |
 | `POST /api/cliente/tasks/[id]/comments` | Comentário do usuário do portal |
-| `GET /api/cliente/dashboard?from&to` | KPIs de tarefas (custo só para admin) |
+| `GET /api/cliente/dashboard?from&to&timeZone` | Distribuições de tarefas (custo e horas só para admin) |
 | `GET /api/cliente/financeiro?from&to&projectIds` | Custo por repositório (admin) |
 | `GET/POST /api/cliente/usuarios` | Lista / cria usuário (admin do cliente) |
 | `PATCH/DELETE /api/cliente/usuarios/[id]` | Edita / remove vínculo (admin do cliente) |
@@ -179,9 +194,9 @@ Como o portal é autenticado por **sessão**, ele **não** entra na especificaç
   `randomUsernameSuffix`), `clarity.ts`, `schemas.ts`, `types.ts` (DTOs incl. `ClienteUserDto`,
   `ClienteSessionDto`, `ClienteFinanceDto`, `ClienteDashboardDto`), `preview-prompt.ts`, `review.ts`,
   hooks, `server/{clients,drafts,users,token,portal,owner,preview,similar,tag-views,estimate-hours,
-  portal-dashboard,portal-finance}.ts`, `components/` (editor, clientes, **users/** compartilhado) e
-  `portal/` (contexto de sessão, shell, picker, páginas Dashboard/Tarefas/Financeiro/Usuários,
-  `period.ts`, componentes).
+  portal-dashboard,portal-aggregate,portal-finance}.ts`, `components/` (editor, clientes, **users/**
+  compartilhado) e `portal/` (contexto de sessão, shell, picker, páginas Dashboard/Tarefas/Financeiro/
+  Usuários, `period.ts`, `useClientePeriod.ts`, `filters.ts`, `components/`).
 - `src/app/cliente/(portal)/**` (layout autenticado e sub-rotas) e `src/app/cliente/page.tsx`
   (entrada); `src/app/api/cliente/**`; `src/app/(app)/integracoes/clientes/[clientId]/page.tsx`.
 - `src/lib/db/models/User.ts` e `src/lib/db/migrations/backfill-client-users.ts`.
@@ -192,5 +207,7 @@ Como o portal é autenticado por **sessão**, ele **não** entra na especificaç
 `clarity-card`, `portal-auth`, `orcamentos-token`, `orcamentos-clients`, `orcamentos-portal`,
 `orcamentos-estimate`, `orcamentos-owner-preview`, `orcamentos-review-view`, `orcamentos-similar`,
 **`users-service`** (usuário padrão, colisão de username, email duplicado, permissões de vínculo,
-padrão não excluível), **`portal-cost`** (custo por repositório) e **`portal-period`** (períodos e
-username), `cliente-*` (cards/listas/detalhe), `cliente-dialog`, `copy-portal-url`, `markdown-field`.
+padrão não excluível), **`portal-cost`** (custo por repositório), **`portal-period`** (período/marca do
+portal e filtros do financeiro), **`portal-dashboard`** (agregações puras: tags e resumo financeiro),
+**`cliente-dashboard-page`** e **`cliente-finance-page`** (apresentação compartilhada com o dono),
+`cliente-*` (cards/listas/detalhe), `cliente-dialog`, `copy-portal-url`, `markdown-field`.

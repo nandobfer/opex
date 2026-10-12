@@ -1,3 +1,4 @@
+import type { DashboardColumnSlice, DashboardProjectSlice, DashboardTimelinePoint } from "@/features/dashboard/types"
 import type { TaskPriority, TaskType } from "@/features/tasks/constants"
 import type { TaskBoardDto } from "@/features/tasks/board"
 import type { ProjectRef, TaskComment, TaskDto } from "@/features/tasks/types"
@@ -209,15 +210,36 @@ export interface ClienteFinanceDto {
     totals: { taskCount: number; totalClientHours: number; totalCostBrl: number }
 }
 
-/** KPIs de tarefas do cliente para o dashboard do portal. */
+/** Contagem de tarefas por **tag** (`tag: null` = tarefas sem tag). */
+export interface ClienteTagSlice {
+    tag: string | null
+    /** Rótulo da tag na taxonomia; id da tag quando ela já saiu da taxonomia. */
+    label: string
+    count: number
+}
+
+/** Resumo financeiro do dashboard do cliente (presente só para o **admin** do cliente). */
+export interface ClienteDashboardFinanceDto {
+    totals: { totalCostBrl: number; totalClientHours: number; taskCount: number }
+    /** Custo e horas (infladas) por repositório. */
+    byProject: Array<{ projectId: string | null; repo: string; costBrl: number; clientHours: number; taskCount: number }>
+    /** Evolução mensal do custo dentro do período. */
+    timeline: Array<{ bucket: string; costBrl: number }>
+}
+
+/**
+ * Dashboard do portal do cliente: mesmas distribuições do dashboard do dono (coluna, tipo/projeto e
+ * série criadas × concluídas), porém no recorte do cliente e com **tags** no lugar do tipo. O bloco
+ * `finance` (custo e horas infladas) só é preenchido para o **admin**; `null` para os demais.
+ */
 export interface ClienteDashboardDto {
     range: { from: string; to: string }
     tasksCreated: number
     tasksActive: number
     tasksCompleted: number
-    byColumn: Array<{ key: string; label: string; count: number }>
-    byPriority: Array<{ priority: string; count: number }>
-    byType: Array<{ type: string | null; count: number }>
-    /** Só é preenchido para o **admin** do cliente; `null` para os demais. */
-    cost: { totalCostBrl: number; totalClientHours: number; completedTasks: number } | null
+    byColumn: DashboardColumnSlice[]
+    byTag: ClienteTagSlice[]
+    byProject: DashboardProjectSlice[]
+    timeline: DashboardTimelinePoint[]
+    finance: ClienteDashboardFinanceDto | null
 }

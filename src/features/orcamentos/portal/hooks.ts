@@ -146,6 +146,8 @@ export function useClienteRealtime(): void {
         const handler = () => {
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "tasks"] })
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "task"] })
+            void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "dashboard"] })
+            void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "finance"] })
         }
         channel.bind(CLIENTE_TASKS_UPDATED_EVENT, handler)
         return () => {
@@ -155,26 +157,30 @@ export function useClienteRealtime(): void {
     }, [clientId, queryClient])
 }
 
-const dashboardKey = (from: string, to: string) => [CLIENTE_QUERY_KEY, "dashboard", { from, to }] as const
-const financeKey = (from: string, to: string, projectIds: readonly string[]) => [CLIENTE_QUERY_KEY, "finance", { from, to, projectIds: [...projectIds].sort() }] as const
+const dashboardKey = (query: { from: string; to: string; timeZone: string }) => [CLIENTE_QUERY_KEY, "dashboard", query] as const
+const financeKey = (query: { from: string; to: string; projectIds: readonly string[] }) => [CLIENTE_QUERY_KEY, "finance", { from: query.from, to: query.to, projectIds: [...query.projectIds].sort() }] as const
 const usersKey = [CLIENTE_QUERY_KEY, "users"] as const
 
-/** KPIs de tarefas do cliente (custo só quando admin). */
-export function useClienteDashboard(from: string, to: string) {
+/**
+ * Dashboard do cliente: distribuições de tarefas do período e (admin) o resumo de custo. O fuso do
+ * navegador entra na consulta para o servidor agrupar a série criadas × concluídas.
+ */
+export function useClienteDashboard(query: { from: string; to: string; timeZone: string }, enabled: boolean) {
     const { api } = useClientePortal()
     return useQuery({
-        queryKey: dashboardKey(from, to),
-        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteDashboardDto>>("/cliente/dashboard", { params: { from, to } })).data),
+        queryKey: dashboardKey(query),
+        enabled,
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteDashboardDto>>("/cliente/dashboard", { params: { from: query.from, to: query.to, timeZone: query.timeZone } })).data),
         staleTime: 30_000,
     })
 }
 
-/** Custo das tarefas concluídas do cliente (admin), por repositório e período. */
-export function useClienteFinance(from: string, to: string, projectIds: readonly string[]) {
+/** Custo das tarefas concluídas do cliente (admin): período (ISO) e repositórios selecionados. */
+export function useClienteFinance(query: { from: string; to: string; projectIds: readonly string[] }) {
     const { api } = useClientePortal()
     return useQuery({
-        queryKey: financeKey(from, to, projectIds),
-        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteFinanceDto>>("/cliente/financeiro", { params: { from, to, ...(projectIds.length ? { projectIds: projectIds.join(",") } : {}) } })).data),
+        queryKey: financeKey(query),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteFinanceDto>>("/cliente/financeiro", { params: { from: query.from || undefined, to: query.to || undefined, ...(query.projectIds.length ? { projectIds: query.projectIds.join(",") } : {}) } })).data),
         staleTime: 30_000,
     })
 }

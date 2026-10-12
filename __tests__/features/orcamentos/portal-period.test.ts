@@ -1,28 +1,48 @@
 import { describe, expect, it } from "vitest"
-import { clientPeriodRange } from "@/features/orcamentos/portal/period"
+import { CLIENTE_PERIOD_OPTIONS, CLIENTE_PERIOD_STORAGE_KEY } from "@/features/orcamentos/portal/period"
+import { clienteFinanceHttpParams, clienteFinanceQuery, defaultClienteFinanceFilters, hasClienteRepoFilter } from "@/features/orcamentos/portal/filters"
 import { randomUsernameSuffix, usernameFromName, USERNAME_PATTERN } from "@/features/orcamentos/logic"
 
 describe("período do portal", () => {
-    const now = new Date(2026, 2, 15, 14, 30)
+    it("usa as mesmas opções e rótulos do dashboard do dono, com chave própria de persistência", () => {
+        expect(CLIENTE_PERIOD_OPTIONS.map((option) => option.value)).toEqual(["7d", "30d", "90d", "month"])
+        expect(CLIENTE_PERIOD_OPTIONS.map((option) => option.label)).toEqual(["7 dias", "30 dias", "90 dias", "Mês atual"])
+        // A preferência do cliente não compartilha a chave do dono.
+        expect(CLIENTE_PERIOD_STORAGE_KEY).not.toContain("opex:dashboard")
+        expect(CLIENTE_PERIOD_STORAGE_KEY.startsWith("opex:cliente:")).toBe(true)
+    })
+})
 
-    it("mês atual vai do dia 1 ao fim de hoje", () => {
-        const range = clientPeriodRange("month", now)
-        const from = new Date(range.from)
-        expect(from.getDate()).toBe(1)
-        expect(from.getMonth()).toBe(2)
-        expect(new Date(range.to).getTime()).toBeGreaterThanOrEqual(now.getTime())
+describe("filtros do financeiro do portal", () => {
+    it("o padrão é o mês corrente, sem repositório selecionado", () => {
+        const filters = defaultClienteFinanceFilters()
+        expect(filters.from).toMatch(/^\d{4}-\d{2}-01$/)
+        expect(filters.to).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        expect(filters.projectIds).toEqual([])
+        expect(hasClienteRepoFilter(filters)).toBe(false)
     })
 
-    it("30 e 90 dias contam para trás a partir de hoje", () => {
-        const r30 = clientPeriodRange("30", now)
-        const days30 = (now.getTime() - new Date(r30.from).getTime()) / 86_400_000
-        expect(days30).toBeGreaterThan(29)
-        expect(days30).toBeLessThan(30)
+    it("normaliza o período (início e fim do dia) e os ids dos repositórios", () => {
+        const query = clienteFinanceQuery({ from: "2026-03-01", to: "2026-03-31", projectIds: ["b", "a", "b", ""] })
 
-        const r90 = clientPeriodRange("90", now)
-        const days90 = (now.getTime() - new Date(r90.from).getTime()) / 86_400_000
-        expect(days90).toBeGreaterThan(89)
-        expect(days90).toBeLessThan(90)
+        expect(query.projectIds).toEqual(["a", "b"])
+        const from = new Date(query.from)
+        expect([from.getDate(), from.getHours(), from.getMinutes()]).toEqual([1, 0, 0])
+        const to = new Date(query.to)
+        expect([to.getDate(), to.getHours()]).toEqual([31, 23])
+    })
+
+    it("sem período, a consulta vai sem datas e os parâmetros HTTP omitem a lista vazia", () => {
+        const query = clienteFinanceQuery({ from: "", to: "", projectIds: [] })
+        expect(query).toEqual({ from: "", to: "", projectIds: [] })
+        expect(clienteFinanceHttpParams(query)).toEqual({ from: undefined, to: undefined, projectIds: undefined })
+    })
+
+    it("com repositórios selecionados, os parâmetros HTTP levam a lista separada por vírgula", () => {
+        const query = clienteFinanceQuery({ from: "2026-03-01", to: "2026-03-31", projectIds: ["p2", "p1"] })
+        const params = clienteFinanceHttpParams(query)
+        expect(params.projectIds).toBe("p1,p2")
+        expect(hasClienteRepoFilter({ projectIds: query.projectIds })).toBe(true)
     })
 })
 

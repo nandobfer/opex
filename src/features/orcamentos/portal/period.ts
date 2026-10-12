@@ -1,21 +1,19 @@
-import { endOfDay, startOfDay, startOfMonth, subDays } from "date-fns"
-
-/** Períodos do dashboard/financeiro do portal. */
-export type ClientePeriod = "month" | "30" | "90"
-
-export const CLIENTE_PERIOD_OPTIONS: ReadonlyArray<{ value: ClientePeriod; label: string }> = [
-    { value: "month", label: "Mês atual" },
-    { value: "30", label: "Últimos 30 dias" },
-    { value: "90", label: "Últimos 90 dias" },
-]
+import { DASHBOARD_PERIOD_LABELS, DASHBOARD_PERIODS, type DashboardPeriod } from "@/features/dashboard/period"
 
 /**
- * Intervalo `[from, to]` (ISO) do período escolhido, relativo a `now`. O `to` sempre vai até o fim do
- * dia de hoje, para o mês atual não cortar as conclusões de hoje.
+ * Período do dashboard do **portal do cliente**: mesmas opções e mesmo cálculo do dashboard do dono
+ * (7 / 30 / 90 dias ou mês atual), mas com **chave própria** de persistência — a preferência do
+ * cliente não compartilha estado com a do dono.
  */
-export function clientPeriodRange(period: ClientePeriod, now: Date): { from: string; to: string } {
-    const to = endOfDay(now).toISOString()
-    if (period === "month") return { from: startOfMonth(now).toISOString(), to }
-    const days = period === "30" ? 29 : 89
-    return { from: startOfDay(subDays(now, days)).toISOString(), to }
-}
+
+/** Mesmo tipo de período do dashboard do dono. */
+export type ClientePeriod = DashboardPeriod
+
+/** Chave de `localStorage` da preferência do portal (separada da chave do dono). */
+export const CLIENTE_PERIOD_STORAGE_KEY = "opex:cliente:dashboard:period:v1"
+
+/** Opções do seletor, com os mesmos rótulos do dono. */
+export const CLIENTE_PERIOD_OPTIONS: ReadonlyArray<{ value: ClientePeriod; label: string }> = DASHBOARD_PERIODS.map((value) => ({
+    value,
+    label: DASHBOARD_PERIOD_LABELS[value],
+}))

@@ -8,27 +8,19 @@ import { formatMinutes } from "@/features/tasks/format"
 import { formatBrl, formatCount, formatHours, formatUsd } from "../format"
 import type { DashboardKpis as Kpis } from "../types"
 
-interface KpiItem {
+/** Um cartão de indicador: rótulo, dica, valor e formatador. */
+export interface DashboardKpiItem {
     label: string
     hint: string
     value: number
     formatter: (value: number) => string
 }
 
-/** Linha de KPIs da tela: contadores do quadro, do período (faturamento/horas) e das mesas (instantâneo). */
-export function DashboardKpis({ kpis }: { kpis: Kpis }) {
-    const items: KpiItem[] = [
-        { label: "Tarefas ativas", hint: "Não arquivadas", value: kpis.tasksActive, formatter: formatCount },
-        { label: "Em andamento", hint: "Fora das colunas de conclusão", value: kpis.tasksInProgress, formatter: formatCount },
-        { label: "Concluídas", hint: "No período", value: kpis.tasksCompleted, formatter: formatCount },
-        { label: "Faturamento", hint: "No período", value: kpis.billingBrl, formatter: formatBrl },
-        { label: "Horas do cliente", hint: "No período", value: kpis.clientHours, formatter: formatHours },
-        { label: "Horas agênticas", hint: "No período", value: kpis.loggedMinutes, formatter: formatMinutes },
-        { label: "Custo de IA", hint: "No período · USD", value: kpis.costUsd, formatter: formatUsd },
-        { label: "Mesas ativas", hint: "Situação atual", value: kpis.activeWorkbenches, formatter: formatCount },
-        { label: "Mesas executando", hint: "Situação atual", value: kpis.runningWorkbenches, formatter: formatCount },
-    ]
-
+/**
+ * Linha de KPIs da tela, recebendo os indicadores da página que a usa (o dono monta os seus com
+ * `dashboardKpiItems`; o portal do cliente monta o recorte dele). A apresentação é única.
+ */
+export function DashboardKpis({ items }: { items: readonly DashboardKpiItem[] }) {
     return (
         <motion.div variants={fadeUp} initial="hidden" animate="visible" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {items.map((item) => (
@@ -44,4 +36,19 @@ export function DashboardKpis({ kpis }: { kpis: Kpis }) {
             ))}
         </motion.div>
     )
+}
+
+/** Indicadores da tela Dashboards do **dono** (quadro, período e mesas). */
+export function dashboardKpiItems(kpis: Kpis): DashboardKpiItem[] {
+    return [
+        { label: "Tarefas ativas", hint: "Não arquivadas", value: kpis.tasksActive, formatter: formatCount },
+        { label: "Em andamento", hint: "Fora das colunas de conclusão", value: kpis.tasksInProgress, formatter: formatCount },
+        { label: "Concluídas", hint: "No período", value: kpis.tasksCompleted, formatter: formatCount },
+        { label: "Faturamento", hint: "No período", value: kpis.billingBrl, formatter: formatBrl },
+        { label: "Horas do cliente", hint: "No período", value: kpis.clientHours, formatter: formatHours },
+        { label: "Horas agênticas", hint: "No período", value: kpis.loggedMinutes, formatter: formatMinutes },
+        { label: "Custo de IA", hint: "No período · USD", value: kpis.costUsd, formatter: formatUsd },
+        { label: "Mesas ativas", hint: "Situação atual", value: kpis.activeWorkbenches, formatter: formatCount },
+        { label: "Mesas executando", hint: "Situação atual", value: kpis.runningWorkbenches, formatter: formatCount },
+    ]
 }
