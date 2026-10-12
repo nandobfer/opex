@@ -101,6 +101,29 @@ container precisa ser recriado.
 - O pipeline **não provisiona** MongoDB, Soketi, redes externas nem o `.env`; isso é preparado uma
   vez no servidor. Requer Docker rootless acessível pelo usuário SSH.
 
+## Solução de problemas (deploy)
+
+- **`Unable to locate executable file: pnpm`** no passo *Configurar Node* do job `deploy`: acontece
+  quando o job não usa pnpm. Corrigido com `package-manager-cache: false` no `setup-node`.
+- **`No ED25519 host key is known for <host> ... Host key verification failed`**: o segredo
+  `DEPLOY_KNOWN_HOSTS` não contém a host key de `DEPLOY_HOST`.
+  - O `DEPLOY_HOST` do SSH deve ser o **host/IP real** do servidor. Um domínio atrás de proxy/CDN
+    (ex.: Cloudflare) resolve para o proxy e **não serve SSH** — `ssh-keyscan` nele não retorna o
+    host key do servidor.
+  - Gere o `known_hosts` com o **mesmo valor** de `DEPLOY_HOST`:
+    `ssh-keyscan -p <porta> -t ed25519,ecdsa,rsa <DEPLOY_HOST>`. Se você rodar `ssh-keyscan localhost`
+    (ou com outro nome), as linhas ficam com esse nome e não combinam com o host de `DEPLOY_HOST`.
+  - Confirme antes de rodar o CI (troque o usuário/host/chave):
+    ```bash
+    ssh -i ~/.ssh/opex_deploy -o UserKnownHostsFile=./known_hosts \
+        -o StrictHostKeyChecking=yes -o BatchMode=yes burgos@<DEPLOY_HOST> true
+    ```
+    `Host key verification failed` = `known_hosts` errado; `Permission denied (publickey)` = o host
+    key está ok e o problema seja a chave (próximo item).
+- **`Permission denied (publickey)`**: a chave pública do `DEPLOY_SSH_KEY` não está em
+  `~/.ssh/authorized_keys` do usuário, ou as permissões estão frouxas. O `sshd` (StrictModes)
+  recusa a chave se `~/.ssh` (ou o home) for gravável por grupo/outros: use `chmod 700 ~/.ssh`.
+
 ## Limitações e decisões
 
 - Sem zero downtime: o serviço único é recriado (breve indisponibilidade).
