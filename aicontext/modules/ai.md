@@ -240,12 +240,15 @@ e opções na própria aba da página "Provedores de IA".
   nunca no diretório da integração OpenCode; lista as centrais com seus diretórios.
 - Regras ao salvar iguais às demais features. Auditoria `FeatureIA` e evento `ai-feature-updated`.
 - **Entrada** (`src/features/refinement/prompt.ts`, puro): a tarefa inteira em Markdown
-  (`buildUnderstandTaskPrompt`) + um **protocolo fixo** acrescentado às instruções que garante que a
-  especificação cubra **critérios de aceite**, **localização da mudança** (rotas/URLs, telas,
-  módulos, integrações, arquivos) e **casos de borda**, e que o agente reescreva a especificação a
-  cada rodada sob o título `## Especificação técnica`. O agente **pergunta pela ferramenta nativa
-  `question`** (formulários) e **não** escreve as perguntas como texto; o refinamento só é marcado
-  como esclarecido quando o turno produz a especificação. Ver `modules/refinement.md`.
+  (`buildUnderstandTaskPrompt`); as instruções configuradas + um **protocolo fixo** são aplicadas como
+  **entrada durável da sessão** do OpenCode (`session.instructions.entry.put`, chave `opex-refinement`;
+  o prompt do turno reenvia o protocolo se o servidor não aceitar a entrada). O protocolo garante que a
+  especificação cubra **critérios de aceite**, **localização da mudança** (rotas/URLs, telas, módulos,
+  integrações, arquivos) e **casos de borda**, que o agente reescreva a especificação a cada rodada sob
+  o título `## Especificação técnica` e que só encerre o turno com uma pergunta ou com a especificação.
+  O agente **pergunta pela ferramenta nativa `question`** (formulários) e **não** escreve as perguntas
+  como texto; o refinamento só é marcado como esclarecido quando o turno produz a especificação **e**
+  ela é gravada. Ver `modules/refinement.md`.
 
 ## APIs
 

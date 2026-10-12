@@ -17,10 +17,14 @@ export interface ITaskRefinement {
     centralId: string
     sessionId: string | null
     sessionDirectory: string | null
+    /** IDs de sessões do OpenCode já desvinculadas e ainda pendentes de exclusão. */
+    pendingSessionDeletions: string[]
     /** `idle`: parado esperando ação; `running`: turno do agente em andamento. */
     runState: string
     /** O agente julgou a especificação totalmente esclarecida. */
     resolved: boolean
+    /** Turno de consolidação (o esclarecimento terminou e a IA está fechando a especificação). */
+    finalizing: boolean
     error: string | null
     /** Texto acumulado do turno atual (de onde a especificação é extraída). */
     lastText: string
@@ -45,8 +49,10 @@ const TaskRefinementSchema = new Schema<ITaskRefinement>(
         centralId: { type: String, required: true, index: true },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
+        pendingSessionDeletions: { type: [String], default: [] },
         runState: { type: String, required: true, default: "idle" },
         resolved: { type: Boolean, default: false },
+        finalizing: { type: Boolean, default: false },
         error: { type: String, default: null },
         lastText: { type: String, default: "" },
         spec: { type: String, default: null },
