@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), useTaskDetail: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
@@ -15,7 +15,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useAgenticSettings: () => ({ data: { availability: { available: true, reason: null } } }),
   useCentralQueue: () => ({ data: [] }),
 }))
-vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail }))
+vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail, useUpdateTask: () => ({ mutate: mocks.updateTask, isPending: false }) }))
 
 import { StartWorkbench } from '@/features/agentic/components/workbench/StartWorkbench'
 import type { CentralDto } from '@/features/agentic/types'
@@ -55,6 +55,7 @@ const task = (patch: Partial<TaskDetailDto> = {}): TaskDetailDto => ({
   history: [],
   timeLogs: [],
   totalTimeLogged: 0,
+  agenticFlow: 'preview',
   ...patch,
 })
 
@@ -95,5 +96,41 @@ describe('StartWorkbench', () => {
     const button = screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
     expect(screen.getByText(/A tarefa não é do projeto Portal/)).toBeTruthy()
+  })
+})
+
+describe('StartWorkbench · fluxo da mesa', () => {
+  const flow = () => screen.getByRole('switch') as HTMLButtonElement
+
+  it('inicia em "Publicar prévia" (desligado)', () => {
+    renderStart()
+    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Publicar prévia')
+  })
+
+  it('reflete o fluxo salvo na tarefa', () => {
+    renderStart({}, { agenticFlow: 'auto_pr' })
+    expect(flow().getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('PR automático')
+  })
+
+  it('ao alternar salva o fluxo na tarefa otimista e imediatamente', () => {
+    renderStart()
+    fireEvent.click(flow())
+    expect(mocks.updateTask).toHaveBeenCalledWith({
+      task: { id: 't1', code: 'OPE-10' },
+      body: { agenticFlow: 'auto_pr' },
+      patch: { agenticFlow: 'auto_pr' },
+    })
+  })
+
+  it('voltar para "Publicar prévia" salva o valor padrão', () => {
+    renderStart({}, { agenticFlow: 'auto_pr' })
+    fireEvent.click(flow())
+    expect(mocks.updateTask).toHaveBeenCalledWith({
+      task: { id: 't1', code: 'OPE-10' },
+      body: { agenticFlow: 'preview' },
+      patch: { agenticFlow: 'preview' },
+    })
   })
 })

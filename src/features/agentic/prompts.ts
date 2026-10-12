@@ -157,14 +157,15 @@ export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: 
     ].join("\n") + extra(config, "build")
 }
 
-export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { code: string; title: string; url?: string }, existingPr: { number: number; url: string } | null): string {
+export function prPrompt(config: CentralConfig, ctx: WorkbenchContext, task: { code: string; title: string; url?: string }, existingPr: { number: number; url: string } | null, options: { fromPreview?: boolean } = {}): string {
     const git = config.git
     const title = renderPattern(git.prTitlePattern, task)
     const commit = renderPattern(git.commitPattern, task)
     const validate = git.validateCommands.trim()
     const flags = [git.prDraft ? "--draft" : "", ...git.prReviewers.map((name) => `--reviewer ${name}`), ...git.prLabels.map((label) => `--label "${label}"`)].filter(Boolean).join(" ")
+    const intro = options.fromPreview === false ? "Você agora é o agente de PULL REQUEST. A implementação foi concluída e o fluxo PR automático dispensou a prévia: valide, publique e abra o Pull Request." : "Você agora é o agente de PULL REQUEST. O usuário aprovou a prévia."
     return [
-        "Você agora é o agente de PULL REQUEST. O usuário aprovou a prévia.",
+        intro,
         `- Trabalhe no worktree ${ctx.worktreePath}, branch ${ctx.branch}.`,
         validate ? `- Antes de tudo, rode a validação e corrija o que falhar:\n\`\`\`sh\n${validate}\n\`\`\`` : "",
         `- Faça commit de todas as alterações pendentes com a mensagem \`${commit}\` (siga a convenção do projeto, se houver; mantenha o código ${task.code} no título).`,
@@ -219,10 +220,11 @@ export function deletePrBranchPrompt(config: CentralConfig, ctx: WorkbenchContex
     ].join("\n") + extra(config, "pr")
 }
 
-export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext): string {
+export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext, options: { preview?: boolean } = {}): string {
+    const hasPreview = options.preview !== false
     const steps = [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,
-        config.cleanup.teardownEnvironment ? `- Derrube a prévia: \`docker compose -p ${ctx.composeProject} down --remove-orphans\` (rode no worktree, se ele ainda existir).` : "",
+        hasPreview && config.cleanup.teardownEnvironment ? `- Derrube a prévia: \`docker compose -p ${ctx.composeProject} down --remove-orphans\` (rode no worktree, se ele ainda existir).` : "",
         config.cleanup.removeWorktree ? `- Remova o worktree: \`git worktree remove --force ${ctx.worktreePath}\` e depois \`git worktree prune\`.` : "",
         config.cleanup.deleteBranch ? `- Apague a branch local \`${ctx.branch}\` (\`git branch -D ${ctx.branch}\`); não apague a remota.` : "",
         `- \`git fetch origin\` e, se for seguro (sem alterações locais), atualize ${config.git.prTargetBranch} no repositório principal.`,

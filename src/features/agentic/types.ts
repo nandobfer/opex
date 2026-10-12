@@ -1,3 +1,4 @@
+import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import type { RunState, WorkbenchStage } from "./constants"
 import type { AgenticSettings, CentralConfig } from "./schemas"
@@ -90,6 +91,8 @@ export interface WorkbenchDto {
     port: number | null
     previewUrl: string | null
     previewHealthy: boolean | null
+    /** Fluxo escolhido na abertura da mesa: `preview` (padrão) sobe a prévia; `auto_pr` vai direto ao PR. */
+    agenticFlow: TaskAgenticFlow
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
     buildQueuePosition: number | null
     plans: PlanVersionDto[]

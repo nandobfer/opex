@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { COLUMN_COLORS, COLUMN_ICON_KEYS, COLUMN_KEY_PATTERN } from "./board"
-import { TASK_PRIORITIES, TASK_TYPES } from "./constants"
+import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "./constants"
 
 const columnKey = z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida")
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
@@ -28,9 +28,13 @@ export type TaskFormValues = z.infer<typeof taskFormSchema>
 export const createTaskSchema = taskInputSchema
 export type CreateTaskInput = z.infer<typeof createTaskSchema>
 
-/** Edição parcial: ao menos um campo. */
+/**
+ * Edição parcial: ao menos um campo. `agenticFlow` fica FORA do `taskInputSchema` (não aparece no
+ * formulário nem na criação): é ajustado na tela de desenvolvimento, ao abrir/preparar a mesa.
+ */
 export const updateTaskSchema = taskInputSchema
     .partial()
+    .extend({ agenticFlow: z.enum(TASK_AGENTIC_FLOWS).optional() })
     .refine((value) => Object.values(value).some((item) => item !== undefined), "Nada para atualizar")
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>
 

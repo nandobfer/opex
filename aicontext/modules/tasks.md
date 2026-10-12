@@ -14,7 +14,7 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
 
 - `DevTask` (`dev_tasks`): `{ code, projectId, columnId, order, title, description, technicalSpec,
   taskType, priority, archived, clientId, summary, summarySourceHash, summaryUpdatedAt, tags,
-  tagsSourceHash, tagsUpdatedAt, estimate }`.
+  tagsSourceHash, tagsUpdatedAt, estimate, agenticFlow }`.
   `description` e `technicalSpec` são Markdown **sem limite artificial de caracteres** (o schema não
   corta nem recusa por tamanho; a mesa/refinamento enviam a tarefa inteira ao agente).
   `code` = `{SIGLA}-{n}` (sequencial por projeto, via `taskSeq` do projeto com `$inc`). `summary` é o
@@ -80,7 +80,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `GET /api/tasks[?includeArchived=true]` | `TaskListDto { tasks, fetchedAt }` |
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
-| `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial) |
+| `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial; inclui `agenticFlow` — fluxo da mesa, ajustável só pela tela de desenvolvimento) |
 | `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — recalcula as horas do cliente e o faturamento |
 | `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove cliente e estimativa) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |

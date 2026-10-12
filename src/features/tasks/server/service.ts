@@ -8,7 +8,7 @@ import { TimeLog } from "@/lib/db/models/TimeLog"
 import { getLocalUser } from "@/lib/local-user"
 import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
-import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskPriority, type TaskType } from "../constants"
+import { TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
 import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
@@ -59,6 +59,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         archived: task.archived === true,
         project: projectRef(project),
         estimate: task.estimate ? toEstimateDto(task.estimate) : null,
+        agenticFlow: (task.agenticFlow as TaskAgenticFlow) ?? "preview",
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
     }
@@ -74,6 +75,7 @@ const FIELD_LABELS: Record<string, string> = {
     coluna: "coluna",
     arquivada: "arquivada",
     cliente: "cliente",
+    fluxo: "fluxo da mesa",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -392,6 +394,11 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
         set.order = await endOrder(input.columnId, id)
         after.coluna = input.columnId
         columnChanged = true
+    }
+    if (input.agenticFlow !== undefined) {
+        set.agenticFlow = input.agenticFlow
+        before.fluxo = TASK_AGENTIC_FLOW_LABELS[(task.agenticFlow as TaskAgenticFlow) ?? "preview"]
+        after.fluxo = TASK_AGENTIC_FLOW_LABELS[input.agenticFlow]
     }
 
     if (Object.keys(set).length === 0) return

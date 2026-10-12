@@ -78,6 +78,8 @@ export interface IAgenticWorkbench {
     buildQueuedAt: Date | null
     previewUrl: string | null
     previewHealthy: boolean | null
+    /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
+    agenticFlow: string
     plans: IPlanVersion[]
     pendingFeedback: string | null
     pr: IWorkbenchPr | null
@@ -114,6 +116,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         buildQueuedAt: { type: Date, default: null },
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
+        agenticFlow: { type: String, default: "preview" },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
         pendingFeedback: { type: String, default: null },
         pr: { type: Schema.Types.Mixed, default: null },

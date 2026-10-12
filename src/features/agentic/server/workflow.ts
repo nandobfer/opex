@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
-import { canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildPrompt,
@@ -353,6 +353,12 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
+            // Fluxo PR automático: pula a prévia e encadeia a abertura do PR na mesma sessão.
+            if (asAgenticFlow(doc.agenticFlow) === "auto_pr") {
+                const pr = doc.pr && doc.pr.state === "open" ? { number: doc.pr.number, url: doc.pr.url } : null
+                notice("info", "Fluxo PR automático: pulando a prévia e abrindo o Pull Request.")
+                return { stage: "opening_pr", text: prPrompt(config, ctx, { code: doc.taskCode, title: doc.taskTitle }, pr, { fromPreview: false }) }
+            }
             // Entra na fila global do build (um build por vez); a porta é reservada quando a vez chega.
             await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
             notice("info", "Implementação concluída. Aguardando a vez do build — um build por vez.")
@@ -541,6 +547,7 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
                 stage: "planning",
                 runState: "idle",
                 composeProject: composeProjectFor(central.projectName, task.code),
+                agenticFlow: task.agenticFlow,
             })
         ).toObject()
     } catch (error) {
@@ -645,7 +652,7 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
-        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded)) }, { userText: "Tentar a limpeza novamente" })
+        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), { preview: Boolean(doc.previewUrl) }) }, { userText: "Tentar a limpeza novamente" })
         return getWorkbench(id)
     }
     if (stage === "building") {
@@ -811,7 +818,8 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
 
     const cleanup = config.cleanup
     if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch) {
-        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded)) }
+        // Sem prévia (fluxo PR automático) não há ambiente a derrubar.
+        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), { preview: Boolean(doc.previewUrl) }) }
     }
     return null
 }

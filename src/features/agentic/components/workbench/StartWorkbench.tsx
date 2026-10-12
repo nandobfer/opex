@@ -6,26 +6,38 @@ import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { ToggleCard } from "@/components/ui/toggle-card"
 import { apiErrorMessage } from "@/lib/api"
-import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
+import { useTaskDetail, useUpdateTask } from "@/features/tasks/hooks/useTasks"
+import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { useAgenticSettings, useCentralQueue, useStartWorkbench } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
 
 /**
  * Estado inicial da mesa (tarefa ainda sem mesa): mostra o código, o título e a **descrição** da
- * tarefa e um campo opcional de **informações adicionais**. Ao abrir a mesa, essas informações são
- * anexadas à tarefa e enviadas ao planejador no primeiro prompt.
+ * tarefa, o **fluxo da mesa** (Publicar prévia ou PR automático) e um campo opcional de
+ * **informações adicionais**. Ao abrir a mesa, essas informações são anexadas à tarefa e enviadas
+ * ao planejador no primeiro prompt.
  */
 export function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: string }) {
     const task = useTaskDetail(taskId)
     const settings = useAgenticSettings()
     const queue = useCentralQueue(central.id)
     const start = useStartWorkbench()
+    const update = useUpdateTask()
     const [text, setText] = useState("")
     const availability = settings.data?.availability
     const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
     const otherProject = task.data && task.data.project?.id !== central.projectId
     const queueItem = queue.data?.find((item) => item.taskId === taskId) ?? null
+    const flow: TaskAgenticFlow = task.data?.agenticFlow ?? "preview"
+
+    /** Salva o fluxo na tarefa na hora (otimista): a mesa nova nasce com a escolha já persistida. */
+    const setFlow = (autoPr: boolean) => {
+        if (!task.data) return
+        const agenticFlow: TaskAgenticFlow = autoPr ? "auto_pr" : "preview"
+        update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow }, patch: { agenticFlow } })
+    }
 
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
@@ -56,6 +68,18 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Na fila da central — posição {queueItem.position}. A mesa abre quando uma vaga liberar.
                     </p>
                 )}
+                {task.data && (
+                    <ToggleCard
+                        id="workbench-flow"
+                        checked={flow === "auto_pr"}
+                        onCheckedChange={setFlow}
+                        disabled={update.isPending}
+                        label="Fluxo da mesa"
+                        description={flow === "auto_pr" ? "O agente pula a prévia e abre o Pull Request assim que a implementação terminar. A revisão do plano continua obrigatória." : "O agente sobe a prévia depois da implementação e espera a sua aprovação antes de abrir o Pull Request."}
+                        onLabel="PR automático"
+                        offLabel="Publicar prévia"
+                    />
+                )}
                 <div className="space-y-1.5">
                     <label htmlFor="workbench-start-context" className="text-sm font-medium">
                         Informações adicionais (opcional)
@@ -64,7 +88,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending} onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined })}>
+                    <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending} onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined })}>
                         {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                         Abrir mesa e gerar o plano
                     </Button>
