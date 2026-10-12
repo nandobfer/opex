@@ -101,3 +101,98 @@ describe('controle de horas agêntico', () => {
     expect(page.logs[0]).toMatchObject({ id: log.id, taskId, taskCode: 'OPX-7', costUsd: 0.5 })
   })
 })
+
+const PROJ_A = 'a'.repeat(24)
+const PROJ_B = 'b'.repeat(24)
+
+const seedTypedTask = async (code: string, projectId: string, taskType: string | null) =>
+  (await mocks.models.devTask.create({ code, title: code, projectId, columnId: 'todo', order: 0, priority: 'high', taskType, archived: false }))._id as string
+
+const seedLog = async (taskId: string, startTime: string, duration = 30, costUsd = 0) => {
+  await mocks.models.timeLog.create({
+    taskId,
+    workbenchId: `wb-${taskId.slice(0, 4)}`,
+    stage: 'implementing',
+    agent: 'build',
+    model: null,
+    startTime: new Date(startTime),
+    endTime: new Date(startTime),
+    duration,
+    costUsd,
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    description: null,
+    active: false,
+  })
+}
+
+describe('filtros de repositório e tipo', () => {
+  const PERIOD = { from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T00:00:00.000Z' }
+
+  beforeEach(() => {
+    // O teste anterior deixa a agregação fixa; aqui os totais voltam ao comportamento neutro.
+    mocks.models.timeLog.aggregate = async () => []
+  })
+
+  it('filtra por repositório, com OU entre os escolhidos', async () => {
+    const taskA = await seedTypedTask('OPX-1', PROJ_A, 'feature')
+    const taskB = await seedTypedTask('OPX-2', PROJ_B, 'bugfix')
+    await seedLog(taskA, '2026-10-05T10:00:00.000Z')
+    await seedLog(taskB, '2026-10-06T10:00:00.000Z')
+
+    const onlyA = await listTimeLogs({ ...PERIOD, page: 1, projects: [PROJ_A] })
+    expect(onlyA.total).toBe(1)
+    expect(onlyA.logs.map((log) => log.taskId)).toEqual([taskA])
+
+    const both = await listTimeLogs({ ...PERIOD, page: 1, projects: [PROJ_A, PROJ_B] })
+    expect(both.total).toBe(2)
+    expect(both.logs.map((log) => log.taskId).sort()).toEqual([taskA, taskB].sort())
+  })
+
+  it('filtra por tipo e deixa de fora a tarefa sem tipo — só quando o filtro está ativo', async () => {
+    const feature = await seedTypedTask('OPX-1', PROJ_A, 'feature')
+    const bugfix = await seedTypedTask('OPX-2', PROJ_A, 'bugfix')
+    const untagged = await seedTypedTask('OPX-3', PROJ_A, null)
+    await seedLog(feature, '2026-10-01T10:00:00.000Z')
+    await seedLog(bugfix, '2026-10-02T10:00:00.000Z')
+    await seedLog(untagged, '2026-10-03T10:00:00.000Z')
+
+    expect((await listTimeLogs({ ...PERIOD, page: 1 })).total).toBe(3)
+    expect((await listTimeLogs({ ...PERIOD, page: 1, types: ['feature'] })).logs.map((log) => log.taskId)).toEqual([feature])
+    expect((await listTimeLogs({ ...PERIOD, page: 1, types: ['feature', 'bugfix'] })).total).toBe(2)
+  })
+
+  it('combina período, repositório e tipo (E entre os recortes)', async () => {
+    const taskA = await seedTypedTask('OPX-1', PROJ_A, 'feature')
+    const taskB = await seedTypedTask('OPX-2', PROJ_A, 'bugfix')
+    await seedLog(taskA, '2026-10-05T10:00:00.000Z')
+    await seedLog(taskB, '2026-10-06T10:00:00.000Z')
+    await seedLog(taskB, '2026-09-01T10:00:00.000Z')
+
+    const page = await listTimeLogs({ ...PERIOD, page: 1, projects: [PROJ_A], types: ['feature'] })
+    expect(page.total).toBe(1)
+    expect(page.logs[0]?.taskId).toBe(taskA)
+  })
+
+  it('sem tarefa correspondente devolve lista vazia e totais zerados', async () => {
+    const taskA = await seedTypedTask('OPX-1', PROJ_A, 'feature')
+    await seedLog(taskA, '2026-10-05T10:00:00.000Z')
+
+    const page = await listTimeLogs({ ...PERIOD, page: 1, projects: ['c'.repeat(24)] })
+    expect(page).toMatchObject({ page: 1, totalPages: 1, total: 0, totalMinutes: 0, totalCostUsd: 0, logs: [] })
+  })
+
+  it('a agregação dos totais recebe o mesmo recorte dos apontamentos', async () => {
+    const taskB = await seedTypedTask('OPX-2', PROJ_B, 'bugfix')
+    let pipeline: Array<{ $match: Record<string, unknown> }> = []
+    mocks.models.timeLog.aggregate = async (next) => {
+      pipeline = next as typeof pipeline
+      return []
+    }
+
+    await listTimeLogs({ ...PERIOD, page: 1, projects: [PROJ_B], types: ['bugfix'] })
+
+    expect(pipeline[0]?.$match).toMatchObject({ taskId: { $in: [taskB] }, startTime: { $gte: new Date(PERIOD.from), $lte: new Date(PERIOD.to) } })
+  })
+})

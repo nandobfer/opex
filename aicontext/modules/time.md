@@ -41,14 +41,20 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 - `endWorkPeriod` / `endWorkPeriodById` — fecham o período (pausa ou conclusão).
 - `listActiveWorkPeriods` — referências dos períodos ativos (limpeza de órfãos).
 - `listActiveTimers`, `listTimeLogs` — leitura (100 por página; `totalMinutes` e `totalCostUsd` do
-  período).
+  período). `listTimeLogs` aceita o recorte de **repositório** (`projects`, ids de projeto) e **tipo de
+  tarefa** (`types`): semântica **OU** dentro de cada lista e **E** entre período, repositório e tipo.
+  Como os dois são da **tarefa**, o recorte resolve primeiro os ids das tarefas que atendem
+  (`DevTask`) e restringe os apontamentos por `taskId`; listagem, contagem e totais usam o mesmo
+  filtro (o recorte vale para o resultado inteiro, não só para a página). A classificação usada é a
+  **atual** da tarefa — mudar o repositório ou o tipo de uma tarefa reclassifica o histórico dela.
+  Sem filtro, o comportamento é o anterior (inclusive apontamentos legados).
 - O `taskCode`/`taskTitle` vêm das tarefas locais. Auditoria (`CRIAR`/`ATUALIZAR`) e evento Pusher
   `time-updated { taskIds }` no canal `private-app` (ao abrir/fechar, não a cada passo).
 
 | Rota do app (somente leitura) | Descrição |
 |---|---|
 | `GET /api/time/active` | `TimeLogDto[]` |
-| `GET /api/time/logs?from&to&page` | `TimeLogPageDto` (`from`/`to` ISO) |
+| `GET /api/time/logs?from&to&page&projects&types` | `TimeLogPageDto` (`from`/`to` ISO; `projects`/`types` em CSV ou repetidos; id de projeto e tipo são validados) |
 
 ## Integração com a mesa (`src/features/agentic/server/timer-sync.ts`)
 
@@ -87,6 +93,12 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
 - Período na URL (`from`/`to`, padrão: última semana) com `PresetDateRangeFilter`; totais do período
   (tempo, quantidade e custo) em números animados.
+- **Filtros na URL** (`TimeLogFiltersBar` sobre `ListFilters`): **Período**, **Repositório**
+  (ids de projeto, com o `GithubRepoLabel`) e **Tipo** — os dois últimos por **multiseleção**
+  (`CadastroMultiSelect`). O recorte vai à API (`useTimeLogs` envia `projects`/`types` como CSV; a
+  chave do TanStack Query inclui o recorte, então trocar um filtro recomeça na primeira página).
+  "Limpar filtros" volta ao padrão da tela (última semana, sem repositório nem tipo). Com
+  repositório/tipo escolhido, o vazio explica o recorte e oferece limpar (`hasTimeLogFilters`).
 - **Agrupamento em dois níveis: dia → task/mesa → itens.** As seções de dia (`groupTimeLogsByDay`,
   mais recente primeiro, total do dia) contêm **grupos por task/mesa** (`groupTimeLogsByTask`, que
   agrupa pelo `taskId`; como há uma mesa por tarefa, o grupo representa a task/mesa — apontamentos
@@ -102,6 +114,9 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 - Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
   descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
   custo). Sem editar/excluir/parar.
+- Tempo real: `useTimeRealtime` (canal `private-app`) invalida as horas em `time-updated` e também em
+  `tasks-updated` — mudar o repositório ou o tipo da tarefa (ou excluí-la) muda o que o recorte
+  devolve.
 - Estados: carregando, vazio e erro.
 
 ## Página da tarefa
@@ -111,6 +126,7 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
 
 ## Testes
 
-`__tests__/features/time/time-service.test.ts`, `time-ui.test.tsx`,
+`__tests__/features/time/time-service.test.ts`, `time-logs-query.test.ts`,
+`time-filters.test.ts`, `time-hooks.test.tsx`, `time-logs-page.test.tsx`, `time-ui.test.tsx`,
 `__tests__/features/agentic/timer-sync.test.ts` e
 `__tests__/features/agentic/workbench-progress.test.tsx`.
