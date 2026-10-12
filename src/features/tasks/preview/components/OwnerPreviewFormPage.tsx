@@ -18,6 +18,8 @@ import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { clienteDraftSchema, type ClienteDraftInput } from "@/features/orcamentos/schemas"
+import { useOwnerAttachmentClient, usePendingAttachments } from "@/features/tasks/attachments/hooks"
+import { PendingAttachmentsField } from "@/features/tasks/attachments/components/PendingAttachmentsField"
 import { TASKS_PATH, taskPreviewPath } from "../../constants"
 import { useTaskOptions } from "../../hooks/useTasks"
 import { useCreateOwnerDraft } from "../hooks"
@@ -30,6 +32,8 @@ export function OwnerPreviewFormPage() {
     const router = useRouter()
     const options = useTaskOptions()
     const create = useCreateOwnerDraft()
+    const attachmentClient = useOwnerAttachmentClient()
+    const pending = usePendingAttachments(attachmentClient)
     const repoIndex = useRepoIndex()
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
@@ -76,7 +80,7 @@ export function OwnerPreviewFormPage() {
                             className="space-y-5"
                             onSubmit={form.handleSubmit(async (values) => {
                                 try {
-                                    const draft = await create.mutateAsync(values)
+                                    const draft = await create.mutateAsync({ ...values, attachmentIds: pending.ids })
                                     router.push(taskPreviewPath(draft.id))
                                 } catch {
                                     // Erro exibido no campo/estado.
@@ -127,9 +131,14 @@ export function OwnerPreviewFormPage() {
                                             rows={10}
                                             invalid={Boolean(errors.description)}
                                             placeholder="Descreva a tarefa ou o problema (Markdown, imagens por URL, links...)"
+                                            uploadFile={pending.uploadFile}
                                         />
                                     )}
                                 />
+                            </Field>
+
+                            <Field id="preview-attachments" label="Anexos">
+                                <PendingAttachmentsField state={pending} />
                             </Field>
 
                             <div className="flex flex-wrap justify-end gap-2 border-t pt-6">

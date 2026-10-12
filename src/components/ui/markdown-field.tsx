@@ -1,12 +1,18 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Bold, Code2, Eye, Heading2, Image as ImageIcon, Italic, Link2, List, Pencil, Quote } from "lucide-react"
+import { Bold, Code2, Eye, Heading2, Image as ImageIcon, Italic, Link2, List, Loader2, Pencil, Quote } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+
+/**
+ * Envia um arquivo colado/arrastado no campo e devolve o Markdown a inserir na posição do cursor
+ * (ex.: a referência do anexo). Sem esta função, colar arquivos não faz nada.
+ */
+export type MarkdownUploadFile = (file: File, onProgress?: (percent: number) => void) => Promise<string>
 
 interface MarkdownFieldProps {
     id?: string
@@ -17,6 +23,8 @@ interface MarkdownFieldProps {
     invalid?: boolean
     /** Classe do contêiner. */
     className?: string
+    /** Habilita colar/arrastar mídia direto no campo (ver `MarkdownUploadFile`). */
+    uploadFile?: MarkdownUploadFile
 }
 
 interface ToolAction {
@@ -38,12 +46,19 @@ const TOOLS: ToolAction[] = [
 
 /**
  * Campo de texto Markdown com barra de formatação (negrito, itálico, título, link, imagem, lista,
- * citação e código) e abas Escrever/Visualizar. Reusado no formulário de tarefa (interno) e no
- * portal do cliente.
+ * citação e código) e abas Escrever/Visualizar. Reusado no formulário de tarefa (interno), na prévia
+ * e no portal do cliente. Com `uploadFile`, colar ou arrastar uma mídia envia o arquivo e insere a
+ * referência do anexo na posição do cursor.
  */
-export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Markdown aceito", invalid, className }: MarkdownFieldProps) {
+export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Markdown aceito", invalid, className, uploadFile }: MarkdownFieldProps) {
     const ref = useRef<HTMLTextAreaElement>(null)
     const [tab, setTab] = useState<"write" | "preview">("write")
+    const [pending, setPending] = useState<{ id: string; name: string; progress: number }[]>([])
+    // O valor mais recente: a inserção da referência acontece depois do envio, com o texto já digitado.
+    const valueRef = useRef(value)
+    useEffect(() => {
+        valueRef.current = value
+    }, [value])
 
     const apply = (tool: ToolAction) => {
         const el = ref.current
@@ -60,6 +75,39 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
             const caret = start + before.length + body.length
             el.setSelectionRange(caret, caret)
         })
+    }
+
+    /** Insere o Markdown na posição pedida do **valor atual** (o texto digitado durante o envio fica). */
+    const insertAt = (position: number, markdown: string) => {
+        const current = valueRef.current
+        const pos = Math.max(0, Math.min(position, current.length))
+        const before = current.slice(0, pos)
+        const after = current.slice(pos)
+        const lead = before && !before.endsWith("\n") ? "\n\n" : ""
+        const trail = after && !after.startsWith("\n") ? "\n\n" : ""
+        onChange(`${before}${lead}${markdown}${trail}${after}`)
+    }
+
+    const sendFiles = (files: File[], position: number) => {
+        if (!uploadFile || files.length === 0) return
+        const local = files.map((file) => ({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, name: file.name || "mídia colada", progress: 0 }))
+        setPending((prev) => [...prev, ...local])
+        void Promise.allSettled(
+            files.map((file, index) => {
+                const entry = local[index]!
+                return uploadFile(file, (progress) => setPending((prev) => prev.map((item) => (item.id === entry.id ? { ...item, progress } : item))))
+            }),
+        ).then((results) => {
+            const inserted = results.filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled").map((result) => result.value.trim()).filter(Boolean)
+            if (inserted.length) insertAt(position, inserted.join("\n\n"))
+            setPending((prev) => prev.filter((item) => !local.some((entry) => entry.id === item.id)))
+        })
+    }
+
+    const handleFiles = (event: { preventDefault: () => void }, files: File[], position: number) => {
+        if (!uploadFile || files.length === 0) return
+        event.preventDefault()
+        sendFiles(files, position)
     }
 
     return (
@@ -98,7 +146,29 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
                                     </Button>
                                 ))}
                             </div>
-                            <Textarea ref={ref} id={id} rows={rows} placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={invalid ? true : undefined} className="rounded-t-none border-0 shadow-none focus-visible:ring-0" />
+                            <Textarea
+                                ref={ref}
+                                id={id}
+                                rows={rows}
+                                placeholder={placeholder}
+                                value={value}
+                                onChange={(event) => onChange(event.target.value)}
+                                aria-invalid={invalid ? true : undefined}
+                                className="rounded-t-none border-0 shadow-none focus-visible:ring-0"
+                                onPaste={(event) => {
+                                    const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.size > 0)
+                                    if (files.length === 0) return
+                                    handleFiles(event, files, event.currentTarget.selectionStart)
+                                }}
+                                onDrop={(event) => {
+                                    const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.size > 0)
+                                    if (files.length === 0) return
+                                    handleFiles(event, files, event.currentTarget.selectionStart)
+                                }}
+                                onDragOver={(event) => {
+                                    if (uploadFile) event.preventDefault()
+                                }}
+                            />
                         </div>
                     ) : (
                         <div className="min-h-[172px] rounded-md border bg-muted/30 p-3">
@@ -106,6 +176,21 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
                         </div>
                     )}
                 </motion.div>
+            </AnimatePresence>
+            <AnimatePresence>
+                {pending.length > 0 && (
+                    <motion.ul initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="space-y-1" aria-label="Mídias sendo enviadas">
+                        {pending.map((item) => (
+                            <li key={item.id} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                                <span className="truncate" title={item.name}>
+                                    Enviando {item.name}…
+                                </span>
+                                <span className="ml-auto shrink-0">{item.progress}%</span>
+                            </li>
+                        ))}
+                    </motion.ul>
+                )}
             </AnimatePresence>
         </div>
     )

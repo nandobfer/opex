@@ -48,12 +48,17 @@ describe("guarda de acesso", () => {
         expect(resolveAuthDecision("/api/financeiro", CLIENT).action).toBe("unauthorized")
     })
 
-    it("a sessão de cliente alcança as rotas de auth internas e o auth do Pusher", () => {
+    it("a sessão de cliente alcança as rotas de auth internas, o auth do Pusher e os anexos", () => {
         expect(resolveAuthDecision("/api/auth/client-select", CLIENT).action).toBe("allow")
         expect(resolveAuthDecision("/api/pusher/auth", CLIENT).action).toBe("allow")
+        // Anexos são compartilhados com o portal (a rota resolve o ator e autoriza o escopo).
+        expect(resolveAuthDecision("/api/attachments", CLIENT).action).toBe("allow")
+        expect(resolveAuthDecision(`/api/attachments/${'a'.repeat(24)}/content`, CLIENT).action).toBe("allow")
+        expect(resolveAuthDecision("/api/attachments-fake", CLIENT).action).toBe("unauthorized")
         // Sem sessão, continuam protegidas.
         expect(resolveAuthDecision("/api/auth/client-select", null).action).toBe("unauthorized")
         expect(resolveAuthDecision("/api/pusher/auth", null).action).toBe("unauthorized")
+        expect(resolveAuthDecision("/api/attachments", null).action).toBe("unauthorized")
     })
 
     it("normaliza barras e identifica API/público/cliente", () => {

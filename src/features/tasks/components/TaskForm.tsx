@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, type ReactNode } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Loader2 } from "lucide-react"
@@ -10,7 +10,7 @@ import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { FormFooter } from "@/components/ui/form-footer"
 import { Input } from "@/components/ui/input"
-import { MarkdownField } from "@/components/ui/markdown-field"
+import { MarkdownField, type MarkdownUploadFile } from "@/components/ui/markdown-field"
 import { SearchPicker } from "@/components/ui/search-picker"
 import type { BoardColumnView } from "../board"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskType } from "../constants"
@@ -31,6 +31,10 @@ interface TaskFormProps {
     submitting: boolean
     onSubmit: (values: TaskFormValues) => Promise<void> | void
     onCancel: () => void
+    /** Bloco de anexos do formulário (criação → pendentes; edição → os da tarefa). */
+    attachments?: ReactNode
+    /** Colar/arrastar mídia na descrição (envia e insere a referência do anexo). */
+    uploadFile?: MarkdownUploadFile
 }
 
 type TypeOption = { value: string; label: string }
@@ -51,7 +55,7 @@ const emptyValues = (projectId: string, columnKey: string): TaskFormValues => ({
  * pré-visualização e metadados (repositório, coluna, tipo e prioridade) em autocomplete com chips.
  * Sem o campo de especificação técnica.
  */
-export function TaskForm({ mode, task, projects, columns, defaultColumnKey, submitting, onSubmit, onCancel }: TaskFormProps) {
+export function TaskForm({ mode, task, projects, columns, defaultColumnKey, submitting, onSubmit, onCancel, attachments, uploadFile }: TaskFormProps) {
     const form = useForm<TaskFormValues>({
         resolver: zodResolver(taskFormSchema),
         mode: "onChange",
@@ -123,9 +127,15 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                 <Controller
                     control={form.control}
                     name="description"
-                    render={({ field }) => <MarkdownField id="task-description" value={field.value ?? ""} onChange={field.onChange} rows={8} placeholder="Markdown aceito" invalid={Boolean(errors.description)} />}
+                    render={({ field }) => <MarkdownField id="task-description" value={field.value ?? ""} onChange={field.onChange} rows={8} placeholder="Markdown aceito" invalid={Boolean(errors.description)} uploadFile={uploadFile} />}
                 />
             </Field>
+
+            {attachments && (
+                <Field id="task-attachments" label="Anexos">
+                    {attachments}
+                </Field>
+            )}
 
             <div className={FORM_GRID}>
                 {repoField}

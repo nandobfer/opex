@@ -184,6 +184,8 @@ export const AGENTIC_QUEUE_JOB_ID = "agentic-queue-pump"
 export const TASK_SUMMARY_JOB_ID = "ai-task-summary"
 export const TASK_TAGS_JOB_ID = "ai-task-tags"
 export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
+/** Limpeza de anexos abandonados (uploads nunca vinculados) e remoções pendentes no storage. */
+export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
 
 /** Rotinas internas que processam tarefas e deixam escolher o escopo (`scope`). */
 export function jobSupportsScope(jobId: string): boolean {
@@ -247,6 +249,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         schedule: { type: "interval", minutes: 60 },
         enabled: false,
         scope: "pending",
+    },
+    {
+        id: ATTACHMENT_CLEANUP_JOB_ID,
+        label: "Limpar anexos abandonados das tarefas",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 30 },
+        enabled: true,
     },
 ]
 

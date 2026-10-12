@@ -76,6 +76,20 @@ export function isAuthPath(pathname: string): boolean {
 /** Rotas de API liberadas também para a sessão de cliente (a própria rota confere o canal/papel). */
 export const CLIENT_ALLOWED_API: readonly string[] = ["/api/pusher/auth"]
 
+/**
+ * Prefixos de API liberados também para a sessão de cliente. Os **anexos** são compartilhados com o
+ * portal (o cliente envia e baixa os das suas tarefas); cada rota resolve o ator e autoriza o
+ * escopo (ver `features/tasks/attachments/server/actor.ts`) — o resto de `/api/*` segue restrito.
+ */
+export const CLIENT_ALLOWED_API_PREFIXES: readonly string[] = ["/api/attachments"]
+
+/** Rotas de API que a sessão de cliente pode chamar (exatas ou por prefixo). */
+export function isClientAllowedApi(pathname: string): boolean {
+    const path = normalizePath(pathname)
+    if (CLIENT_ALLOWED_API.includes(path)) return true
+    return CLIENT_ALLOWED_API_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+}
+
 export type AuthAction = "allow" | "redirect" | "unauthorized"
 
 export interface AuthDecision {
@@ -92,7 +106,7 @@ export function resolveAuthDecision(pathname: string, session: SessionPayload | 
     if (isPublicPath(pathname)) return { action: "allow" }
     if (!session) return isApiPath(pathname) ? { action: "unauthorized" } : { action: "redirect", redirectTo: "/login" }
     if (session.kind === "admin") return { action: "allow" }
-    // Sessão de cliente: o portal, as rotas de auth internas (ex.: escolher cliente) e o auth do Pusher.
-    if (isClientPath(pathname) || isAuthPath(pathname) || CLIENT_ALLOWED_API.includes(normalizePath(pathname))) return { action: "allow" }
+    // Sessão de cliente: o portal, as rotas de auth internas (ex.: escolher cliente), o auth do Pusher e os anexos.
+    if (isClientPath(pathname) || isAuthPath(pathname) || isClientAllowedApi(pathname)) return { action: "allow" }
     return isApiPath(pathname) ? { action: "unauthorized" } : { action: "redirect", redirectTo: "/cliente" }
 }

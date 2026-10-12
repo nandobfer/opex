@@ -35,6 +35,7 @@ import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
 import { TaskForm } from "../TaskForm"
+import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
 import { TaskSummaryCard } from "./TaskSummaryCard"
 import { TaskDetailTabs, type TaskDetailTabId } from "./TaskDetailTabs"
@@ -136,6 +137,7 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                     projects={projects}
                                                     columns={board.columns}
                                                     submitting={update.isPending}
+                                                    attachments={<TaskAttachmentsTab task={task} />}
                                                     onCancel={() => setEditing(false)}
                                                     onSubmit={async (values) => {
                                                         try {

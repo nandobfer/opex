@@ -3,6 +3,7 @@
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
+import { MarkdownMedia } from "./markdown-media"
 
 /**
  * Markdown (GFM: tabelas, listas de tarefa, tachado) com o estilo do tema. HTML cru é ignorado
@@ -25,6 +26,8 @@ const components: Components = {
     ol: (props) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0" {...rest(props)} />,
     li: (props) => <li className="leading-relaxed [&>input]:mr-1.5 [&>input]:accent-primary" {...rest(props)} />,
     a: (props) => <a className="text-primary underline underline-offset-2 hover:text-primary/80" target="_blank" rel="noreferrer noopener" {...rest(props)} />,
+    // Imagens: anexos do app vêm da rota autenticada e podem ser áudio/vídeo (ver `markdown-media`).
+    img: (props) => <MarkdownMedia {...rest(props)} />,
     blockquote: (props) => <blockquote className="mb-2 border-l-2 border-primary/50 pl-3 text-muted-foreground" {...rest(props)} />,
     code: (props) => <code {...rest(props)} className={cn("rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]", props.className)} />,
     pre: (props) => <pre className="mb-2 overflow-x-auto rounded-md border bg-muted/60 p-3 text-xs [&>code]:bg-transparent [&>code]:p-0" {...rest(props)} />,

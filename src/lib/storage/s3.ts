@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, CopyObjectCommand, DeleteObjectCommand, PutObjectCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { getIntegration } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
@@ -145,18 +145,62 @@ export interface StoredFile {
     contentType: string | undefined
     contentLength: number | undefined
     lastModified: Date | undefined
+    /** Presente quando o pedido levou `Range` (resposta 206). */
+    contentRange: string | undefined
+    acceptRanges: string | undefined
+    etag: string | undefined
 }
 
-/** Arquivo do storage como stream web, com tipo e tamanho (repasse do conteúdo por uma rota do app). */
-export const getFileObject = async (key: string): Promise<StoredFile> => {
+/**
+ * Arquivo do storage como stream web, com tipo e tamanho (repasse do conteúdo por uma rota do app).
+ * `range` (cabeçalho `Range`) devolve só o trecho pedido — necessário para o `Range` das mídias.
+ */
+export const getFileObject = async (key: string, options: { range?: string } = {}): Promise<StoredFile> => {
     const { client, bucket } = await getStorage()
-    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, ...(options.range ? { Range: options.range } : {}) }))
     const body = response.Body as { transformToWebStream?: () => ReadableStream<Uint8Array> } | undefined
-    return { body: body?.transformToWebStream?.() ?? null, contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    return {
+        body: body?.transformToWebStream?.() ?? null,
+        contentType: response.ContentType,
+        contentLength: response.ContentLength,
+        lastModified: response.LastModified,
+        contentRange: response.ContentRange,
+        acceptRanges: response.AcceptRanges,
+        etag: response.ETag,
+    }
+}
+
+/**
+ * Cópia server-side (não transfere o conteúdo pela rede do app). Promove um objeto temporário à
+ * chave definitiva depois do envio direto do navegador.
+ */
+export const copyFile = async (fromKey: string, toKey: string): Promise<void> => {
+    const { client, bucket } = await getStorage()
+    dbg.request("Cópia de arquivo", { bucket, fromKey, toKey })
+    try {
+        await client.send(new CopyObjectCommand({ Bucket: bucket, Key: toKey, CopySource: `${bucket}/${fromKey}` }))
+        dbg.success("Cópia concluída", { toKey })
+    } catch (error) {
+        dbg.error("Falha na cópia", error, { fromKey, toKey })
+        throw error
+    }
+}
+
+/** Remove o objeto. Usada na limpeza de temporários e na exclusão de anexos. */
+export const deleteFile = async (key: string): Promise<void> => {
+    const { client, bucket } = await getStorage()
+    dbg.request("Remoção de arquivo", { bucket, key })
+    try {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+        dbg.success("Arquivo removido", { key })
+    } catch (error) {
+        dbg.error("Falha ao remover arquivo", error, { key })
+        throw error
+    }
 }
 
 /** Metadados do arquivo (sem o conteúdo). */
-export const headFile = async (key: string): Promise<Omit<StoredFile, "body">> => {
+export const headFile = async (key: string): Promise<{ contentType: string | undefined; contentLength: number | undefined; lastModified: Date | undefined }> => {
     const { client, bucket } = await getStorage()
     const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
     return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }

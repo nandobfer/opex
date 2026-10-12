@@ -31,10 +31,12 @@ vi.mock('@aws-sdk/client-s3', () => {
     GetObjectCommand: command('GetObjectCommand'),
     HeadObjectCommand: command('HeadObjectCommand'),
     HeadBucketCommand: command('HeadBucketCommand'),
+    CopyObjectCommand: command('CopyObjectCommand'),
+    DeleteObjectCommand: command('DeleteObjectCommand'),
   }
 })
 
-import { checkBucket, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, uploadFile } from '@/lib/storage/s3'
+import { checkBucket, copyFile, deleteFile, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, uploadFile } from '@/lib/storage/s3'
 
 const base = { endpoint: 'http://minio:9000', region: 'us-east-1', bucket: 'opex', signedUrlExpiresSeconds: 3600, accessKey: 'ak', secretKey: 'sk' }
 
@@ -119,5 +121,35 @@ describe('serviço de storage (S3)', () => {
     await checkBucket()
     expect(mocks.clients.map((config) => config.endpoint)).toEqual(['http://minio:9000', 'https://reserva.exemplo.com'])
     expect(mocks.clients.every((config) => config.forcePathStyle === true)).toBe(true)
+  })
+
+  it('promove um objeto temporário para a chave definitiva (cópia server-side)', async () => {
+    await copyFile('attachments/tmp/1/foto.png', 'attachments/1/foto.png')
+
+    const command = lastCommand()
+    expect(command.name).toBe('CopyObjectCommand')
+    expect(command.input).toEqual({ Bucket: 'opex', Key: 'attachments/1/foto.png', CopySource: 'opex/attachments/tmp/1/foto.png' })
+  })
+
+  it('propaga a falha da cópia', async () => {
+    mocks.send.mockRejectedValue(new Error('NoSuchKey'))
+    await expect(copyFile('a', 'b')).rejects.toThrow('NoSuchKey')
+  })
+
+  it('remove o objeto', async () => {
+    await deleteFile('attachments/1/foto.png')
+
+    const command = lastCommand()
+    expect(command.name).toBe('DeleteObjectCommand')
+    expect(command.input).toEqual({ Bucket: 'opex', Key: 'attachments/1/foto.png' })
+  })
+
+  it('pede só o trecho quando recebe Range (reprodução de mídia)', async () => {
+    mocks.send.mockResolvedValue({ Body: { transformToWebStream: () => 'web-stream' }, ContentType: 'video/mp4', ContentLength: 100, ContentRange: 'bytes 0-99/1000', AcceptRanges: 'bytes' })
+
+    const file = await getFileObject('attachments/1/clip.mp4', { range: 'bytes=0-99' })
+
+    expect(lastCommand().input).toEqual({ Bucket: 'opex', Key: 'attachments/1/clip.mp4', Range: 'bytes=0-99' })
+    expect(file.contentRange).toBe('bytes 0-99/1000')
   })
 })

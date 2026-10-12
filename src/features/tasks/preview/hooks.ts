@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
-import type { ClienteDraftInput } from "@/features/orcamentos/schemas"
+import type { CreateDraftInput } from "@/features/orcamentos/schemas"
 import type { OrcamentoDraftDto } from "@/features/orcamentos/types"
 import type { TaskPriority } from "../constants"
 import type { TaskDto } from "../types"
@@ -27,7 +27,7 @@ export function useOwnerDraft(id: string) {
 
 export function useCreateOwnerDraft() {
     return useMutation({
-        mutationFn: async (input: ClienteDraftInput) => unwrapApi((await api.post<ApiResponse<OrcamentoDraftDto>>("/tasks/drafts", input)).data),
+        mutationFn: async (input: CreateDraftInput) => unwrapApi((await api.post<ApiResponse<OrcamentoDraftDto>>("/tasks/drafts", input)).data),
     })
 }
 

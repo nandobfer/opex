@@ -79,6 +79,7 @@ const FIELD_LABELS: Record<string, string> = {
     arquivada: "arquivada",
     cliente: "cliente",
     fluxo: "fluxo da mesa",
+    anexo: "anexos",
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -204,10 +205,13 @@ export async function getTask(id: string): Promise<TaskDetailDto> {
     ])
     const [withIssue] = await withIssueRefs([toTaskDto(task, project)])
     const estimateClientName = withIssue.estimate ? (await resolveTaskClient(task))?.name ?? null : null
+    const { countTaskAttachments } = await import("@/features/tasks/attachments/server/service")
+    const attachmentsCount = await countTaskAttachments(id)
     return {
         ...withIssue,
         clientId: task.clientId ?? null,
         estimateClientName,
+        attachmentsCount,
         description: task.description ?? null,
         technicalSpec: task.technicalSpec ?? null,
         comments: comments.map((comment) => ({
@@ -271,6 +275,15 @@ function notifyAgenticQueue(ids: string[]): void {
 async function syncGithubIssue(id: string): Promise<void> {
     const { pushTasksToIssues } = await import("@/features/github/server/task-sync")
     await pushTasksToIssues([id])
+}
+
+/**
+ * Alinha a visibilidade dos anexos ao cliente da tarefa (o cliente do portal vê os anexos das
+ * tarefas dele). Import dinâmico: os anexos publicam eventos por este módulo.
+ */
+async function syncAttachmentsClient(taskId: string, clientId: string | null): Promise<void> {
+    const { syncTaskAttachmentsClient } = await import("@/features/tasks/attachments/server/service")
+    await syncTaskAttachmentsClient(taskId, clientId)
 }
 
 async function assertColumn(key: string): Promise<void> {
@@ -477,6 +490,8 @@ export async function setTaskClient(id: string, clientId: string | null, actorId
             ? { hours, clientHours: hours, billingBrl: 0, factor: 1, hourlyRate: 0, model: task.estimate.model ?? null, generatedAt: task.estimate.generatedAt ? new Date(task.estimate.generatedAt) : new Date() }
             : null
         await DevTask.updateOne({ _id: id }, { $set: { clientId: null, estimate } })
+        // A visibilidade dos anexos acompanha o cliente da tarefa.
+        await syncAttachmentsClient(id, null)
         await recordAudit({
             userId: actorId,
             entidade: TASK_AUDIT_ENTITY,
@@ -508,6 +523,8 @@ export async function setTaskClient(id: string, clientId: string | null, actorId
     }
 
     await DevTask.updateOne({ _id: id }, { $set: { clientId, estimate } })
+    // A visibilidade dos anexos acompanha o cliente da tarefa.
+    await syncAttachmentsClient(id, clientId)
     await recordAudit({
         userId: actorId,
         entidade: TASK_AUDIT_ENTITY,
@@ -573,6 +590,11 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     await Promise.all([DevTask.deleteOne({ _id: id }), TaskComment.deleteMany({ taskId: id }), TimeLog.deleteMany({ taskId: id })])
     const { GithubIssueLink } = await import("@/lib/db/models/Github")
     await GithubIssueLink.updateMany({ taskId: id }, { $unset: { taskId: "" } })
+    // Os anexos da tarefa (objetos no storage + registros) somem junto, fora da resposta.
+    runAfterResponse("attachments-cleanup", async () => {
+        const { deleteAttachmentsForTask } = await import("@/features/tasks/attachments/server/service")
+        await deleteAttachmentsForTask(id)
+    })
     // O refinamento de IA da tarefa some junto (melhor esforço, fora da resposta).
     runAfterResponse("refinement-cleanup", async () => {
         const { deleteRefinementForTask } = await import("@/features/refinement/server/service")

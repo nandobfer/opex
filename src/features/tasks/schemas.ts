@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { attachmentIdsSchema } from "./attachments/schemas"
 import { COLUMN_COLORS, COLUMN_ICON_KEYS, COLUMN_KEY_PATTERN } from "./board"
 import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "./constants"
 
@@ -25,7 +26,10 @@ export type TaskInput = z.infer<typeof taskInputSchema>
 export const taskFormSchema = taskInputSchema.omit({ technicalSpec: true })
 export type TaskFormValues = z.infer<typeof taskFormSchema>
 
-export const createTaskSchema = taskInputSchema
+export const createTaskSchema = taskInputSchema.extend({
+    /** Anexos enviados no formulário, antes de a tarefa existir (vinculados na criação). */
+    attachmentIds: attachmentIdsSchema,
+})
 export type CreateTaskInput = z.infer<typeof createTaskSchema>
 
 /**

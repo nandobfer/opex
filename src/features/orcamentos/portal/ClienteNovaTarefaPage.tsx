@@ -16,16 +16,20 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import { usePendingAttachments } from "@/features/tasks/attachments/hooks"
+import { PendingAttachmentsField } from "@/features/tasks/attachments/components/PendingAttachmentsField"
 import { clienteDraftSchema, type ClienteDraftInput } from "../schemas"
 import { repoLabel } from "../logic"
 import { clienteRevisaoPath, clienteTarefasPath } from "../constants"
-import { useClienteOptions, useCreateDraft } from "./hooks"
+import { useClienteAttachmentClient, useClienteOptions, useCreateDraft } from "./hooks"
 
 /** Nova tarefa do portal: repositório permitido + descrição formatada. */
 export function ClienteNovaTarefaPage() {
     const router = useRouter()
     const options = useClienteOptions()
     const create = useCreateDraft()
+    const attachmentClient = useClienteAttachmentClient()
+    const pending = usePendingAttachments(attachmentClient)
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
     const projects = options.data?.projects ?? []
@@ -67,7 +71,7 @@ export function ClienteNovaTarefaPage() {
                             className="space-y-5"
                             onSubmit={form.handleSubmit(async (values) => {
                                 try {
-                                    const draft = await create.mutateAsync(values)
+                                    const draft = await create.mutateAsync({ ...values, attachmentIds: pending.ids })
                                     router.push(clienteRevisaoPath(draft.id))
                                 } catch {
                                     // Erro mostrado no campo/estado.
@@ -110,8 +114,12 @@ export function ClienteNovaTarefaPage() {
                                 <Controller
                                     control={form.control}
                                     name="description"
-                                    render={({ field }) => <MarkdownField id="cliente-description" value={field.value} onChange={field.onChange} rows={10} placeholder="Descreva a tarefa (Markdown, imagens por URL, links...)" invalid={Boolean(errors.description)} />}
+                                    render={({ field }) => <MarkdownField id="cliente-description" value={field.value} onChange={field.onChange} rows={10} placeholder="Descreva a tarefa (Markdown, imagens por URL, links...)" invalid={Boolean(errors.description)} uploadFile={pending.uploadFile} />}
                                 />
+                            </Field>
+
+                            <Field id="cliente-attachments" label="Anexos">
+                                <PendingAttachmentsField state={pending} />
                             </Field>
 
                             <div className="flex justify-end gap-2 border-t pt-6">

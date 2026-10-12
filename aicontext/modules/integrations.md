@@ -186,8 +186,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   IA das tarefas não concluídas — ver `modules/ai.md`). O agendamento das internas é editável na tela; só não se
   removem.
 - Também são internas `agentic-queue-pump` (1 min — filas das centrais, fila global do build e
-  exclusões pendentes de sessões do OpenCode das mesas e dos refinamentos), `ai-task-tags` (3 min) e
-  `ai-task-tags-concluded` (60 min, **desligada por padrão**). Esta última permite persistir
+  exclusões pendentes de sessões do OpenCode das mesas e dos refinamentos), `ai-task-tags` (3 min),
+  `ai-task-tags-concluded` (60 min, **desligada por padrão**) e `task-attachments-cleanup` (30 min —
+  remove uploads de anexo abandonados no storage e conclui remoções físicas pendentes; ver
+  `modules/tasks.md`, "Anexos da tarefa").
+- A rotina `ai-task-tags-concluded` permite persistir
   `scope: "pending" | "all"` no card da rotina ("Só pendentes" / "Todas"), para geração de tags
   de concluídas não arquivadas. O escopo salvo vale tanto para "Executar agora" quanto para o
   agendamento; editar exige salvar antes de executar. Rotinas desativadas não rodam no tick,
@@ -259,7 +262,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   têm duas audiências: `browser` (upload direto e mídia) assina com o **Endpoint público** quando
   configurado — o subcaminho do proxy entra só na URL, sem afetar a assinatura — e `server` usa o
   Endpoint interno. Exporta `uploadFile`, `getFileUrl`, `getUploadUrl`, `getFileStream`,
-  `getFileObject`, `headFile`, `checkBucket` e `getSignedUrlExpiresIn`. A expiração da URL assinada
+  `getFileObject` (com `Range` opcional, para a reprodução de mídia), `headFile`, `copyFile`
+  (promoção server-side de um objeto temporário à chave definitiva, usada pelos anexos),
+  `deleteFile`, `checkBucket` e `getSignedUrlExpiresIn`. A expiração da URL assinada
   é configurável (60 s a 7 dias, padrão 1 h).
 - As duas integrações são **novas** no Opex: não declaram `env` e são configuradas só em
   `/integracoes`. Nenhum dos testes de conexão envia e-mail nem grava objeto.

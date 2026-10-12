@@ -30,6 +30,7 @@ const task = (overrides: Partial<TaskDetailDto> = {}): TaskDetailDto => ({
   history: [],
   timeLogs: [],
   totalTimeLogged: 0,
+  attachmentsCount: 0,
   ...overrides,
 })
 
@@ -40,11 +41,17 @@ function Harness({ task: value }: { task: TaskDetailDto }) {
 }
 
 describe('TaskDetailTabs', () => {
-  it('abre na descrição e lista as seções (descrição, especificação, comentários, histórico, horas)', () => {
+  it('abre na descrição e lista as seções (descrição, especificação, anexos, comentários, histórico, horas)', () => {
     render(<Harness task={task({ description: 'Corpo' })} />)
     const tabs = screen.getAllByRole('tab').map((el) => el.textContent)
-    expect(tabs).toEqual(['Descrição', 'Especificação técnica', 'Comentários', 'Histórico', 'Horas'])
+    expect(tabs).toEqual(['Descrição', 'Especificação técnica', 'Anexos', 'Comentários', 'Histórico', 'Horas'])
     expect(screen.getByTestId('markdown').textContent).toBe('Corpo')
+  })
+
+  it('mostra o contador de anexos na aba', () => {
+    render(<Harness task={task({ description: 'Corpo', attachmentsCount: 3 })} />)
+    const tab = screen.getByRole('tab', { name: /Anexos/ })
+    expect(tab.textContent).toBe('Anexos3')
   })
 
   it('a lista de abas rola na horizontal sem criar barra de scroll vertical', () => {

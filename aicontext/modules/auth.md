@@ -62,7 +62,9 @@ URL). Token inválido leva ao `/login` com aviso.
   assinatura/validade do cookie e o `kind`.
   - `kind: "admin"` → app completo **e** portal (pré-visualização);
   - `kind: "client"` → só o portal (`/cliente/*` e `/api/cliente/*`); página interna → redirect para
-    `/cliente`, API interna → 401.
+    `/cliente`, API interna → 401. Uma exceção explícita e testada: os **anexos**
+    (`/api/attachments/**`, `CLIENT_ALLOWED_API_PREFIXES`) — compartilhados com o dono e o portal, com
+    cada rota resolvendo o ator e autorizando o escopo (`resolveAttachmentActor`).
 - **Papéis finos** são conferidos no servidor Node, em cada requisição, com acesso ao banco
   (`src/features/auth/server/context.ts`): `requireAdminSession`, `requireClientActor` (resolve
   usuário ativo + vínculo com o cliente + `isAdmin`) e `assertClientAdmin`. Editar/excluir usuário,
