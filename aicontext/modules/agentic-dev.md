@@ -225,7 +225,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   (OpenCode fora do ar etc.), o id fica em `pendingSessionDeletions` e a rotina **`agentic-queue-pump`**
   (Crons) retoma a exclusão; sessão já inexistente conta como excluída (idempotente). Mesas sem sessão
   concluem sem chamar o OpenCode, e ao excluir uma mesa as pendências são tentadas antes de apagar o
-  registro. Lógica em `server/session-cleanup.ts`.
+  registro. A **mesma rotina** também retoma as exclusões pendentes dos **refinamentos de tarefa**
+  (`features/refinement/server/session-cleanup.ts`; ver `modules/refinement.md`). Lógica em
+  `server/session-cleanup.ts`.
 - **Reabrir mesa** (`done` → planejamento): a tarefa é movida para a coluna de desenvolvimento (a
   mesma "Ao abrir a mesa (implementação)"; sem ela, a coluna de entrada do vínculo) e a issue é
   **reaberta** (mesma sincronização). Como a sessão anterior foi excluída, a mesa ganha uma **sessão

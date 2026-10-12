@@ -67,6 +67,12 @@ describe('RefinementPanel', () => {
         expect(screen.getByRole('button', { name: /Parar/ })).not.toBeNull()
     })
 
+    it('no turno de consolidação mostra "Consolidando a especificação técnica…"', () => {
+        mocks.refinement.mockReturnValue(state({ refinement: { runState: 'running', resolved: false, finalizing: true, sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.getByText(/Consolidando a especificação técnica/)).not.toBeNull()
+    })
+
     it('com intenção de iniciar (autoStart) inicia uma vez e avisa o pai', () => {
         const onAutoStarted = vi.fn()
         render(<RefinementPanel taskId="t1" taskCode="OPX-1" autoStart onAutoStarted={onAutoStarted} />)

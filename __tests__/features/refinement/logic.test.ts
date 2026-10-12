@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from '@/features/refinement/constants'
 import { extractTechnicalSpec, refinementWaitingReason } from '@/features/refinement/logic'
-import { buildRefinementInstructions, buildRefinementPrompt } from '@/features/refinement/prompt'
+import { buildRefinementFinalizePrompt, buildRefinementInstructions, buildRefinementPrompt, buildRefinementResumePrompt } from '@/features/refinement/prompt'
 import { DEFAULT_TASK_REFINEMENT_SETTINGS } from '@/features/ai/schemas'
 import type { TaskDetailDto } from '@/features/tasks/types'
 
@@ -52,6 +52,10 @@ describe('REFINEMENT_PROTOCOL', () => {
     expect(REFINEMENT_PROTOCOL).toContain('localização da mudança')
     expect(REFINEMENT_PROTOCOL).toContain('casos de borda')
     expect(REFINEMENT_PROTOCOL).toContain(REFINEMENT_SPEC_HEADING)
+  })
+
+  it('só permite encerrar o turno com uma pergunta ou com a especificação (sem encerrar em branco)', () => {
+    expect(REFINEMENT_PROTOCOL).toContain('NUNCA encerre sem uma das duas')
   })
 })
 
@@ -116,5 +120,24 @@ describe('buildRefinementPrompt', () => {
   it('respeita o que enviar (sem comentários)', () => {
     const prompt = buildRefinementPrompt(task, { comments: false, history: false })
     expect(prompt).not.toContain('Usar tokens')
+  })
+})
+
+describe('buildRefinementFinalizePrompt', () => {
+  it('consolida sem abrir novas perguntas e exige a especificação sob o título canônico', () => {
+    const prompt = buildRefinementFinalizePrompt()
+    expect(prompt).toContain('NÃO faça novas perguntas')
+    expect(prompt).toContain('NÃO use a ferramenta `question`')
+    expect(prompt).toContain(REFINEMENT_SPEC_HEADING)
+    expect(prompt).toContain('critérios de aceite')
+  })
+})
+
+describe('buildRefinementResumePrompt', () => {
+  it('retoma o esclarecimento e pede a especificação ao final', () => {
+    const prompt = buildRefinementResumePrompt()
+    expect(prompt).toContain('Retome o refinamento')
+    expect(prompt).toContain('`question`')
+    expect(prompt).toContain(REFINEMENT_SPEC_HEADING)
   })
 })

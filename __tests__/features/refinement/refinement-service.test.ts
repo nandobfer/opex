@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => {
             switchAgent: vi.fn(async () => ({})),
             switchModel: vi.fn(async () => ({})),
             prompt: vi.fn(async () => ({})),
+            remove: vi.fn(async () => ({})),
             form: { reply: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})) },
+            instructions: { entry: { put: vi.fn(async () => ({})), remove: vi.fn(async () => ({})) } },
         },
         permission: { reply: vi.fn(async () => ({})) },
     }
@@ -83,10 +85,13 @@ vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
-import { getRefinementState, interruptRefinement, replyRefinementForm, startRefinement } from '@/features/refinement/server/service'
+import { continueRefinement, getRefinementState, interruptRefinement, replyRefinementForm, startRefinement } from '@/features/refinement/server/service'
 
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.run.mockReset()
+    mocks.updateTask.mockReset()
+    mocks.updateTask.mockResolvedValue(undefined)
     mocks.doc = null
     mocks.central = { _id: 'a'.repeat(24), projectId: 'p1', projectName: 'Opex', config: {} }
     mocks.centralEnabled = true
@@ -205,5 +210,67 @@ describe('turno e conclusão', () => {
             expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle', resolved: true }) })),
         )
         await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+    })
+
+    it('aplica as instruções e o protocolo como entrada durável da sessão', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalledWith(expect.objectContaining({ sessionID: 'sess-1', key: 'opex-refinement' })))
+        const instructions = (mocks.fakeClient.session.instructions.entry.put.mock.calls[0]![0] as { value: string }).value
+        expect(instructions).toContain('Regras.')
+        expect(instructions).toContain('Protocolo do refinamento')
+    })
+
+    it('turno sem a especificação dispara a consolidação automática e conclui sem exigir Continuar', async () => {
+        mocks.run
+            .mockResolvedValueOnce({ outcome: 'succeeded', text: 'Tudo esclarecido!', message: null, costUsd: 0, durationMs: 1 })
+            .mockResolvedValueOnce({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(2), { timeout: 3000 })
+        // A segunda rodada é a consolidação, sem novas perguntas.
+        const secondText = (mocks.run.mock.calls[1]![1] as { text: string }).text
+        expect(secondText).toContain('NÃO faça novas perguntas')
+        await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+        await vi.waitFor(() => expect(mocks.fakeClient.session.remove).toHaveBeenCalledWith({ sessionID: 'sess-1' }, expect.anything()))
+        const markedResolved = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { resolved?: boolean } } | undefined)?.$set?.resolved === true)
+        expect(markedResolved).toBe(true)
+    })
+
+    it('falha ao gravar a especificação não marca como esclarecido nem exclui a sessão', async () => {
+        mocks.updateTask.mockRejectedValueOnce(new Error('banco fora do ar'))
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle' }) })))
+        const markedResolved = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { resolved?: boolean } } | undefined)?.$set?.resolved === true)
+        expect(markedResolved).toBe(false)
+        expect(mocks.fakeClient.session.remove).not.toHaveBeenCalled()
+    })
+
+    it('ao concluir, desvincula a sessão e a exclui no OpenCode', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.fakeClient.session.remove).toHaveBeenCalledWith({ sessionID: 'sess-1' }, expect.anything()))
+        const detached = mocks.updateOne.mock.calls.some(
+            (call) => (call[1] as { $set?: { sessionId?: unknown } } | undefined)?.$set?.sessionId === null && (call[1] as { $addToSet?: { pendingSessionDeletions?: string } } | undefined)?.$addToSet?.pendingSessionDeletions === 'sess-1',
+        )
+        expect(detached).toBe(true)
+    })
+})
+
+describe('continuar', () => {
+    it('encerrado sem a especificação (idle) continua consolidando, sem novas perguntas', async () => {
+        mocks.doc = { _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'x', projectId: 'p1', centralId: 'a'.repeat(24), sessionId: 'sess-1', runState: 'idle', resolved: false, usage: {}, pendingForms: [], pendingPermissions: [], startedAt: new Date(), updatedAt: new Date() }
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await continueRefinement('t1')
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect((mocks.run.mock.calls[0]![1] as { text: string }).text).toContain('NÃO faça novas perguntas')
+    })
+
+    it('interrompido/falho continua o esclarecimento (pode perguntar de novo)', async () => {
+        mocks.doc = { _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'x', projectId: 'p1', centralId: 'a'.repeat(24), sessionId: 'sess-1', runState: 'interrupted', resolved: false, usage: {}, pendingForms: [], pendingPermissions: [], startedAt: new Date(), updatedAt: new Date() }
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await continueRefinement('t1')
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect((mocks.run.mock.calls[0]![1] as { text: string }).text).toContain('Retome o refinamento')
     })
 })

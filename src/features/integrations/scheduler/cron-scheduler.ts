@@ -289,12 +289,16 @@ export function registerBuiltInJobs(): void {
         const { pumpAllCentralQueues } = await import("@/features/agentic/server/queue")
         const { pumpBuildQueue } = await import("@/features/agentic/server/build-queue")
         const { processPendingSessionDeletions } = await import("@/features/agentic/server/session-cleanup")
+        const { processPendingRefinementSessionDeletions } = await import("@/features/refinement/server/session-cleanup")
         const summary = await pumpAllCentralQueues()
         // A fila global do build também é avaliada aqui (reinício, vaga liberada fora do processo).
         await pumpBuildQueue()
         // Sessões de mesas concluídas ainda pendentes de exclusão no OpenCode (independe da fila).
         const deleted = await processPendingSessionDeletions()
-        return deleted ? `${summary}; ${deleted} sessão(ões) do OpenCode excluída(s)` : summary
+        // Sessões de refinamentos concluídos ainda pendentes de exclusão no OpenCode.
+        const refinementDeleted = await processPendingRefinementSessionDeletions()
+        const totalDeleted = deleted + refinementDeleted
+        return totalDeleted ? `${summary}; ${totalDeleted} sessão(ões) do OpenCode excluída(s)` : summary
     })
     registerInternalJob(TASK_SUMMARY_JOB_ID, async () => {
         const { runTaskSummaryBackfill } = await import("@/features/ai/server/task-summary")

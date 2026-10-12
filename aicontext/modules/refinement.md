@@ -60,11 +60,24 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
    fixo garante que a especificação cubra **critérios de aceite**, **localização da mudança**
    (rotas/URLs, telas, módulos, integrações, arquivos) e **casos de borda**.
 
-**Conclusão (`resolved`)**: um turno só é marcado como esclarecido quando ele termina (`succeeded`)
-**e** o texto do agente traz a especificação técnica — que é então gravada na tarefa. Se o turno
-termina sem a especificação, o refinamento fica `idle` com o aviso *"O agente terminou sem produzir a
-especificação técnica. Use Continuar."* e o painel oferece **Continuar** (o `runState` nunca fica
-"resolvido" sem a especificação).
+**Conclusão (`resolved`)**: um turno só é marcado como esclarecido quando ele termina (`succeeded`),
+o texto do agente traz a especificação técnica **e** ela é gravada com sucesso no campo
+`technicalSpec` da tarefa. As instruções configuradas + o protocolo fixo são aplicados como **entrada
+durável da sessão** (`session.instructions.entry.put`, chave `opex-refinement`); se o servidor não
+aceitar a entrada, o protocolo é reenviado no prompt de cada turno. Quando o turno termina **sem** a
+especificação (o agente encerrou só com "tudo esclarecido"), o serviço dispara automaticamente, na
+mesma sessão, **até 2 turnos de consolidação** (`buildRefinementFinalizePrompt`) que reescrevem a
+especificação completa **sem abrir novas perguntas** — o usuário não precisa clicar em **Continuar**.
+Esgotadas as tentativas, o refinamento fica `idle` com o aviso *"O agente terminou sem produzir a
+especificação técnica. Use Continuar para finalizá-la."*; nesse estado, **Continuar** também só
+consolida (não reabre o interrogatório).
+
+**Exclusão da sessão**: ao concluir, a sessão é **desvinculada** (`sessionId`/`sessionDirectory` =
+`null`, preservando todo o histórico do refinamento no Opex — especificação, saída, uso) e **excluída**
+no OpenCode (`session.remove`), como nas mesas (`modules/agentic-dev.md`). Se a exclusão falhar (OpenCode
+fora do ar etc.), o id fica em `pendingSessionDeletions` e a rotina **`agentic-queue-pump`** (Crons)
+retoma; sessão já inexistente conta como excluída (idempotente). **Recomeçar** leva as exclusões
+pendentes para o novo refinamento (o id antigo nunca toca a sessão nova).
 
 O texto do agente **não é salvo** na tarefa além da especificação: o diálogo é reconstruído pelos
 eventos gravados (`agentic_events`), como na mesa. O turno roda **em segundo plano** com limite de
@@ -74,12 +87,13 @@ vira `interrupted` e o usuário retoma com **Continuar**.
 ## Estado e ações
 
 - Documento `task_refinements` (um por tarefa): `runState` (`idle`|`running`|`failed`|`interrupted`),
-  `resolved`, `error`, `spec` (última especificação gravada), `pendingForms`/`pendingPermissions`,
-  `usage`, `sessionId`, `sessionDirectory`, `centralId`, `projectId`.
+  `resolved`, `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
+  gravada), `pendingForms`/`pendingPermissions`, `pendingSessionDeletions` (sessões do OpenCode ainda
+  pendentes de exclusão), `usage`, `sessionId`, `sessionDirectory`, `centralId`, `projectId`.
 - Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar), **continue** (retoma na
-  mesma sessão um turno interrompido, falho ou encerrado sem produzir a especificação) e **restart**
-  (Recomeçar: descarta a conversa e abre uma nova sessão; a especificação já salva na tarefa é
-  mantida).
+  mesma sessão um turno interrompido/falho e, quando o refinamento encerrou **sem** a especificação,
+  apenas consolida) e **restart** (Recomeçar: descarta a conversa e abre uma nova sessão; a
+  especificação já salva na tarefa é mantida).
 - Um refinamento "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser
   lido (`reconcile`), com **Continuar** disponível.
 - Excluir a tarefa apaga o refinamento e a saída gravada (melhor esforço).
@@ -98,6 +112,7 @@ vira `interrupted` e o usuário retoma com **Continuar**.
   min-h-[18rem] max-h-[28rem]`) e o card genérico de perguntas (`components/agent-questions/`,
   compartilhado com a mesa) **logo abaixo**, sem rolagem interna curta. Controles: **Parar**,
   **Continuar**, **Recomeçar** (com confirmação) e, sem refinamento, **Refinar tarefa** (inicia).
+  Durante a consolidação automática o painel indica *"Consolidando a especificação técnica…"*.
   Quando `resolved`, mostra que a especificação foi esclarecida e salva.
 
 ## Modelo e tipos
@@ -128,11 +143,15 @@ nada para a issue.
 
 ## Testes
 
-`__tests__/features/refinement/`: `logic` (extração da especificação e montagem do prompt),
-`refinement-service` (disponibilidade sem central / desativada / feature off, início com sessão no
-diretório da central e gravação da especificação, resposta e interrupção), `refinement-route`
+`__tests__/features/refinement/`: `logic` (extração da especificação, protocolo e prompts de
+consolidação/retomada), `refinement-service` (disponibilidade sem central / desativada / feature off,
+ínicio com sessão no diretório da central, aplicação das instruções duráveis, gravação da especificação,
+consolidação automática sem exigir **Continuar**, falha de gravação sem marcar como esclarecido,
+exclusão da sessão ao concluir, resposta, interrupção e **Continuar**), `session-cleanup`
+(exclusão idempotente, pendências e retomada), `refinement-route`
 (rotas NDJSON/ações/formulários), `RefineTaskButton` (bloqueio com motivo e `onOpen`) e
-`RefinementPanel` (CTA de início, indisponível, saída/perguntas, `autoStart` e aviso de esclarecido).
+`RefinementPanel` (CTA de início, indisponível, saída/perguntas, consolidação, `autoStart` e aviso de
+esclarecido).
 `__tests__/features/tasks/task-detail-tabs.test.tsx` cobre o slot do refinamento abaixo da
 especificação. `__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração. O
 OpenCode é sempre mockado.

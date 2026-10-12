@@ -32,6 +32,8 @@ export interface TaskRefinementDto {
     runState: "idle" | "running" | "failed" | "interrupted"
     /** O agente julgou a especificação totalmente esclarecida. */
     resolved: boolean
+    /** Turno de consolidação da especificação em andamento. */
+    finalizing: boolean
     error: string | null
     /** Última especificação técnica gravada na tarefa. */
     spec: string | null

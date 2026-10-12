@@ -176,7 +176,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   mesas de trabalho — ver `modules/agentic-dev.md`) e `ai-task-summary` (a cada 2 min, resumos de
   IA das tarefas não concluídas — ver `modules/ai.md`). O agendamento das internas é editável na tela; só não se
   removem.
-- Também são internas `agentic-queue-pump` (1 min), `ai-task-tags` (3 min) e
+- Também são internas `agentic-queue-pump` (1 min — filas das centrais, fila global do build e
+  exclusões pendentes de sessões do OpenCode das mesas e dos refinamentos), `ai-task-tags` (3 min) e
   `ai-task-tags-concluded` (60 min, **desligada por padrão**). Esta última permite persistir
   `scope: "pending" | "all"` no card da rotina ("Só pendentes" / "Todas"), para geração de tags
   de concluídas não arquivadas. O escopo salvo vale tanto para "Executar agora" quanto para o
