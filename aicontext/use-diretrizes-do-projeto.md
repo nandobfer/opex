@@ -91,6 +91,14 @@ servidor. Compatível com Soketi (modo host).
 `Dockerfile` multi-stage (deps → dev → builder → runner standalone) e `docker-compose.yml` com os
 serviços `app` (produção) e `app-dev` (profile `dev`, watch), porta `PORT` (padrão 3100).
 
+#### Entrega contínua (CI/CD)
+
+O deploy de produção é automatizado no GitHub Actions (`.github/workflows/ci-cd.yml`): a suíte
+Vitest roda em todo push na `main` e em todo pull request (bloqueante de merge via proteção de
+branch), a imagem é construída **no runner** e transferida para o servidor por SCP, onde é
+importada (`docker load`) e o serviço é recriado com Compose — sem build no servidor. Detalhes,
+configuração de secrets/variables e rollback em `modules/deployment.md`.
+
 #### Subcaminho público (proxy com prefixo)
 
 O Next não funciona com prefixo variável: scripts (`/_next/...`), redirects e chamadas do navegador

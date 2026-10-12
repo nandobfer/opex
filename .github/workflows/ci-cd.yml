@@ -1,0 +1,152 @@
+name: CI/CD
+
+# CI (testes Vitest) roda em todo push na main e em todo pull request.
+# CD (build + deploy) roda apenas para a main: constrói a imagem no runner,
+# exporta, transfere por SCP e recria o serviço no servidor de produção.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vitest:
+    name: Vitest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: ci-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Configurar Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Instalar dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Rodar a suíte Vitest
+        run: pnpm test
+
+  build:
+    name: Build image
+    needs: vitest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Configurar QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Construir a imagem
+        env:
+          IMAGE_REPOSITORY: ${{ vars.DEPLOY_IMAGE_REPOSITORY || 'opex' }}
+          PLATFORM: ${{ vars.DEPLOY_PLATFORM || 'linux/amd64' }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_BASE_PATH: ${{ vars.NEXT_PUBLIC_BASE_PATH }}
+          NEXT_PUBLIC_PUSHER_KEY: ${{ vars.NEXT_PUBLIC_PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ vars.NEXT_PUBLIC_PUSHER_CLUSTER }}
+          NEXT_PUBLIC_PUSHER_URL: ${{ vars.NEXT_PUBLIC_PUSHER_URL }}
+        run: |
+          docker buildx build \
+            --platform "$PLATFORM" \
+            --load \
+            --tag "${IMAGE_REPOSITORY}:${GITHUB_SHA}" \
+            --build-arg NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL" \
+            --build-arg NEXT_PUBLIC_BASE_PATH="$NEXT_PUBLIC_BASE_PATH" \
+            --build-arg NEXT_PUBLIC_PUSHER_KEY="$NEXT_PUBLIC_PUSHER_KEY" \
+            --build-arg NEXT_PUBLIC_PUSHER_CLUSTER="$NEXT_PUBLIC_PUSHER_CLUSTER" \
+            --build-arg NEXT_PUBLIC_PUSHER_URL="$NEXT_PUBLIC_PUSHER_URL" \
+            .
+
+      - name: Exportar a imagem
+        env:
+          IMAGE_REPOSITORY: ${{ vars.DEPLOY_IMAGE_REPOSITORY || 'opex' }}
+        run: |
+          docker save "${IMAGE_REPOSITORY}:${GITHUB_SHA}" | gzip -9 > opex-image.tar.gz
+          sha256sum opex-image.tar.gz > opex-image.tar.gz.sha256
+
+      - name: Publicar o artefato
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: opex-image
+          path: |
+            opex-image.tar.gz
+            opex-image.tar.gz.sha256
+          retention-days: 3
+          compression-level: 0
+
+  deploy:
+    name: Deploy production
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Baixar o artefato da imagem
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: opex-image
+
+      - name: Configurar Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Preparar credenciais SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 644 "$HOME/.ssh/known_hosts"
+          echo "DEPLOY_SSH_KEY=$HOME/.ssh/deploy_key" >> "$GITHUB_ENV"
+          echo "DEPLOY_KNOWN_HOSTS=$HOME/.ssh/known_hosts" >> "$GITHUB_ENV"
+
+      - name: Validar o artefato
+        run: |
+          sha256sum -c opex-image.tar.gz.sha256
+          echo "DEPLOY_IMAGE_SHA256=$(cut -d ' ' -f1 opex-image.tar.gz.sha256)" >> "$GITHUB_ENV"
+
+      - name: Executar o deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          DEPLOY_REMOTE_DIR: ${{ vars.DEPLOY_REMOTE_DIR }}
+          DEPLOY_PROJECT_NAME: ${{ vars.DEPLOY_PROJECT_NAME }}
+          DEPLOY_SERVICE: ${{ vars.DEPLOY_SERVICE || 'app' }}
+          DEPLOY_IMAGE_REPOSITORY: ${{ vars.DEPLOY_IMAGE_REPOSITORY || 'opex' }}
+          DEPLOY_IMAGE_TAG: ${{ github.sha }}
+          DEPLOY_IMAGE_ARCHIVE: ${{ github.workspace }}/opex-image.tar.gz
+          DEPLOY_PLATFORM: ${{ vars.DEPLOY_PLATFORM || 'linux/amd64' }}
+          DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+        run: npx --yes tsx scripts/deploy-production.ts

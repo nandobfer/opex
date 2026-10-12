@@ -12,10 +12,15 @@ Dockerfile*
 .dockerignore
 docker-compose.yml
 docker-compose.yaml
+docker-compose.deploy.yml
 *.log*
+*.tsbuildinfo
 .vscode
 .idea
 docs
 aicontext
 __tests__
 .opencode
+.cortexkit
+.github
+worktrees
