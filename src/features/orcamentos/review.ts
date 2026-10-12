@@ -42,13 +42,13 @@ export function selectReviewView(state: BudgetReviewState, data: OrcamentoDraftD
     }
 }
 
-export interface StreamEvent {
+export interface StreamEvent<TEstimate = DraftEstimateDto> {
     type: string
     message?: string
     name?: string
     state?: string
     preview?: DraftPreviewDto
-    estimate?: DraftEstimateDto
+    estimate?: TEstimate
     tags?: DraftTagDto[]
 }
 
@@ -57,7 +57,7 @@ export interface StreamEvent {
  * autenticação quando houver (portal: o token do cliente); `body` é o JSON enviado (`{}` por padrão,
  * `{ clientId }` na estimativa do dono).
  */
-export async function readNdjson(path: string, options: { headers?: Record<string, string>; body?: unknown }, onEvent: (event: StreamEvent) => void): Promise<void> {
+export async function readNdjson<TEstimate = DraftEstimateDto>(path: string, options: { headers?: Record<string, string>; body?: unknown }, onEvent: (event: StreamEvent<TEstimate>) => void): Promise<void> {
     const res = await fetch(withBasePath(path), { method: "POST", headers: { "Content-Type": "application/json", ...(options.headers ?? {}) }, body: JSON.stringify(options.body ?? {}) })
     if (!res.ok || !res.body) {
         const payload = (await res.json().catch(() => null)) as { error?: string } | null
@@ -75,7 +75,7 @@ export async function readNdjson(path: string, options: { headers?: Record<strin
         for (const line of lines) {
             if (!line.trim()) continue
             try {
-                onEvent(JSON.parse(line) as StreamEvent)
+                onEvent(JSON.parse(line) as StreamEvent<TEstimate>)
             } catch {
                 // Linha parcial/inválida: ignora.
             }

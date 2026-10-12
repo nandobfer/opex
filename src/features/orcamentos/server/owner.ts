@@ -66,8 +66,9 @@ export async function recomputeOwnerEstimate(draft: DraftDoc): Promise<{ estimat
 }
 
 /**
- * Aprova a prévia do dono e cria a tarefa (com issue no GitHub, como no app). Sem cliente escolhido,
- * a tarefa nasce **sem** `clientId` nem `estimate`; com cliente, grava o snapshot do orçamento.
+ * Aprova a prévia do dono e cria a tarefa (com issue no GitHub, como no app). Com cliente, grava o
+ * cliente e o snapshot inflado; **sem** cliente, a tarefa nasce sem `clientId`, mas **preserva as
+ * horas reais** estimadas (snapshot neutro: fator 1, custo 0), para aparecerem na página da tarefa.
  */
 export async function approveOwnerDraft(id: string, actorId: string, priority?: TaskPriority): Promise<TaskDto> {
     await dbConnect()
@@ -80,7 +81,7 @@ export async function approveOwnerDraft(id: string, actorId: string, priority?: 
     const preview = draft.preview as IOrcamentoDraftPreview
     const client = await resolveDraftClient(draft)
     const estimatedHours = typeof draft.estimatedHours === "number" ? draft.estimatedHours : null
-    const estimate = client && estimatedHours != null ? computeClientEstimate(estimatedHours, client.profitFactor, client.hourlyRate) : null
+    const estimate = estimatedHours != null ? computeClientEstimate(estimatedHours, client?.profitFactor ?? 1, client?.hourlyRate ?? 0) : null
     const input: CreateTaskInput = {
         title: preview.title,
         projectId: draft.projectId,
@@ -93,8 +94,11 @@ export async function approveOwnerDraft(id: string, actorId: string, priority?: 
     const task = await createTaskWithIssue(input, actorId, {
         origin: "opex",
         tags: preview.tags ?? [],
-        ...(estimate && client
-            ? { clientId: String(client._id), estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } }
+        ...(estimate
+            ? {
+                  ...(client ? { clientId: String(client._id) } : {}),
+                  estimate: { ...estimate, factor: Math.max(1, client?.profitFactor ?? 1), hourlyRate: Math.max(0, client?.hourlyRate ?? 0), model: draft.model ?? null },
+              }
             : {}),
     })
     await OrcamentoDraft.updateOne({ _id: draft._id }, { $set: { status: "approved", taskId: task.id } })
