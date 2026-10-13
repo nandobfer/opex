@@ -7,8 +7,9 @@ Decisões técnicas do Opex e suas motivações. Em conflito, o `AGENTS.md` prev
 ### Objetivo
 
 App pessoal para gerenciar as tarefas (o Opex é a fonte de verdade) e apontar horas, com
-integrações configuráveis (GitHub, provedores de IA, Archflow e as de infraestrutura: Pusher, API
-interna, Crons). Um único usuário, atrás de um login com senha única, rodando localmente ou em
+integrações configuráveis (GitHub, provedores de IA e as de infraestrutura: Pusher, API
+interna, Crons) e a futura Google Drive (fonte de tarefas a partir de planilhas do Google Sheets),
+em desenvolvimento. Um único usuário, atrás de um login com senha única, rodando localmente ou em
 Docker (pode ser publicado na internet).
 
 ## Arquitetura

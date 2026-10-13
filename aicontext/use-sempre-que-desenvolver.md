@@ -19,8 +19,9 @@ Regras gerais do Opex. Leia antes de qualquer implementação.
   permissões no app do dono sem pedido explícito.
 - Toda ação do **dono** é atribuída ao usuário local (`getLocalUser()` de `src/lib/local-user.ts`, id
   `local`) na auditoria e nos campos `createdBy`/`updatedBy`; no portal, ao **usuário** de cliente.
-- Integrações externas (GitHub, provedores de IA, Archflow) são configuradas na tela de Integrações;
-  credenciais (ex.: token do GitHub) ficam cifradas no banco, no documento da integração.
+- Integrações externas (GitHub, provedores de IA) são configuradas na tela de Integrações; credenciais
+  (ex.: token do GitHub) ficam cifradas no banco, no documento da integração. A futura Google Drive
+  (fonte de tarefas) aparece ali como "Em desenvolvimento".
 - A experiência do usuário é prioridade: animações com Framer Motion, resposta otimista e tempo
   real com Pusher.
 
