@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { getPusherServer } from "@/lib/pusher/server"
-import { isChannelAuthorized } from "@/lib/pusher/channel-auth"
+import { isChannelAuthorized, parseChannel } from "@/lib/pusher/channel-auth"
 import { sessionFromRequest } from "@/features/auth/server/context"
+import { isEnvironmentChannelAuthorized } from "@/features/environments/server/realtime"
 import { logger } from "@/lib/logger"
 
 /**
@@ -24,6 +25,14 @@ export async function POST(request: NextRequest) {
 
     try {
         const session = await sessionFromRequest(request)
+        const parsed = parseChannel(channel)
+        // Canal de ambiente: o cliente precisa ter acesso ao repositório do ambiente (checagem no banco).
+        if (parsed.kind === "environment") {
+            if (!(await isEnvironmentChannelAuthorized(parsed.environmentId, session))) {
+                return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+            }
+            return NextResponse.json(pusher.authorizeChannel(socketId, channel))
+        }
         if (!isChannelAuthorized(channel, session)) return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
         return NextResponse.json(pusher.authorizeChannel(socketId, channel))
     } catch (error) {

@@ -9,4 +9,8 @@ export const integrationChannel = (id: string) => `private-integration-${id}`
 /** Canal do portal do cliente (dados das telas do cliente). */
 export const clientChannel = (clientId: string) => `private-client-${clientId}`
 
+/** Canal de um **ambiente** (operações e logs ao vivo do container). */
+export const environmentChannel = (environmentId: string) => `private-environment-${environmentId}`
+
 export const CLIENT_CHANNEL_PREFIX = "private-client-"
+export const ENVIRONMENT_CHANNEL_PREFIX = "private-environment-"

@@ -92,9 +92,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   indisponível" aparece e as telas caem no polling.
 - Navegador: config injetada pelo layout raiz via `PusherConfigBridge`, sempre com
   `authEndpoint: "/api/pusher/auth"` (com o subcaminho público, `withBasePath`). Sem Pusher configurado as telas caem no polling.
-- **Canais** (`src/lib/pusher/channel-auth.ts`): `private-app` (dados das telas) e
-  `private-integration-{id}` (só ids do catálogo). Qualquer outro canal é negado. Não há usuário
-  para conferir; a rota `/api/pusher/auth` só valida o nome do canal.
+- **Canais** (`src/lib/pusher/channel-auth.ts`): `private-app` (dados das telas), `private-integration-{id}` (só ids do catálogo), `private-client-{clientId}` (portal) e `private-environment-{id}` (Ambientes — o dono sempre; o cliente só se o ambiente pertencer a um repositório vinculado, checado no banco pela rota de auth). Qualquer outro canal é negado. Não há usuário para conferir; a rota `/api/pusher/auth` valida o nome do canal (e o vínculo, no caso dos ambientes).
 
 ### Tela de listagem (`/integracoes`)
 
@@ -187,9 +185,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   removem.
 - Também são internas `agentic-queue-pump` (1 min — filas das centrais, fila global do build e
   exclusões pendentes de sessões do OpenCode das mesas e dos refinamentos), `ai-task-tags` (3 min),
-  `ai-task-tags-concluded` (60 min, **desligada por padrão**) e `task-attachments-cleanup` (30 min —
+  `ai-task-tags-concluded` (60 min, **desligada por padrão**), `task-attachments-cleanup` (30 min —
   remove uploads de anexo abandonados no storage e conclui remoções físicas pendentes; ver
-  `modules/tasks.md`, "Anexos da tarefa").
+  `modules/tasks.md`, "Anexos da tarefa") e `environments-operations` (1 min — reconcilia as
+  operações órfãs dos ambientes e reavalia a fila local; ver `modules/environments.md`).
 - A rotina `ai-task-tags-concluded` permite persistir
   `scope: "pending" | "all"` no card da rotina ("Só pendentes" / "Todas"), para geração de tags
   de concluídas não arquivadas. O escopo salvo vale tanto para "Executar agora" quanto para o

@@ -24,6 +24,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[taskId]/page.tsx` (com `layout.tsx`
   que distribui o índice de repositórios): Central de desenvolvimento (item próprio no menu; ver
   `modules/agentic-dev.md`). A central vem do navegador e a tarefa da URL.
+- `src/app/(app)/ambientes/page.tsx`, `ambientes/[repoId]/page.tsx`,
+  `ambientes/[repoId]/config/page.tsx` e `ambientes/[repoId]/ambiente/[envId]/page.tsx`: módulo
+  **Ambientes** (item próprio no menu; ver `modules/environments.md`). O portal tem as rotas
+  espelhadas em `src/app/cliente/(portal)/ambientes/`.
 - `src/app/(app)/tarefas/layout.tsx`: `TimerProvider` (timers locais) para as três páginas.
 - Item ativo do menu = o de `href` mais específico que casa com o caminho (`activeNavHref`): em
   `/tarefas/horas` fica "Minhas horas"; em `/tarefas/123`, "Tarefas".
@@ -39,7 +43,7 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   `<main id="main-content">` com transição de página (Framer Motion). No desktop a sidebar é
   **sempre recolhida** (68px): não há botão de recolher/expandir. A chave da transição é
   `pageTransitionKey(pathname, persistentHrefs)`: telas com sub-rotas que são a mesma tela
-  (`PERSISTENT_PAGE_HREFS`, hoje `/desenvolvimento`) usam o prefixo, então navegar dentro delas não
+  (`PERSISTENT_PAGE_HREFS`, hoje `/desenvolvimento` e `/ambientes`) usam o prefixo, então navegar dentro delas não
   anima nem remonta a página — a própria tela anima só o trecho que mudou. Não há cabeçalho: cada página
   tem o próprio título. No celular, o botão "Abrir menu" flutua no canto superior esquerdo
   (`fixed`) e o conteúdo ganha `pt-16`.
@@ -48,7 +52,7 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   que abre um **popover** com a ação **Sair** (`LogoutButton`, de `src/features/auth/`), que encerra
   a sessão e volta para `/login`; a versão fica na linha inferior da barra. Na gaveta do mobile
   (expandida) o rodapé mantém o dono, a versão e o "Sair" inline.
-- `navigation.ts`: `APP_NAV` (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento; Sistema › Integrações), `HOME_HREF` (`/dashboard`),
+- `navigation.ts`: `APP_NAV` (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Ambientes; Sistema › Integrações), `HOME_HREF` (`/dashboard`),
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 
 ## Regras
@@ -61,8 +65,9 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
    (`kind: "client"`) fica restrito ao portal (`/cliente/*`, `/api/cliente/*`). Ver
    `modules/auth.md` e `modules/orcamentos.md`.
 - O **portal do cliente** tem casca própria (`ClientePortalShell`), reaproveitando o `AppShell` com a
-   navegação `clienteNav`: Dashboard, Tarefas e, para o admin do cliente, Financeiro e Usuários. Os
-   itens internos do dono (Horas agênticas, Central de desenvolvimento, Integrações) não aparecem lá.
+   navegação `clienteNav`: Dashboard, Tarefas, Ambientes e, para o admin do cliente, Financeiro e
+   Usuários. Os itens internos do dono (Horas agênticas, Central de desenvolvimento, Integrações) não
+   aparecem lá.
 - Espaçamento horizontal do conteúdo: `CONTENT_PADDING_X` (`px-4 md:px-6 lg:px-8`, em
   `src/features/layout/content-padding.ts`), usado pelo `AppShell`. Para um bloco ir até a borda do
   conteúdo (ex.: kanban rolando para os lados), use `CONTENT_BLEED_X` — nunca repita os valores.

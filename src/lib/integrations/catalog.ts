@@ -186,6 +186,8 @@ export const TASK_TAGS_JOB_ID = "ai-task-tags"
 export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
 /** Limpeza de anexos abandonados (uploads nunca vinculados) e remoções pendentes no storage. */
 export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
+/** Reconciliação das operações do módulo Ambientes e motor da fila local. */
+export const ENVIRONMENTS_JOB_ID = "environments-operations"
 
 /** Rotinas internas que processam tarefas e deixam escolher o escopo (`scope`). */
 export function jobSupportsScope(jobId: string): boolean {
@@ -255,6 +257,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Limpar anexos abandonados das tarefas",
         kind: "internal",
         schedule: { type: "interval", minutes: 30 },
+        enabled: true,
+    },
+    {
+        id: ENVIRONMENTS_JOB_ID,
+        label: "Reconciliar operações dos ambientes",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 1 },
         enabled: true,
     },
 ]

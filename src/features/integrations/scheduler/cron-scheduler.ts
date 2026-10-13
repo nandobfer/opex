@@ -1,7 +1,7 @@
 import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
-import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, ENVIRONMENTS_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
@@ -315,6 +315,11 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(ATTACHMENT_CLEANUP_JOB_ID, async () => {
         const { cleanupAbandonedAttachments } = await import("@/features/tasks/attachments/server/service")
         return cleanupAbandonedAttachments()
+    })
+    registerInternalJob(ENVIRONMENTS_JOB_ID, async () => {
+        const { reconcileEnvironmentOperations } = await import("@/features/environments/server/reconcile")
+        await reconcileEnvironmentOperations()
+        return "Operações dos ambientes reconciliadas"
     })
 }
 

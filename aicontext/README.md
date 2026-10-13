@@ -48,6 +48,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | `modules/orcamentos.md` | Orçamentos (clientes e portal) | Integração **Clientes** (`/integracoes/clientes`; id `orcamentos`), clientes com usuários e token, portal autenticado por sessão (`/cliente`) com sidebar (Dashboard, Tarefas, Financeiro, Usuários), custo × faturamento, prévia por IA + tags + estimativa e criação da tarefa |
 | `modules/finance.md` | Financeiro | Faturamento das tarefas concluídas por cliente (`/financeiro`, somente leitura): valor pelo snapshot da estimativa, conclusão derivada da auditoria e filtros de período, clientes e repositórios |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
+| `modules/environments.md` | Ambientes | `/ambientes` (dono) e `/cliente/ambientes` (portal): containers por repositório, compose, logs, publicar (Local/CD), restaurar por compatibilidade de banco, CI/CD; execução Local (OpenCode) ou Remota (SSH) |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
 | `modules/deployment.md` | Deploy (CI/CD) | GitHub Actions (testes, build da imagem no runner, transferência por SCP e recriação via Compose), configuração de secrets/variables e rollback |
 

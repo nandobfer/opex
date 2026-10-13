@@ -15,10 +15,15 @@ import { isWorkbenchActive } from "./hub"
  * importa este módulo estaticamente).
  */
 
-/** Um build está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
-async function hasActiveBuild(): Promise<boolean> {
+/** Um build **agêntico local** está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
+export async function hasActiveAgenticBuild(): Promise<boolean> {
     const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1 }).lean()
     return building.some((item) => item.previewBuild?.method !== "github" && isWorkbenchActive(String(item._id)))
+}
+
+/** Um build está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
+async function hasActiveBuild(): Promise<boolean> {
+    return hasActiveAgenticBuild()
 }
 
 /** Mesas aguardando a vez do build, na ordem de chegada (FIFO). */

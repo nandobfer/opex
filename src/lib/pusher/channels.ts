@@ -7,7 +7,7 @@
 import { logger } from "@/lib/logger"
 import { appChannel, clientChannel } from "./channel-names"
 
-export { appChannel, integrationChannel, clientChannel } from "./channel-names"
+export { appChannel, environmentChannel, integrationChannel, clientChannel } from "./channel-names"
 
 /**
  * Publica no canal do app. Nunca lança: falha de tempo real é logada e não desfaz a mutação já

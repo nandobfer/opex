@@ -1,4 +1,4 @@
-import { Banknote, Clock, LayoutDashboard, ListTodo, Plug, Workflow } from "lucide-react"
+import { Banknote, Boxes, Clock, LayoutDashboard, ListTodo, Plug, Workflow } from "lucide-react"
 import type { NavBadgeKey, NavItemDef, NavSectionDef } from "./types"
 
 /** Navegação do app, em seções. */
@@ -11,6 +11,7 @@ export const APP_NAV: readonly NavSectionDef[] = [
             { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
             { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
             { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: Workflow },
+            { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Boxes },
         ],
     },
     {
@@ -22,8 +23,8 @@ export const APP_NAV: readonly NavSectionDef[] = [
 
 export const HOME_HREF = "/dashboard"
 
-/** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL). */
-export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
+/** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento e Ambientes). */
+export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento", "/ambientes"]
 
 export function flattenNav(sections: readonly NavSectionDef[]): readonly NavItemDef[] {
     return sections.flatMap((section) => section.items)

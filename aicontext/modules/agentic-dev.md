@@ -118,7 +118,9 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   reaproveitamento de resultados por SHA não foi introduzido.
 
 A subida da prévia **Local** usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
-centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
+centrais). O módulo **Ambientes** (`modules/environments.md`) compartilha esse mesmo "um build por vez":
+as publicações locais aguardam builds agênticos e vice-versa (`isAnyLocalBuildRunning`, que consulta
+`hasActiveAgenticBuild`). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
 
 - A mesa vai para a etapa **`build_queued`** ("Na fila do build") e aguarda; a posição (1-based)
   aparece na lista de tarefas e na mesa como "Na fila do build · #N".

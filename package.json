@@ -1,6 +1,6 @@
 {
   "name": "opex",
-  "version": "2.45.0",
+  "version": "2.46.0",
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "scripts": {
@@ -64,6 +64,7 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "yaml": "^2.9.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
