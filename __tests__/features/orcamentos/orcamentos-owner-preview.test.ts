@@ -27,6 +27,14 @@ vi.mock("@/lib/db/models/Project", async () => {
 })
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock("@/features/github/server/lookups", () => ({ listGithubRepos: mocks.listGithubRepos }))
+vi.mock("@/lib/db/models/TaskAttachment", async () => {
+    const { memoryModel } = await import("../../helpers/memory-model")
+    return { TaskAttachment: memoryModel() }
+})
+vi.mock("@/lib/db/models/DevTask", async () => {
+    const { memoryModel } = await import("../../helpers/memory-model")
+    return { DevTask: memoryModel(), TaskComment: memoryModel() }
+})
 vi.mock("@/features/orcamentos/server/tag-views", () => ({ resolveTagViews: async (ids: string[]) => ids.map((id) => ({ id, label: id })) }))
 
 import { OWNER_SCOPE, clientScope, getDraft, recomputeDraftEstimate, saveDraftEstimate, saveDraftPreview, setDraftEstimateClient } from "@/features/orcamentos/server/drafts"

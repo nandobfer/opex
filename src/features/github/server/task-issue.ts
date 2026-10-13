@@ -5,6 +5,8 @@ import { Project } from "@/lib/db/models/Project"
 import { assertColumn, createTask, type CreateTaskOptions } from "@/features/tasks/server/service"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
 import type { TaskDto } from "@/features/tasks/types"
+import { assertAttachmentsLinkable, linkAttachmentsToTask } from "@/features/tasks/attachments/server/service"
+import type { AttachmentActor } from "@/features/tasks/attachments/server/actor"
 import { githubRequest } from "../client"
 import { reverseLabels } from "../logic"
 import { toGithubDomainError } from "./errors"
@@ -35,12 +37,25 @@ async function createGithubIssue(repo: string, body: { title: string; body: stri
     }
 }
 
-/** Cria a tarefa e a issue vinculada. Falha do GitHub bloqueia a criação (`DomainError`). */
-export async function createTaskWithIssue(input: CreateTaskInput, actorId: string, options: Omit<CreateTaskOptions, "actorId"> = {}): Promise<TaskDto> {
+/**
+ * Cria a tarefa e a issue vinculada. Falha do GitHub bloqueia a criação (`DomainError`).
+ * `options.attachments` são os anexos enviados no formulário **antes** de a tarefa existir: eles são
+ * validados antes da chamada ao GitHub (para não criar a issue e descobrir depois que o anexo é
+ * inválido) e vinculados à tarefa recém-criada. Falha no vínculo não desfaz a tarefa: o arquivo
+ * continua `ready` e pode ser vinculado de novo pela aba Anexos.
+ */
+export async function createTaskWithIssue(
+    input: CreateTaskInput,
+    actorId: string,
+    options: Omit<CreateTaskOptions, "actorId"> & { attachments?: { ids: readonly string[]; actor: AttachmentActor } } = {},
+): Promise<TaskDto> {
     await dbConnect()
     const project = await Project.findById(input.projectId).lean()
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
     await assertColumn(input.columnId)
+
+    const attachments = options.attachments
+    if (attachments) await assertAttachmentsLinkable(attachments.actor, attachments.ids)
 
     const mapping = await getMapping()
     const labels = reverseLabels(input.taskType ?? null, input.priority ?? null, mapping)
@@ -58,6 +73,7 @@ export async function createTaskWithIssue(input: CreateTaskInput, actorId: strin
         issueUpdatedAt: issue.updated_at ? new Date(issue.updated_at) : null,
         origin: "opex",
     })
+    if (attachments) await linkAttachmentsToTask(attachments.actor, attachments.ids, task.id)
     runAfterResponse("task-summary", async () => {
         const { generateTaskSummary } = await import("@/features/ai/server/task-summary")
         await generateTaskSummary(task.id)

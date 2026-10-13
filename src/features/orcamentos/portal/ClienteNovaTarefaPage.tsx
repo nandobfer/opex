@@ -16,16 +16,20 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import { usePendingAttachments } from "@/features/tasks/attachments/hooks"
+import { PendingAttachmentsField } from "@/features/tasks/attachments/components/PendingAttachmentsField"
 import { clienteDraftSchema, type ClienteDraftInput } from "../schemas"
 import { repoLabel } from "../logic"
 import { clienteRevisaoPath, clienteTarefasPath } from "../constants"
-import { useClienteOptions, useCreateDraft } from "./hooks"
+import { useClienteAttachmentClient, useClienteOptions, useCreateDraft } from "./hooks"
 
 /** Nova tarefa do portal: repositório permitido + descrição formatada. */
 export function ClienteNovaTarefaPage() {
     const router = useRouter()
     const options = useClienteOptions()
     const create = useCreateDraft()
+    const attachmentClient = useClienteAttachmentClient()
+    const pending = usePendingAttachments(attachmentClient)
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
     const projects = options.data?.projects ?? []
@@ -67,7 +71,7 @@ export function ClienteNovaTarefaPage() {
                             className="space-y-5"
                             onSubmit={form.handleSubmit(async (values) => {
                                 try {
-                                    const draft = await create.mutateAsync(values)
+                                    const draft = await create.mutateAsync({ ...values, attachmentIds: pending.ids })
                                     router.push(clienteRevisaoPath(draft.id))
                                 } catch {
                                     // Erro mostrado no campo/estado.
@@ -110,15 +114,24 @@ export function ClienteNovaTarefaPage() {
                                 <Controller
                                     control={form.control}
                                     name="description"
-                                    render={({ field }) => <MarkdownField id="cliente-description" value={field.value} onChange={field.onChange} rows={10} placeholder="Descreva a tarefa (Markdown, imagens por URL, links...)" invalid={Boolean(errors.description)} />}
+                                    render={({ field }) => <MarkdownField id="cliente-description" value={field.value} onChange={field.onChange} rows={10} placeholder="Descreva a tarefa (Markdown, imagens por URL, links...)" invalid={Boolean(errors.description)} uploads={pending.media} />}
                                 />
                             </Field>
 
-                            <div className="flex justify-end gap-2 border-t pt-6">
+                            <Field id="cliente-attachments" label="Anexos">
+                                <PendingAttachmentsField state={pending} />
+                            </Field>
+
+                            <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-6">
+                                {pending.active > 0 && (
+                                    <p className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Enviando anexos…
+                                    </p>
+                                )}
                                 <Button type="button" variant="ghost" asChild disabled={create.isPending}>
                                     <Link href={clienteTarefasPath()}>Cancelar</Link>
                                 </Button>
-                                <Button type="submit" disabled={create.isPending || !form.formState.isValid}>
+                                <Button type="submit" disabled={create.isPending || pending.active > 0 || !form.formState.isValid}>
                                     {create.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}
                                     Avançar
                                 </Button>

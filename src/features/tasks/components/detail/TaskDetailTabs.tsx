@@ -4,9 +4,10 @@ import { useId, type ComponentType, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { TaskDetailDto } from "../../types"
+import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
 import { CommentsSection, DescriptionSection, HistorySection, TechnicalSpecSection, TimeLogsSection } from "./TaskDetailSections"
 
-export type TaskDetailTabId = "description" | "spec" | "comments" | "history" | "time"
+export type TaskDetailTabId = "description" | "spec" | "attachments" | "comments" | "history" | "time"
 
 interface TabDef {
     id: TaskDetailTabId
@@ -18,6 +19,7 @@ interface TabDef {
 const TABS: readonly TabDef[] = [
     { id: "description", label: "Descrição", Component: DescriptionSection, count: null },
     { id: "spec", label: "Especificação técnica", Component: TechnicalSpecSection, count: null },
+    { id: "attachments", label: "Anexos", Component: TaskAttachmentsTab, count: (task) => task.attachmentsCount },
     { id: "comments", label: "Comentários", Component: CommentsSection, count: (task) => task.comments.length },
     { id: "history", label: "Histórico", Component: HistorySection, count: (task) => task.history.length },
     { id: "time", label: "Horas", Component: TimeLogsSection, count: (task) => task.timeLogs.length },

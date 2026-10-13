@@ -94,15 +94,35 @@ Logins e sessões: `aicontext/modules/auth.md`.
   segue para a página de criação, onde recebe a orientação (o portal não tem criação manual de
   tarefa; tudo começa pela prévia por IA).
 - **Página da tarefa**: detalhes equivalentes aos do dono, **exceto Histórico e Horas apontadas**;
-  abas Descrição, Especificação técnica e Comentários; coluna lateral com prioridade editável e a
-  estimativa do cliente (só `H × fator` e o custo). O **autor** dos comentários/ações é o **usuário**
-  (não o nome do cliente); em pré-visualização, o dono.
+  abas Descrição, Especificação técnica, **Anexos** e Comentários; coluna lateral com prioridade
+  editável e a estimativa do cliente (só `H × fator` e o custo). O **autor** dos comentários/ações é o
+  **usuário** (não o nome do cliente); em pré-visualização, o dono.
 - **Tempo real**: canal privado `private-client-{clientId}` (`src/lib/pusher/channel-auth.ts`).
   Eventos publicados **só pelo servidor**, depois da mutação e da auditoria; o cliente invalida as
   tarefas (`useClienteRealtime`). O dono (e a sincronização do GitHub) publica nos canais dos clientes
   afetados.
 - Sem tokens nas URLs internas: as telas usam o **cookie de sessão** (axios do portal com
   `x-client-id`, usado na pré-visualização do dono).
+
+## Anexos no portal
+
+Os anexos são os **mesmos** do dono (`modules/tasks.md`, "Anexos da tarefa") e usam as rotas
+compartilhadas `/api/attachments/**`. O middleware libera esse prefixo para a sessão de cliente e a
+rota resolve o ator (`resolveAttachmentActor`): cliente → `clientId` do vínculo; dono → tudo. As
+regras do portal:
+
+- **Ver e baixar**: o cliente alcança os anexos **do cliente dele** (`clientId` do anexo = cliente
+da tarefa ou o do próprio envio). Um anexo de outro cliente responde 404 (não revela existência).
+- **Enviar**: o cliente envia na **aba Anexos** da tarefa (`/cliente/tarefa/[id]`) e no formulário de
+  **Nova tarefa** (`/cliente/nova`) — neste último os arquivos ficam pendentes e são vinculados ao
+  **rascunho** (`attachmentIds` no `POST /api/cliente/drafts`); ao aprovar a prévia eles passam para a
+  tarefa criada (`moveAttachmentsToTask`).
+- **Excluir**: o portal **não** exclui anexo vinculado. O cliente só remove o que ele mesmo enviou e
+  ainda não foi vinculado (na prática, antes de salvar a nova tarefa). Mídia **colada** na descrição
+  entra pela mesma fila (`MarkdownField.uploads`) e, portanto, no mesmo rascunho — e o formulário
+  **não salva** enquanto houver envio em andamento.
+- **Tempo real**: o dono publica `cliente-tasks-updated` no canal do cliente quando os anexos mudam; a
+  tela invalida a lista (também ao reconectar).
 
 ## Dashboard e Financeiro do cliente
 

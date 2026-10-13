@@ -281,6 +281,18 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   (negrito, itálico, cabeçalho, link, imagem, lista, citação e código), abas **Escrever /
   Visualizar** animadas (Framer Motion) e prévia com o componente `Markdown`. Nunca um `Textarea`
   cru para descrição — é o mesmo campo no `TaskForm` e no portal do cliente (`modules/orcamentos.md`).
+  Com `uploads` (contrato `MarkdownUploads`: `enqueue`, `items`, `retry`, `cancel`, `dismiss` — a fila
+  de anexos da feature o satisfaz), **colar ou arrastar** mídia no campo enfileira o arquivo na
+  **mesma fila** da tela e insere a referência **na posição do cursor** quando a confirmação conclui,
+  sem sobrescrever o texto digitado durante o envio. O envio aparece inline no campo
+  ("Enviando"/"Confirmando" + progresso) e, ao falhar, mostra a mensagem pt-BR com **tentar de novo**
+  (reaproveita o arquivo já enviado) e **descartar**; nada é inserido na falha. Sem `uploads`, colar
+  arquivo não interfere no campo.
+- **Mídia de anexo no Markdown**: o `Markdown` resolve a referência estável
+  (`/api/attachments/{id}/content`, com `#audio`/`#video`) pelo componente
+  `ui/markdown-media.tsx` — imagem, `audio`/`video` com controles ou link de download. Nunca HTML cru.
+  Use a mesma referência (`attachmentMarkdown` de `src/lib/attachments.ts`) para guardar mídia em
+  Markdown; a URL assinada do storage **não** entra em texto persistido (expira).
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista
   (`ListFilters`/`FilterGroup`), tabelas, dashboards e cards de escolha.
 

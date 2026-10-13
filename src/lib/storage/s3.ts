@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, CopyObjectCommand, DeleteObjectCommand, PutObjectCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { getIntegration } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
@@ -19,6 +19,42 @@ const dbg = integrationDebug("storage_s3")
  * com o Endpoint interno. A assinatura SigV4 inclui o host, então não dá para trocar o host depois.
  */
 export type SignedUrlAudience = "browser" | "server"
+
+/** Como o storage respondeu a uma operação. */
+export type StorageErrorKind = "not_found" | "forbidden" | "unavailable"
+
+export interface StorageErrorInfo {
+    kind: StorageErrorKind
+    /** Status HTTP da resposta (quando houve uma). */
+    httpStatus: number | null
+    /** Nome/código do erro do SDK. */
+    code: string | null
+}
+
+/** Códigos que provam que o objeto não existe (não confundir com recusa de acesso). */
+const STORAGE_NOT_FOUND_CODES = new Set(["NotFound", "NoSuchKey"])
+const STORAGE_FORBIDDEN_CODES = new Set(["AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "AuthorizationHeaderMalformed"])
+/** Problema de configuração da integração (não é um arquivo ausente): nunca descarta o envio. */
+const STORAGE_CONFIG_CODES = new Set(["NoSuchBucket"])
+
+/**
+ * Classifica a falha de uma operação no storage.
+ *
+ * **403 nunca significa "objeto ausente"**: serviços S3 compatíveis respondem 403 para objeto
+ * inexistente quando a credencial não tem permissão de listar o bucket. Proxies também podem
+ * invalidar a assinatura ao converter HEAD em GET. Só `404`/`NoSuchKey` provam ausência;
+ * o resto é recusa de acesso ou indisponibilidade
+ * e o objeto pode estar lá.
+ */
+export function storageErrorInfo(error: unknown): StorageErrorInfo {
+    const candidate = error as { name?: unknown; Code?: unknown; $metadata?: { httpStatusCode?: unknown } } | null
+    const code = typeof candidate?.name === "string" ? candidate.name : typeof candidate?.Code === "string" ? candidate.Code : null
+    const httpStatus = typeof candidate?.$metadata?.httpStatusCode === "number" ? candidate.$metadata.httpStatusCode : null
+    const notFound = httpStatus === 404 || (code !== null && STORAGE_NOT_FOUND_CODES.has(code))
+    const misconfigured = code !== null && STORAGE_CONFIG_CODES.has(code)
+    const forbidden = !notFound && !misconfigured && (httpStatus === 401 || httpStatus === 403 || (code !== null && STORAGE_FORBIDDEN_CODES.has(code)))
+    return { kind: notFound && !misconfigured ? "not_found" : forbidden ? "forbidden" : "unavailable", httpStatus, code }
+}
 
 let cached: { version: string; client: S3Client; publicClient: S3Client; publicPrefix: string } | null = null
 
@@ -145,21 +181,82 @@ export interface StoredFile {
     contentType: string | undefined
     contentLength: number | undefined
     lastModified: Date | undefined
+    /** Presente quando o pedido levou `Range` (resposta 206). */
+    contentRange: string | undefined
+    acceptRanges: string | undefined
+    etag: string | undefined
 }
 
-/** Arquivo do storage como stream web, com tipo e tamanho (repasse do conteúdo por uma rota do app). */
-export const getFileObject = async (key: string): Promise<StoredFile> => {
+/**
+ * Arquivo do storage como stream web, com tipo e tamanho (repasse do conteúdo por uma rota do app).
+ * `range` (cabeçalho `Range`) devolve só o trecho pedido — necessário para o `Range` das mídias.
+ */
+export const getFileObject = async (key: string, options: { range?: string } = {}): Promise<StoredFile> => {
     const { client, bucket } = await getStorage()
-    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, ...(options.range ? { Range: options.range } : {}) }))
     const body = response.Body as { transformToWebStream?: () => ReadableStream<Uint8Array> } | undefined
-    return { body: body?.transformToWebStream?.() ?? null, contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    return {
+        body: body?.transformToWebStream?.() ?? null,
+        contentType: response.ContentType,
+        contentLength: response.ContentLength,
+        lastModified: response.LastModified,
+        contentRange: response.ContentRange,
+        acceptRanges: response.AcceptRanges,
+        etag: response.ETag,
+    }
 }
 
-/** Metadados do arquivo (sem o conteúdo). */
-export const headFile = async (key: string): Promise<Omit<StoredFile, "body">> => {
+/**
+ * Cópia server-side (não transfere o conteúdo pela rede do app). Promove um objeto temporário à
+ * chave definitiva depois do envio direto do navegador.
+ */
+export const copyFile = async (fromKey: string, toKey: string): Promise<void> => {
     const { client, bucket } = await getStorage()
-    const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
-    return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    dbg.request("Cópia de arquivo", { bucket, fromKey, toKey })
+    try {
+        await client.send(new CopyObjectCommand({ Bucket: bucket, Key: toKey, CopySource: `${bucket}/${fromKey}` }))
+        dbg.success("Cópia concluída", { toKey })
+    } catch (error) {
+        dbg.error("Falha na cópia", error, { fromKey, toKey })
+        throw error
+    }
+}
+
+/** Remove o objeto. Usada na limpeza de temporários e na exclusão de anexos. */
+export const deleteFile = async (key: string): Promise<void> => {
+    const { client, bucket } = await getStorage()
+    dbg.request("Remoção de arquivo", { bucket, key })
+    try {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+        dbg.success("Arquivo removido", { key })
+    } catch (error) {
+        dbg.error("Falha ao remover arquivo", error, { key })
+        throw error
+    }
+}
+
+/**
+ * Metadados do arquivo. Cloudflare pode converter HEAD em GET para extensões cacheáveis
+ * com cache frio, invalidando a assinatura SigV4 (que inclui o método). Em 403, tenta um GET
+ * autenticado e fecha o stream imediatamente, sem consumir o arquivo nem carregá-lo em memória.
+ * Não usa Range: proxies também podem alterar esses cabeçalhos. A autorização continua sendo
+ * verificada pelo S3; se o GET falhar, seu erro é propagado, nunca se assume sucesso.
+ */
+export const headFile = async (key: string): Promise<{ contentType: string | undefined; contentLength: number | undefined; lastModified: Date | undefined }> => {
+    const { client, bucket } = await getStorage()
+    try {
+        const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+        return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    } catch (error) {
+        if (storageErrorInfo(error).httpStatus !== 403) throw error
+        dbg.step("HEAD recusado; conferindo metadados com GET autenticado", { bucket, key })
+        const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+        // O servidor usa o handler Node do SDK: destruir o stream libera a conexão sem ler o corpo.
+        const body = response.Body as { destroy?: () => void; cancel?: () => Promise<void> } | undefined
+        if (body?.destroy) body.destroy()
+        else if (body?.cancel) await body.cancel()
+        return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    }
 }
 
 /** Confirma que o bucket existe e que as credenciais têm acesso (teste de conexão). */

@@ -4,6 +4,7 @@ import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoDraft, type IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { Project } from "@/lib/db/models/Project"
 import { createTaskWithIssue } from "@/features/github/server/task-issue"
+import { moveAttachmentsToTask } from "@/features/tasks/attachments/server/service"
 import type { TaskDetailDto, TaskDto } from "@/features/tasks/types"
 import type { TaskPriority } from "@/features/tasks/constants"
 import { addComment, getTask, listTasksForClient, updateTask } from "@/features/tasks/server/service"
@@ -74,6 +75,8 @@ export function toClienteTaskDetail(task: TaskDetailDto): ClienteTaskDetailDto {
         description: task.description,
         technicalSpec: task.technicalSpec,
         comments: task.comments,
+        /** Anexos confirmados da tarefa (contador da aba Anexos do portal). */
+        attachmentsCount: task.attachmentsCount,
     }
 }
 
@@ -182,6 +185,8 @@ export async function approveDraft(client: ClienteOrcamentoDoc, id: string, acto
         tags: preview.tags ?? [],
         ...(estimate ? { estimate: { ...estimate, factor: Math.max(1, client.profitFactor || 1), hourlyRate: Math.max(0, client.hourlyRate || 0), model: draft.model ?? null } } : {}),
     })
+    // Os anexos enviados no formulário do portal acompanham o rascunho aprovado.
+    await moveAttachmentsToTask(id, task.id)
     await OrcamentoDraft.updateOne({ _id: id }, { $set: { status: "approved", taskId: task.id } })
     await recordAudit({ userId: actorId, entidade: DRAFT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { cliente: client.name, tarefa: task.code } })
     return task

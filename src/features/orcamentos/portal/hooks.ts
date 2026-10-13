@@ -9,8 +9,9 @@ import { clientChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import type { TaskPriority } from "@/features/tasks/constants"
 import type { TaskDto } from "@/features/tasks/types"
+import { ATTACHMENTS_QUERY_KEY, useAttachmentClient } from "@/features/tasks/attachments/hooks"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "../constants"
-import type { ClienteDraftInput, ClienteUserInput } from "../schemas"
+import type { CreateDraftInput, ClienteUserInput } from "../schemas"
 import type { ClienteDashboardDto, ClienteFinanceDto, ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, ClienteUserDto, CreatedClienteUserDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
 
@@ -104,11 +105,18 @@ export function useClienteDraft(id: string) {
     })
 }
 
+/** Cria o rascunho no portal (repositório + descrição + anexos enviados antes). */
 export function useCreateDraft() {
     const { api } = useClientePortal()
     return useMutation({
-        mutationFn: async (input: ClienteDraftInput) => unwrapApi((await api.post<ApiResponse<OrcamentoDraftDto>>("/cliente/drafts", input)).data),
+        mutationFn: async (input: CreateDraftInput) => unwrapApi((await api.post<ApiResponse<OrcamentoDraftDto>>("/cliente/drafts", input)).data),
     })
+}
+
+/** Cliente de anexos do portal (mesmo axios autenticado do dono em pré-visualização). */
+export function useClienteAttachmentClient() {
+    const { api } = useClientePortal()
+    return useAttachmentClient(api)
 }
 
 export function useSetCorrection(id: string) {
@@ -148,6 +156,8 @@ export function useClienteRealtime(): void {
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "task"] })
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "dashboard"] })
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "finance"] })
+            // Anexos das tarefas do cliente (o dono publica neste canal ao mudar os anexos).
+            void queryClient.invalidateQueries({ queryKey: [ATTACHMENTS_QUERY_KEY] })
         }
         channel.bind(CLIENTE_TASKS_UPDATED_EVENT, handler)
         return () => {

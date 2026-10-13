@@ -25,6 +25,11 @@ vi.mock('@/lib/db/models/DevTask', async () => {
   mocks.models.comment = memoryModel()
   return { DevTask: mocks.models.devTask, TaskComment: mocks.models.comment }
 })
+vi.mock('@/lib/db/models/TaskAttachment', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.attachment = memoryModel()
+  return { TaskAttachment: mocks.models.attachment }
+})
 vi.mock('@/lib/db/models/Project', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   mocks.models.project = memoryModel()

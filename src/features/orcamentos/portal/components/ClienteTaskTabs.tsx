@@ -5,9 +5,10 @@ import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { TaskDescription, TaskTechnicalSpec } from "@/features/tasks/components/detail/TaskDetailSections"
 import type { ClienteTaskDetailDto } from "../../types"
+import { ClienteAttachmentsSection } from "./ClienteAttachmentsSection"
 import { ClienteCommentsSection } from "./ClienteCommentsSection"
 
-export type ClienteTaskTabId = "description" | "spec" | "comments"
+export type ClienteTaskTabId = "description" | "spec" | "attachments" | "comments"
 
 interface TabDef {
     id: ClienteTaskTabId
@@ -19,12 +20,14 @@ interface TabDef {
 const TABS: readonly TabDef[] = [
     { id: "description", label: "Descrição", count: null },
     { id: "spec", label: "Especificação técnica", count: null },
+    { id: "attachments", label: "Anexos", count: (task) => task.attachmentsCount },
     { id: "comments", label: "Comentários", count: (task) => task.comments.length },
 ]
 
 function Section({ task, id }: { task: ClienteTaskDetailDto; id: ClienteTaskTabId }) {
     if (id === "description") return <TaskDescription description={task.description} />
     if (id === "spec") return <TaskTechnicalSpec technicalSpec={task.technicalSpec} />
+    if (id === "attachments") return <ClienteAttachmentsSection task={task} />
     return <ClienteCommentsSection taskId={task.id} comments={task.comments} />
 }
 

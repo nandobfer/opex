@@ -118,6 +118,8 @@ export interface ClienteTaskDetailDto extends Omit<ClienteTaskDto, "issue"> {
     description: string | null
     technicalSpec: string | null
     comments: TaskComment[]
+    /** Anexos confirmados da tarefa (contador da aba Anexos). */
+    attachmentsCount: number
 }
 
 /** Lista de tarefas do portal (visão do cliente). */

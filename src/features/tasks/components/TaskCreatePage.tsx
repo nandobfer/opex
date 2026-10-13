@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
+import { usePendingAttachments, useOwnerAttachmentClient } from "../attachments/hooks"
+import { PendingAttachmentsField } from "../attachments/components/PendingAttachmentsField"
 import { useTaskBoard } from "../hooks/useTaskBoard"
 import { useCreateTask, useTaskOptions } from "../hooks/useTasks"
 import { TASKS_PATH, taskPath } from "../constants"
@@ -20,6 +22,8 @@ export function TaskCreatePage() {
     const options = useTaskOptions()
     const board = useTaskBoard()
     const create = useCreateTask()
+    const attachmentClient = useOwnerAttachmentClient()
+    const pending = usePendingAttachments(attachmentClient)
     const projects = options.data?.projects ?? []
     const loading = options.isLoading || board.isLoading
 
@@ -64,10 +68,13 @@ export function TaskCreatePage() {
                             projects={projects}
                             columns={board.columns}
                             submitting={create.isPending}
+                            uploading={pending.active > 0}
+                            attachments={<PendingAttachmentsField state={pending} />}
+                            uploads={pending.media}
                             onCancel={() => router.push(TASKS_PATH)}
                             onSubmit={async (values) => {
                                 try {
-                                    const task = await create.mutateAsync(values)
+                                    const task = await create.mutateAsync({ ...values, attachmentIds: pending.ids })
                                     router.push(taskPath(task.id))
                                 } catch {
                                     // Toast já mostrado; o formulário fica aberto para corrigir.

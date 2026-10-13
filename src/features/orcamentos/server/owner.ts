@@ -3,6 +3,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { OrcamentoDraft, type IOrcamentoDraftPreview } from "@/lib/db/models/Orcamento"
 import { Project } from "@/lib/db/models/Project"
 import { createTaskWithIssue } from "@/features/github/server/task-issue"
+import { moveAttachmentsToTask } from "@/features/tasks/attachments/server/service"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
 import type { TaskPriority } from "@/features/tasks/constants"
 import type { TaskDto } from "@/features/tasks/types"
@@ -101,6 +102,8 @@ export async function approveOwnerDraft(id: string, actorId: string, priority?: 
               }
             : {}),
     })
+    // Os anexos enviados no formulário da prévia acompanham o rascunho aprovado.
+    await moveAttachmentsToTask(String(draft._id), task.id)
     await OrcamentoDraft.updateOne({ _id: draft._id }, { $set: { status: "approved", taskId: task.id } })
     await recordAudit({ userId: actorId, entidade: DRAFT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { cliente: client?.name ?? null, tarefa: task.code } })
     return task

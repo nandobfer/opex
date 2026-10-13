@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
+import { attachmentIdsSchema } from "@/features/tasks/attachments/schemas"
 import { PREVIEW_CLARITY_STATUSES, type PreviewClarityDto } from "./clarity"
 import { USERNAME_PATTERN } from "./logic"
 
@@ -23,12 +24,20 @@ export const clienteOrcamentoSchema = z.object({
 })
 export type ClienteOrcamentoInput = z.infer<typeof clienteOrcamentoSchema>
 
-/** Rascunho criado pelo portal: repositório + descrição. */
+/** Rascunho criado pelo portal: repositório + descrição (+ anexos enviados no formulário). */
 export const clienteDraftSchema = z.object({
     projectId: objectId,
     description: z.string().trim().min(1, "Descreva a tarefa").max(50_000, "Texto muito longo"),
 })
 export type ClienteDraftInput = z.infer<typeof clienteDraftSchema>
+
+/**
+ * Corpo da abertura do rascunho (portal e prévia do dono): o formulário mais os anexos enviados
+ * antes de o rascunho existir. Os arquivos entram **fora** do JSON do formulário (o upload é
+ * separado); aqui vão só os ids.
+ */
+export const createDraftSchema = clienteDraftSchema.extend({ attachmentIds: attachmentIdsSchema })
+export type CreateDraftInput = z.infer<typeof createDraftSchema>
 
 /** Correção pedida pelo cliente sobre a prévia. */
 export const clienteCorrectionSchema = z.object({

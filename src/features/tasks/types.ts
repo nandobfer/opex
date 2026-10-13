@@ -108,6 +108,8 @@ export interface TaskDetailDto extends TaskDto {
     totalTimeLogged: number
     /** Nome do cliente de orçamento que originou a tarefa (só quando há estimativa). */
     estimateClientName: string | null
+    /** Anexos confirmados da tarefa (contador da aba Anexos). */
+    attachmentsCount: number
 }
 
 export interface TaskListDto {

@@ -159,7 +159,7 @@ describe("formulário da nova prévia", () => {
         fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "Ajustar o rodapé" } })
         const form = screen.getByRole("button", { name: "Avançar" }).closest("form")
         fireEvent.submit(form!)
-        await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ projectId: "a".repeat(24), description: "Ajustar o rodapé" }))
+        await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ projectId: "a".repeat(24), description: "Ajustar o rodapé", attachmentIds: [] }))
         expect(mocks.push).toHaveBeenCalledWith("/tarefas/previa/d9")
     })
 

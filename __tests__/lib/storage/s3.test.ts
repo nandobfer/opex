@@ -31,10 +31,12 @@ vi.mock('@aws-sdk/client-s3', () => {
     GetObjectCommand: command('GetObjectCommand'),
     HeadObjectCommand: command('HeadObjectCommand'),
     HeadBucketCommand: command('HeadBucketCommand'),
+    CopyObjectCommand: command('CopyObjectCommand'),
+    DeleteObjectCommand: command('DeleteObjectCommand'),
   }
 })
 
-import { checkBucket, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, uploadFile } from '@/lib/storage/s3'
+import { checkBucket, copyFile, deleteFile, getFileObject, getFileStream, getSignedUrlExpiresIn, headFile, storageErrorInfo, uploadFile } from '@/lib/storage/s3'
 
 const base = { endpoint: 'http://minio:9000', region: 'us-east-1', bucket: 'opex', signedUrlExpiresSeconds: 3600, accessKey: 'ak', secretKey: 'sk' }
 
@@ -91,6 +93,47 @@ describe('serviço de storage (S3)', () => {
     expect(command.input).toEqual({ Bucket: 'opex' })
   })
 
+  it('recupera HEAD 403 de imagem atrás de proxy com GET autenticado e fecha o corpo', async () => {
+    const destroy = vi.fn()
+    const date = new Date('2026-10-13')
+    mocks.send
+      .mockRejectedValueOnce(Object.assign(new Error('UnknownError'), { $metadata: { httpStatusCode: 403 } }))
+      .mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 200078, LastModified: date, Body: { destroy } })
+
+    expect(await headFile('attachments/tmp/1/logo.png')).toEqual({ contentType: 'image/png', contentLength: 200078, lastModified: date })
+    expect(mocks.send.mock.calls.map(([command]) => command.name)).toEqual(['HeadObjectCommand', 'GetObjectCommand'])
+    expect(lastCommand().input).toEqual({ Bucket: 'opex', Key: 'attachments/tmp/1/logo.png' })
+    expect(destroy).toHaveBeenCalledOnce()
+  })
+
+  it('não ignora autorização: se GET também falhar, propaga seu erro', async () => {
+    const denied = Object.assign(new Error('AccessDenied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } })
+    mocks.send.mockRejectedValueOnce(denied).mockRejectedValueOnce(denied)
+    await expect(headFile('logo.png')).rejects.toBe(denied)
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('GET recupera o erro real de objeto ausente após HEAD 403 do proxy', async () => {
+    const absent = Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } })
+    mocks.send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 403 } }).mockRejectedValueOnce(absent)
+    await expect(headFile('missing.png')).rejects.toBe(absent)
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([404, 500])('não faz fallback quando HEAD responde %s', async (status) => {
+    const failure = Object.assign(new Error('falha'), { $metadata: { httpStatusCode: status } })
+    mocks.send.mockRejectedValueOnce(failure)
+    await expect(headFile('x')).rejects.toBe(failure)
+    expect(mocks.send).toHaveBeenCalledOnce()
+  })
+
+  it('libera também um corpo web no fallback, sem consumir o arquivo', async () => {
+    const cancel = vi.fn(async () => undefined)
+    mocks.send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 403 } }).mockResolvedValueOnce({ ContentLength: 10, Body: { cancel } })
+    expect((await headFile('x.png')).contentLength).toBe(10)
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
   it('devolve a expiração configurada para as URLs assinadas', async () => {
     expect(await getSignedUrlExpiresIn()).toBe(3600)
     mocks.values = { ...base, signedUrlExpiresSeconds: 60 }
@@ -119,5 +162,62 @@ describe('serviço de storage (S3)', () => {
     await checkBucket()
     expect(mocks.clients.map((config) => config.endpoint)).toEqual(['http://minio:9000', 'https://reserva.exemplo.com'])
     expect(mocks.clients.every((config) => config.forcePathStyle === true)).toBe(true)
+  })
+
+  it('promove um objeto temporário para a chave definitiva (cópia server-side)', async () => {
+    await copyFile('attachments/tmp/1/foto.png', 'attachments/1/foto.png')
+
+    const command = lastCommand()
+    expect(command.name).toBe('CopyObjectCommand')
+    expect(command.input).toEqual({ Bucket: 'opex', Key: 'attachments/1/foto.png', CopySource: 'opex/attachments/tmp/1/foto.png' })
+  })
+
+  it('propaga a falha da cópia', async () => {
+    mocks.send.mockRejectedValue(new Error('NoSuchKey'))
+    await expect(copyFile('a', 'b')).rejects.toThrow('NoSuchKey')
+  })
+
+  it('remove o objeto', async () => {
+    await deleteFile('attachments/1/foto.png')
+
+    const command = lastCommand()
+    expect(command.name).toBe('DeleteObjectCommand')
+    expect(command.input).toEqual({ Bucket: 'opex', Key: 'attachments/1/foto.png' })
+  })
+
+  it('pede só o trecho quando recebe Range (reprodução de mídia)', async () => {
+    mocks.send.mockResolvedValue({ Body: { transformToWebStream: () => 'web-stream' }, ContentType: 'video/mp4', ContentLength: 100, ContentRange: 'bytes 0-99/1000', AcceptRanges: 'bytes' })
+
+    const file = await getFileObject('attachments/1/clip.mp4', { range: 'bytes=0-99' })
+
+    expect(lastCommand().input).toEqual({ Bucket: 'opex', Key: 'attachments/1/clip.mp4', Range: 'bytes=0-99' })
+    expect(file.contentRange).toBe('bytes 0-99/1000')
+  })
+})
+
+describe('classificação das falhas do storage', () => {
+  const failure = (name: string, httpStatusCode?: number) => Object.assign(new Error(name), { name, ...(httpStatusCode ? { $metadata: { httpStatusCode } } : {}) })
+
+  it('403 é recusa de acesso, nunca "objeto ausente"', () => {
+    // O Storage S3 do projeto responde 403 (e não 404) para objeto inexistente; o HEAD sem corpo
+    // chega ao SDK como UnknownError. Tratar isso como ausência destruía envios recuperáveis.
+    expect(storageErrorInfo(failure('UnknownError', 403))).toEqual({ kind: 'forbidden', httpStatus: 403, code: 'UnknownError' })
+    expect(storageErrorInfo(failure('AccessDenied', 403)).kind).toBe('forbidden')
+    expect(storageErrorInfo(failure('SignatureDoesNotMatch')).kind).toBe('forbidden')
+  })
+
+  it('404 e NoSuchKey provam a ausência do objeto', () => {
+    expect(storageErrorInfo(failure('NoSuchKey', 404))).toEqual({ kind: 'not_found', httpStatus: 404, code: 'NoSuchKey' })
+    expect(storageErrorInfo(failure('NotFound', 404)).kind).toBe('not_found')
+    expect(storageErrorInfo(failure('NoSuchKey')).kind).toBe('not_found')
+  })
+
+  it('erro de rede, tempo esgotado ou 5xx é indisponibilidade (o objeto pode estar lá)', () => {
+    expect(storageErrorInfo(failure('InternalError', 500)).kind).toBe('unavailable')
+    expect(storageErrorInfo(failure('TimeoutError')).kind).toBe('unavailable')
+    expect(storageErrorInfo(new Error('ECONNRESET')).kind).toBe('unavailable')
+    expect(storageErrorInfo(null).kind).toBe('unavailable')
+    // Bucket inexistente é problema de configuração, não de um arquivo ausente.
+    expect(storageErrorInfo(failure('NoSuchBucket', 404))).toEqual({ kind: 'unavailable', httpStatus: 404, code: 'NoSuchBucket' })
   })
 })

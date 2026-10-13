@@ -44,7 +44,12 @@ vi.mock("@/features/tasks/server/service", () => ({
     getTask: mocks.getTask,
     addComment: mocks.addComment,
     updateTask: mocks.updateTask,
+    TASK_AUDIT_ENTITY: "Tarefa",
 }))
+vi.mock("@/lib/db/models/TaskAttachment", async () => {
+    const { memoryModel } = await import("../../helpers/memory-model")
+    return { TaskAttachment: memoryModel() }
+})
 vi.mock("@/features/tasks/server/columns", () => ({ getBoard: vi.fn(async () => ({ columns: [], layout: [] })) }))
 vi.mock("@/features/github/server/task-issue", () => ({ createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock("@/features/github/server/lookups", () => ({ listGithubRepos: mocks.listGithubRepos }))
