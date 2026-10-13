@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo } from "react"
-import { Controller, useForm, useWatch } from "react-hook-form"
+import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Github, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,6 @@ export function ClienteDialog({ open, client, submitting, repoIndex, onSubmit, o
     const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects])
     const reposPlaceholder = options.isLoading ? "Carregando…" : options.isError ? "Não foi possível listar os repositórios" : projects.length === 0 ? "Nenhum repositório vinculado" : "Selecionar…"
     const errors = form.formState.errors
-    const projectIds = useWatch({ control: form.control, name: "projectIds" })
 
     useEffect(() => {
         if (!open) return
@@ -63,14 +62,14 @@ export function ClienteDialog({ open, client, submitting, repoIndex, onSubmit, o
                 >
                     <DialogHeader>
                         <DialogTitle>{client ? `Editar ${client.name}` : "Novo cliente"}</DialogTitle>
-                        <DialogDescription>O cliente vê no portal apenas as tarefas dos repositórios escolhidos. O token de acesso é gerado ao salvar.</DialogDescription>
+                        <DialogDescription>O cliente vê no portal apenas as tarefas dos repositórios escolhidos. Os repositórios são opcionais e podem ser vinculados depois. O token de acesso é gerado ao salvar.</DialogDescription>
                     </DialogHeader>
 
                     <Field id="client-name" label="Nome" error={errors.name?.message}>
                         <Input id="client-name" autoFocus placeholder="Ex.: Cliente X" {...form.register("name")} aria-invalid={errors.name ? true : undefined} />
                     </Field>
 
-                    <Field id="client-repos" label="Repositórios" error={errors.projectIds?.message}>
+                    <Field id="client-repos" label="Repositórios (opcional)" error={errors.projectIds?.message}>
                         <Controller
                             control={form.control}
                             name="projectIds"
@@ -123,7 +122,7 @@ export function ClienteDialog({ open, client, submitting, repoIndex, onSubmit, o
                         <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={submitting || !form.formState.isValid || projectIds.length === 0}>
+                        <Button type="submit" disabled={submitting || !form.formState.isValid}>
                             {submitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />}
                             {client ? "Salvar" : "Criar cliente"}
                         </Button>

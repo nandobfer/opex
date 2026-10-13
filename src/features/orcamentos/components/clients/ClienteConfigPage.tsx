@@ -96,7 +96,7 @@ export function ClienteConfigPage({ clientId }: { clientId: string }) {
                                     <div className="space-y-1.5">
                                         <p className="text-xs uppercase tracking-wide text-muted-foreground">Repositórios</p>
                                         {client.projects.length === 0 ? (
-                                            <p className="text-sm text-warning">Nenhum repositório válido: o portal não mostra tarefas.</p>
+                                            <p className="text-sm text-warning">Nenhum repositório vinculado: vincule um para o cliente ver e criar tarefas no portal.</p>
                                         ) : (
                                             <div className="flex flex-wrap gap-1.5">
                                                 {client.projects.map((project) => (

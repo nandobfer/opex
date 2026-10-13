@@ -22,7 +22,8 @@ Logins e sessões: `aicontext/modules/auth.md`.
 ## Modelos
 
 - `OrcamentoClient` (`orcamento_clients`): `{ name, token, tokenHash, tokenPrefix, projectIds[],
-  hourlyRate, profitFactor, active }`. O **token** (`cli_…`) é gravado em claro (`token`) para montar a
+  hourlyRate, profitFactor, active }`. Os **repositórios são opcionais** (`projectIds` pode ficar vazio).
+  O **token** (`cli_…`) é gravado em claro (`token`) para montar a
   **URL copiável**; a autenticação usa o **hash SHA-256** (`tokenHash`) e o **prefixo visível**
   (`tokenPrefix`).
 - `User` (`users`, `src/lib/db/models/User.ts`): usuários **globais** de cliente —
@@ -71,8 +72,11 @@ Logins e sessões: `aicontext/modules/auth.md`.
   - **Token** — prefixo, **Copiar URL** e **Regenerar token** (com aviso: invalida a URL do cliente e
     do usuário padrão).
 - **Pré-visualizar portal** no cabeçalho: entra no portal como o cliente (cookie de prévia).
-- Regras: repositório precisa existir (`PROJECT_NOT_FOUND`); mutações auditadas (`ClienteOrcamento`) e
-  publicam `orcamentos-updated { scope }` em `private-app`.
+- **Repositórios opcionais**: o cliente pode ser criado e editado **sem nenhum repositório**
+  vinculado — útil para configurar o cliente antes de ter acesso aos repositórios dele. Sem vínculo, o
+  portal apenas não mostra tarefas (a lista e a página de configuração orientam a vincular um).
+- Regras: os repositórios escolhidos, **se houver algum**, precisam existir (`PROJECT_NOT_FOUND`);
+  mutações auditadas (`ClienteOrcamento`) e publicam `orcamentos-updated { scope }` em `private-app`.
 
 ## Portal (`/cliente`)
 

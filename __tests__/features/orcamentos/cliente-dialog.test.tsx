@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
 
@@ -38,6 +38,8 @@ const withOptions = (projects: ProjectRef[], extra: Record<string, unknown> = {}
 const renderDialog = (props: Partial<Parameters<typeof ClienteDialog>[0]> = {}) =>
     render(<ClienteDialog open client={null} submitting={false} repoIndex={REPO_INDEX} onSubmit={vi.fn()} onClose={vi.fn()} {...props} />)
 
+const createButton = () => screen.getByRole("button", { name: "Criar cliente" })
+
 afterEach(() => cleanup())
 
 beforeEach(() => {
@@ -48,7 +50,7 @@ beforeEach(() => {
 describe("ClienteDialog — seleção de repositórios", () => {
     it("mostra os repositórios no rótulo real do GitHub e permite escolher vários", () => {
         renderDialog()
-        fireEvent.click(screen.getByRole("button", { name: "Repositórios" }))
+        fireEvent.click(screen.getByRole("button", { name: "Repositórios (opcional)" }))
 
         expect(screen.getByText("acme/app")).toBeTruthy()
         expect(screen.getByText("Portal do cliente")).toBeTruthy()
@@ -61,13 +63,42 @@ describe("ClienteDialog — seleção de repositórios", () => {
 
         expect(screen.getByText("2 selecionados")).toBeTruthy()
     })
+})
 
-    it("sem repositórios vinculados, avisa no campo e bloqueia o salvar", () => {
+describe("ClienteDialog — repositórios opcionais", () => {
+    it("permite criar o cliente sem selecionar nenhum repositório", async () => {
+        const onSubmit = vi.fn().mockResolvedValue(null)
+        renderDialog({ onSubmit })
+
+        fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Acme" } })
+        await waitFor(() => expect(createButton().hasAttribute("disabled")).toBe(false))
+
+        fireEvent.click(createButton())
+
+        await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+        expect(onSubmit.mock.calls[0][0]).toMatchObject({ name: "Acme", projectIds: [] })
+    })
+
+    it("sem repositórios cadastrados, avisa no campo sem bloquear o salvar", async () => {
         withOptions([])
         renderDialog()
 
-        expect(screen.getByRole("button", { name: "Repositórios" })).toBeTruthy()
+        expect(screen.getByRole("button", { name: "Repositórios (opcional)" })).toBeTruthy()
         expect(screen.getByText("Nenhum repositório vinculado")).toBeTruthy()
-        expect(screen.getByRole("button", { name: "Criar cliente" }).hasAttribute("disabled")).toBe(true)
+        // Sem repositórios válidos o envio segue bloqueado apenas enquanto o formulário está inválido.
+        expect(createButton().hasAttribute("disabled")).toBe(true)
+
+        fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Acme" } })
+        await waitFor(() => expect(createButton().hasAttribute("disabled")).toBe(false))
+    })
+
+    it("continua bloqueando o salvamento enquanto o formulário está inválido", () => {
+        renderDialog()
+        expect(createButton().hasAttribute("disabled")).toBe(true)
+    })
+
+    it("não envia enquanto uma submissão está em andamento", () => {
+        renderDialog({ submitting: true, client: null })
+        expect(createButton().hasAttribute("disabled")).toBe(true)
     })
 })

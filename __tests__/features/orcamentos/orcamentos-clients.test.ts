@@ -65,6 +65,24 @@ describe("clientes do portal", () => {
         await expect(createClient({ name: "X", projectIds: ["aaaaaaaaaaaaaaaaaaaaaaaa"], hourlyRate: 0, profitFactor: 1, active: true }, "local")).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" })
     })
 
+    it("cria sem repositórios e permite vincular/desvincular depois", async () => {
+        const created = await createClient({ name: "Sem repo", projectIds: [], hourlyRate: 0, profitFactor: 1, active: true }, "local")
+        expect(created.token.startsWith("cli_")).toBe(true)
+        expect(created.item.projectIds).toEqual([])
+        expect(created.item.projects).toEqual([])
+        expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "ClienteOrcamento", acao: "CRIAR", depois: expect.objectContaining({ repositorios: 0 }) }))
+        expect(mocks.publish).toHaveBeenCalledWith("orcamentos-updated", { scope: "clients" })
+
+        const projectId = await seedProject()
+        const linked = await updateClient(created.item.id, { name: "Sem repo", projectIds: [projectId], hourlyRate: 10, profitFactor: 2, active: true }, "local")
+        expect(linked.projectIds).toEqual([projectId])
+        expect(linked.projects[0]).toMatchObject({ id: projectId, repo: "acme/app" })
+
+        const unlinked = await updateClient(created.item.id, { name: "Sem repo", projectIds: [], hourlyRate: 10, profitFactor: 2, active: true }, "local")
+        expect(unlinked.projectIds).toEqual([])
+        expect(unlinked.projects).toEqual([])
+    })
+
     it("lista, edita, regenera o token e exclui", async () => {
         const projectId = await seedProject()
         const created = await createClient({ name: "Acme", projectIds: [projectId], hourlyRate: 40, profitFactor: 10, active: true }, "local")
