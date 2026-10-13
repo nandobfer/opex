@@ -27,8 +27,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   para `/integracoes/clientes`.
 - `isIntegrationConfigured(def, resolved)` (`config.ts`): obrigatórios públicos visíveis e segredos
   legíveis preenchidos (não testa a conexão).
-- **Em desenvolvimento** (`IN_DEVELOPMENT_INTEGRATIONS`): `archflow` (Archflow — solicitar deploys
-  em QA e PRD). Aparece na lista com o selo "Em desenvolvimento", sem status, teste, debug,
+- **Em desenvolvimento** (`IN_DEVELOPMENT_INTEGRATIONS`): `google_drive` (Google Drive — fonte de
+  tarefas a partir de planilhas do Google Sheets). Aparece na lista com o selo "Em desenvolvimento", sem status, teste, debug,
   edição ou explorar, e não tem página de detalhe.
 - ⚠️ **Sem `.env` para integrações novas**: só as herdadas do CRM (Pusher, Crons) têm `env`
   legado. Integração ou campo novo não declara `env` — tudo é configurado em `/integracoes`.
@@ -104,7 +104,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   "Editar".
 - Ações por card (fora do link): **Testar conexão** e **Debug** (desabilitado com motivo quando o
   debug está desligado).
-- Cards "Em desenvolvimento" (Archflow) no fim, sem ações.
+- Cards "Em desenvolvimento" (Google Drive) no fim, sem ações.
 
 ### Página da integração (`/integracoes/[id]`)
 
@@ -282,7 +282,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 ### Planejado (em desenvolvimento)
 
-- **Archflow**: plataforma de arquitetura para solicitar deploys em QA e PRD.
+- **Google Drive**: fonte de tarefas a partir de planilhas do Google Sheets.
 
 ## APIs
 

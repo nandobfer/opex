@@ -96,14 +96,15 @@ describe("IntegrationList", () => {
         expect(within(screen.getByText("Provedores de IA").closest("li")!).getByText("Provedores de IA").closest("a")!.getAttribute("href")).toBe("/integracoes/ia")
     })
 
-    it("Archflow aparece como Em desenvolvimento, sem ações", () => {
+    it("Google Drive aparece como Em desenvolvimento (fonte de tarefas do Google Sheets), sem ações nem link", () => {
         mocks.useIntegrations.mockReturnValue({ data: [], isLoading: false })
         render(<IntegrationList />)
-        for (const name of ["Archflow"]) {
-            const row = screen.getByText(name).closest("li")!
-            expect(within(row).getByText("Em desenvolvimento")).toBeTruthy()
-            expect(within(row).queryAllByRole("button")).toHaveLength(0)
-        }
+        const row = screen.getByText("Google Drive").closest("li")!
+        expect(within(row).getByText("Em desenvolvimento")).toBeTruthy()
+        expect(within(row).getByText("Fonte de tarefas a partir de planilhas do Google Sheets")).toBeTruthy()
+        expect(within(row).queryAllByRole("button")).toHaveLength(0)
+        expect(within(row).queryByRole("link")).toBeNull()
+        expect(screen.queryByText("Archflow")).toBeNull()
     })
 
     it("erro ao carregar mostra mensagem em pt-BR", () => {
