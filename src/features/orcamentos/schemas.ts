@@ -8,10 +8,14 @@ import { USERNAME_PATTERN } from "./logic"
 
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
 
-/** Cliente do portal (criar/editar). */
+/**
+ * Cliente do portal (criar/editar). Os **repositórios são opcionais**: o cliente pode ser cadastrado
+ * e configurado antes de o dono ter acesso aos seus repositórios; sem vínculo, o portal apenas não
+ * mostra tarefas. Os escolhidos continuam validados contra o catálogo (existem e são ObjectId).
+ */
 export const clienteOrcamentoSchema = z.object({
     name: z.string().trim().min(1, "Informe o nome").max(120, "Máximo de 120 caracteres"),
-    projectIds: z.array(objectId).min(1, "Selecione ao menos um repositório"),
+    projectIds: z.array(objectId),
     hourlyRate: z
         .number({ error: "Informe o custo por hora" })
         .min(0, "Não pode ser negativo")

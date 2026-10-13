@@ -1,6 +1,6 @@
 {
   "name": "opex",
-  "version": "2.44.0",
+  "version": "2.45.0",
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "scripts": {

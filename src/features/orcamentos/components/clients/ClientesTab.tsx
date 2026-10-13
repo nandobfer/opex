@@ -121,7 +121,7 @@ function ClienteCard({ client, repoIndex }: { client: ClienteOrcamentoDto; repoI
                             ))}
                         </div>
                     ) : (
-                        <p className="text-xs text-warning">Nenhum repositório válido: o portal não mostra tarefas.</p>
+                        <p className="text-xs text-warning">Nenhum repositório vinculado: vincule um para o cliente ver e criar tarefas no portal.</p>
                     )}
                     {client.updatedAt && <p className="text-xs text-muted-foreground">Atualizado {formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true, locale: ptBR })}</p>}
                 </div>
