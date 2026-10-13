@@ -2,15 +2,16 @@
 
 import { useState, type ReactNode } from "react"
 import { motion } from "framer-motion"
-import { FileCode2, FileTerminal, History, Loader2, MessageSquare, Send, Timer } from "lucide-react"
+import { AlertCircle, FileCode2, FileTerminal, History, Loader2, MessageSquare, Send, Timer } from "lucide-react"
 import { Markdown } from "@/components/ui/markdown"
+import { MarkdownField } from "@/components/ui/markdown-field"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { formatDateTime, formatMinutes } from "../../format"
 import { formatCostUsd, formatTokens } from "@/features/time/format"
 import type { TaskDetailDto } from "../../types"
 import { useAddComment } from "../../hooks/useTasks"
+import { useOwnerAttachmentClient, useTaskDescriptionUploads } from "../../attachments/hooks"
 
 function Empty({ icon: Icon, children }: { icon: typeof History; children: ReactNode }) {
     return (
@@ -53,9 +54,20 @@ export function TechnicalSpecSection({ task }: { task: TaskDetailDto }) {
 export function CommentsSection({ task }: { task: TaskDetailDto }) {
     const [content, setContent] = useState("")
     const add = useAddComment(task.id)
+    const attachmentClient = useOwnerAttachmentClient()
+    // Mesma fila de upload da descrição, vinculada a esta tarefa: a mídia colada vira anexo da tarefa.
+    const uploads = useTaskDescriptionUploads(attachmentClient, task.id)
+    /** Envios em andamento; enquanto houver, publicar perderia a mídia ainda não confirmada. */
+    const uploading = uploads.media.items.some((item) => item.status === "queued" || item.status === "uploading" || item.status === "confirming")
+    /**
+     * Mídia com falha ou cancelada aguardando decisão: resolver antes evita inserir a referência
+     * ao vivo depois de o comentário ser publicado.
+     */
+    const unresolved = uploads.media.items.some((item) => item.status === "error" || item.status === "canceled")
+    const busy = uploading || unresolved
     const submit = async () => {
         const value = content.trim()
-        if (!value) return
+        if (!value || busy) return
         try {
             await add.mutateAsync(value)
             setContent("")
@@ -66,9 +78,31 @@ export function CommentsSection({ task }: { task: TaskDetailDto }) {
     return (
         <div className="space-y-4">
             <div className="space-y-2" data-ctrl-enter-scope>
-                <Textarea value={content} onChange={(event) => setContent(event.target.value)} rows={3} placeholder="Escreva um comentário (Markdown aceito)" aria-label="Novo comentário" />
-                <div className="flex justify-end">
-                    <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={add.isPending || !content.trim()} onClick={submit}>
+                <MarkdownField
+                    value={content}
+                    onChange={setContent}
+                    rows={3}
+                    placeholder="Escreva um comentário (Markdown aceito)"
+                    ariaLabel="Novo comentário"
+                    tablistLabel="Editar ou visualizar o comentário"
+                    uploadsLabel="Mídias enviadas pelo comentário"
+                    uploads={uploads.media}
+                />
+                <div className="flex items-center justify-end gap-2">
+                    {busy && (
+                        <p className="mr-auto flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                            {uploading ? (
+                                <>
+                                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Enviando anexos…
+                                </>
+                            ) : (
+                                <>
+                                    <AlertCircle className="h-3 w-3 text-destructive" aria-hidden /> Tente novamente ou descarte a mídia com falha para comentar.
+                                </>
+                            )}
+                        </p>
+                    )}
+                    <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={add.isPending || busy || !content.trim()} onClick={submit}>
                         {add.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
                         Comentar
                     </Button>

@@ -8,6 +8,10 @@ import type { TaskDetailDto } from '@/features/tasks/types'
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/components/ui/markdown', () => ({ Markdown: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div> }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useAddComment: () => ({ mutateAsync: vi.fn(), isPending: false }) }))
+vi.mock('@/features/tasks/attachments/hooks', () => ({
+  useOwnerAttachmentClient: () => ({}),
+  useTaskDescriptionUploads: () => ({ media: { enqueue: vi.fn(), items: [], retry: vi.fn(), cancel: vi.fn(), dismiss: vi.fn() }, active: 0 }),
+}))
 
 import { TaskDetailTabs, type TaskDetailTabId } from '@/features/tasks/components/detail/TaskDetailTabs'
 

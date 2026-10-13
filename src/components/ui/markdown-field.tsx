@@ -45,6 +45,12 @@ interface MarkdownFieldProps {
     className?: string
     /** Habilita colar/arrastar mídia direto no campo (ver `MarkdownUploads`). */
     uploads?: MarkdownUploads
+    /** Nome acessível do campo de texto (quando não há `<label>` externo, ex.: comentários). */
+    ariaLabel?: string
+    /** Rótulo do grupo de abas Escrever/Visualizar (padrão: descrição). */
+    tablistLabel?: string
+    /** Rótulo da lista de mídias em envio exibida abaixo do campo (padrão: descrição). */
+    uploadsLabel?: string
 }
 
 interface ToolAction {
@@ -66,11 +72,25 @@ const TOOLS: ToolAction[] = [
 
 /**
  * Campo de texto Markdown com barra de formatação (negrito, itálico, título, link, imagem, lista,
- * citação e código) e abas Escrever/Visualizar. Reusado no formulário de tarefa (interno), na prévia
- * e no portal do cliente. Com `uploads`, colar ou arrastar uma mídia envia o arquivo e insere a
- * referência do anexo na posição do cursor — com progresso, falha visível e nova tentativa.
+ * citação e código) e abas Escrever/Visualizar. Reusado no formulário de tarefa (interno), na prévia,
+ * no portal do cliente e no formulário de comentários. Com `uploads`, colar ou arrastar uma mídia
+ * envia o arquivo e insere a referência do anexo na posição do cursor — com progresso, falha visível
+ * e nova tentativa. Os rótulos acessíveis (`ariaLabel`/`tablistLabel`/`uploadsLabel`) permitem que o
+ * campo fale de comentários e não só de descrição.
  */
-export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Markdown aceito", invalid, className, uploads }: MarkdownFieldProps) {
+export function MarkdownField({
+    id,
+    value,
+    onChange,
+    rows = 8,
+    placeholder = "Markdown aceito",
+    invalid,
+    className,
+    uploads,
+    ariaLabel,
+    tablistLabel = "Editar ou visualizar a descrição",
+    uploadsLabel = "Mídias enviadas pela descrição",
+}: MarkdownFieldProps) {
     const ref = useRef<HTMLTextAreaElement>(null)
     const [tab, setTab] = useState<"write" | "preview">("write")
     /** Mídias enviadas por ESTE campo: a lista inline acompanha a fila pelos ids. */
@@ -150,7 +170,7 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
 
     return (
         <div className={cn("space-y-2", className)}>
-            <div role="tablist" aria-label="Editar ou visualizar a descrição" className="flex gap-1 rounded-lg bg-muted p-1">
+            <div role="tablist" aria-label={tablistLabel} className="flex gap-1 rounded-lg bg-muted p-1">
                 {(
                     [
                         { id: "write", label: "Escrever", icon: Pencil },
@@ -191,6 +211,7 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
                                 placeholder={placeholder}
                                 value={value}
                                 onChange={(event) => onChange(event.target.value)}
+                                aria-label={ariaLabel}
                                 aria-invalid={invalid ? true : undefined}
                                 className="rounded-t-none border-0 shadow-none focus-visible:ring-0"
                                 onPaste={(event) => {
@@ -217,7 +238,7 @@ export function MarkdownField({ id, value, onChange, rows = 8, placeholder = "Ma
             </AnimatePresence>
             <AnimatePresence>
                 {pending.length > 0 && (
-                    <motion.ul initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="space-y-1" aria-label="Mídias enviadas pela descrição" aria-live="polite">
+                    <motion.ul initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="space-y-1" aria-label={uploadsLabel} aria-live="polite">
                         {pending.map(({ job, item }) => {
                             const failed = item.status === "error"
                             const canceled = item.status === "canceled"
