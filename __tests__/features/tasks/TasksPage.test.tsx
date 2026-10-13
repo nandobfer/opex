@@ -147,6 +147,21 @@ describe('TasksPage', () => {
     expect(screen.getByRole('columnheader', { name: /Código/ })).toBeTruthy()
   })
 
+  it('no celular a visão Tabela vira cards compactos (sem tabela)', () => {
+    const original = window.matchMedia
+    window.matchMedia = vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })) as unknown as typeof window.matchMedia
+    try {
+      window.localStorage.setItem('opex:tasks-filters:v1', JSON.stringify({ view: 'table' }))
+      renderPage()
+      expect(screen.getByTestId('task-compact-list')).toBeTruthy()
+      expect(screen.queryByTestId('task-table')).toBeNull()
+      expect(screen.queryByRole('columnheader')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Abrir OPX-1: Primeira' })).toBeTruthy()
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
   it('Atualizar recarrega as tarefas', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Atualizar tarefas' }))

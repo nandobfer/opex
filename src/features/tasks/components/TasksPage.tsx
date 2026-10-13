@@ -39,8 +39,10 @@ import { ColumnFormDialog } from "./ColumnFormDialog"
 import { TaskCreationActions } from "./TaskCreationActions"
 import { TaskBulkBar } from "./TaskBulkBar"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
-import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
+import { useFillViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
+import { useIsMobile } from "@/hooks/useMediaQuery"
 import { TaskBoard } from "./TaskBoard"
+import { TaskCompactList } from "./TaskCompactList"
 import { TaskFiltersBar } from "./TaskFiltersBar"
 import { TaskTable } from "./TaskTable"
 import { TaskViewSwitch } from "./TaskViewSwitch"
@@ -143,21 +145,20 @@ export function TasksPage() {
     const filtering = countActiveFilters(filters) > 0
     const view = !ready || list.isLoading ? "loading" : list.isError ? "error" : shown.length === 0 && (filtering || filters.view === "table") ? "empty" : filters.view
     const kanbanLayout = view === "kanban"
+    const isMobile = useIsMobile()
 
     // No kanban o quadro precisa de altura definida para as colunas rolarem por dentro (o cabeçalho
-    // alto do celular empurrava o conteúdo e a coluna colapsava). No desktop `min-h-full` já resolve;
-    // no celular medimos a área visível e fixamos a altura do quadro.
-    const sectionRef = useRef<HTMLElement>(null)
-    const kanbanHeight = useScrollViewportHeight(sectionRef, kanbanLayout)
+    // alto do celular empurrava o conteúdo e a coluna colapsava). A altura vem da área visível a
+    // partir do topo do próprio quadro; no desktop o `min-h-full` do flex já resolve.
+    const boardRef = useRef<HTMLDivElement>(null)
+    const boardHeight = useFillViewportHeight(boardRef, kanbanLayout)
 
     return (
         <motion.section
-            ref={sectionRef}
             initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            style={kanbanLayout && kanbanHeight ? ({ "--tasks-kanban-height": `${kanbanHeight}px` } as CSSProperties) : undefined}
-            className={cn(kanbanLayout ? "flex flex-col gap-4 max-md:h-[var(--tasks-kanban-height,calc(100dvh_-_14rem))] md:min-h-full" : "space-y-4")}
+            className={cn(kanbanLayout ? "flex flex-col gap-4 md:min-h-full" : "space-y-4")}
         >
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="flex items-center gap-3">
@@ -197,7 +198,7 @@ export function TasksPage() {
             </AnimatePresence>
 
             <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={view} {...swap} className={cn(view === "kanban" && "flex min-h-0 flex-1 basis-0 flex-col")}>
+                <motion.div key={view} {...swap} className={cn(view === "kanban" && "flex min-h-0 flex-col md:flex-1 md:basis-0")}>
                     {view === "loading" && <TasksSkeleton kanban={filters.view === "kanban"} />}
                     {view === "error" && <ErrorState title="Não foi possível carregar as tarefas" description={apiErrorMessage(list.error, "Tente novamente.")} onRetry={refresh} />}
                     {view === "empty" && (
@@ -210,34 +211,54 @@ export function TasksPage() {
                         />
                     )}
                     {view === "kanban" && (
-                        <TaskBoard
-                            tasks={visible}
-                            columns={columns}
-                            rawCounts={rawCounts}
-                            sort={filters.sort}
-                            movingId={flow.movingId}
-                            selection={selection}
-                            actions={columnActions}
-                            onMove={flow.move}
-                            onMoveMany={bulk.move}
-                            onReorderColumns={reorderColumns}
-                            onOpen={open}
-                        />
+                        <div
+                            ref={boardRef}
+                            style={boardHeight ? ({ "--tasks-board-height": `${boardHeight}px` } as CSSProperties) : undefined}
+                            className="flex min-h-0 flex-col max-md:h-[var(--tasks-board-height,20rem)] max-md:min-h-[20rem] md:flex-1 md:basis-0"
+                        >
+                            <TaskBoard
+                                tasks={visible}
+                                columns={columns}
+                                rawCounts={rawCounts}
+                                sort={filters.sort}
+                                movingId={flow.movingId}
+                                selection={selection}
+                                actions={columnActions}
+                                onMove={flow.move}
+                                onMoveMany={bulk.move}
+                                onReorderColumns={reorderColumns}
+                                onOpen={open}
+                            />
+                        </div>
                     )}
-                    {view === "table" && (
-                        <TaskTable
-                            tasks={visible}
-                            columns={allColumns}
-                            sort={filters.tableSort}
-                            onSortChange={(tableSort) => setFilters((prev) => ({ ...prev, tableSort }))}
-                            movingId={flow.movingId}
-                            updatingId={updatingId}
-                            selection={selection}
-                            onMove={(task, column) => flow.move(task, column)}
-                            onUpdate={(task, change) => update.mutate({ task, body: change, patch: change, success: `${task.code} com prioridade ${change.priority}` })}
-                            onOpen={open}
-                        />
-                    )}
+                    {view === "table" &&
+                        (isMobile ? (
+                            <TaskCompactList
+                                tasks={visible}
+                                columns={allColumns}
+                                sort={filters.tableSort}
+                                onSortChange={(tableSort) => setFilters((prev) => ({ ...prev, tableSort }))}
+                                movingId={flow.movingId}
+                                updatingId={updatingId}
+                                selection={selection}
+                                onMove={(task, column) => flow.move(task, column)}
+                                onUpdate={(task, change) => update.mutate({ task, body: change, patch: change, success: `${task.code} com prioridade ${change.priority}` })}
+                                onOpen={open}
+                            />
+                        ) : (
+                            <TaskTable
+                                tasks={visible}
+                                columns={allColumns}
+                                sort={filters.tableSort}
+                                onSortChange={(tableSort) => setFilters((prev) => ({ ...prev, tableSort }))}
+                                movingId={flow.movingId}
+                                updatingId={updatingId}
+                                selection={selection}
+                                onMove={(task, column) => flow.move(task, column)}
+                                onUpdate={(task, change) => update.mutate({ task, body: change, patch: change, success: `${task.code} com prioridade ${change.priority}` })}
+                                onOpen={open}
+                            />
+                        ))}
                 </motion.div>
             </AnimatePresence>
 
