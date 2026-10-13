@@ -4,7 +4,7 @@
  * Integrações ativas: Pusher, API interna, Crons, GitHub, Provedores de IA (hub `ai`
  * com os provedores `ai_opencode`, `ai_gemini` e `ai_jev`, que só aparecem dentro do hub), Clientes,
  * SMTP e Storage S3.
- * `archflow` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
+ * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
  * Fonte única dos metadados: nome, descrição, ambiente padrão e campos. É módulo PURO (sem
  * dependência de servidor) — a tela usa o mesmo catálogo para desenhar o formulário e o servidor o
@@ -25,9 +25,9 @@ export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 /** Integrações exibidas na lista como "Em desenvolvimento" (sem configuração nem ações). */
 export const IN_DEVELOPMENT_INTEGRATIONS = [
     {
-        id: "archflow",
-        name: "Archflow",
-        description: "Plataforma de arquitetura para solicitar deploys nos ambientes de QA e PRD",
+        id: "google_drive",
+        name: "Google Drive",
+        description: "Fonte de tarefas a partir de planilhas do Google Sheets",
     },
 ] as const satisfies readonly { id: string; name: string; description: string }[]
 

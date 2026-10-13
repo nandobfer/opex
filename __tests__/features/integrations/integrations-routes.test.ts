@@ -71,6 +71,7 @@ describe('GET /api/integrations', () => {
 describe('GET/PATCH /api/integrations/[id]', () => {
   it('404 para integração desconhecida', async () => {
     expect((await detailGET(new NextRequest('http://x'), params('meta'))).status).toBe(404)
+    expect((await detailGET(new NextRequest('http://x'), params('google_drive'))).status).toBe(404)
     expect((await detailGET(new NextRequest('http://x'), params('archflow'))).status).toBe(404)
   })
 
