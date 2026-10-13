@@ -107,8 +107,12 @@ semeado na primeira leitura (`ensureBoard`).
 
 ## Tela `/tarefas` (`components/TasksPage.tsx`)
 
-- Cabeçalho: título com total animado, "atualizado às HH:mm:ss", **Nova prévia**, **Nova tarefa**, **Kanban |
-  Tabela** (`TaskViewSwitch`) e **Atualizar**. `TimerIndicator` e "Minhas horas" ao lado.
+- Cabeçalho: título com total animado, "atualizado às HH:mm:ss", o indicador **Trabalhos em
+  andamento** (`TimerIndicator`), **Nova prévia**, **Nova tarefa**, **Kanban |
+  Tabela** (`TaskViewSwitch`) e **Atualizar**. O antigo atalho **Horas agênticas** saiu do cabeçalho
+  (a tela continua no menu). No **celular** (`< md`) as ações empilham em **linhas inteiras**: o
+  indicador sozinho, os dois botões de criação lado a lado, o seletor de visualização e **Atualizar**
+  cada um na sua linha; no desktop seguem numa linha.
 - **Nova prévia** e **Nova tarefa** são os `TaskCreationActions`
   (`components/TaskCreationActions.tsx`), **compartilhados com o Dashboard**
   (`modules/dashboard.md`): mesmos botões e destinos, com `enabled` amarrado à disponibilidade dos
@@ -141,12 +145,16 @@ semeado na primeira leitura (`ensureBoard`).
   (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**
   (`workbenchProgressTone`) como **link direto para a mesa** (`/desenvolvimento/[central]/[tarefa]`):
   clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
-  `modules/agentic-dev.md`, "Trabalhos em andamento").
+  `modules/agentic-dev.md`, "Trabalhos em andamento"). No **celular** o quadro recebe uma **altura
+  definida** (medida da área visível com `useScrollViewportHeight`) para as colunas rolarem por
+  dentro, e cada coluna usa a **largura da tela** (`85vw`, máx. 300px) em vez dos 290px do desktop.
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA**, as **tags** e a
   **estimativa real** de horas e, com cliente, o faturamento sob o título), Coluna ("Mover para…"), Prioridade,
   Tipo, Repositório, Atualizada; ordenação por coluna (salva); virtualizada acima de 50; rola com
   a página (`usePageVirtualizer`). Na célula do código, o **motivo de espera** de uma mesa é o
-  mesmo **link para a mesa** do card do kanban.
+  mesmo **link para a mesa** do card do kanban. No **celular** o cabeçalho da tabela some e cada
+  linha vira um **cartão empilhado** (código e o menu de coluna na 1ª linha; título, resumo e tags
+  em linha própria), sem rolagem horizontal.
 - **Edição na linha** (tabela): prioridade (`TaskPriorityMenu`) aplica na hora (`useUpdateTask`,
   otimista, reverte com toast).
 - Mudança de coluna (`useTaskMoveFlow` + `useMoveTask`): **otimista** em todas as listas e no

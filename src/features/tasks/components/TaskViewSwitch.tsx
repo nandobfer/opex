@@ -11,9 +11,9 @@ const OPTIONS = [
 ] as const satisfies readonly { value: TaskViewMode; label: string; icon: typeof LayoutGrid }[]
 
 /** Alterna Kanban | Tabela (padrão `NegotiationViewSwitch` do Smart Desk), com destaque deslizante. */
-export function TaskViewSwitch({ value, onChange }: { value: TaskViewMode; onChange: (value: TaskViewMode) => void }) {
+export function TaskViewSwitch({ value, onChange, className }: { value: TaskViewMode; onChange: (value: TaskViewMode) => void; className?: string }) {
     return (
-        <div role="radiogroup" aria-label="Visualização" className="flex items-center gap-1 rounded-md border border-border bg-card p-1">
+        <div role="radiogroup" aria-label="Visualização" className={cn("flex items-center gap-1 rounded-md border border-border bg-card p-1", className)}>
             {OPTIONS.map((option) => {
                 const active = value === option.value
                 const Icon = option.icon
@@ -25,7 +25,7 @@ export function TaskViewSwitch({ value, onChange }: { value: TaskViewMode; onCha
                         aria-checked={active}
                         onClick={() => onChange(option.value)}
                         className={cn(
-                            "relative inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors",
+                            "relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors md:flex-none",
                             active ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground",
                         )}
                     >

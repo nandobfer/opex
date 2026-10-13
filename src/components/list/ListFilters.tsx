@@ -131,15 +131,18 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
             <Card>
                 <CardHeader className={cn("transition-[padding]", collapsed ? "py-3" : "pb-3")}>
                     <div
-                        className={cn("flex items-center gap-3", collapsed && "cursor-pointer")}
+                        className={cn(
+                            "grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 md:grid-cols-[auto_1fr_auto]",
+                            collapsed && "cursor-pointer",
+                        )}
                         onClick={expand}
                         data-testid="list-filters-header"
                     >
-                        <div className="flex shrink-0 items-center gap-2">
-                            <Filter className="h-5 w-5 text-primary" aria-hidden />
-                            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Filtros</h2>
+                        <div className="col-start-1 col-end-2 row-start-1 flex min-w-0 items-center gap-2">
+                            <Filter className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                            <h2 className="whitespace-nowrap text-sm font-semibold uppercase tracking-wider text-muted-foreground">Filtros</h2>
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="col-start-1 col-end-3 row-start-2 min-w-0 md:col-start-2 md:col-end-3 md:row-start-1" data-testid="list-filters-summary">
                             <AnimatePresence initial={false}>
                                 {collapsed && (
                                     <motion.div key="chips" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
@@ -148,7 +151,7 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
                                 )}
                             </AnimatePresence>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="col-start-2 col-end-3 row-start-1 flex shrink-0 items-center justify-end gap-1.5 md:col-start-3 md:col-end-4" data-testid="list-filters-controls">
                             {total !== undefined && total > 0 && (
                                 <div className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">{total} REGISTROS</div>
                             )}

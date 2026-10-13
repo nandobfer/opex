@@ -44,16 +44,16 @@ export function DashboardHeader({
                     <p className="text-sm text-muted-foreground">{description}</p>
                 </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
                 {actions}
                 <OptionTabs
                     aria-label="Período"
-                    className="shrink-0"
+                    className="w-full md:w-auto md:shrink-0"
                     value={period}
                     onChange={onPeriodChange}
                     options={DASHBOARD_PERIODS.map((value) => ({ value, label: DASHBOARD_PERIOD_LABELS[value] }))}
                 />
-                <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={onRefresh} disabled={refreshing} aria-label="Atualizar indicadores">
+                <Button type="button" variant="outline" size="sm" className="h-9 gap-2 max-md:hidden" onClick={onRefresh} disabled={refreshing} aria-label="Atualizar indicadores">
                     <motion.span animate={{ rotate: refreshing ? 360 : 0 }} transition={refreshing ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
                         <RefreshCw className="h-4 w-4" aria-hidden />
                     </motion.span>

@@ -153,4 +153,15 @@ describe('TaskTable rolando com a página', () => {
     fireEvent.click(screen.getByRole('button', { name: 'selecionar' }))
     expect(screen.getByTestId('task-table').className).toContain('pb-24')
   })
+
+  it('no celular o cabeçalho some e cada linha vira um cartão empilhado (título em linha própria)', () => {
+    inPage(<Table tasks={[task(1)]} />)
+    const wrapper = screen.getByTestId('task-table')
+    expect(wrapper.querySelector('thead')!.className).toContain('max-md:hidden')
+    expect(wrapper.querySelector('tbody')!.className).toContain('max-md:block')
+    expect(screen.getByRole('row', { name: 'Abrir OPX-1' }).className).toContain('max-md:flex')
+    const titleCell = screen.getByText('Tarefa 1').closest('td')!
+    expect(titleCell.className).toContain('max-md:order-last')
+    expect(titleCell.className).toContain('max-md:w-full')
+  })
 })

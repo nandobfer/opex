@@ -35,6 +35,8 @@ interface TasksPaneProps {
     centrals: readonly CentralDto[]
     activeTaskId: string | null
     onSelectCentral: (id: string) => void
+    /** Classes extras do painel (ex.: visibilidade/altura no celular, controladas pela tela). */
+    className?: string
 }
 
 /**
@@ -42,7 +44,7 @@ interface TasksPaneProps {
  * a busca por nome e o filtro de colunas, todos ocupando a linha inteira; por fim a lista com a
  * etapa da mesa. Coluna sempre expandida (largura fixa a partir de `lg`).
  */
-export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: TasksPaneProps) {
+export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, className }: TasksPaneProps) {
     const list = useTaskList(false)
     const board = useTaskBoard()
     const workbenches = useCentralWorkbenches(central.id)
@@ -59,7 +61,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral }: 
     const reduceMotion = useReducedMotion()
 
     return (
-        <Card role="region" aria-label="Lista de tarefas" className="flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0">
+        <Card role="region" aria-label="Lista de tarefas" data-testid="tasks-pane" className={cn("flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0", className)}>
             <div className="space-y-2 border-b p-3">
                 <h2 className="text-sm font-semibold">
                     Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>

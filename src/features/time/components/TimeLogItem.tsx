@@ -70,7 +70,7 @@ export function TimeLogItem({ log }: { log: TimeLogDto }) {
                     )}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex shrink-0 items-center gap-3 max-md:w-full max-md:basis-full max-md:justify-between max-md:border-t max-md:pt-2" data-testid="time-log-period">
                     <span className="text-xs tabular-nums text-muted-foreground">
                         {hour(log.startTime)} – {log.endTime ? hour(log.endTime) : "agora"}
                     </span>

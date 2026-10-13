@@ -43,7 +43,7 @@ export function FinanceTaskRow({ task }: { task: FinanceTaskDto }) {
                         </span>
                     </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground max-md:w-full max-md:basis-full max-md:justify-start max-md:border-t max-md:pt-2" data-testid="finance-task-values">
                     <span title="Horas do cliente (H × fator)">{formatHours(task.clientHours)}</span>
                     <span title="Horas reais (H)">{formatHours(task.hours)}</span>
                     <span className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-success">

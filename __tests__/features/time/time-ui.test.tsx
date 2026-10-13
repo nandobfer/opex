@@ -177,4 +177,20 @@ describe('TimeLogTaskGroup (agrupamento por task/mesa)', () => {
     expect(screen.queryByText(/tokens/)).toBeNull()
     expect(screen.queryByText(/US\$/)).toBeNull()
   })
+
+  it('no celular o consumo/total do grupo vai para uma linha própria (não espreme o título)', () => {
+    render(<GroupHarness group={group({ totalMinutes: 45, totalTokens: 175, totalCostUsd: 0.5 })} />)
+    const metrics = screen.getByTestId('time-group-metrics')
+    expect(metrics.className).toContain('max-md:basis-full')
+    expect(metrics.className).toContain('max-md:justify-start')
+  })
+})
+
+describe('TimeLogItem no celular', () => {
+  it('o período/duração vai para uma linha própria, abaixo do conteúdo', () => {
+    render(<TimeLogItem log={log({ active: false, endTime: new Date().toISOString(), duration: 90 })} />)
+    const period = screen.getByTestId('time-log-period')
+    expect(period.className).toContain('max-md:basis-full')
+    expect(period.className).toContain('max-md:justify-between')
+  })
 })

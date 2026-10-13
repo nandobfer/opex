@@ -41,7 +41,7 @@ export function ClienteCostTaskRow({ task, repoIndex, href }: { task: ClienteCos
                         </span>
                     </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground max-md:w-full max-md:basis-full max-md:justify-start max-md:border-t max-md:pt-2" data-testid="cliente-cost-task-values">
                     <span title="Horas no período">{formatHours(task.clientHours)}</span>
                     <span className="inline-flex items-center gap-1 font-mono text-sm font-semibold text-success">
                         <Wallet className="h-3.5 w-3.5" aria-hidden />

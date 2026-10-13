@@ -122,6 +122,12 @@ describe("DashboardPage", () => {
         expect(mocks.push).toHaveBeenCalledWith("/tarefas/nova")
     })
 
+    it("oculta Atualizar no celular e deixa o período ocupar a linha inteira", () => {
+        render(<DashboardPage />)
+        expect(screen.getByRole("button", { name: "Atualizar indicadores" }).className).toContain("max-md:hidden")
+        expect(screen.getByRole("radiogroup", { name: "Período" }).className).toContain("w-full md:w-auto")
+    })
+
     it("mantém os atalhos disponíveis durante o carregamento dos indicadores", () => {
         mocks.query = { data: undefined, isLoading: true, isError: false, isFetching: true, error: null, refetch: vi.fn() }
         render(<DashboardPage />)

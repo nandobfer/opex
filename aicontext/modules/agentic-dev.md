@@ -170,7 +170,10 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   no seletor tem prioridade** sobre a central do projeto da tarefa até a tarefa sair da URL: a central
   escolhida fica salva e a tarefa é limpa (o guarda evita que a central da tarefa regrave por cima a
   escolha no render intermediário entre a troca e a navegação). Duas colunas:
-  **Tarefas do projeto** | **Mesa de trabalho**.
+  **Tarefas do projeto** | **Mesa de trabalho**. No **celular** (`< lg`) só um painel aparece por
+  vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
+  A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
+  no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
 - O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista

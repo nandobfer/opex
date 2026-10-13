@@ -1,15 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Clock, FilterX, ListTodo, RefreshCw } from "lucide-react"
+import { FilterX, ListTodo, RefreshCw } from "lucide-react"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
-import { TIME_PATH } from "@/features/time/schemas"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -41,6 +39,7 @@ import { ColumnFormDialog } from "./ColumnFormDialog"
 import { TaskCreationActions } from "./TaskCreationActions"
 import { TaskBulkBar } from "./TaskBulkBar"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
+import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
 import { TaskBoard } from "./TaskBoard"
 import { TaskFiltersBar } from "./TaskFiltersBar"
 import { TaskTable } from "./TaskTable"
@@ -145,12 +144,20 @@ export function TasksPage() {
     const view = !ready || list.isLoading ? "loading" : list.isError ? "error" : shown.length === 0 && (filtering || filters.view === "table") ? "empty" : filters.view
     const kanbanLayout = view === "kanban"
 
+    // No kanban o quadro precisa de altura definida para as colunas rolarem por dentro (o cabeçalho
+    // alto do celular empurrava o conteúdo e a coluna colapsava). No desktop `min-h-full` já resolve;
+    // no celular medimos a área visível e fixamos a altura do quadro.
+    const sectionRef = useRef<HTMLElement>(null)
+    const kanbanHeight = useScrollViewportHeight(sectionRef, kanbanLayout)
+
     return (
         <motion.section
+            ref={sectionRef}
             initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className={cn(kanbanLayout ? "flex min-h-full flex-col gap-4" : "space-y-4")}
+            style={kanbanLayout && kanbanHeight ? ({ "--tasks-kanban-height": `${kanbanHeight}px` } as CSSProperties) : undefined}
+            className={cn(kanbanLayout ? "flex flex-col gap-4 max-md:h-[var(--tasks-kanban-height,calc(100dvh_-_14rem))] md:min-h-full" : "space-y-4")}
         >
             <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div className="flex items-center gap-3">
@@ -168,14 +175,9 @@ export function TasksPage() {
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <TimerIndicator />
-                    <Button asChild variant="outline" size="sm" className="h-9 gap-2">
-                        <Link href={TIME_PATH}>
-                            <Clock className="h-4 w-4" aria-hidden /> Horas agênticas
-                        </Link>
-                    </Button>
-                    <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} />
+                <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+                    <TimerIndicator className="w-full md:w-auto" />
+                    <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} className="w-full md:w-auto" />
                     <TaskCreationActions enabled={ready} />
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={refreshing} aria-label="Atualizar tarefas">
                         <motion.span animate={{ rotate: refreshing ? 360 : 0 }} transition={refreshing ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">

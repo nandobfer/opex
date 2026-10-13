@@ -48,4 +48,11 @@ describe("ClienteTaskTable", () => {
         const link = screen.getByRole("link", { name: "Corrigir X" })
         expect(link.getAttribute("href")).toBe("/cliente/tarefa/1")
     })
+
+    it("no celular empilha as células e esconde o cabeçalho da tabela", () => {
+        const { container } = render(<ClienteTaskTable tasks={[task]} columns={columns} hrefFor={(item) => `/cliente/tarefa/${item.id}`} />)
+        expect(container.querySelector("thead")!.className).toContain("max-md:hidden")
+        expect(container.querySelector("tbody")!.className).toContain("max-md:block")
+        expect(container.querySelector("tbody tr")!.className).toContain("max-md:flex")
+    })
 })

@@ -65,8 +65,12 @@ monta os itens com `dashboardKpiItems(kpis)` e o portal com o recorte dele.
 
 Os atalhos **independem do período** e continuam disponíveis durante o carregamento ou erro dos
 indicadores. O período é um `OptionTabs` que **não quebra linha**: o grupo não encolhe (`shrink-0`) e
-os rótulos usam `whitespace-nowrap`, para o grupo inteiro passar à linha seguinte sem “Mês atual”
-quebrar em duas linhas.
+os rótulos usam `whitespace-nowrap`, para o grupo inteiro passar à linha seguinte sem "Mês atual"
+quebrar em duas linhas. No **celular** (`< md`) a linha de ações empilha em **linhas inteiras**: o
+indicador **Trabalhos em andamento** ocupa uma linha sozinho, **Nova prévia** e **Nova tarefa**
+dividem uma linha inteira, o período ocupa a linha inteira e o botão **Atualizar** fica **oculto** (a
+atualização continua pelo tempo real e pelo "Tentar novamente" em erro). O mesmo vale para o
+**dashboard do cliente**: o botão único de criação e o período ocupam a linha inteira no celular.
 
 O `layout.tsx` da rota monta `TimerProvider` e `WorkbenchProgressProvider` (somente leitura) para
 alimentar o indicador — os mesmos contextos do layout de Tarefas.

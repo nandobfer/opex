@@ -107,4 +107,13 @@ describe('kanban: altura e largura', () => {
     expect(BULK_BAR_CLEARANCE).toBe('pb-24')
     expect(BULK_BAR_CLEARANCE_PX).toBe(24 * 4)
   })
+
+  it('no celular a coluna usa a largura da tela (não os 290px fixos do desktop)', () => {
+    render(<Board tasks={[task(1)]} />)
+    const column = screen.getByRole('region', { name: 'A Fazer' })
+    expect(column.className).toContain('max-md:w-[85vw]')
+    expect(column.className).toContain('max-md:max-w-[300px]')
+    // A lista de cards continua sem altura máxima chutada (rola dentro da coluna).
+    expect(screen.getByTestId('column-cards-todo').className).not.toMatch(/max-h/)
+  })
 })

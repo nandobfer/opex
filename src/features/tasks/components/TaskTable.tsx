@@ -143,7 +143,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                 aria-label={`Abrir ${task.code}`}
                 aria-selected={selected}
                 className={cn(
-                    "cursor-pointer border-b transition-colors focus:outline-none",
+                    "cursor-pointer border-b transition-colors focus:outline-none max-md:mb-3 max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-2 max-md:gap-y-1 max-md:rounded-lg max-md:border max-md:p-3",
                     selected
                         ? "bg-primary/10 hover:bg-primary/15"
                         : tone === "failed"
@@ -159,10 +159,10 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                     task.archived && "opacity-70",
                 )}
             >
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 max-md:px-0 max-md:py-0">
                     <SelectionCheckbox checked={selected} onToggle={(event) => selection.toggle(task.id, { shift: event.shiftKey, ordered: orderedIds })} label={`Selecionar ${task.code}`} />
                 </td>
-                <td className="px-3 py-2 font-mono text-xs font-semibold text-primary">
+                <td className="px-3 py-2 font-mono text-xs font-semibold text-primary max-md:px-0 max-md:py-0">
                     <span className="flex items-center gap-1.5">
                         <span role="img" className={cn("h-2 w-2 shrink-0 rounded-full md:hidden", PRIORITY_DOT[task.priority])} title={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} aria-label={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} />
                         {task.code}
@@ -177,7 +177,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                         <span className="px-1.5 text-xs text-muted-foreground">—</span>
                     )}
                 </td>
-                <td className="max-w-0 px-3 py-2">
+                <td className="max-w-0 px-3 py-2 max-md:order-last max-md:w-full max-md:max-w-full max-md:px-0 max-md:pt-1 max-md:pb-0">
                     <div className="flex flex-col gap-0.5">
                         <span className="flex items-center gap-2">
                             <Tooltip delayDuration={300}>
@@ -200,7 +200,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                         {(task.tags?.length ?? 0) > 0 && <TaskTagsBadge tags={task.tags} max={3} />}
                     </div>
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 max-md:ml-auto max-md:px-0 max-md:py-0">
                     <TaskColumnMenu task={task} columns={columns} moving={movingId === task.id} onMove={onMove} />
                 </td>
                 <td className={cn("px-3 py-2", hide("priority"))}>
@@ -222,8 +222,8 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     return (
         <TooltipProvider>
             <div ref={anchorRef} className={cn("rounded-md border bg-card transition-[padding]", hasSelection && BULK_BAR_CLEARANCE)} data-testid="task-table">
-                <table className="w-full table-fixed caption-bottom text-sm">
-                    <thead className={cn("sticky top-0 z-10 bg-card shadow-[0_1px_0_var(--color-border)] transition-shadow", stuck && "shadow-[0_1px_0_var(--color-border),0_8px_16px_-8px_rgb(0_0_0/0.6)]")} data-stuck={stuck || undefined}>
+                <table className="w-full table-fixed caption-bottom text-sm max-md:block">
+                    <thead className={cn("sticky top-0 z-10 bg-card shadow-[0_1px_0_var(--color-border)] transition-shadow max-md:hidden", stuck && "shadow-[0_1px_0_var(--color-border),0_8px_16px_-8px_rgb(0_0_0/0.6)]")} data-stuck={stuck || undefined}>
                         <tr>
                             <th className="h-10 w-[44px] px-3 text-left align-middle">
                                 <SelectionCheckbox
@@ -247,7 +247,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                             })}
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="max-md:block">
                         {virtualize ? (
                             <>
                                 {padTop > 0 && <tr style={{ height: padTop }} aria-hidden />}

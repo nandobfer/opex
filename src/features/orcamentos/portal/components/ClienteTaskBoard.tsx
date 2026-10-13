@@ -29,7 +29,7 @@ export function ClienteTaskBoard({
             {columns.map((column) => {
                 const items = grouped.get(column.key) ?? []
                 return (
-                    <section key={column.key} role="listitem" className={cn("flex w-[290px] shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 p-2", column.border, "border-t-2")}>
+                    <section key={column.key} role="listitem" className={cn("flex w-[290px] shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 p-2 max-md:w-[85vw] max-md:max-w-[300px]", column.border, "border-t-2")}>
                         <header className="flex items-center justify-between gap-2 px-1 py-0.5">
                             <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
                                 <ColumnIconView icon={column.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />

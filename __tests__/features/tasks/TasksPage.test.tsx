@@ -116,6 +116,13 @@ describe('TasksPage', () => {
     expect(mocks.push).toHaveBeenCalledWith('/tarefas/previa')
   })
 
+  it('não mostra o atalho "Horas agênticas" no cabeçalho (removido)', () => {
+    renderPage()
+    expect(screen.queryByRole('link', { name: /Horas agênticas/ })).toBeNull()
+    // O seletor Kanban | Tabela ocupa a linha inteira no celular (largura total).
+    expect(screen.getByRole('radiogroup', { name: 'Visualização' }).className).toContain('w-full md:w-auto')
+  })
+
   it('alternar para Tabela fica salvo no navegador', () => {
     const { unmount } = renderPage()
     fireEvent.click(screen.getByRole('radio', { name: /Tabela/ }))
