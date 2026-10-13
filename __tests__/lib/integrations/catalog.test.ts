@@ -25,8 +25,12 @@ describe('catálogo de integrações', () => {
     expect(isIntegrationId('whatsapp_orchestrator')).toBe(false)
   })
 
-  it('Archflow aparece como Em desenvolvimento, sem definição configurável', () => {
-    expect(IN_DEVELOPMENT_INTEGRATIONS.map((item) => [item.id, item.name])).toEqual([['archflow', 'Archflow']])
+  it('Google Drive aparece como Em desenvolvimento, sem definição configurável', () => {
+    expect(IN_DEVELOPMENT_INTEGRATIONS.map((item) => [item.id, item.name])).toEqual([['google_drive', 'Google Drive']])
+    expect(getInDevelopmentIntegration('archflow')).toBeUndefined()
+    expect(getInDevelopmentIntegration('google_drive')?.description).toBe(
+      'Fonte de tarefas a partir de planilhas do Google Sheets',
+    )
     for (const item of IN_DEVELOPMENT_INTEGRATIONS) {
       expect(getIntegrationDef(item.id)).toBeUndefined()
       expect(getInDevelopmentIntegration(item.id)).toBe(item)

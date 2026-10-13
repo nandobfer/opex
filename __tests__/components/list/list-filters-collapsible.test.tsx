@@ -72,4 +72,14 @@ describe('ListFilters recolhível', () => {
     expect(screen.getByText('campo')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Expandir filtros|Recolher filtros/ })).toBeNull()
   })
+
+  it('recolhido, o resumo (chips ou mensagem) fica em linha própria, abaixo do cabeçalho', () => {
+    render(<Harness />)
+    const summary = screen.getByTestId('list-filters-summary')
+    const controls = screen.getByTestId('list-filters-controls')
+    // No celular o resumo cai para a 2ª linha do grid; os controles (total/limpar/expandir) ficam na 1ª.
+    expect(summary.className).toContain('row-start-2')
+    expect(controls.className).toContain('row-start-1')
+    expect(summary.contains(controls)).toBe(false)
+  })
 })

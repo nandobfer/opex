@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   list: { data: undefined as unknown, isLoading: false, isError: false, isFetching: false, error: null as unknown },
   push: vi.fn(),
   invalidate: vi.fn(),
+  timerFullWidth: false,
 }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
@@ -44,6 +45,13 @@ vi.mock('@/features/tasks/hooks/useTaskBoard', async () => {
     useColumnMutations: () => ({ create: { isPending: false }, update: { isPending: false }, remove: { mutate: vi.fn() }, reorder: { mutate: vi.fn() } }),
   }
 })
+
+vi.mock('@/features/time/components/TimerIndicator', () => ({
+  TimerIndicator: ({ fullWidth }: { fullWidth?: boolean }) => {
+    mocks.timerFullWidth = Boolean(fullWidth)
+    return React.createElement('span', { 'data-testid': 'tasks-timer-indicator' })
+  },
+}))
 
 import { RepoIndexProvider } from '@/features/github/components/RepoIndexProvider'
 
@@ -116,6 +124,19 @@ describe('TasksPage', () => {
     expect(mocks.push).toHaveBeenCalledWith('/tarefas/previa')
   })
 
+  it('não mostra o atalho "Horas agênticas" no cabeçalho (removido)', () => {
+    renderPage()
+    expect(screen.queryByRole('link', { name: /Horas agênticas/ })).toBeNull()
+    // O seletor Kanban | Tabela ocupa a linha inteira no celular (largura total).
+    expect(screen.getByRole('radiogroup', { name: 'Visualização' }).className).toContain('w-full md:w-auto')
+  })
+
+  it('o indicador de trabalho ocupa a linha inteira no celular (fullWidth)', () => {
+    renderPage()
+    expect(screen.getByTestId('tasks-timer-indicator')).toBeTruthy()
+    expect(mocks.timerFullWidth).toBe(true)
+  })
+
   it('alternar para Tabela fica salvo no navegador', () => {
     const { unmount } = renderPage()
     fireEvent.click(screen.getByRole('radio', { name: /Tabela/ }))
@@ -124,6 +145,21 @@ describe('TasksPage', () => {
     unmount()
     renderPage()
     expect(screen.getByRole('columnheader', { name: /Código/ })).toBeTruthy()
+  })
+
+  it('no celular a visão Tabela vira cards compactos (sem tabela)', () => {
+    const original = window.matchMedia
+    window.matchMedia = vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })) as unknown as typeof window.matchMedia
+    try {
+      window.localStorage.setItem('opex:tasks-filters:v1', JSON.stringify({ view: 'table' }))
+      renderPage()
+      expect(screen.getByTestId('task-compact-list')).toBeTruthy()
+      expect(screen.queryByTestId('task-table')).toBeNull()
+      expect(screen.queryByRole('columnheader')).toBeNull()
+      expect(screen.getByRole('button', { name: 'Abrir OPX-1: Primeira' })).toBeTruthy()
+    } finally {
+      window.matchMedia = original
+    }
   })
 
   it('Atualizar recarrega as tarefas', () => {

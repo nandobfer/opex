@@ -7,12 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TimeLogDto } from '@/features/time/types'
 import type { ProjectRef } from '@/features/tasks/types'
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }))
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), timerFullWidth: false }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/lib/api', async (original) => ({
   ...(await original<typeof import('@/lib/api')>()),
   api: { get: mocks.get, post: mocks.post, patch: mocks.patch, delete: mocks.delete },
+}))
+vi.mock('@/features/time/components/TimerIndicator', () => ({
+  TimerIndicator: ({ fullWidth }: { fullWidth?: boolean }) => {
+    mocks.timerFullWidth = Boolean(fullWidth)
+    return React.createElement('span', { 'data-testid': 'logs-timer-indicator' })
+  },
 }))
 
 import { TimeLogsPage } from '@/features/time/components/TimeLogsPage'
@@ -145,6 +151,15 @@ describe('TimeLogsPage — infinite scrolling', () => {
     renderPage()
     await screen.findByText('Tarefa 1')
     expect(screen.getByRole('button', { name: /Carregar mais/ })).toBeTruthy()
+  })
+})
+
+describe('TimeLogsPage — indicador de trabalho no celular', () => {
+  it('o indicador "Trabalhos em andamento" ocupa a linha inteira (fullWidth)', async () => {
+    renderPage()
+    await screen.findByText('Tarefa 1')
+    expect(screen.getByTestId('logs-timer-indicator')).toBeTruthy()
+    expect(mocks.timerFullWidth).toBe(true)
   })
 })
 

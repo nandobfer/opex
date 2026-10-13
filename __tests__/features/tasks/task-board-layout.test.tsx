@@ -107,4 +107,25 @@ describe('kanban: altura e largura', () => {
     expect(BULK_BAR_CLEARANCE).toBe('pb-24')
     expect(BULK_BAR_CLEARANCE_PX).toBe(24 * 4)
   })
+
+  it('no celular a coluna usa a largura da tela (não os 290px fixos do desktop)', () => {
+    render(<Board tasks={[task(1)]} />)
+    const column = screen.getByRole('region', { name: 'A Fazer' })
+    expect(column.className).toContain('max-md:w-[85vw]')
+    expect(column.className).toContain('max-md:max-w-[300px]')
+    // A lista de cards continua sem altura máxima chutada (rola dentro da coluna).
+    expect(screen.getByTestId('column-cards-todo').className).not.toMatch(/max-h/)
+  })
+
+  it('no celular a altura é medida a partir do topo do próprio quadro (não da seção, que colapsava a coluna)', () => {
+    const page = readFileSync(join(process.cwd(), 'src/features/tasks/components/TasksPage.tsx'), 'utf8')
+    // O quadro (e não a seção inteira com cabeçalho/filtros) recebe a altura da área visível...
+    expect(page).toContain('useFillViewportHeight(boardRef')
+    expect(page).toContain('--tasks-board-height')
+    // ...com um mínimo para o conteúdo não colapsar (a página rola quando o cabeçalho é alto).
+    expect(page).toContain('max-md:min-h-[20rem]')
+    // A seção não é mais fixada no celular.
+    expect(page).not.toContain('--tasks-kanban-height')
+    expect(page).not.toContain('max-md:h-[var(--tasks-kanban-height')
+  })
 })

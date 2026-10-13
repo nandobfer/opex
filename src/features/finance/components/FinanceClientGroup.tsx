@@ -31,7 +31,7 @@ export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroup
                     onClick={onToggle}
                     aria-expanded={open}
                     aria-controls={listId}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="flex w-full flex-wrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                     <motion.span
                         animate={{ rotate: open ? 0 : -90 }}
@@ -46,7 +46,7 @@ export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroup
                             {group.clientName}
                         </span>
                     </span>
-                    <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-0.5 text-xs text-muted-foreground max-md:w-full max-md:basis-full max-md:justify-start max-md:pt-1" data-testid="finance-group-metrics">
                         <span className="inline-flex items-center gap-1">
                             <ListChecks className="h-3 w-3" aria-hidden />
                             {group.taskCount} {group.taskCount === 1 ? "tarefa" : "tarefas"}

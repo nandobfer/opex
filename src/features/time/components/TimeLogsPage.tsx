@@ -92,8 +92,8 @@ export function TimeLogsPage() {
                         <p className="text-sm text-muted-foreground">Tempo e uso das mesas de desenvolvimento</p>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <TimerIndicator />
+                <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+                    <TimerIndicator fullWidth />
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={() => void logsQuery.refetch()} disabled={logsQuery.isFetching} aria-label="Atualizar apontamentos">
                         <motion.span animate={{ rotate: logsQuery.isFetching ? 360 : 0 }} transition={logsQuery.isFetching ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
                             <RefreshCw className="h-4 w-4" aria-hidden />

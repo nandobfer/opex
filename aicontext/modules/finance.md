@@ -95,9 +95,11 @@ totalBillingBrl, tasks }`), `FinanceTotalsDto` e `FinanceByClientDto` (`{ from, 
   seleção). As opções vêm de `useOrcamentoClients` (clientes) e `useTaskOptions` (projetos).
 - `components/FinanceClientGroup.tsx` — grupo de cliente **expansível** (recolhido por padrão;
   abertura animada por Framer Motion, respeitando movimento reduzido): nome, contagem, horas do
-  cliente e faturamento.
+  cliente e faturamento. No **celular** as métricas do grupo vão para uma **linha própria**, abaixo
+  do nome do cliente.
 - `components/FinanceTaskRow.tsx` — cada tarefa concluída: código (link para `/tarefas/{id}`), título,
   repositório (`GithubRepoLabel`), data de conclusão e os valores (horas reais, horas do cliente e R$).
+  No **celular** os valores vão para uma **linha própria**, abaixo do título.
 - `format.ts` (**puro**) — `formatBillingBrl` (`R$ 1.234,56`) e `formatHours` (`H:mm h`).
 
 ## Testes
@@ -127,4 +129,5 @@ Reusa a mesma regra de conclusão (`completionTimestamps`) e o snapshot (`client
 **nunca** expõe horas reais, fator ou custo/hora — o termo é **"Custo"** e as horas mostradas são as
 infladas. Serviço em `src/features/orcamentos/server/portal-finance.ts` (`groupCostByProject` é puro e
 testado); apresentação em `src/features/orcamentos/portal/{ClienteFinanceiroPage,components/ClienteCost*}`;
-detalhes em `modules/orcamentos.md`.
+detalhes em `modules/orcamentos.md`. No **celular** os grupos e as tarefas seguem o mesmo ajuste da
+tela do dono (métricas e valores numa linha própria).

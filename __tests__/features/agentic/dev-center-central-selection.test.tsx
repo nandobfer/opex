@@ -28,8 +28,8 @@ vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskList: () => mocks.tas
 vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({ WorkbenchPane: () => <div data-testid="workbench" /> }))
 // A coluna de tarefas é reduzida ao essencial: mostra a central ativa e dispara a troca.
 vi.mock('@/features/agentic/components/dev-center/TasksPane', () => ({
-  TasksPane: ({ central, onSelectCentral }: { central: CentralDto; onSelectCentral: (id: string) => void }) => (
-    <div>
+  TasksPane: ({ central, onSelectCentral, className }: { central: CentralDto; onSelectCentral: (id: string) => void; className?: string }) => (
+    <div data-testid="tasks-pane" className={className}>
       <span data-testid="active-central">{central.id}</span>
       <button type="button" onClick={() => onSelectCentral('c2')}>Trocar para c2</button>
     </div>
@@ -95,5 +95,26 @@ describe('troca de central na Central de desenvolvimento (OPE-42)', () => {
     expect(activeCentral()).toBe('c2')
     expect(stored()).toBe(JSON.stringify({ id: 'c2' }))
     expect(mocks.replace).not.toHaveBeenCalled()
+  })
+
+  it('com tarefa aberta mostra o botão de voltar para a lista; sem tarefa, ele não aparece', () => {
+    const { unmount } = render(<DevCenterPage taskId={TASK} />)
+    expect(screen.getByRole('link', { name: /Voltar para tarefas/ }).getAttribute('href')).toBe('/desenvolvimento')
+    unmount()
+
+    render(<DevCenterPage taskId={null} />)
+    expect(screen.queryByRole('link', { name: /Voltar para tarefas/ })).toBeNull()
+  })
+
+  it('no celular só um painel aparece por vez (lista sem tarefa; mesa com tarefa)', () => {
+    const { unmount } = render(<DevCenterPage taskId={TASK} />)
+    // Com tarefa, a lista de tarefas some no celular e a mesa ocupa o espaço.
+    expect(screen.getByTestId('tasks-pane').className).toContain('max-lg:hidden')
+    expect(screen.getByTestId('dev-center-workbench-pane').className).not.toContain('max-lg:hidden')
+    unmount()
+
+    render(<DevCenterPage taskId={null} />)
+    expect(screen.getByTestId('tasks-pane').className).toContain('max-lg:flex-1')
+    expect(screen.getByTestId('dev-center-workbench-pane').className).toContain('max-lg:hidden')
   })
 })

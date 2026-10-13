@@ -53,8 +53,8 @@ export function ClienteTasksPage() {
                     <h1 className="text-lg font-semibold md:text-2xl">Tarefas</h1>
                     <p className="text-sm text-muted-foreground">Acompanhamento das tarefas que você solicitou (somente leitura).</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <TaskViewSwitch value={filters.view} onChange={(view) => setFilters((prev) => ({ ...prev, view }))} />
+                <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+                    <TaskViewSwitch value={filters.view} onChange={(view) => setFilters((prev) => ({ ...prev, view }))} className="w-full md:w-auto" />
                     <ClienteTaskCreationButton />
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={tasks.isFetching}>
                         <RefreshCw className="h-4 w-4" aria-hidden /> Atualizar

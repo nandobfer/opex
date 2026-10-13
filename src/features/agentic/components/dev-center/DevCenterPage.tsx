@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, type CSSProperties } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Settings2, Workflow } from "lucide-react"
+import { Settings2, Workflow, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import { cn } from "@/lib/utils"
 import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
 import { useTaskList } from "@/features/tasks/hooks/useTasks"
 import { DEV_CENTER_PATH } from "../../constants"
@@ -91,27 +92,43 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
             style={height ? ({ "--dev-center-height": `${height}px` } as CSSProperties) : undefined}
-            className="flex min-h-0 flex-col gap-4 lg:h-[var(--dev-center-height,calc(100dvh-3rem))] lg:flex-row"
+            className="flex h-[var(--dev-center-height,calc(100dvh_-_3rem))] min-h-0 flex-col gap-4 lg:flex-row"
         >
             {central ? (
-                <TasksPane central={central} centrals={list} activeTaskId={taskId} onSelectCentral={selectCentral} />
+                <TasksPane
+                    central={central}
+                    centrals={list}
+                    activeTaskId={taskId}
+                    onSelectCentral={selectCentral}
+                    // No celular só um painel aparece: a lista quando não há tarefa; a mesa quando há.
+                    className={cn(taskId ? "max-lg:hidden" : "max-lg:flex-1 max-lg:min-h-0")}
+                />
             ) : (
                 <Skeleton className="h-96 lg:w-[340px] lg:shrink-0" />
             )}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !taskId && "max-lg:hidden")} data-testid="dev-center-workbench-pane">
                 {central ? (
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                            key={`${central.id}-${taskId ?? ""}`}
-                            initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="flex min-h-0 min-w-0 flex-1 flex-col"
-                        >
-                            <WorkbenchPane central={central} taskId={taskId} />
-                        </motion.div>
-                    </AnimatePresence>
+                    <>
+                        {taskId && (
+                            <Button asChild variant="ghost" size="sm" className="mb-2 w-fit shrink-0 gap-1.5 lg:hidden">
+                                <Link href={DEV_CENTER_PATH}>
+                                    <ArrowLeft className="h-4 w-4" aria-hidden /> Voltar para tarefas
+                                </Link>
+                            </Button>
+                        )}
+                        <AnimatePresence mode="wait" initial={false}>
+                            <motion.div
+                                key={`${central.id}-${taskId ?? ""}`}
+                                initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
+                                transition={{ duration: 0.15, ease: "easeOut" }}
+                                className="flex min-h-0 min-w-0 flex-1 flex-col"
+                            >
+                                <WorkbenchPane central={central} taskId={taskId} />
+                            </motion.div>
+                        </AnimatePresence>
+                    </>
                 ) : (
                     <Skeleton className="h-96" />
                 )}
