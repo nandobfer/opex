@@ -176,7 +176,7 @@ export function TasksPage() {
                     </div>
                 </div>
                 <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-                    <TimerIndicator className="w-full md:w-auto" />
+                    <TimerIndicator fullWidth />
                     <TaskViewSwitch value={filters.view} onChange={(next) => setFilters((prev) => ({ ...prev, view: next }))} className="w-full md:w-auto" />
                     <TaskCreationActions enabled={ready} />
                     <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={refresh} disabled={refreshing} aria-label="Atualizar tarefas">

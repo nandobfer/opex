@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   list: { data: undefined as unknown, isLoading: false, isError: false, isFetching: false, error: null as unknown },
   push: vi.fn(),
   invalidate: vi.fn(),
+  timerFullWidth: false,
 }))
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
@@ -44,6 +45,13 @@ vi.mock('@/features/tasks/hooks/useTaskBoard', async () => {
     useColumnMutations: () => ({ create: { isPending: false }, update: { isPending: false }, remove: { mutate: vi.fn() }, reorder: { mutate: vi.fn() } }),
   }
 })
+
+vi.mock('@/features/time/components/TimerIndicator', () => ({
+  TimerIndicator: ({ fullWidth }: { fullWidth?: boolean }) => {
+    mocks.timerFullWidth = Boolean(fullWidth)
+    return React.createElement('span', { 'data-testid': 'tasks-timer-indicator' })
+  },
+}))
 
 import { RepoIndexProvider } from '@/features/github/components/RepoIndexProvider'
 
@@ -121,6 +129,12 @@ describe('TasksPage', () => {
     expect(screen.queryByRole('link', { name: /Horas agênticas/ })).toBeNull()
     // O seletor Kanban | Tabela ocupa a linha inteira no celular (largura total).
     expect(screen.getByRole('radiogroup', { name: 'Visualização' }).className).toContain('w-full md:w-auto')
+  })
+
+  it('o indicador de trabalho ocupa a linha inteira no celular (fullWidth)', () => {
+    renderPage()
+    expect(screen.getByTestId('tasks-timer-indicator')).toBeTruthy()
+    expect(mocks.timerFullWidth).toBe(true)
   })
 
   it('alternar para Tabela fica salvo no navegador', () => {

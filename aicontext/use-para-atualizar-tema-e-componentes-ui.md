@@ -401,12 +401,15 @@ segunda linha no mesmo cartão).
 
 Breakpoints do Tailwind (`sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536). Toda tela funciona
 de mobile a desktop. Padrões adotados no **celular**: cabeçalhos empilham as ações em **linhas
-inteiras** abaixo de `md` (o indicador de trabalho sozinho; os botões de criação lado a lado;
-período, seletor Kanban/Tabela e Atualizar em linha própria); a lista de **Tarefas** em tabela vira
-**cartões empilhados** (o cabeçalho da tabela some); o **kanban** mede a altura da área visível para
-as colunas rolarem por dentro (`useScrollViewportHeight`) e cada coluna usa a largura da tela; a
-**Central de desenvolvimento** mostra um painel por vez abaixo de `lg` (lista de tarefas ou mesa,
-com botão de voltar). Ajustes relativos ao mobile usam os prefixos `max-md:`/`md:`/`max-lg:` para
+inteiras** abaixo de `md` (o indicador de trabalho com contêiner **e botão** em largura total; os
+botões de criação lado a lado; período, seletor Kanban/Tabela e Atualizar em linha própria, com
+Atualizar oculto nos dashboards); a lista de **Tarefas** em tabela vira **cartões empilhados** (o
+cabeçalho da tabela some); o **kanban** mede a altura da área visível para as colunas rolarem por
+dentro (`useScrollViewportHeight`) e cada coluna usa a largura da tela; a **Central de
+desenvolvimento** mostra um painel por vez abaixo de `lg` (lista de tarefas ou mesa, com botão de
+voltar) e, na mesa, a barra de ações da etapa fica numa **linha só** (abrir prévia só com o ícone,
+rótulos compactos com nome acessível completo; rolagem horizontal se não couber) para dar altura às
+mensagens do agente. Ajustes relativos ao mobile usam os prefixos `max-md:`/`md:`/`max-lg:` para
 não alterar o desktop.
 
 ## Acessibilidade

@@ -89,7 +89,9 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   Clique abre a lista **"Trabalhos em andamento"** (o popover **se dimensiona pelo conteúdo**,
   limitado à largura da viewport, para não quebrar linhas sem necessidade): cada item é um botão que
   navega para a **mesa de trabalho** (`/desenvolvimento/{tarefa}`) — ou para a tarefa, em
-  apontamentos legados sem mesa. As mesas pausadas **não** somem da lista.
+  apontamentos legados sem mesa. As mesas pausadas **não** somem da lista. Com `fullWidth` (Tarefas,
+  Dashboards e Horas agênticas) no **celular** o contêiner **e o botão** ocupam a linha inteira
+  (conteúdo centralizado); no desktop e nos demais consumidores (página da tarefa) segue compacto.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)
 

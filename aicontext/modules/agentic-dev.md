@@ -269,7 +269,10 @@ done → Reabrir mesa (texto ao planejador) → planning
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
   (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia**,
-  **Solicitar correção**, **Aprovar e abrir PR**.
+  **Solicitar correção**, **Aprovar e abrir PR**. No **celular** as ações da etapa ficam na **mesma
+  linha** (sem quebrar): **Abrir em nova guia** só com o ícone e as demais com rótulo compacto
+  (**Correção**, **Aprovar PR**…), preservando o nome acessível completo; se não couber, a barra rola
+  na horizontal. Assim a saída do agente ganha altura de leitura.
 - **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).

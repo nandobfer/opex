@@ -41,7 +41,7 @@ export function DashboardPage() {
                 description="Visão geral de tarefas, financeiro, horas agênticas e desenvolvimento"
                 actions={
                     <>
-                        <TimerIndicator />
+                        <TimerIndicator fullWidth />
                         <TaskCreationActions />
                     </>
                 }

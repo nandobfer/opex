@@ -159,4 +159,16 @@ describe("DashboardPage: Trabalhos em andamento", () => {
         )
         expect(screen.queryByRole("button", { name: /Trabalho em andamento|Aguardando ação/ })).toBeNull()
     })
+
+    it("no celular o indicador ocupa a linha inteira (botão com largura total)", async () => {
+        mocks.workbenches = [workbench()]
+        render(
+            <DashboardLayout>
+                <DashboardPage />
+            </DashboardLayout>,
+        )
+        const button = await screen.findByRole("button", { name: "Aguardando ação em OPX-1" })
+        expect(button.className).toContain("max-md:w-full")
+        expect(button.className).toContain("max-md:justify-center")
+    })
 })

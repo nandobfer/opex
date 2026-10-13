@@ -111,8 +111,9 @@ semeado na primeira leitura (`ensureBoard`).
   andamento** (`TimerIndicator`), **Nova prévia**, **Nova tarefa**, **Kanban |
   Tabela** (`TaskViewSwitch`) e **Atualizar**. O antigo atalho **Horas agênticas** saiu do cabeçalho
   (a tela continua no menu). No **celular** (`< md`) as ações empilham em **linhas inteiras**: o
-  indicador sozinho, os dois botões de criação lado a lado, o seletor de visualização e **Atualizar**
-  cada um na sua linha; no desktop seguem numa linha.
+  indicador sozinho (o **botão** ocupa a linha inteira, não só o contêiner), os dois botões de criação
+  lado a lado, o seletor de visualização e **Atualizar** cada um na sua linha; no desktop seguem numa
+  linha.
 - **Nova prévia** e **Nova tarefa** são os `TaskCreationActions`
   (`components/TaskCreationActions.tsx`), **compartilhados com o Dashboard**
   (`modules/dashboard.md`): mesmos botões e destinos, com `enabled` amarrado à disponibilidade dos
