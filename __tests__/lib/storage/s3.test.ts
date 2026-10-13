@@ -93,6 +93,47 @@ describe('serviço de storage (S3)', () => {
     expect(command.input).toEqual({ Bucket: 'opex' })
   })
 
+  it('recupera HEAD 403 de imagem atrás de proxy com GET autenticado e fecha o corpo', async () => {
+    const destroy = vi.fn()
+    const date = new Date('2026-10-13')
+    mocks.send
+      .mockRejectedValueOnce(Object.assign(new Error('UnknownError'), { $metadata: { httpStatusCode: 403 } }))
+      .mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 200078, LastModified: date, Body: { destroy } })
+
+    expect(await headFile('attachments/tmp/1/logo.png')).toEqual({ contentType: 'image/png', contentLength: 200078, lastModified: date })
+    expect(mocks.send.mock.calls.map(([command]) => command.name)).toEqual(['HeadObjectCommand', 'GetObjectCommand'])
+    expect(lastCommand().input).toEqual({ Bucket: 'opex', Key: 'attachments/tmp/1/logo.png' })
+    expect(destroy).toHaveBeenCalledOnce()
+  })
+
+  it('não ignora autorização: se GET também falhar, propaga seu erro', async () => {
+    const denied = Object.assign(new Error('AccessDenied'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } })
+    mocks.send.mockRejectedValueOnce(denied).mockRejectedValueOnce(denied)
+    await expect(headFile('logo.png')).rejects.toBe(denied)
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('GET recupera o erro real de objeto ausente após HEAD 403 do proxy', async () => {
+    const absent = Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } })
+    mocks.send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 403 } }).mockRejectedValueOnce(absent)
+    await expect(headFile('missing.png')).rejects.toBe(absent)
+    expect(mocks.send).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([404, 500])('não faz fallback quando HEAD responde %s', async (status) => {
+    const failure = Object.assign(new Error('falha'), { $metadata: { httpStatusCode: status } })
+    mocks.send.mockRejectedValueOnce(failure)
+    await expect(headFile('x')).rejects.toBe(failure)
+    expect(mocks.send).toHaveBeenCalledOnce()
+  })
+
+  it('libera também um corpo web no fallback, sem consumir o arquivo', async () => {
+    const cancel = vi.fn(async () => undefined)
+    mocks.send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 403 } }).mockResolvedValueOnce({ ContentLength: 10, Body: { cancel } })
+    expect((await headFile('x.png')).contentLength).toBe(10)
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+
   it('devolve a expiração configurada para as URLs assinadas', async () => {
     expect(await getSignedUrlExpiresIn()).toBe(3600)
     mocks.values = { ...base, signedUrlExpiresSeconds: 60 }

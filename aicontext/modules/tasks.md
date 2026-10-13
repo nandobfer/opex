@@ -272,14 +272,16 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
 - **Envio em duas fases** (`src/features/tasks/attachments/server/service.ts`): `POST /api/attachments`
   cria o registro pendente e devolve a URL assinada (`PUT`, `Content-Type` obrigatório) para uma
   chave **temporária**; `POST /api/attachments/uploads/[id]/complete` confere o objeto
-  (`HeadObject`: tamanho e tipo **reais**), **promove** o arquivo para a chave definitiva (cópia
+  (`headFile`: tamanho e tipo **reais**, HEAD com fallback GET autenticado em 403), **promove** o arquivo para a chave definitiva (cópia
   server-side) e marca `ready`. Confirmar de novo é idempotente; arquivo acima de **100 MB**, vazio
   ou ausente é descartado (objeto e registro). A promoção impede que uma URL de upload ainda válida
   sobrescreva um anexo já confirmado.
 - **Falha de storage não destrói o envio** (`storageErrorInfo` de `src/lib/storage/s3.ts`): só
   **404/`NoSuchKey`** provam que o objeto não chegou (descarta a reserva e responde 400 "envie de
-  novo"). **403 é recusa de acesso, não ausência** — o Storage S3 do projeto responde 403 para objeto
-  inexistente e o HEAD sem corpo chega ao SDK como `UnknownError`; 403, rede, tempo esgotado e 5xx
+  novo"). **403 não comprova ausência**: o proxy Cloudflare pode converter HEAD em GET para PNG e
+  outras extensões cacheáveis, invalidando a assinatura S3. `headFile` tenta então GET autenticado,
+  lê apenas os metadados e fecha o stream sem consumir o corpo. Se o GET também falhar, 403,
+  rede, tempo esgotado e 5xx
   respondem **502** (`ATTACHMENT_STORAGE_UNAVAILABLE`) **preservando a reserva e o objeto temporário**,
   e a nova tentativa refaz **só a confirmação** (sem reenviar o arquivo). O mesmo vale para a leitura
   do conteúdo (403/5xx → 502; 404 → "anexo não encontrado"). Cada operação (`head`, `copy`, `get`,

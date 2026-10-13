@@ -41,8 +41,9 @@ const STORAGE_CONFIG_CODES = new Set(["NoSuchBucket"])
  * Classifica a falha de uma operação no storage.
  *
  * **403 nunca significa "objeto ausente"**: serviços S3 compatíveis respondem 403 para objeto
- * inexistente quando a credencial não tem permissão de listar o bucket (foi o observado no Storage
- * S3 do projeto). Só `404`/`NoSuchKey` provam ausência; o resto é recusa de acesso ou indisponibilidade
+ * inexistente quando a credencial não tem permissão de listar o bucket. Proxies também podem
+ * invalidar a assinatura ao converter HEAD em GET. Só `404`/`NoSuchKey` provam ausência;
+ * o resto é recusa de acesso ou indisponibilidade
  * e o objeto pode estar lá.
  */
 export function storageErrorInfo(error: unknown): StorageErrorInfo {
@@ -234,11 +235,28 @@ export const deleteFile = async (key: string): Promise<void> => {
     }
 }
 
-/** Metadados do arquivo (sem o conteúdo). */
+/**
+ * Metadados do arquivo. Cloudflare pode converter HEAD em GET para extensões cacheáveis
+ * com cache frio, invalidando a assinatura SigV4 (que inclui o método). Em 403, tenta um GET
+ * autenticado e fecha o stream imediatamente, sem consumir o arquivo nem carregá-lo em memória.
+ * Não usa Range: proxies também podem alterar esses cabeçalhos. A autorização continua sendo
+ * verificada pelo S3; se o GET falhar, seu erro é propagado, nunca se assume sucesso.
+ */
 export const headFile = async (key: string): Promise<{ contentType: string | undefined; contentLength: number | undefined; lastModified: Date | undefined }> => {
     const { client, bucket } = await getStorage()
-    const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
-    return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    try {
+        const response = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+        return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    } catch (error) {
+        if (storageErrorInfo(error).httpStatus !== 403) throw error
+        dbg.step("HEAD recusado; conferindo metadados com GET autenticado", { bucket, key })
+        const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+        // O servidor usa o handler Node do SDK: destruir o stream libera a conexão sem ler o corpo.
+        const body = response.Body as { destroy?: () => void; cancel?: () => Promise<void> } | undefined
+        if (body?.destroy) body.destroy()
+        else if (body?.cancel) await body.cancel()
+        return { contentType: response.ContentType, contentLength: response.ContentLength, lastModified: response.LastModified }
+    }
 }
 
 /** Confirma que o bucket existe e que as credenciais têm acesso (teste de conexão). */

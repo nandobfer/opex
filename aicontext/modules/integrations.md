@@ -268,9 +268,14 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   é configurável (60 s a 7 dias, padrão 1 h). `storageErrorInfo(error)` classifica a falha de uma
   operação em `not_found` (404/`NoSuchKey` — ausência comprovada), `forbidden` (401/403/
   `AccessDenied` — recusa de acesso) e `unavailable` (rede, tempo esgotado, 5xx e configuração
-  inválida). **403 nunca é tratado como objeto ausente**: este Storage S3 responde 403 para objeto
-  inexistente (o HEAD sem corpo chega ao SDK como `UnknownError`), então classificar 403 como ausência
-  descartaria envios recuperáveis; quem consome a classificação são os anexos
+  inválida). **403 nunca é tratado como objeto ausente**. Cloudflare converte HEAD em GET para
+  extensões cacheáveis quando o cache está frio; isso invalida SigV4, que assina o método HTTP,
+  e o HEAD sem corpo chega ao SDK como `UnknownError`. `headFile` recupera esse caso com GET
+  autenticado sem Range, aproveita os metadados e fecha o stream imediatamente (sem ler o corpo
+  nem acumular o arquivo em memória). O GET mantém a verificação de autorização e propaga falhas;
+  não há acesso público nem confirmação sem conferir o objeto. Preferencialmente o endpoint
+  interno deve apontar direto para o S3, ou o proxy deve ter bypass de cache para todo o serviço.
+  Quem consome a classificação são os anexos
   (`modules/tasks.md`, "Anexos da tarefa").
 - As duas integrações são **novas** no Opex: não declaram `env` e são configuradas só em
   `/integracoes`. Nenhum dos testes de conexão envia e-mail nem grava objeto.
