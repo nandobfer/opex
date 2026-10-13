@@ -122,6 +122,12 @@ describe("DashboardPage", () => {
         expect(mocks.push).toHaveBeenCalledWith("/tarefas/nova")
     })
 
+    it("oculta Atualizar no celular e deixa o período ocupar a linha inteira", () => {
+        render(<DashboardPage />)
+        expect(screen.getByRole("button", { name: "Atualizar indicadores" }).className).toContain("max-md:hidden")
+        expect(screen.getByRole("radiogroup", { name: "Período" }).className).toContain("w-full md:w-auto")
+    })
+
     it("mantém os atalhos disponíveis durante o carregamento dos indicadores", () => {
         mocks.query = { data: undefined, isLoading: true, isError: false, isFetching: true, error: null, refetch: vi.fn() }
         render(<DashboardPage />)
@@ -152,5 +158,17 @@ describe("DashboardPage: Trabalhos em andamento", () => {
             </DashboardLayout>,
         )
         expect(screen.queryByRole("button", { name: /Trabalho em andamento|Aguardando ação/ })).toBeNull()
+    })
+
+    it("no celular o indicador ocupa a linha inteira (botão com largura total)", async () => {
+        mocks.workbenches = [workbench()]
+        render(
+            <DashboardLayout>
+                <DashboardPage />
+            </DashboardLayout>,
+        )
+        const button = await screen.findByRole("button", { name: "Aguardando ação em OPX-1" })
+        expect(button.className).toContain("max-md:w-full")
+        expect(button.className).toContain("max-md:justify-center")
     })
 })

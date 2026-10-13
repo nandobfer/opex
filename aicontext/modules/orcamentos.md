@@ -86,7 +86,10 @@ Logins e sessões: `aicontext/modules/auth.md`.
 - Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
   `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin).
 - **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com
-  "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa.
+  "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa. No **celular** o
+  cabeçalho empilha as ações em linhas inteiras (o atalho de criação, o seletor Kanban/Tabela e
+  **Atualizar**), o kanban usa a largura da tela por coluna e a **tabela vira cartões empilhados**
+  (mesmo ajuste da tela do dono, sem revelar dados internos).
 - **Atalho de criação**: Tarefas e Dashboard usam o **mesmo** botão (`ClienteTaskCreationButton`), que
   abre `/cliente/nova`. No Dashboard ele aparece como **"Nova prévia"** (`outline`, ícone `Sparkles`)
   e em Tarefas como **"Nova tarefa"** (`default`, ícone `Plus`) — só o rótulo e o estilo mudam, a

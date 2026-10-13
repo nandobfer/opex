@@ -378,7 +378,9 @@ próprios.
   após o total recolhe. Abre/fecha com Framer Motion (altura, ou só opacidade com movimento
   reduzido). Sempre começa recolhido ao entrar na página (`defaultCollapsed`, padrão `true`). Os
   chips são montados pela página (função pura da feature), nunca pelo componente genérico. Sem
-  `collapsible` o cartão segue sempre aberto.
+  `collapsible` o cartão segue sempre aberto. No **celular** (`< md`) o resumo — os chips ou a
+  mensagem "Nenhum filtro ativo · clique para filtrar" — passa para uma **linha própria**, abaixo da
+  linha do ícone/título e dos controles (total, limpar, expandir).
 
 **Regra: toda tela de listagem usa este padrão** — `CadastroHeader` (título, descrição e ações à
 direita, como "Novo"/importar/atalhos da tela) + `*Filters` sobre `ListFilters`, com `onClear`
@@ -398,7 +400,20 @@ segunda linha no mesmo cartão).
 ## Responsividade
 
 Breakpoints do Tailwind (`sm` 640, `md` 768, `lg` 1024, `xl` 1280, `2xl` 1536). Toda tela funciona
-de mobile a desktop.
+de mobile a desktop. Padrões adotados no **celular**: cabeçalhos empilham as ações em **linhas
+inteiras** abaixo de `md` (o indicador de trabalho com contêiner **e botão** em largura total; os
+botões de criação lado a lado; período, seletor Kanban/Tabela e Atualizar em linha própria, com
+Atualizar oculto nos dashboards); a visão Tabela de **Tarefas** vira **cards compactos**
+(`TaskCompactList`/`TaskCompactCard`, escolhidos em JS por `useIsMobile` — só a apresentação ativa
+monta, sem `tr`/`td` nem altura fixa de linha); o **kanban** mede a altura da área visível a partir
+do topo do próprio quadro (`useFillViewportHeight`, mínimo de `20rem`) para as colunas rolarem por
+dentro, deixando a seção com altura natural (a página rola quando não couber), e cada coluna usa a
+largura da tela; a **Central de
+desenvolvimento** mostra um painel por vez abaixo de `lg` (lista de tarefas ou mesa, com botão de
+voltar) e, na mesa, a barra de ações da etapa fica numa **linha só** (abrir prévia só com o ícone,
+rótulos compactos com nome acessível completo; rolagem horizontal se não couber) para dar altura às
+mensagens do agente. Ajustes relativos ao mobile usam os prefixos `max-md:`/`md:`/`max-lg:` para
+não alterar o desktop.
 
 ## Acessibilidade
 

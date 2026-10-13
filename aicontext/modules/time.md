@@ -89,7 +89,9 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   Clique abre a lista **"Trabalhos em andamento"** (o popover **se dimensiona pelo conteúdo**,
   limitado à largura da viewport, para não quebrar linhas sem necessidade): cada item é um botão que
   navega para a **mesa de trabalho** (`/desenvolvimento/{tarefa}`) — ou para a tarefa, em
-  apontamentos legados sem mesa. As mesas pausadas **não** somem da lista.
+  apontamentos legados sem mesa. As mesas pausadas **não** somem da lista. Com `fullWidth` (Tarefas,
+  Dashboards e Horas agênticas) no **celular** o contêiner **e o botão** ocupam a linha inteira
+  (conteúdo centralizado); no desktop e nos demais consumidores (página da tarefa) segue compacto.
 
 ## Horas agênticas (`/tarefas/horas`, item próprio no menu)
 
@@ -112,10 +114,13 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   soma `totalTokens` e `totalCostUsd`), além de um indicador "Em execução" quando contém período
   ativo. O grupo **começa recolhido**; grupos com período ativo ficam **sempre abertos**. A
   abertura/fechamento é animada por Framer Motion (altura/opacidade) respeitando movimento reduzido.
+  No **celular** o consumo e o total do grupo caem para uma **linha própria**, abaixo do
+  código/título, sem espremer o nome da tarefa.
 - **Infinite scrolling** (páginas de 100): um sentinel no fim da lista é observado na área de rolagem do app (`#main-content`); a próxima página carrega automaticamente ao se aproximar do fim. Enquanto carrega, aparece um indicador (spinner Framer Motion, respeitando movimento reduzido). Sem `IntersectionObserver` no ambiente, o botão "Carregar mais" permanece como fallback.
 - Cada apontamento (`TimeLogItem`, **somente leitura**): código (link para a tarefa), título,
   descrição, início–fim, duração (ou cronômetro ao vivo) e o **uso** (agente, modelo, tokens e
-  custo). Sem editar/excluir/parar.
+  custo). Sem editar/excluir/parar. No **celular** o período/duração vai para uma **linha própria**,
+  abaixo do conteúdo.
 - Tempo real: `useTimeRealtime` (canal `private-app`) invalida as horas em `time-updated` e também em
   `tasks-updated` — mudar o repositório ou o tipo da tarefa (ou excluí-la) muda o que o recorte
   devolve.

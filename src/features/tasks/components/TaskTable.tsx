@@ -15,7 +15,7 @@ import { WorkbenchWaitingLink } from "@/features/agentic/components/WorkbenchWai
 import { workbenchProgressTone } from "@/features/agentic/logic"
 import { cn } from "@/lib/utils"
 import { columnKeyOf, type BoardColumnView } from "../board"
-import { TASK_PRIORITY_LABELS, TASK_PRIORITY_RANK, TASK_TYPE_LABELS, type TaskPriority } from "../constants"
+import { TASK_PRIORITY_RANK, TASK_TYPE_LABELS, type TaskPriority } from "../constants"
 import type { TaskFilters, TaskTableColumn } from "../filters"
 import type { TaskSelection } from "../hooks/useTaskSelection"
 import type { TaskDto } from "../types"
@@ -27,6 +27,7 @@ import { EstimateBadge } from "./EstimateBadge"
 import { BULK_BAR_CLEARANCE } from "./TaskBulkBar"
 import { TaskColumnMenu } from "./TaskColumnMenu"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
+import { nextTableSort, TABLE_COLUMN_LABELS, TABLE_COLUMN_ORDER, TABLE_COLUMN_WIDTHS } from "./table-columns"
 
 const VIRTUALIZE_ABOVE = 50
 /** Duas linhas (título + resumo) para a virtualização reservar a altura correta. */
@@ -41,25 +42,13 @@ export const TASK_TABLE_RESPONSIVE: Partial<Record<TaskTableColumn, string>> = {
     updatedAt: "hidden xl:table-cell",
 }
 
-const COLUMNS: { key: TaskTableColumn; label: string; className: string }[] = [
-    { key: "code", label: "Código", className: "w-[96px] md:w-[110px]" },
-    { key: "issue", label: "Issue", className: "w-[84px]" },
-    { key: "title", label: "Título", className: "" },
-    { key: "column", label: "Coluna", className: "w-[150px] md:w-[200px] xl:w-[240px]" },
-    { key: "priority", label: "Prioridade", className: "w-[125px]" },
-    { key: "type", label: "Tipo", className: "w-[100px]" },
-    { key: "project", label: "Repositório", className: "w-[200px]" },
-    { key: "updatedAt", label: "Atualizada", className: "w-[120px]" },
-]
+const COLUMNS: { key: TaskTableColumn; label: string; className: string }[] = TABLE_COLUMN_ORDER.map((key) => ({
+    key,
+    label: TABLE_COLUMN_LABELS[key],
+    className: TABLE_COLUMN_WIDTHS[key] ?? "",
+}))
 
 const hide = (column: TaskTableColumn) => TASK_TABLE_RESPONSIVE[column] ?? ""
-
-const PRIORITY_DOT: Record<TaskPriority, string> = {
-    urgent: "bg-red-400",
-    high: "bg-orange-400",
-    medium: "bg-sky-400",
-    low: "bg-zinc-400",
-}
 
 const text = (value: string | null | undefined) => (value ?? "").toLocaleLowerCase("pt-BR")
 
@@ -91,7 +80,7 @@ export function sortTaskRows(tasks: readonly TaskDto[], sort: TaskFilters["table
     return [...tasks].sort((a, b) => compare(a, b, sort.column, columnIndex) * factor || a.code.localeCompare(b.code, "pt-BR", { numeric: true }))
 }
 
-interface TaskTableProps {
+export interface TaskTableProps {
     tasks: readonly TaskDto[]
     columns: readonly BoardColumnView[]
     sort: TaskFilters["tableSort"]
@@ -118,8 +107,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: TASK_TABLE_ROW_HEIGHT })
     const hasSelection = selection.selected.size > 0
 
-    const toggleSort = (column: TaskTableColumn) =>
-        onSortChange(sort.column === column ? { column, direction: sort.direction === "asc" ? "desc" : "asc" } : { column, direction: column === "updatedAt" ? "desc" : "asc" })
+    const toggleSort = (column: TaskTableColumn) => onSortChange(nextTableSort(sort, column))
 
     const row = (task: TaskDto, style?: CSSProperties) => {
         const selected = selection.selected.has(task.id)
@@ -163,10 +151,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                     <SelectionCheckbox checked={selected} onToggle={(event) => selection.toggle(task.id, { shift: event.shiftKey, ordered: orderedIds })} label={`Selecionar ${task.code}`} />
                 </td>
                 <td className="px-3 py-2 font-mono text-xs font-semibold text-primary">
-                    <span className="flex items-center gap-1.5">
-                        <span role="img" className={cn("h-2 w-2 shrink-0 rounded-full md:hidden", PRIORITY_DOT[task.priority])} title={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} aria-label={`Prioridade ${TASK_PRIORITY_LABELS[task.priority]}`} />
-                        {task.code}
-                    </span>
+                    <span className="flex items-center gap-1.5">{task.code}</span>
                     {running && <RunningClock startTime={running.startTime} className="block text-[10px] font-semibold text-success" />}
                     {waiting && <WorkbenchWaitingLink taskId={task.id} taskCode={task.code} item={waiting} className="mt-0.5" />}
                 </td>

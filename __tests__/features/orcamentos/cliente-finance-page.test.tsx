@@ -121,4 +121,16 @@ describe("ClienteFinanceiroPage", () => {
         render(<ClienteFinanceiroPage />)
         expect(screen.getByText("Não foi possível carregar o financeiro")).toBeTruthy()
     })
+
+    it("no celular as métricas do grupo e os valores da tarefa vão para uma linha própria", async () => {
+        render(<ClienteFinanceiroPage />)
+        expect(screen.getByTestId("cliente-cost-group-metrics").className).toContain("max-md:basis-full")
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole("button", { name: /o\/portal/ }))
+        })
+
+        const values = await screen.findByTestId("cliente-cost-task-values")
+        expect(values.className).toContain("max-md:basis-full")
+    })
 })

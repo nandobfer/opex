@@ -76,6 +76,19 @@ describe('ActionBar', () => {
     expect(screen.getByRole('button', { name: /Aprovar e abrir PR/ })).toBeTruthy()
   })
 
+  it('prévia pronta: ações numa única linha no celular, com abrir prévia só pelo ícone', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    const link = screen.getByRole('link', { name: /Abrir em nova guia/ })
+    // O texto do link some no celular (fica só o ícone), preservando o nome acessível.
+    expect(link.querySelector('.max-md\\:hidden')).toBeTruthy()
+    const row = link.closest('div')!
+    expect(row.className).toContain('max-md:flex-nowrap')
+    expect(row.className).toContain('max-md:overflow-x-auto')
+    // Rótulo completo (acessível) e compacto (celular) para o botão de aprovar o PR.
+    const approve = screen.getByRole('button', { name: /Aprovar e abrir PR/ })
+    expect(approve.textContent).toContain('Aprovar PR')
+  })
+
   it('executando: só Parar; falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
     expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Parar'])

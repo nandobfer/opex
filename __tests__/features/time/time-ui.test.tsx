@@ -95,6 +95,19 @@ describe('controle de horas é somente leitura', () => {
     expect(screen.queryByRole('button', { name: /Iniciar o timer|Parar o timer/ })).toBeNull()
     expect(mocks.post).not.toHaveBeenCalled()
   })
+
+  it('com fullWidth (celular) o botão ocupa a linha inteira; sem fullWidth segue compacto', async () => {
+    const wide = await renderWith([log()], <TimerIndicator fullWidth />)
+    const wideButton = await screen.findByRole('button', { name: 'Trabalho em andamento em OPX-1' })
+    expect(wideButton.className).toContain('max-md:w-full')
+    expect(wideButton.className).toContain('max-md:justify-center')
+    wide.unmount()
+
+    const compact = await renderWith([log()], <TimerIndicator />)
+    const compactButton = await screen.findByRole('button', { name: 'Trabalho em andamento em OPX-1' })
+    expect(compactButton.className).not.toContain('max-md:w-full')
+    compact.unmount()
+  })
 })
 
 describe('TimeLogItem (Horas agênticas)', () => {
@@ -176,5 +189,21 @@ describe('TimeLogTaskGroup (agrupamento por task/mesa)', () => {
     render(<GroupHarness group={group()} />)
     expect(screen.queryByText(/tokens/)).toBeNull()
     expect(screen.queryByText(/US\$/)).toBeNull()
+  })
+
+  it('no celular o consumo/total do grupo vai para uma linha própria (não espreme o título)', () => {
+    render(<GroupHarness group={group({ totalMinutes: 45, totalTokens: 175, totalCostUsd: 0.5 })} />)
+    const metrics = screen.getByTestId('time-group-metrics')
+    expect(metrics.className).toContain('max-md:basis-full')
+    expect(metrics.className).toContain('max-md:justify-start')
+  })
+})
+
+describe('TimeLogItem no celular', () => {
+  it('o período/duração vai para uma linha própria, abaixo do conteúdo', () => {
+    render(<TimeLogItem log={log({ active: false, endTime: new Date().toISOString(), duration: 90 })} />)
+    const period = screen.getByTestId('time-log-period')
+    expect(period.className).toContain('max-md:basis-full')
+    expect(period.className).toContain('max-md:justify-between')
   })
 })

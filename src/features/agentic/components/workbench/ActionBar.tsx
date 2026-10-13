@@ -30,6 +30,27 @@ const FEEDBACK: Record<FeedbackAction, { button: string; title: string; placehol
 
 const isFeedback = (action: WorkbenchAction): action is FeedbackAction => action in FEEDBACK
 
+/** Rótulo compacto (celular) de `FeedbackAction`; o nome acessível completo vai no `aria-label`. */
+const COMPACT_LABEL: Record<FeedbackAction, string> = {
+    "revise-plan": "Correção",
+    "request-correction": "Correção",
+    "submit-pr-feedback": "Descrever",
+    reopen: "Reabrir",
+}
+
+/** Botões das etapas: no celular não encolhem nem ganham padding grande (cabe tudo na mesma linha). */
+const ACTION_BUTTON = "gap-1.5 max-md:shrink-0 max-md:px-2.5"
+
+/** Rótulo completo no desktop; compacto no celular (`< md`). */
+function ActionLabel({ full, compact }: { full: string; compact: string }) {
+    return (
+        <>
+            <span className="max-md:hidden">{full}</span>
+            <span className="md:hidden">{compact}</span>
+        </>
+    )
+}
+
 /** Botões da etapa atual; correções abrem o campo de texto que vai para o planejador. */
 export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
     const mutation = useWorkbenchAction(workbench)
@@ -116,52 +137,58 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
             </AnimatePresence>
 
             {!composer && actions.length > 0 && (
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2 max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
                     {actions.map((action) => {
                         if (isFeedback(action)) {
                             const label = action === "request-correction" && failed ? "Voltar ao planejamento" : FEEDBACK[action].button
+                            const compact = action === "request-correction" && failed ? "Replanejar" : COMPACT_LABEL[action]
                             return (
-                                <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setComposer(action)}>
-                                    {action === "reopen" ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden />} {label}
+                                <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label={label} onClick={() => setComposer(action)}>
+                                    {action === "reopen" ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden />}
+                                    <ActionLabel full={label} compact={compact} />
                                 </Button>
                             )
                         }
                         switch (action) {
                             case "open-preview":
                                 return (
-                                    <Button key={action} asChild variant="outline" size="sm" className="gap-1.5">
-                                        <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener">
-                                            <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir em nova guia
+                                    <Button key={action} asChild variant="outline" size="sm" className={ACTION_BUTTON}>
+                                        <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
+                                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                                            <span className="max-md:hidden">Abrir em nova guia</span>
                                         </a>
                                     </Button>
                                 )
                             case "implement":
                                 return (
-                                    <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
+                                    <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
                                         <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                     </Button>
                                 )
                             case "approve":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("approve")}>
-                                        <CheckCheck className="h-3.5 w-3.5" aria-hidden /> Aprovar e abrir PR
+                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Aprovar e abrir PR" onClick={() => setConfirm("approve")}>
+                                        <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+                                        <ActionLabel full="Aprovar e abrir PR" compact="Aprovar PR" />
                                     </Button>
                                 )
                             case "reconnect":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("reconnect")}>
-                                        <PlugZap className="h-3.5 w-3.5" aria-hidden /> Reconectar ao agente
+                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Reconectar ao agente" onClick={() => run("reconnect")}>
+                                        <PlugZap className="h-3.5 w-3.5" aria-hidden />
+                                        <ActionLabel full="Reconectar ao agente" compact="Reconectar" />
                                     </Button>
                                 )
                             case "retry":
                                 return (
-                                    <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => run("retry")}>
-                                        <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Tentar novamente
+                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Tentar novamente" onClick={() => run("retry")}>
+                                        <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                                        <ActionLabel full="Tentar novamente" compact="Tentar" />
                                     </Button>
                                 )
                             case "interrupt":
                                 return (
-                                    <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("interrupt")}>
+                                    <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => setConfirm("interrupt")}>
                                         <Square className="h-3.5 w-3.5" aria-hidden /> Parar
                                     </Button>
                                 )

@@ -17,7 +17,7 @@ export function WorkbenchPane({ central, taskId }: { central: CentralDto; taskId
     const workbench = useWorkbenchByTask(taskId)
     const view = !taskId ? "empty" : workbench.isLoading ? "loading" : workbench.isError ? "error" : workbench.data ? "workbench" : "start"
     return (
-        <Card className="flex min-h-[520px] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
+        <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "empty" && (

@@ -31,8 +31,11 @@ const hrefForLog = (log: TimeLogDto) => `/tarefas/${log.taskId}`
  * Indicador de trabalho em andamento (topo das telas): ícone girando + cronômetro quando algum
  * agente executa, ou aviso (warning) quando só há mesas aguardando ação humana. **Somente leitura**
  * — clique abre a lista dos trabalhos em andamento; cada item navega para a mesa de trabalho.
+ *
+ * Com `fullWidth`, no **celular** (`< md`) o contêiner **e o botão** ocupam a linha inteira
+ * (conteúdo centralizado); no desktop segue compacto. Usado em Dashboard, Tarefas e Horas agênticas.
  */
-export function TimerIndicator() {
+export function TimerIndicator({ className, fullWidth = false }: { className?: string; fullWidth?: boolean } = {}) {
     const timer = useTimer()
     const progress = useWorkbenchProgress()
     const active = timer?.active ?? []
@@ -92,8 +95,9 @@ export function TimerIndicator() {
         </>
     )
 
-    const className = cn(
+    const triggerClassName = cn(
         "inline-flex h-9 items-center gap-2 rounded-md border px-3 transition-colors focus-visible:outline-none focus-visible:ring-2",
+        fullWidth && "max-md:flex max-md:w-full max-md:justify-center",
         anyRunning ? "border-success/40 bg-success/10 text-success hover:bg-success/20 focus-visible:ring-success" : "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20 focus-visible:ring-warning",
     )
     const label = anyRunning
@@ -107,9 +111,9 @@ export function TimerIndicator() {
     return (
         <AnimatePresence initial={false}>
             {first && (
-                <motion.div key="timer-indicator" initial={{ opacity: 0, scale: 0.85, x: 8 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.85, x: 8 }} transition={{ duration: 0.2 }}>
+                <motion.div key="timer-indicator" initial={{ opacity: 0, scale: 0.85, x: 8 }} animate={{ opacity: 1, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.85, x: 8 }} transition={{ duration: 0.2 }} className={cn(fullWidth && "max-md:w-full", className)}>
                     <Popover>
-                        <PopoverTrigger className={className} aria-label={label}>
+                        <PopoverTrigger className={triggerClassName} aria-label={label}>
                             {body}
                         </PopoverTrigger>
                         <PopoverContent align="end" data-testid="in-progress-popover" className="w-max max-w-[calc(100vw-2rem)] p-1">
