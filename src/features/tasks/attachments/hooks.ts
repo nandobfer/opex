@@ -377,8 +377,9 @@ export interface TaskDescriptionUploads {
 }
 
 /**
- * Mídia colada/arrastada no campo de descrição de uma tarefa **existente**: o arquivo já entra
- * vinculado à tarefa (aba Anexos) e a referência vai para o cursor.
+ * Mídia colada/arrastada num campo de uma tarefa **existente** (descrição na edição e o formulário
+ * de comentários): o arquivo já entra vinculado à tarefa (aba Anexos) e a referência vai para o
+ * cursor do campo.
  */
 export function useTaskDescriptionUploads(client: AttachmentClient, taskId: string): TaskDescriptionUploads {
     const queryClient = useQueryClient()

@@ -216,8 +216,10 @@ a descrição.
 - Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
 animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
   **Especificação técnica** (aba própria: a especificação atual em Markdown e, **abaixo**, o painel do
-  refinamento com IA — ver `modules/refinement.md`), Comentários (lista + formulário; cada
-  comentário mostra o **nome do autor** — dono ou cliente, ver `modules/orcamentos.md`), Histórico
+  refinamento com IA — ver `modules/refinement.md`), Comentários (lista + formulário em **campo
+  Markdown** com abas Escrever/Visualizar, barra de formatação e **colagem de mídia** — o arquivo
+  colado/arrastado vira anexo da tarefa e a referência entra no comentário; cada comentário mostra o
+  **nome do autor** — dono ou cliente, ver `modules/orcamentos.md`), Histórico
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
@@ -309,14 +311,17 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
   envio pela descrição (`uploads`, ligado na página da tarefa com `target` da tarefa, então a mídia
   colada já nasce vinculada). Enquanto há envio em andamento o formulário **não salva**
   (`uploading`/`active`: botão desabilitado e aviso "Enviando anexos…").
-- **Mídia colada ou arrastada na descrição** (`MarkdownField.uploads`): o arquivo entra na **mesma
-  fila** da aba Anexos (progresso real, cancelar, tentar de novo) e a referência vai para a posição
-  do cursor **só quando a confirmação conclui** — nada é inserido na falha. O campo mostra o envio
-  inline ("Enviando"/"Confirmando", progresso) e, ao falhar, a mensagem pt-BR com **tentar de novo**
-  (que reaproveita o arquivo já enviado) e **descartar**; a fila da página não repete o item. O texto
-  digitado durante o envio é preservado e arquivo sem nome (colado) ganha nome padrão por tipo
+- **Mídia colada ou arrastada no campo Markdown** (`MarkdownField.uploads`): o arquivo entra na
+  **mesma fila** da aba Anexos (progresso real, cancelar, tentar de novo) e a referência vai para a
+  posição do cursor **só quando a confirmação conclui** — nada é inserido na falha. O campo mostra o
+  envio inline ("Enviando"/"Confirmando", progresso) e, ao falhar, a mensagem pt-BR com **tentar de
+  novo** (que reaproveita o arquivo já enviado) e **descartar**; a fila da página não repete o item. O
+  texto digitado durante o envio é preservado e arquivo sem nome (colado) ganha nome padrão por tipo
   (`fallbackAttachmentName`, ex.: `imagem-colada.png`). Sem `uploads`, colar arquivo não interfere no
-  campo.
+  campo. O mesmo campo é usado no **formulário de comentários** da página da tarefa: enquanto há
+  envio em andamento — ou uma mídia com falha/cancelada aguardando **tentar de novo**/**descartar** —
+  o botão **Comentar** fica desabilitado, para a referência não entrar depois de o comentário ser
+  publicado.
 - **Exclusão**: o dono exclui qualquer anexo (com confirmação); o usuário do portal só o que ele
   mesmo enviou e ainda **não vinculado**. Excluir a tarefa remove os objetos e os registros fora da
   resposta (`runAfterResponse`). A rotina **`task-attachments-cleanup`** (30 min) remove uploads
@@ -351,7 +356,10 @@ dos comentários são cobertos em `tasks-service`; as **tags** têm testes próp
 **anexos** têm testes próprios em `__tests__/features/tasks/attachments-service.test.ts` (reserva,
 confirmação/promoção, limite, idempotência, vínculo, visibilidade e limpeza),
 `__tests__/features/tasks/attachments-ui.test.tsx` (área de envio, lista/exclusão, mídia no Markdown
-  e colar mídia — inclusive a falha visível com nova tentativa) e `__tests__/lib/attachments.test.ts`
+  e colar mídia — inclusive a falha visível com nova tentativa) e
+  `__tests__/features/tasks/task-comments-upload.test.tsx` (colar mídia nos comentários: referência
+  publicada, comentário só com imagem, bloqueio durante o envio e mídia com falha) e
+  `__tests__/lib/attachments.test.ts`
   (contrato puro). A **fila** (recuperação sem novo envio, erro definitivo, arquivo recusado) tem
   testes próprios em `__tests__/features/tasks/attachments-upload-queue.test.tsx`; a classificação
   das falhas do storage, em `__tests__/lib/storage/s3.test.ts`. As **falhas do storage** na

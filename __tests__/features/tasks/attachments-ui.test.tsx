@@ -187,3 +187,15 @@ describe('colar mídia na descrição', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+describe('rótulos do campo Markdown', () => {
+  it('usa os rótulos da descrição por padrão e aceita os de comentários', () => {
+    const { rerender } = render(<MarkdownField value="" onChange={vi.fn()} />)
+    expect(screen.getByRole('tablist', { name: 'Editar ou visualizar a descrição' })).toBeTruthy()
+
+    rerender(<MarkdownField value="" onChange={vi.fn()} ariaLabel="Novo comentário" tablistLabel="Editar ou visualizar o comentário" />)
+    expect(screen.getByRole('tablist', { name: 'Editar ou visualizar o comentário' })).toBeTruthy()
+    expect(screen.queryByRole('tablist', { name: 'Editar ou visualizar a descrição' })).toBeNull()
+    expect(screen.getByLabelText('Novo comentário')).toBeTruthy()
+  })
+})
