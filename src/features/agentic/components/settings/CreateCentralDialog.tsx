@@ -12,8 +12,11 @@ import { FieldTrigger } from "@/components/ui/field-trigger"
 import { Input } from "@/components/ui/input"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { apiErrorMessage } from "@/lib/api"
+import { GithubRepoLabel } from "@/features/github/components/shared"
+import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
+import { useGithubRepoIndex } from "@/features/github/hooks/useGithub"
 import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
-import type { NamedRef } from "@/features/tasks/types"
+import type { ProjectRef } from "@/features/tasks/types"
 import { centralSettingsPath, AGENTIC_CODE_ROOT } from "../../constants"
 import { useCreateCentral } from "../../hooks/useAgentic"
 import { defaultSessionDirectory } from "../../logic"
@@ -32,11 +35,14 @@ const EMPTY: CreateCentralInput = { projectId: "", projectName: "", sessionDirec
 export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCentralDialogProps) {
     const router = useRouter()
     const options = useTaskOptions(open)
+    const repoIndex = useGithubRepoIndex(open)
     const create = useCreateCentral()
     const form = useForm<CreateCentralInput>({ resolver: zodResolver(createCentralSchema), mode: "onChange", defaultValues: EMPTY })
-    const projectName = useWatch({ control: form.control, name: "projectName" })
+    const projectId = useWatch({ control: form.control, name: "projectId" })
     const errors = form.formState.errors
     const taken = useMemo(() => new Set(existing.map((central) => central.projectId)), [existing])
+    const projects = useMemo(() => options.data?.projects ?? [], [options.data])
+    const project = useMemo(() => projects.find((item) => item.id === projectId) ?? null, [projects, projectId])
 
     useEffect(() => {
         if (open) form.reset(EMPTY)
@@ -68,12 +74,12 @@ export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCent
                     </DialogHeader>
 
                     <Field id="central-product" label="Projeto (repositório)" error={errors.projectId?.message ?? (options.isError ? apiErrorMessage(options.error, "Não foi possível listar os projetos") : undefined)}>
-                        <SearchPicker<NamedRef>
-                            trigger={<FieldTrigger id="central-product" placeholder="Escolha o projeto" value={projectName || undefined} invalid={Boolean(errors.projectId)} />}
-                            items={options.data?.projects ?? []}
+                        <SearchPicker<ProjectRef>
+                            trigger={<FieldTrigger id="central-product" placeholder="Escolha o repositório" value={project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : undefined} invalid={Boolean(errors.projectId)} />}
+                            items={projects}
                             getKey={(item) => item.id}
-                            searchKeys={["name"]}
-                            renderItem={(item) => <span className="truncate">{item.name}</span>}
+                            searchKeys={["repo", "name", "sigla"]}
+                            renderItem={(item) => <GithubRepoLabel repo={repoLabelOption(item.repo, repoIndex)} />}
                             disabledReason={(item) => (taken.has(item.id) ? "Este projeto já tem uma central" : false)}
                             onPick={(item) => {
                                 form.setValue("projectId", item.id, { shouldDirty: true, shouldValidate: true })
@@ -82,11 +88,18 @@ export function CreateCentralDialog({ open, onOpenChange, existing }: CreateCent
                             }}
                             loading={options.isLoading}
                             matchTriggerWidth
-                            placeholder="Buscar projeto"
-                            searchLabel="Buscar projeto"
-                            listLabel="Projetos"
-                            emptyText="Nenhum projeto disponível (vincule um repositório em Integrações › GitHub)"
-                            emptySearchText="Nenhum projeto encontrado"
+                            placeholder="Buscar repositório"
+                            searchLabel="Buscar repositório"
+                            listLabel="Repositórios vinculados"
+                            emptyText={options.isError ? "Não foi possível listar os repositórios (confira o token em Integrações › GitHub)" : "Nenhum repositório vinculado: vincule um em Integrações › GitHub"}
+                            emptySearchText="Nenhum repositório encontrado"
+                            footer={
+                                options.isError ? (
+                                    <button type="button" className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted" onClick={() => void options.refetch()}>
+                                        Tentar novamente
+                                    </button>
+                                ) : undefined
+                            }
                         />
                     </Field>
 
