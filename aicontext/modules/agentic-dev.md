@@ -43,6 +43,14 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   - Sem resultados, o card mostra o vazio **Nenhuma central encontrada** com **Limpar busca**
     (distinto de "Nenhuma central ainda", quando não há centrais). A busca filtra só a lista:
     **Nova central** continua oferecendo todos os projetos disponíveis.
+- O campo **Projeto (repositório)** do diálogo *Nova central* é um `SearchPicker` com o item de
+  repositório do GitHub (`GithubRepoLabel`: avatar, `owner/repo`, descrição e cadeado de privado),
+  buscável por repositório, nome do projeto e sigla (fuse.js) — as opções continuam sendo os
+  **projetos vinculados** (`GET /api/tasks/options`), e o índice do GitHub (`useGithubRepoIndex`, o
+  mesmo do `ClienteDialog`) só enriquece a exibição. Sem os metadados do GitHub (token ausente ou
+  falha), o item cai no `owner/repo` do projeto e segue selecionável. Projeto que já tem central fica
+  bloqueado com o motivo; a lista vazia, o carregamento, o "não encontrado" e a falha da consulta
+  (com **Tentar novamente**) têm estado próprio.
 
 ### Central (`/integracoes/ia/centrais/[id]`, `agentic_centrals`)
 
@@ -412,7 +420,8 @@ merge, reabrir, excluir).
 
 ## Testes
 
-`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`), mesas em
+`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`),
+criação da central com o seletor de repositório (`create-central-dialog`), mesas em
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
