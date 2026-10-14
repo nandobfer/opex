@@ -158,8 +158,8 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   oferece **Tentar novamente**; se a limpeza não puder nem começar, a mesa com backup fica em
   `finishing` (não conclui).
 - Mesas abertas antes desta funcionalidade (sem `previewBackup`) seguem concluindo sem backup.
-- Fora do escopo: excluir (ou abandonar) uma mesa não remove o dump; a remoção automática é só na
-  conclusão após o merge.
+- A **exclusão da mesa** (OPE-68) roda a mesma limpeza e remove o dump antes de apagar o registro
+  (ver "Excluir mesa"); abandonar a mesa (deixá-la parada) não remove o dump.
 
 ## Central de desenvolvimento (`/desenvolvimento/[tarefa]`)
 
@@ -343,8 +343,18 @@ done → Reabrir mesa (texto ao planejador) → planning
   só ao vivo) e usa o `turnStartedAt` como marco do turno. Sem sessão, sem etapa de execução ou com
   o agente indisponível, a ação responde 409 e a tela continua oferecendo **Tentar novamente**.
 - Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
-- **Excluir mesa**: interrompe, apaga a saída, tenta excluir as sessões já pendentes e libera a
-  porta; worktree, branch, containers e PR ficam como estão.
+- **Excluir mesa (OPE-68)**: marca a exclusão na mesa (`deletionRequestedAt`), interrompe o turno
+  vivo, invalida a prévia remota e roda a **mesma limpeza de ambiente da conclusão** (etapa
+  `finishing`, agente de Build) antes de apagar o registro: containers (`docker compose down`, quando
+  houve build), backup do MongoDB (sempre), worktree e branch local — conforme as opções da central —
+  e a sessão do OpenCode. O app **confere** na máquina do OpenCode que os recursos sumiram (o bloco
+  JSON do agente não basta) e só então remove a mesa, a saída e libera a porta. A tarefa, o PR e a
+  branch remota **não** são tocados. Enquanto a limpeza não termina, a mesa permanece na etapa
+  `finishing` (rótulo "Excluindo…") com **Tentar novamente**/**Reconectar**; OpenCode indisponível ou
+  falha na limpeza **não** apaga a mesa nem perde a referência da sessão. Mesa que nunca criou
+  recursos (só planejamento) e não tem sessão é removida na hora. O `DELETE` responde
+  `{ deleted: true }` quando a mesa já saiu e `{ deleted: false }` quando a limpeza ficou em
+  andamento.
 - Custo e tokens acumulados por mesa (`session.step.ended`). Cada passo também é registrado em
   `ai_consumption_logs` (origem `agentic`) para o painel de consumo do OpenCode — ver
   `modules/ai.md`, "Medição de consumo".
@@ -380,7 +390,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
 | `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
-| `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa |
+| `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
@@ -396,6 +406,8 @@ andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconex
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
-(`preview-backup` e `workflow-preview-backup`) e fluxo da mesa — Publicar
-prévia vs PR automático (`workflow-flow-mode`)), `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
+(`preview-backup` e `workflow-preview-backup`), fluxo da mesa — Publicar
+prévia vs PR automático (`workflow-flow-mode`) e **exclusão da mesa com limpeza do ambiente**
+(`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
+`__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

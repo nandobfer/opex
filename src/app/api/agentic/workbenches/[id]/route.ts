@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic"
 
 export const GET = withRoute<{ id: string }>(async ({ params }) => ok(await getWorkbench(params.id)))
 
-/** DELETE /api/agentic/workbenches/[id] — interrompe (se preciso) e exclui a mesa e a saída dela. */
-export const DELETE = withRoute<{ id: string }>(async ({ params }) => {
-    await deleteWorkbench(params.id)
-    return ok({ deleted: true })
-})
+/**
+ * DELETE /api/agentic/workbenches/[id] — exclui a mesa. Antes de apagar o registro ela roda a
+ * mesma limpeza de ambiente da conclusão (respeitando as opções da central) e exclui a sessão do
+ * OpenCode. `deleted: false` = a limpeza ficou em andamento; a mesa sai quando ela terminar.
+ */
+export const DELETE = withRoute<{ id: string }>(async ({ params }) => ok(await deleteWorkbench(params.id)))

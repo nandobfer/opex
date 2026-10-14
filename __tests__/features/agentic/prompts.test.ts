@@ -169,6 +169,26 @@ describe('leitura das respostas', () => {
   })
 })
 
+describe('limpeza da exclusão (OPE-68)', () => {
+  it('usa o enunciado da exclusão e diz que o PR e a branch remota não são tocados', () => {
+    const text = cleanupPrompt(config, ctx, null, { reason: 'deletion' })
+    expect(text).toContain('EXCLUÍDA')
+    expect(text).toContain('NÃO toque no Pull Request nem na branch remota')
+    expect(text).not.toContain('O PR foi mergeado')
+  })
+
+  it('omite worktree e branch que a mesa não registrou', () => {
+    const text = cleanupPrompt(config, { ...ctx, worktreePath: '', branch: '' }, null, { reason: 'deletion' })
+    expect(text).not.toContain('git worktree remove')
+    expect(text).not.toContain('git branch -D')
+    expect(text).toContain('docker compose -p portal-go-dev-12 down')
+  })
+
+  it('trata recursos já ausentes como removidos (idempotente)', () => {
+    expect(cleanupPrompt(config, ctx, null, { reason: 'deletion' })).toContain('se ainda existir')
+  })
+})
+
 describe('fluxos alternativos (prévia vs PR automático)', () => {
   it('PR automático não afirma que a prévia foi aprovada', () => {
     const task = { code: 'GO-DEV-12', title: 'Exportar' }

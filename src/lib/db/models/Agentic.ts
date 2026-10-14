@@ -95,6 +95,11 @@ export interface IAgenticWorkbench {
     agenticFlow: string
     /** Backup do MongoDB da prévia (reservado no build); `null` quando a mesa não tem backup. */
     previewBackup: IPreviewBackup | null
+    /**
+     * Pedido de exclusão da mesa (OPE-68): a intenção fica gravada enquanto a limpeza do ambiente
+     * não termina; `null` quando não há exclusão pendente. O registro só é apagado ao final.
+     */
+    deletionRequestedAt: Date | null
     plans: IPlanVersion[]
     pendingFeedback: string | null
     pr: IWorkbenchPr | null
@@ -134,6 +139,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         previewHealthy: { type: Boolean, default: null },
         agenticFlow: { type: String, default: "preview" },
         previewBackup: { type: Schema.Types.Mixed, default: null },
+        deletionRequestedAt: { type: Date, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
         pendingFeedback: { type: String, default: null },
         pr: { type: Schema.Types.Mixed, default: null },
