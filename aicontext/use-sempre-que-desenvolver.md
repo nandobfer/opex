@@ -91,9 +91,11 @@ src/
 ### 8. Tempo real (Pusher)
 - Servidor: `pusher` (`src/lib/pusher/server.ts`, `channels.ts`); cliente: `pusher-js`.
 - Dispare eventos só no servidor, depois de persistir e auditar (`publishAppEvent`).
-- Canais privados: `private-app` (dados das telas) e `private-integration-{id}` (debug/status).
-  Payload mínimo (ids e o que mudou); o cliente invalida/atualiza o cache do TanStack Query em
-  hooks da feature (`use*Realtime`), com assinatura em `useEffect` e cancelamento na desmontagem.
+- Canais privados: `private-app` e `private-integration-{id}` (dono), `private-client-{clientId}`
+  (portal) e `private-repo-recents-{ator}` (o próprio ator); canal novo exige regra em
+  `src/lib/pusher/channel-auth.ts`. Payload mínimo (ids e o que mudou); o cliente invalida/atualiza o
+  cache do TanStack Query em hooks da feature (`use*Realtime`), com assinatura em `useEffect` e
+  cancelamento na desmontagem.
 
 ### 9. Consumo de API no cliente
 - Use o axios central (`src/lib/api.ts`, `baseURL: '/api'`) sem o prefixo `/api`:

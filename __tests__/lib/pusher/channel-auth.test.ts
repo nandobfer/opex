@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isChannelAuthorized, parseChannel } from '@/lib/pusher/channel-auth'
-import { appChannel, clientChannel, integrationChannel } from '@/lib/pusher/channel-names'
+import { appChannel, clientChannel, integrationChannel, repoRecentsChannel } from '@/lib/pusher/channel-names'
 import type { SessionPayload } from '@/features/auth/session'
 
 const ADMIN: SessionPayload = { iat: 0, exp: 9_999_999_999, kind: 'admin' }
@@ -39,6 +39,21 @@ describe('autorização dos canais privados', () => {
     expect(isChannelAuthorized(clientChannel('c1'), CLIENT())).toBe(false)
     expect(isChannelAuthorized(clientChannel('c1'), ADMIN)).toBe(true)
     expect(isChannelAuthorized(clientChannel('c1'), null)).toBe(false)
+  })
+
+  it('o canal do histórico de repositórios é do próprio ator', () => {
+    expect(parseChannel('private-repo-recents-local')).toEqual({ kind: 'repoRecents', actorId: 'local' })
+    expect(repoRecentsChannel('u1')).toBe('private-repo-recents-u1')
+
+    expect(isChannelAuthorized(repoRecentsChannel('local'), ADMIN)).toBe(true)
+    expect(isChannelAuthorized(repoRecentsChannel('u1'), ADMIN)).toBe(false)
+
+    expect(isChannelAuthorized(repoRecentsChannel('u1'), CLIENT())).toBe(true)
+    expect(isChannelAuthorized(repoRecentsChannel('u2'), CLIENT())).toBe(false)
+    expect(isChannelAuthorized(repoRecentsChannel('local'), CLIENT())).toBe(false)
+
+    expect(isChannelAuthorized(repoRecentsChannel('local'), null)).toBe(false)
+    expect(isChannelAuthorized('private-repo-recents-', ADMIN)).toBe(false)
   })
 
   it('qualquer outro canal é negado', () => {

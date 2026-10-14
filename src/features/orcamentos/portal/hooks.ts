@@ -10,6 +10,8 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import type { TaskPriority } from "@/features/tasks/constants"
 import type { TaskDto } from "@/features/tasks/types"
 import { ATTACHMENTS_QUERY_KEY, useAttachmentClient } from "@/features/tasks/attachments/hooks"
+import { CLIENTE_REPO_RECENTS_PATH } from "@/features/repository-recency/constants"
+import { useRepoRecentsSource, type RepoRecentsSource } from "@/features/repository-recency/hooks"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "../constants"
 import type { CreateDraftInput, ClienteUserInput } from "../schemas"
 import type { ClienteDashboardDto, ClienteFinanceDto, ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, ClienteUserDto, CreatedClienteUserDto, OrcamentoDraftDto } from "../types"
@@ -30,6 +32,15 @@ export function useClienteOptions() {
         queryFn: async () => unwrapApi((await api.get<ApiResponse<ClientePortalOptionsDto>>("/cliente/options")).data),
         staleTime: 5 * 60_000,
     })
+}
+
+/**
+ * Histórico de repositórios usados recentemente pelo **usuário** no portal (o mesmo nas Tarefas e no
+ * formulário de nova tarefa). O cache é separado por cliente em escopo.
+ */
+export function useClienteRepoRecents(): RepoRecentsSource {
+    const { api, clientId } = useClientePortal()
+    return useRepoRecentsSource(api, CLIENTE_REPO_RECENTS_PATH, `cliente:${clientId}`)
 }
 
 export function useClienteTasks(includeArchived: boolean) {

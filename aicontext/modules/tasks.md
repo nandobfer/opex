@@ -129,7 +129,8 @@ semeado na primeira leitura (`ensureBoard`).
   + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
   guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub
   (integração ausente ou repositório fora do token), o avatar cai na inicial. "Limpar" zera os
-  filtros, mantendo visão e ordenações.
+  filtros, mantendo visão e ordenações. Os repositórios aparecem **por uso recente** (ver
+  `modules/repository-recency.md`); adicionar um ao filtro registra o uso.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
@@ -180,10 +181,12 @@ Formulário no estilo "nova issue do GitHub", em **página própria** (não é m
 descrição em **campo Markdown** (`MarkdownField`: abas **Escrever / Visualizar** + barra com
 **negrito**, itálico, cabeçalho, link, imagem, lista, citação e código) e os metadados em
 **autocomplete com chips**
-(`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
-**Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
-campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
-`technicalSpec`). O mesmo `MarkdownField` é reusado no portal do cliente (`modules/orcamentos.md`).
+  (`SearchPicker` + `FieldTrigger`): **Repositório** (`GithubRepoLabel`, só os vinculados), **Coluna**,
+  **Tipo** e **Prioridade**. A **especificação técnica saiu do formulário** (será gerada de forma agêntica; o
+  campo continua no modelo e na API). Schema do formulário: `taskFormSchema` (= `taskInputSchema` sem
+  `technicalSpec`). O mesmo `MarkdownField` é reusado no portal do cliente (`modules/orcamentos.md`).
+  O seletor de **Repositório** lista as opções **por uso recente** (`modules/repository-recency.md`),
+  sem alterar o repositório inicial do formulário.
 
 O **Repositório** substitui o antigo campo "Projeto": o Projeto É o repositório vinculado, então a
 escolha do repositório define o `projectId`. Ao salvar, a tarefa **cria a issue no repositório** e o
@@ -197,8 +200,8 @@ O dono usa o **mesmo fluxo de prévia por IA do portal do cliente** (ver `module
 mas pelos endpoints internos (sessão, sem token de cliente):
 
 - `/tarefas/previa` — formulário (`OwnerPreviewFormPage`): **Repositório** (só os vinculados, no
-  `SearchPicker` com o `GithubRepoLabel` real) + **descrição** em Markdown (`MarkdownField`). Ao
-  avançar, abre o rascunho e segue para a revisão.
+  `SearchPicker` com o `GithubRepoLabel` real, listados **por uso recente**) + **descrição** em
+  Markdown (`MarkdownField`). Ao avançar, abre o rascunho e segue para a revisão.
 - `/tarefas/previa/[draftId]` — revisão (`OwnerPreviewReviewPage`), espelhando a revisão do portal:
   prévia (título/resumo/descrição e especificação técnica), repositório, tipo + **prioridade
   editável**, tags, **clareza** e os cards de correção/aprovar. A diferença é o card de estimativa.
@@ -386,3 +389,5 @@ confirmação/promoção, limite, idempotência, vínculo, visibilidade e limpez
 do dono** (formulário, revisão e o card de estimativa com cliente opcional) em
 `__tests__/features/tasks/owner-preview.test.tsx`. O botão
 **Refinar tarefa** é coberto em `__tests__/features/refinement/` (ver `modules/refinement.md`).
+Os **repositórios usados recentemente** (ordem no seletor, busca e registro da escolha) em
+`__tests__/features/repository-recency/` (ver `modules/repository-recency.md`).

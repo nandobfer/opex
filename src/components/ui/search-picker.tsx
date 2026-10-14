@@ -25,6 +25,12 @@ export interface SearchPickerProps<T> {
     searchKeys?: FuseOptionKey<T>[]
     /** Filtro local próprio (ex.: trecho sem acento), no lugar da busca tolerante do fuse.js. */
     filterItems?: (items: readonly T[], term: string) => T[]
+    /**
+     * Ordena as opções ANTES da busca (ex.: repositórios usados recentemente primeiro). Sem termo,
+     * essa é a ordem da lista; com termo, o fuse.js reordena por relevância e a ordenação de entrada
+     * decide os empates. Memoize a função para não recriar o índice a cada render.
+     */
+    orderItems?: (items: readonly T[]) => T[]
     onSearchChange?: (term: string) => void
     onOpenChange?: (open: boolean) => void
     /** Motivo do bloqueio (vira dica da opção) ou `false` quando a opção pode ser escolhida. */
@@ -50,7 +56,8 @@ export interface SearchPickerProps<T> {
 /**
  * Busca com lista em popover para escolher UM item de uma lista grande (produto, oferta, item da
  * oferta): campo de busca, opções ricas com entrada/saída animadas, ↑/↓ + Enter para escolher e
- * Esc para fechar. Fecha e limpa a busca ao escolher.
+ * Esc para fechar. Fecha e limpa a busca ao escolher. A ordem das opções é a recebida, salvo
+ * `orderItems` (ex.: uso recente).
  */
 export function SearchPicker<T>({
     trigger,
@@ -60,6 +67,7 @@ export function SearchPicker<T>({
     onPick,
     searchKeys,
     filterItems,
+    orderItems,
     onSearchChange,
     onOpenChange,
     disabledReason,
@@ -81,12 +89,13 @@ export function SearchPicker<T>({
     const [open, setOpen] = useState(false)
     const [term, setTerm] = useState("")
     const [active, setActive] = useState(-1)
-    const fuse = useMemo(() => (searchKeys ? new Fuse([...items], { keys: searchKeys, threshold: 0.35, ignoreLocation: true }) : null), [items, searchKeys])
+    const ordered = useMemo(() => (orderItems ? orderItems(items) : items), [items, orderItems])
+    const fuse = useMemo(() => (searchKeys ? new Fuse([...ordered], { keys: searchKeys, threshold: 0.35, ignoreLocation: true }) : null), [ordered, searchKeys])
     const query = term.trim()
     const visible = useMemo(() => {
-        if (filterItems) return filterItems(items, query).slice(0, MAX_VISIBLE)
-        return (fuse && query ? fuse.search(query).map((result) => result.item) : [...items]).slice(0, MAX_VISIBLE)
-    }, [filterItems, fuse, items, query])
+        if (filterItems) return filterItems(ordered, query).slice(0, MAX_VISIBLE)
+        return (fuse && query ? fuse.search(query).map((result) => result.item) : [...ordered]).slice(0, MAX_VISIBLE)
+    }, [filterItems, fuse, ordered, query])
 
     const changeTerm = (next: string) => {
         setTerm(next)

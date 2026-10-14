@@ -266,8 +266,10 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - Escolha de **um** item numa lista grande ou rica (ex.: tarefa) usa
   `SearchPicker` (`ui/search-picker.tsx`) em vez de `Select`: popover com busca (local fuse.js por
   `searchKeys` ou no servidor por `onSearchChange`), opções ricas via `renderItem`, ↑/↓ +
-  Enter, opções bloqueadas com motivo (`disabledReason`) e entrada/saída animadas. O gatilho com
-  cara de campo é o `FieldTrigger` (`ui/field-trigger.tsx`). `Select` fica para
+  Enter, opções bloqueadas com motivo (`disabledReason`) e entrada/saída animadas. A ordem das
+  opções é a recebida, salvo `orderItems` (ex.: **uso recente**, ver `modules/repository-recency.md`)
+  — a ordenação entra ANTES da busca, então a relevância do fuse.js prevalece e a ordem decide os
+  empates. O gatilho com cara de campo é o `FieldTrigger` (`ui/field-trigger.tsx`). `Select` fica para
   listas curtas e simples.
 - **Período** (início e fim) num formulário usa um só `DateRangeCalendar`
   (`ui/date-range-calendar.tsx`), nunca dois `DatePicker`; o `PresetDateRangeFilter` é só para

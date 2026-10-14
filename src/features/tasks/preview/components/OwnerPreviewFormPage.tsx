@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useCallback } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeft, Github, Loader2, Sparkles } from "lucide-react"
@@ -20,8 +21,11 @@ import { repoLabelOption, useRepoIndex } from "@/features/github/components/Repo
 import { clienteDraftSchema, type ClienteDraftInput } from "@/features/orcamentos/schemas"
 import { useOwnerAttachmentClient, usePendingAttachments } from "@/features/tasks/attachments/hooks"
 import { PendingAttachmentsField } from "@/features/tasks/attachments/components/PendingAttachmentsField"
+import { useOwnerRepoRecents } from "@/features/repository-recency/hooks"
+import { orderByRecency } from "@/features/repository-recency/ordering"
 import { TASKS_PATH, taskPreviewPath } from "../../constants"
 import { useTaskOptions } from "../../hooks/useTasks"
+import type { ProjectRef } from "../../types"
 import { useCreateOwnerDraft } from "../hooks"
 
 /**
@@ -38,6 +42,8 @@ export function OwnerPreviewFormPage() {
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
     const projects = options.data?.projects ?? []
+    const { recents, record } = useOwnerRepoRecents()
+    const orderProjects = useCallback((items: readonly ProjectRef[]) => orderByRecency(items, recents, (item) => item.id), [recents])
 
     return (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
@@ -104,10 +110,14 @@ export function OwnerPreviewFormPage() {
                                                     />
                                                 }
                                                 items={projects}
+                                                orderItems={orderProjects}
                                                 getKey={(item) => item.id}
                                                 searchKeys={["repo", "name", "sigla"]}
                                                 renderItem={(item) => <GithubRepoLabel repo={repoLabelOption(item.repo, repoIndex)} />}
-                                                onPick={(item) => field.onChange(item.id)}
+                                                onPick={(item) => {
+                                                    field.onChange(item.id)
+                                                    record(item.id)
+                                                }}
                                                 matchTriggerWidth
                                                 searchLabel="Buscar repositório"
                                                 listLabel="Repositórios vinculados"

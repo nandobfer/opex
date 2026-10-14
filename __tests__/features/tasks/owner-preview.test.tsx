@@ -35,6 +35,10 @@ vi.mock("@/features/tasks/hooks/useTasks", async (original) => ({
     ...(await original<typeof import("@/features/tasks/hooks/useTasks")>()),
     useTaskOptions: () => mocks.projects,
 }))
+// Histórico de uso recente é testado em `repository-recency/task-form-recents.test.tsx`.
+vi.mock("@/features/repository-recency/hooks", () => ({
+    useOwnerRepoRecents: () => ({ recents: [], record: vi.fn() }),
+}))
 
 import { PreviewEstimateCard } from "@/features/tasks/preview/components/PreviewEstimateCard"
 import { OwnerPreviewReviewPage } from "@/features/tasks/preview/components/OwnerPreviewReviewPage"

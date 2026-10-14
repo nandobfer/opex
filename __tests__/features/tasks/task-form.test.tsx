@@ -12,6 +12,10 @@ vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion'
 vi.mock('@/features/github/hooks/useGithub', () => ({
   useGithubRepoIndex: () => new Map([['o/portal', { fullName: 'o/portal', htmlUrl: 'https://github.com/o/portal', description: 'Portal interno', private: false, ownerAvatarUrl: 'https://avatars.githubusercontent.com/u/9?v=4' }]]),
 }))
+// Histórico de uso recente é testado em `repository-recency/task-form-recents.test.tsx`.
+vi.mock('@/features/repository-recency/hooks', () => ({
+  useOwnerRepoRecents: () => ({ recents: [], record: vi.fn() }),
+}))
 
 import { TaskForm } from '@/features/tasks/components/TaskForm'
 

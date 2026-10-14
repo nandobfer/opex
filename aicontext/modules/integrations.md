@@ -92,9 +92,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   indisponível" aparece e as telas caem no polling.
 - Navegador: config injetada pelo layout raiz via `PusherConfigBridge`, sempre com
   `authEndpoint: "/api/pusher/auth"` (com o subcaminho público, `withBasePath`). Sem Pusher configurado as telas caem no polling.
-- **Canais** (`src/lib/pusher/channel-auth.ts`): `private-app` (dados das telas) e
-  `private-integration-{id}` (só ids do catálogo). Qualquer outro canal é negado. Não há usuário
-  para conferir; a rota `/api/pusher/auth` só valida o nome do canal.
+- **Canais** (`src/lib/pusher/channel-auth.ts`), por **tipo de sessão**: `private-app` (dados das
+  telas) e `private-integration-{id}` (só ids do catálogo) — só o **dono**; `private-client-{clientId}`
+  — a sessão do cliente em escopo (ou o dono em pré-visualização); `private-repo-recents-{ator}` — só o
+  próprio ator, dono (`local`) ou usuário de cliente (ver `modules/repository-recency.md`). Qualquer
+  outro canal é negado.
 
 ### Tela de listagem (`/integracoes`)
 
@@ -304,7 +306,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 | `GET /api/v1/whoami` | Pública por token de sistema |
 | `/api/integrations/github/*` | Vínculos, mapeamento, sincronização e opções (ver `modules/github.md`) |
 | `GET/POST /api/routines/scheduler-tick` | Tick do agendador (Bearer `CRON_SECRET` ou cron secret) |
-| `POST /api/pusher/auth` | Autoriza `private-app` e `private-integration-{id}` |
+| `POST /api/pusher/auth` | Autoriza os canais privados do tipo de sessão (`private-app`, `private-integration-{id}`, `private-client-{clientId}`, `private-repo-recents-{ator}`) |
 
 ## Consumidores
 
