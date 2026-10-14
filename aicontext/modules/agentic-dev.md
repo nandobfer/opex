@@ -11,7 +11,8 @@ Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cl
 tarefas, ver `modules/refinement.md`). Modelos em `src/lib/db/models/Agentic.ts`; a saída gravada
 (`agentic_events`) também é usada pelo refinamento. O backup do MongoDB da prévia (OPE-54) tem
 caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferência em
-`src/features/agentic/server/preview-backup.ts`.
+`src/features/agentic/server/preview-backup.ts`; se ele roda ou não é uma opção da central
+(`environment.backupDatabase`, OPE-72 — ver “Backup do MongoDB da prévia”).
 
 ## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
 
@@ -62,7 +63,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
-| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build |
+| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72) |
 | Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
@@ -110,7 +111,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - O método é salvo por tentativa em `previewBuild`; trocar configuração não altera o build em
   andamento. Retentativa remota também pula fila, mesmo se a configuração mudou depois.
 - A etapa continua sendo um turno do agente Build na sessão da mesa. O agente cria/reutiliza o
-  backup obrigatório e executa `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree.
+  backup do banco (quando ligado na aba Ambiente) e executa
+  `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree.
   O workflow e o runner devem estar instalados no projeto com a skill global
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
@@ -120,10 +122,11 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
   e confirmação de publicação. A URL do run aparece nos logs da sessão; reconexão pode retomar
   o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
-- O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup e
-  worktree, revalida porta e importa a imagem. Publica com override Compose por tentativa,
-  `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta ocupada por outra
-  aplicação falha; container da própria mesa pode ser recriado. Não há fallback para build local.
+- O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
+  quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
+  Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
+  ocupada por outra aplicação falha; container da própria mesa pode ser recriado. Não há fallback
+  para build local.
 - Cancelamento, exclusão, correção e nova tentativa invalidam o estado antigo; o runner verifica
   a reserva lógica durante a espera e imediatamente antes da publicação. Timeout/falha também
   invalidam a tentativa. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
@@ -153,18 +156,36 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 - Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
   turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
 
-## Backup do MongoDB da prévia (OPE-54)
+## Backup do MongoDB da prévia (OPE-54 · opcional pela OPE-72)
 
 Antes de publicar a prévia, o agente cria um **dump do banco MongoDB do próprio projeto** (não o do
 Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (caminhos puros),
 `server/preview-backup.ts` (reserva e conferência) e os prompts de build/limpeza.
 
+- **Execução opcional por central** (`environment.backupDatabase`, aba **Ambiente**, padrão **ligado**):
+  desligada, a prévia sobe **sem dump** — para projetos que não têm banco de dados, em que a etapa
+  falhava por não haver o que copiar. O valor vive no schema da central (`centralConfigSchema`), é
+  salvo como o resto da configuração (auditoria + Pusher) e `parseCentralConfig` mantém centrais
+  antigas com o backup **ligado** (compatibilidade).
+- A opção é **efetiva por tentativa** (`previewBuild.dumpRequired`): desligá-la não altera o turno que
+  já está rodando; **Tentar novamente** depois de desligar reaproveita a configuração salva e sobe a
+  prévia sem o dump (destrava a retentativa que falhava por falta de banco).
+- **Desligada no modo remoto**: a pasta do ciclo continua sendo reservada porque é nela que ficam o
+  estado da tentativa (`remote-preview-<tentativa>.json`), os artefatos e o `flock`; o que sai é a
+  **exigência** do arquivo — `scripts/preview-github.ts` só rejeita o dump ausente/vazio quando
+  `dumpRequired` não é `false` (estado gravado por versão anterior, sem o campo, continua exigindo).
+  Projetos já instalados precisam reaplicar a skill `setup-preview-workflow` para receber o script
+  atualizado — sem ele, a prévia remota com o backup desligado continua falhando por dump ausente.
+- **Limpeza independente da opção**: um backup já registrado (ligado em um ciclo anterior) continua
+  sendo removido na conclusão/exclusão, e a reserva anterior é preservada nas retentativas mesmo com a
+  opção desligada.
 - **Caminho reservado antes do build**: ao iniciar o turno de build (`startBuildTurn`), a mesa
   reserva uma pasta exclusiva do ciclo em `<pasta dos worktrees>/.opex-backups/<código>/<ciclo>/`
   (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o prompt de build manda criar o dump ali
   como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto e **sem
   imprimir credenciais**. A pasta fica **fora do worktree**, então nunca entra em commit nem é
-  derrubada pelo `git worktree remove`.
+  derrubada pelo `git worktree remove`. Com o backup desligado no modo **local** a reserva é
+  dispensada (a mesa fica sem `previewBackup` e conclui sem etapa de limpeza).
 - **Primeiro dump preservado**: retentativas do build e correções da prévia **reutilizam** o arquivo
   já criado (o prompt manda reutilizar quando existir; só cria quando não há nenhum). Reabrir a mesa
   zera a reserva, então o próximo build começa um **ciclo novo** (pasta nova).
@@ -426,8 +447,10 @@ andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconex
 acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
-(`preview-backup` e `workflow-preview-backup`), fluxo da mesa — Publicar
+(`preview-backup` e `workflow-preview-backup`, com o backup **ligado e desligado** — OPE-72),
+aba Ambiente do formulário da central (`environment-section`, com o toggle do backup), fluxo da mesa — Publicar
 prévia vs PR automático (`workflow-flow-mode`) e **exclusão da mesa com limpeza do ambiente**
 (`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
+`__tests__/deployment/preview-github.test.ts` (prévia remota, com e sem o dump obrigatório),
 `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

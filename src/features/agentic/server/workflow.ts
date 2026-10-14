@@ -390,8 +390,9 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             await assertRemotePreview(client, doc, config.sessionDirectory)
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) throw new Error(`O build falhou: ${parsed.data.error ?? "motivo não informado"}`)
-            // O agente cria o dump antes de publicar; aqui confirmamos que ele existe de fato.
-            if (doc.previewBackup) {
+            // O agente cria o dump antes de publicar (quando a central exige backup); aqui confirmamos que ele existe.
+            const dumpRequired = doc.previewBuild?.dumpRequired !== false
+            if (dumpRequired && doc.previewBackup) {
                 await assertPreviewBackup(client, doc.previewBackup, config.sessionDirectory)
                 notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
             }
@@ -573,20 +574,30 @@ export async function startBuildTurn(id: string): Promise<boolean> {
 async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Promise<TurnPlan> {
     const id = String(loaded.doc._id)
     const port = await allocatePreviewPort(id, loaded.config.environment.previewHost, { min: loaded.config.environment.previewPortMin, max: loaded.config.environment.previewPortMax })
-    // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e
-    // é preservado nas retentativas: o primeiro dump é o backup da mesa (OPE-54).
-    const backup = await reservePreviewBackup(loaded.doc, loaded.config)
+    // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
+    const dumpRequired = loaded.config.environment.backupDatabase
+    // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e é
+    // preservado nas retentativas: o primeiro dump é o backup da mesa (OPE-54). Sem dump exigido a
+    // reserva só acontece no modo remoto, onde a pasta também guarda o estado da tentativa.
+    const backup = dumpRequired || method === "github" ? await reservePreviewBackup(loaded.doc, loaded.config) : null
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}` })
-    publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Backup do MongoDB da prévia em ${backup.dir}` })
+    publishWorkbenchEvent(id, {
+        type: "notice",
+        level: "info",
+        message: dumpRequired && backup ? `Backup do MongoDB da prévia em ${backup.dir}` : "Backup do banco de dados desativado nesta central: a prévia sobe sem dump.",
+    })
     let remote: { attempt: string; statePath: string } | undefined
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
+        if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
         remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, contextOf(loaded))
     } else {
-        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local" }, buildQueuedAt: null } })
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired }, buildQueuedAt: null } })
     }
-    return { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, backup, remote) }
+    // O backup só entra no prompt (e na conferência do servidor) quando a central o exige; sem ele a
+    // prévia sobe sem dump — projetos sem banco de dados (OPE-72).
+    return { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, dumpRequired ? backup : null, remote) }
 }
 
 export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {

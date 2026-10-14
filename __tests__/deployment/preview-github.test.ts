@@ -100,6 +100,13 @@ describe('prévia remota', () => {
     expect(mocks.exec.mock.calls.some(([name]) => name === 'flock')).toBe(false)
   })
 
+  it('backup desligado na central publica sem o arquivo de dump (OPE-72)', async () => {
+    writeFileSync(state.backupPath, '')
+    writeFileSync(statePath, JSON.stringify({ ...state, dumpRequired: false }))
+    await runPreview(statePath, 'one')
+    expect(JSON.parse(readFileSync(statePath, 'utf8')).published).toBe(true)
+  })
+
   it('reconexão reutiliza o run registrado, sem novo push/dispatch', async () => {
     writeFileSync(statePath, JSON.stringify({ ...state, sha, runId: 9 }))
     await runPreview(statePath, 'one')

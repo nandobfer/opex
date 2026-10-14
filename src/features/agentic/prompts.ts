@@ -148,26 +148,33 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     return withInfo + extra(config, "implementation")
 }
 
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths, remote?: { attempt: string; statePath: string }): string {
+export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }): string {
     const env = config.environment
     const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
     const command = `${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
     const health = `http://localhost:${port}${env.healthPath || "/"}`
-    return [
-        "Você agora é o agente de BUILD. Suba a prévia da implementação com Docker Compose, no worktree.",
-        `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
-        "",
-        "## Backup do MongoDB (obrigatório ANTES de publicar a prévia)",
-        "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
-        `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
-        `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
+    // Sem backup (OPE-72, projetos sem banco de dados) a seção some por inteiro: o agente não
+    // identifica banco, não roda `mongodump` e a prévia não depende de nenhum arquivo de dump.
+    const backupSteps = backup
+        ? [
+              "## Backup do MongoDB (obrigatório ANTES de publicar a prévia)",
+              "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
+              `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
+              `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
 \`\`\`sh
 mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>" --archive=${shellQuote(backup.path)} --gzip
 \`\`\`
   (se o \`mongodump\` só existir num container, rode-o no container com acesso ao MongoDB).`,
-        `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
-        "- Se não conseguir identificar o banco ou o dump falhar, NÃO suba a prévia e responda com o bloco JSON de falha abaixo.",
+              `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
+              "- Se não conseguir identificar o banco ou o dump falhar, NÃO suba a prévia e responda com o bloco JSON de falha abaixo.",
+              "",
+          ]
+        : []
+    return [
+        "Você agora é o agente de BUILD. Suba a prévia da implementação com Docker Compose, no worktree.",
+        `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
         "",
+        ...backupSteps,
         `- Confira o docker compose do projeto${file ? ` (${env.composeFile.trim()})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada ${env.previewPortMin}–${env.previewPortMax}; nunca outra).`,
         ...(remote ? [
             "## Construção no GitHub Action (sem build local e sem abrir PR)",
@@ -178,7 +185,9 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
         ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
         `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`docker compose -p ${ctx.composeProject} logs --tail 100\` se falhar).`,
         remote ? "- Informe a URL da execução e o diagnóstico quando falhar. Não substitua a porta ou a imagem por outra tentativa." : "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
-        `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
+        backup
+            ? `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`
+            : `- ${JSON_RULE} Formato: {"ok": true} quando a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
     ].join("\n") + extra(config, "build")
 }
 

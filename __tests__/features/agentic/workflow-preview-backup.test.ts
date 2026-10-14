@@ -84,6 +84,7 @@ interface State {
   runState: string
   error?: string | null
   previewBackup: IPreviewBackup | null
+  previewBuild?: { method: string; dumpRequired?: boolean } | null
   lastPrompt?: { text: string } | null
   pr?: { number: number; url: string; state: string } | null
 }
@@ -121,6 +122,14 @@ const centralWithoutCleanup = () => ({
   config: { ...defaultCentralConfig('/home/u/app'), cleanup: { teardownEnvironment: false, removeWorktree: false, deleteBranch: false } },
 })
 
+/** Central com o backup do banco DESLIGADO (projetos sem banco de dados, OPE-72). */
+const centralWithoutBackup = () => {
+  const config = defaultCentralConfig('/home/u/app')
+  return {
+    doc: { projectName: 'App', projectId: 'p1' },
+    config: { ...config, environment: { ...config.environment, backupDatabase: false }, cleanup: { teardownEnvironment: false, removeWorktree: false, deleteBranch: false } },
+  }
+}
 const succeeded = (text: string) => ({ outcome: 'succeeded', text, message: null, costUsd: 0.01, durationMs: 5 })
 const shellOk = { exitCode: 0, status: 'exited', output: '' }
 const shellFail = { exitCode: 1, status: 'exited', output: '' }
@@ -255,5 +264,56 @@ describe('conclusão com backup (OPE-54)', () => {
     expect(doc().stage).toBe('done')
     expect(stages).toEqual([])
     expect(mocks.runShell).not.toHaveBeenCalled()
+  })
+})
+
+describe('build sem backup do banco (OPE-72)', () => {
+  it('desligado na central, a prévia sobe sem criar nem conferir o dump', async () => {
+    mocks.loadCentral.mockResolvedValue(centralWithoutBackup())
+    const wb = await workbench()
+
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+
+    expect(doc().previewBuild).toEqual({ method: 'local', dumpRequired: false })
+    expect(doc().previewBackup).toBeNull()
+    expect(doc().lastPrompt!.text).not.toContain('mongodump')
+    expect(mocks.runShell).not.toHaveBeenCalled()
+  })
+
+  it('desligar o backup destrava a retentativa que falhava por falta de banco', async () => {
+    const wb = await workbench()
+    mocks.runShell.mockResolvedValue(shellFail)
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().runState).toBe('failed'))
+    expect(doc().error).toContain('dump do MongoDB')
+
+    mocks.loadCentral.mockResolvedValue(centralWithoutBackup())
+    mocks.runShell.mockResolvedValue(shellOk)
+    await retry(String(wb._id))
+    expect(doc().stage).toBe('build_queued')
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+
+    expect(doc().lastPrompt!.text).not.toContain('mongodump')
+    // Só a conferência da primeira tentativa: a nova política dispensa o arquivo.
+    expect(mocks.runShell).toHaveBeenCalledTimes(1)
+    expect(doc().previewBackup).not.toBeNull()
+  })
+
+  it('desligado, um backup anterior da mesa continua sendo removido na conclusão', async () => {
+    mocks.loadCentral.mockResolvedValue(centralWithoutBackup())
+    const removedPath = '/home/u/app/worktrees/.opex-backups/OPE-54/tok/opex-preview-backup.archive'
+    const wb = await workbench({
+      stage: 'pr_open',
+      pr: openPr,
+      previewBackup: { dir: '/home/u/app/worktrees/.opex-backups/OPE-54/tok', path: removedPath, createdAt: new Date() },
+    })
+
+    await handlePrMerged(String(wb._id), { mergedAt: new Date(), mergeCommitSha: 'abc' })
+    await vi.waitFor(() => expect(doc().stage).toBe('done'))
+
+    expect(doc().previewBackup).toBeNull()
+    expect(mocks.runShell).toHaveBeenCalledWith(expect.anything(), '/home/u/app', `test ! -e '${removedPath}'`, { timeoutMs: 15000 })
   })
 })

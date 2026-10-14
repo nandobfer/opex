@@ -107,6 +107,11 @@ describe('parseCentralConfig', () => {
     expect(parseCentralConfig({ sessionDirectory: '/repo' }).columns.queue).toBeNull()
     expect(parseCentralConfig({ sessionDirectory: '/repo', columns: { queue: 'fila' } }).columns.queue).toBe('fila')
   })
+
+  it('o backup do banco nasce ligado (compatível) e o desligado é preservado (OPE-72)', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo' }).environment.backupDatabase).toBe(true)
+    expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { backupDatabase: false } }).environment.backupDatabase).toBe(false)
+  })
 })
 
 describe('padrões da central', () => {  it('worktreeRoot nasce como <diretório das sessões>/worktrees', () => {

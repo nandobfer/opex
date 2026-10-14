@@ -6,11 +6,12 @@ import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
+import { FormToggleCard } from "@/components/ui/toggle-card"
 import { AnimatePresence, motion } from "framer-motion"
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../../constants"
 import type { CentralForm } from "./form"
 
-/** Aba Ambiente: docker compose da prévia, faixa de portas, variável da porta, endereço e teste de saúde. */
+/** Aba Ambiente: docker compose da prévia, faixa de portas, variável da porta, endereço, teste de saúde e backup do banco. */
 export function EnvironmentSection({ form }: { form: CentralForm }) {
     const errors = form.formState.errors.environment
     const env = useWatch({ control: form.control, name: "environment" })
@@ -59,6 +60,17 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
                     <Field id="central-env-port-max" label="Porta final da prévia" error={errors?.previewPortMax?.message}>
                         <Input id="central-env-port-max" type="number" min={1024} max={65535} {...form.register("environment.previewPortMax", { valueAsNumber: true })} aria-invalid={errors?.previewPortMax ? true : undefined} />
                     </Field>
+                </div>
+                <div className="mt-4">
+                    <FormToggleCard
+                        control={form.control}
+                        name="environment.backupDatabase"
+                        id="central-env-backup"
+                        label="Backup do Banco de Dados"
+                        description="Antes de publicar, o agente cria um dump (mongodump) do banco do projeto e a prévia só é aceita com ele; a mesa remove o backup na conclusão. Desligue em projetos sem banco de dados."
+                        onLabel="Ativado"
+                        offLabel="Desativado"
+                    />
                 </div>
                 <p className="mt-4 text-xs text-muted-foreground">
                     O botão &quot;Abrir em nova guia&quot; usa http://{env.previewHost || "localhost"}:&lt;porta&gt;. Abrindo o app de outra máquina, use o IP do servidor, não localhost.
