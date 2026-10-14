@@ -160,7 +160,9 @@ sem pedido explícito.
 - Eventos são disparados **somente pelo servidor**, depois da mutação persistida e da auditoria
   (`publishAppEvent` de `src/lib/pusher/channels.ts`). O cliente nunca publica eventos.
 - Canais **privados** conhecidos: `private-app` (dados das telas) e `private-integration-{id}`
-  (debug/status das integrações). Canal novo exige regra em `src/lib/pusher/channel-auth.ts`.
+  (debug/status das integrações) — só o dono —, `private-client-{clientId}` (portal do cliente) e
+  `private-repo-recents-{ator}` (histórico do próprio ator). Canal novo exige regra em
+  `src/lib/pusher/channel-auth.ts`.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.

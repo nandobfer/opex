@@ -90,7 +90,9 @@ Logins e sessões: `aicontext/modules/auth.md`.
 - Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
   `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin).
 - **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com
-  "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa. No **celular** o
+  "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa. O filtro **Repositório**
+  lista as opções **por uso recente do usuário** (ver `modules/repository-recency.md`); adicionar um
+  repositório registra o uso. No **celular** o
   cabeçalho empilha as ações em linhas inteiras (o atalho de criação, o seletor Kanban/Tabela e
   **Atualizar**), o kanban usa a largura da tela por coluna e a **tabela vira cartões empilhados**
   (mesmo ajuste da tela do dono, sem revelar dados internos).
@@ -99,7 +101,8 @@ Logins e sessões: `aicontext/modules/auth.md`.
   e em Tarefas como **"Nova tarefa"** (`default`, ícone `Plus`) — só o rótulo e o estilo mudam, a
   navegação é a mesma. O atalho **não** depende de repositório liberado: quem não tem repositório
   segue para a página de criação, onde recebe a orientação (o portal não tem criação manual de
-  tarefa; tudo começa pela prévia por IA).
+  tarefa; tudo começa pela prévia por IA). O seletor de **Repositório** de `/cliente/nova` lista as
+  opções **por uso recente do usuário** (`modules/repository-recency.md`).
 - **Página da tarefa**: detalhes equivalentes aos do dono, **exceto Histórico e Horas apontadas**;
   abas Descrição, Especificação técnica, **Anexos** e Comentários; coluna lateral com prioridade
   editável e a estimativa do cliente (só `H × fator` e o custo). O **autor** dos comentários/ações é o
@@ -208,6 +211,7 @@ cada cliente existente, preservando os **tokens/URLs** já em uso. Tarefas pedid
 | `GET /api/cliente/options` | Nome do cliente, repositórios permitidos e quadro |
 | `GET /api/cliente/tasks[?includeArchived=true]` | Tarefas que o cliente solicitou |
 | `GET /api/cliente/tasks/[id]` | Detalhe na visão do cliente |
+| `GET/POST /api/cliente/repo-recents` | Repositórios usados recentemente pelo usuário (ver `modules/repository-recency.md`) |
 | `PATCH /api/cliente/tasks/[id]` | Prioridade da própria tarefa (`{ priority }`) |
 | `POST /api/cliente/tasks/[id]/comments` | Comentário do usuário do portal |
 | `GET /api/cliente/dashboard?from&to&timeZone` | Distribuições de tarefas (custo e horas só para admin) |
@@ -242,6 +246,8 @@ Como o portal é autenticado por **sessão**, ele **não** entra na especificaç
 **`users-service`** (usuário padrão, colisão de username, email duplicado, permissões de vínculo,
 padrão não excluível), **`portal-cost`** (custo por repositório), **`portal-period`** (período/marca do
 portal e filtros do financeiro), **`portal-dashboard`** (agregações puras: tags e resumo financeiro),
+**repositórios usados recentemente** do portal em `__tests__/features/repository-recency/`
+(`modules/repository-recency.md`),
 **`cliente-dashboard-page`** e **`cliente-finance-page`** (apresentação compartilhada com o dono),
 **`cliente-task-creation-button`** (botão de criação compartilhado por Tarefas/Dashboard),
 **`cliente-tasks-page`** (tela de Tarefas), `cliente-*` (cards/listas/detalhe), `cliente-dialog`,

@@ -9,8 +9,10 @@ import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_TYPES, TASK_TYPE_LABELS, ty
 import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type FilterableTask, type TaskFilters } from "@/features/tasks/filters"
 import type { BoardColumnView } from "@/features/tasks/board"
 import { GithubRepoLabel } from "@/features/github/components/shared"
+import { newlySelected, orderByRecency } from "@/features/repository-recency/ordering"
 import { repoLabelFrom, repoLabelIndex } from "@/features/orcamentos/logic"
 import type { ClienteRepoDto } from "@/features/orcamentos/types"
+import { useClienteRepoRecents } from "../hooks"
 
 const COL = "min-w-[160px] flex-1"
 
@@ -28,6 +30,9 @@ export function ClienteFiltersBar({ filters, setFilters, total, tasks, projects,
     const set = <K extends keyof TaskFilters>(key: K) => (value: TaskFilters[K]) => setFilters((prev) => ({ ...prev, [key]: value }))
     const repoOptions = useMemo(() => taskRepoOptions(projects, tasks), [projects, tasks])
     const repoIndex = useMemo(() => repoLabelIndex(projects), [projects])
+    const { recents, record } = useClienteRepoRecents()
+    // Repositórios usados recentemente pelo usuário primeiro; os demais seguem a ordem original.
+    const orderedRepoOptions = useMemo(() => orderByRecency(repoOptions, recents, (option) => option.value), [repoOptions, recents])
     const clear = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
     return (
@@ -63,13 +68,17 @@ export function ClienteFiltersBar({ filters, setFilters, total, tasks, projects,
                 <CadastroMultiSelect
                     icon={Github}
                     placeholder="Todos"
-                    options={repoOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    options={orderedRepoOptions.map((option) => ({ value: option.value, label: option.label }))}
                     renderLabel={(option) => {
                         const project = repoOptions.find((item) => item.value === option.value)?.project
                         return project ? <GithubRepoLabel repo={repoLabelFrom(project.repo, repoIndex)} /> : option.label
                     }}
                     selected={filters.projects}
-                    onSelect={set("projects")}
+                    onSelect={(values) => {
+                        // Registra só as inclusões: remover/limpar filtro não é uso recente.
+                        for (const value of newlySelected(filters.projects, values)) record(value)
+                        set("projects")(values)
+                    }}
                     searchable
                     searchPlaceholder="Buscar repositório..."
                 />

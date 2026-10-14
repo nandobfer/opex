@@ -15,6 +15,8 @@ import type { BoardColumnView } from "../board"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { activeTaskFilterChips } from "../filter-chips"
+import { useOwnerRepoRecents } from "@/features/repository-recency/hooks"
+import { newlySelected, orderByRecency } from "@/features/repository-recency/ordering"
 import { useTaskTaxonomy } from "./TaskTaxonomyProvider"
 import { ColumnBadge } from "./TaskBadges"
 
@@ -37,6 +39,9 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
     const repoOptions = useMemo(() => taskRepoOptions(options?.projects ?? [], tasks), [options, tasks])
     const projectById = useMemo(() => new Map(repoOptions.map((option) => [option.value, option.project])), [repoOptions])
     const repoIndex = useRepoIndex()
+    const { recents, record } = useOwnerRepoRecents()
+    // Repositórios usados recentemente primeiro; os demais seguem a ordem alfabética de `repoOptions`.
+    const orderedRepoOptions = useMemo(() => orderByRecency(repoOptions, recents, (option) => option.value), [repoOptions, recents])
     const taxonomy = useTaskTaxonomy()
     const tagById = useMemo(() => new Map(taxonomy.map((tag) => [tag.id, tag.label])), [taxonomy])
 
@@ -123,13 +128,17 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
                 <CadastroMultiSelect
                     icon={Github}
                     placeholder="Todos"
-                    options={repoOptions.map((option) => ({ value: option.value, label: option.label }))}
+                    options={orderedRepoOptions.map((option) => ({ value: option.value, label: option.label }))}
                     renderLabel={(option) => {
                         const project = projectById.get(option.value)
                         return project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : option.label
                     }}
                     selected={filters.projects}
-                    onSelect={set("projects")}
+                    onSelect={(values) => {
+                        // Registra só as inclusões: remover/limpar filtro não é uso recente.
+                        for (const value of newlySelected(filters.projects, values)) record(value)
+                        set("projects")(values)
+                    }}
                     searchable
                     searchPlaceholder="Buscar repositório..."
                 />

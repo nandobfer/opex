@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, type ReactNode } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Loader2 } from "lucide-react"
@@ -18,6 +18,8 @@ import { taskFormSchema, type TaskFormValues } from "../schemas"
 import type { ProjectRef, TaskDetailDto } from "../types"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
+import { useOwnerRepoRecents } from "@/features/repository-recency/hooks"
+import { orderByRecency } from "@/features/repository-recency/ordering"
 import { ColumnBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
 
 interface TaskFormProps {
@@ -85,6 +87,9 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
     const project = useMemo(() => projects.find((item) => item.id === projectId) ?? null, [projects, projectId])
     const column = useMemo(() => columns.find((item) => item.key === columnId) ?? null, [columns, columnId])
     const repoIndex = useRepoIndex()
+    const { recents, record } = useOwnerRepoRecents()
+    // Só a lista do seletor é reordenada: o reset do formulário continua usando `projects`.
+    const orderProjects = useCallback((items: readonly ProjectRef[]) => orderByRecency(items, recents, (item) => item.id), [recents])
 
     const repoField = (
         <Field id="task-repo" label="Repositório" error={errors.projectId?.message}>
@@ -98,10 +103,14 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                         <SearchPicker
                             trigger={<FieldTrigger id="task-repo" placeholder="Escolha o repositório" invalid={Boolean(errors.projectId)} value={project ? <GithubRepoLabel repo={repoLabelOption(project.repo, repoIndex)} /> : undefined} />}
                             items={projects}
+                            orderItems={orderProjects}
                             getKey={(item) => item.id}
                             searchKeys={["repo", "name", "sigla"]}
                             renderItem={(item) => <GithubRepoLabel repo={repoLabelOption(item.repo, repoIndex)} />}
-                            onPick={(item) => field.onChange(item.id)}
+                            onPick={(item) => {
+                                field.onChange(item.id)
+                                record(item.id)
+                            }}
                             matchTriggerWidth
                             searchLabel="Buscar repositório"
                             listLabel="Repositórios vinculados"

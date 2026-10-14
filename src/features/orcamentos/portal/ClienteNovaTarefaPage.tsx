@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useCallback } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeft, Loader2, Plus } from "lucide-react"
@@ -18,10 +19,12 @@ import { apiErrorMessage } from "@/lib/api"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { usePendingAttachments } from "@/features/tasks/attachments/hooks"
 import { PendingAttachmentsField } from "@/features/tasks/attachments/components/PendingAttachmentsField"
+import { orderByRecency } from "@/features/repository-recency/ordering"
 import { clienteDraftSchema, type ClienteDraftInput } from "../schemas"
 import { repoLabel } from "../logic"
+import type { ClienteRepoDto } from "../types"
 import { clienteRevisaoPath, clienteTarefasPath } from "../constants"
-import { useClienteAttachmentClient, useClienteOptions, useCreateDraft } from "./hooks"
+import { useClienteAttachmentClient, useClienteOptions, useClienteRepoRecents, useCreateDraft } from "./hooks"
 
 /** Nova tarefa do portal: repositório permitido + descrição formatada. */
 export function ClienteNovaTarefaPage() {
@@ -33,6 +36,8 @@ export function ClienteNovaTarefaPage() {
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
     const projects = options.data?.projects ?? []
+    const { recents, record } = useClienteRepoRecents()
+    const orderProjects = useCallback((items: readonly ClienteRepoDto[]) => orderByRecency(items, recents, (item) => item.id), [recents])
 
     return (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-5">
@@ -95,10 +100,14 @@ export function ClienteNovaTarefaPage() {
                                                     />
                                                 }
                                                 items={projects}
+                                                orderItems={orderProjects}
                                                 getKey={(item) => item.id}
                                                 searchKeys={["repo", "name", "sigla"]}
                                                 renderItem={(item) => <GithubRepoLabel repo={repoLabel(item)} />}
-                                                onPick={(item) => field.onChange(item.id)}
+                                                onPick={(item) => {
+                                                    field.onChange(item.id)
+                                                    record(item.id)
+                                                }}
                                                 matchTriggerWidth
                                                 searchLabel="Buscar repositório"
                                                 listLabel="Repositórios"

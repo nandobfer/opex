@@ -10,3 +10,11 @@ export const integrationChannel = (id: string) => `private-integration-${id}`
 export const clientChannel = (clientId: string) => `private-client-${clientId}`
 
 export const CLIENT_CHANNEL_PREFIX = "private-client-"
+
+/**
+ * Canal do **histórico de repositórios recentes** de um ator (dono ou usuário de cliente): cada um
+ * recebe só as suas próprias mudanças, mesmo quando o dono pré-visualiza o portal.
+ */
+export const repoRecentsChannel = (actorId: string) => `private-repo-recents-${actorId}`
+
+export const REPO_RECENTS_CHANNEL_PREFIX = "private-repo-recents-"

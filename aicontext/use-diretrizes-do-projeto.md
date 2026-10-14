@@ -90,8 +90,10 @@ CRM. Detalhes em `use-para-atualizar-tema-e-componentes-ui.md`.
 
 ### 8. Tempo real: Pusher
 
-`pusher`/`pusher-js`, canais privados `private-app` e `private-integration-{id}`, eventos só pelo
-servidor. Compatível com Soketi (modo host).
+`pusher`/`pusher-js`, eventos só pelo servidor, em canais privados por **tipo de sessão**:
+`private-app` e `private-integration-{id}` (dono), `private-client-{clientId}` (portal) e
+`private-repo-recents-{ator}` (o próprio ator — `modules/repository-recency.md`). Compatível com Soketi
+(modo host).
 
 ### 9. Execução: local (`pnpm dev`) ou Docker
 
