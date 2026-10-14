@@ -93,6 +93,8 @@ export interface WorkbenchDto {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa: `preview` (padrão) sobe a prévia; `auto_pr` vai direto ao PR. */
     agenticFlow: TaskAgenticFlow
+    /** Pedido de exclusão em andamento (a limpeza do ambiente roda antes de a mesa ser removida). */
+    deletionRequestedAt: string | null
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
     buildQueuePosition: number | null
     plans: PlanVersionDto[]

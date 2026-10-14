@@ -47,6 +47,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         previewUrl: doc.previewUrl ?? null,
         previewHealthy: doc.previewHealthy ?? null,
         agenticFlow: asAgenticFlow(doc.agenticFlow),
+        deletionRequestedAt: iso(doc.deletionRequestedAt),
         buildQueuePosition,
         plans: (doc.plans ?? []).map((plan) => ({ version: plan.version, text: plan.text, feedback: plan.feedback ?? null, createdAt: new Date(plan.createdAt).toISOString() })),
         pr: doc.pr ? { number: doc.pr.number, url: doc.pr.url, state: doc.pr.state, mergedAt: iso(doc.pr.mergedAt) } : null,

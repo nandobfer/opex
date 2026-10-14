@@ -245,17 +245,32 @@ export function deletePrBranchPrompt(config: CentralConfig, ctx: WorkbenchContex
     ].join("\n") + extra(config, "pr")
 }
 
-export function cleanupPrompt(config: CentralConfig, ctx: WorkbenchContext, backup: PreviewBackupPaths | null, options: { preview?: boolean } = {}): string {
+/**
+ * Prompt de limpeza da mesa. É a MESMA rotina usada na conclusão (merge) e na exclusão da mesa
+ * (OPE-68): `reason` muda só o enunciado. Os passos são idempotentes (recursos já ausentes contam
+ * como removidos) e só entram quando a central manda (`config.cleanup`) e o recurso é conhecido
+ * (worktree/branch vazios = a mesa não chegou a criá-los).
+ */
+export function cleanupPrompt(
+    config: CentralConfig,
+    ctx: WorkbenchContext,
+    backup: PreviewBackupPaths | null,
+    options: { preview?: boolean; reason?: "merge" | "deletion" } = {},
+): string {
     const hasPreview = options.preview !== false
     const steps = [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,
         backup ? `- Apague o backup do MongoDB da prévia (obrigatório): \`rm -rf ${shellQuote(backup.dir)}\` — o arquivo ${shellQuote(backup.path)} não pode continuar existindo.` : "",
         hasPreview && config.cleanup.teardownEnvironment ? `- Derrube a prévia: \`docker compose -p ${ctx.composeProject} down --remove-orphans\` (rode no worktree, se ele ainda existir).` : "",
-        config.cleanup.removeWorktree ? `- Remova o worktree: \`git worktree remove --force ${ctx.worktreePath}\` e depois \`git worktree prune\`.` : "",
-        config.cleanup.deleteBranch ? `- Apague a branch local \`${ctx.branch}\` (\`git branch -D ${ctx.branch}\`); não apague a remota.` : "",
+        config.cleanup.removeWorktree && ctx.worktreePath ? `- Remova o worktree (se ainda existir): \`git worktree remove --force ${ctx.worktreePath}\` e depois \`git worktree prune\`.` : "",
+        config.cleanup.deleteBranch && ctx.branch ? `- Apague a branch local \`${ctx.branch}\` se ela ainda existir (\`git branch -D ${ctx.branch}\`); não apague a remota.` : "",
         `- \`git fetch origin\` e, se for seguro (sem alterações locais), atualize ${config.git.prTargetBranch} no repositório principal.`,
     ].filter(Boolean)
-    return [`O PR foi mergeado e a tarefa ${ctx.code} foi concluída. Faça a LIMPEZA:`, ...steps, `- ${JSON_RULE} Formato: {"ok": true} ou {"ok": false, "error": "motivo"}.`].join("\n")
+    const intro =
+        options.reason === "deletion"
+            ? `A mesa da tarefa ${ctx.code} foi EXCLUÍDA pelo usuário: faça a LIMPEZA do ambiente dela. A limpeza é idempotente (o que já não existir conta como removido) e NÃO toque no Pull Request nem na branch remota.`
+            : `O PR foi mergeado e a tarefa ${ctx.code} foi concluída. Faça a LIMPEZA:`
+    return [intro, ...steps, `- ${JSON_RULE} Formato: {"ok": true} ou {"ok": false, "error": "motivo"}.`].join("\n")
 }
 
 /** Último bloco ```json``` (ou o último objeto `{…}`) do texto, já interpretado. */

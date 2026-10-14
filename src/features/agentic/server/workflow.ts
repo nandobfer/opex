@@ -2,7 +2,7 @@ import { isValidObjectId } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench, type IWorkbenchPr } from "@/lib/db/models/Agentic"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
 import { getTask, moveTask } from "@/features/tasks/server/service"
@@ -34,6 +34,7 @@ import {
 import { buildResultSchema, conflictResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
+import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
 import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
@@ -138,6 +139,10 @@ function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext
 }
 
 function assertAction(doc: IAgenticWorkbench, action: WorkbenchAction): void {
+    // Exclusão em andamento: só retomar a limpeza (Tentar novamente) ou reconectar ao turno dela.
+    if (doc.deletionRequestedAt && action !== "retry" && action !== "reconnect") {
+        throw new DomainError(409, "A mesa está sendo excluída: a limpeza do ambiente precisa terminar antes de qualquer outra ação", "WORKBENCH_DELETING")
+    }
     const stage = asStage(doc.stage)
     const runState = isWorkbenchActive(String(doc._id)) ? "running" : asRunState(doc.runState) === "running" ? "interrupted" : asRunState(doc.runState)
     if (!canRun(stage, runState, action)) {
@@ -184,6 +189,8 @@ interface LaunchOptions {
     /** Pedido que origina a próxima versão do plano. */
     feedback?: string | null
     extraSet?: Record<string, unknown>
+    /** Ignora o limite de mesas abertas (a limpeza da exclusão nunca espera uma vaga). */
+    bypassLimit?: boolean
 }
 
 /** Inicia um turno em segundo plano (as rotas respondem na hora; a saída chega pelo stream). */
@@ -191,7 +198,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     const id = String(loaded.doc._id)
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está trabalhando nesta mesa", "WORKBENCH_BUSY")
     // A reconexão não abre uma mesa nova: só a disponibilidade importa (o limite de mesas não se aplica).
-    if (turn.attach) await assertAgenticReady(loaded.config)
+    // A limpeza da exclusão também não espera vaga: a mesa precisa terminar de sair.
+    if (turn.attach || options.bypassLimit) await assertAgenticReady(loaded.config)
     else await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
     if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
@@ -265,7 +273,10 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
             }
-            next = await afterTurn(client, await loadAll(id), turn.stage, result)
+            const fresh = await loadAll(id)
+            // Exclusão pedida durante o turno: não avança a etapa — a limpeza da exclusão assume daqui.
+            if (fresh.doc.deletionRequestedAt && turn.stage !== "finishing") return
+            next = await afterTurn(client, fresh, turn.stage, result)
         } catch (error) {
             if (turn.stage === "building" && loaded.doc.previewBuild?.method === "github") {
                 await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory).catch(() => undefined)
@@ -462,6 +473,16 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
         }
         case "finishing": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
+            if (doc.deletionRequestedAt) {
+                // Exclusão: uma limpeza incompleta NÃO pode liberar a mesa para ser apagada.
+                if (parsed.success && !parsed.data.ok) throw new Error(`A limpeza não foi concluída: ${parsed.data.error ?? "motivo não informado"}`)
+                await assertCleanupDone(client, cleanupTargets(config, doc), ctx)
+                // Ambiente limpo: a mesa esquece os recursos (a retomada só precisa excluir a sessão) e sai.
+                await update(doc, { previewBackup: null, previewBuild: null, worktreePath: null, branch: null, previewUrl: null, previewHealthy: null, buildQueuedAt: null })
+                await removeWorkbenchSessions(doc)
+                await finalizeDeletion(doc)
+                return null
+            }
             if (parsed.success && !parsed.data.ok) notice("warn", `Limpeza incompleta: ${parsed.data.error ?? "motivo não informado"}`)
             // A mesa só conclui quando o dump foi removido (idempotente: ausente conta como sucesso).
             if (doc.previewBackup) {
@@ -541,6 +562,8 @@ async function applyReopenEffects(id: string, loaded: Loaded): Promise<void> {
  */
 export async function startBuildTurn(id: string): Promise<boolean> {
     const loaded = await loadAll(id)
+    // Mesa em exclusão: nunca sobe um build; ela só precisa terminar de sair.
+    if (loaded.doc.deletionRequestedAt) return false
     if (asStage(loaded.doc.stage) !== "build_queued") return false
     const turn = await prepareBuildTurn(loaded, "local")
     await launchTurn(loaded, turn, { extraSet: { buildQueuedAt: null } })
@@ -687,6 +710,11 @@ export async function reconnect(id: string): Promise<WorkbenchDto> {
 export async function retry(id: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     const doc = await reconcile(loaded.doc)
+    if (doc.deletionRequestedAt) {
+        // Exclusão pendente: retoma a limpeza (a mesa sai ao concluir; nenhuma etapa anterior é reenviada).
+        const deleted = await runDeletion(loaded, doc)
+        return deleted ? toWorkbenchDto(doc) : getWorkbench(id)
+    }
     assertAction(doc, "retry")
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
@@ -759,26 +787,127 @@ export async function replyForm(id: string, formId: string, input: FormReplyInpu
     return getWorkbench(id)
 }
 
-export async function deleteWorkbench(id: string): Promise<void> {
-    const doc = await loadWorkbench(id)
-    if (doc.previewBuild?.method === "github") {
-        const loaded = await loadAll(id)
-        await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory)
+// ---------------------------------------------------------------------------
+// Exclusão da mesa (com a mesma limpeza de ambiente da conclusão — OPE-68)
+// ---------------------------------------------------------------------------
+
+const DELETE_IDLE_TIMEOUT_MS = 30_000
+
+/** Espera o turno vivo desta mesa soltar o processo antes de iniciar a limpeza de exclusão. */
+async function waitWorkbenchIdle(id: string, timeoutMs = DELETE_IDLE_TIMEOUT_MS): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (isWorkbenchActive(id)) {
+        if (Date.now() >= deadline) throw new DomainError(409, "A execução em andamento não terminou a tempo de iniciar a limpeza da exclusão", "WORKBENCH_BUSY")
+        await new Promise((resolve) => setTimeout(resolve, 200))
     }
-    if (isWorkbenchActive(id)) {
-        if (doc.sessionId) await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
-        abortWorkbenchRun(id, "Mesa excluída")
+}
+
+/**
+ * Exclui no OpenCode a sessão atual e as pendentes da mesa. A sessão é desvinculada e registrada
+ * como pendência ANTES da chamada: se a exclusão falhar (OpenCode fora do ar), a referência fica
+ * gravada e a retomada não perde a sessão.
+ */
+async function removeWorkbenchSessions(doc: IAgenticWorkbench): Promise<void> {
+    const sessions = [...new Set([...(doc.pendingSessionDeletions ?? []), ...(doc.sessionId ? [doc.sessionId] : [])])].filter((value): value is string => Boolean(value))
+    if (!sessions.length) return
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionId: null, sessionDirectory: null, pendingSessionDeletions: sessions } })
+    if (!(await flushPendingSessionDeletions({ _id: doc._id, pendingSessionDeletions: sessions }))) {
+        throw new Error("O OpenCode não confirmou a exclusão da sessão da mesa; tente novamente quando o serviço estiver disponível")
     }
-    // Não perde sessões já pendentes de exclusão: tenta apagá-las antes de remover a mesa.
-    await flushPendingSessionDeletions(doc).catch(() => undefined)
+}
+
+/** Confere, na máquina do OpenCode, que a limpeza removeu de fato os recursos que a mesa criou. */
+async function assertCleanupDone(client: OpencodeClient, targets: CleanupTargets, ctx: WorkbenchContext): Promise<void> {
+    for (const command of cleanupVerificationCommands(targets, ctx.composeProject)) {
+        const result = await runOpencodeShell(client, ctx.sessionDirectory, command, { timeoutMs: 15_000 })
+        if (result.exitCode !== 0) throw new Error(`A limpeza não confirmou a remoção de um recurso da mesa (${command}); verifique o ambiente e tente novamente`)
+    }
+}
+
+/** Apaga o registro da mesa e libera tudo o que ela segurava (porta, saída e filas). */
+async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
+    const id = String(doc._id)
+    await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })
     await syncWorkbenchTimer(id)
-    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage } })
-    centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })
+    centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id, limpezaAmbiente: Boolean(doc.deletionRequestedAt) })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
     pumpQueue(doc.centralId)
     pumpBuildQueue()
+}
+
+/**
+ * Inicia (ou retoma) a exclusão: marca a intenção, interrompe o turno vivo, invalida a prévia
+ * remota e roda a MESMA limpeza de ambiente da conclusão antes de remover o registro. Devolve
+ * `true` quando a mesa já foi removida; `false` quando a limpeza ficou em andamento (a mesa sai no
+ * fim do turno de limpeza, em `afterTurn`).
+ */
+async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promise<boolean> {
+    const id = String(loadedDoc._id)
+    let doc = loadedDoc
+    // A intenção é gravada ANTES de qualquer operação externa: a retomada (retry/reinício) a mantém.
+    if (!doc.deletionRequestedAt) {
+        const requestedAt = new Date()
+        await update(doc, { deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", error: null, buildQueuedAt: null })
+        doc = { ...doc, deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", buildQueuedAt: null }
+    }
+    if (doc.previewBuild?.method === "github") {
+        // Melhor esforço: sem OpenCode não há como invalidar a tentativa remota (a limpeza falha e a mesa fica).
+        try {
+            await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory)
+        } catch {
+            // ignora: a tentativa remota é reinvalidada na retomada
+        }
+    }
+    if (isWorkbenchActive(id)) {
+        if (doc.sessionId) {
+            try {
+                await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId })
+            } catch {
+                // sem OpenCode, o abort local abaixo já encerra o acompanhamento
+            }
+        }
+        abortWorkbenchRun(id, "Mesa excluída")
+        await waitWorkbenchIdle(id)
+    }
+    const targets = cleanupTargets(loaded.config, doc)
+    if (!hasCleanupWork(targets)) {
+        await removeWorkbenchSessions(doc)
+        await finalizeDeletion(doc)
+        return true
+    }
+    await launchTurn(
+        { ...loaded, doc },
+        { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "deletion" }) },
+        { userText: "Exclusão da mesa: limpando o ambiente antes de remover", bypassLimit: true },
+    )
+    return false
+}
+
+/**
+ * DELETE /api/agentic/workbenches/[id] — exclui a mesa. Antes de apagar o registro roda a MESMA
+ * limpeza de ambiente da conclusão (OPE-68), respeitando as opções da central, e exclui a sessão do
+ * OpenCode. Devolve `{ deleted }`: `false` = a limpeza ficou em andamento (a mesa sai depois).
+ */
+export async function deleteWorkbench(id: string): Promise<{ deleted: boolean }> {
+    const loaded = await loadAll(id)
+    const doc = loaded.doc
+    // Concluída: a limpeza da conclusão já rodou; só apaga o registro (sessões: melhor esforço).
+    if (asStage(doc.stage) === "done") {
+        await flushPendingSessionDeletions(doc).catch(() => undefined)
+        await finalizeDeletion(doc)
+        return { deleted: true }
+    }
+    try {
+        return { deleted: await runDeletion(loaded, doc) }
+    } catch (error) {
+        const message = errorText(error)
+        // A exclusão continua agendada: a mesa fica com "Tentar novamente" em vez de sumir sem limpar.
+        await update(doc, { deletionRequestedAt: doc.deletionRequestedAt ?? new Date(), stage: "finishing", runState: "failed", error: `A limpeza da exclusão não pôde concluir: ${message}` }).catch(() => undefined)
+        throw new DomainError(409, `Não foi possível limpar o ambiente da mesa agora (${message}). A exclusão segue pendente — use Tentar novamente na mesa.`, "WORKBENCH_DELETION_FAILED")
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -788,6 +917,7 @@ export async function deleteWorkbench(id: string): Promise<void> {
 /** Pedido de mudança no PR (comentário com `@opex` ou revisão): com o motivo, replaneja sozinho; sem, pede o texto ao usuário. */
 export async function handlePrFeedback(id: string, feedback: string): Promise<void> {
     const loaded = await loadAll(id)
+    if (loaded.doc.deletionRequestedAt) return
     await prepareHub(id)
     if (!feedback.trim()) {
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "O PR pediu mudanças sem dizer o motivo: descreva o que precisa mudar" })
@@ -812,6 +942,8 @@ export async function handlePrConflict(id: string, info: { baseBranch: string; h
     const loaded = await loadAll(id)
     const { doc, config } = loaded
     const pr = doc.pr
+    // Mesa em exclusão: o PR não a reativa.
+    if (doc.deletionRequestedAt) return false
     // Só age na mesa aberta e ociosa do mesmo PR aberto (nunca em cima de outra execução em andamento).
     if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
     if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
@@ -882,6 +1014,7 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
 export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeCommitSha: string | null }): Promise<void> {
     const loaded = await loadAll(id)
     const { doc } = loaded
+    if (doc.deletionRequestedAt) return
     await prepareHub(id)
     const pr: IWorkbenchPr = { ...doc.pr!, state: "merged", mergedAt: merge.mergedAt, mergeCommitSha: merge.mergeCommitSha }
     const next = await afterMerge(loaded, pr)
@@ -911,6 +1044,8 @@ export async function handlePrAutoMerge(id: string, info: { baseBranch: string }
     const { doc, config } = loaded
     const pr = doc.pr
     if (!config.git.autoMerge) return false
+    // Mesa em exclusão: não mergeia nem reabre fluxo.
+    if (doc.deletionRequestedAt) return false
     // Só age na mesa aberta e ociosa acompanhando o PR (nunca em cima de outra execução em andamento).
     if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
     if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
@@ -933,7 +1068,7 @@ export async function handlePrAutoMerge(id: string, info: { baseBranch: string }
 /** PR fechado sem merge: avisa uma vez (a mesa continua aberta para decidir o que fazer). */
 export async function handlePrClosed(id: string): Promise<void> {
     const doc = await loadWorkbench(id)
-    if (!doc.pr || doc.pr.closedNotified) return
+    if (doc.deletionRequestedAt || !doc.pr || doc.pr.closedNotified) return
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR #${doc.pr.number} foi fechado sem merge. Reabra o PR no GitHub ou exclua a mesa.` })
     await update(doc, { pr: { ...doc.pr, state: "closed", closedNotified: true } })
@@ -941,7 +1076,7 @@ export async function handlePrClosed(id: string): Promise<void> {
 
 export async function handlePrReopened(id: string): Promise<void> {
     const doc = await loadWorkbench(id)
-    if (!doc.pr || doc.pr.state === "open") return
+    if (doc.deletionRequestedAt || !doc.pr || doc.pr.state === "open") return
     await update(doc, { pr: { ...doc.pr, state: "open", closedNotified: false } })
 }
 

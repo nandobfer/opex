@@ -57,9 +57,15 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                     <p className="font-mono text-foreground">{usd.format(usage.costUsd)}</p>
                     <p>{compact.format(tokens)} tokens</p>
                 </div>
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Excluir mesa" onClick={() => setConfirming(true)}>
-                    <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
-                </Button>
+                {workbench.deletionRequestedAt ? (
+                    <span className="flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive" title="A mesa sai quando a limpeza do ambiente terminar">
+                        <Trash2 className="h-3 w-3" aria-hidden /> Excluindo…
+                    </span>
+                ) : (
+                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Excluir mesa" onClick={() => setConfirming(true)}>
+                        <Trash2 className="h-4 w-4 text-destructive" aria-hidden />
+                    </Button>
+                )}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 {workbench.branch && (
@@ -89,7 +95,7 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                     <AlertDialogHeader>
                         <AlertDialogTitle>Excluir a mesa de {workbench.taskCode}?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            O agente é interrompido e a saída da mesa é apagada. O worktree, a branch, os containers da prévia e o PR não são tocados — limpe-os manualmente em {central.config.sessionDirectory} se precisar.
+                            Excluir limpa o ambiente da mesa antes de apagá-la: containers da prévia, backup do MongoDB, worktree e branch local, conforme as configurações da central de {central.projectName}. A sessão do OpenCode é excluída. O Pull Request e a branch remota não são tocados. Se a limpeza não puder começar, a mesa permanece para tentar novamente.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

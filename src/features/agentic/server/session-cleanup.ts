@@ -45,20 +45,29 @@ export async function deleteWorkbenchSession(workbenchId: string, sessionId: str
     return true
 }
 
-/** Melhor esforço: exclui as sessões já pendentes antes de a mesa ser apagada (não lança). */
-export async function flushPendingSessionDeletions(workbench: Pick<IAgenticWorkbench, "_id" | "pendingSessionDeletions">): Promise<void> {
+/**
+ * Melhor esforço: exclui as sessões já pendentes antes de a mesa ser apagada (não lança). Devolve
+ * `true` quando nenhuma pendência sobrou (todas excluídas ou já inexistentes); `false` quando alguma
+ * ficou pendente (ex.: OpenCode indisponível) — nesse caso a referência NÃO pode ser descartada.
+ */
+export async function flushPendingSessionDeletions(workbench: Pick<IAgenticWorkbench, "_id" | "pendingSessionDeletions">): Promise<boolean> {
     const ids = [...new Set(workbench.pendingSessionDeletions ?? [])].filter((id) => typeof id === "string" && id)
-    if (!ids.length) return
+    if (!ids.length) return true
     let client: OpencodeClient
     try {
         client = await getOpencodeClient()
     } catch {
-        return
+        return false
     }
+    let allRemoved = true
     for (const sessionId of ids) {
-        if (!(await removeSession(client, sessionId))) continue
+        if (!(await removeSession(client, sessionId))) {
+            allRemoved = false
+            continue
+        }
         await AgenticWorkbench.updateOne({ _id: workbench._id }, { $pull: { pendingSessionDeletions: sessionId } })
     }
+    return allRemoved
 }
 
 let running = false

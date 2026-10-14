@@ -183,13 +183,19 @@ export function useDeleteWorkbench() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: async (workbench: WorkbenchDto) => {
-            await api.delete(`/agentic/workbenches/${workbench.id}`)
-            return workbench
+            const result = unwrapApi((await api.delete<ApiResponse<{ deleted: boolean }>>(`/agentic/workbenches/${workbench.id}`)).data)
+            return { workbench, deleted: result.deleted }
         },
-        onSuccess: (workbench) => {
-            queryClient.setQueryData(agenticKey("workbench", workbench.taskId), null)
-            void queryClient.invalidateQueries({ queryKey: agenticKey("workbenches", workbench.centralId) })
-            toast.success("Mesa excluída")
+        onSuccess: ({ workbench, deleted }) => {
+            if (deleted) {
+                queryClient.setQueryData(agenticKey("workbench", workbench.taskId), null)
+                void queryClient.invalidateQueries({ queryKey: agenticKey("workbenches", workbench.centralId) })
+                toast.success("Mesa excluída")
+                return
+            }
+            // A mesa ainda vai sair: o ambiente é limpo antes de o registro ser apagado.
+            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY] })
+            toast.info("Excluindo a mesa: o ambiente é limpo antes de remover o registro")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível excluir a mesa")),
     })
