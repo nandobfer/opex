@@ -88,7 +88,12 @@ export interface IAgenticWorkbench {
     port: number | null
     /** Instante em que a mesa entrou na fila global do build (`null` fora da fila); define a ordem FIFO. */
     buildQueuedAt: Date | null
-    previewBuild?: { method: "local" | "github"; attempt?: string; statePath?: string } | null
+    /**
+     * Reserva do build: método da prévia e, no modo remoto, tentativa/estado. `dumpRequired` é a
+     * política efetiva de backup desta tentativa (false = prévia sem dump, OPE-72); ausente em
+     * mesas antigas conta como exigido.
+     */
+    previewBuild?: { method: "local" | "github"; attempt?: string; statePath?: string; dumpRequired?: boolean } | null
     previewUrl: string | null
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */

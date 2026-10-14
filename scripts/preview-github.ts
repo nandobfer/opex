@@ -10,7 +10,7 @@ export interface PreviewState {
     attempt: string; currentPath: string; active: boolean; repo: string; branch: string; worktreePath: string
     composeProject: string; composeFile: string; service: string; portEnvVar: string
     port: number; min: number; max: number; workflow: string; timeoutMinutes: number
-    healthPath: string; previewHost: string; backupPath: string; sha?: string; runId?: number; published?: boolean
+    healthPath: string; previewHost: string; backupPath: string; dumpRequired?: boolean; sha?: string; runId?: number; published?: boolean
 }
 
 export function validateState(s: PreviewState, attempt: string): void {
@@ -100,7 +100,9 @@ export async function runPreview(statePath: string, attempt: string): Promise<vo
     const manifest = JSON.parse(readFileSync(resolve(artifactDir, "manifest.json"), "utf8")) as { attempt: string; sha: string; image: string; checksum: string }
     validateManifest(manifest, s, checksum)
     check()
-    if (statSync(s.backupPath).size === 0) throw new Error("Backup MongoDB obrigatório ausente/vazio")
+    // Sem o dump obrigatório na central (projetos sem banco de dados) o arquivo não é exigido; estados
+    // antigos, sem o campo, continuam exigindo o backup.
+    if (s.dumpRequired !== false && statSync(s.backupPath).size === 0) throw new Error("Backup MongoDB obrigatório ausente/vazio")
     if (git("rev-parse", "HEAD") !== sha || git("status", "--porcelain")) throw new Error("Worktree mudou durante o build")
     const docker = (...args: string[]) => command("docker", args, cwd)
     const compose = ["compose", "-p", s.composeProject, "-f", s.composeFile]

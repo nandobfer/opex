@@ -76,6 +76,12 @@ export const centralConfigSchema = z.object({
         previewHost: z.string().trim().min(1, "Informe o endereço").max(200).regex(/^[A-Za-z0-9.-]+$/, "Informe só o host (ex.: localhost ou 192.168.0.64)"),
         healthPath: z.string().trim().max(200).regex(/^(\/.*)?$/, "Comece com /"),
         buildTimeoutMinutes: z.number({ error: "Informe um número" }).int().min(2, "Mínimo 2").max(120, "Máximo 120"),
+        /**
+         * Backup do banco de dados da prévia (OPE-72): ligado, o agente cria o dump antes de
+         * publicar e a prévia só vale com ele; desligado, projetos sem banco publicam sem dump.
+         * Padrão **ligado** (compatível com a obrigatoriedade anterior).
+         */
+        backupDatabase: z.boolean().default(true),
         /** Faixa de portas reservadas às prévias das mesas (min/max inclusive). */
         previewPortMin: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
         previewPortMax: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
@@ -128,7 +134,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         columns: { queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },

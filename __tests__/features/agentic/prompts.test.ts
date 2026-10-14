@@ -74,6 +74,14 @@ describe('mensagens das etapas', () => {
     expect(text).toContain('{"ok": true} quando o dump existir')
   })
 
+  it('build sem backup (OPE-72) não pede dump nem condiciona a prévia a ele', () => {
+    const text = buildPrompt(config, ctx, 4015, null)
+    expect(text).not.toContain('mongodump')
+    expect(text).not.toContain('Backup do MongoDB')
+    expect(text).toContain('quando a prévia estiver respondendo')
+    expect(text).toContain('Use EXCLUSIVAMENTE a porta 4015')
+  })
+
   it('PR novo usa gh pr create; PR existente só atualiza', () => {
     const task = { code: 'GO-DEV-12', title: 'Exportar', url: 'https://go/t' }
     expect(prPrompt({ ...config, git: { ...config.git, prDraft: true, prReviewers: ['ana'] } }, ctx, task, null)).toContain('gh pr create --base main --head feat/go-dev-12-exportar-relatorio --title "Exportar (GO-DEV-12)" --draft --reviewer ana')

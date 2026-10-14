@@ -8,13 +8,14 @@ import type { CentralConfig } from "../schemas"
 /** Estado fora do worktree: o runner retoma a mesma execução após reconexão. */
 export async function reserveRemotePreview(client: OpencodeClient, doc: IAgenticWorkbench, config: CentralConfig, repo: string, port: number, backup: { dir: string; path: string }, context: { branch: string; worktreePath: string; composeProject: string }) {
     const attempt = randomId()
+    const dumpRequired = config.environment.backupDatabase
     const statePath = `${backup.dir}/remote-preview-${attempt}.json`
     const currentPath = `${backup.dir}/remote-current`
-    const state = { attempt, currentPath, active: true, repo, port, min: config.environment.previewPortMin, max: config.environment.previewPortMax, workflow: config.environment.githubWorkflow, service: config.environment.previewService, composeFile: config.environment.composeFile || "docker-compose.yml", portEnvVar: config.environment.portEnvVar, previewHost: config.environment.previewHost, healthPath: config.environment.healthPath || "/", timeoutMinutes: config.environment.buildTimeoutMinutes, backupPath: backup.path, ...context }
+    const state = { attempt, currentPath, active: true, repo, port, min: config.environment.previewPortMin, max: config.environment.previewPortMax, workflow: config.environment.githubWorkflow, service: config.environment.previewService, composeFile: config.environment.composeFile || "docker-compose.yml", portEnvVar: config.environment.portEnvVar, previewHost: config.environment.previewHost, healthPath: config.environment.healthPath || "/", timeoutMinutes: config.environment.buildTimeoutMinutes, backupPath: backup.path, dumpRequired, ...context }
     const write = `printf '%s' ${shellQuote(JSON.stringify(state))} > ${shellQuote(statePath)} && printf '%s' ${shellQuote(attempt)} > ${shellQuote(currentPath)}`
     const result = await runOpencodeShell(client, config.sessionDirectory, `mkdir -p ${shellQuote(backup.dir)} && flock ${shellQuote(`${backup.dir}/preview-publish.lock`)} sh -c ${shellQuote(write)}`, { timeoutMs: 150_000 })
     if (result.exitCode !== 0) throw new Error("Não foi possível reservar a tentativa da prévia remota")
-    const build = { method: "github" as const, attempt, statePath }
+    const build = { method: "github" as const, attempt, statePath, dumpRequired }
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: build, buildQueuedAt: null } })
     return build
 }
