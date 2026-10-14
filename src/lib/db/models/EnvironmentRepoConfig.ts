@@ -5,8 +5,9 @@ import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 /**
  * Configuração de **execução** de um repositório (Projeto) no módulo Ambientes
  * (`environment_repos`, uma por projeto). Define se o Opex fala com o Docker **local** (máquina do
- * Opencode) ou **remoto** (SSH) e guarda, **cifrados**, os segredos do host e a connection string
- * padrão do banco. Nenhum segredo é devolvido pela API (só `configured`/`unreadable`).
+ * Opencode) ou **remoto** (SSH) e guarda, **cifrados**, os segredos do host. Nenhum segredo é
+ * devolvido pela API (só `configured`/`unreadable`). O banco do ambiente não é acessado pelo Opex:
+ * a compatibilidade usa o schema registrado nas publicações.
  */
 
 export type EnvironmentMode = "local" | "remote"
@@ -30,8 +31,6 @@ export interface IEnvironmentRepoConfig {
     sshPassword: EncryptedSecret | null
     sshPrivateKey: EncryptedSecret | null
     sshPassphrase: EncryptedSecret | null
-    /** Connection string padrão do banco do ambiente (pode ser sobrescrita por ambiente). */
-    connectionString: EncryptedSecret | null
     createdBy: string
     createdAt: Date
     updatedBy: string
@@ -54,7 +53,6 @@ const EnvironmentRepoConfigSchema = new Schema<IEnvironmentRepoConfig>(
         sshPassword: { type: Schema.Types.Mixed, default: null },
         sshPrivateKey: { type: Schema.Types.Mixed, default: null },
         sshPassphrase: { type: Schema.Types.Mixed, default: null },
-        connectionString: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "environment_repos", versionKey: false },
 )

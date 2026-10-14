@@ -2,12 +2,14 @@ import type { NextRequest } from "next/server"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { ok } from "@/lib/api/responses"
 import { queryToObject } from "@/lib/api/query"
-import { environmentRepoUpdateSchema, environmentSchema, publishInputSchema, restoreInputSchema } from "../schemas"
+import { z } from "zod"
+import { environmentRepoUpdateSchema, environmentSchema, hostEnvFileInputSchema, publishInputSchema, restoreInputSchema } from "../schemas"
 import type { EnvironmentActor } from "./actor"
-import { assertCanAccessProject } from "./actor"
+import { assertCanAccessProject, assertCanManage } from "./actor"
 import { loadProject, listProjectOptions } from "./projects"
 import { getOrCreateRepoConfig, toRepoConfigDto, updateRepoConfig } from "./repo-config"
 import {
+    adoptComposeProject,
     assertEnvironmentAccess,
     createEnvironment,
     deleteEnvironment,
@@ -21,6 +23,11 @@ import { listEnvironmentImages, startRestore } from "./restore"
 import { startPublish } from "./deploy"
 import { findOperation, listOperations, operationDto } from "./operations"
 import { readEnvironmentLogs } from "./logs"
+import { ensureEnvironmentLogCollector } from "./log-collector"
+import { discoverComposeProject, refreshEnvironmentStatus } from "./containers"
+import { readHostEnvFile, updateHostEnvFile } from "./env-file"
+import { listRepositoryBranches } from "./branches"
+import { loadEnvironmentRuntime } from "./context"
 import { listRuns, listWorkflows } from "./ci-cd"
 
 /**
@@ -30,6 +37,8 @@ import { listRuns, listWorkflows } from "./ci-cd"
  */
 
 export type EnvironmentActorResolver = (req: NextRequest) => Promise<EnvironmentActor>
+
+const adoptInputSchema = z.object({ project: z.string().trim().min(1, "Informe o projeto").max(120) })
 
 export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver) {
     return {
@@ -56,10 +65,17 @@ export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver
             return ok(toRepoConfigDto(config, project))
         }),
 
+        listBranches: withRoute<{ projectId: string }>(async ({ req, params }) => {
+            const actor = await resolveActor(req)
+            const project = await loadProject(params.projectId)
+            assertCanAccessProject(actor, String(project._id))
+            return ok(await listRepositoryBranches(project.repo))
+        }),
+
         listEnvironments: withRoute<{ projectId: string }>(async ({ req, params }) => {
             const actor = await resolveActor(req)
             assertCanAccessProject(actor, params.projectId)
-            return ok(await listEnvironmentDtos(params.projectId, actor))
+            return ok(await listEnvironmentDtos(params.projectId))
         }),
 
         createEnvironment: withRoute<{ projectId: string }>(async ({ req, params }) => {
@@ -69,14 +85,18 @@ export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver
             const body = await parseBody(req, environmentSchema)
             if (!body.ok) return body.response
             const env = await createEnvironment(actor, project, body.data)
-            return ok(await getEnvironmentDto(env, actor))
+            return ok(await getEnvironmentDto(env))
         }),
 
         getEnvironment: withRoute<{ envId: string }>(async ({ req, params }) => {
             const actor = await resolveActor(req)
             const env = await getEnvironmentById(params.envId)
             assertEnvironmentAccess(actor, env)
-            return ok(await getEnvironmentDto(env, actor))
+            // Ao selecionar o ambiente, consulta o estado real dos containers (respeita o intervalo).
+            const query = queryToObject(req.nextUrl.searchParams)
+            await refreshEnvironmentStatus(params.envId, { force: query.refresh === "1" })
+            const refreshed = await getEnvironmentById(params.envId)
+            return ok(await getEnvironmentDto(refreshed))
         }),
 
         updateEnvironment: withRoute<{ envId: string }>(async ({ req, params }) => {
@@ -85,7 +105,7 @@ export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver
             const body = await parseBody(req, environmentSchema)
             if (!body.ok) return body.response
             const updated = await updateEnvironment(actor, env, body.data)
-            return ok(await getEnvironmentDto(updated, actor))
+            return ok(await getEnvironmentDto(updated))
         }),
 
         deleteEnvironment: withRoute<{ envId: string }>(async ({ req, params }) => {
@@ -93,6 +113,27 @@ export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver
             const env = await getEnvironmentById(params.envId)
             await deleteEnvironment(actor, env)
             return ok({ id: params.envId })
+        }),
+
+        discoverCompose: withRoute<{ envId: string }>(async ({ req, params }) => {
+            const actor = await resolveActor(req)
+            const env = await getEnvironmentById(params.envId)
+            assertEnvironmentAccess(actor, env)
+            const runtime = await loadEnvironmentRuntime(params.envId)
+            return ok(await discoverComposeProject(runtime))
+        }),
+
+        adoptCompose: withRoute<{ envId: string }>(async ({ req, params }) => {
+            const actor = await resolveActor(req)
+            const env = await getEnvironmentById(params.envId)
+            assertEnvironmentAccess(actor, env)
+            assertCanManage(actor)
+            const body = await parseBody(req, adoptInputSchema)
+            if (!body.ok) return body.response
+            await adoptComposeProject(actor, env, body.data.project)
+            await refreshEnvironmentStatus(params.envId, { force: true })
+            const refreshed = await getEnvironmentById(params.envId)
+            return ok(await getEnvironmentDto(refreshed))
         }),
 
         getCompose: withRoute<{ envId: string }>(async ({ req, params }) => {
@@ -145,12 +186,32 @@ export function createEnvironmentHandlers(resolveActor: EnvironmentActorResolver
             return ok(await startRestore(actor, params.envId, body.data))
         }),
 
+        getEnvFile: withRoute<{ envId: string }>(async ({ req, params }) => {
+            const actor = await resolveActor(req)
+            const env = await getEnvironmentById(params.envId)
+            assertEnvironmentAccess(actor, env)
+            const runtime = await loadEnvironmentRuntime(params.envId)
+            return ok(await readHostEnvFile(runtime))
+        }),
+
+        updateEnvFile: withRoute<{ envId: string }>(async ({ req, params }) => {
+            const actor = await resolveActor(req)
+            const env = await getEnvironmentById(params.envId)
+            assertEnvironmentAccess(actor, env)
+            const body = await parseBody(req, hostEnvFileInputSchema)
+            if (!body.ok) return body.response
+            const runtime = await loadEnvironmentRuntime(params.envId)
+            return ok(await updateHostEnvFile(actor, runtime, body.data))
+        }),
+
         listLogs: withRoute<{ envId: string }>(async ({ req, params }) => {
             const actor = await resolveActor(req)
             const env = await getEnvironmentById(params.envId)
             assertEnvironmentAccess(actor, env)
             const query = queryToObject(req.nextUrl.searchParams)
             const service = typeof query.service === "string" ? query.service : null
+            // Enquanto a aba Logs lê, o coletor acompanha os containers ao vivo (histórico + tempo real).
+            if (query.live !== "0") ensureEnvironmentLogCollector(params.envId)
             const logs = await readEnvironmentLogs(params.envId, {
                 after: typeof query.after === "string" ? query.after : undefined,
                 limit: typeof query.limit === "string" ? Number(query.limit) : undefined,

@@ -8,6 +8,7 @@ import { NEW_ENVIRONMENT_ID } from "../constants"
 import { useCreateEnvironment, useEnvironmentDetail, useUpdateEnvironment, type AmbientesApi } from "../hooks"
 import type { EnvironmentInput } from "../types"
 import { AmbientesPage } from "./AmbientesPage"
+import { EnvironmentEnvVarsCard } from "./EnvironmentEnvVarsCard"
 import { EnvironmentRepoConfigForm } from "./EnvironmentRepoConfigForm"
 import { EnvironmentForm } from "./EnvironmentForm"
 
@@ -56,13 +57,11 @@ export function AmbientesFormRoute({
     basePath,
     projectId,
     envId,
-    isOwner,
 }: {
     context: AmbientesApi
     basePath: string
     projectId: string
     envId: string
-    isOwner: boolean
 }) {
     const router = useRouter()
     const isNew = envId === NEW_ENVIRONMENT_ID
@@ -87,9 +86,10 @@ export function AmbientesFormRoute({
                     Voltar para os ambientes
                 </Link>
                 <h1 className="text-lg font-semibold md:text-2xl">{isNew ? "Novo ambiente" : `Editar ${env?.name ?? "ambiente"}`}</h1>
-                <p className="text-sm text-muted-foreground">Branch, compose, limites, variáveis e healthcheck do ambiente.</p>
+                <p className="text-sm text-muted-foreground">Branch, compose, limites, healthcheck e as variáveis do .env do host.</p>
             </header>
-            <EnvironmentForm env={env} isOwner={isOwner} submitting={create.isPending || update.isPending} onSubmit={onSubmit} />
+            <EnvironmentForm context={context} projectId={projectId} env={env} submitting={create.isPending || update.isPending} onSubmit={onSubmit} />
+            {env && <EnvironmentEnvVarsCard context={context} envId={env.id} envFile={env.envFile} />}
         </div>
     )
 }

@@ -1,13 +1,26 @@
 import { stringify as stringifyYaml } from "yaml"
 import { shellQuote, type CommandResult, type EnvironmentHost, type RunOptions } from "./runner"
-import { parseComposePsOutput, parseDockerImagesOutput, type ParsedContainer, type ParsedImage } from "../parsers"
+import {
+    DOCKER_PS_FORMAT,
+    parseComposePsOutput,
+    parseDockerImagesOutput,
+    parseDockerLogLines,
+    parseDockerPsLabels,
+    type ParsedContainer,
+    type ParsedImage,
+    type ParsedProjectContainer,
+} from "../parsers"
 import type { ComposeSummary } from "../compose-types"
 
 /**
  * Comandos Docker/Compose do módulo Ambientes. Os **construtores de comando são puros** (testáveis)
- * e a execução passa pelo `EnvironmentHost` (local via OpenCode, remoto via SSH). O isolamento é por
- * projeto Compose (`-p <slug-repo>-<slug-ambiente>`) e um override fora do checkout define imagem,
- * porta, recursos e variáveis.
+ * e a execução passa pelo `EnvironmentHost` (local via OpenCode, remoto via SSH).
+ *
+ * O isolamento de uma publicação nova é por projeto Compose (`-p <slug-repo>-<slug-ambiente>`) e um
+ * override fora do checkout define imagem, porta, recursos e variáveis. Mas **status, logs e
+ * descoberta** usam `docker ps`/`docker logs` por **label de projeto**, o que funciona tanto para o
+ * projeto criado pelo Opex quanto para um projeto **já em execução** adotado pelo ambiente — sem
+ * exigir o override nem o arquivo do compose.
  */
 
 export interface ComposeInvocation {
@@ -39,10 +52,9 @@ export interface ComposeOverrideInput {
     containerPort?: number | null
     cpus?: number | null
     memoryMb?: number | null
-    env?: { key: string; value: string }[]
 }
 
-/** Conteúdo do override do Compose (fora do checkout), com imagem, porta, limites e variáveis. */
+/** Conteúdo do override do Compose (fora do checkout), com imagem, porta e limites. */
 export function buildComposeOverride(input: ComposeOverrideInput): string {
     const service: Record<string, unknown> = {}
     if (input.image) service.image = input.image
@@ -57,9 +69,6 @@ export function buildComposeOverride(input: ComposeOverrideInput): string {
             },
         }
     }
-    if (input.env && input.env.length > 0) {
-        service.environment = Object.fromEntries(input.env.map((variable) => [variable.key, variable.value]))
-    }
     return stringifyYaml({ services: { [input.service]: service } })
 }
 
@@ -73,14 +82,20 @@ export interface GitSyncInput {
     directory: string
 }
 
-/** Clona (se preciso) ou atualiza o repositório e devolve o SHA publicado. */
+/**
+ * Clona (se preciso) ou atualiza o repositório e devolve o SHA publicado. Num checkout existente
+ * **não** descarta alterações locais às cegas: exige a árvore limpa (o `.env` não é versionado e
+ * permanece); havendo alterações, o comando falha com mensagem clara.
+ */
 export async function gitSync(host: EnvironmentHost, input: GitSyncInput, options: RunOptions = {}): Promise<{ result: CommandResult; commitSha: string | null }> {
     const dir = shellQuote(input.directory)
     const url = shellQuote(input.repoUrl)
     const branch = shellQuote(input.branch)
     const command =
         `if [ -d ${dir}/.git ]; then ` +
-        `git -C ${dir} fetch --prune origin ${branch} && git -C ${dir} checkout -f ${branch} && git -C ${dir} reset --hard origin/${branch}; ` +
+        `git -C ${dir} fetch --prune origin ${branch} && ` +
+        `git -C ${dir} diff --quiet && git -C ${dir} diff --cached --quiet && ` +
+        `git -C ${dir} checkout -f ${branch} && git -C ${dir} reset --hard origin/${branch}; ` +
         `else mkdir -p "$(dirname ${dir})" && git clone --branch ${branch} --single-branch ${url} ${dir}; fi; ` +
         `git -C ${dir} rev-parse HEAD`
     const result = await host.run(command, options)
@@ -105,9 +120,21 @@ export function imagesCommand(projectName: string): string {
     return `docker images --format '{{json .}}' --filter label=com.docker.compose.project=${shellQuote(projectName)}`
 }
 
+/** Todos os containers (inclusive parados) com a identidade do projeto Compose, numa única chamada. */
+export function listContainersCommand(): string {
+    return `docker ps -a --no-trunc --format '${DOCKER_PS_FORMAT}'`
+}
+
+/** Container do serviço (`docker compose` nomeia `<projeto>-<serviço>-<n>`), para logs. */
 export function logsCommand(invocation: ComposeInvocation, options: { service?: string | null; since?: string; tail?: number }): string {
     const since = options.since ? ` --since ${shellQuote(options.since)}` : ` --tail ${options.tail ?? 200}`
     return `${composeCommand(invocation)} logs --no-color --timestamps${since}${options.service ? ` ${shellQuote(options.service)}` : ""}`
+}
+
+/** Logs de um **container específico** (funciona também para projeto adotado, sem o compose). */
+export function containerLogsCommand(container: string, options: { since?: string; tail?: number } = {}): string {
+    const range = options.since ? ` --since ${shellQuote(options.since)}` : ` --tail ${options.tail ?? 200}`
+    return `docker logs --timestamps${range} ${shellQuote(container)}`
 }
 
 export async function composeBuild(host: EnvironmentHost, invocation: ComposeInvocation, options: RunOptions & { envFile?: string | null } = {}): Promise<CommandResult> {
@@ -128,8 +155,19 @@ export async function listProjectImages(host: EnvironmentHost, projectName: stri
     return result.exitCode === 0 ? parseDockerImagesOutput(result.output) : []
 }
 
-/** Busca um lote de logs do Compose (a partir de `since`) — usado pelo stream por polling. */
-export async function fetchComposeLogs(host: EnvironmentHost, invocation: ComposeInvocation, options: RunOptions & { service?: string | null; since?: string } = {}): Promise<string> {
-    const result = await host.run(logsCommand(invocation, { service: options.service, since: options.since }), options)
-    return result.output
+/** Containers (com labels do projeto Compose) do host. Lista vazia quando o comando falha. */
+export async function listHostContainers(host: EnvironmentHost, options: RunOptions = {}): Promise<ParsedProjectContainer[]> {
+    const result = await host.run(listContainersCommand(), options)
+    return result.exitCode === 0 ? parseDockerPsLabels(result.output) : []
+}
+
+/** Logs de um container específico já interpretados (`ts` + texto). */
+export async function fetchContainerLogs(
+    host: EnvironmentHost,
+    container: string,
+    options: RunOptions & { since?: string; tail?: number } = {},
+): Promise<{ ts: string | null; text: string }[]> {
+    const result = await host.run(containerLogsCommand(container, { since: options.since, tail: options.tail }), options)
+    if (result.exitCode !== 0) return []
+    return parseDockerLogLines(result.output)
 }

@@ -55,9 +55,12 @@ export function normalizeDbVersion(value: unknown): string | null {
 }
 
 export interface RestoreCompatibilityInput {
-    /** Versão atual do banco (`null` = desconhecida). */
-    currentVersion: string | null
-    /** Versão de banco gravada na imagem (`null` = desconhecida). */
+    /**
+     * Schema **registrado no Opex** como aplicado ao ambiente (`null` = desconhecido). Não é uma
+     * leitura do banco real: é o histórico de publicações bem-sucedidas registradas pelo Opex.
+     */
+    appliedVersion: string | null
+    /** Schema esperado pela imagem (`null` = desconhecida). */
     imageVersion: string | null
     origin: "opex" | "cd" | "unknown"
     /** O usuário já confirmou restaurar mesmo assim. */
@@ -65,24 +68,25 @@ export interface RestoreCompatibilityInput {
 }
 
 /**
- * Decide se uma imagem pode ser restaurada:
- * - versão conhecida **diferente** → **bloqueada** (exige restaurar o banco para a versão da imagem);
- * - versão conhecida **igual** e origem Opex → **liberada**;
- * - versão **desconhecida** (banco ou imagem) ou imagem do **CD** → **confirmação** explícita.
+ * Decide se uma imagem pode ser restaurada, comparando o **schema registrado no Opex** para o
+ * ambiente com o schema esperado pela imagem:
+ * - schema conhecido **diferente** → **bloqueada** (exige publicar a versão do banco antes);
+ * - schema conhecido **igual** e origem Opex → **liberada**;
+ * - schema **desconhecido** (ambiente ou imagem) ou imagem do **CD** → **confirmação** explícita.
  */
 export function checkRestoreCompatibility(input: RestoreCompatibilityInput): RestoreCompatibility {
-    const { currentVersion, imageVersion, origin, confirmUnverified } = input
+    const { appliedVersion, imageVersion, origin, confirmUnverified } = input
 
-    if (currentVersion && imageVersion && currentVersion !== imageVersion) {
+    if (appliedVersion && imageVersion && appliedVersion !== imageVersion) {
         return {
             level: "blocked",
             allowed: false,
             requiresConfirmation: false,
-            message: `A imagem usa a versão de banco ${imageVersion}, mas o banco atual está em ${currentVersion}. Restaure o banco para a versão da imagem antes de continuar.`,
+            message: `A imagem usa o schema ${imageVersion}, mas o ambiente está registrado no ${appliedVersion}. Publique a versão do banco antes de restaurar.`,
         }
     }
 
-    const knownEqual = currentVersion !== null && imageVersion !== null && currentVersion === imageVersion
+    const knownEqual = appliedVersion !== null && imageVersion !== null && appliedVersion === imageVersion
     if (knownEqual && origin === "opex") {
         return { level: "compatible", allowed: true, requiresConfirmation: false, message: "Versão de banco compatível." }
     }
@@ -90,8 +94,8 @@ export function checkRestoreCompatibility(input: RestoreCompatibilityInput): Res
     const reason = knownEqual
         ? "A imagem foi publicada pelo CD"
         : imageVersion === null
-          ? "A imagem não informa a versão de banco"
-          : "A versão atual do banco é desconhecida"
+          ? "A imagem não informa o schema do banco"
+          : "O schema aplicado ao ambiente é desconhecido"
 
     if (confirmUnverified) {
         return { level: "confirm", allowed: true, requiresConfirmation: true, message: `${reason}; restauração confirmada.` }
@@ -177,4 +181,213 @@ export function findComposeIsolationConflicts(doc: unknown): string[] {
 /** Resume os conflitos num único texto (vazio quando não há). */
 export function describeIsolationConflicts(conflicts: readonly string[]): string {
     return conflicts.join(" ")
+}
+
+// ---------------------------------------------------------------------------
+// Arquivo .env do host
+// ---------------------------------------------------------------------------
+
+/**
+ * Chaves cujo valor é tratado como segredo por padrão: nunca sai do servidor e só o dono pode
+ * definir/substituir. Qualquer chave desconhecida que casa com o padrão é protegida.
+ */
+const SECRET_ENV_KEY = /(PASS(WORD|WD)?|SECRET|TOKEN|CREDENTIAL|API_?KEY|PRIVATE_?KEY|ACCESS_?KEY|AUTH|DSN|CONN(ECTION)?_?STRING|SESSION_?KEY|ENCRYPTION_?KEY)/i
+
+/** A chave do `.env` é sensível (valor nunca devolvido ao navegador)? */
+export function isSecretEnvKey(key: string): boolean {
+    return SECRET_ENV_KEY.test(key)
+}
+
+/** Chave de variável de ambiente válida (`POSIX`). */
+export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+export interface EnvAssignment {
+    key: string
+    /** Valor sem as aspas externas. */
+    value: string
+    /** Índice (0-based) da primeira linha da atribuição. */
+    start: number
+    /** Índice da última linha (multilinha ocupa várias). */
+    end: number
+}
+
+export interface ParsedEnvFile {
+    /** Linhas originais, preservando comentários, espaços e linhas desconhecidas. */
+    lines: string[]
+    assignments: EnvAssignment[]
+}
+
+const ASSIGNMENT = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([\s\S]*)$/
+
+function unquote(raw: string): { value: string; quote: "\"" | "'" | null; closed: boolean } {
+    const trimmed = raw.trim()
+    const first = trimmed[0]
+    if (first === "\"" || first === "'") {
+        let closed = false
+        let value = ""
+        for (let i = 1; i < trimmed.length; i++) {
+            const char = trimmed[i]
+            if (char === "\\" && first === "\"" && i + 1 < trimmed.length) {
+                const next = trimmed[i + 1]!
+                value += next === "n" ? "\n" : next === "t" ? "\t" : next
+                i++
+                continue
+            }
+            if (char === first) {
+                closed = true
+                break
+            }
+            value += char
+        }
+        return { value, quote: first, closed }
+    }
+    return { value: trimmed, quote: null, closed: true }
+}
+
+/** Interpreta o conteúdo de um `.env` preservando comentários e linhas não editadas. */
+export function parseEnvFile(content: string): ParsedEnvFile {
+    const lines = content.length === 0 ? [] : content.replace(/\r\n/g, "\n").split("\n")
+    const assignments: EnvAssignment[] = []
+    for (let index = 0; index < lines.length; index++) {
+        const match = ASSIGNMENT.exec(lines[index] ?? "")
+        if (!match) continue
+        const key = match[1]!
+        const rest = match[2] ?? ""
+        const { value, quote, closed } = unquote(rest)
+        let end = index
+        let resolved = value
+        // Valor multilinha (aspas abertas): consome as linhas seguintes até fechar.
+        if (!closed && quote) {
+            const parts = [value]
+            while (end + 1 < lines.length) {
+                end++
+                const next = lines[end] ?? ""
+                const closing = next.indexOf(quote)
+                if (closing >= 0) {
+                    parts.push(next.slice(0, closing))
+                    break
+                }
+                parts.push(next)
+            }
+            resolved = parts.join("\n")
+        }
+        assignments.push({ key, value: resolved, start: index, end })
+        index = end
+    }
+    return { lines, assignments }
+}
+
+function renderValue(value: string): string {
+    if (value === "") return ""
+    if (/[\s#'"$\\]/.test(value)) {
+        return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`
+    }
+    return value
+}
+
+export interface EnvChange {
+    key: string
+    /** `null` remove a chave; string (mesmo vazia) define o valor. */
+    value: string | null
+}
+
+/**
+ * Aplica alterações por chave **sem reconstruir** o arquivo: as linhas não alteradas (comentários,
+ * espaços, valores secretos preservados) permanecem; chaves novas entram no fim.
+ */
+export function applyEnvChanges(parsed: ParsedEnvFile, changes: readonly EnvChange[]): string {
+    const byKey = new Map(parsed.assignments.map((assignment) => [assignment.key, assignment]))
+    const lines = [...parsed.lines]
+    const removed = new Set<number>()
+    const appended: string[] = []
+    for (const change of changes) {
+        const assignment = byKey.get(change.key)
+        if (!assignment) {
+            if (change.value !== null) appended.push(`${change.key}=${renderValue(change.value)}`)
+            continue
+        }
+        if (change.value === null) {
+            for (let i = assignment.start; i <= assignment.end; i++) removed.add(i)
+            continue
+        }
+        for (let i = assignment.start + 1; i <= assignment.end; i++) removed.add(i)
+        lines[assignment.start] = `${change.key}=${renderValue(change.value)}`
+    }
+    const kept = lines.filter((_, index) => !removed.has(index))
+    if (appended.length > 0) {
+        if (kept.length > 0 && kept[kept.length - 1]!.trim() !== "") kept.push("")
+        kept.push(...appended)
+    }
+    return `${kept.join("\n").replace(/\n+$/, "")}\n`
+}
+
+// ---------------------------------------------------------------------------
+// Projeto Compose existente (adoção)
+// ---------------------------------------------------------------------------
+
+/** Normaliza um diretório para comparação (sem barra final, `~` resolvido por quem chama). */
+export function normalizeDirectory(value: string): string {
+    return value.trim().replace(/\/+$/, "")
+}
+
+export interface ComposeProjectCandidate {
+    project: string
+    workingDir: string | null
+    configFiles: string[]
+    services: string[]
+    running: boolean
+}
+
+/**
+ * Escolhe o projeto Compose **existente** que corresponde ao ambiente: o diretório de trabalho bate
+ * e o arquivo do compose está entre os arquivos de configuração. Um candidato → adotado; vários →
+ * `ambiguous` (o usuário escolhe); nenhum → `null` (publicação nova usa o projeto isolado do Opex).
+ */
+export function pickComposeProject(
+    candidates: readonly ComposeProjectCandidate[],
+    input: { directory: string; composeFile: string },
+): { project: ComposeProjectCandidate | null; ambiguous: boolean } {
+    const directory = normalizeDirectory(input.directory)
+    const file = input.composeFile.trim().replace(/^\.\//, "")
+    const matches = candidates.filter((candidate) => {
+        if (directory && normalizeDirectory(candidate.workingDir ?? "") !== directory) return false
+        if (!file) return true
+        return candidate.configFiles.some((config) => config.replace(/^\.\//, "").endsWith(file))
+    })
+    if (matches.length === 0) return { project: null, ambiguous: false }
+    if (matches.length === 1) return { project: matches[0]!, ambiguous: false }
+    return { project: null, ambiguous: true }
+}
+
+export interface EnvRow {
+    key: string
+    value: string
+    secret: boolean
+}
+
+/**
+ * Diferença entre as linhas editadas e o arquivo do host: só o que mudou é enviado. O valor de uma
+ * variável sensível nunca é conhecido no cliente, então ele só entra quando o usuário digita um
+ * substituto (mesmo vazio, a chave é preservada). Chaves ausentes na edição são removidas.
+ */
+export function diffEnvRows(original: readonly EnvRow[], rows: readonly EnvRow[]): EnvChange[] {
+    const changes: EnvChange[] = []
+    const remaining = new Map(original.map((row) => [row.key, row]))
+    for (const row of rows) {
+        const key = row.key.trim()
+        if (!key) continue
+        const before = remaining.get(key)
+        remaining.delete(key)
+        if (!before) {
+            if (row.value !== "") changes.push({ key, value: row.value })
+            continue
+        }
+        if (row.secret) {
+            if (row.value !== "") changes.push({ key, value: row.value })
+            continue
+        }
+        if (row.value !== before.value) changes.push({ key, value: row.value })
+    }
+    for (const key of remaining.keys()) changes.push({ key, value: null })
+    return changes
 }

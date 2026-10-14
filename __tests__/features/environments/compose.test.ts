@@ -30,9 +30,9 @@ describe("compose — interpretação do YAML", () => {
 })
 
 describe("operations — etapas por tipo", () => {
-    it("publicação local tem 4 etapas + checagem de banco", () => {
+    it("publicação local tem 4 etapas + compatibilidade do banco", () => {
         const steps = stepsFor("publish", "local")
-        expect(steps.map((step) => step.id)).toEqual(["git", "build", "database", "up", "healthcheck"])
+        expect(steps.map((step) => step.id)).toEqual(["git", "build", "up", "compat", "healthcheck"])
         expect(steps.every((step) => step.status === "pending")).toBe(true)
     })
 

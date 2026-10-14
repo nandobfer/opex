@@ -1,12 +1,14 @@
 import type {
+    composeProjectCandidateSchema,
     databaseVersionSourceSchema,
     environmentHealthcheckSchema,
     environmentRepoUpdateSchema,
     environmentResourcesSchema,
     environmentSchema,
     environmentStatusSchema,
-    operationDtoSchema,
+    hostEnvFileInputSchema,
     imageDtoSchema,
+    operationDtoSchema,
     publishInputSchema,
     restoreInputSchema,
 } from "./schemas"
@@ -27,6 +29,8 @@ export type RestoreInput = z.infer<typeof restoreInputSchema>
 export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>
 export type EnvironmentImageDto = z.infer<typeof imageDtoSchema>
 export type OperationDto = z.infer<typeof operationDtoSchema>
+export type HostEnvFileInput = z.infer<typeof hostEnvFileInputSchema>
+export type ComposeProjectCandidateDto = z.infer<typeof composeProjectCandidateSchema>
 
 /** Fonte de execução do ambiente. */
 export type EnvironmentMode = "local" | "remote"
@@ -67,7 +71,6 @@ export interface EnvironmentRepoSecretsStatus {
     sshPassword: SecretStatus
     sshPrivateKey: SecretStatus
     sshPassphrase: SecretStatus
-    connectionString: SecretStatus
 }
 
 /** Ambiente (DTO de leitura). */
@@ -80,15 +83,19 @@ export interface EnvironmentDto {
     hostDirectory: string
     composeFile: string
     composeService: string
+    /** Projeto Compose adotado no host (vazio = derivado do Opex). */
+    composeProject: string
+    /** Arquivo `.env` do ambiente, relativo ao diretório do repositório. */
+    envFile: string
     publishedPort: number | null
     resources: EnvironmentResources
-    envVars: { key: string; value: string; secret: boolean }[]
     healthcheck: EnvironmentHealthcheck
     dbVersionSource: DatabaseVersionSource
-    /** Última versão de banco lida/conhecida. `null` = desconhecida. */
+    /** Schema esperado pela última imagem publicada. `null` = desconhecido. */
     dbVersion: string | null
-    /** Versão do banco configurada por override neste ambiente (não o valor). */
-    hasConnectionOverride: boolean
+    /** Schema registrado no Opex como aplicado ao ambiente. */
+    appliedDbVersion: string | null
+    appliedDbVersionAt: string | null
     status: EnvironmentStatus
     lastOperation: OperationDto | null
     createdAt: string
@@ -104,6 +111,30 @@ export interface EnvironmentProjectDto {
     /** O ambiente já tem configuração de repositório? */
     configured: boolean
     environmentCount: number
+}
+
+/** Branch real de um repositório (seletor com busca). */
+export interface EnvironmentBranchDto {
+    name: string
+    sha: string | null
+    protected: boolean
+}
+
+/** Variável do `.env` real do host (valor `null` quando sensível). */
+export interface HostEnvEntryDto {
+    key: string
+    value: string | null
+    secret: boolean
+}
+
+/** Arquivo `.env` do host, como a tela o vê (nunca o conteúdo bruto). */
+export interface HostEnvFileDto {
+    path: string
+    exists: boolean
+    entries: HostEnvEntryDto[]
+    /** Revisão do arquivo (evita sobrescrever edição externa). */
+    revision: string
+    updatedAt: string | null
 }
 
 export type EnvironmentLogLevel = "info" | "step" | "success" | "warn" | "error"

@@ -8,17 +8,21 @@ import { ENVIRONMENT_OPERATION_AUDIT_ENTITY } from "../constants"
 import type { EnvironmentActor } from "./actor"
 import { assertCanOperate } from "./actor"
 import { loadEnvironmentRuntime } from "./context"
-import { buildComposeOverride, composePs, composeUp, inferContainerPort, listProjectImages } from "./docker"
+import { buildComposeOverride, composeUp, inferContainerPort, listProjectImages } from "./docker"
+import { inspectEnvironmentStatus } from "./containers"
 import { writeHostFile } from "./host-files"
 import { fetchComposeFile } from "./compose"
-import { readDatabaseVersion } from "./database"
 import { environmentLogger } from "./logs"
 import { claimOperation, createOperation, finishOperation, operationDto, patchStep, renewLease } from "./operations"
 import { publishEnvironmentsUpdated, publishOperationEvent } from "./realtime"
 import { findImageMetadata, loadImageMetadata, mergeImageMetadata } from "./images"
 import type { EnvironmentImageDto, OperationDto, RestoreInput } from "../types"
 
-/** Restauração de um ambiente para uma imagem específica, com bloqueio por compatibilidade de banco. */
+/**
+ * Restauração de um ambiente para uma imagem específica, com bloqueio por **compatibilidade de
+ * schema**: compara o schema **registrado no Opex** para o ambiente com o esperado pela imagem. Não
+ * há leitura do banco do ambiente — o registro vem das publicações bem-sucedidas.
+ */
 
 const LEASE_OWNER = `${process.pid}:${Date.now()}:restore`
 
@@ -36,9 +40,8 @@ export async function startRestore(actor: EnvironmentActor, envId: string, input
     assertCanOperate(actor, runtime.env.projectId)
 
     const metadata = await findImageMetadata(String(runtime.env._id), input.imageId)
-    const currentVersion = await readDatabaseVersion(runtime.connectionString)
     const compatibility = checkRestoreCompatibility({
-        currentVersion,
+        appliedVersion: runtime.env.appliedDbVersion ?? null,
         imageVersion: metadata?.dbVersion ?? null,
         origin: metadata?.origin ?? "unknown",
         confirmUnverified: input.confirmUnverified,
@@ -87,11 +90,10 @@ export async function runRestoreOperation(operationId: string, owner: string): P
             const current = await EnvironmentOperation.findById(operationId).lean()
             if (current) await publishOperationEvent(current)
         }
-        // Revalida o banco imediatamente antes de restaurar.
+        // Revalida o schema registrado imediatamente antes de restaurar.
         const metadata = await findImageMetadata(claimed.environmentId, imageRef)
-        const currentVersion = await readDatabaseVersion(runtime.connectionString)
         const compatibility = checkRestoreCompatibility({
-            currentVersion,
+            appliedVersion: runtime.env.appliedDbVersion ?? null,
             imageVersion: metadata?.dbVersion ?? null,
             origin: metadata?.origin ?? "unknown",
             confirmUnverified: true,
@@ -111,18 +113,13 @@ export async function runRestoreOperation(operationId: string, owner: string): P
             containerPort,
             cpus: runtime.env.resources.cpus,
             memoryMb: runtime.env.resources.memoryMb,
-            env: (runtime.env.envVars ?? []).map((variable) => ({ key: variable.key, value: variable.value })),
         }))
         const upResult = await composeUp(runtime.host, runtime.invocation, { cwd: runtime.directory, service: runtime.env.composeService || null })
         if (upResult.exitCode !== 0) throw new DomainError(502, `Falha ao recriar os containers: ${upResult.output.slice(0, 400)}`, "UP_FAILED")
-        const containers = await composePs(runtime.host, runtime.invocation, { cwd: runtime.directory })
-        const running = containers.some((container) => /running/i.test(container.state))
-        await Environment.updateOne(
-            { _id: claimed.environmentId },
-            { $set: { status: { containers: containers.map((c) => ({ name: c.name, service: c.service, state: c.state, status: c.status, image: c.image })), running, checkedAt: new Date() } } },
-        )
+        await inspectEnvironmentStatus(runtime)
         await patchStep(operationId, "up", { status: "done" })
-        await finishOperation(operationId, "done", "Restaurado.")
+        // Restaurar uma imagem **não reduz** o schema registrado: o banco não é revertido junto.
+        await finishOperation(operationId, "done", "Restaurado. O schema do banco permanece o registrado.")
         log.success("Restauração concluída.")
     } catch (error) {
         logger.error({ err: error, operationId }, "[environments] Restauração falhou")

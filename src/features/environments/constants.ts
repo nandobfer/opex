@@ -29,10 +29,16 @@ export const MAX_OUTPUT_CHARS = 20_000
 export const OPERATION_LEASE_MS = 15 * 60_000
 /** Tempo de vida de uma sessão de logs sem heartbeat (aba fechada de forma abrupta). */
 export const LOG_SESSION_TTL_MS = 5 * 60_000
-
-/** Coleção e documento da **versão atual do banco** (convenção fixa do Opex). */
-export const DB_SCHEMA_COLLECTION = "_opex_schema"
-export const DB_SCHEMA_DOC_ID = "schema"
+/** Intervalo do coletor de logs ao vivo dos containers. */
+export const LOG_COLLECTOR_INTERVAL_MS = 3_000
+/** Intervalo mínimo entre duas consultas de estado do host (evita bater no Docker a cada leitura). */
+export const STATUS_REFRESH_MS = 8_000
+/** Arquivo `.env` padrão do ambiente (relativo ao diretório do repositório). */
+export const DEFAULT_ENV_FILE = ".env"
+/** Tamanho máximo do `.env` lido/gravado no host. */
+export const MAX_ENV_FILE_BYTES = 128 * 1024
+/** Número máximo de variáveis devolvidas/editadas do `.env`. */
+export const MAX_ENV_VARS = 300
 
 /** Evento em `private-app`/canal do cliente quando os ambientes mudam. Payload: `{ scope, projectId? }`. */
 export const ENVIRONMENTS_UPDATED_EVENT = "environments-updated"

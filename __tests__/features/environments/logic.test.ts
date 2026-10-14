@@ -45,34 +45,35 @@ describe("logic — nomes e tags", () => {
 })
 
 describe("logic — compatibilidade de restauração", () => {
-    it("versão igual e origem Opex libera", () => {
-        const result = checkRestoreCompatibility({ currentVersion: "3", imageVersion: "3", origin: "opex", confirmUnverified: false })
+    it("schema igual e origem Opex libera", () => {
+        const result = checkRestoreCompatibility({ appliedVersion: "3", imageVersion: "3", origin: "opex", confirmUnverified: false })
         expect(result.level).toBe("compatible")
         expect(result.allowed).toBe(true)
         expect(result.requiresConfirmation).toBe(false)
     })
 
-    it("versão conhecida diferente bloqueia", () => {
-        const result = checkRestoreCompatibility({ currentVersion: "4", imageVersion: "3", origin: "opex", confirmUnverified: true })
+    it("schema conhecido diferente bloqueia", () => {
+        const result = checkRestoreCompatibility({ appliedVersion: "4", imageVersion: "3", origin: "opex", confirmUnverified: true })
         expect(result.level).toBe("blocked")
         expect(result.allowed).toBe(false)
         expect(result.message).toContain("3")
     })
 
-    it("imagem do CD pede confirmação mesmo com versão igual", () => {
-        const blocked = checkRestoreCompatibility({ currentVersion: "3", imageVersion: "3", origin: "cd", confirmUnverified: false })
+    it("imagem do CD pede confirmação mesmo com schema igual", () => {
+        const blocked = checkRestoreCompatibility({ appliedVersion: "3", imageVersion: "3", origin: "cd", confirmUnverified: false })
         expect(blocked.level).toBe("confirm")
         expect(blocked.allowed).toBe(false)
         expect(blocked.requiresConfirmation).toBe(true)
 
-        const confirmed = checkRestoreCompatibility({ currentVersion: "3", imageVersion: "3", origin: "cd", confirmUnverified: true })
+        const confirmed = checkRestoreCompatibility({ appliedVersion: "3", imageVersion: "3", origin: "cd", confirmUnverified: true })
         expect(confirmed.allowed).toBe(true)
     })
 
-    it("versão desconhecida nunca libera silenciosamente", () => {
-        const result = checkRestoreCompatibility({ currentVersion: null, imageVersion: "3", origin: "opex", confirmUnverified: false })
+    it("schema desconhecido nunca libera silenciosamente", () => {
+        const result = checkRestoreCompatibility({ appliedVersion: null, imageVersion: "3", origin: "opex", confirmUnverified: false })
         expect(result.level).toBe("confirm")
         expect(result.allowed).toBe(false)
+        expect(result.message).toContain("desconhecido")
     })
 })
 

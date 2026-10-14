@@ -28,7 +28,6 @@ export function emptySecretsStatus(): EnvironmentRepoSecretsStatus {
         sshPassword: { configured: false, unreadable: false },
         sshPrivateKey: { configured: false, unreadable: false },
         sshPassphrase: { configured: false, unreadable: false },
-        connectionString: { configured: false, unreadable: false },
     }
 }
 
@@ -36,6 +35,9 @@ function toStatus(status: IEnvironmentStatus | undefined): EnvironmentStatus {
     return {
         containers: (status?.containers ?? []).map((container) => ({ ...container })),
         running: Boolean(status?.running),
+        partial: Boolean(status?.partial),
+        reachable: Boolean(status?.reachable),
+        error: status?.error ?? null,
         checkedAt: toIso(status?.checkedAt ?? null),
     }
 }
@@ -64,12 +66,7 @@ export function toOperationDto(operation: IEnvironmentOperation): OperationDto {
     }
 }
 
-export interface EnvironmentDtoOptions {
-    /** Só o dono recebe o valor das variáveis marcadas como secretas. */
-    includeSecretValues: boolean
-}
-
-export function toEnvironmentDto(env: IEnvironment & { _id: unknown }, options: EnvironmentDtoOptions): EnvironmentDto {
+export function toEnvironmentDto(env: IEnvironment & { _id: unknown }): EnvironmentDto {
     return {
         id: String(env._id),
         projectId: env.projectId,
@@ -79,13 +76,10 @@ export function toEnvironmentDto(env: IEnvironment & { _id: unknown }, options: 
         hostDirectory: env.hostDirectory,
         composeFile: env.composeFile,
         composeService: env.composeService,
+        composeProject: env.composeProject ?? "",
+        envFile: env.envFile ?? ".env",
         publishedPort: env.publishedPort ?? null,
         resources: { cpus: env.resources?.cpus ?? null, memoryMb: env.resources?.memoryMb ?? null },
-        envVars: (env.envVars ?? []).map((variable) => ({
-            key: variable.key,
-            value: variable.secret && !options.includeSecretValues ? "" : variable.value,
-            secret: Boolean(variable.secret),
-        })),
         healthcheck: {
             enabled: env.healthcheck?.enabled ?? true,
             path: env.healthcheck?.path ?? "/",
@@ -93,7 +87,8 @@ export function toEnvironmentDto(env: IEnvironment & { _id: unknown }, options: 
         },
         dbVersionSource: { kind: env.dbVersionSource?.kind ?? "file", value: env.dbVersionSource?.value ?? "" },
         dbVersion: env.dbVersion ?? null,
-        hasConnectionOverride: isEncryptedSecret(env.connectionString),
+        appliedDbVersion: env.appliedDbVersion ?? null,
+        appliedDbVersionAt: toIso(env.appliedDbVersionAt ?? null),
         status: toStatus(env.status),
         lastOperation: null,
         createdAt: toIso(env.createdAt) ?? new Date().toISOString(),

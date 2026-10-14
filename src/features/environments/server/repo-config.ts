@@ -33,7 +33,6 @@ export function toRepoConfigDto(config: IEnvironmentRepoConfig, project: IProjec
     secrets.sshPassword = secretStatus(config.sshPassword)
     secrets.sshPrivateKey = secretStatus(config.sshPrivateKey)
     secrets.sshPassphrase = secretStatus(config.sshPassphrase)
-    secrets.connectionString = secretStatus(config.connectionString)
     return {
         projectId: config.projectId,
         repo: project.repo,
@@ -77,7 +76,6 @@ export async function getOrCreateRepoConfig(project: WithId<IProject>, userId: s
         sshPassword: null,
         sshPrivateKey: null,
         sshPassphrase: null,
-        connectionString: null,
     })
     created.set("_auditContext", { userId })
     await created.save()
@@ -127,11 +125,9 @@ export async function updateRepoConfig(actor: EnvironmentActor, project: WithId<
         const sshPassword = applySecret(input.secrets.sshPassword)
         const sshPrivateKey = applySecret(input.secrets.sshPrivateKey)
         const sshPassphrase = applySecret(input.secrets.sshPassphrase)
-        const connectionString = applySecret(input.secrets.connectionString)
         if (sshPassword !== undefined) config.sshPassword = sshPassword
         if (sshPrivateKey !== undefined) config.sshPrivateKey = sshPrivateKey
         if (sshPassphrase !== undefined) config.sshPassphrase = sshPassphrase
-        if (connectionString !== undefined) config.connectionString = connectionString
     }
 
     config.set("_auditContext", { userId: actor.userId })
@@ -171,14 +167,4 @@ export function resolveRepoConnection(config: IEnvironmentRepoConfig): ResolvedR
         sshPrivateKey: decryptOrNull(config.sshPrivateKey),
         sshPassphrase: decryptOrNull(config.sshPassphrase),
     }
-}
-
-/** Connection string do repositório (padrão), em claro. `null` = não configurada. */
-export function repoConnectionString(config: IEnvironmentRepoConfig): string | null {
-    return decryptOrNull(config.connectionString)
-}
-
-/** Decripta a connection string de um ambiente (override). */
-export function environmentConnectionString(box: unknown): string | null {
-    return decryptOrNull(box)
 }

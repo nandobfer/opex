@@ -1,22 +1,21 @@
 import { dbConnect } from "@/lib/db"
 import { Environment, type IEnvironment } from "@/lib/db/models/Environment"
 import { EnvironmentOperation } from "@/lib/db/models/EnvironmentOperation"
-import { encryptSecret, isEncryptedSecret, SecretBoxKeyError, type EncryptedSecret } from "@/lib/crypto/secretBox"
 import { recordAudit, AcaoAuditoria } from "@/lib/audit/record"
 import { DomainError } from "@/lib/api/route"
 import type { IProject } from "@/lib/db/models/Project"
 import { slugify } from "../logic"
 import { ENVIRONMENT_AUDIT_ENTITY } from "../constants"
 import type { EnvironmentActor } from "./actor"
-import { assertCanAccessProject, assertCanManage, isOwner } from "./actor"
+import { assertCanAccessProject, assertCanManage } from "./actor"
 import type { EnvironmentDto, EnvironmentInput } from "../types"
 import type { WithId } from "./types"
 import { toEnvironmentDto, toOperationDto } from "./dto"
+import { stopEnvironmentLogCollector } from "./log-collector"
 
 /**
  * CRUD dos ambientes de um repositório. O cliente só alcança ambientes de projetos vinculados; o
- * admin do cliente cria/edita (sem segredos); só o dono define variáveis secretas e o override de
- * connection string. Toda mutação é auditada (sem segredos).
+ * admin do cliente cria/edita (os segredos do host são exclusivos do dono). Toda mutação é auditada.
  */
 
 function slugFor(input: EnvironmentInput): string {
@@ -50,7 +49,7 @@ export function assertEnvironmentAccess(actor: EnvironmentActor, env: IEnvironme
 }
 
 /** DTOs da lista, já com a última operação de cada ambiente. */
-export async function listEnvironmentDtos(projectId: string, actor: EnvironmentActor): Promise<EnvironmentDto[]> {
+export async function listEnvironmentDtos(projectId: string): Promise<EnvironmentDto[]> {
     const environments = await listEnvironments(projectId)
     if (environments.length === 0) return []
     const ids = environments.map((env) => String(env._id))
@@ -58,44 +57,23 @@ export async function listEnvironmentDtos(projectId: string, actor: EnvironmentA
     const latestByEnv = new Map<string, (typeof operations)[number]>()
     for (const operation of operations) if (!latestByEnv.has(operation.environmentId)) latestByEnv.set(operation.environmentId, operation)
     return environments.map((env) => {
-        const dto = toEnvironmentDto(env, { includeSecretValues: isOwner(actor) })
+        const dto = toEnvironmentDto(env)
         const operation = latestByEnv.get(String(env._id))
         dto.lastOperation = operation ? toOperationDto(operation) : null
         return dto
     })
 }
 
-export async function getEnvironmentDto(env: WithId<IEnvironment>, actor: EnvironmentActor): Promise<EnvironmentDto> {
-    const dto = toEnvironmentDto(env, { includeSecretValues: isOwner(actor) })
+export async function getEnvironmentDto(env: WithId<IEnvironment>): Promise<EnvironmentDto> {
+    const dto = toEnvironmentDto(env)
     const operation = await EnvironmentOperation.findOne({ environmentId: String(env._id) }).sort({ createdAt: -1 }).lean()
     dto.lastOperation = operation ? toOperationDto(operation) : null
     return dto
 }
 
-function assertClientEnvVars(actor: EnvironmentActor, input: EnvironmentInput): void {
-    if (isOwner(actor)) return
-    const hasSecret = input.envVars.some((variable) => variable.secret && variable.value.trim().length > 0)
-    if (hasSecret) throw new DomainError(403, "Variáveis secretas só podem ser definidas pelo dono do Opex.", "SECRET_VAR_FORBIDDEN")
-    if (input.secrets?.connectionString) throw new DomainError(403, "A connection string só pode ser definida pelo dono do Opex.", "CONNECTION_STRING_FORBIDDEN")
-}
-
-function applyConnectionOverride(actor: EnvironmentActor, current: EncryptedSecret | null, input: EnvironmentInput): EncryptedSecret | null {
-    const update = input.secrets?.connectionString
-    if (!update) return current
-    if (!isOwner(actor)) throw new DomainError(403, "A connection string só pode ser definida pelo dono do Opex.", "CONNECTION_STRING_FORBIDDEN")
-    if (update.action === "clear") return null
-    try {
-        return encryptSecret(update.value)
-    } catch (error) {
-        if (error instanceof SecretBoxKeyError) throw new DomainError(409, "Configure INTEGRATIONS_ENCRYPTION_KEY para gravar segredos.", "ENCRYPTION_KEY_MISSING")
-        throw error
-    }
-}
-
 export async function createEnvironment(actor: EnvironmentActor, project: WithId<IProject>, input: EnvironmentInput): Promise<WithId<IEnvironment>> {
     assertCanManage(actor)
     assertCanAccessProject(actor, String(project._id))
-    assertClientEnvVars(actor, input)
     await dbConnect()
     const projectId = String(project._id)
     const slug = await uniqueSlug(projectId, slugFor(input))
@@ -107,14 +85,17 @@ export async function createEnvironment(actor: EnvironmentActor, project: WithId
         hostDirectory: input.hostDirectory,
         composeFile: input.composeFile,
         composeService: input.composeService,
+        composeProject: input.composeProject,
+        envFile: input.envFile,
         publishedPort: input.publishedPort,
         resources: input.resources,
-        envVars: input.envVars,
         healthcheck: input.healthcheck,
         dbVersionSource: input.dbVersionSource,
-        connectionString: applyConnectionOverride(actor, null, input),
         dbVersion: null,
-        status: { containers: [], running: false, checkedAt: null },
+        appliedDbVersion: null,
+        appliedDbVersionAt: null,
+        appliedDbVersionOperationId: null,
+        status: { containers: [], running: false, partial: false, reachable: false, error: null, checkedAt: null },
         lastOperationId: null,
     })
     created.set("_auditContext", { userId: actor.userId })
@@ -132,11 +113,10 @@ export async function createEnvironment(actor: EnvironmentActor, project: WithId
 export async function updateEnvironment(actor: EnvironmentActor, env: WithId<IEnvironment>, input: EnvironmentInput): Promise<WithId<IEnvironment>> {
     assertCanManage(actor)
     assertEnvironmentAccess(actor, env)
-    assertClientEnvVars(actor, input)
     await dbConnect()
     const doc = await Environment.findById(env._id)
     if (!doc) throw new DomainError(404, "Ambiente não encontrado", "ENVIRONMENT_NOT_FOUND")
-    const before = { name: doc.name, slug: doc.slug, branch: doc.branch, publishedPort: doc.publishedPort }
+    const before = { name: doc.name, slug: doc.slug, branch: doc.branch, publishedPort: doc.publishedPort, composeProject: doc.composeProject }
     const desiredSlug = slugFor(input)
     if (desiredSlug !== doc.slug) doc.slug = await uniqueSlug(doc.projectId, desiredSlug, String(doc._id))
     doc.name = input.name
@@ -144,13 +124,12 @@ export async function updateEnvironment(actor: EnvironmentActor, env: WithId<IEn
     doc.hostDirectory = input.hostDirectory
     doc.composeFile = input.composeFile
     doc.composeService = input.composeService
+    doc.composeProject = input.composeProject
+    doc.envFile = input.envFile
     doc.publishedPort = input.publishedPort
     doc.resources = input.resources
-    doc.envVars = input.envVars
     doc.healthcheck = input.healthcheck
     doc.dbVersionSource = input.dbVersionSource
-    const override = applyConnectionOverride(actor, doc.connectionString, input)
-    if (override !== doc.connectionString) doc.connectionString = override
     doc.set("_auditContext", { userId: actor.userId })
     await doc.save()
     await recordAudit({
@@ -159,7 +138,29 @@ export async function updateEnvironment(actor: EnvironmentActor, env: WithId<IEn
         entidadeId: String(doc._id),
         acao: AcaoAuditoria.ATUALIZAR,
         antes: before,
-        depois: { name: doc.name, slug: doc.slug, branch: doc.branch, publishedPort: doc.publishedPort },
+        depois: { name: doc.name, slug: doc.slug, branch: doc.branch, publishedPort: doc.publishedPort, composeProject: doc.composeProject },
+    })
+    return doc.toObject() as WithId<IEnvironment>
+}
+
+/** Adota (ou troca) o projeto Compose existente no host — não reinicia nem recria containers. */
+export async function adoptComposeProject(actor: EnvironmentActor, env: WithId<IEnvironment>, project: string): Promise<WithId<IEnvironment>> {
+    assertCanManage(actor)
+    assertEnvironmentAccess(actor, env)
+    await dbConnect()
+    const doc = await Environment.findById(env._id)
+    if (!doc) throw new DomainError(404, "Ambiente não encontrado", "ENVIRONMENT_NOT_FOUND")
+    const before = doc.composeProject
+    doc.composeProject = project.trim()
+    doc.set("_auditContext", { userId: actor.userId })
+    await doc.save()
+    await recordAudit({
+        userId: actor.userId,
+        entidade: ENVIRONMENT_AUDIT_ENTITY,
+        entidadeId: String(doc._id),
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { composeProject: before },
+        depois: { composeProject: doc.composeProject },
     })
     return doc.toObject() as WithId<IEnvironment>
 }
@@ -171,6 +172,7 @@ export async function deleteEnvironment(actor: EnvironmentActor, env: WithId<IEn
     const active = await EnvironmentOperation.findOne({ environmentId: String(env._id), status: { $in: ["queued", "running"] } }).select({ _id: 1 }).lean()
     if (active) throw new DomainError(409, "Há uma operação em andamento neste ambiente.", "OPERATION_IN_PROGRESS")
     await Environment.deleteOne({ _id: env._id })
+    stopEnvironmentLogCollector(String(env._id))
     await recordAudit({
         userId: actor.userId,
         entidade: ENVIRONMENT_AUDIT_ENTITY,
@@ -178,8 +180,4 @@ export async function deleteEnvironment(actor: EnvironmentActor, env: WithId<IEn
         acao: AcaoAuditoria.EXCLUIR,
         antes: { name: env.name, slug: env.slug, projectId: env.projectId },
     })
-}
-
-export function hasConnectionOverride(env: IEnvironment): boolean {
-    return isEncryptedSecret(env.connectionString)
 }

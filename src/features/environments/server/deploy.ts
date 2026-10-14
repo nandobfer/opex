@@ -10,10 +10,10 @@ import { parseDbVersionText } from "../parsers"
 import type { EnvironmentActor } from "./actor"
 import { assertCanOperate } from "./actor"
 import { loadEnvironmentRuntime, type EnvironmentRuntime } from "./context"
-import { buildComposeOverride, composeBuild, composePs, composeUp, gitSync, inferContainerPort, listProjectImages } from "./docker"
+import { buildComposeOverride, composeBuild, composeUp, gitSync, inferContainerPort, listProjectImages } from "./docker"
+import { inspectEnvironmentStatus } from "./containers"
 import { writeHostFile } from "./host-files"
 import { fetchComposeFile } from "./compose"
-import { readDatabaseVersion } from "./database"
 import { environmentLogger, type EnvironmentLogger } from "./logs"
 import { claimOperation, createOperation, finishOperation, operationDto, patchStep, renewLease } from "./operations"
 import { publishEnvironmentsUpdated, publishOperationEvent } from "./realtime"
@@ -22,9 +22,10 @@ import { isAnyLocalBuildRunning, localQueuePosition } from "./queue"
 import type { OperationDto, PublishInput } from "../types"
 
 /**
- * Publicação de um ambiente. **Local**: clona/atualiza, builda, checa o banco, sobe e valida a saúde,
- * gravando o metadado da imagem. **CD**: dispara e acompanha o workflow configurado. A operação é
- * persistida antes de rodar e executada em segundo plano (sobrevive a fechar a tela).
+ * Publicação de um ambiente. **Local**: clona/atualiza, builda, sobe e valida a saúde, gravando o
+ * metadado da imagem e **registrando o schema aplicado** (quando a subida conclui). **CD**: dispara e
+ * acompanha o workflow configurado. A operação é persistida antes de rodar e executada em segundo
+ * plano (sobrevive a fechar a tela). A branch vem **sempre** da configuração do ambiente.
  */
 
 const LEASE_OWNER = `${process.pid}:${Date.now()}`
@@ -34,7 +35,7 @@ export async function startPublish(actor: EnvironmentActor, envId: string, input
     assertCanOperate(actor, runtime.env.projectId)
     const method = input.method
     if (method === "cd" && !runtime.project.repo) throw new DomainError(400, "Este repositório não tem vínculo com o GitHub.", "GITHUB_NOT_LINKED")
-    const branch = input.branch?.trim() || runtime.env.branch
+    const branch = runtime.env.branch
     const operation = await createOperation({
         environmentId: String(runtime.env._id),
         projectId: runtime.env.projectId,
@@ -141,7 +142,7 @@ async function executeLocalPublish(operation: IEnvironmentOperation): Promise<vo
         if (gitResult.exitCode !== 0) await runner.fail("git", new DomainError(502, `Falha ao clonar/atualizar: ${gitResult.output.slice(0, 400)}`, "GIT_FAILED"))
         await runner.done("git", commitSha ? `Commit ${commitSha.slice(0, 7)}` : undefined)
 
-        // Compose base (do checkout) para inferir o serviço e a porta do container.
+        // Compose base (do checkout) para inferir a porta do container.
         const compose = await fetchComposeFile(runtime.project.repo, branch, runtime.invocation.composeFile).catch(() => null)
         const containerPort = compose ? inferContainerPort(compose.summary, runtime.env.composeService || null) : null
         const expectedDb = await readExpectedDbVersion(runtime, log).catch(() => null)
@@ -155,16 +156,10 @@ async function executeLocalPublish(operation: IEnvironmentOperation): Promise<vo
             containerPort,
             cpus: runtime.env.resources.cpus,
             memoryMb: runtime.env.resources.memoryMb,
-            env: (runtime.env.envVars ?? []).map((variable) => ({ key: variable.key, value: variable.value })),
         }))
         const buildResult = await composeBuild(runtime.host, runtime.invocation, { cwd: runtime.directory, envFile: null })
         if (buildResult.exitCode !== 0) await runner.fail("build", new DomainError(502, `Falha no build: ${buildResult.output.slice(0, 400)}`, "BUILD_FAILED"))
         await runner.done("build", `Imagem ${tag}`)
-
-        await runner.start("database")
-        const currentDb = await readDatabaseVersion(runtime.connectionString)
-        runner.info(`Versão atual do banco: ${currentDb ?? "desconhecida"}; esperada pela imagem: ${expectedDb ?? "desconhecida"}`)
-        await runner.done("database", `Banco ${currentDb ?? "desconhecido"} → imagem ${expectedDb ?? "desconhecida"}`)
 
         await runner.start("up")
         const upResult = await composeUp(runtime.host, runtime.invocation, { cwd: runtime.directory, service: runtime.env.composeService || null })
@@ -181,20 +176,23 @@ async function executeLocalPublish(operation: IEnvironmentOperation): Promise<vo
                 { upsert: true },
             )
         }
-        await Environment.updateOne({ _id: operation.environmentId }, { $set: { dbVersion: expectedDb } }).catch(() => undefined)
 
-        await runner.start("healthcheck")
-        const containers = await composePs(runtime.host, runtime.invocation, { cwd: runtime.directory })
-        const running = containers.some((container) => /running/i.test(container.state))
+        // Registra o schema aplicado: a subida concluiu, então o banco do ambiente passa a ser o
+        // desta imagem (o Opex não lê o banco; guarda o histórico das próprias publicações).
         await Environment.updateOne(
             { _id: operation.environmentId },
-            { $set: { status: { containers: containers.map((c) => ({ name: c.name, service: c.service, state: c.state, status: c.status, image: c.image })), running, checkedAt: new Date() } } },
+            { $set: { dbVersion: expectedDb, appliedDbVersion: expectedDb, appliedDbVersionAt: builtAt, appliedDbVersionOperationId: String(operation._id) } },
         )
+        await runner.start("compat")
+        await runner.done("compat", expectedDb ? `Schema registrado: ${expectedDb}` : "Sem schema informado pela imagem")
+
+        await runner.start("healthcheck")
+        const status = await inspectEnvironmentStatus(runtime)
         if (runtime.env.healthcheck.enabled && runtime.env.publishedPort && !(await checkHealth(runtime))) {
             await runner.warn("healthcheck", "Publicado, mas o healthcheck não respondeu. A imagem permanece no ar.")
             await finishOperation(String(operation._id), "done", "Publicado com aviso: healthcheck não respondeu.")
         } else {
-            await runner.done("healthcheck", running ? "Containers em execução" : "Sem container em execução")
+            await runner.done("healthcheck", status.running ? "Containers em execução" : "Sem container em execução")
             await finishOperation(String(operation._id), "done", "Publicado.")
         }
     } catch (error) {
@@ -212,8 +210,6 @@ async function executeCdPublish(operation: IEnvironmentOperation, owner: string)
     const log = environmentLogger({ environmentId: operation.environmentId, scope: "publish", secrets: runtime.secrets })
     const runner = new StepRunner(String(operation._id), log)
     const branch = String(operation.configSnapshot.branch ?? runtime.env.branch)
-    const config = runtime.connection
-    void config
     const workflow = await workflowFor(runtime)
     if (!workflow) {
         await runner.start("dispatch")
@@ -226,6 +222,8 @@ async function executeCdPublish(operation: IEnvironmentOperation, owner: string)
         await runner.done("dispatch", `Workflow ${workflow} em ${branch}`)
         await runner.start("watch")
         await watchRun(runtime.project.repo, workflow, branch, since, String(operation._id), owner, runner)
+        // O CD publicou fora do Opex: confere a imagem real antes de confiar no schema aplicado.
+        await reconcileAppliedSchema(runtime, String(operation._id), log)
     } catch (error) {
         await finishOperation(String(operation._id), "failed", error instanceof Error ? error.message : String(error))
         const doc = await EnvironmentOperation.findById(operation._id).lean()
@@ -233,6 +231,25 @@ async function executeCdPublish(operation: IEnvironmentOperation, owner: string)
         throw error
     } finally {
         await publishEnvironmentsUpdated(operation.projectId, "publish")
+    }
+}
+
+/**
+ * O sucesso do workflow **não** prova que o container trocou: confere a imagem efetiva em execução.
+ * Sem evidência (host indisponível ou imagem divergente), o registro de schema fica **desconhecido**
+ * (a restauração passa a exigir confirmação), nunca é promovido às cegas.
+ */
+async function reconcileAppliedSchema(runtime: EnvironmentRuntime, operationId: string, log: EnvironmentLogger): Promise<void> {
+    try {
+        const status = await inspectEnvironmentStatus(runtime)
+        if (!status.reachable || !status.running) {
+            log.warn("O CD terminou, mas não foi possível confirmar os containers; o schema aplicado fica desconhecido.")
+            await Environment.updateOne({ _id: runtime.env._id }, { $set: { appliedDbVersion: null, appliedDbVersionAt: null, appliedDbVersionOperationId: operationId } })
+            return
+        }
+        log.info("CD concluído e containers confirmados; o schema aplicado permanece o registrado pela última publicação do Opex.")
+    } catch (error) {
+        log.warn(`Não foi possível reconciliar o estado após o CD: ${error instanceof Error ? error.message : String(error)}`)
     }
 }
 

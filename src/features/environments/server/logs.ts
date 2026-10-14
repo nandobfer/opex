@@ -109,6 +109,23 @@ export async function drainEnvironmentLogs(): Promise<void> {
     await Promise.allSettled([...pending])
 }
 
+/**
+ * Grava um lote de linhas (coletor de logs dos containers) **sem** escrever no console do app: as
+ * linhas vêm do próprio container e o console do servidor não deve virar eco. Nunca lança.
+ */
+export async function persistEnvironmentLogLines(lines: readonly EnvironmentLogLine[]): Promise<void> {
+    if (lines.length === 0) return
+    try {
+        await dbConnect()
+        await EnvironmentLog.insertMany(
+            lines.map((line) => ({ ...line, ts: new Date(line.ts) })),
+            { ordered: false },
+        )
+    } catch (error) {
+        logger.warn({ err: error instanceof Error ? error.message : error }, "[environments] Falha ao gravar logs do container")
+    }
+}
+
 export interface ReadLogsOptions {
     after?: string
     limit?: number

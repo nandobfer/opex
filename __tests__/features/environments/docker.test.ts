@@ -34,7 +34,7 @@ describe("docker — porta do container", () => {
 })
 
 describe("docker — override do compose", () => {
-    it("monta imagem, porta, limites e variáveis", () => {
+    it("monta imagem, porta e limites", () => {
         const yaml = buildComposeOverride({
             service: "app",
             image: "opex:2026.10-20260101000000",
@@ -42,13 +42,16 @@ describe("docker — override do compose", () => {
             containerPort: 3000,
             cpus: 2,
             memoryMb: 2048,
-            env: [{ key: "NODE_ENV", value: "production" }],
         })
         expect(yaml).toContain("image: opex:2026.10-20260101000000")
         expect(yaml).toContain("4001:3000")
         expect(yaml).toContain('cpus: "2"')
         expect(yaml).toContain("memory: 2048M")
-        expect(yaml).toContain("NODE_ENV: production")
+    })
+
+    it("não injeta variáveis: o .env real do host é a fonte", () => {
+        const yaml = buildComposeOverride({ service: "app", image: "opex:1" })
+        expect(yaml).not.toContain("environment")
     })
 
     it("sem porta do container não publica portas", () => {

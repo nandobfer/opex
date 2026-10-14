@@ -7,15 +7,14 @@ import type { AxiosInstance } from "axios"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { appChannel } from "@/lib/pusher/channel-names"
-import { environmentChannel } from "@/lib/pusher/channel-names"
-import { clientChannel } from "@/lib/pusher/channel-names"
+import { appChannel, clientChannel, environmentChannel } from "@/lib/pusher/channel-names"
 import { ENVIRONMENT_OPERATION_EVENT, ENVIRONMENTS_UPDATED_EVENT } from "./constants"
 import type { OperationDto } from "./types"
-import type { EnvironmentDto, EnvironmentProjectDto, EnvironmentRepoConfigDto } from "./types"
+import type { EnvironmentDto, EnvironmentProjectDto, EnvironmentRepoConfigDto, EnvironmentBranchDto, HostEnvFileDto, HostEnvFileInput } from "./types"
 import type { EnvironmentInput, EnvironmentRepoUpdateInput } from "./types"
 import type { EnvironmentImageDto } from "./types"
 import type { ComposeSummary } from "./compose-types"
+import type { ComposeProjectCandidateDto } from "./types"
 import type { CiCdRunDto, CiCdWorkflowDto } from "./server/ci-cd"
 import type { EnvironmentLogLine } from "./types"
 
@@ -38,11 +37,14 @@ export const ownerAmbientesApi: AmbientesApi = { basePath: "/environments", clie
 const keyRoot = (api: AmbientesApi) => ["environments", api.basePath] as const
 const projectsKey = (api: AmbientesApi) => [...keyRoot(api), "projects"] as const
 const repoConfigKey = (api: AmbientesApi, projectId: string) => [...keyRoot(api), "repo-config", projectId] as const
+const branchesKey = (api: AmbientesApi, projectId: string) => [...keyRoot(api), "branches", projectId] as const
 const listKey = (api: AmbientesApi, projectId: string) => [...keyRoot(api), "list", projectId] as const
 const detailKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "detail", envId] as const
 const composeKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "compose", envId] as const
 const imagesKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "images", envId] as const
 const operationsKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "operations", envId] as const
+const envFileKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "env-file", envId] as const
+const discoverKey = (api: AmbientesApi, envId: string) => [...keyRoot(api), "discover", envId] as const
 const ciCdKey = (api: AmbientesApi, projectId: string) => [...keyRoot(api), "ci-cd", projectId] as const
 
 export function useEnvironmentProjects(context: AmbientesApi) {
@@ -61,12 +63,24 @@ export function useRepoConfig(context: AmbientesApi, projectId: string) {
     })
 }
 
+/** Branches reais do repositório (seletor com busca). Cache curto; erro não derruba a tela. */
+export function useEnvironmentBranches(context: AmbientesApi, projectId: string, enabled = true) {
+    return useQuery({
+        queryKey: branchesKey(context, projectId),
+        queryFn: async () => unwrapApi((await context.client.get<ApiResponse<EnvironmentBranchDto[]>>(`${context.basePath}/projects/${projectId}/branches`)).data),
+        enabled: Boolean(projectId) && enabled,
+        staleTime: 60_000,
+        retry: false,
+    })
+}
+
 export function useEnvironmentList(context: AmbientesApi, projectId: string) {
     return useQuery({
         queryKey: listKey(context, projectId),
         queryFn: async () => unwrapApi((await context.client.get<ApiResponse<EnvironmentDto[]>>(`${context.basePath}/projects/${projectId}/environments`)).data),
         enabled: Boolean(projectId),
-        staleTime: 15_000,
+        staleTime: 10_000,
+        refetchInterval: 20_000,
     })
 }
 
@@ -75,6 +89,8 @@ export function useEnvironmentDetail(context: AmbientesApi, envId: string) {
         queryKey: detailKey(context, envId),
         queryFn: async () => unwrapApi((await context.client.get<ApiResponse<EnvironmentDto>>(`${context.basePath}/environments/${envId}`)).data),
         enabled: Boolean(envId),
+        // O servidor consulta o estado real dos containers ao ler o ambiente (com intervalo mínimo).
+        refetchInterval: 15_000,
     })
 }
 
@@ -102,6 +118,26 @@ export function useEnvironmentOperations(context: AmbientesApi, envId: string, e
         queryFn: async () => unwrapApi((await context.client.get<ApiResponse<OperationDto[]>>(`${context.basePath}/environments/${envId}/operations`)).data),
         enabled: Boolean(envId) && enabled,
         refetchInterval: 15_000,
+    })
+}
+
+/** Descobre o projeto Compose existente no host (para adotar). */
+export function useDiscoverCompose(context: AmbientesApi, envId: string, enabled: boolean) {
+    return useQuery({
+        queryKey: discoverKey(context, envId),
+        queryFn: async () => unwrapApi((await context.client.get<ApiResponse<{ project: string | null; ambiguous: boolean; candidates: ComposeProjectCandidateDto[]; reachable: boolean; error: string | null }>>(`${context.basePath}/environments/${envId}/discover`)).data),
+        enabled: Boolean(envId) && enabled,
+        retry: false,
+    })
+}
+
+/** `.env` real do host (nomes e valores não sensíveis). */
+export function useHostEnvFile(context: AmbientesApi, envId: string, enabled: boolean) {
+    return useQuery({
+        queryKey: envFileKey(context, envId),
+        queryFn: async () => unwrapApi((await context.client.get<ApiResponse<HostEnvFileDto>>(`${context.basePath}/environments/${envId}/env-file`)).data),
+        enabled: Boolean(envId) && enabled,
+        retry: false,
     })
 }
 
@@ -175,10 +211,39 @@ export function useDeleteEnvironment(context: AmbientesApi, projectId: string) {
     })
 }
 
+/** Adota o projeto Compose existente no host. */
+export function useAdoptCompose(context: AmbientesApi, envId: string, projectId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (project: string) =>
+            unwrapApi((await context.client.post<ApiResponse<EnvironmentDto>>(`${context.basePath}/environments/${envId}/adopt`, { project })).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível adotar o projeto")),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: discoverKey(context, envId) })
+            invalidateEnv(queryClient, context, envId, projectId)
+            toast.success("Projeto Compose adotado")
+        },
+    })
+}
+
+/** Aplica alterações no `.env` real do host. */
+export function useUpdateHostEnvFile(context: AmbientesApi, envId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: HostEnvFileInput) =>
+            unwrapApi((await context.client.put<ApiResponse<HostEnvFileDto>>(`${context.basePath}/environments/${envId}/env-file`, input)).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar o .env")),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: envFileKey(context, envId) })
+            toast.success(".env atualizado no host")
+        },
+    })
+}
+
 export function usePublish(context: AmbientesApi, envId: string, projectId: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (input: { method: "local" | "cd"; branch?: string }) =>
+        mutationFn: async (input: { method: "local" | "cd" }) =>
             unwrapApi((await context.client.post<ApiResponse<OperationDto>>(`${context.basePath}/environments/${envId}/publish`, input)).data),
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível iniciar a publicação")),
         onSuccess: (operation) => {
@@ -241,9 +306,9 @@ export function useEnvironmentOperationRealtime(context: AmbientesApi, envId: st
 export function useEnvironmentLogs(
     context: AmbientesApi,
     envId: string,
-    options: { enabled: boolean; service?: string | null; onLines: (lines: EnvironmentLogLine[], reset: boolean) => void },
+    options: { enabled: boolean; service?: string | null; onLines: (lines: EnvironmentLogLine[], reset: boolean) => void; reloadKey?: number },
 ): void {
-    const { enabled, service, onLines } = options
+    const { enabled, service, onLines, reloadKey = 0 } = options
     useEffect(() => {
         if (!enabled || !envId) return
         let cancelled = false
@@ -281,5 +346,5 @@ export function useEnvironmentLogs(
             cancelled = true
             clearInterval(timer)
         }
-    }, [context, enabled, envId, onLines, service])
+    }, [context, enabled, envId, onLines, reloadKey, service])
 }

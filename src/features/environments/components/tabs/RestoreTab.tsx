@@ -34,20 +34,21 @@ export function RestoreTab({ context, envId, projectId, env }: { context: Ambien
     if (list.length === 0) return <EmptyState icon={History} title="Nenhuma imagem disponível" description="Publique uma versão para criar a primeira imagem." />
 
     const target = list.find((image) => image.id === selected) ?? null
+    const appliedVersion = env.appliedDbVersion
     const compatibility = target
-        ? checkRestoreCompatibility({ currentVersion: env.dbVersion, imageVersion: target.dbVersion, origin: target.origin, confirmUnverified: confirmed })
+        ? checkRestoreCompatibility({ appliedVersion, imageVersion: target.dbVersion, origin: target.origin, confirmUnverified: confirmed })
         : null
 
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                    Versão atual do banco: <span className="font-mono">{env.dbVersion ?? "desconhecida"}</span>
+                    Schema registrado no Opex: <span className="font-mono">{appliedVersion ?? "desconhecido"}</span>
                 </p>
             </div>
             <div className="space-y-2">
                 {list.map((image) => {
-                    const check = checkRestoreCompatibility({ currentVersion: env.dbVersion, imageVersion: image.dbVersion, origin: image.origin, confirmUnverified: true })
+                    const check = checkRestoreCompatibility({ appliedVersion, imageVersion: image.dbVersion, origin: image.origin, confirmUnverified: true })
                     const blocked = check.level === "blocked"
                     return (
                         <button
@@ -67,7 +68,7 @@ export function RestoreTab({ context, envId, projectId, env }: { context: Ambien
                             <div className="min-w-0">
                                 <p className="truncate font-mono text-sm">{image.tag ?? image.id.slice(0, 20)}</p>
                                 <p className="text-xs text-muted-foreground">
-                                    {formatDate(image.builtAt)} · banco {image.dbVersion ?? "desconhecido"} · {image.origin}
+                                    {formatDate(image.builtAt)} · schema {image.dbVersion ?? "desconhecido"} · {image.origin}
                                 </p>
                             </div>
                             {blocked ? <Badge variant="destructive">Incompatível</Badge> : check.level === "compatible" ? <Badge variant="success">Compatível</Badge> : <Badge variant="warning">Confirmar</Badge>}
@@ -108,7 +109,7 @@ export function RestoreTab({ context, envId, projectId, env }: { context: Ambien
 
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <DatabaseZap className="h-3.5 w-3.5" aria-hidden />
-                A compatibilidade exige a mesma versão do banco; imagens sem versão conhecida pedem confirmação.
+                A compatibilidade compara o schema registrado nas publicações com o da imagem; imagens sem schema conhecido pedem confirmação.
             </p>
         </div>
     )

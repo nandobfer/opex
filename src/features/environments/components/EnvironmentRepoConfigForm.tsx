@@ -18,9 +18,9 @@ import type { EnvironmentRepoConfigDto } from "../types"
 import type { z } from "zod"
 
 type FormValues = z.input<typeof environmentRepoUpdateSchema>
-type SecretDraft = { sshPassword: string; sshPrivateKey: string; sshPassphrase: string; connectionString: string }
+type SecretDraft = { sshPassword: string; sshPrivateKey: string; sshPassphrase: string }
 
-const EMPTY_SECRETS: SecretDraft = { sshPassword: "", sshPrivateKey: "", sshPassphrase: "", connectionString: "" }
+const EMPTY_SECRETS: SecretDraft = { sshPassword: "", sshPrivateKey: "", sshPassphrase: "" }
 
 function secretBadge(status: { configured: boolean; unreadable: boolean }) {
     if (status.unreadable) return <Badge variant="destructive">Ilegível</Badge>
@@ -59,7 +59,6 @@ function ConfigForm({ context, projectId, isOwner, config }: { context: Ambiente
         if (secrets.sshPassword.trim()) secretPayload.sshPassword = { action: "set", value: secrets.sshPassword }
         if (secrets.sshPrivateKey.trim()) secretPayload.sshPrivateKey = { action: "set", value: secrets.sshPrivateKey }
         if (secrets.sshPassphrase.trim()) secretPayload.sshPassphrase = { action: "set", value: secrets.sshPassphrase }
-        if (secrets.connectionString.trim()) secretPayload.connectionString = { action: "set", value: secrets.connectionString }
         update.mutate(
             environmentRepoUpdateSchema.parse({ ...values, ...(Object.keys(secretPayload).length ? { secrets: secretPayload } : {}) }),
         )
@@ -174,12 +173,6 @@ function ConfigForm({ context, projectId, isOwner, config }: { context: Ambiente
                                 </Field>
                             </div>
                         )}
-                        <Field id="secret-connection" label="Connection string do banco (padrão do repositório)">
-                            <div className="space-y-1.5">
-                                {secretBadge(config.secrets.connectionString)}
-                                <Input id="secret-connection" type="password" autoComplete="new-password" value={secrets.connectionString} onChange={(e) => setSecrets((s) => ({ ...s, connectionString: e.target.value }))} placeholder="mongodb://… (substituir)" />
-                            </div>
-                        </Field>
                         <p className="text-xs text-muted-foreground">Os segredos são cifrados e nunca são exibidos de volta; preencha só para substituir.</p>
                     </CardContent>
                 </Card>

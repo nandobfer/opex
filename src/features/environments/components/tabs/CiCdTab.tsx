@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { EmptyState } from "@/components/feedback/EmptyState"
+import { Field } from "@/components/ui/field"
+import { ALL_BRANCHES, EnvironmentBranchPicker } from "../EnvironmentBranchPicker"
 import { useCiCd, type AmbientesApi } from "../../hooks"
 
 const ALL = "__all__"
@@ -18,11 +20,11 @@ function statusVariant(status: string, conclusion: string | null): "default" | "
     return "secondary"
 }
 
-/** Aba CI/CD: runs de todos os workflows do repositório, com filtro por workflow e branch. */
+/** Aba CI/CD: runs de todos os workflows do repositório, com filtro por workflow e branch (com busca). */
 export function CiCdTab({ context, projectId, branch }: { context: AmbientesApi; projectId: string; branch: string }) {
     const [workflow, setWorkflow] = useState<string>(ALL)
     const [branchFilter, setBranchFilter] = useState<string>(branch)
-    const query = useCiCd(context, projectId, { workflow: workflow === ALL ? undefined : workflow, branch: branchFilter.trim() || undefined }, true)
+    const query = useCiCd(context, projectId, { workflow: workflow === ALL ? undefined : workflow, branch: branchFilter === ALL_BRANCHES ? undefined : branchFilter || undefined }, true)
 
     if (query.isLoading) return <Skeleton className="h-40 w-full" />
     if (query.isError) return <ErrorState title="Não foi possível carregar o CI/CD" description="Confira o token do GitHub." onRetry={() => void query.refetch()} />
@@ -31,27 +33,25 @@ export function CiCdTab({ context, projectId, branch }: { context: AmbientesApi;
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-end gap-2">
-                <Select value={workflow} onValueChange={setWorkflow}>
-                    <SelectTrigger className="w-full sm:w-64" aria-label="Workflow">
-                        <SelectValue placeholder="Todos os workflows" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value={ALL}>Todos os workflows</SelectItem>
-                        {workflows.map((item) => (
-                            <SelectItem key={item.id} value={item.path}>
-                                {item.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <input
-                    aria-label="Branch"
-                    value={branchFilter}
-                    onChange={(event) => setBranchFilter(event.target.value)}
-                    placeholder="Branch"
-                    className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-                />
+            <div className="grid gap-3 sm:grid-cols-2">
+                <Field id="cicd-workflow" label="Workflow">
+                    <Select value={workflow} onValueChange={setWorkflow}>
+                        <SelectTrigger id="cicd-workflow" aria-label="Workflow">
+                            <SelectValue placeholder="Todos os workflows" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ALL}>Todos os workflows</SelectItem>
+                            {workflows.map((item) => (
+                                <SelectItem key={item.id} value={item.path}>
+                                    {item.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </Field>
+                <Field id="cicd-branch" label="Branch">
+                    <EnvironmentBranchPicker context={context} projectId={projectId} id="cicd-branch" value={branchFilter} onChange={setBranchFilter} allowAll placeholder="Todas as branches" />
+                </Field>
             </div>
 
             {runs.length === 0 ? (

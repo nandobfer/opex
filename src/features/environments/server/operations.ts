@@ -19,8 +19,8 @@ export interface OperationStepSeed {
 export const PUBLISH_LOCAL_STEPS: readonly OperationStepSeed[] = [
     { id: "git", label: "Clonar/atualizar" },
     { id: "build", label: "Build" },
-    { id: "database", label: "Checagem do banco" },
     { id: "up", label: "Subir containers" },
+    { id: "compat", label: "Compatibilidade do banco" },
     { id: "healthcheck", label: "Healthcheck" },
 ]
 
@@ -32,7 +32,7 @@ export const PUBLISH_CD_STEPS: readonly OperationStepSeed[] = [
 
 /** Etapas da restauração. */
 export const RESTORE_STEPS: readonly OperationStepSeed[] = [
-    { id: "check", label: "Conferir imagem e banco" },
+    { id: "check", label: "Conferir imagem e schema" },
     { id: "up", label: "Recriar containers" },
 ]
 
