@@ -270,7 +270,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   opções é a recebida, salvo `orderItems` (ex.: **uso recente**, ver `modules/repository-recency.md`)
   — a ordenação entra ANTES da busca, então a relevância do fuse.js prevalece e a ordem decide os
   empates. O gatilho com cara de campo é o `FieldTrigger` (`ui/field-trigger.tsx`). `Select` fica para
-  listas curtas e simples.
+  listas curtas e simples. Ao fechar, `onCloseAutoFocus` entrega o evento de restauração de foco no
+  gatilho: quem escolheu um item e vai devolver o foco a **outro** campo chama `event.preventDefault()`
+  (ex.: escolher o repositório na prévia foca a descrição — `modules/tasks.md`).
 - **Período** (início e fim) num formulário usa um só `DateRangeCalendar`
   (`ui/date-range-calendar.tsx`), nunca dois `DatePicker`; o `PresetDateRangeFilter` é só para
   filtros de lista.
@@ -289,7 +291,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   sem sobrescrever o texto digitado durante o envio. O envio aparece inline no campo
   ("Enviando"/"Confirmando" + progresso) e, ao falhar, mostra a mensagem pt-BR com **tentar de novo**
   (reaproveita o arquivo já enviado) e **descartar**; nada é inserido na falha. Sem `uploads`, colar
-  arquivo não interfere no campo.
+  arquivo não interfere no campo. Pela `ref` (`MarkdownFieldHandle.focus()`), quem seleciona dado em
+  outro campo devolve o foco ao texto — se a aba **Visualizar** está ativa, o campo troca para
+  **Escrever** e foca quando o textarea monta.
 - **Mídia de anexo no Markdown**: o `Markdown` resolve a referência estável
   (`/api/attachments/{id}/content`, com `#audio`/`#video`) pelo componente
   `ui/markdown-media.tsx` — imagem, `audio`/`video` com controles ou link de download. Nunca HTML cru.

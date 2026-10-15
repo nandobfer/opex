@@ -201,7 +201,10 @@ mas pelos endpoints internos (sessão, sem token de cliente):
 
 - `/tarefas/previa` — formulário (`OwnerPreviewFormPage`): **Repositório** (só os vinculados, no
   `SearchPicker` com o `GithubRepoLabel` real, listados **por uso recente**) + **descrição** em
-  Markdown (`MarkdownField`). Ao avançar, abre o rascunho e segue para a revisão.
+  Markdown (`MarkdownField`). Ao avançar, abre o rascunho e segue para a revisão. Escolher o
+  repositório (clique ou teclado) **leva o foco para a descrição** — o campo já fica pronto para
+  digitar. Só a escolha transfere o foco: fechar o seletor sem escolher (Esc, clique fora) mantém o
+  comportamento padrão e devolve o foco ao gatilho.
 - `/tarefas/previa/[draftId]` — revisão (`OwnerPreviewReviewPage`), espelhando a revisão do portal:
   prévia (título/resumo/descrição e especificação técnica), repositório, tipo + **prioridade
   editável**, tags, **clareza** e os cards de correção/aprovar. A diferença é o card de estimativa.

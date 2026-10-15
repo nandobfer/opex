@@ -167,6 +167,47 @@ describe("formulário da nova prévia", () => {
         expect(mocks.push).toHaveBeenCalledWith("/tarefas/previa/d9")
     })
 
+    it("selecionar o repositório foca o campo de descrição", async () => {
+        render(<OwnerPreviewFormPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Repositório" }))
+        fireEvent.click(await screen.findByRole("option", { name: /o\/portal/ }))
+        const description = screen.getByLabelText("Descrição")
+        await waitFor(() => expect(document.activeElement).toBe(description))
+    })
+
+    it("fechar o seletor sem escolher repositório não leva o foco para a descrição", async () => {
+        render(<OwnerPreviewFormPage />)
+        const repoTrigger = screen.getByRole("button", { name: "Repositório" })
+        fireEvent.click(repoTrigger)
+        fireEvent.keyDown(screen.getByLabelText("Buscar repositório"), { key: "Escape" })
+        await waitFor(() => expect(screen.queryByLabelText("Buscar repositório")).toBeNull())
+        expect(document.activeElement).not.toBe(screen.getByLabelText("Descrição"))
+    })
+
+    it("trocar o repositório preserva a descrição e devolve o foco ao campo", async () => {
+        mocks.projects = {
+            data: {
+                projects: [
+                    { id: "a".repeat(24), name: "Portal", repo: "o/portal", sigla: "POR" },
+                    { id: "b".repeat(24), name: "Outro", repo: "o/outro", sigla: "OUT" },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+            error: null,
+            refetch: vi.fn(),
+        }
+        render(<OwnerPreviewFormPage />)
+        fireEvent.click(screen.getByRole("button", { name: "Repositório" }))
+        fireEvent.click(await screen.findByRole("option", { name: /o\/portal/ }))
+        const description = screen.getByLabelText("Descrição") as HTMLTextAreaElement
+        fireEvent.change(description, { target: { value: "texto já escrito" } })
+        fireEvent.click(screen.getByRole("button", { name: "Repositório" }))
+        fireEvent.click(await screen.findByRole("option", { name: /o\/outro/ }))
+        await waitFor(() => expect(document.activeElement).toBe(description))
+        expect(description.value).toBe("texto já escrito")
+    })
+
     it("sem repositórios mostra o estado vazio com o link da integração", () => {
         mocks.projects = { data: { projects: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
         render(<OwnerPreviewFormPage />)
