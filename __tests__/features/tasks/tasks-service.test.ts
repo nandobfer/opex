@@ -334,6 +334,21 @@ describe('estimativa da tarefa (portal do cliente)', () => {
     expect((await getTask(a.id)).estimate).toMatchObject({ hours: 4 })
     await expect(updateTaskEstimate('nope', { hours: 1 }, 'local')).rejects.toMatchObject({ status: 404, code: 'TASK_NOT_FOUND' })
   })
+
+  it('guarda as horas decimais convertidas de hh:mm e arredonda a 2 casas', async () => {
+    const pid = await seedProject()
+    const a = await createEstimated(pid, { hours: 5 })
+
+    // 01:30 → 90 min → 1,5 h.
+    const estimate = await updateTaskEstimate(a.id, { hours: 90 / 60 }, 'local')
+    expect(estimate.hours).toBe(1.5)
+    expect((await getTask(a.id)).estimate).toMatchObject({ hours: 1.5 })
+
+    // 00:01 → 0,0166 h → 0,02 h gravado; voltar a minutos devolve o mesmo minuto.
+    const minute = await updateTaskEstimate(a.id, { hours: 1 / 60 }, 'local')
+    expect(minute.hours).toBe(0.02)
+    expect(Math.round(minute.hours * 60)).toBe(1)
+  })
 })
 
 describe('tarefas do portal (cliente)', () => {
