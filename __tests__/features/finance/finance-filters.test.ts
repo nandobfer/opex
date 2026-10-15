@@ -23,7 +23,7 @@ describe("filtros do financeiro (puros)", () => {
     })
 
     it("filtros padrão: mês corrente sem seleções", () => {
-        expect(defaultFinanceFilters()).toEqual({ ...currentMonth(), clientIds: [], projectIds: [] })
+        expect(defaultFinanceFilters()).toEqual({ ...currentMonth(), clientIds: [], projectIds: [], archived: "" })
     })
 
     it("normaliza ids: remove vazios e duplicatas e ordena", () => {
@@ -38,15 +38,22 @@ describe("filtros do financeiro (puros)", () => {
     })
 
     it("monta a consulta normalizada a partir dos filtros", () => {
-        const query = financeQuery({ from: "2026-10-05", to: "2026-10-06", clientIds: ["c2", "c1", "c2"], projectIds: ["p1"] })
+        const query = financeQuery({ from: "2026-10-05", to: "2026-10-06", clientIds: ["c2", "c1", "c2"], projectIds: ["p1"], archived: "" })
         expect(query.clientIds).toEqual(["c1", "c2"])
         expect(query.projectIds).toEqual(["p1"])
         expect(query.from).toBe(new Date(2026, 9, 5, 0, 0, 0, 0).toISOString())
+        expect(query.includeArchived).toBe(false)
+    })
+
+    it("liga a consulta de arquivados com o filtro ativo", () => {
+        const query = financeQuery({ from: "", to: "", clientIds: [], projectIds: [], archived: "1" })
+        expect(query.includeArchived).toBe(true)
+        expect(financeHttpParams(query).archived).toBe("1")
     })
 
     it("serializa os parâmetros HTTP com listas separadas por vírgula", () => {
-        const params = financeHttpParams({ from: "2026-10-05T03:00:00.000Z", to: "", clientIds: ["c1", "c2"], projectIds: [] })
-        expect(params).toEqual({ from: "2026-10-05T03:00:00.000Z", to: undefined, clientIds: "c1,c2", projectIds: undefined })
+        const params = financeHttpParams({ from: "2026-10-05T03:00:00.000Z", to: "", clientIds: ["c1", "c2"], projectIds: [], includeArchived: false })
+        expect(params).toEqual({ from: "2026-10-05T03:00:00.000Z", to: undefined, clientIds: "c1,c2", projectIds: undefined, archived: undefined })
     })
 
     it("detecta filtros de seleção ativos", () => {

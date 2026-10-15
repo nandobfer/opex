@@ -182,15 +182,18 @@ export interface ClienteSessionDto {
     clients: ClienteSelectableDto[]
 }
 
-/** Tarefa concluída na visão de **custo** do cliente (sem horas reais). */
+/** Item de custo do cliente (tarefa concluída **ou** serviço), sem horas reais. */
 export interface ClienteCostTaskDto {
     id: string
+    /** Discriminador: tarefa concluída ou serviço criado manualmente. */
+    kind: "task" | "service"
     code: string
     title: string
     repo: string | null
     projectId: string | null
     clientHours: number
     costBrl: number
+    /** Data efetiva (conclusão da tarefa ou data do serviço). */
     completedAt: string
 }
 
@@ -199,6 +202,8 @@ export interface ClienteCostGroupDto {
     projectId: string | null
     repo: string
     taskCount: number
+    /** Serviços do grupo (contados à parte das tarefas). */
+    serviceCount: number
     totalClientHours: number
     totalCostBrl: number
     tasks: ClienteCostTaskDto[]
@@ -209,7 +214,7 @@ export interface ClienteFinanceDto {
     from: string | null
     to: string | null
     groups: ClienteCostGroupDto[]
-    totals: { taskCount: number; totalClientHours: number; totalCostBrl: number }
+    totals: { taskCount: number; serviceCount: number; totalClientHours: number; totalCostBrl: number }
 }
 
 /** Contagem de tarefas por **tag** (`tag: null` = tarefas sem tag). */
@@ -222,9 +227,9 @@ export interface ClienteTagSlice {
 
 /** Resumo financeiro do dashboard do cliente (presente só para o **admin** do cliente). */
 export interface ClienteDashboardFinanceDto {
-    totals: { totalCostBrl: number; totalClientHours: number; taskCount: number }
+    totals: { totalCostBrl: number; totalClientHours: number; taskCount: number; serviceCount: number }
     /** Custo e horas (infladas) por repositório. */
-    byProject: Array<{ projectId: string | null; repo: string; costBrl: number; clientHours: number; taskCount: number }>
+    byProject: Array<{ projectId: string | null; repo: string; costBrl: number; clientHours: number; taskCount: number; serviceCount: number }>
     /** Evolução mensal do custo dentro do período. */
     timeline: Array<{ bucket: string; costBrl: number }>
 }
@@ -244,4 +249,25 @@ export interface ClienteDashboardDto {
     byProject: DashboardProjectSlice[]
     timeline: DashboardTimelinePoint[]
     finance: ClienteDashboardFinanceDto | null
+}
+
+/**
+ * Detalhe de um serviço na visão do cliente: descrição, anexos e o custo/horas infladas.
+ * Sem horas reais, fator, custo/hora ou modelo (dados internos do dono).
+ */
+export interface ClienteServiceDto {
+    id: string
+    code: string
+    title: string | null
+    summary: string | null
+    description: string
+    repo: string | null
+    projectId: string | null
+    serviceDate: string
+    /** Horas infladas (H x fator). */
+    clientHours: number
+    /** Custo (R$). */
+    billingBrl: number
+    /** Anexos confirmados do serviço. */
+    attachmentsCount: number
 }

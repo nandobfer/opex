@@ -185,6 +185,15 @@ e opções na própria aba da página "Provedores de IA".
   fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
   `understand-stream.ts`.
 
+## Serviços (título, resumo e tags)
+
+O módulo **Serviços** (`modules/services.md`) reusa as configurações existentes em vez de ter uma
+feature própria: o **título/resumo** saem da feature **"Orçamentos"** (provedores de texto + o mesmo
+`streamAi`) e as **tags** da feature **"Tags de tarefas"** (`generateTagsForInput`, texto ou JEV).
+Roda em segundo plano (`runAfterResponse`) e registra o consumo em `ai_consumption_logs` (origem
+`service-ai`, `subject: service:{id}`) e uma linha em `ai_usage_logs`. Falha vira `aiStatus: "error"`
+com "Gerar novamente" (`POST /api/services/[id]/ai`).
+
 ## Feature "Tags de tarefas"
 
 - Configuração em `ai_feature_settings` (`feature: "task-tags"`), schema Zod `taskTagsSettingsSchema`:

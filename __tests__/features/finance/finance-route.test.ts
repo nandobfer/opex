@@ -14,7 +14,7 @@ const call = (query = "") => GET(new NextRequest(`http://localhost/api/financeir
 
 beforeEach(() => {
     vi.clearAllMocks()
-    mocks.listFinanceByClient.mockResolvedValue({ from: null, to: null, groups: [], totals: { taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } })
+    mocks.listFinanceByClient.mockResolvedValue({ from: null, to: null, groups: [], totals: { taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } })
 })
 
 describe("GET /api/financeiro", () => {
@@ -26,7 +26,14 @@ describe("GET /api/financeiro", () => {
             to: undefined,
             clientIds: [id(1), id(2)],
             projectIds: [id(3)],
+            archived: false,
         })
+    })
+
+    it("encaminha o filtro de arquivados", async () => {
+        const response = await call("?archived=1")
+        expect(response.status).toBe(200)
+        expect(mocks.listFinanceByClient).toHaveBeenCalledWith({ from: undefined, to: undefined, clientIds: [], projectIds: [], archived: true })
     })
 
     it("recusa identificador malformado com 400 e não consulta", async () => {
@@ -36,6 +43,6 @@ describe("GET /api/financeiro", () => {
 
     it("sem parâmetros consulta sem filtros", async () => {
         expect((await call()).status).toBe(200)
-        expect(mocks.listFinanceByClient).toHaveBeenCalledWith({ from: undefined, to: undefined, clientIds: [], projectIds: [] })
+        expect(mocks.listFinanceByClient).toHaveBeenCalledWith({ from: undefined, to: undefined, clientIds: [], projectIds: [], archived: false })
     })
 })

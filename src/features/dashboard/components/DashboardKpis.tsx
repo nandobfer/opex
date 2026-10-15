@@ -50,5 +50,6 @@ export function dashboardKpiItems(kpis: Kpis): DashboardKpiItem[] {
         { label: "Custo de IA", hint: "No período · USD", value: kpis.costUsd, formatter: formatUsd },
         { label: "Mesas ativas", hint: "Situação atual", value: kpis.activeWorkbenches, formatter: formatCount },
         { label: "Mesas executando", hint: "Situação atual", value: kpis.runningWorkbenches, formatter: formatCount },
+        { label: "Serviços", hint: "No período", value: kpis.services, formatter: formatCount },
     ]
 }

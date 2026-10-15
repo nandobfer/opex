@@ -1,8 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Banknote, Filter, Loader2, RefreshCw } from "lucide-react"
+import { Banknote, Filter, Loader2, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,6 +15,7 @@ import { useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { useTaskOptions } from "@/features/tasks/hooks/useTasks"
 import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
+import { SERVICE_NEW_PATH } from "@/features/services/constants"
 import { defaultFinanceFilters, FINANCE_FILTER_SCHEMA, hasSelectionFilters } from "../filters"
 import { formatBillingBrl, formatHours } from "../format"
 import { useFinanceByClient, useFinanceRealtime } from "../hooks/useFinance"
@@ -23,10 +25,11 @@ import { FinanceFiltersBar } from "./FinanceFiltersBar"
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 
 /**
- * Financeiro (`/financeiro`): faturamento das tarefas **concluídas** agrupado por **cliente**, por
- * período e filtros de cliente/repositório (na URL; período padrão = mês corrente). Cada cliente é
- * expansível para listar as tarefas. **Somente leitura** — o valor é o snapshot da estimativa e a
- * conclusão vem da auditoria.
+ * Financeiro (`/financeiro`): faturamento das **tarefas concluídas** e dos **serviços** criados
+ * manualmente, agrupado por **cliente**, por período e filtros de cliente/repositório (na URL;
+ * período padrão = mês corrente). Cada cliente é expansível para listar os itens. O filtro "Mostrar
+ * arquivados" revela serviços arquivados (fora dos totais). O valor da tarefa é o snapshot da
+ * estimativa; o do serviço, o próprio snapshot.
  */
 export function FinancePage() {
     const reduceMotion = useReducedMotion()
@@ -65,28 +68,36 @@ export function FinancePage() {
                     </span>
                     <div>
                         <h1 className="text-lg font-semibold md:text-2xl">Financeiro</h1>
-                        <p className="text-sm text-muted-foreground">Faturamento das tarefas concluídas por cliente</p>
+                        <p className="text-sm text-muted-foreground">Faturamento das tarefas concluídas e dos serviços, por cliente</p>
                     </div>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={() => void financeQuery.refetch()} disabled={financeQuery.isFetching} aria-label="Atualizar financeiro">
-                    <motion.span animate={{ rotate: financeQuery.isFetching ? 360 : 0 }} transition={financeQuery.isFetching ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
-                        <RefreshCw className="h-4 w-4" aria-hidden />
-                    </motion.span>
-                    Atualizar
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild size="sm" className="h-9 gap-1.5">
+                        <Link href={SERVICE_NEW_PATH}>
+                            <Plus className="h-4 w-4" aria-hidden />
+                            Novo serviço
+                        </Link>
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 gap-2" onClick={() => void financeQuery.refetch()} disabled={financeQuery.isFetching} aria-label="Atualizar financeiro">
+                        <motion.span animate={{ rotate: financeQuery.isFetching ? 360 : 0 }} transition={financeQuery.isFetching ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
+                            <RefreshCw className="h-4 w-4" aria-hidden />
+                        </motion.span>
+                        Atualizar
+                    </Button>
+                </div>
             </header>
 
             <FinanceFiltersBar
                 filters={filters}
                 setFilters={setFilters}
                 onClear={resetFilters}
-                total={totals?.taskCount}
+                total={(totals?.taskCount ?? 0) + (totals?.serviceCount ?? 0)}
                 clients={clientsQuery.data ?? []}
                 projects={projectsQuery.data?.projects ?? []}
             />
 
             <Card>
-                <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+                <CardContent className="grid gap-4 pt-6 sm:grid-cols-4">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Faturamento no período</p>
                         <p className="font-mono text-2xl font-bold text-primary">{data ? <AnimatedNumber value={totals?.totalBillingBrl ?? 0} formatter={formatBillingBrl} /> : "—"}</p>
@@ -97,7 +108,11 @@ export function FinancePage() {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tarefas</p>
-                        <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.taskCount ?? 0} /> : "—"}</p>
+                        <p className="font-mono text-2xl font-bold" data-testid="finance-total-tasks">{data ? <AnimatedNumber value={totals?.taskCount ?? 0} /> : "—"}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Serviços</p>
+                        <p className="font-mono text-2xl font-bold" data-testid="finance-total-services">{data ? <AnimatedNumber value={totals?.serviceCount ?? 0} /> : "—"}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -116,13 +131,13 @@ export function FinancePage() {
                         (hasSelection ? (
                             <EmptyState
                                 icon={Filter}
-                                title="Nenhuma tarefa para os filtros selecionados"
-                                description="Ajuste os filtros de cliente ou repositório, ou limpe a seleção para ver todas as tarefas do período."
+                                title="Nenhum item para os filtros selecionados"
+                                description="Ajuste os filtros de cliente ou repositório, ou limpe a seleção para ver as tarefas e os serviços do período."
                                 actionLabel="Limpar seleção"
                                 onAction={clearSelection}
                             />
                         ) : (
-                            <EmptyState icon={Banknote} title="Nenhuma tarefa concluída neste período" description="Conclua tarefas com estimativa para vê-las aqui, agrupadas por cliente." />
+                            <EmptyState icon={Banknote} title="Nenhuma tarefa concluída ou serviço neste período" description="Conclua tarefas com estimativa ou crie um serviço para vê-los aqui, agrupados por cliente." />
                         ))}
                     {view === "list" && (
                         <motion.div variants={listContainer} initial="hidden" animate="visible" className="space-y-2">

@@ -3,11 +3,13 @@ import type { MemoryModel } from "../../helpers/memory-model"
 
 const mocks = vi.hoisted(() => ({
     concludedColumnKeys: vi.fn(),
+    listServices: vi.fn(),
     models: {} as Record<string, MemoryModel>,
 }))
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
 vi.mock("@/features/tasks/server/service", () => ({ concludedColumnKeys: mocks.concludedColumnKeys, TASK_AUDIT_ENTITY: "Tarefa" }))
+vi.mock("@/features/services/server/service", () => ({ listServiceAggregates: mocks.listServices }))
 vi.mock("@/lib/db/models/AuditLog", async () => {
     const { memoryModel } = await import("../../helpers/memory-model")
     mocks.models.audit = memoryModel()
@@ -61,6 +63,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     for (const model of Object.values(mocks.models)) model.docs.length = 0
     mocks.concludedColumnKeys.mockResolvedValue(["done"])
+    mocks.listServices.mockResolvedValue([])
 })
 
 describe("listFinanceByClient", () => {
@@ -81,7 +84,22 @@ describe("listFinanceByClient", () => {
         mocks.concludedColumnKeys.mockResolvedValue([])
         const result = await listFinanceByClient(RANGE)
         expect(result.groups).toEqual([])
-        expect(result.totals).toEqual({ taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 })
+        expect(result.totals).toEqual({ taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 })
+    })
+
+    it("lista serviços mesmo sem colunas de conclusão nem tarefas", async () => {
+        mocks.concludedColumnKeys.mockResolvedValue([])
+        const client = await mocks.models.client.create({ name: "Acme" })
+        mocks.listServices.mockResolvedValue([
+            { id: "svc1", code: "SRV-1", title: "Serviço", summary: null, clientId: String(client._id), projectId: null, project: null, taskId: null, serviceDate: new Date("2026-10-10T00:00:00.000Z").getTime(), hours: 1, clientHours: 2, billingBrl: 200, archived: false },
+        ])
+
+        const result = await listFinanceByClient(RANGE)
+
+        expect(result.groups).toHaveLength(1)
+        expect(result.groups[0]).toMatchObject({ clientName: "Acme", taskCount: 0, serviceCount: 1, totalBillingBrl: 200 })
+        expect(result.groups[0]!.tasks[0]).toMatchObject({ kind: "service", code: "SRV-1" })
+        expect(result.totals.serviceCount).toBe(1)
     })
 
     it("filtra pela data de conclusão derivada da auditoria (fora do período é ignorada)", async () => {

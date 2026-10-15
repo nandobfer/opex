@@ -88,7 +88,8 @@ Logins e sessões: `aicontext/modules/auth.md`.
   contexto** (`ClienteContextBar`): seletor de cliente (troca sem novo login), aviso de
   pré-visualização e atalho de volta ao Opex. Sem itens internos do dono.
 - Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
-  `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin).
+  `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin) e, para o
+  **admin**, `/cliente/servicos/[id]` (detalhe de um serviço criado pelo dono).
 - **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com
   "Custo" no lugar de "Faturamento". Cada card/linha leva à página da tarefa. O filtro **Repositório**
   lista as opções **por uso recente do usuário** (ver `modules/repository-recency.md`); adicionar um
@@ -131,6 +132,9 @@ da tarefa ou o do próprio envio). Um anexo de outro cliente responde 404 (não 
   ainda não foi vinculado (na prática, antes de salvar a nova tarefa). Mídia **colada** na descrição
   entra pela mesma fila (`MarkdownField.uploads`) e, portanto, no mesmo rascunho — e o formulário
   **não salva** enquanto houver envio em andamento.
+- **Serviços**: os anexos de um **serviço** (`serviceId`) usam as mesmas rotas; o cliente os vê e
+  baixa no detalhe `/cliente/servicos/[id]`. A leitura **revalida** o serviço no estado atual:
+  arquivar o serviço ou trocar o cliente bloqueia o acesso na hora (`modules/services.md`).
 - **Tempo real**: o dono publica `cliente-tasks-updated` no canal do cliente quando os anexos mudam; a
   tela invalida a lista (também ao reconectar).
 
@@ -153,12 +157,15 @@ consultas e os DTOs são próprios do portal (autorizados e recortados pelo clie
   (`features/dashboard/period.ts` — 7/30/90 dias ou mês atual, padrão 30 dias), persistidas com chave
   própria do portal (`opex:cliente:dashboard:period:v1`); o fuso IANA do navegador define os buckets.
 - **Financeiro** (`GET /api/cliente/financeiro?from&to&projectIds`, admin): **custo** das tarefas
-  concluídas, agrupado por **repositório**, no **mesmo padrão** do Financeiro do dono — filtros no
+  concluídas **e dos serviços criados pelo dono**, agrupado por **repositório** (serviço sem
+  repositório → "Sem repositório"), no **mesmo padrão** do Financeiro do dono — filtros no
   `ListFilters` (Período com `PresetDateRangeFilter` e Repositórios com `CadastroMultiSelect`), com
   `from`/`to`/`projectIds` na **URL** (`useUrlFilters`, padrão mês corrente), cartão de totais (Custo,
-  Horas e Tarefas), botão Atualizar e grupos **expansíveis**. Usa o snapshot (`clientHours`/`billingBrl`)
-  e reusa a regra de conclusão do Financeiro do dono (`completionTimestamps`). Nunca expõe horas reais,
-  fator ou custo por hora. Período ou fuso inválido → **400** (`validationError`).
+  Horas, Tarefas e **Serviços**), botão Atualizar e grupos **expansíveis**. Usa o snapshot
+  (`clientHours`/`billingBrl`) e reusa a regra de conclusão do Financeiro do dono
+  (`completionTimestamps`). Nunca expõe horas reais, fator ou custo por hora. O **detalhe de um
+  serviço** (`/cliente/servicos/[id]`, admin, `GET /api/cliente/servicos/[id]`) mostra descrição,
+  anexos e custo/horas infladas. Período ou fuso inválido → **400** (`validationError`).
 - **Usuários** (`/cliente/usuarios`, admin): CRUD dos usuários do cliente (mesmos componentes do dono),
   com as regras de permissão acima.
 
@@ -215,7 +222,8 @@ cada cliente existente, preservando os **tokens/URLs** já em uso. Tarefas pedid
 | `PATCH /api/cliente/tasks/[id]` | Prioridade da própria tarefa (`{ priority }`) |
 | `POST /api/cliente/tasks/[id]/comments` | Comentário do usuário do portal |
 | `GET /api/cliente/dashboard?from&to&timeZone` | Distribuições de tarefas (custo e horas só para admin) |
-| `GET /api/cliente/financeiro?from&to&projectIds` | Custo por repositório (admin) |
+| `GET /api/cliente/financeiro?from&to&projectIds` | Custo por repositório (admin) — tarefas **e serviços** |
+| `GET /api/cliente/servicos/[id]` | Detalhe de um serviço (admin): descrição, anexos e custo |
 | `GET/POST /api/cliente/usuarios` | Lista / cria usuário (admin do cliente) |
 | `PATCH/DELETE /api/cliente/usuarios/[id]` | Edita / remove vínculo (admin do cliente) |
 | `POST /api/cliente/usuarios/[id]/token` | Regenera o token próprio (admin do cliente) |
@@ -229,11 +237,11 @@ Como o portal é autenticado por **sessão**, ele **não** entra na especificaç
 - `src/features/orcamentos/` — `constants.ts` (caminhos e vocabulário, `CLIENTE_COST_LABEL`),
   `logic.ts` (puro: `computeClientEstimate`, `formatHoursLabel`, `usernameFromName`,
   `randomUsernameSuffix`), `clarity.ts`, `schemas.ts`, `types.ts` (DTOs incl. `ClienteUserDto`,
-  `ClienteSessionDto`, `ClienteFinanceDto`, `ClienteDashboardDto`), `preview-prompt.ts`, `review.ts`,
-  hooks, `server/{clients,drafts,users,token,portal,owner,preview,similar,tag-views,estimate-hours,
-  portal-dashboard,portal-aggregate,portal-finance}.ts`, `components/` (editor, clientes, **users/**
+  `ClienteSessionDto`, `ClienteFinanceDto`, `ClienteServiceDto`, `ClienteDashboardDto`),
+  `preview-prompt.ts`, `review.ts`, hooks, `server/{clients,drafts,users,token,portal,owner,preview,similar,tag-views,estimate-hours,
+  portal-dashboard,portal-aggregate,portal-finance,portal-services}.ts`, `components/` (editor, clientes, **users/**
   compartilhado) e `portal/` (contexto de sessão, shell, picker, páginas Dashboard/Tarefas/Financeiro/
-  Usuários, `period.ts`, `useClientePeriod.ts`, `filters.ts`, `components/`).
+  Usuários/**Serviço**, `period.ts`, `useClientePeriod.ts`, `filters.ts`, `components/`).
 - `src/app/cliente/(portal)/**` (layout autenticado e sub-rotas) e `src/app/cliente/page.tsx`
   (entrada); `src/app/api/cliente/**`; `src/app/(app)/integracoes/clientes/[clientId]/page.tsx`.
 - `src/lib/db/models/User.ts` e `src/lib/db/migrations/backfill-client-users.ts`.

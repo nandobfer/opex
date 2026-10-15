@@ -25,7 +25,7 @@ export const ATTACHMENTS_QUERY_KEY = "attachments"
  */
 const DEAD_RESERVATION_CODES = new Set(["ATTACHMENT_NOT_UPLOADED", "ATTACHMENT_EMPTY", "ATTACHMENT_TOO_LARGE"])
 
-export const attachmentsKey = (target: AttachmentTarget) => [ATTACHMENTS_QUERY_KEY, target.taskId ?? null, target.draftId ?? null] as const
+export const attachmentsKey = (target: AttachmentTarget) => [ATTACHMENTS_QUERY_KEY, target.taskId ?? null, target.draftId ?? null, target.serviceId ?? null] as const
 
 /** Cliente de anexos sobre um axios qualquer (o do app ou o do portal). */
 export function useAttachmentClient(axiosInstance: AxiosInstance): AttachmentClient {
@@ -41,7 +41,7 @@ export function useTaskAttachments(client: AttachmentClient, target: AttachmentT
     return useQuery({
         queryKey: attachmentsKey(target),
         queryFn: () => client.list(target),
-        enabled: enabled && Boolean(target.taskId ?? target.draftId),
+        enabled: enabled && Boolean(target.taskId ?? target.draftId ?? target.serviceId),
     })
 }
 

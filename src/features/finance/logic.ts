@@ -1,9 +1,9 @@
 import type { ProjectRef } from "@/features/tasks/types"
-import type { FinanceByClientDto, FinanceClientGroupDto, FinanceTotalsDto } from "./types"
+import type { FinanceByClientDto, FinanceClientGroupDto, FinanceItemDto, FinanceTotalsDto } from "./types"
 
 /**
  * Regras puras da visão Financeiro: derivação da data de conclusão a partir da auditoria e agregação
- * do faturamento por cliente. Testável sem banco.
+ * do faturamento por cliente (tarefas concluídas **e** serviços). Testável sem banco.
  */
 
 /** Evento de auditoria mínimo usado para derivar a conclusão de uma tarefa. */
@@ -34,8 +34,9 @@ export function completionTimestamps(logs: readonly CompletionAuditLog[], closed
     return result
 }
 
-/** Tarefa candidata já normalizada para a agregação. */
+/** Tarefa concluída já normalizada para a agregação. */
 export interface FinanceTaskInput {
+    kind: "task"
     id: string
     code: string
     title: string
@@ -52,40 +53,99 @@ export interface FinanceTaskInput {
     completedAt: number
 }
 
+/** Serviço já normalizado para a agregação. */
+export interface FinanceServiceInput {
+    kind: "service"
+    id: string
+    code: string
+    title: string
+    project: ProjectRef | null
+    clientId: string
+    hours: number
+    clientHours: number
+    billingBrl: number
+    /** Data do serviço em ms. */
+    serviceDate: number
+    taskId: string | null
+    /** Arquivado: entra na lista com o filtro ligado, mas **fora** dos totais. */
+    archived?: boolean
+}
+
+export type FinanceItemInput = FinanceTaskInput | FinanceServiceInput
+
 const REMOVED_GROUP = "__removed__"
 const REMOVED_LABEL = "Cliente removido"
 
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
+/** Instante (ms) usado para ordenar e para a evolução mensal do item (conclusão ou data do serviço). */
+export function financeItemTimestamp(item: FinanceItemDto): number {
+    return item.kind === "service" ? new Date(item.serviceDate).getTime() : new Date(item.completedAt).getTime()
+}
+
+/** Instante (ms) do item de entrada (a tarefa tem conclusão; o serviço tem data própria). */
+export function financeInputTimestamp(item: FinanceItemInput): number {
+    return item.kind === "service" ? item.serviceDate : item.completedAt
+}
+
+/** Serviço arquivado: entra na lista (com o filtro ligado), mas fora das somas e contadores. */
+function isArchived(item: FinanceItemInput): boolean {
+    return item.kind === "service" && item.archived === true
+}
+
+function toItemDto(item: FinanceItemInput): FinanceItemDto {
+    if (item.kind === "service") {
+        return {
+            kind: "service",
+            id: item.id,
+            code: item.code,
+            title: item.title,
+            project: item.project,
+            hours: item.hours,
+            clientHours: item.clientHours,
+            billingBrl: item.billingBrl,
+            serviceDate: new Date(item.serviceDate).toISOString(),
+            taskId: item.taskId,
+            archived: item.archived === true,
+        }
+    }
+    return {
+        kind: "task",
+        id: item.id,
+        code: item.code,
+        title: item.title,
+        project: item.project,
+        hours: item.hours,
+        clientHours: item.clientHours,
+        billingBrl: item.billingBrl,
+        completedAt: new Date(item.completedAt).toISOString(),
+    }
+}
+
 /**
- * Agrupa as tarefas concluídas por cliente e soma o faturamento do período. O cliente cujo registro
- * não existe mais cai no grupo **"Cliente removido"**. Grupos por faturamento desc (desempate por
- * nome); dentro do grupo, as tarefas por data de conclusão desc.
+ * Agrupa tarefas e serviços por cliente e soma o faturamento do período. O cliente cujo registro não
+ * existe mais cai no grupo **"Cliente removido"**. Grupos por faturamento desc (desempate por nome);
+ * dentro do grupo, os itens por data desc. Serviços **arquivados** aparecem na lista, mas **não**
+ * entram nos totais nem nos contadores.
  */
-export function aggregateFinance(tasks: readonly FinanceTaskInput[], clientsById: ReadonlyMap<string, string>, range: { from: string | null; to: string | null }): FinanceByClientDto {
+export function aggregateFinance(items: readonly FinanceItemInput[], clientsById: ReadonlyMap<string, string>, range: { from: string | null; to: string | null }): FinanceByClientDto {
     const groups = new Map<string, FinanceClientGroupDto>()
-    for (const task of tasks) {
-        const clientName = clientsById.get(task.clientId)
-        const groupKey = clientName ? task.clientId : REMOVED_GROUP
+    for (const item of items) {
+        const clientName = clientsById.get(item.clientId)
+        const groupKey = clientName ? item.clientId : REMOVED_GROUP
         let group = groups.get(groupKey)
         if (!group) {
-            group = { clientId: clientName ? task.clientId : null, clientName: clientName ?? REMOVED_LABEL, taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0, tasks: [] }
+            group = { clientId: clientName ? item.clientId : null, clientName: clientName ?? REMOVED_LABEL, taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0, tasks: [] }
             groups.set(groupKey, group)
         }
-        group.tasks.push({
-            id: task.id,
-            code: task.code,
-            title: task.title,
-            project: task.project,
-            hours: task.hours,
-            clientHours: task.clientHours,
-            billingBrl: task.billingBrl,
-            completedAt: new Date(task.completedAt).toISOString(),
-        })
-        group.taskCount += 1
-        group.totalHours += task.hours
-        group.totalClientHours += task.clientHours
-        group.totalBillingBrl += task.billingBrl
+        group.tasks.push(toItemDto(item))
+        if (!isArchived(item)) {
+            if (item.kind === "task") group.taskCount += 1
+            else group.serviceCount += 1
+            group.totalHours += item.hours
+            group.totalClientHours += item.clientHours
+            group.totalBillingBrl += item.billingBrl
+        }
     }
 
     const list = [...groups.values()]
@@ -93,12 +153,13 @@ export function aggregateFinance(tasks: readonly FinanceTaskInput[], clientsById
         group.totalHours = round2(group.totalHours)
         group.totalClientHours = round2(group.totalClientHours)
         group.totalBillingBrl = round2(group.totalBillingBrl)
-        group.tasks.sort((a, b) => b.completedAt.localeCompare(a.completedAt) || a.code.localeCompare(b.code))
+        group.tasks.sort((a, b) => financeItemTimestamp(b) - financeItemTimestamp(a) || a.code.localeCompare(b.code))
     }
     list.sort((a, b) => b.totalBillingBrl - a.totalBillingBrl || a.clientName.localeCompare(b.clientName, "pt-BR"))
 
     const totals: FinanceTotalsDto = {
         taskCount: list.reduce((sum, group) => sum + group.taskCount, 0),
+        serviceCount: list.reduce((sum, group) => sum + group.serviceCount, 0),
         totalHours: round2(list.reduce((sum, group) => sum + group.totalHours, 0)),
         totalClientHours: round2(list.reduce((sum, group) => sum + group.totalClientHours, 0)),
         totalBillingBrl: round2(list.reduce((sum, group) => sum + group.totalBillingBrl, 0)),

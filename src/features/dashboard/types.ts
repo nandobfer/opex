@@ -21,7 +21,9 @@ export interface DashboardKpis {
     tasksInProgress: number
     /** Tarefas cuja conclusão (auditoria) caiu no período. */
     tasksCompleted: number
-    /** Faturamento (snapshot) das tarefas concluídas no período. */
+    /** Serviços com data no período (não arquivados). */
+    services: number
+    /** Faturamento (snapshot) das tarefas concluídas **e** dos serviços no período. */
     billingBrl: number
     /** Horas do cliente (H × fator) das tarefas concluídas no período. */
     clientHours: number
@@ -66,6 +68,8 @@ export interface DashboardFinanceClient {
     billingBrl: number
     clientHours: number
     taskCount: number
+    /** Serviços ativos do cliente no período. */
+    serviceCount: number
 }
 
 export interface DashboardFinancePoint {

@@ -47,6 +47,7 @@ export function ClienteDashboardPage() {
                   ? [
                         { label: CLIENTE_COST_LABEL, hint: "No período", value: data.finance.totals.totalCostBrl, formatter: formatBrl },
                         { label: "Horas", hint: "No período", value: data.finance.totals.totalClientHours, formatter: formatHours },
+                        { label: "Serviços", hint: "No período", value: data.finance.totals.serviceCount, formatter: formatCount },
                     ]
                   : []),
           ]
@@ -79,7 +80,7 @@ function ClienteDashboardSkeleton({ admin }: { admin: boolean }) {
     return (
         <div className="space-y-6" aria-label="Carregando dashboard">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-                {Array.from({ length: admin ? 5 : 3 }, (_, index) => (
+                {Array.from({ length: admin ? 6 : 3 }, (_, index) => (
                     <Card key={index}>
                         <CardContent className="flex flex-col gap-2 p-4">
                             <Skeleton className="h-3 w-20" />

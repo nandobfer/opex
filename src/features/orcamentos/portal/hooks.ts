@@ -13,8 +13,9 @@ import { ATTACHMENTS_QUERY_KEY, useAttachmentClient } from "@/features/tasks/att
 import { CLIENTE_REPO_RECENTS_PATH } from "@/features/repository-recency/constants"
 import { useRepoRecentsSource, type RepoRecentsSource } from "@/features/repository-recency/hooks"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "../constants"
+import { SERVICES_UPDATED_EVENT } from "@/features/services/constants"
 import type { CreateDraftInput, ClienteUserInput } from "../schemas"
-import type { ClienteDashboardDto, ClienteFinanceDto, ClientePortalOptionsDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, ClienteUserDto, CreatedClienteUserDto, OrcamentoDraftDto } from "../types"
+import type { ClienteDashboardDto, ClienteFinanceDto, ClientePortalOptionsDto, ClienteServiceDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, ClienteUserDto, CreatedClienteUserDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
 
 /** Consultas e mutações do portal do cliente (axios autenticado pelo token). */
@@ -24,6 +25,17 @@ const optionsKey = [CLIENTE_QUERY_KEY, "options"] as const
 const tasksKey = (includeArchived: boolean) => [CLIENTE_QUERY_KEY, "tasks", { includeArchived }] as const
 const taskKey = (id: string) => [CLIENTE_QUERY_KEY, "task", id] as const
 const draftKey = (id: string) => [CLIENTE_QUERY_KEY, "draft", id] as const
+const serviceKey = (id: string) => [CLIENTE_QUERY_KEY, "service", id] as const
+
+/** Detalhe de um serviço do cliente (admin): descrição, anexos e custo. */
+export function useClienteService(id: string) {
+    const { api } = useClientePortal()
+    return useQuery({
+        queryKey: serviceKey(id),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteServiceDto>>(`/cliente/servicos/${id}`)).data),
+        enabled: Boolean(id),
+    })
+}
 
 export function useClienteOptions() {
     const { api } = useClientePortal()
@@ -171,8 +183,10 @@ export function useClienteRealtime(): void {
             void queryClient.invalidateQueries({ queryKey: [ATTACHMENTS_QUERY_KEY] })
         }
         channel.bind(CLIENTE_TASKS_UPDATED_EVENT, handler)
+        channel.bind(SERVICES_UPDATED_EVENT, handler)
         return () => {
             channel.unbind(CLIENTE_TASKS_UPDATED_EVENT, handler)
+            channel.unbind(SERVICES_UPDATED_EVENT, handler)
             releaseChannel(name)
         }
     }, [clientId, queryClient])
