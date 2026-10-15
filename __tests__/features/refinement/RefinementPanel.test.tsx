@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     start: vi.fn(),
     action: vi.fn(),
     stream: vi.fn(),
+    reconnect: vi.fn(),
 }))
 
 vi.mock('@/features/refinement/hooks/useRefinement', () => ({
@@ -19,6 +20,7 @@ vi.mock('@/features/refinement/hooks/useRefinement', () => ({
     useTaskRefinement: mocks.refinement,
     useStartRefinement: mocks.start,
     useRefinementAction: mocks.action,
+    useRefinementReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
 }))
 vi.mock('@/features/refinement/hooks/useRefinementStream', () => ({ useRefinementStream: mocks.stream }))
 vi.mock('@/features/agentic/components/workbench/Timeline', () => ({ Timeline: () => <div data-testid="timeline" /> }))
@@ -85,5 +87,20 @@ describe('RefinementPanel', () => {
         render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
         expect(screen.getByText(/esclarecida e salva na tarefa/)).not.toBeNull()
         expect(screen.queryByRole('button', { name: /Continuar/ })).toBeNull()
+    })
+
+    it('interrompido/falho com sessão oferece Reconectar ao lado de Continuar', () => {
+        mocks.reconnect.mockResolvedValue({ refinement: { runState: 'running', reconnect: { outcome: 'attached', message: null, at: '2026-10-09T12:00:00.000Z' } }, availability: { available: true } })
+        mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'interrupted', resolved: false, sessionId: 's1', sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.getByRole('button', { name: /Continuar/ })).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: /Reconect/ }))
+        expect(mocks.reconnect).toHaveBeenCalled()
+    })
+
+    it('sem sessão do OpenCode não oferece Reconectar', () => {
+        mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'interrupted', resolved: false, sessionId: null, sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.queryByRole('button', { name: /Reconect/ })).toBeNull()
     })
 })

@@ -278,7 +278,8 @@ done → Reabrir mesa (texto ao planejador) → planning
 
 - `runState`: `idle` | `running` | `failed` | `interrupted`. Ações por etapa em
   `workbenchActions` (mesma regra na tela e nas rotas): executando só **Parar**; falha/interrupção →
-  **Reconectar** (acompanha a sessão existente **sem** reenviar mensagem — ver "Reconectar"),
+  **Reconectar** (acompanha a sessão existente **sem** reenviar mensagem — ver "Reconectar", com o
+  ciclo automático 1 s→16 s quando a interrupção **não** veio de um Parar),
   **Tentar novamente** (reenvia a mensagem da etapa pedindo para retomar) e, depois do plano,
   **Voltar ao planejamento**.
 - **Planejamento**: só leitura; o texto do turno vira uma nova **versão do plano** (com o pedido que
@@ -373,15 +374,34 @@ done → Reabrir mesa (texto ao planejador) → planning
   pergunta viram uma lista de **linhas selecionáveis** (`AgentQuestionOptions`): cada opção com o
   texto e, abaixo, a **descrição** mais discreta; a linha inteira é o botão (rádio na escolha única,
   caixa na múltipla). O card é compartilhado com o refinamento (`components/agent-questions/`).
+  **Pendências são chaveadas por id** (o servidor faz `$pull` + `$push` e a timeline atualiza o item
+  existente): uma releitura do estado nunca vira card duplicado.
 - **Reconectar** (`POST /workbenches/[id]/actions/reconnect`): quando a mesa aparece em falha/
   interrupção mas o agente **continua rodando** no OpenCode (queda de conexão ou reinício do app),
   religa o acompanhamento da **mesma sessão** — **sem** enviar prompt nem trocar agente/modelo. O app
-  confere a sessão no OpenCode (`session.get`/`session.active`): se ainda executa, volta a assinar o
-  SSE e segue até o fim; se já terminou durante a queda, **recupera o resultado do histórico**
-  (`message.list`) e aplica a transição da etapa **uma única vez**; se não há execução em andamento,
-  avisa e mantém o estado. Também **restaura perguntas e permissões** que ficaram pendentes (o SSE é
-  só ao vivo) e usa o `turnStartedAt` como marco do turno. Sem sessão, sem etapa de execução ou com
-  o agente indisponível, a ação responde 409 e a tela continua oferecendo **Tentar novamente**.
+  confere a sessão no OpenCode (mesmo `probeAttachSession` na tela e no acompanhamento) e a resposta
+  (HTTP 200) traz um **desfecho estável** em `reconnect.outcome` do estado: **`attached`** (ainda
+  executa — volta a assinar o SSE e segue até o fim), **`recovered`** (terminou durante a queda —
+  recupera o resultado do histórico e aplica a transição da etapa **uma única vez**), **`nothing`**
+  (sessão inexistente ou nada rodando — mantém o estado e explica) ou **`transient`** (OpenCode
+  indisponível no momento — nada muda, é só tentar de novo). Sem sessão, fora de uma etapa de
+  execução, com a feature/central indisponível ou com um turno vivo no processo, responde 409/no-op.
+  A releitura também **restaura perguntas e permissões** que ficaram pendentes (o SSE é só ao vivo).
+- **Reconexão no buraco do SSE**: se o SSE com o OpenCode cair **durante** um turno e reatar, o runner
+  relê o estado da sessão (`form.list`/`permission.list`) e republica só as pendências **ainda não
+  emitidas** neste acompanhamento; o que saiu da lista (respondido/demitido em outro lugar) é fechado.
+  Assim uma pergunta que nasceu durante a queda aparece na mesa sem abrir o OpenCode. Falha da
+  releitura é transitória (mantém o que já foi emitido) e o aviso de que "parte da saída pode não ter
+  sido exibida" continua valendo para o texto/raciocínio perdidos.
+- **Ciclo automático de reconexão** (mesa e refinamento, `useAutoReconnect` + `ReconnectButton`):
+  quando a ação **Reconectar** passa a ser oferecida — inclusive ao abrir a tela já em falha/
+  interrupção — o cliente tenta sozinho em **1 s → 2 s → 4 s → 8 s → 16 s** (no máximo 5, sem toast
+  por tentativa) e o botão mostra **“Reconectando…”** (sem contador) durante o ciclo. Para no sucesso
+  (`running`/resultado recuperado), na resposta definitiva (`nothing`, com aviso) e ao esgotar (aviso
+  discreto; o botão continua clicável e uma nova tentativa recomeça a contagem). Uma oscilação
+  `running → falha` da recuperação **não** reinicia a contagem (um ciclo por episódio, chaveado pelo
+  `turnStartedAt`) e **nunca** há ciclo automático depois de um **Parar** do usuário
+  (`stopRequestedAt` marca a intenção; só uma tentativa manual reconecta).
 - Mesa "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser lida.
 - **Excluir mesa (OPE-68)**: marca a exclusão na mesa (`deletionRequestedAt`), interrompe o turno
   vivo, invalida a prévia remota e roda a **mesma limpeza de ambiente da conclusão** (etapa
@@ -408,7 +428,10 @@ done → Reabrir mesa (texto ao planejador) → planning
 - `GET /api/agentic/workbenches/[id]/events` (NDJSON): `reset` + tudo o que foi gravado + ao vivo,
   `ping` a cada 15 s. Sem buracos: assina, grava o pendente, lê o banco e descarta `seq` repetido.
   O cliente (`useWorkbenchStream`) reconecta sozinho (3 s; 45 s sem nada = reconectar) e reconstrói
-  com `applyTimelineLine` (`timeline.ts`, puro).
+  com `applyTimelineLine` (`timeline.ts`, puro). Na reconexão do SSE o runner relê as pendências da
+  sessão (ver "Reconectar") e a timeline **atualiza o item pelo id** (pergunta/permissão reenviadas
+  não duplicam). A queda da conexão do navegador/Pusher é coberta pelo `RealtimeStatusBanner`,
+  que invalida as consultas ativas ao reconectar — a pendência persistida reaparece sem clique.
 - Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
   `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`.
 - Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
@@ -441,10 +464,11 @@ merge, reabrir, excluir).
 
 ## Testes
 
-`__tests__/features/agentic/` (prompts, regras, linha do tempo, filtros, fila (`queue`),
+`__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em
-andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) —,
-acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
+andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) e a
+releitura das pendências no buraco do SSE —, o ciclo automático de reconexão (`reconnect`,
+`auto-reconnect`), acompanhamento do PR, rota de ações, barra de ações, exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
 (`preview-backup` e `workflow-preview-backup`, com o backup **ligado e desligado** — OPE-72),

@@ -201,6 +201,18 @@ export function useDeleteWorkbench() {
     })
 }
 
+/**
+ * Reconectar à sessão do agente (mesa). Sem toast próprio: as tentativas automáticas do ciclo de
+ * reconexão são silenciosas (o feedback fica no indicador "Reconectando…" do botão compartilhado).
+ */
+export function useWorkbenchReconnect(workbenchId: string) {
+    const setWorkbench = useSetWorkbench()
+    return useMutation({
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/actions/reconnect`)).data),
+        onSuccess: setWorkbench,
+    })
+}
+
 /** Mesas em andamento mudaram no servidor: recarrega só a lista de trabalhos em andamento. */
 export function useWorkbenchProgressRealtime(): void {
     const queryClient = useQueryClient()

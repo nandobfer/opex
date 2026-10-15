@@ -63,6 +63,18 @@ export function useRefinementAction(taskId: string) {
     })
 }
 
+/**
+ * Reconectar ao turno do refinamento (attach à mesma sessão). Sem toast próprio: as tentativas
+ * automáticas do ciclo de reconexão são silenciosas.
+ */
+export function useRefinementReconnect(taskId: string) {
+    const set = useSetRefinement(taskId)
+    return useMutation({
+        mutationFn: async () => unwrapApi((await api.post<ApiResponse<TaskRefinementStateDto>>(`/tasks/${taskId}/refinement/actions/reconnect`)).data),
+        onSuccess: set,
+    })
+}
+
 /** Estado do refinamento mudou no servidor (outra aba, turnos): recarrega. */
 export function useRefinementRealtime(taskId: string): void {
     const queryClient = useQueryClient()

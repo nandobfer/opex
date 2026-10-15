@@ -29,7 +29,7 @@ export const REFINEMENT_STAGE_LABEL = "Refinando"
 export const REFINEMENT_RUN_STATES = ["idle", "running", "failed", "interrupted"] as const
 export type RefinementRunState = (typeof REFINEMENT_RUN_STATES)[number]
 
-export const REFINEMENT_ACTIONS = ["interrupt", "restart", "continue"] as const
+export const REFINEMENT_ACTIONS = ["interrupt", "restart", "continue", "reconnect"] as const
 export type RefinementAction = (typeof REFINEMENT_ACTIONS)[number]
 
 /**

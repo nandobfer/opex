@@ -37,6 +37,7 @@ import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
 import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
+import { probeReconnect } from "./reconnect"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
@@ -211,8 +212,9 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             runState: "running",
             error: null,
             heartbeatAt: new Date(),
-            // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam válidos).
-            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, turnStartedAt: new Date() }),
+            // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam
+            // válidos) e a causa da parada; um turno novo começa um episódio novo (limpa o desfecho).
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -712,6 +714,15 @@ export async function reconnect(id: string): Promise<WorkbenchDto> {
     if (!RUNNING_STAGES.includes(stage)) throw new DomainError(409, "A mesa não está numa etapa de execução para reconectar", "WORKBENCH_INVALID_STATE")
     await assertAgenticReady(loaded.config)
     await prepareHub(id)
+    // Confere o estado da sessão ANTES de acompanhar: a resposta (200) já diz se há execução para
+    // acompanhar (`attached`/`recovered`), se não há (`nothing`) ou se é falha transitória.
+    const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
+    const probe = await probeReconnect(doc.sessionId, startedAt)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: probe.outcome, message: probe.message, at: new Date() } } })
+    if (!probe.follow) {
+        await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
+        return getWorkbench(id)
+    }
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Reconectando à sessão do OpenCode sem reenviar a mensagem…" })
     centralLogger(doc.centralId, doc.taskCode).info("Reconectando à sessão do OpenCode", { workbenchId: id, stage })
     await launchTurn({ ...loaded, doc }, { stage, text: "", attach: true })
@@ -756,6 +767,9 @@ export async function interrupt(id: string): Promise<WorkbenchDto> {
         const loaded = await loadAll(id)
         await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory)
     }
+    // Registra a intenção ANTES de abortar: a interrupção pedida pelo usuário nunca dispara a
+    // reconexão automática (ao contrário das perdas por queda/reinício).
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { stopRequestedAt: new Date() } })
     if (!isWorkbenchActive(id)) {
         await reconcile(doc)
         return getWorkbench(id)

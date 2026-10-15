@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { useWorkbenchAction } from "../../hooks/useAgentic"
+import { useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
 import { workbenchActions, type WorkbenchAction } from "../../logic"
 import type { WorkbenchDto } from "../../types"
+import { useAutoReconnect } from "../../hooks/useAutoReconnect"
+import { ReconnectButton } from "./ReconnectButton"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
 
@@ -54,7 +56,16 @@ function ActionLabel({ full, compact }: { full: string; compact: string }) {
 /** Botões da etapa atual; correções abrem o campo de texto que vai para o planejador. */
 export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
     const mutation = useWorkbenchAction(workbench)
+    const reconnect = useWorkbenchReconnect(workbench.id)
     const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId))
+    const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
+    // Ciclo automático de reconexão: dispara quando a tela passa a oferecer Reconectar (e ao abrir
+    // já nesse estado). Nunca depois de um Parar do usuário; um ciclo por episódio de queda.
+    const autoReconnect = useAutoReconnect({
+        eligible: failed && Boolean(workbench.sessionId) && !workbench.stoppedByUser,
+        episodeKey: `${workbench.id}:${workbench.turnStartedAt ?? workbench.startedAt}`,
+        attempt: () => reconnect.mutateAsync().then((saved) => (saved.runState === "running" ? "attached" : (saved.reconnect?.outcome ?? null)), () => null),
+    })
     const [composer, setComposer] = useState<FeedbackAction | null>(workbench.stage === "changes_requested" && workbench.runState === "idle" ? "submit-pr-feedback" : null)
     const [text, setText] = useState("")
     const [additional, setAdditional] = useState("")
@@ -71,7 +82,6 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 },
             },
         )
-    const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
     // Ao aprovar o plano, o usuário pode anexar informações adicionais ao prompt de implementação.
     const canImplement = actions.includes("implement")
 
@@ -81,6 +91,11 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                 {failed && workbench.error && (
                     <motion.p key="error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
                         {workbench.error}
+                    </motion.p>
+                )}
+                {autoReconnect.notice && (
+                    <motion.p key="reconnect-notice" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                        <PlugZap className="h-3.5 w-3.5" aria-hidden /> {autoReconnect.notice}
                     </motion.p>
                 )}
                 {workbench.stage === "pr_open" && workbench.runState === "idle" && (
@@ -173,12 +188,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                     </Button>
                                 )
                             case "reconnect":
-                                return (
-                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Reconectar ao agente" onClick={() => run("reconnect")}>
-                                        <PlugZap className="h-3.5 w-3.5" aria-hidden />
-                                        <ActionLabel full="Reconectar ao agente" compact="Reconectar" />
-                                    </Button>
-                                )
+                                return <ReconnectButton key={action} reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={autoReconnect.retryNow} />
                             case "retry":
                                 return (
                                     <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Tentar novamente" onClick={() => run("retry")}>

@@ -45,6 +45,20 @@ describe('applyTimelineLine', () => {
     expect(applyTimelineLine(thinking, { type: 'text', text: 'x', seq: 1, ts }).reasoning).toBe(false)
     expect(applyTimelineLine(run([{ type: 'reset' }, { type: 'text', text: 'x', seq: 1, ts }]), { type: 'reset' }).items).toEqual([])
   })
+
+  it('pergunta/permissão reenviadas (reconexão) atualizam o item pelo id, sem duplicar', () => {
+    const state = run([
+      { type: 'reset' },
+      { type: 'form', form: { id: 'f1', title: 'Pergunta', fields: [] }, seq: 1, ts },
+      { type: 'form-closed', id: 'f1', seq: 2, ts },
+      { type: 'form', form: { id: 'f1', title: 'Pergunta (relida)', fields: [] }, seq: 3, ts },
+      { type: 'permission', permission: { id: 'p1', action: 'bash', resources: [], message: null }, seq: 4, ts },
+      { type: 'permission', permission: { id: 'p1', action: 'bash', resources: ['x'], message: null }, seq: 5, ts },
+    ])
+    expect(state.items).toHaveLength(2)
+    expect(state.items[0]).toMatchObject({ kind: 'form', form: { id: 'f1', title: 'Pergunta (relida)' }, closed: false })
+    expect(state.items[1]).toMatchObject({ kind: 'permission', permission: { id: 'p1', resources: ['x'] }, decision: null })
+  })
 })
 
 describe('splitNdjson', () => {

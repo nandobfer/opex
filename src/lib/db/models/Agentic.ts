@@ -78,6 +78,13 @@ export interface IAgenticWorkbench {
     lastPrompt: { stage: string; text: string } | null
     /** Instante em que o último turno começou (delimita a execução acompanhada ao reconectar). */
     turnStartedAt: Date | null
+    /**
+     * Instante do "Parar" pedido pelo usuário; distingue a interrupção pedida das perdas (queda,
+     * reinício). Enquanto existir, a reconexão automática fica desligada para este episódio.
+     */
+    stopRequestedAt: Date | null
+    /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático do cliente). */
+    reconnect: { outcome: string; message: string | null; at: Date } | null
     sessionId: string | null
     sessionDirectory: string | null
     /** IDs de sessões do OpenCode já desvinculadas da mesa e ainda pendentes de exclusão. */
@@ -131,6 +138,8 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         lastStage: { type: String, default: null },
         lastPrompt: { type: Schema.Types.Mixed, default: null },
         turnStartedAt: { type: Date, default: null },
+        stopRequestedAt: { type: Date, default: null },
+        reconnect: { type: Schema.Types.Mixed, default: null },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         pendingSessionDeletions: { type: [String], default: [] },

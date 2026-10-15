@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     interrupt: vi.fn(),
     restart: vi.fn(),
     continueRun: vi.fn(),
+    reconnectRun: vi.fn(),
 }))
 
 vi.mock('@/features/refinement/server/service', () => ({
@@ -19,6 +20,7 @@ vi.mock('@/features/refinement/server/service', () => ({
     interruptRefinement: mocks.interrupt,
     restartRefinement: mocks.restart,
     continueRefinement: mocks.continueRun,
+    reconnectRefinement: mocks.reconnectRun,
 }))
 
 import { GET, POST as START, DELETE } from '@/app/api/tasks/[id]/refinement/route'
@@ -71,5 +73,12 @@ describe('rotas do refinamento', () => {
         const res = await ACTION(req('http://localhost/api/tasks/t1/refinement/actions/interrupt'), params({ id: 't1', action: 'interrupt' }))
         expect(res.status).toBe(200)
         expect(mocks.interrupt).toHaveBeenCalledWith('t1')
+    })
+
+    it('ação reconnect reconecta ao turno do refinamento', async () => {
+        mocks.reconnectRun.mockResolvedValue({ refinement: { id: 'r1' }, availability: { available: true } })
+        const res = await ACTION(req('http://localhost/api/tasks/t1/refinement/actions/reconnect'), params({ id: 't1', action: 'reconnect' }))
+        expect(res.status).toBe(200)
+        expect(mocks.reconnectRun).toHaveBeenCalledWith('t1')
     })
 })

@@ -111,6 +111,44 @@ async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceM
     }
 }
 
+/**
+ * Estado atual da sessão para reconectar: em andamento, terminada durante a queda (com o desfecho)
+ * ou sem nada a acompanhar. `get` resolvendo `null` = sessão inexistente; erro de rede/timeout vira
+ * `unavailable` (transitório — não é o mesmo que sessão inexistente).
+ */
+export type AttachProbe =
+    | { kind: "unavailable" }
+    | { kind: "missing-session" }
+    | { kind: "running" }
+    | { kind: "finished"; outcome: TurnResult["outcome"]; message: string | null }
+    | { kind: "idle" }
+
+/** Confere o estado da sessão antes de acompanhar (attach): distingue "o que acompanhar" do "nada". */
+export async function probeAttachSession(client: OpencodeClient, sessionId: string, startedAt: number): Promise<AttachProbe> {
+    let info: Awaited<ReturnType<OpencodeClient["session"]["get"]>>
+    try {
+        info = await client.session.get({ sessionID: sessionId })
+    } catch {
+        return { kind: "unavailable" }
+    }
+    if (!info) return { kind: "missing-session" }
+    let running = false
+    try {
+        // Método ausente numa versão antiga do cliente não é queda: cai no desfecho do `outcome`.
+        if (typeof client.session.active === "function") {
+            const active = await client.session.active()
+            running = Boolean(active && (active as Record<string, unknown>)[sessionId])
+        }
+    } catch {
+        return { kind: "unavailable" }
+    }
+    if (running) return { kind: "running" }
+    if (info.outcome && (info.time?.idle ?? 0) >= startedAt) {
+        return { kind: "finished", outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null }
+    }
+    return { kind: "idle" }
+}
+
 type End = { outcome: TurnResult["outcome"]; message: string | null }
 
 export async function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks: TurnHooks = {}): Promise<TurnResult> {
@@ -126,6 +164,65 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
+    // Pendências vivas NESTE acompanhamento (dedupe por id): nem o evento ao vivo nem a releitura do
+    // estado (reconexão) publicam duas vezes a mesma pergunta/permissão.
+    const liveForms = new Map<string, OpencodeFormDto>()
+    const livePermissions = new Map<string, OpencodePermissionDto>()
+
+    const emitForm = async (form: OpencodeFormDto) => {
+        if (liveForms.has(form.id)) return
+        liveForms.set(form.id, form)
+        publish({ type: "form", form })
+        await hooks.onForm?.(form)
+    }
+    const emitPermission = async (permission: OpencodePermissionDto) => {
+        if (livePermissions.has(permission.id)) return
+        livePermissions.set(permission.id, permission)
+        publish({ type: "permission", permission })
+        await hooks.onPermission?.(permission)
+    }
+    const closeForm = async (id: string) => {
+        if (!liveForms.delete(id)) return
+        publish({ type: "form-closed", id })
+        await hooks.onFormClosed?.(id)
+    }
+    const closePermission = async (id: string) => {
+        if (!livePermissions.delete(id)) return
+        await hooks.onPermissionClosed?.(id)
+    }
+
+    /**
+     * Relê as pendências da sessão e publica só o que ainda não foi emitido neste acompanhamento — o
+     * SSE é ao vivo, então o que nasceu num buraco de conexão nunca chegou. O que saiu da lista
+     * (respondido/dispensado em outro lugar durante a queda) é fechado aqui. Falha de leitura é
+     * transitória: mantém o que já foi emitido e tenta de novo na próxima reconexão.
+     */
+    const syncSessionPending = async (): Promise<boolean> => {
+        let forms: unknown[]
+        let permissions: unknown[]
+        try {
+            ;[forms, permissions] = await Promise.all([client.session.form.list({ sessionID: sessionId }), client.permission.list({ sessionID: sessionId })])
+        } catch {
+            return false
+        }
+        const formIds = new Set<string>()
+        for (const raw of forms) {
+            const form = toOpencodeForm(raw)
+            if (!form) continue
+            formIds.add(form.id)
+            await emitForm(form)
+        }
+        for (const id of [...liveForms.keys()]) if (!formIds.has(id)) await closeForm(id)
+        const permissionIds = new Set<string>()
+        for (const raw of permissions) {
+            const permission = toOpencodePermission(raw)
+            if (!permission) continue
+            permissionIds.add(permission.id)
+            await emitPermission(permission)
+        }
+        for (const id of [...livePermissions.keys()]) if (!permissionIds.has(id)) await closePermission(id)
+        return true
+    }
 
     // Agente e modelo da etapa (a sessão é a mesma do início ao fim). Na reconexão, preserva o que já está na sessão.
     if (!attach) {
@@ -208,19 +305,16 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 publish({ type: "notice", level: "warn", message: event.message })
                 break
             case "permission":
-                publish({ type: "permission", permission: event.permission })
-                await hooks.onPermission?.(event.permission)
+                await emitPermission(event.permission)
                 break
             case "permission-replied":
-                await hooks.onPermissionClosed?.(event.id)
+                await closePermission(event.id)
                 break
             case "form":
-                publish({ type: "form", form: event.form })
-                await hooks.onForm?.(event.form)
+                await emitForm(event.form)
                 break
             case "form-closed":
-                publish({ type: "form-closed", id: event.id })
-                await hooks.onFormClosed?.(event.id)
+                await closeForm(event.id)
                 break
             case "moved":
                 publish({ type: "notice", level: "info", message: `Sessão movida para ${event.directory}` })
@@ -232,21 +326,29 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         }
     }
 
-    // Assinatura do SSE com reconexão; ao reconectar, confere se a execução terminou no intervalo.
+    // Assinatura do SSE com reconexão; ao reconectar, relê as pendências do buraco e confere se a execução terminou no intervalo.
     const pump = (async () => {
         let attempts = 0
+        let dropped = false
         while (!finished && !subscription.signal.aborted) {
             try {
                 const iterable = client.event.subscribe({ signal: subscription.signal, onActivity: readyResolve })
+                let first = true
                 for await (const raw of iterable) {
                     readyResolve()
                     attempts = 0
+                    if (first) {
+                        first = false
+                        // Voltou depois de uma queda: o que foi criado no buraco nunca chegou pelo SSE.
+                        if (dropped) await syncSessionPending().catch(() => undefined)
+                    }
                     await handle(raw).catch(() => undefined)
                     if (finished) break
                 }
             } catch {
                 // queda do stream: tenta de novo
             }
+            dropped = true
             if (finished || subscription.signal.aborted) break
             if (++attempts > MAX_RECONNECTS) {
                 finish({ outcome: "failed", message: "Conexão com o OpenCode perdida durante a execução" })
@@ -279,40 +381,19 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     // Reconexão: confere o estado da sessão ANTES de acompanhar. Se a execução já terminou, recupera o
     // resultado do histórico; se não há execução em andamento, não há o que reconectar.
     if (attach) {
-        const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
-        if (!info) {
+        const probe = await probeAttachSession(client, sessionId, startedAt)
+        if (probe.kind === "missing-session") {
             finish({ outcome: "failed", message: "A sessão do OpenCode não existe mais; reconectar não é possível (use Tentar novamente para criar outra)" })
+        } else if (probe.kind === "unavailable") {
+            finish({ outcome: "failed", message: "Não foi possível falar com o OpenCode para reconectar" })
+        } else if (probe.kind === "idle") {
+            finish({ outcome: "interrupted", message: "Não há execução em andamento nesta sessão do OpenCode" })
         } else {
-            // Perguntas e permissões que ficaram pendentes durante a queda: o SSE é só ao vivo, então
-            // restaura do estado atual da sessão (o hook deduplica por id).
-            const [forms, permissions] = await Promise.all([
-                client.session.form.list({ sessionID: sessionId }).catch(() => [] as unknown[]),
-                client.permission.list({ sessionID: sessionId }).catch(() => [] as unknown[]),
-            ])
-            for (const raw of permissions) {
-                const permission = toOpencodePermission(raw)
-                if (permission) {
-                    publish({ type: "permission", permission })
-                    await hooks.onPermission?.(permission)
-                }
-            }
-            for (const raw of forms) {
-                const form = toOpencodeForm(raw)
-                if (form) {
-                    publish({ type: "form", form })
-                    await hooks.onForm?.(form)
-                }
-            }
-            const active = await client.session.active().catch(() => null)
-            const running = Boolean(active && (active as Record<string, unknown>)[sessionId])
-            if (!running) {
-                const idle = info.time?.idle ?? 0
-                if (info.outcome && idle >= startedAt) {
-                    text = await recoverTurnText(client, sessionId, startedAt)
-                    finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null })
-                } else {
-                    finish({ outcome: "interrupted", message: "Não há execução em andamento nesta sessão do OpenCode" })
-                }
+            // Perguntas e permissões que ficaram pendentes durante a queda: relê do estado da sessão.
+            await syncSessionPending()
+            if (probe.kind === "finished") {
+                text = await recoverTurnText(client, sessionId, startedAt)
+                finish({ outcome: probe.outcome, message: probe.message })
             }
         }
     }
