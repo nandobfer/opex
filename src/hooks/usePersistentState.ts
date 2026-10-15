@@ -55,6 +55,27 @@ function subscribe(key: string, callback: () => void): () => void {
 
 const subscribeNoop = () => () => {}
 
+/**
+ * Leitura imperativa do mesmo estado persistido (mesma validação e mesmo cache do hook). Usada por
+ * código fora do React (ex.: comandos `:set` do editor Vim).
+ */
+export function readPersistentState<T>(key: string, schema: ZodType<T, unknown>, fallback: T): T {
+    if (typeof window === "undefined") return fallback
+    return read(key, schema, fallback)
+}
+
+/** Gravação imperativa do estado persistido, notificando os componentes da mesma aba. */
+export function writePersistentState<T>(key: string, value: T): void {
+    if (typeof window === "undefined") return
+    try {
+        window.localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+        // Armazenamento cheio/bloqueado: mantém só na memória desta sessão.
+        cache.set(key, { raw: null, value })
+    }
+    window.dispatchEvent(new CustomEvent(LOCAL_EVENT, { detail: key }))
+}
+
 export function usePersistentState<T>(
     key: string,
     schema: ZodType<T, unknown>,

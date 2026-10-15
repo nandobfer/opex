@@ -2,7 +2,17 @@
 
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CtrlEnterSubmit, handleCtrlEnterKey, isCtrlEnter, resolveCtrlEnterAction } from '@/components/ctrl-enter-submit'
+import {
+  CtrlEnterSubmit,
+  handleCtrlEnterKey,
+  handleTextareaEditKey,
+  insertLineBreak,
+  isCtrlE,
+  isCtrlEnter,
+  isCtrlJ,
+  moveCursorToLineEnd,
+  resolveCtrlEnterAction,
+} from '@/components/ctrl-enter-submit'
 
 const keyEvent = (overrides: Partial<KeyboardEventInit> = {}) =>
   new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...overrides })
@@ -232,5 +242,156 @@ describe('CtrlEnterSubmit: montagem global', () => {
     unmount()
     field.dispatchEvent(keyEvent({ ctrlKey: true }))
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('o mesmo listener global atende Ctrl+J e Ctrl+E', () => {
+    const { container } = render(
+      <>
+        <CtrlEnterSubmit />
+        <Demo />
+      </>,
+    )
+    const field = container.querySelector('textarea')!
+    field.value = 'linha um\nlinha dois'
+    field.setSelectionRange(3, 3)
+
+    const breakEvent = new KeyboardEvent('keydown', { key: 'j', ctrlKey: true, bubbles: true, cancelable: true })
+    field.dispatchEvent(breakEvent)
+    expect(breakEvent.defaultPrevented).toBe(true)
+    expect(field.value).toBe('lin\nha um\nlinha dois')
+
+    const endEvent = new KeyboardEvent('keydown', { key: 'e', ctrlKey: true, bubbles: true, cancelable: true })
+    field.dispatchEvent(endEvent)
+    expect(endEvent.defaultPrevented).toBe(true)
+    expect(field.selectionStart).toBe(9)
+  })
+})
+
+describe('Ctrl+J / Ctrl+E', () => {
+  beforeEach(() => document.addEventListener('keydown', handleTextareaEditKey, true))
+  afterEach(() => document.removeEventListener('keydown', handleTextareaEditKey, true))
+
+  const editEvent = (key: string, overrides: Partial<KeyboardEventInit> = {}) => new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...overrides })
+
+  it('só Ctrl puro: ⌘, Alt e Shift desqualificam', () => {
+    expect(isCtrlJ(keyEvent({ key: 'j', ctrlKey: true }))).toBe(true)
+    expect(isCtrlE(keyEvent({ key: 'E', ctrlKey: true }))).toBe(true)
+    expect(isCtrlJ(keyEvent({ key: 'j', ctrlKey: true, metaKey: true }))).toBe(false)
+    expect(isCtrlJ(keyEvent({ key: 'j', ctrlKey: true, altKey: true }))).toBe(false)
+    expect(isCtrlJ(keyEvent({ key: 'j', ctrlKey: true, shiftKey: true }))).toBe(false)
+    expect(isCtrlJ(keyEvent({ key: 'j' }))).toBe(false)
+  })
+
+  it('insertLineBreak quebra a linha no cursor substituindo a seleção', () => {
+    const field = textarea()
+    field.value = 'abcd'
+    field.setSelectionRange(1, 3)
+
+    insertLineBreak(field)
+
+    expect(field.value).toBe('a\nd')
+  })
+
+  it('insertLineBreak respeita o maxLength do campo', () => {
+    const field = textarea()
+    field.value = 'abcd'
+    field.maxLength = 4
+    field.setSelectionRange(4, 4)
+
+    insertLineBreak(field)
+
+    expect(field.value).toBe('abcd')
+  })
+
+  it('moveCursorToLineEnd vai ao próximo \\n (ou ao fim do texto)', () => {
+    const field = textarea()
+    field.value = 'linha um\nlinha dois'
+
+    field.setSelectionRange(2, 4)
+    moveCursorToLineEnd(field)
+    expect([field.selectionStart, field.selectionEnd]).toEqual([8, 8])
+
+    field.setSelectionRange(9, 9)
+    moveCursorToLineEnd(field)
+    expect(field.selectionStart).toBe(field.value.length)
+  })
+
+  it('quebra a linha e leva ao fim da linha lógica no campo com foco', () => {
+    const field = textarea()
+    field.value = 'abc'
+    field.setSelectionRange(1, 1)
+
+    const breakEvent = editEvent('j')
+    field.dispatchEvent(breakEvent)
+    expect(breakEvent.defaultPrevented).toBe(true)
+    expect(field.value).toBe('a\nbc')
+
+    const endEvent = editEvent('e')
+    field.dispatchEvent(endEvent)
+    expect(endEvent.defaultPrevented).toBe(true)
+    expect(field.selectionStart).toBe(4)
+  })
+
+  it('ignora campo somente leitura, desabilitado e composição (IME)', () => {
+    const readOnly = textarea()
+    readOnly.value = 'abc'
+    readOnly.readOnly = true
+    readOnly.setSelectionRange(1, 1)
+    readOnly.dispatchEvent(editEvent('j'))
+
+    const disabled = textarea()
+    disabled.value = 'abc'
+    disabled.disabled = true
+    disabled.setSelectionRange(1, 1)
+    disabled.dispatchEvent(editEvent('j'))
+
+    const composing = textarea()
+    composing.value = 'abc'
+    composing.setSelectionRange(1, 1)
+    composing.dispatchEvent(editEvent('j', { isComposing: true }))
+
+    expect(readOnly.value).toBe('abc')
+    expect(disabled.value).toBe('abc')
+    expect(composing.value).toBe('abc')
+  })
+
+  it('ignora textarea no terminal (.xterm) e em [data-textarea-shortcuts-ignore]', () => {
+    const terminal = append(document.body, document.createElement('div'))
+    terminal.className = 'xterm'
+    const inTerminal = textarea(terminal)
+    inTerminal.value = 'abc'
+    inTerminal.setSelectionRange(1, 1)
+
+    const ignored = append(document.body, document.createElement('div'))
+    ignored.setAttribute('data-textarea-shortcuts-ignore', '')
+    const inIgnored = textarea(ignored)
+    inIgnored.value = 'abc'
+    inIgnored.setSelectionRange(1, 1)
+
+    const terminalEvent = editEvent('j')
+    inTerminal.dispatchEvent(terminalEvent)
+    const ignoredEvent = editEvent('j')
+    inIgnored.dispatchEvent(ignoredEvent)
+
+    expect(inTerminal.value).toBe('abc')
+    expect(inIgnored.value).toBe('abc')
+    expect(terminalEvent.defaultPrevented).toBe(false)
+    expect(ignoredEvent.defaultPrevented).toBe(false)
+  })
+
+  it('ignora teclas sem Ctrl e eventos já cancelados', () => {
+    const field = textarea()
+    field.value = 'abc'
+    field.setSelectionRange(1, 1)
+
+    const plain = new KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true })
+    field.dispatchEvent(plain)
+    expect(plain.defaultPrevented).toBe(false)
+    expect(field.value).toBe('abc')
+
+    const canceled = editEvent('j')
+    canceled.preventDefault()
+    field.dispatchEvent(canceled)
+    expect(field.value).toBe('abc')
   })
 })

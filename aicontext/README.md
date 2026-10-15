@@ -38,6 +38,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | Arquivo | Módulo | Quando consultar |
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
+| `modules/editor-mode.md` | Modo Vim nos campos de texto | Alternância (`Ctrl+Tab`/`Ctrl+Shift+Alt+V`), selo de modo, números de linha, Ctrl+J/Ctrl+E, comandos `:` e exclusões |
 | `modules/dashboard.md` | Dashboards | Página inicial (`/dashboard`, acima de Tarefas): KPIs e gráficos de tarefas, financeiro, horas agênticas e central de desenvolvimento, período global e tempo real |
 | `modules/auth.md` | Login, usuários e sessão | O dono (`ADMIN_*`), usuários de cliente (scrypt), cookie assinado com tipo de sessão, guarda do middleware, entrada do portal por URL e logout |
 | `modules/tasks.md` | Tarefas | Kanban/tabela locais, colunas configuráveis, projetos (repositórios), lote, página da tarefa |
@@ -63,6 +64,7 @@ Novos módulos ganham um arquivo aqui quando forem implementados, conforme o flu
 | Regras gerais de desenvolvimento | `use-sempre-que-desenvolver.md` |
 | Entender decisões arquiteturais | `use-diretrizes-do-projeto.md` |
 | Tema, componente, animação, formulário ou lista | `use-para-atualizar-tema-e-componentes-ui.md` |
+| Modo Vim nos campos de texto (atalhos, selo, números de linha) | `modules/editor-mode.md` |
 | Tempo real (Pusher) | `use-sempre-que-desenvolver.md`, seção "Tempo real" + `modules/integrations.md` |
 | Issues do GitHub viram tarefas | `modules/github.md` |
 | Componente que existe no CRM e ainda não foi copiado | `~/code/crm-marketing-campanhas` (somente leitura; copie e adapte) |
