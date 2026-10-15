@@ -17,6 +17,7 @@ export const GET = withRoute(async ({ req }) => {
         to: params.get("to") ?? undefined,
         clientIds: params.get("clientIds") ?? undefined,
         projectIds: params.get("projectIds") ?? undefined,
+        archived: params.get("archived") ?? undefined,
     })
     if (!query.success) return validationError(query.error)
     return ok(await listFinanceByClient(query.data))

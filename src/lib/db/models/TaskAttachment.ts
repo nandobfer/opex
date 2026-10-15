@@ -6,9 +6,10 @@ import { Schema, model, models, type Model } from "mongoose"
  * temporária) e confirmado depois (`ready`, com a chave definitiva) — ver
  * `src/features/tasks/attachments/server/service.ts`.
  *
- * O vínculo é `taskId` (tarefa) **ou** `draftId` (rascunho de prévia, do portal ou do dono); ao
- * aprovar o rascunho, os anexos passam para a tarefa. `clientId` é o cliente que pode ver o anexo
- * (o do upload ou o da tarefa em que ele foi vinculado) — `null` = só o dono.
+ * O vínculo é `taskId` (tarefa), `draftId` (rascunho de prévia, do portal ou do dono) **ou**
+ * `serviceId` (serviço do Financeiro); ao aprovar o rascunho, os anexos passam para a tarefa.
+ * `clientId` é o cliente que pode ver o anexo (o do upload ou o da tarefa/serviço em que ele foi
+ * vinculado) — `null` = só o dono.
  */
 
 export type AttachmentStatus = "pending" | "ready" | "removing"
@@ -19,6 +20,8 @@ export interface ITaskAttachment {
     taskId: string | null
     /** Rascunho de prévia vinculado (antes de existir a tarefa). */
     draftId: string | null
+    /** Serviço do Financeiro vinculado (`FinanceService._id`). */
+    serviceId: string | null
     /** Quem enviou: o dono ou um usuário do portal. */
     uploaderKind: AttachmentUploaderKind
     /** Id do autor (dono local ou usuário do portal) — usado na autorização e na auditoria. */
@@ -45,6 +48,7 @@ const TaskAttachmentSchema = new Schema<ITaskAttachment>(
     {
         taskId: { type: String, default: null, index: true },
         draftId: { type: String, default: null, index: true },
+        serviceId: { type: String, default: null, index: true },
         uploaderKind: { type: String, default: "owner" },
         uploaderId: { type: String, required: true },
         uploaderName: { type: String, default: null },

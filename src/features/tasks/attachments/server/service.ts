@@ -5,9 +5,11 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { TaskAttachment, type ITaskAttachment } from "@/lib/db/models/TaskAttachment"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoDraft } from "@/lib/db/models/Orcamento"
+import { FinanceService } from "@/lib/db/models/FinanceService"
 import { logger } from "@/lib/logger"
 import { copyFile, deleteFile, getFileObject, getUploadUrl, headFile, storageErrorInfo } from "@/lib/storage/s3"
 import { TASK_AUDIT_ENTITY } from "@/features/tasks/server/service"
+import { SERVICE_AUDIT_ENTITY } from "@/features/services/constants"
 import {
     ATTACHMENT_AUDIT_ENTITY,
     ATTACHMENT_FALLBACK_MIME,
@@ -75,6 +77,28 @@ async function requireDraft(actor: AttachmentActor, draftId: string): Promise<{ 
     return { clientId: draft.clientId ?? null }
 }
 
+/** Serviço do Financeiro, resolvido no estado **atual** (cliente arquivado/trocado bloqueia na hora). */
+async function requireService(actor: AttachmentActor, serviceId: string): Promise<{ clientId: string | null }> {
+    await dbConnect()
+    if (!OBJECT_ID.test(serviceId)) throw new DomainError(404, "Serviço não encontrado", "SERVICE_NOT_FOUND")
+    const service = await FinanceService.findById(serviceId).select({ clientId: 1, archived: 1 }).lean()
+    if (!service) throw new DomainError(404, "Serviço não encontrado", "SERVICE_NOT_FOUND")
+    if (actor.kind === "client" && (service.clientId !== actor.clientId || service.archived === true)) throw new DomainError(404, "Serviço não encontrado", "SERVICE_NOT_FOUND")
+    return { clientId: service.clientId ?? null }
+}
+
+/**
+ * O anexo de um **serviço** ainda é visível para o ator? O vínculo sozinho não basta: o cliente só
+ * vê enquanto o serviço aponta para ele e não está arquivado (arquivar/retrocar o cliente bloqueia o
+ * portal imediatamente, sem varrer os anexos).
+ */
+async function serviceAllowsReach(doc: AttachmentDoc, actor: AttachmentActor): Promise<boolean> {
+    if (!doc.serviceId || actor.kind === "owner") return true
+    await dbConnect()
+    const service = await FinanceService.findById(doc.serviceId).select({ clientId: 1, archived: 1 }).lean()
+    return Boolean(service && service.archived !== true && service.clientId === actor.clientId)
+}
+
 async function getAttachmentDoc(id: string): Promise<AttachmentDoc> {
     await dbConnect()
     if (!OBJECT_ID.test(id)) throw new DomainError(404, "Anexo não encontrado", "ATTACHMENT_NOT_FOUND")
@@ -102,15 +126,24 @@ function toAttachmentDto(doc: AttachmentDoc): TaskAttachmentDto {
     }
 }
 
-/** Auditoria do anexo: aparece no Histórico da tarefa quando já está vinculado. */
+/** Auditoria do anexo: entra no Histórico da tarefa/serviço quando já está vinculado. */
 async function auditAttachment(actor: AttachmentActor, doc: AttachmentDoc, action: "adicionado" | "removido"): Promise<void> {
-    const linked = Boolean(doc.taskId)
+    if (doc.taskId || doc.serviceId) {
+        await recordAudit({
+            userId: actor.userId,
+            entidade: doc.taskId ? TASK_AUDIT_ENTITY : SERVICE_AUDIT_ENTITY,
+            entidadeId: (doc.taskId ?? doc.serviceId)!,
+            acao: AcaoAuditoria.ATUALIZAR,
+            depois: { anexo: action, arquivo: doc.name, autor: actor.name },
+        })
+        return
+    }
     await recordAudit({
         userId: actor.userId,
-        entidade: linked ? TASK_AUDIT_ENTITY : ATTACHMENT_AUDIT_ENTITY,
-        entidadeId: linked ? doc.taskId! : String(doc._id),
+        entidade: ATTACHMENT_AUDIT_ENTITY,
+        entidadeId: String(doc._id),
         acao: AcaoAuditoria.ATUALIZAR,
-        depois: { ...(linked ? {} : { codigo: doc.name }), anexo: action, arquivo: doc.name, autor: actor.name },
+        depois: { codigo: doc.name, anexo: action, arquivo: doc.name, autor: actor.name },
     })
 }
 
@@ -118,6 +151,12 @@ async function auditAttachment(actor: AttachmentActor, doc: AttachmentDoc, actio
 async function notifyTaskChanged(taskId: string): Promise<void> {
     const { publishTasksUpdated } = await import("@/features/tasks/server/service")
     await publishTasksUpdated([taskId])
+}
+
+/** Avisa o dono e o portal que os anexos de um serviço mudaram. */
+async function notifyServiceChanged(serviceId: string): Promise<void> {
+    const { publishServicesUpdated } = await import("@/features/services/server/service")
+    await publishServicesUpdated([serviceId])
 }
 
 async function removeObjectQuietly(key: string | null | undefined): Promise<boolean> {
@@ -140,6 +179,7 @@ export async function reserveAttachmentUpload(actor: AttachmentActor, input: Att
     let clientId = actor.clientId
     if (input.taskId) clientId = (await requireTask(actor, input.taskId)).clientId
     else if (input.draftId) clientId = (await requireDraft(actor, input.draftId)).clientId
+    else if (input.serviceId) clientId = (await requireService(actor, input.serviceId)).clientId
 
     const _id = new Types.ObjectId()
     const id = String(_id)
@@ -151,6 +191,7 @@ export async function reserveAttachmentUpload(actor: AttachmentActor, input: Att
         _id,
         taskId: input.taskId ?? null,
         draftId: input.draftId ?? null,
+        serviceId: input.serviceId ?? null,
         uploaderKind: actor.kind,
         uploaderId: actor.userId,
         uploaderName: actor.name,
@@ -220,6 +261,7 @@ export async function completeAttachmentUpload(actor: AttachmentActor, id: strin
     const ready: AttachmentDoc = { ...doc, status: "ready", size, mimeType }
     await auditAttachment(actor, ready, "adicionado")
     if (ready.taskId) await notifyTaskChanged(ready.taskId)
+    else if (ready.serviceId) await notifyServiceChanged(ready.serviceId)
     return toAttachmentDto(ready)
 }
 
@@ -234,15 +276,23 @@ export async function cancelAttachmentUpload(actor: AttachmentActor, id: string)
 
 // ── Consulta e conteúdo ────────────────────────────────────────────────────
 
-/** Anexos confirmados de uma tarefa ou de um rascunho. */
+/** Anexos confirmados de uma tarefa, de um rascunho ou de um serviço. */
 export async function listAttachments(actor: AttachmentActor, query: AttachmentListQuery): Promise<TaskAttachmentListDto> {
     await dbConnect()
     if (query.taskId) await requireTask(actor, query.taskId)
+    else if (query.serviceId) await requireService(actor, query.serviceId)
     else if (query.draftId) await requireDraft(actor, query.draftId)
-    const docs = (await TaskAttachment.find({ ...(query.taskId ? { taskId: query.taskId } : { draftId: query.draftId }), status: "ready" })
+    const filter = query.taskId ? { taskId: query.taskId } : query.serviceId ? { serviceId: query.serviceId } : { draftId: query.draftId }
+    const docs = (await TaskAttachment.find({ ...filter, status: "ready" })
         .sort({ createdAt: 1 })
         .lean()) as AttachmentDoc[]
-    return { attachments: docs.filter((doc) => canReach(actor, doc)).map(toAttachmentDto) }
+    const visible: AttachmentDoc[] = []
+    for (const doc of docs) {
+        if (!canReach(actor, doc)) continue
+        if (!(await serviceAllowsReach(doc, actor))) continue
+        visible.push(doc)
+    }
+    return { attachments: visible.map(toAttachmentDto) }
 }
 
 export interface AttachmentContent {
@@ -263,6 +313,7 @@ export interface AttachmentContent {
 export async function readAttachmentContent(actor: AttachmentActor, id: string, options: { range?: string; download?: boolean } = {}): Promise<AttachmentContent> {
     const doc = await getAttachmentDoc(id)
     if (doc.status !== "ready" || !canReach(actor, doc)) throw new DomainError(404, "Anexo não encontrado", "ATTACHMENT_NOT_FOUND")
+    if (!(await serviceAllowsReach(doc, actor))) throw new DomainError(404, "Anexo não encontrado", "ATTACHMENT_NOT_FOUND")
     let file
     try {
         file = await getFileObject(doc.key, { range: options.range })
@@ -312,6 +363,7 @@ async function removeAttachmentRecord(actor: AttachmentActor, doc: AttachmentDoc
     await TaskAttachment.deleteOne({ _id: doc._id })
     await auditAttachment(actor, doc, "removido")
     if (doc.taskId) await notifyTaskChanged(doc.taskId)
+    else if (doc.serviceId) await notifyServiceChanged(doc.serviceId)
 }
 
 // ── Vínculo (criação, rascunho e aprovação) ────────────────────────────────
@@ -344,7 +396,15 @@ export async function linkAttachmentsToDraft(actor: AttachmentActor, ids: readon
     if (ids.length === 0) return
     const draft = await requireDraft(actor, draftId)
     await dbConnect()
-    await TaskAttachment.updateMany({ _id: { $in: [...new Set(ids)] } }, { $set: { draftId, clientId: draft.clientId } })
+    await TaskAttachment.updateMany({ _id: { $in: [...new Set(ids)] } }, { $set: { draftId, taskId: null, serviceId: null, clientId: draft.clientId } })
+}
+
+/** Vincula anexos a um serviço (feito depois de o serviço existir). Idempotente. */
+export async function linkAttachmentsToService(actor: AttachmentActor, ids: readonly string[], serviceId: string): Promise<void> {
+    if (ids.length === 0) return
+    const service = await requireService(actor, serviceId)
+    await dbConnect()
+    await TaskAttachment.updateMany({ _id: { $in: [...new Set(ids)] } }, { $set: { serviceId, taskId: null, draftId: null, clientId: service.clientId } })
 }
 
 /** Transfere os anexos do rascunho aprovado para a tarefa criada. */
@@ -360,10 +420,22 @@ export async function syncTaskAttachmentsClient(taskId: string, clientId: string
     await TaskAttachment.updateMany({ taskId }, { $set: { clientId } })
 }
 
+/** Mantém a visibilidade dos anexos alinhada ao cliente do serviço (troca de cliente ao editar). */
+export async function syncServiceAttachmentsClient(serviceId: string, clientId: string | null): Promise<void> {
+    await dbConnect()
+    await TaskAttachment.updateMany({ serviceId }, { $set: { clientId } })
+}
+
 /** Anexos que uma tarefa possui (contagem exibida na aba). */
 export async function countTaskAttachments(taskId: string): Promise<number> {
     await dbConnect()
     return TaskAttachment.countDocuments({ taskId, status: "ready" })
+}
+
+/** Anexos que um serviço possui (contagem exibida no detalhe). */
+export async function countServiceAttachments(serviceId: string): Promise<number> {
+    await dbConnect()
+    return TaskAttachment.countDocuments({ serviceId, status: "ready" })
 }
 
 /** Limpa os anexos quando a tarefa é excluída (objetos em melhor esforço, registros sempre). */

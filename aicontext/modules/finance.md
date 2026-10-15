@@ -1,18 +1,22 @@
 # Módulo: Financeiro (`/financeiro`)
 
-Visão de **faturamento das tarefas concluídas, agrupadas por cliente**, por período. Item próprio no
-menu (seção "início", ícone `Banknote`, logo após "Horas agênticas"). É **somente leitura** e é
-complementar a Horas agênticas (`/tarefas/horas`, que trata do tempo de execução das mesas). Código em
-`src/features/finance/`.
+Visão de **faturamento por cliente**, por período: **tarefas concluídas** e **serviços** criados
+manualmente. Item próprio no menu (seção "início", ícone `Banknote`, logo após "Horas agênticas").
+É **somente leitura**, exceto o atalho **"Novo serviço"** no cabeçalho (ver `modules/services.md`), e
+é complementar a Horas agênticas (`/tarefas/horas`, que trata do tempo de execução das mesas). Código
+em `src/features/finance/`.
 
 ## Regras de negócio
 
-1. **Valor (R$).** O valor de cada tarefa é o **snapshot** `DevTask.estimate.billingBrl` (horas do
-   cliente × custo/hora, já com o fator de lucro da época). O total do cliente é a **soma** dos
-   snapshots no período. **Não** recalcula com fator/custo atuais nem usa horas apontadas.
+1. **Valor (R$).** O valor de cada **tarefa** é o **snapshot** `DevTask.estimate.billingBrl` (horas do
+   cliente × custo/hora, já com o fator de lucro da época); o de cada **serviço** é o próprio
+   snapshot (`FinanceService.billingBrl`, recalculado no servidor na criação/edição). O total do
+   cliente é a **soma** dos snapshots no período. **Não** recalcula com fator/custo atuais nem usa
+   horas apontadas.
 2. **"Concluída".** Tarefa cujo `columnId` está entre as **colunas de conclusão** dos vínculos do
    GitHub: `concludedColumnKeys()` (`src/features/tasks/server/service.ts`, derivado de
-   `Project.closedColumnKey`). Sem vínculo configurado, não há conclusões.
+   `Project.closedColumnKey`). Sem vínculo configurado, não há conclusões — mas **os serviços
+   entram mesmo assim** (não dependem de colunas).
 3. **Data de conclusão (derivada da auditoria).** Não existe campo `completedAt`. A data é o **maior
    `timestamp`** de um evento de auditoria da tarefa (`entidade: "Tarefa"`) que a moveu **para dentro**
    de uma coluna de conclusão:
@@ -52,27 +56,41 @@ Candidatas da busca: `DevTask` com `columnId ∈ colunas de conclusão`, `archiv
 
 ## Contrato (`types.ts`)
 
-`FinanceTaskDto` (`{ id, code, title, project, hours, clientHours, billingBrl, completedAt }`),
-`FinanceClientGroupDto` (`{ clientId, clientName, taskCount, totalHours, totalClientHours,
-totalBillingBrl, tasks }`), `FinanceTotalsDto` e `FinanceByClientDto` (`{ from, to, groups, totals }`).
+`FinanceItemDto` é a união discriminada `FinanceTaskDto | FinanceServiceDto` (`kind: "task" |
+"service"`): a tarefa traz `completedAt`; o serviço traz `serviceDate`, `taskId` e `archived`.
+`FinanceClientGroupDto` (`{ clientId, clientName, taskCount, serviceCount, totalHours,
+totalClientHours, totalBillingBrl, tasks }`), `FinanceTotalsDto` (com `serviceCount`) e
+`FinanceByClientDto` (`{ from, to, groups, totals }`).
+
+## Serviços (lançamento manual)
+
+Itens criados pelo dono em `/financeiro/servicos/novo` (ver `modules/services.md`) entram **no mesmo
+grupo do cliente**, com **badge "Serviço"** e clique para o detalhe. Entram no período pela
+**`serviceDate`** (início/fim do dia, mesmo `financeQueryRange`), **não** dependem de colunas de
+conclusão e participam dos filtros de cliente/repositório (serviço **sem repositório** sai quando há
+filtro de repositório, como a tarefa sem projeto). O cartão de totais mostra o contador
+**"Serviços"** (o `taskCount` continua só tarefas); dentro do grupo os dois itens se ordenam juntos
+por data desc. Com o filtro **"Mostrar arquivados"** (`archived=1`) os serviços arquivados aparecem
+com badge próprio, mas ficam **fora** dos totais e contadores.
 
 ## Backend
 
 - `schemas.ts` — `financeQuerySchema` (`from`/`to` ISO opcionais; `clientIds`/`projectIds` como
-  **listas de ids separadas por vírgula**, com deduplicação e id malformado recusado) e `FINANCE_PATH`.
+  **listas de ids separadas por vírgula**, com deduplicação e id malformado recusado; `archived=1`
+  vira o booleano `archived`) e `FINANCE_PATH`.
 - `logic.ts` (**puro**, testável sem banco):
   - `completionTimestamps(logs, closedKeys, nameToKey)` — reduz os logs de auditoria ao maior
     timestamp "para dentro de conclusão" por tarefa;
   - `aggregateFinance(tasks, clientsById, range)` — agrupa, resolve nome/"Cliente removido", soma,
     arredonda a 2 casas e ordena grupos e tarefas.
-- `server/service.ts` — `listFinanceByClient({ from, to, clientIds, projectIds })`: `dbConnect()` →
-  `concludedColumnKeys()` (vazio ⇒ vazio) → `TaskBoardColumn` (nome → key) → tarefas candidatas
-  (aplicando `$in` de `clientId`/`projectId` quando há seleção) → `AuditLog` (MOVER/ATUALIZAR,
-  `timestamp ≤ to`) → `completionTimestamps` → filtro `[from, to]` → `OrcamentoClient` (nomes) →
-  `aggregateFinance`. Reusa `concludedColumnKeys` de `features/tasks/server/service.ts` e `ProjectRef`
-  de `features/tasks/types.ts`. Os filtros são **opcionais** (o dashboard chama só com `from`/`to`).
-- Rota `GET /api/financeiro?from&to&clientIds&projectIds` (`src/app/api/financeiro/route.ts`, `withRoute`
-  + `ok`), protegida pelo middleware (não é API pública por token e **não** entra no OpenAPI `/api/v1/*`).
+- `server/service.ts` — `listFinanceByClient({ from, to, clientIds, projectIds, archived })`: consulta
+  as tarefas concluídas (`collectTaskItems`) **e** os serviços (`listServiceAggregates`) em paralelo,
+  resolve os nomes de cliente e delega a `aggregateFinance`. Reusa `concludedColumnKeys` de
+  `features/tasks/server/service.ts` e `ProjectRef` de `features/tasks/types.ts`. Os filtros são
+  **opcionais** (o dashboard chama só com `from`/`to`).
+- Rota `GET /api/financeiro?from&to&clientIds&projectIds&archived` (`src/app/api/financeiro/route.ts`,
+  `withRoute` + `ok`), protegida pelo middleware (não é API pública por token e **não** entra no
+  OpenAPI `/api/v1/*`).
 
 ## Frontend
 
@@ -90,28 +108,34 @@ totalBillingBrl, tasks }`), `FinanceTotalsDto` e `FinanceByClientDto` (`{ from, 
   (`PresetDateRangeFilter`), **Clientes** e **Repositórios** (`CadastroMultiSelect` com busca); Limpar
   restaura o mês corrente e zera as seleções.
 - `components/FinancePage.tsx` — filtros na URL (`useUrlFilters`; padrão = mês corrente), cartão de
-  totais (`AnimatedNumber`), botão Atualizar e estados loading/erro/vazio/lista (Framer Motion). O
-  vazio distingue "sem conclusões no período" de "sem resultados para os filtros" (com ação de limpar a
-  seleção). As opções vêm de `useOrcamentoClients` (clientes) e `useTaskOptions` (projetos).
+  totais (`AnimatedNumber`; Faturamento, Horas, **Tarefas** e **Serviços**), atalho **"Novo serviço"**
+  (link para `/financeiro/servicos/novo`), botão Atualizar e estados loading/erro/vazio/lista (Framer
+  Motion). O vazio distingue "sem conclusões/serviços no período" de "sem resultados para os filtros".
+  As opções vêm de `useOrcamentoClients` (clientes) e `useTaskOptions` (projetos).
 - `components/FinanceClientGroup.tsx` — grupo de cliente **expansível** (recolhido por padrão;
   abertura animada por Framer Motion, respeitando movimento reduzido): nome, contagem, horas do
   cliente e faturamento. No **celular** as métricas do grupo vão para uma **linha própria**, abaixo
   do nome do cliente.
-- `components/FinanceTaskRow.tsx` — cada tarefa concluída: código (link para `/tarefas/{id}`), título,
-  repositório (`GithubRepoLabel`), data de conclusão e os valores (horas reais, horas do cliente e R$).
-  No **celular** os valores vão para uma **linha própria**, abaixo do título.
+- `components/FinanceTaskRow.tsx` — cada **tarefa** concluída: código (link para `/tarefas/{id}`),
+  título, repositório (`GithubRepoLabel`), data de conclusão e os valores (horas reais, horas do
+  cliente e R$). No **celular** os valores vão para uma **linha própria**, abaixo do título.
+- `components/FinanceServiceRow.tsx` — cada **serviço**: badge "Serviço" (e "Arquivado" quando for o
+  caso), código (link para o detalhe), título, repositório, **data do serviço** e os mesmos valores.
+  A `FinanceClientGroup` escolhe a linha pelo `kind` e mostra as duas contagens no cabeçalho.
 - `format.ts` (**puro**) — `formatBillingBrl` (`R$ 1.234,56`) e `formatHours` (`H:mm h`).
 
 ## Testes
 
 `__tests__/features/finance/`: `finance-logic` (derivação da conclusão por nome/key, maior timestamp,
-agrupamento, "Cliente removido", ordenação e totais), `finance-service` (agrupamento pelo snapshot,
-vazio sem colunas de conclusão, filtro pelo período, tarefas arquivadas/sem cliente/sem evento
-ignoradas, cliente removido e os **filtros de cliente/repositório** — OU dentro do filtro, E entre
-filtros e seleção sem resultado), `finance-filters` (normalização dos ids, parâmetros HTTP, período ISO
-em início/fim do dia e opções ordenadas), `finance-schemas` (listas por vírgula sem duplicatas e id malformado), `finance-route` (encaminhamento dos parâmetros e 400 para id malformado) e `finance-page` (totais,
-filtros de clientes/repositórios, seleção lida da URL, vazio com filtros, expansão do cliente, vazio e
-erro). A navegação é coberta em `__tests__/features/layout/navigation.test.ts`.
+agrupamento, "Cliente removido", ordenação, **serviços** — contagem separada e arquivados fora dos
+somas — e totais), `finance-service` (agrupamento pelo snapshot, vazio sem colunas de conclusão,
+**serviços mesmo sem colunas**, filtro pelo período, itens arquivados/sem cliente/sem evento
+ignorados, cliente removido e os **filtros de cliente/repositório**), `finance-filters` (normalização
+dos ids, parâmetros HTTP, período ISO em início/fim do dia, **filtro de arquivados** e opções
+ordenadas), `finance-schemas` (listas por vírgula sem duplicatas, id malformado e o flag
+`archived`), `finance-route` (encaminhamento dos parâmetros, `archived` e 400 para id malformado) e
+`finance-page` (totais com **Serviços**, filtros, **Novo serviço**, linha de serviço com badge, vazio,
+erro e expansão do cliente). A navegação é coberta em `__tests__/features/layout/navigation.test.ts`.
 
 ## Financeiro do **cliente** (portal)
 
@@ -125,9 +149,13 @@ período em ISO é convertido para início/fim do dia (`clienteFinanceQuery`, em
 `src/features/orcamentos/portal/filters.ts`, que reusa `currentMonth`/`financeQueryRange`/`normalizeIds`
 daqui) e entradas inválidas devolvem **400**.
 
-Reusa a mesma regra de conclusão (`completionTimestamps`) e o snapshot (`clientHours`/`billingBrl`), mas
-**nunca** expõe horas reais, fator ou custo/hora — o termo é **"Custo"** e as horas mostradas são as
-infladas. Serviço em `src/features/orcamentos/server/portal-finance.ts` (`groupCostByProject` é puro e
-testado); apresentação em `src/features/orcamentos/portal/{ClienteFinanceiroPage,components/ClienteCost*}`;
-detalhes em `modules/orcamentos.md`. No **celular** os grupos e as tarefas seguem o mesmo ajuste da
-tela do dono (métricas e valores numa linha própria).
+Reusa a mesma regra de conclusão (`completionTimestamps`) e o snapshot (`clientHours`/`billingBrl`)
+para as tarefas, **mais** os **serviços** (agrupados pelo repositório; sem repositório caem em "Sem
+repositório"), mas **nunca** expõe horas reais, fator ou custo/hora — o termo é **"Custo"** e as horas
+mostradas são as infladas. Serviço em `src/features/orcamentos/server/portal-finance.ts`
+(`groupCostByProject` é puro e testado); apresentação em
+`src/features/orcamentos/portal/{ClienteFinanceiroPage,components/ClienteCost*}`; o detalhe do serviço
+(`/cliente/servicos/[id]`, admin) mostra descrição/anexos/custo e é servido por
+`src/features/orcamentos/server/portal-services.ts`. Detalhes em `modules/orcamentos.md` e
+`modules/services.md`. No **celular** os grupos e os itens seguem o mesmo ajuste da tela do dono
+(métricas e valores numa linha própria).

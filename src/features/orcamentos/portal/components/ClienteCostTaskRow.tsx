@@ -3,9 +3,11 @@
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { CalendarDays, Wallet } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { listItem } from "@/components/motion/presets"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import type { GithubRepoLabelData } from "@/features/github/types"
+import { clienteServicoPath } from "@/features/services/constants"
 import { repoLabelFrom } from "../../logic"
 import { formatBillingBrl, formatHours } from "@/features/finance/format"
 import { formatDate } from "@/features/tasks/format"
@@ -17,12 +19,18 @@ import type { ClienteCostTaskDto } from "../../types"
  * custo por hora (dados internos do dono).
  */
 export function ClienteCostTaskRow({ task, repoIndex, href }: { task: ClienteCostTaskDto; repoIndex?: ReadonlyMap<string, GithubRepoLabelData>; href: string }) {
+    const target = task.kind === "service" ? clienteServicoPath(task.id) : href
     return (
         <motion.li layout="position" variants={listItem} className="rounded-lg border bg-card p-3" data-testid={`cliente-cost-task-${task.id}`}>
             <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <Link href={href} className="font-mono text-xs font-semibold text-primary hover:underline">
+                        {task.kind === "service" && (
+                            <Badge variant="secondary" className="shrink-0">
+                                Serviço
+                            </Badge>
+                        )}
+                        <Link href={target} className="font-mono text-xs font-semibold text-primary hover:underline">
                             {task.code}
                         </Link>
                         <span className="truncate text-sm font-medium" title={task.title}>

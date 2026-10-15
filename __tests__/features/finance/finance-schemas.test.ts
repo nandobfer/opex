@@ -33,4 +33,10 @@ describe("financeQuerySchema", () => {
     it("recusa data inválida", () => {
         expect(financeQuerySchema.safeParse({ from: "ontem" }).success).toBe(false)
     })
+
+    it("interpreta o filtro de arquivados", () => {
+        expect(financeQuerySchema.parse({}).archived).toBe(false)
+        expect(financeQuerySchema.parse({ archived: "1" }).archived).toBe(true)
+        expect(financeQuerySchema.safeParse({ archived: "sim" }).success).toBe(false)
+    })
 })

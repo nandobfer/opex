@@ -47,7 +47,7 @@ import { buildDashboard } from "@/features/dashboard/server/service"
 
 const RANGE = { from: "2026-10-01T00:00:00.000Z", to: "2026-10-31T23:59:59.999Z", timeZone: "UTC" }
 
-const emptyFinance = { from: RANGE.from, to: RANGE.to, groups: [], totals: { taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } }
+const emptyFinance = { from: RANGE.from, to: RANGE.to, groups: [], totals: { taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } }
 
 async function seed() {
     await mocks.models.column.create({ key: "todo", name: "A Fazer", color: "zinc" })
@@ -69,8 +69,19 @@ beforeEach(() => {
     mocks.finance.mockResolvedValue({
         from: RANGE.from,
         to: RANGE.to,
-        groups: [{ clientId: "c1", clientName: "Acme", taskCount: 1, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400, tasks: [{ id: "x", code: "POR-2", title: "Bug", project: null, hours: 2, clientHours: 4, billingBrl: 400, completedAt: "2026-10-10T12:00:00.000Z" }] }],
-        totals: { taskCount: 1, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400 },
+        groups: [
+            {
+                clientId: "c1",
+                clientName: "Acme",
+                taskCount: 1,
+                serviceCount: 1,
+                totalHours: 2,
+                totalClientHours: 4,
+                totalBillingBrl: 400,
+                tasks: [{ kind: "task", id: "x", code: "POR-2", title: "Bug", project: null, hours: 2, clientHours: 4, billingBrl: 400, completedAt: "2026-10-10T12:00:00.000Z" }],
+            },
+        ],
+        totals: { taskCount: 1, serviceCount: 1, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400 },
     })
 })
 
@@ -84,6 +95,7 @@ describe("buildDashboard", () => {
             tasksActive: 2,
             tasksInProgress: 1,
             tasksCompleted: 1,
+            services: 1,
             billingBrl: 400,
             clientHours: 4,
             loggedMinutes: 45,
@@ -97,7 +109,7 @@ describe("buildDashboard", () => {
         ])
         expect(result.tasksTimeline.find((point) => point.bucket === "2026-10-05")).toMatchObject({ created: 1 })
         expect(result.tasksTimeline.find((point) => point.bucket === "2026-10-10")).toMatchObject({ completed: 1 })
-        expect(result.financeByClient).toEqual([{ clientId: "c1", clientName: "Acme", billingBrl: 400, clientHours: 4, taskCount: 1 }])
+        expect(result.financeByClient).toEqual([{ clientId: "c1", clientName: "Acme", billingBrl: 400, clientHours: 4, taskCount: 1, serviceCount: 1 }])
         expect(result.financeTimeline).toEqual([{ bucket: "2026-10", billingBrl: 400 }])
         expect(result.timeByDay.find((point) => point.bucket === "2026-10-05")).toMatchObject({ minutes: 45, costUsd: 2 })
         expect(result.costByProject).toEqual([{ projectId, name: "Portal", sigla: "POR", minutes: 45, costUsd: 2 }])

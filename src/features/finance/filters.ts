@@ -19,6 +19,8 @@ export interface FinanceFilters {
     clientIds: string[]
     /** Ids dos projetos (repositórios vinculados); vazio = todos. */
     projectIds: string[]
+    /** `"1"` inclui serviços arquivados na lista (fora dos totais). */
+    archived: string
 }
 
 export const FINANCE_FILTER_SCHEMA: UrlFilterSchema<FinanceFilters> = {
@@ -26,6 +28,7 @@ export const FINANCE_FILTER_SCHEMA: UrlFilterSchema<FinanceFilters> = {
     to: urlFilterCodecs.string(),
     clientIds: urlFilterCodecs.strings(),
     projectIds: urlFilterCodecs.strings(),
+    archived: urlFilterCodecs.string(),
 }
 
 /** Mês corrente (dia 1 → hoje), em `yyyy-MM-dd` — padrão ao abrir a tela. */
@@ -34,9 +37,9 @@ export function currentMonth(): { from: string; to: string } {
     return { from: format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd"), to: format(today, "yyyy-MM-dd") }
 }
 
-/** Filtros padrão: mês corrente e nenhuma seleção de cliente/repositório. */
+/** Filtros padrão: mês corrente, nenhuma seleção e arquivados ocultos. */
 export function defaultFinanceFilters(): FinanceFilters {
-    return { ...currentMonth(), clientIds: [], projectIds: [] }
+    return { ...currentMonth(), clientIds: [], projectIds: [], archived: "" }
 }
 
 /** Ids únicos e ordenados — assinatura estável para a chave de cache e para os parâmetros. */
@@ -58,11 +61,12 @@ export interface FinanceQueryParams {
     to: string
     clientIds: string[]
     projectIds: string[]
+    includeArchived: boolean
 }
 
 /** Consulta normalizada a partir dos filtros da URL (ids únicos e ordenados). */
 export function financeQuery(filters: FinanceFilters): FinanceQueryParams {
-    return { ...financeQueryRange(filters), clientIds: normalizeIds(filters.clientIds), projectIds: normalizeIds(filters.projectIds) }
+    return { ...financeQueryRange(filters), clientIds: normalizeIds(filters.clientIds), projectIds: normalizeIds(filters.projectIds), includeArchived: filters.archived === "1" }
 }
 
 /** Parâmetros HTTP: listas separadas por vírgula; vazio vira `undefined` (sem filtro). */
@@ -72,7 +76,13 @@ export function financeHttpParams(query: FinanceQueryParams): Record<string, str
         to: query.to || undefined,
         clientIds: query.clientIds.length ? query.clientIds.join(",") : undefined,
         projectIds: query.projectIds.length ? query.projectIds.join(",") : undefined,
+        archived: query.includeArchived ? "1" : undefined,
     }
+}
+
+/** O filtro "Mostrar arquivados" está ligado? */
+export function financeShowsArchived(filters: Pick<FinanceFilters, "archived">): boolean {
+    return filters.archived === "1"
 }
 
 /** Há filtro de cliente ou repositório ativo? */

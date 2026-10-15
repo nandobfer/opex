@@ -27,8 +27,10 @@ atalhos globais”).
 - **Tarefas**: `tasksActive` = não arquivadas; `tasksInProgress` = não arquivadas **fora** das
   colunas de conclusão; distribuições por coluna (rótulo/cor do quadro), tipo (`null` → "Sem tipo") e
   projeto (`null`/removido → "Projeto removido"). Criadas usam `createdAt`.
-- **Financeiro**: faturamento é o **snapshot** `estimate.billingBrl`; `financeByClient` e os KPIs vêm
+- **Financeiro**: faturamento é o **snapshot** — `estimate.billingBrl` das tarefas concluídas **e**
+  `FinanceService.billingBrl` dos serviços (data em `serviceDate`); `financeByClient` e os KPIs vêm
   dos grupos do serviço Financeiro (cliente removido preservado). `financeTimeline` é **mensal**.
+  KPI **"Serviços"** (no período, não arquivados); `tasksCompleted`/`taskCount` continuam só tarefas.
 - **Horas agênticas**: `TimeLog` com `startTime` no período; soma `duration` (minutos consolidados) e
   `costUsd`; agrupa por dia/semana, por projeto (via `taskId → projectId`), por etapa
   (`WORKBENCH_STAGE_LABELS`) e por modelo. Custo em **USD** (sem conversão cambial).
@@ -79,8 +81,8 @@ alimentar o indicador — os mesmos contextos do layout de Tarefas.
 ## Tempo real
 
 `useDashboardRealtime()` assina `private-app` e invalida a consulta em `tasks-updated`,
-`task-columns-updated`, `time-updated`, `agentic-updated` e `orcamentos-updated`. Nenhum evento ou
-`publishAppEvent` novo — o servidor já publica nesses pontos.
+`task-columns-updated`, `time-updated`, `agentic-updated`, `orcamentos-updated` e `services-updated`.
+Nenhum evento ou `publishAppEvent` novo — o servidor já publica nesses pontos.
 
 ## Gráficos
 
@@ -107,7 +109,8 @@ gráficos de `components/charts/` (rosca por coluna, barras por tipo, barras ran
 linha criadas × concluídas) — o cartão **Por tipo** conta as **tags** da tarefa, não o tipo. O período
 usa as mesmas opções do dono (`period.ts`) com **chave própria** de persistência
 (`opex:cliente:dashboard:period:v1`) e envia o fuso do navegador. O bloco de **custo** (custo por
-repositório, evolução mensal e horas por repositório) só aparece para o **admin** do cliente. **Não**
+repositório, evolução mensal e horas por repositório) só aparece para o **admin** do cliente — agora
+com **serviços** incluídos (custo/horas e o contador **"Serviços"**). **Não**
 inclui horas agênticas, custo de IA, mesas de trabalho nem faturas do dono (dados internos). Serviço em
 `src/features/orcamentos/server/portal-dashboard.ts` (agregações puras em `portal-aggregate.ts`);
 detalhes em `modules/orcamentos.md`.

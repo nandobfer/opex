@@ -53,6 +53,7 @@ export function summarizeClienteFinance(
         costBrl: rounded(group.totalCostBrl),
         clientHours: rounded(group.totalClientHours),
         taskCount: group.taskCount,
+        serviceCount: group.serviceCount,
     }))
 
     const points = new Map<string, number>()
@@ -69,6 +70,7 @@ export function summarizeClienteFinance(
             totalCostBrl: rounded(finance.totals.totalCostBrl),
             totalClientHours: rounded(finance.totals.totalClientHours),
             taskCount: finance.totals.taskCount,
+            serviceCount: finance.totals.serviceCount,
         },
         byProject,
         timeline: [...points.entries()].map(([bucket, costBrl]) => ({ bucket, costBrl })),

@@ -10,6 +10,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { TASKS_QUERY_KEY } from "@/features/tasks/hooks/useTasks"
 import { ORCAMENTOS_UPDATED_EVENT } from "@/features/orcamentos/constants"
 import { orcamentoClientsKey } from "@/features/orcamentos/hooks/useOrcamentos"
+import { SERVICES_UPDATED_EVENT } from "@/features/services/constants"
 import { FINANCE_PATH } from "../schemas"
 import { financeHttpParams, financeQuery, type FinanceFilters, type FinanceQueryParams } from "../filters"
 import type { FinanceByClientDto } from "../types"
@@ -32,8 +33,8 @@ export function useFinanceByClient(filters: FinanceFilters) {
 }
 
 /**
- * Recarrega o financeiro (e as opções dos filtros) quando tarefas ou clientes mudam — o servidor
- * avisa pelo Pusher. Nunca publica eventos.
+ * Recarrega o financeiro (e as opções dos filtros) quando tarefas, serviços ou clientes mudam — o
+ * servidor avisa pelo Pusher. Nunca publica eventos.
  */
 export function useFinanceRealtime(): void {
     const queryClient = useQueryClient()
@@ -48,9 +49,11 @@ export function useFinanceRealtime(): void {
         }
         channel.bind(TASKS_UPDATED_EVENT, invalidate)
         channel.bind(ORCAMENTOS_UPDATED_EVENT, invalidate)
+        channel.bind(SERVICES_UPDATED_EVENT, invalidate)
         return () => {
             channel.unbind(TASKS_UPDATED_EVENT, invalidate)
             channel.unbind(ORCAMENTOS_UPDATED_EVENT, invalidate)
+            channel.unbind(SERVICES_UPDATED_EVENT, invalidate)
             releaseChannel(name)
         }
     }, [queryClient])

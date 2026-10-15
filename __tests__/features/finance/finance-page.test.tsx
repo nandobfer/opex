@@ -40,11 +40,13 @@ const data = (): FinanceByClientDto => ({
       clientId: 'c1',
       clientName: 'Acme',
       taskCount: 1,
+      serviceCount: 0,
       totalHours: 2,
       totalClientHours: 4,
       totalBillingBrl: 400,
       tasks: [
         {
+          kind: 'task',
           id: 'a'.repeat(24),
           code: 'AP-1',
           title: 'Portal interno',
@@ -57,10 +59,42 @@ const data = (): FinanceByClientDto => ({
       ],
     },
   ],
-  totals: { taskCount: 1, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400 },
+  totals: { taskCount: 1, serviceCount: 0, totalHours: 2, totalClientHours: 4, totalBillingBrl: 400 },
 })
 
-const emptyData = (): FinanceByClientDto => ({ ...data(), groups: [], totals: { taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } })
+const serviceData = (): FinanceByClientDto => ({
+  from: null,
+  to: null,
+  groups: [
+    {
+      clientId: 'c1',
+      clientName: 'Acme',
+      taskCount: 0,
+      serviceCount: 1,
+      totalHours: 1,
+      totalClientHours: 2,
+      totalBillingBrl: 200,
+      tasks: [
+        {
+          kind: 'service',
+          id: 's'.repeat(24),
+          code: 'SRV-1',
+          title: 'Consultoria',
+          project: null,
+          hours: 1,
+          clientHours: 2,
+          billingBrl: 200,
+          serviceDate: '2026-10-08T00:00:00.000Z',
+          taskId: null,
+          archived: false,
+        },
+      ],
+    },
+  ],
+  totals: { taskCount: 0, serviceCount: 1, totalHours: 1, totalClientHours: 2, totalBillingBrl: 200 },
+})
+
+const emptyData = (): FinanceByClientDto => ({ ...data(), groups: [], totals: { taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 } })
 
 const renderPage = () =>
   render(
@@ -94,6 +128,23 @@ describe('FinancePage', () => {
     expect(screen.getByText('1 REGISTROS')).toBeTruthy()
   })
 
+  it('oferece o botão Novo serviço, o filtro de arquivados e o contador de Serviços', () => {
+    renderPage()
+    expect(screen.getByRole('link', { name: /Novo serviço/ }).getAttribute('href')).toBe('/financeiro/servicos/novo')
+    expect(screen.getByLabelText('Mostrar serviços arquivados')).toBeTruthy()
+    expect(screen.getByTestId('finance-total-services')).toBeTruthy()
+  })
+
+  it('lista um serviço com badge e link para o detalhe', async () => {
+    mocks.query = { ...mocks.query, data: serviceData() }
+    renderPage()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Acme/ }))
+    })
+    expect(screen.getByText('Serviço')).toBeTruthy()
+    expect(screen.getByText('SRV-1').getAttribute('href')).toBe(`/financeiro/servicos/${'s'.repeat(24)}`)
+  })
+
   it('lê clientes e repositórios da URL e consulta o financeiro com eles', () => {
     const clientId = 'a'.repeat(24)
     const projectId = 'b'.repeat(24)
@@ -106,7 +157,7 @@ describe('FinancePage', () => {
     window.history.replaceState(null, '', `/financeiro?clientIds=${'a'.repeat(24)}`)
     mocks.query = { ...mocks.query, data: emptyData() }
     renderPage()
-    expect(screen.getByText('Nenhuma tarefa para os filtros selecionados')).toBeTruthy()
+    expect(screen.getByText('Nenhum item para os filtros selecionados')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Limpar seleção' })).toBeTruthy()
   })
 
@@ -126,7 +177,7 @@ describe('FinancePage', () => {
   it('sem tarefas concluídas mostra o estado vazio', () => {
     mocks.query = { ...mocks.query, data: emptyData() }
     renderPage()
-    expect(screen.getByText('Nenhuma tarefa concluída neste período')).toBeTruthy()
+    expect(screen.getByText('Nenhuma tarefa concluída ou serviço neste período')).toBeTruthy()
   })
 
   it('erro mostra o aviso com tentar novamente', () => {

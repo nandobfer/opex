@@ -133,6 +133,7 @@ export async function buildDashboard(range: { from?: string; to?: string; timeZo
         tasksActive: tasks.length,
         tasksInProgress: taskAgg.tasksInProgress,
         tasksCompleted,
+        services: finance.totals.serviceCount,
         billingBrl: finance.totals.totalBillingBrl,
         clientHours: finance.totals.totalClientHours,
         loggedMinutes: timeAgg.loggedMinutes,

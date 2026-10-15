@@ -301,7 +301,8 @@ async function endOrder(columnId: string, exceptId?: string): Promise<number> {
     return (last?.order ?? -1) + 1
 }
 
-async function nextCode(project: IProject): Promise<string> {
+/** Aloca o próximo código do projeto (`{SIGLA}-{n}`), incrementando `taskSeq` atomicamente. */
+export async function nextProjectCode(project: IProject): Promise<string> {
     const updated = await Project.findOneAndUpdate({ _id: (project as unknown as { _id: unknown })._id }, { $inc: { taskSeq: 1 } }, { returnDocument: "after" }).lean()
     const seq = updated?.taskSeq ?? project.taskSeq + 1
     return `${project.sigla}-${seq}`
@@ -337,7 +338,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
     const project = await Project.findById(input.projectId).lean()
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
     await assertColumn(input.columnId)
-    const code = await nextCode(project)
+    const code = await nextProjectCode(project)
     const order = options.order ?? (await endOrder(input.columnId))
     const task = await DevTask.create({
         code,

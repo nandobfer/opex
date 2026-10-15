@@ -122,19 +122,38 @@ describe("buildTaskTimeline", () => {
 })
 
 describe("financeiro", () => {
-    it("mapeia os grupos (cliente removido preservado) e monta a série mensal", () => {
+    it("mapeia os grupos (cliente removido preservado, serviços inclusos) e monta a série mensal", () => {
         const groups = [
-            { clientId: "c1", clientName: "Acme", totalBillingBrl: 400, totalClientHours: 4, taskCount: 1, tasks: [{ billingBrl: 400, completedAt: "2026-10-05T12:00:00.000Z" }] },
-            { clientId: null, clientName: "Cliente removido", totalBillingBrl: 100, totalClientHours: 1, taskCount: 1, tasks: [{ billingBrl: 100, completedAt: "2026-09-20T12:00:00.000Z" }] },
+            {
+                clientId: "c1",
+                clientName: "Acme",
+                totalBillingBrl: 450,
+                totalClientHours: 4,
+                taskCount: 1,
+                serviceCount: 1,
+                tasks: [
+                    { kind: "task" as const, id: "t1", code: "OPX-1", title: "T", project: null, hours: 2, clientHours: 4, billingBrl: 400, completedAt: "2026-10-05T12:00:00.000Z" },
+                    { kind: "service" as const, id: "s1", code: "SRV-1", title: "S", project: null, hours: 1, clientHours: 0, billingBrl: 50, serviceDate: "2026-10-20T00:00:00.000Z", taskId: null, archived: false },
+                ],
+            },
+            {
+                clientId: null,
+                clientName: "Cliente removido",
+                totalBillingBrl: 100,
+                totalClientHours: 1,
+                taskCount: 1,
+                serviceCount: 0,
+                tasks: [{ kind: "task" as const, id: "t2", code: "OPX-2", title: "U", project: null, hours: 1, clientHours: 1, billingBrl: 100, completedAt: "2026-09-20T12:00:00.000Z" }],
+            },
         ]
         expect(aggregateFinanceClients(groups)).toEqual([
-            { clientId: "c1", clientName: "Acme", billingBrl: 400, clientHours: 4, taskCount: 1 },
-            { clientId: null, clientName: "Cliente removido", billingBrl: 100, clientHours: 1, taskCount: 1 },
+            { clientId: "c1", clientName: "Acme", billingBrl: 450, clientHours: 4, taskCount: 1, serviceCount: 1 },
+            { clientId: null, clientName: "Cliente removido", billingBrl: 100, clientHours: 1, taskCount: 1, serviceCount: 0 },
         ])
         const timeline = buildFinanceTimeline(groups, Date.UTC(2026, 8, 1), Date.UTC(2026, 9, 31), "UTC")
         expect(timeline).toEqual([
             { bucket: "2026-09", billingBrl: 100 },
-            { bucket: "2026-10", billingBrl: 400 },
+            { bucket: "2026-10", billingBrl: 450 },
         ])
     })
 })

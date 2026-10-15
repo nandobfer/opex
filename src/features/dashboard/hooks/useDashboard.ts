@@ -8,6 +8,7 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { appChannel } from "@/lib/pusher/channel-names"
 import { AGENTIC_UPDATED_EVENT } from "@/features/agentic/constants"
 import { ORCAMENTOS_UPDATED_EVENT } from "@/features/orcamentos/constants"
+import { SERVICES_UPDATED_EVENT } from "@/features/services/constants"
 import { TASKS_UPDATED_EVENT, TASK_COLUMNS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { TIME_UPDATED_EVENT } from "@/features/time/schemas"
 import type { DashboardDto } from "../types"
@@ -35,7 +36,7 @@ export function useDashboard(range: { from: string; to: string; timeZone: string
     })
 }
 
-/** Recarrega o dashboard quando tarefas, colunas, horas, mesas ou clientes mudam (Pusher). */
+/** Recarrega o dashboard quando tarefas, colunas, horas, mesas, clientes ou serviços mudam (Pusher). */
 export function useDashboardRealtime(): void {
     const queryClient = useQueryClient()
     useEffect(() => {
@@ -43,7 +44,7 @@ export function useDashboardRealtime(): void {
         const name = appChannel()
         const channel = acquireChannel(name)
         const invalidate = () => void queryClient.invalidateQueries({ queryKey: [DASHBOARD_QUERY_KEY] })
-        const events = [TASKS_UPDATED_EVENT, TASK_COLUMNS_UPDATED_EVENT, TIME_UPDATED_EVENT, AGENTIC_UPDATED_EVENT, ORCAMENTOS_UPDATED_EVENT]
+        const events = [TASKS_UPDATED_EVENT, TASK_COLUMNS_UPDATED_EVENT, TIME_UPDATED_EVENT, AGENTIC_UPDATED_EVENT, ORCAMENTOS_UPDATED_EVENT, SERVICES_UPDATED_EVENT]
         for (const event of events) channel.bind(event, invalidate)
         return () => {
             for (const event of events) channel.unbind(event, invalidate)

@@ -50,6 +50,9 @@ export function ClienteCostGroup({ group, open, onToggle, repoIndex, hrefFor }: 
                             <ListChecks className="h-3 w-3" aria-hidden />
                             {group.taskCount} {group.taskCount === 1 ? "tarefa" : "tarefas"}
                         </span>
+                        <span>
+                            {group.serviceCount} {group.serviceCount === 1 ? "serviço" : "serviços"}
+                        </span>
                         <span title="Horas no período">{formatHours(group.totalClientHours)}</span>
                         <strong className="font-mono text-sm text-success">{formatBillingBrl(group.totalCostBrl)}</strong>
                     </span>

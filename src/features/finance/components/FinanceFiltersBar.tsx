@@ -5,6 +5,7 @@ import { Building2, Github } from "lucide-react"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { ListFilters } from "@/components/list/ListFilters"
+import { Switch } from "@/components/ui/switch"
 import { PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
@@ -70,6 +71,12 @@ export function FinanceFiltersBar({ filters, setFilters, onClear, total, clients
                     searchable
                     searchPlaceholder="Buscar repositório..."
                 />
+            </FilterGroup>
+            <FilterGroup label="Arquivados" className={COL}>
+                <label className="flex h-9 items-center gap-2 text-sm">
+                    <Switch checked={filters.archived === "1"} onCheckedChange={(checked) => setFilters((prev) => ({ ...prev, archived: checked ? "1" : "" }))} aria-label="Mostrar serviços arquivados" />
+                    <span className="text-muted-foreground">Mostrar arquivados</span>
+                </label>
             </FilterGroup>
         </ListFilters>
     )

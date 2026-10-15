@@ -77,10 +77,10 @@ export function ClienteFinanceiroPage() {
                 </Button>
             </header>
 
-            <ClienteFinanceFiltersBar filters={filters} setFilters={setFilters} onClear={resetFilters} total={totals?.taskCount} projects={projects} />
+            <ClienteFinanceFiltersBar filters={filters} setFilters={setFilters} onClear={resetFilters} total={(totals?.taskCount ?? 0) + (totals?.serviceCount ?? 0)} projects={projects} />
 
             <Card>
-                <CardContent className="grid gap-4 pt-6 sm:grid-cols-3">
+                <CardContent className="grid gap-4 pt-6 sm:grid-cols-4">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{`${CLIENTE_COST_LABEL} no período`}</p>
                         <p className="font-mono text-2xl font-bold text-primary">{data ? <AnimatedNumber value={totals?.totalCostBrl ?? 0} formatter={formatBillingBrl} /> : "—"}</p>
@@ -92,6 +92,10 @@ export function ClienteFinanceiroPage() {
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Tarefas</p>
                         <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.taskCount ?? 0} /> : "—"}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Serviços</p>
+                        <p className="font-mono text-2xl font-bold">{data ? <AnimatedNumber value={totals?.serviceCount ?? 0} /> : "—"}</p>
                     </div>
                 </CardContent>
             </Card>

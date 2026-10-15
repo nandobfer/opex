@@ -295,13 +295,15 @@ A tarefa tem **anexos** guardados na integração **Storage S3**: os metadados f
 `task_attachments` (modelo `TaskAttachment`) e o binário **nunca passa pelo servidor do app** — o
 navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
 
-- **Modelo** (`src/lib/db/models/TaskAttachment.ts`): `{ taskId, draftId, uploaderKind, uploaderId,
-  uploaderName, clientId, name, size, mimeType, key, uploadKey, status }`. `key` é a chave definitiva
-  e `uploadKey` a temporária (removida na confirmação). `status`: `pending` (reservado), `ready`
-  (confirmado) e `removing` (exclusão pedida, aguardando o storage). O vínculo é `taskId` **ou**
-  `draftId` (rascunho de prévia) — ao aprovar o rascunho os anexos passam para a tarefa.
-  `clientId` é quem **pode ver** o anexo (o cliente que o enviou ou o cliente da tarefa em que foi
-  vinculado); `null` = só o dono. Trocar/remover o cliente da tarefa reajusta a visibilidade.
+- **Modelo** (`src/lib/db/models/TaskAttachment.ts`): `{ taskId, draftId, serviceId, uploaderKind,
+  uploaderId, uploaderName, clientId, name, size, mimeType, key, uploadKey, status }`. `key` é a chave
+  definitiva e `uploadKey` a temporária (removida na confirmação). `status`: `pending` (reservado),
+  `ready` (confirmado) e `removing` (exclusão pedida, aguardando o storage). O vínculo é `taskId`,
+  `draftId` (rascunho de prévia) **ou** `serviceId` (serviço do Financeiro) — ao aprovar o rascunho os
+  anexos passam para a tarefa. `clientId` é quem **pode ver** o anexo (o cliente que o enviou ou o
+  cliente da tarefa/serviço em que foi vinculado); `null` = só o dono. Trocar/remover o cliente da
+  tarefa reajusta a visibilidade; no **serviço**, a leitura revalida o cliente/arquivamento atual
+  (ver `modules/services.md`).
 - **Envio em duas fases** (`src/features/tasks/attachments/server/service.ts`): `POST /api/attachments`
   cria o registro pendente e devolve a URL assinada (`PUT`, `Content-Type` obrigatório) para uma
   chave **temporária**; `POST /api/attachments/uploads/[id]/complete` confere o objeto

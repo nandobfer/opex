@@ -17,6 +17,7 @@ import type { AttachmentReservationDto, TaskAttachmentDto, TaskAttachmentListDto
 export interface AttachmentTarget {
     taskId?: string
     draftId?: string
+    serviceId?: string
 }
 
 export interface SignedUploadInput {

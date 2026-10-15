@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { aggregateFinance, completionTimestamps, type CompletionAuditLog, type FinanceTaskInput } from "@/features/finance/logic"
+import { aggregateFinance, completionTimestamps, financeItemTimestamp, type CompletionAuditLog, type FinanceServiceInput, type FinanceTaskInput } from "@/features/finance/logic"
 
 const DONE = "done"
 const DOING = "doing"
@@ -47,6 +47,7 @@ describe("completionTimestamps", () => {
 })
 
 const task = (overrides: Partial<FinanceTaskInput> = {}): FinanceTaskInput => ({
+    kind: "task",
     id: Math.random().toString(16).slice(2).padEnd(24, "0"),
     code: "OPX-1",
     title: "Tarefa",
@@ -56,6 +57,21 @@ const task = (overrides: Partial<FinanceTaskInput> = {}): FinanceTaskInput => ({
     clientHours: 2,
     billingBrl: 100,
     completedAt: new Date("2026-10-05T12:00:00.000Z").getTime(),
+    ...overrides,
+})
+
+const service = (overrides: Partial<FinanceServiceInput> = {}): FinanceServiceInput => ({
+    kind: "service",
+    id: Math.random().toString(16).slice(2).padEnd(24, "0"),
+    code: "SRV-1",
+    title: "Serviço",
+    project: null,
+    clientId: "c1",
+    hours: 1,
+    clientHours: 2,
+    billingBrl: 100,
+    serviceDate: new Date("2026-10-06T00:00:00.000Z").getTime(),
+    taskId: null,
     ...overrides,
 })
 
@@ -99,10 +115,40 @@ describe("aggregateFinance", () => {
         expect(result.groups[0].tasks.map((item) => item.code)).toEqual(["OPX-2", "OPX-1"])
     })
 
-    it("ecoa o período e zera quando não há tarefas", () => {
+    it("ecoa o período e zera quando não há itens", () => {
         const result = aggregateFinance([], new Map(), { from: "2026-10-01T00:00:00.000Z", to: "2026-10-31T00:00:00.000Z" })
         expect(result.groups).toEqual([])
         expect(result.from).toBe("2026-10-01T00:00:00.000Z")
-        expect(result.totals).toEqual({ taskCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 })
+        expect(result.totals).toEqual({ taskCount: 0, serviceCount: 0, totalHours: 0, totalClientHours: 0, totalBillingBrl: 0 })
+    })
+
+    it("conta tarefas e serviços separadamente e ordena os dois por data desc", () => {
+        const result = aggregateFinance(
+            [
+                task({ code: "OPX-1", billingBrl: 100, completedAt: new Date("2026-10-01T10:00:00.000Z").getTime() }),
+                service({ code: "SRV-1", billingBrl: 300, serviceDate: new Date("2026-10-09T00:00:00.000Z").getTime() }),
+            ],
+            new Map([["c1", "Cliente A"]]),
+            { from: null, to: null },
+        )
+        expect(result.groups[0]).toMatchObject({ taskCount: 1, serviceCount: 1, totalBillingBrl: 400 })
+        expect(result.groups[0]!.tasks.map((item) => item.kind)).toEqual(["service", "task"])
+        expect(result.totals).toMatchObject({ taskCount: 1, serviceCount: 1 })
+    })
+
+    it("serviço arquivado aparece na lista, mas fica fora dos totais e contadores", () => {
+        const result = aggregateFinance([service({ code: "SRV-1", billingBrl: 300, archived: true }), service({ code: "SRV-2", billingBrl: 100 })], new Map([["c1", "Cliente A"]]), { from: null, to: null })
+        expect(result.groups[0]!.tasks.map((item) => item.code)).toEqual(["SRV-1", "SRV-2"])
+        expect(result.groups[0]).toMatchObject({ serviceCount: 1, totalBillingBrl: 100 })
+        expect(result.totals).toMatchObject({ serviceCount: 1, totalBillingBrl: 100 })
+    })
+})
+
+describe("financeItemTimestamp", () => {
+    it("usa a conclusão da tarefa e a data do serviço", () => {
+        const done = aggregateFinance([task()], new Map([["c1", "A"]]), { from: null, to: null }).groups[0]!.tasks[0]!
+        const created = aggregateFinance([service()], new Map([["c1", "A"]]), { from: null, to: null }).groups[0]!.tasks[0]!
+        expect(financeItemTimestamp(done)).toBe(new Date("2026-10-05T12:00:00.000Z").getTime())
+        expect(financeItemTimestamp(created)).toBe(new Date("2026-10-06T00:00:00.000Z").getTime())
     })
 })

@@ -4,11 +4,12 @@ import { groupCostByProject, type CostTaskInput } from "@/features/orcamentos/se
 const day = (iso: string) => new Date(iso).getTime()
 
 const tasks: CostTaskInput[] = [
-    { id: "1", code: "APP-1", title: "A", projectId: "p1", repo: "acme/app", clientHours: 20, costBrl: 2000, completedAt: day("2026-03-10T10:00:00Z") },
-    { id: "2", code: "APP-2", title: "B", projectId: "p2", repo: "acme/site", clientHours: 5, costBrl: 250.5, completedAt: day("2026-03-11T10:00:00Z") },
-    { id: "3", code: "APP-3", title: "C", projectId: "p1", repo: "acme/app", clientHours: 10, costBrl: 1000.25, completedAt: day("2026-03-12T10:00:00Z") },
-    { id: "4", code: "APP-4", title: "D", projectId: null, repo: null, clientHours: 2, costBrl: 100, completedAt: day("2026-03-13T10:00:00Z") },
-    { id: "5", code: "APP-5", title: "E", projectId: "p3", repo: null, clientHours: 1, costBrl: 50, completedAt: day("2026-03-14T10:00:00Z") },
+    { id: "1", kind: "task", code: "APP-1", title: "A", projectId: "p1", repo: "acme/app", clientHours: 20, costBrl: 2000, completedAt: day("2026-03-10T10:00:00Z") },
+    { id: "2", kind: "task", code: "APP-2", title: "B", projectId: "p2", repo: "acme/site", clientHours: 5, costBrl: 250.5, completedAt: day("2026-03-11T10:00:00Z") },
+    { id: "3", kind: "task", code: "APP-3", title: "C", projectId: "p1", repo: "acme/app", clientHours: 10, costBrl: 1000.25, completedAt: day("2026-03-12T10:00:00Z") },
+    { id: "4", kind: "task", code: "APP-4", title: "D", projectId: null, repo: null, clientHours: 2, costBrl: 100, completedAt: day("2026-03-13T10:00:00Z") },
+    { id: "5", kind: "task", code: "APP-5", title: "E", projectId: "p3", repo: null, clientHours: 1, costBrl: 50, completedAt: day("2026-03-14T10:00:00Z") },
+    { id: "6", kind: "service", code: "SRV-1", title: "F", projectId: "p3", repo: null, clientHours: 2, costBrl: 30, completedAt: day("2026-03-15T10:00:00Z") },
 ]
 
 const projects = new Map([
@@ -21,7 +22,13 @@ describe("custo do cliente agrupado por repositório", () => {
         const result = groupCostByProject(tasks, projects, { from: null, to: null })
         expect(result.groups.map((group) => group.repo)).toEqual(["acme/app", "acme/site", "Sem repositório", "Repositório removido"])
         expect(result.groups[0]).toMatchObject({ projectId: "p1", taskCount: 2, totalClientHours: 30, totalCostBrl: 3000.25 })
-        expect(result.totals).toEqual({ taskCount: 5, totalClientHours: 38, totalCostBrl: 3400.75 })
+        expect(result.totals).toEqual({ taskCount: 5, serviceCount: 1, totalClientHours: 40, totalCostBrl: 3430.75 })
+    })
+
+    it("conta serviços à parte das tarefas no grupo", () => {
+        const result = groupCostByProject(tasks, projects, { from: null, to: null })
+        const group = result.groups.find((item) => item.projectId === "p3")!
+        expect(group).toMatchObject({ taskCount: 1, serviceCount: 1, totalCostBrl: 80, totalClientHours: 3 })
     })
 
     it("dentro do grupo, as tarefas ficam por conclusão (desc)", () => {
@@ -36,10 +43,10 @@ describe("custo do cliente agrupado por repositório", () => {
         expect(result.groups.find((group) => group.projectId === "p3")!.tasks[0]!.repo).toBe("Repositório removido")
     })
 
-    it("sem tarefas, devolve totais zerados", () => {
+    it("sem itens, devolve totais zerados", () => {
         const result = groupCostByProject([], projects, { from: "2026-03-01T00:00:00Z", to: "2026-03-31T23:59:59Z" })
         expect(result.groups).toEqual([])
-        expect(result.totals).toEqual({ taskCount: 0, totalClientHours: 0, totalCostBrl: 0 })
+        expect(result.totals).toEqual({ taskCount: 0, serviceCount: 0, totalClientHours: 0, totalCostBrl: 0 })
         expect(result.from).toBe("2026-03-01T00:00:00Z")
     })
 })

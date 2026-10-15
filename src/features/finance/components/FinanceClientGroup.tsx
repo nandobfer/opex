@@ -6,6 +6,7 @@ import { ChevronDown, ListChecks } from "lucide-react"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { formatBillingBrl, formatHours } from "../format"
 import type { FinanceClientGroupDto } from "../types"
+import { FinanceServiceRow } from "./FinanceServiceRow"
 import { FinanceTaskRow } from "./FinanceTaskRow"
 
 interface FinanceClientGroupProps {
@@ -15,9 +16,10 @@ interface FinanceClientGroupProps {
 }
 
 /**
- * Grupo de tarefas concluídas de um cliente, **expansível**: o cabeçalho mostra o nome do cliente, a
- * contagem de tarefas, as horas do cliente e o faturamento do período; ao abrir, revela as tarefas
- * (`FinanceTaskRow`). Anima com Framer Motion e respeita movimento reduzido.
+ * Grupo de itens de um cliente (tarefas concluídas **e** serviços), **expansível**: o cabeçalho mostra
+ * o nome do cliente, as contagens (tarefas e serviços), as horas do cliente e o faturamento do
+ * período; ao abrir, revela as tarefas (`FinanceTaskRow`) e os serviços (`FinanceServiceRow`). Anima
+ * com Framer Motion e respeita movimento reduzido.
  */
 export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroupProps) {
     const reduceMotion = useReducedMotion()
@@ -51,6 +53,9 @@ export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroup
                             <ListChecks className="h-3 w-3" aria-hidden />
                             {group.taskCount} {group.taskCount === 1 ? "tarefa" : "tarefas"}
                         </span>
+                        <span className="inline-flex items-center gap-1">
+                            {group.serviceCount} {group.serviceCount === 1 ? "serviço" : "serviços"}
+                        </span>
                         <span title="Horas do cliente no período">{formatHours(group.totalClientHours)}</span>
                         <strong className="font-mono text-sm text-success">{formatBillingBrl(group.totalBillingBrl)}</strong>
                     </span>
@@ -60,7 +65,7 @@ export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroup
                 {open && (
                     <motion.div
                         id={listId}
-                        key="tasks"
+                        key="items"
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
@@ -68,9 +73,7 @@ export function FinanceClientGroup({ group, open, onToggle }: FinanceClientGroup
                         className="overflow-hidden"
                     >
                         <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-2 border-t p-2">
-                            {group.tasks.map((task) => (
-                                <FinanceTaskRow key={task.id} task={task} />
-                            ))}
+                            {group.tasks.map((item) => (item.kind === "service" ? <FinanceServiceRow key={item.id} service={item} /> : <FinanceTaskRow key={item.id} task={item} />))}
                         </motion.ul>
                     </motion.div>
                 )}

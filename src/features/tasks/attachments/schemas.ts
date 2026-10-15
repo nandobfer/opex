@@ -18,13 +18,15 @@ export const attachmentReserveSchema = z.object({
     taskId: objectId.optional(),
     /** Rascunho de destino (upload feito no formulário de prévia). */
     draftId: objectId.optional(),
+    /** Serviço de destino (upload já vinculado, feito na página do serviço). */
+    serviceId: objectId.optional(),
 })
 export type AttachmentReserveInput = z.infer<typeof attachmentReserveSchema>
 
-/** Lista de anexos de uma tarefa **ou** de um rascunho (exatamente um dos dois). */
+/** Lista de anexos de uma tarefa, de um rascunho **ou** de um serviço (exatamente um dos três). */
 export const attachmentListQuerySchema = z
-    .object({ taskId: objectId.optional(), draftId: objectId.optional() })
-    .refine((value) => Boolean(value.taskId) !== Boolean(value.draftId), "Informe a tarefa ou o rascunho")
+    .object({ taskId: objectId.optional(), draftId: objectId.optional(), serviceId: objectId.optional() })
+    .refine((value) => [value.taskId, value.draftId, value.serviceId].filter(Boolean).length === 1, "Informe a tarefa, o rascunho ou o serviço")
 export type AttachmentListQuery = z.infer<typeof attachmentListQuerySchema>
 
 /** Anexos vinculados na criação da tarefa (upload antes de a tarefa existir). */

@@ -1,4 +1,6 @@
 import { WORKBENCH_STEPS, WORKBENCH_STAGE_LABELS } from "@/features/agentic/constants"
+import { financeItemTimestamp } from "@/features/finance/logic"
+import type { FinanceItemDto } from "@/features/finance/types"
 import type { ColumnColor } from "@/features/tasks/board"
 import { TASK_TYPES, type TaskType } from "@/features/tasks/constants"
 import type {
@@ -210,29 +212,25 @@ export function buildTaskTimeline(tasks: readonly TaskAggInput[], mode: BucketMo
 // ── Financeiro ───────────────────────────────────────────────────────────────
 
 /** Converte os grupos do serviço Financeiro no recorte do dashboard (cliente removido preservado). */
-export function aggregateFinanceClients(groups: readonly { clientId: string | null; clientName: string; totalBillingBrl: number; totalClientHours: number; taskCount: number }[]): DashboardFinanceClient[] {
+export function aggregateFinanceClients(groups: readonly { clientId: string | null; clientName: string; totalBillingBrl: number; totalClientHours: number; taskCount: number; serviceCount: number }[]): DashboardFinanceClient[] {
     return groups.map((group) => ({
         clientId: group.clientId,
         clientName: group.clientName,
         billingBrl: rounded(group.totalBillingBrl),
         clientHours: rounded(group.totalClientHours),
         taskCount: group.taskCount,
+        serviceCount: group.serviceCount,
     }))
 }
 
-/** Evolução mensal do faturamento a partir das tarefas concluídas por cliente. */
-export function buildFinanceTimeline(
-    groups: readonly { tasks: readonly { billingBrl: number; completedAt: string }[] }[],
-    fromMs: number,
-    toMs: number,
-    timeZone: string,
-): DashboardFinancePoint[] {
+/** Evolução mensal do faturamento a partir das tarefas concluídas e dos serviços do período. */
+export function buildFinanceTimeline(groups: readonly { tasks: readonly FinanceItemDto[] }[], fromMs: number, toMs: number, timeZone: string): DashboardFinancePoint[] {
     const points = new Map<string, DashboardFinancePoint>()
     for (const bucket of bucketKeys("month", fromMs, toMs, timeZone)) points.set(bucket, { bucket, billingBrl: 0 })
     for (const group of groups) {
-        for (const task of group.tasks) {
-            const hit = points.get(bucketKeyFor(new Date(task.completedAt).getTime(), "month", timeZone))
-            if (hit) hit.billingBrl = rounded(hit.billingBrl + task.billingBrl)
+        for (const item of group.tasks) {
+            const hit = points.get(bucketKeyFor(financeItemTimestamp(item), "month", timeZone))
+            if (hit) hit.billingBrl = rounded(hit.billingBrl + item.billingBrl)
         }
     }
     return [...points.values()]
