@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
         abort: vi.fn(),
         create: vi.fn(),
         updateOne: vi.fn(async () => ({})),
+        probe: vi.fn(),
     }
 })
 
@@ -82,10 +83,11 @@ vi.mock('@/features/ai/server/settings', () => ({
     availabilityOfTaskRefinement: vi.fn(async () => mocks.availability),
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
+vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
-import { continueRefinement, getRefinementState, interruptRefinement, replyRefinementForm, startRefinement } from '@/features/refinement/server/service'
+import { continueRefinement, getRefinementState, interruptRefinement, reconnectRefinement, replyRefinementForm, startRefinement } from '@/features/refinement/server/service'
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -97,6 +99,7 @@ beforeEach(() => {
     mocks.centralEnabled = true
     mocks.availability = { available: true, reason: null }
     mocks.isActive.mockReturnValue(false)
+    mocks.probe.mockResolvedValue({ outcome: 'attached', follow: true, message: null })
     mocks.create.mockImplementation(async (input: Record<string, unknown>) => {
         mocks.doc = {
             ...input,
@@ -272,5 +275,78 @@ describe('continuar', () => {
         await continueRefinement('t1')
         await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
         expect((mocks.run.mock.calls[0]![1] as { text: string }).text).toContain('Retome o refinamento')
+    })
+})
+
+describe('reconectar', () => {
+    const docBase = (patch: Record<string, unknown> = {}) => ({
+        _id: 'c'.repeat(24),
+        taskId: 't1',
+        taskCode: 'OPX-1',
+        taskTitle: 'x',
+        projectId: 'p1',
+        centralId: 'a'.repeat(24),
+        sessionId: 'sess-1',
+        runState: 'interrupted',
+        resolved: false,
+        usage: {},
+        pendingForms: [],
+        pendingPermissions: [],
+        turnStartedAt: new Date(1000),
+        startedAt: new Date(),
+        updatedAt: new Date(),
+        ...patch,
+    })
+
+    it('acompanha a sessão existente sem criar outra, sem prompt e sem trocar agente/modelo', async () => {
+        mocks.doc = docBase()
+        mocks.probe.mockResolvedValue({ outcome: 'attached', follow: true, message: null })
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await reconnectRefinement('t1')
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        const turnRequest = mocks.run.mock.calls[0]![1] as { attach?: boolean; text: string; sessionId: string }
+        expect(turnRequest.attach).toBe(true)
+        expect(turnRequest.text).toBe('')
+        expect(turnRequest.sessionId).toBe('sess-1')
+        expect(mocks.probe).toHaveBeenCalledWith('sess-1', 1000)
+        expect(mocks.fakeClient.session.create).not.toHaveBeenCalled()
+        const recorded = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { reconnect?: { outcome?: string } } }).$set?.reconnect?.outcome === 'attached')
+        expect(recorded).toBe(true)
+    })
+
+    it('turno que terminou durante a queda recupera o resultado e conclui gravando a especificação', async () => {
+        mocks.doc = docBase()
+        mocks.probe.mockResolvedValue({ outcome: 'recovered', follow: true, message: null })
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await reconnectRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+        await vi.waitFor(() => expect(mocks.fakeClient.session.remove).toHaveBeenCalledWith({ sessionID: 'sess-1' }, expect.anything()))
+    })
+
+    it('sem execução para acompanhar não dispara turno e registra o desfecho definitivo', async () => {
+        mocks.doc = docBase()
+        mocks.probe.mockResolvedValue({ outcome: 'nothing', follow: false, message: 'Não há execução em andamento nesta sessão do OpenCode' })
+        await reconnectRefinement('t1')
+        expect(mocks.run).not.toHaveBeenCalled()
+        const recorded = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { reconnect?: { outcome?: string } } }).$set?.reconnect?.outcome === 'nothing')
+        expect(recorded).toBe(true)
+    })
+
+    it('sem sessão do OpenCode responde 409', async () => {
+        mocks.doc = docBase({ sessionId: null })
+        await expect(reconnectRefinement('t1')).rejects.toMatchObject({ code: 'REFINEMENT_NO_SESSION' })
+    })
+
+    it('estado que não está falho nem interrompido responde 409', async () => {
+        mocks.doc = docBase({ runState: 'idle' })
+        await expect(reconnectRefinement('t1')).rejects.toMatchObject({ code: 'REFINEMENT_INVALID_STATE' })
+    })
+
+    it('com turno vivo no processo não faz nada (no-op)', async () => {
+        mocks.doc = docBase({ runState: 'running' })
+        mocks.isActive.mockReturnValue(true)
+        await reconnectRefinement('t1')
+        expect(mocks.probe).not.toHaveBeenCalled()
+        expect(mocks.run).not.toHaveBeenCalled()
     })
 })

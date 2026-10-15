@@ -176,4 +176,46 @@ describe('runAgentTurn (reconexão)', () => {
     expect(onPermission).toHaveBeenCalledWith({ id: 'p1', action: 'bash', resources: ['rm -rf /tmp/x'], message: null })
     expect(onForm).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1', title: 'Como seguir?' }))
   })
+
+  it('reconecta o SSE e relê a pendência que nasceu no buraco da conexão (uma única vez)', async () => {
+    // A pergunta só aparece na releitura DEPOIS da queda (o attach inicial não a viu).
+    let formListCalls = 0
+    let subscriptions = 0
+    const client = {
+      session: {
+        switchAgent: vi.fn().mockResolvedValue(undefined),
+        switchModel: vi.fn().mockResolvedValue(undefined),
+        prompt: vi.fn().mockResolvedValue(undefined),
+        interrupt: vi.fn().mockResolvedValue({}),
+        get: vi.fn().mockResolvedValue({ time: { idle: 0 }, location: { directory: '/repo' } }),
+        active: vi.fn().mockResolvedValue({ s1: { type: 'running' } }),
+        form: {
+          list: vi.fn(async () => {
+            formListCalls += 1
+            return formListCalls >= 2 ? [{ id: 'f1', sessionID: 's1', title: 'Como seguir?', fields: [] }] : []
+          }),
+        },
+      },
+      message: { list: vi.fn().mockResolvedValue({ data: [] }) },
+      permission: { list: vi.fn().mockResolvedValue([]) },
+      event: {
+        subscribe: (opts: { onActivity?: () => void }) =>
+          (async function* () {
+            opts.onActivity?.()
+            yield { type: 'server.connected', data: {} }
+            subscriptions += 1
+            if (subscriptions === 1) throw new Error('stream caiu')
+            yield ev('session.execution.succeeded')
+          })(),
+      },
+    } as unknown as OpencodeClient
+    const onForm = vi.fn()
+    const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 }, { onForm })
+    expect(result.outcome).toBe('succeeded')
+    expect(subscriptions).toBe(2)
+    expect(onForm).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1' }))
+    const publishedForms = mocks.publish.mock.calls.map(([, payload]) => payload as { type: string; form?: { id: string } }).filter((payload) => payload.type === 'form')
+    expect(publishedForms).toHaveLength(1)
+    expect(publishedForms[0]!.form).toMatchObject({ id: 'f1' })
+  })
 })

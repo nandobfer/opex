@@ -82,21 +82,61 @@ pendentes para o novo refinamento (o id antigo nunca toca a sessão nova).
 O texto do agente **não é salvo** na tarefa além da especificação: o diálogo é reconstruído pelos
 eventos gravados (`agentic_events`), como na mesa. O turno roda **em segundo plano** com limite de
 **6 h** (o refinamento é guiado pelas respostas do usuário; a mesa usa 3 h); reinício do app no meio
-vira `interrupted` e o usuário retoma com **Continuar**.
+vira `interrupted` e o usuário retoma com **Continuar** — ou, com o agente ainda vivo no OpenCode,
+acompanha pela **Reconectar** (ver "Reconectar").
+
+## Reconectar (recuperar a pergunta perdida)
+
+A sessão do refinamento é longa: a pergunta do agente (`question`) pausa o turno até uma resposta. Se
+a conexão se perder nesse instante, o SSE (que é **só ao vivo**) não entrega mais a pergunta.
+`reconnect` (`POST /api/tasks/[id]/refinement/actions/reconnect`) religa o acompanhamento da **mesma
+sessão**, **sem** prompt e **sem** trocar agente/modelo, e trata os três pontos de perda:
+
+1. **Queda transitória Opex↔OpenCode durante o turno**: o runner relê o estado da sessão
+   (`form.list`/`permission.list`) na reconexão do SSE e republica só as pendências **ainda não
+   emitidas**, fechando as que saíram da lista. A timeline atualiza o item pelo id (sem duplicar) e o
+   servidor deduplica `pendingForms`/`pendingPermissions` por id.
+2. **Reinício do app**: o turno vira `interrupted` (`reconcile`) mas a sessão segue viva; ao
+   reconectar, as pendências são restauradas do estado da sessão e a pergunta volta a ser respondida
+   **no Opex**.
+3. **Queda do navegador**: o stream NDJSON reconecta e reenvia `reset` + histórico; o estado vem do
+   banco e, ao reconectar o Pusher, `useRealtimeConnection` invalida as consultas ativas
+   (`useRefinementRealtime`) — a pergunta reaparece **sem clique adicional**.
+
+A resposta da ação traz o **desfecho estável** em `reconnect.outcome`: **`attached`** (execução em
+andamento, o painel volta a **running**), **`recovered`** (terminou na queda: recupera o resultado do
+histórico e aplica o fim de turno normal — grava a especificação e marca `resolved`, consolida até 2
+turnos quando terminar sem ela, ou registra a falha), **`nothing`** (sessão inexistente ou nada
+rodando) ou **`transient`** (OpenCode indisponível no momento). Sem sessão, fora de `failed`/
+`interrupted` ou com a feature/central indisponível, responde 409; com um turno vivo no processo, é
+no-op.
+
+O painel mostra **Reconectar** (mesmo componente/botão da mesa: `ReconnectButton`) **ao lado de**
+**Continuar** quando há sessão e o refinamento está falho/interrompido; **Continuar** segue sendo o
+caminho de "novo prompt" (retomar/consolidar) e **Recomeçar** não mudou. O botão compartilhado traz o
+**ciclo automático** (`useAutoReconnect`): tentativas em **1 s → 2 s → 4 s → 8 s → 16 s** (máximo 5),
+indicador **“Reconectando…”**, aviso discreto ao esgotar e clique manual a qualquer momento (tenta na
+hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** do usuário
+(`stopRequestedAt`), nem reinício por oscilação de estado do mesmo episódio (`turnStartedAt`).
+
 
 ## Estado e ações
 
 - Documento `task_refinements` (um por tarefa): `runState` (`idle`|`running`|`failed`|`interrupted`),
   `resolved`, `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
   gravada), `pendingForms`/`pendingPermissions`, `pendingSessionDeletions` (sessões do OpenCode ainda
-  pendentes de exclusão), `usage`, `sessionId`, `sessionDirectory`, `centralId`, `projectId`.
+  pendentes de exclusão), `turnStartedAt` (marco do turno; episódio do ciclo de reconexão),
+  `stopRequestedAt` (Parar do usuário; desliga a reconexão automática), `reconnect` (`{outcome,
+  message, at}` — desfecho estável para o cliente), `usage`, `sessionId`, `sessionDirectory`,
+  `centralId`, `projectId`.
 - O `usage` acumula tokens/custo do refinamento; cada passo também vai para `ai_consumption_logs`
   (origem `refinement`) para o painel de consumo do OpenCode — ver `modules/ai.md`, "Medição de
   consumo".
-- Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar), **continue** (retoma na
-  mesma sessão um turno interrompido/falho e, quando o refinamento encerrou **sem** a especificação,
-  apenas consolida) e **restart** (Recomeçar: descarta a conversa e abre uma nova sessão; a
-  especificação já salva na tarefa é mantida).
+- Ações (`POST .../refinement/actions/[action]`): **interrupt** (Parar; marca `stopRequestedAt`),
+  **continue** (retoma na mesma sessão um turno interrompido/falho e, quando o refinamento encerrou
+  **sem** a especificação, apenas consolida), **restart** (Recomeçar: descarta a conversa e abre uma
+  nova sessão; a especificação já salva na tarefa é mantida) e **reconnect** (acompanha a sessão
+  existente sem reenviar prompt — ver "Reconectar").
 - Um refinamento "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser
   lido (`reconcile`), com **Continuar** disponível.
 - Excluir a tarefa apaga o refinamento e a saída gravada (melhor esforço).
@@ -114,7 +154,8 @@ vira `interrupted` e o usuário retoma com **Continuar**.
   reusa a **Timeline** da mesa (saída ao vivo) numa **área própria com rolagem** (`h-[40vh]
   min-h-[18rem] max-h-[28rem]`) e o card genérico de perguntas (`components/agent-questions/`,
   compartilhado com a mesa) **logo abaixo**, sem rolagem interna curta. Controles: **Parar**,
-  **Continuar**, **Recomeçar** (com confirmação) e, sem refinamento, **Refinar tarefa** (inicia).
+  **Continuar**, **Reconectar** (quando há sessão e está falho/interrompido; mesmo botão/ciclo da
+  mesa) e **Recomeçar** (com confirmação) e, sem refinamento, **Refinar tarefa** (inicia).
   Durante a consolidação automática o painel indica *"Consolidando a especificação técnica…"*.
   Quando `resolved`, mostra que a especificação foi esclarecida e salva.
 
@@ -136,7 +177,7 @@ vira `interrupted` e o usuário retoma com **Continuar**.
 | `GET /api/tasks/[id]/refinement/events` | Stream NDJSON da saída |
 | `POST /api/tasks/[id]/refinement/forms/[formId]` `{answer}` ou `{cancel:true}` | Responde a pergunta |
 | `POST /api/tasks/[id]/refinement/permissions/[requestId]` `{decision, message?}` | Responde permissão |
-| `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart` |
+| `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart`, `reconnect` |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração da feature + disponibilidade |
 
 Auditoria: `RefinamentoTarefa` (iniciar, recomeçar, excluir). A gravação da especificação usa a
@@ -150,11 +191,15 @@ nada para a issue.
 consolidação/retomada), `refinement-service` (disponibilidade sem central / desativada / feature off,
 ínicio com sessão no diretório da central, aplicação das instruções duráveis, gravação da especificação,
 consolidação automática sem exigir **Continuar**, falha de gravação sem marcar como esclarecido,
-exclusão da sessão ao concluir, resposta, interrupção e **Continuar**), `session-cleanup`
+exclusão da sessão ao concluir, resposta, interrupção, **Continuar** e **Reconectar** (attach sem
+prompt, turno recuperado na queda, desfecho definitivo sem turno, 409 sem sessão/estado inválido e
+no-op com turno vivo)), `session-cleanup`
 (exclusão idempotente, pendências e retomada), `refinement-route`
-(rotas NDJSON/ações/formulários), `RefineTaskButton` (bloqueio com motivo e `onOpen`) e
-`RefinementPanel` (CTA de início, indisponível, saída/perguntas, consolidação, `autoStart` e aviso de
-esclarecido).
+(rotas NDJSON/ações/formulários, com `reconnect`), `RefineTaskButton` (bloqueio com motivo e `onOpen`) e
+`RefinementPanel` (CTA de início, indisponível, saída/perguntas, consolidação, `autoStart`, aviso de
+esclarecido e **Reconectar** ao lado de **Continuar**).
+O ciclo automático compartilhado é coberto por `__tests__/features/agentic/reconnect.test.ts` (agenda e
+máquina do ciclo) e `__tests__/features/agentic/auto-reconnect.test.tsx` (hook).
 `__tests__/features/tasks/task-detail-tabs.test.tsx` cobre o slot do refinamento abaixo da
 especificação. `__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração. O
 OpenCode é sempre mockado.

@@ -19,6 +19,12 @@ export interface ITaskRefinement {
     sessionDirectory: string | null
     /** IDs de sessões do OpenCode já desvinculadas e ainda pendentes de exclusão. */
     pendingSessionDeletions: string[]
+    /** Instante em que o último turno começou (delimita a reconexão automática e o attach). */
+    turnStartedAt: Date | null
+    /** "Parar" pedido pelo usuário (distingue a interrupção pedida das perdas); desliga a reconexão automática. */
+    stopRequestedAt: Date | null
+    /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático do cliente). */
+    reconnect: { outcome: string; message: string | null; at: Date } | null
     /** `idle`: parado esperando ação; `running`: turno do agente em andamento. */
     runState: string
     /** O agente julgou a especificação totalmente esclarecida. */
@@ -50,6 +56,9 @@ const TaskRefinementSchema = new Schema<ITaskRefinement>(
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         pendingSessionDeletions: { type: [String], default: [] },
+        turnStartedAt: { type: Date, default: null },
+        stopRequestedAt: { type: Date, default: null },
+        reconnect: { type: Schema.Types.Mixed, default: null },
         runState: { type: String, required: true, default: "idle" },
         resolved: { type: Boolean, default: false },
         finalizing: { type: Boolean, default: false },

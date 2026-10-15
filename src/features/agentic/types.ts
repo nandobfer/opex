@@ -1,9 +1,11 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import type { RunState, WorkbenchStage } from "./constants"
+import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
 
 export type { OpencodeFormDto, OpencodeFormFieldDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+export type { ReconnectInfoDto, ReconnectOutcome } from "./reconnect"
 
 export interface AgenticAvailability {
     available: boolean
@@ -104,6 +106,12 @@ export interface WorkbenchDto {
     usage: WorkbenchUsageDto
     /** Etapa em que a execução falhou/parou (o "Tentar novamente" refaz o turno dela). */
     lastStage: WorkbenchStage | null
+    /** Instante em que o último turno começou (episódio do ciclo de reconexão automática). */
+    turnStartedAt: string | null
+    /** A interrupção atual foi pedida pelo usuário (Parar): sem reconexão automática. */
+    stoppedByUser: boolean
+    /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
+    reconnect: ReconnectInfoDto | null
     startedAt: string
     completedAt: string | null
     updatedAt: string
