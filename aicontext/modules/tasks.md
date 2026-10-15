@@ -147,10 +147,11 @@ semeado na primeira leitura (`ensureBoard`).
   (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**
   (`workbenchProgressTone`) como **link direto para a mesa** (`/desenvolvimento/[central]/[tarefa]`):
   clicar nele navega para a mesa que aguarda a interação e **não** abre a tarefa (ver
-  `modules/agentic-dev.md`, "Trabalhos em andamento"). No **celular** o **quadro** recebe uma
-  **altura medida** da área visível a partir do topo dele mesmo (`useFillViewportHeight`, com
-  mínimo de `20rem`) para as colunas rolarem por dentro sem colapsar — a **seção** (cabeçalho e
-  filtros) fica com altura natural e a página rola quando não couber — e cada coluna usa a
+  `modules/agentic-dev.md`, "Trabalhos em andamento"). No **celular** cada coluna do kanban tem
+  **altura fixa de `80vh`** (`max-md:h-[80vh]`) — sem medição em JS: o cabeçalho da coluna fica com
+  altura natural e os cards rolam por dentro dela, e a **seção** (cabeçalho e filtros) fica com
+  altura natural, com a página rolando quando não couber —, o mínimo interno da lista de cards deixa
+  de valer no celular (`max-md:min-h-0`) para não estourar os `80vh`, e cada coluna usa a
   **largura da tela** (`85vw`, máx. 300px) em vez dos 290px do desktop.
 - **Tabela** (`TaskTable`): Código, Issue, Título (com a prévia do **resumo de IA**, as **tags** e a
   **estimativa real** de horas e, com cliente, o faturamento sob o título), Coluna ("Mover para…"), Prioridade,

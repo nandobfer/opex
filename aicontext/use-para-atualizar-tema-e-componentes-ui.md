@@ -411,10 +411,9 @@ inteiras** abaixo de `md` (o indicador de trabalho com contêiner **e botão** e
 botões de criação lado a lado; período, seletor Kanban/Tabela e Atualizar em linha própria, com
 Atualizar oculto nos dashboards); a visão Tabela de **Tarefas** vira **cards compactos**
 (`TaskCompactList`/`TaskCompactCard`, escolhidos em JS por `useIsMobile` — só a apresentação ativa
-monta, sem `tr`/`td` nem altura fixa de linha); o **kanban** mede a altura da área visível a partir
-do topo do próprio quadro (`useFillViewportHeight`, mínimo de `20rem`) para as colunas rolarem por
-dentro, deixando a seção com altura natural (a página rola quando não couber), e cada coluna usa a
-largura da tela; a **Central de
+monta, sem `tr`/`td` nem altura fixa de linha); as colunas do **kanban** têm altura fixa de
+`80vh` (`max-md:h-[80vh]`, sem medição em JS) para os cards rolarem por dentro, deixando a seção com
+altura natural (a página rola quando não couber), e cada coluna usa a largura da tela; a **Central de
 desenvolvimento** mostra um painel por vez abaixo de `lg` (lista de tarefas ou mesa, com botão de
 voltar) e, na mesa, a barra de ações da etapa fica numa **linha só** (abrir prévia só com o ícone,
 rótulos compactos com nome acessível completo; rolagem horizontal se não couber) para dar altura às
