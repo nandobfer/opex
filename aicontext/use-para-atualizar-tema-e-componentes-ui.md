@@ -308,20 +308,27 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista
   (`ListFilters`/`FilterGroup`), tabelas, dashboards e cards de escolha.
 
-### Atalho Ctrl+Enter (⌘+Enter) em campos multiline
+### Atalhos em campos multiline (Ctrl+Enter, Ctrl+J e Ctrl+E)
 
 Campos `<textarea>` (multiline) usam o Enter para quebrar linha; para enviar o contexto do campo
-sem sair do teclado, **Ctrl+Enter** (e **⌘+Enter** no Mac) aciona a ação principal. O atalho é
-**global** — instalado uma única vez por `CtrlEnterSubmit` (`src/components/ctrl-enter-submit.tsx`),
-renderizado no layout raiz (`src/app/layout.tsx`) — e não exige handler por campo. O Enter simples
+sem sair do teclado, **Ctrl+Enter** (e **⌘+Enter** no Mac) aciona a ação principal. Os atalhos são
+**globais** — instalados uma única vez por `CtrlEnterSubmit` (`src/components/ctrl-enter-submit.tsx`),
+renderizado no layout raiz (`src/app/layout.tsx`) — e não exigem handler por campo. O Enter simples
 continua nativo (quebra linha no textarea, submete no `<input>`).
+
+Além do envio, o mesmo listener global dá os atalhos de edição: **Ctrl+J** insere uma
+quebra de linha no cursor (substituindo a seleção e respeitando `maxLength`) e **Ctrl+E** leva o
+cursor ao fim da linha lógica (até o próximo `\n`). Só valem com **Ctrl puro** (sem ⌘/Alt/Shift, para
+não brigar com as funções nativas do Mac) e são ignorados em campos `readOnly`/`disabled`.
 
 Como funciona (listener de `keydown` no `document`, em fase de captura para alcançar formulários
 portalados por diálogos Radix):
 
-1. Age só em `<textarea>`, com `Enter` + (`ctrlKey` ou `metaKey`) e **sem** `altKey` (AltGr emite
-   ctrl+alt), fora de `[data-ctrl-enter-ignore]` e do terminal `.xterm`, ignorando eventos já
-   cancelados ou em composição (IME).
+1. Age só em `<textarea>` — o nativo com foco ou o escondido do editor Vim (resolvido por
+   `vimHostTextarea`, `src/components/ui/vim-editor/host.ts`) —, com `Enter` + (`ctrlKey` ou
+   `metaKey`) e **sem** `altKey` (AltGr emite
+   ctrl+alt), fora de `[data-textarea-shortcuts-ignore]`, de `[data-ctrl-enter-ignore]` e do terminal
+   `.xterm`, ignorando eventos já cancelados ou em composição (IME).
 2. Resolve a ação, do mais específico ao mais genérico: **escopo explícito**
    (`data-ctrl-enter-scope`) → **botão marcado dentro do `<form>`** → **botão marcado em um
    ancestral** → **o próprio `<form>`** via `requestSubmit()` (respeita a validação e exibe os
@@ -333,12 +340,21 @@ Atributos (só onde não há `<form>` — nos formulários normais nada é neces
 
 - `data-ctrl-enter-submit`: no botão que deve ser acionado.
 - `data-ctrl-enter-scope`: no contêiner que envolve campo + botão (torna a resolução determinística).
-- `data-ctrl-enter-ignore`: em qualquer ancestral, desliga o atalho na subárvore.
+- `data-ctrl-enter-ignore`: em qualquer ancestral, desliga o Ctrl+Enter na subárvore.
+- `data-textarea-shortcuts-ignore`: em qualquer ancestral, desliga **todos** os atalhos de textarea
+  (Ctrl+Enter, Ctrl+J e Ctrl+E) e também impede que o campo vire editor Vim.
 
 Campos que usam marcação: abas de IA ("Salvar" de cada aba, dentro do `<form>` do editor),
 comentários da tarefa e do cliente, `CorrectionCard` ("Solicitar correção"), `ActionBar`
 ("Implementar"/envio do feedback), `StartWorkbench` ("Abrir mesa e gerar o plano"),
 `AgentQuestionsCard` ("Responder") e o explorador OpenAPI ("Executar").
+
+### Modo Vim nos campos de texto
+
+Qualquer `Textarea` (`src/components/ui/textarea.tsx`) pode ser trocado por um editor CodeMirror com
+atalhos do Vim, por **Ctrl+Tab** ou **Ctrl+Shift+Alt+V**; a preferência é do navegador e começa no modo
+nativo. Só `vim={false}` e as subárvores ignoradas/terminal ficam de fora. Detalhes (selo de modo,
+números de linha, comandos `:`, área de transferência e exclusões) em `modules/editor-mode.md`.
 
 ## Filtros persistidos na URL
 
