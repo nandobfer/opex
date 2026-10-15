@@ -93,7 +93,7 @@ export function TaskColumn(props: TaskColumnProps) {
                 transition={{ duration: 0.2 }}
                 aria-label={column.label}
                 data-status={column.key}
-                className={cn("flex w-[290px] max-md:w-[85vw] max-md:max-w-[300px] flex-col rounded-lg border border-t-4 bg-muted/40 p-2 transition-colors", column.border, overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
+                className={cn("flex w-[290px] max-md:h-[80vh] max-md:w-[85vw] max-md:max-w-[300px] flex-col rounded-lg border border-t-4 bg-muted/40 p-2 transition-colors", column.border, overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
             >
                 <header className="group/col mb-2 flex flex-col gap-1.5 border-b px-1 pb-2">
                     <div className="flex items-center justify-between gap-2">
@@ -165,7 +165,7 @@ export function TaskColumn(props: TaskColumnProps) {
                     )}
                 </AnimatePresence>
 
-                <div ref={setDropRef} className="flex min-h-[200px] flex-1 basis-0 flex-col">
+                <div ref={setDropRef} className="flex min-h-[200px] max-md:min-h-0 flex-1 basis-0 flex-col">
                     <div ref={scrollRef} className="-mr-1 flex min-h-0 flex-1 basis-0 flex-col gap-2 overflow-y-auto pr-1" data-testid={`column-cards-${column.key}`}>
                         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
                             {tasks.length === 0 ? (

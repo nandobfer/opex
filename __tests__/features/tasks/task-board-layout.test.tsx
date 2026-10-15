@@ -117,15 +117,34 @@ describe('kanban: altura e largura', () => {
     expect(screen.getByTestId('column-cards-todo').className).not.toMatch(/max-h/)
   })
 
-  it('no celular a altura é medida a partir do topo do próprio quadro (não da seção, que colapsava a coluna)', () => {
+  it('no celular a coluna tem altura fixa de 80vh (com ou sem cards)', () => {
+    render(<Board tasks={[task(1)]} />)
+    // Vale para toda coluna, inclusive a vazia (o "Nenhuma tarefa" também rola por dentro).
+    for (const name of ['A Fazer', 'Em Andamento']) {
+      expect(classes(screen.getByRole('region', { name }).className)).toContain('max-md:h-[80vh]')
+    }
+  })
+
+  it('no celular o mínimo interno da lista não estoura os 80vh da coluna', () => {
+    render(<Board tasks={[task(1)]} />)
+    // A área que recebe o card tinha um mínimo de 200px; num viewport baixo ele estouraria a altura
+    // fixa da coluna e o conteúdo vazaria para fora da borda em vez de rolar por dentro dela.
+    const dropArea = screen.getByTestId('column-cards-todo').parentElement as HTMLElement
+    expect(classes(dropArea.className)).toContain('max-md:min-h-0')
+  })
+
+  it('no celular a altura da coluna não é mais medida em JS (e o desktop segue na cadeia flex)', () => {
     const page = readFileSync(join(process.cwd(), 'src/features/tasks/components/TasksPage.tsx'), 'utf8')
-    // O quadro (e não a seção inteira com cabeçalho/filtros) recebe a altura da área visível...
-    expect(page).toContain('useFillViewportHeight(boardRef')
-    expect(page).toContain('--tasks-board-height')
-    // ...com um mínimo para o conteúdo não colapsar (a página rola quando o cabeçalho é alto).
-    expect(page).toContain('max-md:min-h-[20rem]')
-    // A seção não é mais fixada no celular.
+    // Nada de medição da área visível para o quadro: a altura vem da própria coluna (80vh).
+    expect(page).not.toContain('useFillViewportHeight')
+    expect(page).not.toContain('--tasks-board-height')
+    // A seção continua sem altura fixa no celular (a página rola quando o cabeçalho é alto).
     expect(page).not.toContain('--tasks-kanban-height')
     expect(page).not.toContain('max-md:h-[var(--tasks-kanban-height')
+    // O desktop mantém a cadeia flex (o quadro preenche a altura da página).
+    expect(page).toContain('md:flex-1 md:basis-0')
+    // No celular o quadro não é mais um item flex `flex-1` (dependeria de uma altura definida no
+    // contêiner): a altura vem das colunas, em altura natural.
+    expect(page).toContain('max-md:block')
   })
 })

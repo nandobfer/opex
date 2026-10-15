@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
@@ -39,7 +39,6 @@ import { ColumnFormDialog } from "./ColumnFormDialog"
 import { TaskCreationActions } from "./TaskCreationActions"
 import { TaskBulkBar } from "./TaskBulkBar"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
-import { useFillViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
 import { useIsMobile } from "@/hooks/useMediaQuery"
 import { TaskBoard } from "./TaskBoard"
 import { TaskCompactList } from "./TaskCompactList"
@@ -148,10 +147,9 @@ export function TasksPage() {
     const isMobile = useIsMobile()
 
     // No kanban o quadro precisa de altura definida para as colunas rolarem por dentro (o cabeçalho
-    // alto do celular empurrava o conteúdo e a coluna colapsava). A altura vem da área visível a
-    // partir do topo do próprio quadro; no desktop o `min-h-full` do flex já resolve.
-    const boardRef = useRef<HTMLDivElement>(null)
-    const boardHeight = useFillViewportHeight(boardRef, kanbanLayout)
+    // alto do celular empurrava o conteúdo e a coluna colapsava). No celular cada coluna tem altura
+    // fixa de `80vh` (ver `TaskColumn`), que define a altura do quadro sem medição em JS; no desktop
+    // o `min-h-full` do flex já resolve.
 
     return (
         <motion.section
@@ -211,11 +209,7 @@ export function TasksPage() {
                         />
                     )}
                     {view === "kanban" && (
-                        <div
-                            ref={boardRef}
-                            style={boardHeight ? ({ "--tasks-board-height": `${boardHeight}px` } as CSSProperties) : undefined}
-                            className="flex min-h-0 flex-col max-md:h-[var(--tasks-board-height,20rem)] max-md:min-h-[20rem] md:flex-1 md:basis-0"
-                        >
+                        <div className="flex min-h-0 flex-col max-md:block md:flex-1 md:basis-0">
                             <TaskBoard
                                 tasks={visible}
                                 columns={columns}
