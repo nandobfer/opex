@@ -33,6 +33,11 @@ export interface SearchPickerProps<T> {
     orderItems?: (items: readonly T[]) => T[]
     onSearchChange?: (term: string) => void
     onOpenChange?: (open: boolean) => void
+    /**
+     * Ao fechar, recebe o evento de restauração de foco no gatilho. Ex.: quem escolheu um item e vai
+     * devolver o foco para outro campo chama `event.preventDefault()` para o gatilho não retomá-lo.
+     */
+    onCloseAutoFocus?: (event: Event) => void
     /** Motivo do bloqueio (vira dica da opção) ou `false` quando a opção pode ser escolhida. */
     disabledReason?: (item: T) => string | false
     loading?: boolean
@@ -70,6 +75,7 @@ export function SearchPicker<T>({
     orderItems,
     onSearchChange,
     onOpenChange,
+    onCloseAutoFocus,
     disabledReason,
     loading,
     fetching,
@@ -132,7 +138,7 @@ export function SearchPicker<T>({
             <PopoverTrigger asChild disabled={disabled}>
                 {trigger}
             </PopoverTrigger>
-            <PopoverContent align={align} className={cn("p-0", matchTriggerWidth ? "w-[var(--radix-popover-trigger-width)] min-w-[min(420px,calc(100vw-2rem))]" : "w-[min(420px,calc(100vw-2rem))]", contentClassName)}>
+            <PopoverContent align={align} onCloseAutoFocus={onCloseAutoFocus} className={cn("p-0", matchTriggerWidth ? "w-[var(--radix-popover-trigger-width)] min-w-[min(420px,calc(100vw-2rem))]" : "w-[min(420px,calc(100vw-2rem))]", contentClassName)}>
                 <div className="flex items-center gap-2 border-b px-3">
                     <Search className="h-4 w-4 text-muted-foreground" aria-hidden />
                     <Input

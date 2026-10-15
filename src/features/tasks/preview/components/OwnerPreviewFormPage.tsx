@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowLeft, Github, Loader2, Sparkles } from "lucide-react"
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
 import { FieldTrigger } from "@/components/ui/field-trigger"
-import { MarkdownField } from "@/components/ui/markdown-field"
+import { MarkdownField, type MarkdownFieldHandle } from "@/components/ui/markdown-field"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
@@ -30,7 +30,8 @@ import { useCreateOwnerDraft } from "../hooks"
 
 /**
  * Primeira etapa da **prévia do dono** (`/tarefas/previa`): escolhe o repositório e descreve a tarefa.
- * Ao avançar, abre o rascunho e segue para a revisão da prévia da IA.
+ * Escolher o repositório leva o foco para a descrição; ao avançar, abre o rascunho e segue para a
+ * revisão da prévia da IA.
  */
 export function OwnerPreviewFormPage() {
     const router = useRouter()
@@ -39,6 +40,9 @@ export function OwnerPreviewFormPage() {
     const attachmentClient = useOwnerAttachmentClient()
     const pending = usePendingAttachments(attachmentClient)
     const repoIndex = useRepoIndex()
+    const descriptionRef = useRef<MarkdownFieldHandle>(null)
+    /** Escolher o repositório pede o foco na descrição: aplicado quando o popover fecha. */
+    const focusDescriptionOnClose = useRef(false)
     const form = useForm<ClienteDraftInput>({ resolver: zodResolver(clienteDraftSchema), mode: "onChange", defaultValues: { projectId: "", description: "" } })
     const errors = form.formState.errors
     const projects = options.data?.projects ?? []
@@ -117,6 +121,13 @@ export function OwnerPreviewFormPage() {
                                                 onPick={(item) => {
                                                     field.onChange(item.id)
                                                     record(item.id)
+                                                    focusDescriptionOnClose.current = true
+                                                }}
+                                                onCloseAutoFocus={(event) => {
+                                                    if (!focusDescriptionOnClose.current) return
+                                                    focusDescriptionOnClose.current = false
+                                                    event.preventDefault()
+                                                    descriptionRef.current?.focus()
                                                 }}
                                                 matchTriggerWidth
                                                 searchLabel="Buscar repositório"
@@ -135,6 +146,7 @@ export function OwnerPreviewFormPage() {
                                     name="description"
                                     render={({ field }) => (
                                         <MarkdownField
+                                            ref={descriptionRef}
                                             id="preview-description"
                                             value={field.value}
                                             onChange={field.onChange}

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { framerMotionMock } from '../helpers/framer-motion'
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -67,5 +67,32 @@ describe('SearchPicker', () => {
     expect(blocked.hasAttribute('disabled')).toBe(true)
     fireEvent.click(blocked)
     expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('onCloseAutoFocus com preventDefault mantém o foco fora do gatilho', async () => {
+    const destino = document.createElement('textarea')
+    document.body.appendChild(destino)
+    render(
+      <SearchPicker<Fruit>
+        trigger={<button type="button">Escolher fruta</button>}
+        items={FRUITS}
+        getKey={(fruit) => fruit.id}
+        renderItem={(fruit) => <span>{fruit.nome}</span>}
+        onPick={() => {}}
+        searchKeys={['nome']}
+        searchLabel="Buscar fruta"
+        listLabel="Frutas"
+        emptyText="Nenhuma fruta"
+        emptySearchText="Nenhuma fruta encontrada"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          destino.focus()
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher fruta' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Banana' }))
+    await waitFor(() => expect(document.activeElement).toBe(destino))
+    destino.remove()
   })
 })

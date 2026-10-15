@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertCircle, Bold, Code2, Eye, Heading2, Image as ImageIcon, Italic, Link2, List, Loader2, Pencil, Quote, RotateCcw, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,15 @@ export interface MarkdownUploads {
     retry: (id: string) => void
     cancel: (id: string) => void
     dismiss: (id: string) => void
+}
+
+/**
+ * Operações imperativas do campo (`ref`): foco no texto, ativando a aba **Escrever** quando o
+ * usuário estiver na visualização. Usado por quem seleciona dado em outro campo e devolve o foco
+ * para a descrição (ex.: escolher o repositório na prévia).
+ */
+export interface MarkdownFieldHandle {
+    focus: () => void
 }
 
 interface MarkdownFieldProps {
@@ -76,23 +85,29 @@ const TOOLS: ToolAction[] = [
  * no portal do cliente e no formulário de comentários. Com `uploads`, colar ou arrastar uma mídia
  * envia o arquivo e insere a referência do anexo na posição do cursor — com progresso, falha visível
  * e nova tentativa. Os rótulos acessíveis (`ariaLabel`/`tablistLabel`/`uploadsLabel`) permitem que o
- * campo fale de comentários e não só de descrição.
+ * campo fale de comentários e não só de descrição. Pela `ref` (`MarkdownFieldHandle`), quem
+ * seleciona dado em outro campo devolve o foco ao texto, ativando a aba Escrever quando preciso.
  */
-export function MarkdownField({
-    id,
-    value,
-    onChange,
-    rows = 8,
-    placeholder = "Markdown aceito",
-    invalid,
-    className,
-    uploads,
-    ariaLabel,
-    tablistLabel = "Editar ou visualizar a descrição",
-    uploadsLabel = "Mídias enviadas pela descrição",
-}: MarkdownFieldProps) {
-    const ref = useRef<HTMLTextAreaElement>(null)
+export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>(function MarkdownField(
+    {
+        id,
+        value,
+        onChange,
+        rows = 8,
+        placeholder = "Markdown aceito",
+        invalid,
+        className,
+        uploads,
+        ariaLabel,
+        tablistLabel = "Editar ou visualizar a descrição",
+        uploadsLabel = "Mídias enviadas pela descrição",
+    },
+    ref,
+) {
+    const areaRef = useRef<HTMLTextAreaElement>(null)
     const [tab, setTab] = useState<"write" | "preview">("write")
+    /** Foco pedido enquanto a aba Visualizar está ativa: aplicado quando o campo de texto monta. */
+    const pendingFocus = useRef(false)
     /** Mídias enviadas por ESTE campo: a lista inline acompanha a fila pelos ids. */
     const [jobs, setJobs] = useState<{ id: string; name: string }[]>([])
     // O valor mais recente: a inserção da referência acontece depois do envio, com o texto já digitado.
@@ -108,8 +123,30 @@ export function MarkdownField({
         [],
     )
 
+    /** Foco no texto: na aba Visualizar, troca para Escrever e o foco entra quando o campo monta. */
+    const focusText = useCallback(() => {
+        const node = areaRef.current
+        if (node) {
+            node.focus()
+            return
+        }
+        pendingFocus.current = true
+        setTab("write")
+    }, [])
+
+    /** Ref do campo de texto: aplica o foco pendente assim que a aba Escrever monta (troca animada). */
+    const attachArea = useCallback((node: HTMLTextAreaElement | null) => {
+        areaRef.current = node
+        if (node && pendingFocus.current) {
+            pendingFocus.current = false
+            node.focus()
+        }
+    }, [])
+
+    useImperativeHandle(ref, () => ({ focus: focusText }), [focusText])
+
     const apply = (tool: ToolAction) => {
-        const el = ref.current
+        const el = areaRef.current
         if (!el) return
         const start = el.selectionStart
         const end = el.selectionEnd
@@ -205,7 +242,7 @@ export function MarkdownField({
                                 ))}
                             </div>
                             <Textarea
-                                ref={ref}
+                                ref={attachArea}
                                 id={id}
                                 rows={rows}
                                 placeholder={placeholder}
@@ -277,4 +314,4 @@ export function MarkdownField({
             </AnimatePresence>
         </div>
     )
-}
+})
