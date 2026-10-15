@@ -11,8 +11,9 @@ import type { ServiceCalcOrigin } from "../constants"
 /**
  * Os três campos reativos do serviço (duração real, duração inflada e faturamento). O **último campo
  * editado** manda: os outros dois são recalculados com o fator de lucro e o custo/hora do cliente
- * selecionado (`computeServiceAmounts`). Enquanto se digita, o campo em edição mantém o texto cru; os
- * derivados são reformatados (`H:mm` / `R$`).
+ * selecionado (`computeServiceAmounts`). As horas usam o mesmo `hh:mm` do campo de estimativa da
+ * tarefa (`estimate-duration`): enquanto a digitação não fecha o formato, os derivados ficam como
+ * estão; ao sair do campo o texto é normalizado com o valor confirmado.
  */
 
 export interface ServiceAmountValues {
@@ -49,32 +50,37 @@ export function ServiceAmountsFields({ factor, hourlyRate, value, onChange, disa
         setRaw(toRaw(value))
     }, [value])
 
-    const numberFrom = (field: keyof typeof raw) => {
-        const parsed = field === "billingBrl" ? parseMoneyInput(raw[field]) : parseHoursInput(raw[field])
-        return parsed ?? 0
+    /** Texto formatado de um campo a partir do valor já confirmado (usado no blur). */
+    const committed = (field: ServiceCalcOrigin) => {
+        if (field === "billingBrl") return formatMoneyInput(value.billingBrl)
+        return formatHoursInput(field === "hours" ? value.hours : value.clientHours)
     }
 
     const handle = (field: ServiceCalcOrigin, text: string) => {
         setRaw((prev) => ({ ...prev, [field]: text }))
         const parsed = field === "billingBrl" ? parseMoneyInput(text) : parseHoursInput(text)
+        // Campo ainda incompleto (ex.: "1:"): não recalcula nem sobrescreve os derivados.
+        if (parsed === null && text.trim() !== "") return
         const base = {
             origin: field,
-            hours: field === "hours" ? (parsed ?? 0) : numberFrom("hours"),
-            clientHours: field === "clientHours" ? (parsed ?? 0) : numberFrom("clientHours"),
-            billingBrl: field === "billingBrl" ? (parsed ?? 0) : numberFrom("billingBrl"),
+            hours: field === "hours" ? (parsed ?? 0) : value.hours,
+            clientHours: field === "clientHours" ? (parsed ?? 0) : value.clientHours,
+            billingBrl: field === "billingBrl" ? (parsed ?? 0) : value.billingBrl,
         }
         const amounts = computeServiceAmounts({ ...base, factor, hourlyRate })
         const next: ServiceAmountValues = { origin: field, hours: amounts.hours, clientHours: amounts.clientHours, billingBrl: amounts.billingBrl }
         lastEmitted.current = next
         // Preserva o texto em edição; reformata só os derivados.
-        setRaw((prev) => ({ hours: field === "hours" ? prev.hours : formatHoursInput(amounts.hours), clientHours: field === "clientHours" ? prev.clientHours : formatHoursInput(amounts.clientHours), billingBrl: field === "billingBrl" ? prev.billingBrl : formatMoneyInput(amounts.billingBrl) }))
+        setRaw((prev) => ({
+            hours: field === "hours" ? prev.hours : formatHoursInput(amounts.hours),
+            clientHours: field === "clientHours" ? prev.clientHours : formatHoursInput(amounts.clientHours),
+            billingBrl: field === "billingBrl" ? prev.billingBrl : formatMoneyInput(amounts.billingBrl),
+        }))
         onChange(next)
     }
 
-    const blur = (field: keyof typeof raw) => {
-        const parsed = field === "billingBrl" ? parseMoneyInput(raw[field]) : parseHoursInput(raw[field])
-        setRaw((prev) => ({ ...prev, [field]: field === "billingBrl" ? formatMoneyInput(parsed ?? 0) : formatHoursInput(parsed ?? 0) }))
-    }
+    /** Ao sair do campo, normaliza o texto com o valor confirmado (descarta digitação incompleta). */
+    const blur = (field: ServiceCalcOrigin) => setRaw((prev) => ({ ...prev, [field]: committed(field) }))
 
     const fields = SERVICE_CALC_ORIGINS.map((origin) => ({ origin, ...labels[origin] }))
 

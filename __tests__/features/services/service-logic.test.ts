@@ -39,24 +39,25 @@ describe("computeServiceAmounts", () => {
 })
 
 describe("parseHoursInput / formatHoursInput", () => {
-    it("lê H:mm e decimal (ponto ou vírgula)", () => {
+    it("lê o hh:mm completo (reusa o helper da estimativa da tarefa)", () => {
         expect(parseHoursInput("1:30")).toBe(1.5)
         expect(parseHoursInput("0:05")).toBe(0.08)
-        expect(parseHoursInput("2")).toBe(2)
-        expect(parseHoursInput("1,5")).toBe(1.5)
+        expect(parseHoursInput("1:5")).toBe(1.08)
         expect(parseHoursInput(" 3:00 ")).toBe(3)
     })
 
-    it("recusa entrada inválida ou negativa", () => {
+    it("devolve null enquanto a digitação não fecha o formato ou o valor é inválido", () => {
         expect(parseHoursInput("")).toBeNull()
+        expect(parseHoursInput("2")).toBeNull()
+        expect(parseHoursInput("2:")).toBeNull()
         expect(parseHoursInput("1:75")).toBeNull()
         expect(parseHoursInput("-1")).toBeNull()
         expect(parseHoursInput("abc")).toBeNull()
     })
 
-    it("formata horas decimais como H:mm, acima de 24 inclusive", () => {
-        expect(formatHoursInput(1.5)).toBe("1:30")
-        expect(formatHoursInput(0)).toBe("0:00")
+    it("formata horas decimais como hh:mm, acima de 24 inclusive", () => {
+        expect(formatHoursInput(1.5)).toBe("01:30")
+        expect(formatHoursInput(0)).toBe("00:00")
         expect(formatHoursInput(25.5)).toBe("25:30")
     })
 })

@@ -27,7 +27,9 @@ Regras de borda (`computeServiceAmounts`, `logic.ts`, puro):
 - **zero é permitido** nos três campos (não bloqueia salvar);
 - divisão por zero (`factor`/`hourlyRate` iguais a zero): o campo digitado é **preservado** e o não
   derivável vira **zero** — nunca `NaN`/`Infinity`;
-- horários entram/saem como **`H:mm`** e são armazenados como **horas decimais** com 2 casas;
+- horários entram/saem como **`hh:mm`** (reusando o helper compartilhado `estimate-duration` da
+  estimativa da tarefa) e são armazenados como **horas decimais** com 2 casas; enquanto a digitação não
+  fecha o formato, os campos derivados ficam como estão (ao sair do campo o texto é normalizado);
 - o **servidor** recalcula sempre com o `factor`/`hourlyRate` **atuais** do cliente e grava o
   **snapshot** — o que o navegador envia não é confiado.
 

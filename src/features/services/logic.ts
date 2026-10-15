@@ -1,3 +1,6 @@
+import { format } from "date-fns"
+import { roundHours } from "@/features/orcamentos/logic"
+import { formatEstimateDuration, parseEstimateDuration } from "@/features/tasks/estimate-duration"
 import type { ServiceCalcOrigin } from "./constants"
 
 /**
@@ -15,8 +18,7 @@ import type { ServiceCalcOrigin } from "./constants"
 
 export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
-/** Horas decimais normalizadas (nunca negativas, 2 casas). */
-export const roundHours = (value: number) => round2(Math.max(0, Number.isFinite(value) ? value : 0))
+export { roundHours }
 
 export interface ServiceAmountInput {
     /** Campo que o usuário acabou de editar. */
@@ -58,30 +60,18 @@ export function computeServiceAmounts(input: ServiceAmountInput): ServiceAmounts
 }
 
 /**
- * Lê um valor de horas digitado e devolve as horas decimais. Aceita `H:mm` (`1:30` → `1,5`) e
- * decimal com ponto ou vírgula (`1.5`/`1,5`). `null` quando inválido ou negativo.
+ * Lê um valor de horas digitado (`hh:mm`) e devolve as horas decimais. Reusa o helper compartilhado da
+ * **estimativa da tarefa** (`estimate-duration`), que exige o formato completo — `null` enquanto o
+ * usuário ainda está digitando (ex.: só as horas) ou quando o valor é inválido.
  */
 export function parseHoursInput(value: string): number | null {
-    const text = value.trim().replace(/\s/g, "")
-    if (!text) return null
-    const clock = /^(\d+):([0-5]?\d)$/.exec(text)
-    if (clock) {
-        const hours = Number(clock[1])
-        const minutes = Number(clock[2])
-        if (minutes > 59) return null
-        return round2(hours + minutes / 60)
-    }
-    const decimal = Number(text.replace(",", "."))
-    if (!Number.isFinite(decimal) || decimal < 0) return null
-    return round2(decimal)
+    const parsed = parseEstimateDuration(value)
+    return parsed.status === "valid" ? round2(parsed.hours) : null
 }
 
-/** Formata horas decimais como `H:mm` (ex.: `1,5` → `1:30`). */
+/** Formata horas decimais como `hh:mm` (ex.: `1,5` → `01:30`). Mesmo formato do campo de estimativa. */
 export function formatHoursInput(hours: number): string {
-    const totalMinutes = Math.round(Math.max(0, Number.isFinite(hours) ? hours : 0) * 60)
-    const h = Math.floor(totalMinutes / 60)
-    const m = totalMinutes % 60
-    return `${h}:${String(m).padStart(2, "0")}`
+    return formatEstimateDuration(hours)
 }
 
 /** Lê um valor em reais digitado (`1.234,56` ou `1234.56`). `null` quando inválido ou negativo. */
@@ -103,8 +93,5 @@ export function formatMoneyInput(value: number): string {
 
 /** Data (`yyyy-MM-dd`) do dia corrente no fuso local — valor inicial do campo Data do serviço. */
 export function todayDateInput(now: Date = new Date()): string {
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, "0")
-    const day = String(now.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
+    return format(now, "yyyy-MM-dd")
 }
