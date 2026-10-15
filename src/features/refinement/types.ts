@@ -1,4 +1,5 @@
 import type { OpencodeFormDto, OpencodePermissionDto, WorkbenchStreamLine } from "@/features/agentic/types"
+import type { ReconnectInfoDto } from "@/features/agentic/reconnect"
 
 /** Tipos do refinamento de tarefa (cliente e servidor). */
 
@@ -40,6 +41,12 @@ export interface TaskRefinementDto {
     pendingForms: OpencodeFormDto[]
     pendingPermissions: OpencodePermissionDto[]
     usage: TaskRefinementUsage
+    /** Instante em que o último turno começou (episódio do ciclo de reconexão automática). */
+    turnStartedAt: string | null
+    /** A interrupção atual foi pedida pelo usuário (Parar): sem reconexão automática. */
+    stoppedByUser: boolean
+    /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
+    reconnect: ReconnectInfoDto | null
     startedAt: string
     updatedAt: string
 }

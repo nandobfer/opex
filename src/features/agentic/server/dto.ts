@@ -2,6 +2,7 @@ import type { IAgenticCentral, IAgenticWorkbench } from "@/lib/db/models/Agentic
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { WORKBENCH_STAGES, RUN_STATES, type RunState, type WorkbenchStage } from "../constants"
 import { parseCentralConfig, asAgenticFlow } from "../logic"
+import { asReconnectOutcome } from "../reconnect"
 import type { CentralDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
@@ -55,6 +56,9 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         pendingForms: (doc.pendingForms ?? []) as OpencodeFormDto[],
         usage: { costUsd: doc.usage?.costUsd ?? 0, inputTokens: doc.usage?.inputTokens ?? 0, outputTokens: doc.usage?.outputTokens ?? 0, reasoningTokens: doc.usage?.reasoningTokens ?? 0 },
         lastStage: doc.lastStage ? asStage(doc.lastStage) : null,
+        turnStartedAt: iso(doc.turnStartedAt),
+        stoppedByUser: Boolean(doc.stopRequestedAt),
+        reconnect: doc.reconnect ? { outcome: asReconnectOutcome(doc.reconnect.outcome) ?? "transient", message: doc.reconnect.message ?? null, at: new Date(doc.reconnect.at).toISOString() } : null,
         startedAt: new Date(doc.startedAt).toISOString(),
         completedAt: iso(doc.completedAt),
         updatedAt: new Date(doc.updatedAt).toISOString(),

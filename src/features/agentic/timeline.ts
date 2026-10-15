@@ -81,16 +81,24 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
             return { ...state, items: [...items, { kind: "user", key: keyOf("user", line.seq, items.length), text: line.text, ts: line.ts }] }
         case "notice":
             return { ...state, items: [...items, { kind: "notice", key: keyOf("notice", line.seq, items.length), level: line.level, message: line.message }] }
-        case "permission":
-            return { ...state, items: [...items, { kind: "permission", key: `perm-${line.permission.id}`, permission: line.permission, decision: null }] }
+        case "permission": {
+            // Reconexão pode reenviar uma pendência: atualiza o item existente pelo id (não duplica).
+            const index = findLastIndex(items, (item) => item.kind === "permission" && item.permission.id === line.permission.id)
+            const item: TimelineItem = { kind: "permission", key: `perm-${line.permission.id}`, permission: line.permission, decision: null }
+            return { ...state, items: index >= 0 ? replaceLast(items, index, item) : [...items, item] }
+        }
         case "permission-replied": {
             const index = findLastIndex(items, (item) => item.kind === "permission" && item.permission.id === line.id)
             if (index < 0) return state
             const item = items[index] as Extract<TimelineItem, { kind: "permission" }>
             return { ...state, items: replaceLast(items, index, { ...item, decision: line.decision }) }
         }
-        case "form":
-            return { ...state, items: [...items, { kind: "form", key: `form-${line.form.id}`, form: line.form, closed: false }] }
+        case "form": {
+            // Reconexão pode reenviar uma pendência: atualiza o item existente pelo id (não duplica).
+            const index = findLastIndex(items, (item) => item.kind === "form" && item.form.id === line.form.id)
+            const item: TimelineItem = { kind: "form", key: `form-${line.form.id}`, form: line.form, closed: false }
+            return { ...state, items: index >= 0 ? replaceLast(items, index, item) : [...items, item] }
+        }
         case "form-closed": {
             const index = findLastIndex(items, (item) => item.kind === "form" && item.form.id === line.id)
             if (index < 0) return state

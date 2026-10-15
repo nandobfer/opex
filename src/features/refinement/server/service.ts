@@ -10,6 +10,8 @@ import { publishAppEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
 import { getLocalUser } from "@/lib/local-user"
 import { parseCentralConfig } from "@/features/agentic/logic"
+import { asReconnectOutcome } from "@/features/agentic/reconnect"
+import { probeReconnect } from "@/features/agentic/server/reconnect"
 import type { FormReplyInput, PermissionReplyInput } from "@/features/agentic/schemas"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import {
@@ -68,7 +70,7 @@ async function findByTask(taskId: string): Promise<ITaskRefinement | null> {
 async function reconcile(doc: ITaskRefinement): Promise<ITaskRefinement> {
     const id = String(doc._id)
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
-    const error = "A execução foi perdida (o app reiniciou durante o turno). Use Continuar."
+    const error = "A execução foi perdida neste app (o app reiniciou durante o turno). Use Reconectar para acompanhar o agente ou Continuar para retomar."
     await TaskRefinement.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", finalizing: false, error, pendingForms: [], pendingPermissions: [] } })
     return { ...doc, runState: "interrupted", finalizing: false, error, pendingForms: [], pendingPermissions: [] }
 }
@@ -92,6 +94,9 @@ function toRefinementDto(doc: ITaskRefinement): TaskRefinementDto {
         pendingForms: (doc.pendingForms ?? []) as OpencodeFormDto[],
         pendingPermissions: (doc.pendingPermissions ?? []) as OpencodePermissionDto[],
         usage: { costUsd: doc.usage?.costUsd ?? 0, inputTokens: doc.usage?.inputTokens ?? 0, outputTokens: doc.usage?.outputTokens ?? 0, reasoningTokens: doc.usage?.reasoningTokens ?? 0 },
+        turnStartedAt: iso(doc.turnStartedAt),
+        stoppedByUser: Boolean(doc.stopRequestedAt),
+        reconnect: doc.reconnect ? { outcome: asReconnectOutcome(doc.reconnect.outcome) ?? "transient", message: doc.reconnect.message ?? null, at: new Date(doc.reconnect.at).toISOString() } : null,
         startedAt: iso(doc.startedAt) ?? new Date().toISOString(),
         updatedAt: iso(doc.updatedAt) ?? new Date().toISOString(),
     }
@@ -196,6 +201,8 @@ function turnHooks(doc: ITaskRefinement) {
     return {
         hooks: {
             onPermission: async (permission: OpencodePermissionDto) => {
+                // Deduplica por id: a reconexão pode reenviar uma permissão que já está pendente.
+                await TaskRefinement.updateOne(filter, { $pull: { pendingPermissions: { id: permission.id } } })
                 await TaskRefinement.updateOne(filter, { $push: { pendingPermissions: permission } })
                 await changed()
             },
@@ -204,6 +211,8 @@ function turnHooks(doc: ITaskRefinement) {
                 await changed()
             },
             onForm: async (form: OpencodeFormDto) => {
+                // Deduplica por id: a reconexão pode reenviar uma pergunta que já está pendente.
+                await TaskRefinement.updateOne(filter, { $pull: { pendingForms: { id: form.id } } })
                 await TaskRefinement.updateOne(filter, { $push: { pendingForms: form } })
                 // Rodada concluída: a especificação atualizada é gravada na tarefa.
                 await saveSpec(doc.taskId, accumulated.text).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
@@ -245,20 +254,32 @@ async function finishRefinementSession(refinementId: string, sessionId: string):
  * Executa o turno em segundo plano: garante a sessão, roda o agente, grava a especificação e — quando
  * o turno termina sem produzi-la — dispara turnos automáticos de consolidação (sem exigir "Continuar").
  * Ao concluir, desvincula e exclui a sessão do OpenCode.
+ *
+ * Com `attach`, NÃO cria sessão nem envia prompt: acompanha a execução já em andamento numa sessão
+ * existente (reconexão) e, se ela já terminou, recupera o resultado do histórico e fecha o turno
+ * normalmente (especificação, consolidação até o limite, falha).
  */
-async function executeTurn(id: string, text: string, controller: AbortController): Promise<void> {
+interface TurnExecutionOptions {
+    attach?: boolean
+}
+
+async function executeTurn(id: string, text: string, controller: AbortController, options: TurnExecutionOptions = {}): Promise<void> {
     const doc = await loadRefinement(id)
     const task = await getTask(doc.taskId)
     const { settings } = await loadTaskRefinementSettings()
     const central = await resolveCentral(task)
     const client = await getOpencodeClient()
-    const sessionId = await ensureSession(client, doc, doc.sessionDirectory ?? central.directory)
+    const attach = options.attach === true
+    // Reconectar acompanha a sessão existente; um turno normal (re)usa a gravada ou cria uma nova.
+    const sessionId = attach ? (doc.sessionId as string) : await ensureSession(client, doc, doc.sessionDirectory ?? central.directory)
     const instructions = buildRefinementInstructions(settings)
     const instructionsApplied = await applyInstructions(client, sessionId, instructions)
     // Sem a entrada durável (servidor sem suporte), o protocolo vai no início de cada prompt.
     const withProtocol = (prompt: string) => (instructionsApplied ? prompt : `${instructions}\n\n---\n${prompt}`)
     // O runner genérico emite os eventos via `publish`; sem isto a saída não chega ao stream.
     const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
+    // Marco do turno acompanhado (reconexão): delimita o resultado recuperado do histórico.
+    const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
 
     let prompt = withProtocol(text)
     let result: Awaited<ReturnType<typeof runAgentTurn>> = { outcome: "failed", text: "", message: null, costUsd: 0, durationMs: 0 }
@@ -266,10 +287,24 @@ async function executeTurn(id: string, text: string, controller: AbortController
     let specSaved = false
     for (let attempt = 0; ; attempt++) {
         const { hooks, accumulated } = turnHooks(doc)
-        log.info({ refinementId: id, agent: settings.agent, model: settings.model, attempt }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
+        // O attach vale só para o primeiro turno: as consolidações são turnos novos normais.
+        const attachThisTurn = attach && attempt === 0
+        log.info({ refinementId: id, agent: settings.agent, model: settings.model, attempt, attach: attachThisTurn }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
         result = await runAgentTurn(
             client,
-            { id, sessionId, stage: REFINEMENT_STAGE_LABEL, title: REFINEMENT_STAGE_LABEL, agent: { agent: settings.agent, model: settings.model, variant: settings.variant }, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "refinement", subject: doc.taskId } },
+            {
+                id,
+                sessionId,
+                stage: REFINEMENT_STAGE_LABEL,
+                title: REFINEMENT_STAGE_LABEL,
+                agent: { agent: settings.agent, model: settings.model, variant: settings.variant },
+                text: attachThisTurn ? "" : prompt,
+                timeoutMs: TURN_TIMEOUT_MS,
+                signal: controller.signal,
+                attach: attachThisTurn,
+                ...(attachThisTurn ? { startedAt } : {}),
+                consumption: { origin: "refinement", subject: doc.taskId },
+            },
             { ...hooks, publish },
         )
         textOut = result.text || accumulated.text
@@ -321,7 +356,9 @@ async function launchTurn(id: string, text: string): Promise<void> {
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
     try {
-        await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "running", resolved: false, finalizing: false, error: null, lastPrompt: { text }, heartbeatAt: new Date(), pendingForms: [], pendingPermissions: [] } })
+        // Turno novo começa um episódio novo: marca o início do turno e limpa a causa da parada e o
+        // desfecho da reconexão anterior (o ciclo automático do cliente reinicia do zero).
+        await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "running", resolved: false, finalizing: false, error: null, lastPrompt: { text }, heartbeatAt: new Date(), turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null, pendingForms: [], pendingPermissions: [] } })
     } catch (error) {
         clearWorkbenchActive(id, controller)
         throw error
@@ -404,6 +441,9 @@ export async function interruptRefinement(taskId: string): Promise<TaskRefinemen
     const doc = await findByTask(taskId)
     if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
     const id = String(doc._id)
+    // Registra a intenção ANTES de abortar: a interrupção pedida pelo usuário nunca dispara a
+    // reconexão automática (ao contrário das perdas por queda/reinício).
+    await TaskRefinement.updateOne({ _id: doc._id }, { $set: { stopRequestedAt: new Date() } })
     if (!isWorkbenchActive(id)) {
         await reconcile(doc)
         return getRefinementState(taskId)
@@ -412,6 +452,58 @@ export async function interruptRefinement(taskId: string): Promise<TaskRefinemen
     abortWorkbenchRun(id, "Interrompido pelo usuário")
     log.warn({ refinementId: id }, `Refinamento ${doc.taskCode}: interrompido pelo usuário`)
     return getRefinementState(taskId)
+}
+
+/**
+ * Reconecta ao turno em andamento na MESMA sessão do OpenCode: acompanha sem reenviar prompt e sem
+ * trocar agente/modelo, restaura perguntas/permissões pendentes e, se a execução já terminou durante
+ * a queda, recupera o resultado e fecha o turno (especificação, consolidação automática, falha).
+ * A rota responde na hora: a resposta já diz se há (ou não) execução para acompanhar.
+ */
+export async function reconnectRefinement(taskId: string): Promise<TaskRefinementStateDto> {
+    const found = await findByTask(taskId)
+    if (!found) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
+    const doc = await reconcile(found)
+    const id = String(doc._id)
+    // Já há um turno vivo neste processo acompanhando o refinamento: nada a reconectar.
+    if (isWorkbenchActive(id)) return getRefinementState(taskId)
+    if (!doc.sessionId) throw new DomainError(409, "Este refinamento não tem uma sessão do OpenCode para reconectar (use Continuar)", "REFINEMENT_NO_SESSION")
+    if (doc.runState !== "failed" && doc.runState !== "interrupted") throw new DomainError(409, "O refinamento não está falho nem interrompido para reconectar", "REFINEMENT_INVALID_STATE")
+    const task = await getTask(doc.taskId)
+    const availability = await availabilityFor(task)
+    if (!availability.available) throw new DomainError(409, availability.reason ?? "Refinar tarefa indisponível", "REFINEMENT_UNAVAILABLE")
+    await prepareHub(id)
+    const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
+    const probe = await probeReconnect(doc.sessionId, startedAt)
+    await TaskRefinement.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: probe.outcome, message: probe.message, at: new Date() } } })
+    await publishRefinement(doc.taskId)
+    if (!probe.follow) return getRefinementState(taskId)
+    await launchAttachTurn(id, doc)
+    return getRefinementState(taskId)
+}
+
+/** Acompanha em segundo plano a sessão existente (attach), sem criar sessão nem enviar prompt. */
+async function launchAttachTurn(id: string, doc: ITaskRefinement): Promise<void> {
+    if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está refinando esta tarefa", "REFINEMENT_BUSY")
+    const controller = new AbortController()
+    markWorkbenchActive(id, controller)
+    try {
+        // Preserva a sessão, o marco do turno, a causa da parada e as pendências (o turno é o mesmo).
+        await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "running", finalizing: false, error: null, heartbeatAt: new Date() } })
+    } catch (error) {
+        clearWorkbenchActive(id, controller)
+        throw error
+    }
+    await publishRefinement(doc.taskId)
+    void executeTurn(id, "", controller, { attach: true })
+        .catch(async (error) => {
+            log.error({ err: errorText(error), refinementId: id }, "[refinement] falha inesperada na reconexão")
+            await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "failed", error: errorText(error), pendingForms: [], pendingPermissions: [] } }).catch(() => undefined)
+        })
+        .finally(() => {
+            clearWorkbenchActive(id, controller)
+            void publishRefinement(doc.taskId)
+        })
 }
 
 /** Retoma um refinamento interrompido/falho ou encerrado sem a especificação (mesma sessão). */

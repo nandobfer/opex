@@ -5,10 +5,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }) }))
+vi.mock('@/features/agentic/hooks/useAgentic', () => ({
+  useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }),
+  useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
+}))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'
 import type { WorkbenchDto } from '@/features/agentic/types'
@@ -35,6 +38,9 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
   pendingForms: [],
   usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 },
   lastStage: null,
+  turnStartedAt: null,
+  stoppedByUser: false,
+  reconnect: null,
   startedAt: '2026-10-09T12:00:00.000Z',
   completedAt: null,
   updatedAt: '2026-10-09T12:00:00.000Z',
@@ -106,9 +112,10 @@ describe('ActionBar', () => {
   })
 
   it('mesa falha com sessão oferece Reconectar (sem reenviar) ao lado de Tentar novamente', () => {
+    mocks.reconnect.mockResolvedValue({ runState: 'running', reconnect: { outcome: 'attached', message: null, at: '2026-10-09T12:00:00.000Z' } })
     render(<ActionBar workbench={workbench({ stage: 'planning', runState: 'interrupted', error: 'Conexão perdida' })} />)
-    fireEvent.click(screen.getByRole('button', { name: /Reconectar ao agente/ }))
-    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'reconnect', text: undefined }, expect.anything())
+    fireEvent.click(screen.getByRole('button', { name: /Reconect/ }))
+    expect(mocks.reconnect).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /Tentar novamente/ })).toBeTruthy()
   })
 

@@ -85,7 +85,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
 | `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial; inclui `agenticFlow` — fluxo da mesa, ajustável só pela tela de desenvolvimento) |
-| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`) — grava as horas reais (cria a estimativa se não existir) e recalcula prazo/faturamento com o cliente da tarefa |
+| `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`, **decimal**) — grava as horas reais (cria a estimativa se não existir) e recalcula prazo/faturamento com o cliente da tarefa; a página da tarefa edita em `hh:mm` e converte antes de enviar |
 | `POST /api/tasks/[id]/estimate/generate` | Estima as horas com IA (NDJSON; reusa "Estimar prazos") e grava o snapshot |
 | `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove o cliente e a inflação, **preservando as horas reais**) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
@@ -259,9 +259,15 @@ preservar o escopo de hooks de cada aba.
   horas reais** na estimativa. Clientes são cadastrados **apenas** em Integrações › Orçamentos (o
   card traz o link no estado vazio).
 - **Estimativa** (`TaskEstimateCard`, coluna lateral; **sempre visível**, com ou sem cliente): as
-  **horas reais** (H) são **editáveis** (campo + **Salvar**, `useUpdateTaskEstimate`; salvar **cria**
-  a estimativa quando a tarefa ainda não tinha) e podem ser **geradas por IA** pelo botão **Estimar
-  com IA** / **Regerar com IA** (`useGenerateTaskEstimate` → `POST /api/tasks/[id]/estimate/generate`,
+  **horas reais** (H) são **editáveis** em **horas e minutos** (`hh:mm`, ex.: `01:30`); o campo
+  mostra a duração e converte para **horas decimais** no envio (`estimate-duration.ts`:
+  `formatEstimateDuration`/`parseEstimateDuration`), sem mudar o contrato da API. O **Salvar** só
+  habilita com duração válida e **diferente em minutos** do valor gravado (vazio e `00:00` são coisas
+  distintas) e salvar **cria** a estimativa quando a tarefa ainda não tinha. Formatos fora de
+  `hh:mm` mostram erro pt-BR (`aria-invalid`) e a digitação em andamento (só as horas, ou as horas e
+  os `:`) não acusa erro; `10000:00` é o limite do contrato. As horas também podem ser **geradas por
+  IA** pelo botão **Estimar com IA** / **Regerar com IA**
+  (`useGenerateTaskEstimate` → `POST /api/tasks/[id]/estimate/generate`,
   que reusa "Estimar prazos" — ver `modules/ai.md`; o progresso e o erro aparecem no próprio card).
   **Com cliente**, o **prazo** (`H × fator`) e o **faturamento estimado** (`prazo × custo/hora`) são
   recalculados com o fator e o custo/hora **atuais** do cliente **da tarefa** (`resolveTaskClient`:
@@ -375,8 +381,9 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `task-creation-actions` (os atalhos compartilhados com o Dashboard), `task-form`,
 `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
-`task-summary-card`, `task-estimate-card`, `task-estimate-generate`, `task-client-card` — a
-estimativa (sempre visível, edição manual e geração por IA na tarefa), o cliente da
+`task-summary-card`, `task-estimate-card`, `estimate-duration`, `task-estimate-generate`,
+`task-client-card` — a
+estimativa (sempre visível, edição manual em `hh:mm` e geração por IA na tarefa), o cliente da
 tarefa (adicionar/trocar/remover e as validações) e o autor
 dos comentários são cobertos em `tasks-service`; as **tags** têm testes próprios em
 `__tests__/features/tasks/tags.test.ts`) e `__tests__/hooks/usePersistentState.test.tsx`. Os

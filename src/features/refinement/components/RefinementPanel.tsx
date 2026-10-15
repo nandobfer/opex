@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/features/agentic/components/workbench/Timeline"
+import { ReconnectButton } from "@/features/agentic/components/workbench/ReconnectButton"
+import { useAutoReconnect } from "@/features/agentic/hooks/useAutoReconnect"
 import { apiErrorMessage } from "@/lib/api"
-import { useRefinementAction, useRefinementRealtime, useStartRefinement, useTaskRefinement } from "../hooks/useRefinement"
+import { useRefinementAction, useRefinementRealtime, useRefinementReconnect, useStartRefinement, useTaskRefinement } from "../hooks/useRefinement"
 import { useRefinementStream } from "../hooks/useRefinementStream"
 import { refinementWaitingReason } from "../logic"
 import { RefinementRequests } from "./RefinementRequests"
@@ -40,10 +42,19 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
     const query = useTaskRefinement(taskId)
     const start = useStartRefinement(taskId)
     const action = useRefinementAction(taskId)
+    const reconnect = useRefinementReconnect(taskId)
     const refinement = query.data?.refinement ?? null
     const availability = query.data?.availability ?? null
     const { timeline } = useRefinementStream(refinement ? taskId : null)
     const running = refinement?.runState === "running"
+    const reconnectable = Boolean(refinement && refinement.sessionId && (refinement.runState === "failed" || refinement.runState === "interrupted"))
+    // Ciclo automático de reconexão (mesmo comportamento da mesa): dispara ao oferecer Reconectar e
+    // nunca depois de um Parar do usuário; um ciclo por episódio de queda.
+    const autoReconnect = useAutoReconnect({
+        eligible: reconnectable && !refinement?.stoppedByUser,
+        episodeKey: `${refinement?.id ?? taskId}:${refinement?.turnStartedAt ?? ""}`,
+        attempt: () => reconnect.mutateAsync().then((state) => (state.refinement?.runState === "running" ? "attached" : (state.refinement?.reconnect?.outcome ?? null)), () => null),
+    })
     const [confirmRestart, setConfirmRestart] = useState(false)
     const startedRef = useRef(false)
 
@@ -99,6 +110,7 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                             </motion.span>
                         ) : null}
                     </AnimatePresence>
+                    {reconnectable && <ReconnectButton reconnecting={autoReconnect.reconnecting} size="default" onClick={autoReconnect.retryNow} />}
                     {refinement && (
                         <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending || running} onClick={() => setConfirmRestart(true)}>
                             <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Recomeçar
@@ -106,6 +118,14 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                     )}
                 </div>
             </div>
+
+            <AnimatePresence initial={false}>
+                {autoReconnect.notice && (
+                    <motion.p key="reconnect-notice" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                        <Info className="h-3.5 w-3.5 shrink-0" aria-hidden /> {autoReconnect.notice}
+                    </motion.p>
+                )}
+            </AnimatePresence>
 
             {unavailable && !refinement ? (
                 <p className="flex items-start gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
