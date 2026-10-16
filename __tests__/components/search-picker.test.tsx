@@ -20,11 +20,13 @@ const FRUITS: Fruit[] = [
 
 afterEach(() => cleanup())
 
-function renderPicker(onPick = vi.fn(), disabledIds: string[] = []) {
+function renderPicker(onPick = vi.fn(), disabledIds: string[] = [], options: { items?: Fruit[]; loading?: boolean; fetching?: boolean } = {}) {
   render(
     <SearchPicker<Fruit>
       trigger={<button type="button">Escolher fruta</button>}
-      items={FRUITS}
+      items={options.items ?? FRUITS}
+      loading={options.loading}
+      fetching={options.fetching}
       getKey={(fruit) => fruit.id}
       renderItem={(fruit) => <span>{fruit.nome}</span>}
       onPick={onPick}
@@ -41,6 +43,53 @@ function renderPicker(onPick = vi.fn(), disabledIds: string[] = []) {
 }
 
 describe('SearchPicker', () => {
+  it('Enter com busca escolhe o primeiro resultado sem precisar de setas', () => {
+    const onPick = renderPicker()
+    const input = screen.getByLabelText('Buscar fruta')
+    fireEvent.change(input, { target: { value: 'a' } })
+    expect(screen.getAllByRole('option').length).toBeGreaterThan(1)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPick).toHaveBeenCalledWith(FRUITS[0])
+  })
+
+  it('Enter busca o primeiro habilitado, ignorando resultado bloqueado', () => {
+    const onPick = renderPicker(vi.fn(), ['a'])
+    const input = screen.getByLabelText('Buscar fruta')
+    fireEvent.change(input, { target: { value: 'a' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPick).toHaveBeenCalledWith(FRUITS[1])
+  })
+
+  it('sem busca não escolhe arbitrariamente entre vários resultados', () => {
+    const onPick = renderPicker()
+    fireEvent.keyDown(screen.getByLabelText('Buscar fruta'), { key: 'Enter' })
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('sem busca preserva a escolha quando só uma opção está habilitada', () => {
+    const onPick = renderPicker(vi.fn(), ['a', 'c'])
+    fireEvent.keyDown(screen.getByLabelText('Buscar fruta'), { key: 'Enter' })
+    expect(onPick).toHaveBeenCalledWith(FRUITS[1])
+  })
+
+  it.each([{ loading: true }, { fetching: true }, { items: [] }, { disabled: true }])('não escolhe durante carga, busca ou sem opções disponíveis: %j', (options) => {
+    const onPick = renderPicker(vi.fn(), 'disabled' in options ? ['a', 'b', 'c'] : [], options)
+    const input = screen.getByLabelText('Buscar fruta')
+    fireEvent.change(input, { target: { value: 'a' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('navegação explícita tem prioridade sobre o primeiro resultado da busca', () => {
+    const onPick = renderPicker()
+    const input = screen.getByLabelText('Buscar fruta')
+    fireEvent.change(input, { target: { value: 'a' } })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onPick).toHaveBeenCalledWith(FRUITS[1])
+  })
+
   it('busca local tolera erro de digitação e mostra estado vazio sem resultado', () => {
     renderPicker()
     fireEvent.change(screen.getByLabelText('Buscar fruta'), { target: { value: 'banaan' } })

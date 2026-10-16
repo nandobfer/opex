@@ -5,9 +5,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), openFork: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ mutate: mocks.openFork, isPending: false }) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }),
   useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
@@ -32,6 +33,9 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
   port: null,
   previewUrl: null,
   previewHealthy: null,
+  agenticFlow: 'preview',
+  buildQueuePosition: null,
+  slotQueue: null,
   plans: [],
   pr: null,
   pendingPermissions: [],
@@ -97,13 +101,26 @@ describe('ActionBar', () => {
 
   it('executando: só Parar; falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
-    expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Parar'])
+    expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])
     unmount()
     render(<ActionBar workbench={workbench({ stage: 'building', runState: 'failed', error: 'A prévia não respondeu' })} />)
     expect(screen.getByRole('alert').textContent).toContain('A prévia não respondeu')
     fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
     expect(mocks.mutate).toHaveBeenCalledWith({ action: 'retry', text: undefined }, expect.anything())
     expect(screen.getByRole('button', { name: /Voltar ao planejamento/ })).toBeTruthy()
+  })
+
+  it('aguardando vaga: mostra a posição e só oferece cancelar a espera (com confirmação)', () => {
+    render(<ActionBar workbench={workbench({ slotQueue: { position: 2, action: 'implement' } })} />)
+    expect(screen.getByText(/Aguardando vaga na central — posição #2/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Implementar/ })).toBeNull()
+    expect(screen.queryByLabelText('Informações adicionais (opcional)')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Cancelar espera/ }))
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    const confirm = screen.getAllByRole('button', { name: /Cancelar espera/ }).at(-1)!
+    fireEvent.click(confirm)
+    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'cancel-wait', text: undefined }, expect.anything())
   })
 
   it('PR com mudanças sem motivo já abre o campo de texto', () => {
@@ -117,6 +134,24 @@ describe('ActionBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /Reconect/ }))
     expect(mocks.reconnect).toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /Tentar novamente/ })).toBeTruthy()
+  })
+
+  it.each(['plan_review', 'implementing', 'preview', 'pr_open', 'done'] as const)('Abrir fork disponível na etapa %s', (stage) => {
+    render(<ActionBar workbench={workbench({ stage, runState: stage === 'implementing' ? 'running' : 'idle' })} />)
+    expect(screen.getByRole('button', { name: /Abrir fork/ })).toBeTruthy()
+  })
+
+  it('Abrir fork pede a primeira mensagem (obrigatória) e abre o fork', () => {
+    const onForkOpened = vi.fn()
+    mocks.openFork.mockImplementation((_text: string, options: { onSuccess: (fork: { id: string }) => void }) => options.onSuccess({ id: 'f1' }))
+    render(<ActionBar workbench={workbench({})} onForkOpened={onForkOpened} />)
+    fireEvent.click(screen.getByRole('button', { name: /Abrir fork/ }))
+    const submit = screen.getAllByRole('button', { name: /Abrir fork/ }).at(-1)!
+    expect(submit.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(screen.getByLabelText(/O que você quer perguntar ou investigar no fork/), { target: { value: 'Por que o serviço X?' } })
+    fireEvent.click(screen.getAllByRole('button', { name: /Abrir fork/ }).at(-1)!)
+    expect(mocks.openFork).toHaveBeenCalledWith({ text: 'Por que o serviço X?', parentForkId: undefined }, expect.anything())
+    expect(onForkOpened).toHaveBeenCalledWith({ id: 'f1' })
   })
 
   it('mesa falha sem sessão não oferece Reconectar', () => {

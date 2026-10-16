@@ -97,7 +97,7 @@ export function CentralPage({ id }: { id: string }) {
                     {tab === "geral" && <GeneralSection form={form} central={central} />}
                     {tab === "agentes" && <AgentsSection form={form} />}
                     {tab === "git" && <GitSection form={form} />}
-                    {tab === "ambiente" && <EnvironmentSection form={form} />}
+                    {tab === "ambiente" && <EnvironmentSection form={form} centralId={id} />}
                     {tab === "colunas" && <ColumnsSection form={form} />}
                     {tab === "instrucoes" && <InstructionsSection form={form} />}
                     {tab === "logs" && <CentralLogsSection centralId={id} />}

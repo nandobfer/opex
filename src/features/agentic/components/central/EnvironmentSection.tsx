@@ -9,10 +9,11 @@ import { OptionTabs } from "@/components/ui/option-tabs"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { AnimatePresence, motion } from "framer-motion"
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../../constants"
+import { DockerBuilderField } from "./DockerBuilderField"
 import type { CentralForm } from "./form"
 
 /** Aba Ambiente: docker compose da prévia, faixa de portas, variável da porta, endereço, teste de saúde e backup do banco. */
-export function EnvironmentSection({ form }: { form: CentralForm }) {
+export function EnvironmentSection({ form, centralId }: { form: CentralForm; centralId: string }) {
     const errors = form.formState.errors.environment
     const env = useWatch({ control: form.control, name: "environment" })
     return (
@@ -22,6 +23,7 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
                 <CardDescription>
                     Cada mesa recebe uma porta livre entre {env.previewPortMin || PREVIEW_PORT_MIN} e {env.previewPortMax || PREVIEW_PORT_MAX}. {env.previewMethod === "github" ? "O GitHub constrói a imagem e o agente publica sem build local." : "O agente constrói no worktree."}{" "}
                     <code className="font-mono text-foreground">
+                        {env.previewMethod !== "github" && env.dockerBuilder ? `BUILDX_BUILDER=${env.dockerBuilder} ` : ""}
                         {env.portEnvVar || "PORT"}={env.previewPortMin || PREVIEW_PORT_MIN} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}
                     </code>{" "}
                     no worktree.
@@ -42,6 +44,8 @@ export function EnvironmentSection({ form }: { form: CentralForm }) {
                     <Field id="central-env-compose" label="Arquivo do compose" error={errors?.composeFile?.message}>
                         <Input id="central-env-compose" className="font-mono" placeholder="Vazio: o padrão do projeto" {...form.register("environment.composeFile")} />
                     </Field>
+                    {env.previewMethod !== "github" && <DockerBuilderField form={form} centralId={centralId} />}
+                    {env.previewMethod === "github" && <p className="col-span-full text-xs text-muted-foreground">O builder do host é usado somente na prévia Local. No GitHub Action, o builder é definido pelo workflow do runner.</p>}
                     <Field id="central-env-port-var" label="Variável da porta" error={errors?.portEnvVar?.message}>
                         <Input id="central-env-port-var" className="font-mono" {...form.register("environment.portEnvVar")} aria-invalid={errors?.portEnvVar ? true : undefined} />
                     </Field>

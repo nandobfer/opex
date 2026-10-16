@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
 import { useTaskList } from "@/features/tasks/hooks/useTasks"
 import { DEV_CENTER_PATH } from "../../constants"
-import { pickActiveCentral } from "../../dev-center-central"
+import { ALL_CENTRALS_ID, isAllCentrals, pickActiveCentral } from "../../dev-center-central"
 import { useAgenticRealtime, useCentrals } from "../../hooks/useAgentic"
 import { useDevCenterCentral } from "../../hooks/useDevCenterCentral"
 import { AGENTIC_SETTINGS_HREF } from "../central/CentralPage"
@@ -25,7 +25,8 @@ import { TasksPane } from "./TasksPane"
  * Central de desenvolvimento (`/desenvolvimento/[tarefa]`): a **central vem do navegador** e a
  * **tarefa vem da URL**. Trocar de central ou de tarefa não remonta a tela (a casca agrupa
  * `/desenvolvimento`): as colunas ficam e só o que mudou anima (a mesa ao trocar de tarefa, a lista
- * de tarefas ao trocar de central).
+ * de tarefas ao trocar de central). Em "Todos os projetos" a lista junta todas as centrais e a mesa
+ * usa a central do produto da tarefa aberta (a escolha "Todos" continua salva).
  */
 export function DevCenterPage({ taskId }: { taskId: string | null }) {
     useAgenticRealtime()
@@ -36,6 +37,7 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     // A tarefa (na URL) manda na central: a central efetiva é a do projeto dela.
     const tasks = useTaskList(false)
     const taskProjectId = taskId ? (tasks.data?.tasks.find((task) => task.id === taskId)?.project?.id ?? null) : null
+    const allSelected = isAllCentrals(storedId)
     const central = useMemo(() => pickActiveCentral(list, storedId, taskProjectId), [list, storedId, taskProjectId])
     // As colunas ocupam exatamente a área visível do <main> (descontado o padding e o aviso de conexão).
     const sectionRef = useRef<HTMLElement>(null)
@@ -53,11 +55,19 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
             if (!taskId) pendingSelectionRef.current = null
             return
         }
+        // "Todos os projetos" fica salvo mesmo com uma tarefa aberta.
+        if (allSelected) return
         if (central && central.id !== storedId) setCentralId(central.id)
-    }, [taskId, central, storedId, setCentralId])
+    }, [taskId, central, storedId, setCentralId, allSelected])
 
     // Trocar de central limpa a tarefa da URL (a mesa aberta era de outro projeto).
     const selectCentral = (id: string) => {
+        // "Todos os projetos" inclui o produto da tarefa aberta: a mesa continua aberta.
+        if (id === ALL_CENTRALS_ID) {
+            pendingSelectionRef.current = null
+            setCentralId(id)
+            return
+        }
         // A escolha do usuário tem prioridade sobre a central derivada da tarefa até a URL ser limpa.
         pendingSelectionRef.current = id
         setCentralId(id)
@@ -96,7 +106,7 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
         >
             {central ? (
                 <TasksPane
-                    central={central}
+                    central={allSelected ? null : central}
                     centrals={list}
                     activeTaskId={taskId}
                     onSelectCentral={selectCentral}
@@ -125,7 +135,7 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
                                 transition={{ duration: 0.15, ease: "easeOut" }}
                                 className="flex min-h-0 min-w-0 flex-1 flex-col"
                             >
-                                <WorkbenchPane central={central} taskId={taskId} />
+                                <WorkbenchPane central={central} taskId={taskId} scopeName={allSelected ? null : central.projectName} />
                             </motion.div>
                         </AnimatePresence>
                     </>

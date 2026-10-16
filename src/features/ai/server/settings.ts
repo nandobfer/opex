@@ -30,6 +30,9 @@ import {
     type UnderstandTaskSettings,
 } from "../schemas"
 import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto } from "../types"
+import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
+import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
+import type { PrReviewSettingsDto } from "@/features/pr-review/types"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
@@ -300,4 +303,32 @@ export async function saveTaskRefinementSettings(input: TaskRefinementSettings, 
     const before = await loadTaskRefinementSettings()
     await persistFeature(TASK_REFINEMENT_FEATURE, next, actorId, before)
     return getTaskRefinementSettings()
+}
+
+// ── Revisão de PR (agente OpenCode que executa a skill de code review) ──────
+
+export async function loadPrReviewSettings(): Promise<{ settings: PrReviewSettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(PR_REVIEW_FEATURE, prReviewSettingsSchema, DEFAULT_PR_REVIEW_SETTINGS)
+}
+
+/** Exclusiva do OpenCode (sessão com ferramentas, `gh` e skills). */
+export async function availabilityOfPrReview(settings: PrReviewSettings): Promise<AiFeatureAvailability> {
+    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Revisão de PR"')
+}
+
+export async function getPrReviewSettings(): Promise<PrReviewSettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadPrReviewSettings()
+    return { settings, isDefault, availability: await availabilityOfPrReview(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export function normalizePrReviewSettings(input: PrReviewSettings): PrReviewSettings {
+    return { ...input, agent: input.agent || null, variant: input.variant || null }
+}
+
+export async function savePrReviewSettings(input: PrReviewSettings, actorId: string): Promise<PrReviewSettingsDto> {
+    const next = normalizePrReviewSettings(input)
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    const before = await loadPrReviewSettings()
+    await persistFeature(PR_REVIEW_FEATURE, next, actorId, before)
+    return getPrReviewSettings()
 }

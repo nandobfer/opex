@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
@@ -9,6 +9,7 @@ import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
+import type { DockerBuildersDto } from "../docker-builders"
 import type { WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
@@ -74,6 +75,10 @@ export function useDeleteCentral() {
     })
 }
 
+/** Builders do Docker da máquina do OpenCode (aba Ambiente); só consulta de novo ao pedir. */
+export const useDockerBuilders = (centralId: string) =>
+    useQuery({ queryKey: agenticKey("docker-builders", centralId), queryFn: () => get<DockerBuildersDto>(`/agentic/centrals/${centralId}/docker-builders`), staleTime: 5 * 60_000, retry: false })
+
 export function useTestCentral(id: string) {
     const queryClient = useQueryClient()
     return useMutation({
@@ -93,6 +98,27 @@ export const useCentralWorkbenches = (centralId: string | null) =>
 /** Fila da central: tarefas na coluna da fila ainda sem mesa, na ordem do kanban. */
 export const useCentralQueue = (centralId: string | null) =>
     useQuery({ queryKey: agenticKey("queue", centralId), queryFn: () => get<QueueItemDto[]>(`/agentic/centrals/${centralId}/queue`), enabled: Boolean(centralId) })
+
+/**
+ * Mesas e fila de várias centrais ("Todos os projetos" na Central de desenvolvimento), juntadas numa
+ * lista só. Usa as mesmas chaves de `useCentralWorkbenches`/`useCentralQueue` (cache e tempo real).
+ */
+export function useCentralsTaskState(centralIds: readonly string[]): { workbenches: WorkbenchSummaryDto[]; queue: QueueItemDto[] } {
+    const workbenches = useQueries({
+        queries: centralIds.map((id) => ({ queryKey: agenticKey("workbenches", id), queryFn: () => get<WorkbenchSummaryDto[]>(`/agentic/centrals/${id}/workbenches`) })),
+        combine: flattenResults<WorkbenchSummaryDto>,
+    })
+    const queue = useQueries({
+        queries: centralIds.map((id) => ({ queryKey: agenticKey("queue", id), queryFn: () => get<QueueItemDto[]>(`/agentic/centrals/${id}/queue`) })),
+        combine: flattenResults<QueueItemDto>,
+    })
+    return { workbenches, queue }
+}
+
+// Fora do componente: com referência estável, o TanStack Query só recalcula o `combine` quando os dados mudam.
+function flattenResults<T>(results: readonly { data?: T[] }[]): T[] {
+    return results.flatMap((result) => result.data ?? [])
+}
 
 /** Mesas em andamento (executando ou aguardando ação humana) — lista "Trabalhos em andamento". */
 export const useWorkbenchesInProgress = (enabled = true) =>
@@ -130,6 +156,7 @@ const ACTION_TOASTS: Partial<Record<WorkbenchAction, string>> = {
     reopen: "Mesa reaberta",
     reconnect: "Reconectando à sessão do agente",
     interrupt: "Interrompendo o agente",
+    "cancel-wait": "Espera por vaga cancelada",
 }
 
 /** Ações da mesa com resposta otimista (a mesa entra em "executando" na hora). */
@@ -144,7 +171,8 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
             if (!workbench || action === "interrupt" || action === "reconnect") return { previous: workbench }
             const key = agenticKey("workbench", workbench.taskId)
             await queryClient.cancelQueries({ queryKey: key })
-            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, runState: "running", error: null } : current))
+            // Cancelar a espera só tira o aviso de vaga; as demais ações marcam "executando" (a resposta corrige se a mesa ficar aguardando vaga).
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : { ...current, runState: "running", error: null }) : current))
             return { previous: workbench }
         },
         onError: (error, _vars, context) => {
@@ -153,6 +181,10 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
         },
         onSuccess: (saved, { action }) => {
             setWorkbench(saved)
+            if (saved.slotQueue && action !== "cancel-wait") {
+                toast.info(`Limite de mesas da central atingido: aguardando vaga${saved.slotQueue.position ? ` (posição #${saved.slotQueue.position})` : ""}`)
+                return
+            }
             const message = ACTION_TOASTS[action]
             if (message) toast.success(message)
         },

@@ -1,7 +1,7 @@
 import { isValidObjectId } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
-import { AgenticWorkbench, type IAgenticWorkbench, type IWorkbenchPr } from "@/lib/db/models/Agentic"
+import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWorkbenchPr } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
@@ -9,7 +9,7 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { AGENTIC_AUDIT_WORKBENCH, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
+import { AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
 import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
@@ -44,8 +44,10 @@ import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
+import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { syncWorkbenchTimer } from "./timer-sync"
+import { needsSlotToRun, occupiedSlots, runInCentral, slotQueuePosition, slotQueuePositions } from "./slots"
 import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } from "./remote-preview"
 
 /**
@@ -90,25 +92,26 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id))
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null)
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)))
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null)
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
     await dbConnect()
-    const [docs, positions] = await Promise.all([
-        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
+    const [docs, positions, slots] = await Promise.all([
+        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, pendingTurn: 1, forksDonePrompt: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
         buildQueuePositions(),
+        slotQueuePositions(),
     ])
     return docs.map((doc) => {
         const reconciled = doc.runState === "running" && !isWorkbenchActive(String(doc._id)) ? { ...doc, runState: "interrupted" } : doc
-        return toWorkbenchSummary(reconciled, positions.get(String(doc._id)) ?? null)
+        return toWorkbenchSummary(reconciled, positions.get(String(doc._id)) ?? null, slots.get(String(doc._id)) ?? null)
     })
 }
 
@@ -146,16 +149,19 @@ function assertAction(doc: IAgenticWorkbench, action: WorkbenchAction): void {
     }
     const stage = asStage(doc.stage)
     const runState = isWorkbenchActive(String(doc._id)) ? "running" : asRunState(doc.runState) === "running" ? "interrupted" : asRunState(doc.runState)
-    if (!canRun(stage, runState, action)) {
-        throw new DomainError(409, `Ação indisponível na etapa "${WORKBENCH_STAGE_LABELS[stage]}"${runState === "running" ? " (o agente está trabalhando)" : ""}`, "WORKBENCH_INVALID_STATE")
+    const waitingSlot = Boolean(doc.pendingTurn)
+    if (!canRun(stage, runState, action, waitingSlot)) {
+        const detail = waitingSlot ? " (a mesa está aguardando vaga na central)" : runState === "running" ? " (o agente está trabalhando)" : ""
+        throw new DomainError(409, `Ação indisponível na etapa "${WORKBENCH_STAGE_LABELS[stage]}"${detail}`, "WORKBENCH_INVALID_STATE")
     }
 }
 
 async function assertAvailable(centralId: string, workbenchId: string | null, config: CentralConfig): Promise<void> {
     await assertAgenticReady(config)
-    // O limite é de mesas ABERTAS (não concluídas); a própria mesa não conta ao retomar um turno.
-    const open = await AgenticWorkbench.countDocuments({ centralId, stage: { $ne: "done" }, ...(workbenchId ? { _id: { $ne: workbenchId } } : {}) })
-    if (open >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) abertas ao mesmo tempo nesta central`, "CENTRAL_BUSY")
+    // O limite conta as mesas que ocupam vaga (não concluídas e fora de Plano pronto/Prévia pronta/PR aberto);
+    // a própria mesa não conta ao retomar um turno.
+    const open = await occupiedSlots(centralId, workbenchId)
+    if (open >= config.maxConcurrent) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) ocupando vaga ao mesmo tempo nesta central`, "CENTRAL_BUSY")
 }
 
 /** Disponibilidade para executar algo na central (feature/OpenCode + central ativa). Sem o limite de mesas. */
@@ -171,6 +177,122 @@ function pumpQueue(centralId: string): void {
     void import("./queue")
         .then((queue) => queue.pumpCentralQueue(centralId))
         .catch(() => undefined)
+}
+
+/** Forks da conversa (import dinâmico: `forks.ts` usa as ações deste módulo para integrar). */
+const forksModule = () => import("./forks")
+
+// ---------------------------------------------------------------------------
+// Espera por vaga (retomadas de mesas que não ocupam vaga)
+// ---------------------------------------------------------------------------
+
+/**
+ * Executa o turno de uma ação. Se a mesa não ocupa vaga (Plano pronto, Prévia pronta, PR aberto ou
+ * concluída) e a central está no limite — ou há retomadas esperando antes dela —, grava a ação em
+ * `pendingTurn` e a mesa **aguarda vaga** (o motor da central a lança depois). Devolve `true` quando
+ * o turno começou e `false` quando ficou aguardando.
+ */
+async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: TurnPlan, options: LaunchOptions = {}, flags: { reopen?: boolean } = {}): Promise<boolean> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const stage = asStage(doc.stage)
+    if (!needsSlotToRun(stage)) {
+        await launchTurn(loaded, turn, options)
+        return true
+    }
+    if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está trabalhando nesta mesa", "WORKBENCH_BUSY")
+    // OpenCode/central indisponível continua sendo erro na hora (não é falta de vaga).
+    await assertAgenticReady(config)
+    return runInCentral(doc.centralId, async () => {
+        const current = await loadWorkbench(id)
+        if (current.deletionRequestedAt || current.pendingTurn || current.stage !== doc.stage || isWorkbenchActive(id)) {
+            throw new DomainError(409, "A mesa mudou de estado; atualize antes de tentar novamente", "WORKBENCH_BUSY")
+        }
+        const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
+        if (!othersWaiting && occupied < config.maxConcurrent) {
+            await launchTurn(flags.reopen ? await applyReopen(loaded) : loaded, turn, options)
+            return true
+        }
+        const pendingTurn: IPendingTurn = {
+            action,
+            stage: turn.stage,
+            text: turn.text,
+            userText: options.userText ?? null,
+            feedback: options.feedback ?? null,
+            extraSet: options.extraSet ?? null,
+            reopen: Boolean(flags.reopen),
+            fromStage: stage,
+            queuedAt: new Date(),
+        }
+        await update(doc, { pendingTurn })
+        const position = await slotQueuePosition(id)
+        await prepareHub(id)
+        publishWorkbenchEvent(id, {
+            type: "notice",
+            level: "info",
+            message: `Limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central: "${PENDING_TURN_LABELS[action]}" aguarda vaga${position ? ` (posição #${position})` : ""} e começa sozinho quando liberar.`,
+        })
+        centralLogger(doc.centralId, doc.taskCode).info(`Aguardando vaga na central: ${PENDING_TURN_LABELS[action]}`, { workbenchId: id, position })
+        return false
+    })
+}
+
+/**
+ * Lança a retomada que aguardava vaga (chamado pelo motor da central, dentro de `runInCentral`, já
+ * com vaga). `dropped` quando a espera não vale mais (a mesa mudou de etapa ou já está executando).
+ * Indisponibilidade (OpenCode, central desativada, limite) devolve a espera e lança o erro.
+ */
+export async function startPendingTurn(id: string): Promise<"started" | "dropped"> {
+    const loaded = await loadAll(id)
+    const { doc } = loaded
+    const pending = doc.pendingTurn
+    if (!pending) return "dropped"
+    if (doc.deletionRequestedAt || asStage(doc.stage) !== pending.fromStage || isWorkbenchActive(id)) {
+        await update(doc, { pendingTurn: null })
+        centralLogger(doc.centralId, doc.taskCode).warn("Espera por vaga descartada: a mesa mudou de etapa", { workbenchId: id })
+        return "dropped"
+    }
+    await assertAgenticReady(loaded.config)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { pendingTurn: null } })
+    let reopened = false
+    try {
+        const ready = pending.reopen ? await applyReopen(loaded) : loaded
+        reopened = Boolean(pending.reopen)
+        await launchTurn(
+            ready,
+            { stage: asStage(pending.stage), text: pending.text },
+            {
+                ...(pending.userText ? { userText: pending.userText } : {}),
+                ...(pending.feedback !== null ? { feedback: pending.feedback } : {}),
+                ...(pending.extraSet ? { extraSet: pending.extraSet } : {}),
+            },
+        )
+    } catch (error) {
+        // Mantém o lugar na fila (mesmo `queuedAt`) e a reabertura não repete os efeitos já aplicados.
+        await AgenticWorkbench.updateOne({ _id: doc._id, pendingTurn: null }, { $set: { pendingTurn: { ...pending, reopen: pending.reopen && !reopened } } })
+        throw error
+    }
+    centralLogger(doc.centralId, doc.taskCode).info(`Vaga liberada: ${PENDING_TURN_LABELS[pending.action as PendingTurnAction] ?? pending.action}`, { workbenchId: id })
+    return "started"
+}
+
+/** Cancela a espera por vaga: a mesa volta a aguardar a ação do usuário na etapa em que estava. */
+export async function cancelWait(id: string): Promise<WorkbenchDto> {
+    const initial = await loadWorkbench(id)
+    return runInCentral(initial.centralId, async () => {
+        const doc = await loadWorkbench(id)
+        assertAction(doc, "cancel-wait")
+        const pending = doc.pendingTurn!
+        await update(doc, { pendingTurn: null })
+        const label = PENDING_TURN_LABELS[pending.action as PendingTurnAction] ?? pending.action
+        await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { tarefa: doc.taskCode, aguardandoVaga: label }, depois: { tarefa: doc.taskCode, aguardandoVaga: null } })
+        await prepareHub(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Espera por vaga cancelada ("${label}").` })
+        centralLogger(doc.centralId, doc.taskCode).info("Espera por vaga cancelada pelo usuário", { workbenchId: id })
+        // A próxima retomada da fila pode ter ganhado a vez.
+        pumpQueue(doc.centralId)
+        return getWorkbench(id)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +365,9 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
+            // Resumos de forks que não puderam virar instrução da sessão vão no prompt (uma vez).
+            const notes = turn.attach ? null : await AgenticWorkbench.findById(id).select({ forkNotes: 1, forkNotesSynced: 1 }).lean()
+            const text = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
             const { settings } = await loadAgenticSettings()
             const role = STAGE_ROLE[turn.stage] ?? "planning"
             const agent = resolveAgent(settings, loaded.config, role)
@@ -255,7 +380,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                     stage: turn.stage,
                     title: WORKBENCH_STAGE_LABELS[turn.stage],
                     agent,
-                    text: turn.text,
+                    text,
                     timeoutMs: turn.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
                     signal: controller.signal,
                     attach: turn.attach,
@@ -346,6 +471,8 @@ async function ensureSession(client: OpencodeClient, { doc, config }: Loaded): P
     const directory = doc.sessionId && doc.sessionDirectory ? doc.sessionDirectory : config.sessionDirectory
     const session = await client.session.create({ title: `${doc.taskCode} · ${doc.taskTitle}`.slice(0, 120), location: { directory }, metadata: { app: "opex", taskId: doc.taskId } })
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionId: session.id, sessionDirectory: session.location?.directory ?? directory } })
+    // Sessão nova: os resumos de forks integrados ao contexto voltam a valer nela.
+    if (doc.forkNotes?.length) await applyForkNotes(client, doc, session.id)
     return session.id
 }
 
@@ -362,6 +489,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             if (!text) throw new Error("O planejador não devolveu um plano")
             const version = (doc.plans?.length ?? 0) + 1
             await update(doc, { stage: "plan_review", runState: "idle", pendingFeedback: null }, { $push: { plans: { version, text, feedback: doc.pendingFeedback ?? null, createdAt: new Date() } } })
+            // Plano pronto não ocupa vaga: a próxima mesa da central pode executar.
+            pumpQueue(doc.centralId)
             return null
         }
         case "implementing": {
@@ -406,6 +535,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             if (!healthy && (doc.previewBuild?.method === "github" || !parsed.success)) throw new Error(`A prévia não respondeu em ${previewUrl}`)
             notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O agente concluiu o build, mas ${previewUrl} não respondeu ao app`)
             await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
+            pumpQueue(doc.centralId)
             return null
         }
         case "opening_pr": {
@@ -416,6 +546,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             const pr: IWorkbenchPr = keep ? { ...doc.pr!, url: found.url, state: "open" } : { number: found.number, url: found.url, state: "open", mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false, conflictBaseSha: null, conflictHeadSha: null }
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
+            pumpQueue(doc.centralId)
             const prColumn = config.columns.onPr
             if (prColumn) {
                 try {
@@ -437,6 +568,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             if (doc.previewHealthy) notice("warn", "A prévia pode estar desatualizada em relação ao código publicado na resolução do conflito.")
             // Volta a acompanhar o PR; a prévia aprovada deixa de valer para o código novo, quando havia uma.
             await update(doc, { stage: "pr_open", runState: "idle", ...(doc.previewHealthy ? { previewHealthy: false } : {}) })
+            pumpQueue(doc.centralId)
             return null
         }
         case "merging_pr": {
@@ -516,6 +648,13 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
         const removed = await deleteWorkbenchSession(String(doc._id), sessionId).catch(() => false)
         if (removed) publishWorkbenchEvent(String(doc._id), { type: "notice", level: "info", message: "Sessão do OpenCode excluída" })
         else publishWorkbenchEvent(String(doc._id), { type: "notice", level: "info", message: "A sessão do OpenCode será excluída assim que o serviço estiver disponível" })
+    }
+    // Forks em aberto: concluir, manter ou perguntar, conforme a central.
+    try {
+        const { config } = await loadCentral(doc.centralId)
+        await (await forksModule()).handleWorkbenchDone(doc, config.forks.onWorkbenchDone)
+    } catch (error) {
+        centralLogger(doc.centralId, doc.taskCode).warn("Falha ao tratar os forks na conclusão da mesa", { workbenchId: String(doc._id), error: errorText(error) })
     }
     pumpQueue(doc.centralId)
 }
@@ -603,6 +742,11 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
 }
 
 export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
+    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text))
+}
+
+/** Chamado pelo motor já dentro da decisão serializada de vagas da central. */
+export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
     await dbConnect()
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
@@ -610,6 +754,9 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
     const task = await getTask(taskId)
     if (task.project?.id !== central.projectId) throw new DomainError(400, `A tarefa ${task.code} não é do projeto ${central.projectName}`, "TASK_OTHER_PROJECT")
     await assertAvailable(centralId, null, config)
+    if (await AgenticWorkbench.exists({ centralId, pendingTurn: { $ne: null } })) {
+        throw new DomainError(409, "Há mesas aguardando retomada nesta central; elas têm prioridade", "CENTRAL_BUSY")
+    }
 
     let doc: IAgenticWorkbench
     try {
@@ -648,7 +795,7 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
 export async function revisePlan(id: string, feedback: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "revise-plan")
-    await launchTurn(loaded, { stage: "planning", text: revisePlanPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
     return getWorkbench(id)
 }
 
@@ -659,8 +806,9 @@ export async function implement(id: string, additionalInfo?: string): Promise<Wo
     // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
     const info = additionalInfo?.trim() || null
     const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
-    await launchTurn(
+    await launchOrQueue(
         loaded,
+        "implement",
         { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info) },
         { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
@@ -672,7 +820,7 @@ export async function requestCorrection(id: string, feedback: string): Promise<W
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "request-correction")
     await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
-    await launchTurn(loaded, { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
     return getWorkbench(id)
 }
 
@@ -681,26 +829,40 @@ export async function approve(id: string): Promise<WorkbenchDto> {
     assertAction(loaded.doc, "approve")
     const task = await getTask(loaded.doc.taskId)
     const pr = loaded.doc.pr && loaded.doc.pr.state === "open" ? { number: loaded.doc.pr.number, url: loaded.doc.pr.url } : null
-    await launchTurn(loaded, { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
+    await launchOrQueue(loaded, "approve", { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
     return getWorkbench(id)
 }
 
 export async function submitPrFeedback(id: string, feedback: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "submit-pr-feedback")
-    await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: feedback, feedback })
+    await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: feedback, feedback })
     return getWorkbench(id)
 }
 
 export async function reopen(id: string, feedback: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "reopen")
+    // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.
+    await launchOrQueue(
+        loaded,
+        "reopen",
+        { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) },
+        { userText: `Mesa reaberta: ${feedback}`, feedback },
+        { reopen: true },
+    )
+    return getWorkbench(id)
+}
+
+/** Efeitos da reabertura de uma mesa concluída (rodam imediatamente antes do turno de planejamento). */
+async function applyReopen(loaded: Loaded): Promise<Loaded> {
+    const id = String(loaded.doc._id)
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
-    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null }, ...pastPr })
+    // Reabrir dispensa a pergunta sobre os forks em aberto (eles seguem utilizáveis).
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
-    await launchTurn({ ...loaded, doc: { ...loaded.doc, pr: null } }, { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) }, { userText: `Mesa reaberta: ${feedback}`, feedback })
-    return getWorkbench(id)
+    return { ...loaded, doc: { ...loaded.doc, pr: null } }
 }
 
 export async function reconnect(id: string): Promise<WorkbenchDto> {
@@ -852,6 +1014,9 @@ async function assertCleanupDone(client: OpencodeClient, targets: CleanupTargets
 /** Apaga o registro da mesa e libera tudo o que ela segurava (porta, saída e filas). */
 async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     const id = String(doc._id)
+    await (await forksModule()).deleteWorkbenchForks(id)
+    const current = await loadWorkbench(id)
+    await removeWorkbenchSessions(current)
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })
@@ -875,8 +1040,8 @@ async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promis
     // A intenção é gravada ANTES de qualquer operação externa: a retomada (retry/reinício) a mantém.
     if (!doc.deletionRequestedAt) {
         const requestedAt = new Date()
-        await update(doc, { deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", error: null, buildQueuedAt: null })
-        doc = { ...doc, deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", buildQueuedAt: null }
+        await update(doc, { deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", error: null, buildQueuedAt: null, pendingTurn: null })
+        doc = { ...doc, deletionRequestedAt: requestedAt, stage: "finishing", runState: "idle", buildQueuedAt: null, pendingTurn: null }
     }
     if (doc.previewBuild?.method === "github") {
         // Melhor esforço: sem OpenCode não há como invalidar a tentativa remota (a limpeza falha e a mesa fica).
@@ -950,9 +1115,10 @@ export async function handlePrFeedback(id: string, feedback: string): Promise<vo
         return
     }
     try {
-        await launchTurn(loaded, { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Pedido de mudança no PR:\n\n${feedback}`, feedback })
+        // Com o limite cheio, o replanejamento aguarda vaga (a mesa segue em PR aberto até lá).
+        await launchOrQueue(loaded, "pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Pedido de mudança no PR:\n\n${feedback}`, feedback })
     } catch (error) {
-        // Sem como replanejar agora (ex.: limite de mesas): guarda o pedido para o usuário reenviar.
+        // Sem como replanejar agora (ex.: OpenCode indisponível): guarda o pedido para o usuário reenviar.
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido:\n\n${feedback}` })
         await update(loaded.doc, { stage: "changes_requested", runState: "idle" })
     }
@@ -971,16 +1137,17 @@ export async function handlePrConflict(id: string, info: { baseBranch: string; h
     if (doc.deletionRequestedAt) return false
     // Só age na mesa aberta e ociosa do mesmo PR aberto (nunca em cima de outra execução em andamento).
     if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
-    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
+    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running" || doc.pendingTurn) return false
     await prepareHub(id)
-    const marked: IWorkbenchPr = { ...pr, conflictBaseSha: info.baseSha, conflictHeadSha: info.headSha }
     try {
-        await launchTurn(
-            { ...loaded, doc: { ...doc, pr: marked } },
+        // Os SHAs tratados são gravados só quando o turno começa (na espera por vaga, ao ganhar a vaga).
+        const started = await launchOrQueue(
+            loaded,
+            "pr-conflict",
             { stage: "resolving_conflicts", text: conflictPrompt(config, contextOf(loaded), { number: pr.number, url: pr.url, baseBranch: info.baseBranch, headBranch: info.headBranch }) },
-            { userText: `Conflito de merge no PR #${pr.number}: resolvendo automaticamente contra ${info.baseBranch}.`, extraSet: { pr: marked } },
+            { userText: `Conflito de merge no PR #${pr.number}: resolvendo automaticamente contra ${info.baseBranch}.`, extraSet: { "pr.conflictBaseSha": info.baseSha, "pr.conflictHeadSha": info.headSha } },
         )
-        centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: conflito de merge — resolução automática iniciada`, { workbenchId: id })
+        if (started) centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: conflito de merge — resolução automática iniciada`, { workbenchId: id })
         return true
     } catch (error) {
         // Sem como resolver agora (OpenCode indisponível, limite de mesas…): mantém elegível à próxima varredura.
@@ -1041,11 +1208,17 @@ export async function handlePrMerged(id: string, merge: { mergedAt: Date; mergeC
     const { doc } = loaded
     if (doc.deletionRequestedAt) return
     await prepareHub(id)
+    if (doc.pendingTurn) {
+        // O merge encerra o que a mesa aguardava (replanejar, resolver conflito, mergear…).
+        await update(doc, { pendingTurn: null })
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: "O PR foi mergeado: a espera por vaga foi descartada." })
+    }
     const pr: IWorkbenchPr = { ...doc.pr!, state: "merged", mergedAt: merge.mergedAt, mergeCommitSha: merge.mergeCommitSha }
     const next = await afterMerge(loaded, pr)
     if (next) {
         try {
-            await launchTurn({ ...loaded, doc: { ...doc, pr } }, next)
+            // Com o limite cheio, a limpeza aguarda vaga (a mesa segue em PR aberto, já mergeado).
+            await launchOrQueue({ ...loaded, doc: { ...doc, pr, pendingTurn: null } }, "pr-cleanup", next)
             return
         } catch (error) {
             publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Limpeza não iniciada: ${errorText(error)}` })
@@ -1073,16 +1246,17 @@ export async function handlePrAutoMerge(id: string, info: { baseBranch: string }
     if (doc.deletionRequestedAt) return false
     // Só age na mesa aberta e ociosa acompanhando o PR (nunca em cima de outra execução em andamento).
     if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
-    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running") return false
+    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running" || doc.pendingTurn) return false
     if (!doc.branch) return false
     await prepareHub(id)
     try {
-        await launchTurn(
-            { ...loaded, doc },
+        const started = await launchOrQueue(
+            loaded,
+            "pr-auto-merge",
             { stage: "merging_pr", text: mergePrPrompt(config, contextOf(loaded), { number: pr.number, url: pr.url, baseBranch: info.baseBranch }) },
             { userText: `Merge automático habilitado na central: mergeando o PR #${pr.number}.` },
         )
-        centralLogger(doc.centralId, doc.taskCode).info(`PR #${pr.number}: merge automático iniciado`, { workbenchId: id })
+        if (started) centralLogger(doc.centralId, doc.taskCode).info(`PR #${pr.number}: merge automático iniciado`, { workbenchId: id })
         return true
     } catch (error) {
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O merge automático do PR #${pr.number} não pôde começar (${errorText(error)}).` })
@@ -1106,7 +1280,11 @@ export async function handlePrReopened(id: string): Promise<void> {
 }
 
 /** Grava os cursores de acompanhamento do PR (maior id de revisão e de comentário já tratados). */
-export async function savePrCursors(id: string, cursors: { lastReviewId: number; lastCommentId: number }): Promise<void> {
-    await AgenticWorkbench.updateOne({ _id: id }, { $set: { "pr.lastReviewId": cursors.lastReviewId, "pr.lastCommentId": cursors.lastCommentId } })
+export async function savePrCursors(id: string, cursors: { lastReviewId?: number; lastCommentId?: number; autoReviewReplans?: number }): Promise<void> {
+    const set: Record<string, number> = {}
+    if (cursors.lastReviewId !== undefined) set["pr.lastReviewId"] = cursors.lastReviewId
+    if (cursors.lastCommentId !== undefined) set["pr.lastCommentId"] = cursors.lastCommentId
+    if (cursors.autoReviewReplans !== undefined) set["pr.autoReviewReplans"] = cursors.autoReviewReplans
+    if (Object.keys(set).length) await AgenticWorkbench.updateOne({ _id: id }, { $set: set })
 }
 

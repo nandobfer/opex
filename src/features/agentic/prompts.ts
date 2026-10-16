@@ -151,7 +151,8 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
 export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }): string {
     const env = config.environment
     const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
-    const command = `${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
+    const builder = env.dockerBuilder.trim()
+    const command = `${builder ? `BUILDX_BUILDER=${builder} ` : ""}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
     const health = `http://localhost:${port}${env.healthPath || "/"}`
     // Sem backup (OPE-72, projetos sem banco de dados) a seção some por inteiro: o agente não
     // identifica banco, não roda `mongodump` e a prévia não depende de nenhum arquivo de dump.
@@ -183,6 +184,7 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
             "- O workflow e o script precisam estar instalados com a skill setup-preview-workflow. Se estiverem ausentes, informe o erro; NÃO faça build local como fallback.",
             "- Não dispare workflow manualmente nem publique container fora do script. Reconectar retoma o run registrado. Em erro de código, informe a falha; uma correção exige nova tentativa/SHA.",
         ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
+        ...(!remote && builder ? [`- Construa EXCLUSIVAMENTE com o builder do Docker \`${builder}\` (BUILDX_BUILDER em todo build desta prévia). NÃO troque o builder padrão do host (\`docker buildx use\`) nem crie outro builder.`] : []),
         `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`docker compose -p ${ctx.composeProject} logs --tail 100\` se falhar).`,
         remote ? "- Informe a URL da execução e o diagnóstico quando falhar. Não substitua a porta ou a imagem por outra tentativa." : "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
         backup

@@ -1,7 +1,8 @@
 /**
  * Coleção em memória com o subconjunto de Mongoose usado pelos serviços da integração GitHub
  * (find/findOne/findById/create/updateOne/updateMany/findOneAndUpdate/deleteOne/exists/
- * countDocuments). Filtros: igualdade, `$in`, `$ne` e `$lte`.
+ * countDocuments). Filtros: igualdade, `$in`, `$nin`, `$ne`, `$lte` e `$or` (topo); `$set` aceita
+ * caminhos com pontos (`pr.lastReviewId`) e `sort` aceita campo com pontos.
  */
 
 export type Doc = Record<string, unknown>
@@ -15,6 +16,7 @@ function matchValue(actual: unknown, expected: unknown): boolean {
         const asTime = (value: unknown) => (value instanceof Date ? value.getTime() : new Date(value as string).getTime())
         const actualTime = actual == null ? null : asTime(actual)
         if ("$in" in ops && !(ops.$in as unknown[]).includes(actual)) return false
+        if ("$nin" in ops && (ops.$nin as unknown[]).includes(actual)) return false
         if ("$ne" in ops && (actual ?? null) === ops.$ne) return false
         if ("$exists" in ops) {
             const present = actual !== undefined && actual !== null
@@ -24,7 +26,7 @@ function matchValue(actual: unknown, expected: unknown): boolean {
         if ("$gte" in ops && !(actualTime !== null && actualTime >= asTime(ops.$gte))) return false
         if ("$lt" in ops && !(actualTime !== null && actualTime < asTime(ops.$lt))) return false
         if ("$gt" in ops && !(actualTime !== null && actualTime > asTime(ops.$gt))) return false
-        if ("$in" in ops || "$ne" in ops || "$exists" in ops || "$lte" in ops || "$gte" in ops || "$lt" in ops || "$gt" in ops) return true
+        if ("$in" in ops || "$nin" in ops || "$ne" in ops || "$exists" in ops || "$lte" in ops || "$gte" in ops || "$lt" in ops || "$gt" in ops) return true
     }
     if (Array.isArray(actual) && !Array.isArray(expected)) return actual.includes(expected)
     return (actual ?? null) === (expected ?? null) || String(actual) === String(expected)
@@ -51,15 +53,29 @@ function getPath(doc: Doc, path: string): unknown {
     return current
 }
 
-const matches = (doc: Doc, filter: Doc) => Object.entries(filter).every(([key, value]) => matchValue(getPath(doc, key), value))
+const matches = (doc: Doc, filter: Doc): boolean =>
+    Object.entries(filter).every(([key, value]) => (key === "$or" ? (value as Doc[]).some((branch) => matches(doc, branch)) : matchValue(getPath(doc, key), value)))
+
+/** Grava um valor num caminho com pontos, criando os objetos intermediários. */
+function setPath(doc: Doc, path: string, value: unknown): void {
+    const parts = path.split(".")
+    let current = doc
+    for (const part of parts.slice(0, -1)) {
+        // Copia o objeto intermediário: cópias já devolvidas pelo `find` não mudam por tabela.
+        current[part] = current[part] != null && typeof current[part] === "object" ? { ...(current[part] as Doc) } : {}
+        current = current[part] as Doc
+    }
+    current[parts.at(-1)!] = value
+}
 
 function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
-    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc; $pull?: Doc }
-    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset && !ops.$pull) Object.assign(doc, update)
-    if (ops.$set) Object.assign(doc, ops.$set)
+    const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc; $pull?: Doc; $push?: Doc }
+    if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset && !ops.$pull && !ops.$push) Object.assign(doc, update)
+    for (const [key, value] of Object.entries(ops.$set ?? {})) setPath(doc, key, value)
     if (inserting && ops.$setOnInsert) Object.assign(doc, ops.$setOnInsert)
     for (const [key, value] of Object.entries(ops.$inc ?? {})) doc[key] = ((doc[key] as number) ?? 0) + value
     for (const key of Object.keys(ops.$unset ?? {})) delete doc[key]
+    for (const [key, value] of Object.entries(ops.$push ?? {})) doc[key] = [...(Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []), value]
     for (const [key, value] of Object.entries(ops.$addToSet ?? {})) {
         const list = Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []
         if (!list.includes(value)) list.push(value)
@@ -91,8 +107,8 @@ function query<T>(result: () => T) {
             sorter = (list) =>
                 list.sort((a, b) => {
                     const norm = (v: unknown) => (v instanceof Date ? v.getTime() : v)
-                    const av = norm(a[field!])
-                    const bv = norm(b[field!])
+                    const av = norm(getPath(a, field!))
+                    const bv = norm(getPath(b, field!))
                     if (av === bv) return 0
                     return (av as number) > (bv as number) ? dir! : -dir!
                 })

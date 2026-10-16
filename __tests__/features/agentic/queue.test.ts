@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
   }
   return {
     start: vi.fn(),
+    startPending: vi.fn(),
     DomainError,
     models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }>,
   }
@@ -28,7 +29,7 @@ vi.mock('@/lib/db/models/DevTask', async () => {
   mocks.models.task = memoryModel()
   return { DevTask: mocks.models.task, TaskComment: memoryModel() }
 })
-vi.mock('@/features/agentic/server/workflow', () => ({ startWorkbench: mocks.start }))
+vi.mock('@/features/agentic/server/workflow', () => ({ startWorkbenchInCentral: mocks.start, startPendingTurn: mocks.startPending }))
 
 import { listCentralQueue, notifyTasksColumnChanged, pumpAllCentralQueues, pumpCentralQueue } from '@/features/agentic/server/queue'
 
@@ -39,9 +40,10 @@ const central = async (overrides: Record<string, unknown> = {}) =>
 const task = async (order: number, overrides: Record<string, unknown> = {}) =>
   (await mocks.models.task.create({ code: `APP-${order}`, projectId: 'p1', columnId: 'fila', order, title: `Tarefa ${order}`, archived: false, ...overrides }))._id as string
 
-const openWorkbench = async (centralId: string, taskId: string, stage = 'plan_review') => {
-  await mocks.models.workbench.create({ centralId, taskId, stage, runState: 'idle' })
-}
+const openWorkbench = async (centralId: string, taskId: string, stage = 'implementing', extra: Record<string, unknown> = {}) =>
+  String((await mocks.models.workbench.create({ centralId, taskId, stage, runState: 'idle', pendingTurn: null, ...extra }))._id)
+
+const pendingTurn = (queuedAt: string) => ({ action: 'implement', stage: 'implementing', text: 'implemente', fromStage: 'plan_review', queuedAt: new Date(queuedAt) })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -95,6 +97,72 @@ describe('pumpCentralQueue', () => {
 
     await pumpCentralQueue(cid)
     expect(mocks.start).not.toHaveBeenCalled()
+  })
+
+  it('mesas em Plano pronto, Prévia pronta e PR aberto não ocupam vaga: a próxima da fila abre', async () => {
+    const cid = await central()
+    await openWorkbench(cid, 'x1', 'plan_review')
+    await openWorkbench(cid, 'x2', 'preview')
+    await openWorkbench(cid, 'x3', 'pr_open')
+    const next = await task(1)
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.start).toHaveBeenCalledWith(cid, next)
+  })
+
+  it('outras etapas de espera continuam ocupando vaga (mudanças pedidas e fila do build)', async () => {
+    const cid = await central()
+    await openWorkbench(cid, 'x1', 'changes_requested')
+    await openWorkbench(cid, 'x2', 'build_queued')
+    await task(1)
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.start).not.toHaveBeenCalled()
+  })
+
+  it('retomadas aguardando vaga vêm antes das mesas novas, em ordem de chegada', async () => {
+    const cid = await central()
+    await openWorkbench(cid, 'x1', 'implementing')
+    const later = await openWorkbench(cid, 'x2', 'plan_review', { pendingTurn: pendingTurn('2026-10-15T10:05:00Z') })
+    const earlier = await openWorkbench(cid, 'x3', 'preview', { pendingTurn: pendingTurn('2026-10-15T10:00:00Z') })
+    await task(1)
+    // A retomada lançada passa a ocupar vaga (sai da etapa isenta).
+    mocks.startPending.mockImplementation(async (id: string) => {
+      const doc = (mocks.models.workbench.docs as Record<string, unknown>[]).find((item) => String(item._id) === id)!
+      Object.assign(doc, { stage: 'implementing', pendingTurn: null })
+      return 'started'
+    })
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.startPending.mock.calls.map((call) => call[0])).toEqual([earlier])
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(later).toBeTruthy()
+  })
+
+  it('retomada que não pôde começar segura a vaga: nenhuma mesa nova abre', async () => {
+    const cid = await central()
+    await openWorkbench(cid, 'x1', 'plan_review', { pendingTurn: pendingTurn('2026-10-15T10:00:00Z') })
+    await task(1)
+    mocks.startPending.mockRejectedValue(new mocks.DomainError(409, 'OpenCode fora', 'AGENTIC_UNAVAILABLE'))
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.startPending).toHaveBeenCalledTimes(1)
+    expect(mocks.start).not.toHaveBeenCalled()
+  })
+
+  it('retomada descartada (mesa mudou de etapa) libera a vez para a fila', async () => {
+    const cid = await central()
+    await openWorkbench(cid, 'x1', 'plan_review', { pendingTurn: pendingTurn('2026-10-15T10:00:00Z') })
+    const next = await task(1)
+    mocks.startPending.mockResolvedValue('dropped')
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.start).toHaveBeenCalledWith(cid, next)
   })
 
   it('mesa concluída não ocupa a vaga: a próxima da fila abre', async () => {
@@ -157,5 +225,15 @@ describe('pumpAllCentralQueues', () => {
     const summary = await pumpAllCentralQueues()
     expect(summary).toContain('1 central')
     expect(mocks.start).toHaveBeenCalledWith(cid, waiting)
+  })
+
+  it('central sem coluna da fila é processada quando tem retomada aguardando vaga', async () => {
+    const cid = await central({ config: { maxConcurrent: 1, columns: { queue: null } } })
+    const resumed = await openWorkbench(cid, 'x1', 'plan_review', { pendingTurn: pendingTurn('2026-10-15T10:00:00Z') })
+    mocks.startPending.mockResolvedValue('started')
+
+    const summary = await pumpAllCentralQueues()
+    expect(summary).toContain('1 central')
+    expect(mocks.startPending).toHaveBeenCalledWith(resumed)
   })
 })

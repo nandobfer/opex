@@ -1,13 +1,14 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Check } from "lucide-react"
+import { Check, Minus } from "lucide-react"
 
 interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
   onCheckedChange?: (checked: boolean) => void
+  indeterminate?: boolean
 }
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, onCheckedChange, checked, defaultChecked, ...props }, ref) => {
+  ({ className, onCheckedChange, checked, defaultChecked, indeterminate = false, ...props }, ref) => {
     const [isChecked, setIsChecked] = React.useState(defaultChecked || checked || false)
 
     React.useEffect(() => {
@@ -33,7 +34,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
 
     return (
         <div className="relative inline-flex items-center">
-            <input type="checkbox" ref={ref} className="sr-only peer" checked={isChecked} onChange={handleChange} {...props} />
+            <input type="checkbox" ref={ref} className="sr-only peer" checked={isChecked} aria-checked={!isChecked && indeterminate ? "mixed" : undefined} onChange={handleChange} {...props} />
             <div
                 onClick={handleClick}
                 className={cn(
@@ -43,7 +44,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
                     className,
                 )}
             >
-                {isChecked && <Check className="h-3 w-3 text-current" />}
+                {isChecked ? <Check className="h-3 w-3 text-current" /> : indeterminate ? <Minus className="h-3 w-3 text-current" /> : null}
             </div>
         </div>
     )

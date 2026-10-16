@@ -2,12 +2,13 @@ import { getOpencodeClient, runOpencodeShell, type OpencodeShellResult } from "@
 import { loadCentral, repoForProject, saveCentralTest } from "./centrals"
 import { centralLogger } from "./log"
 import { shellQuote } from "../preview-backup"
+import { DOCKER_BUILDERS_COMMAND, checkDockerBuilder } from "../docker-builders"
 import type { CentralCheck, CentralTestOutcome } from "../types"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 
 /**
  * Teste da central: o OpenCode alcança o diretório, é um repositório git com as branches
- * configuradas, o gh está autenticado e o docker compose está disponível. Cada passo vai para o
+ * configuradas, o gh está autenticado, o docker compose está disponível e o builder do Docker existe. Cada passo vai para o
  * log da central (o terminal da página mostra em tempo real).
  */
 
@@ -59,6 +60,8 @@ export async function testCentral(id: string): Promise<CentralTestOutcome> {
 
             const docker = await run("docker compose version")
             add({ label: "Docker Compose", status: docker.exitCode === 0 ? "ok" : "error", detail: docker.exitCode === 0 ? firstLine(docker) : firstLine(docker) || "docker compose indisponível" })
+
+            add(checkDockerBuilder(config.environment.dockerBuilder, await run(DOCKER_BUILDERS_COMMAND)))
 
             const file = config.environment.composeFile.trim()
             const compose = await run(file ? `test -f ${shellQuote(file)} && echo ${shellQuote(file)}` : "ls compose.yaml compose.yml docker-compose.yaml docker-compose.yml 2>/dev/null | head -1")

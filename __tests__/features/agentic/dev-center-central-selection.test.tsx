@@ -25,13 +25,16 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useCentrals: () => mocks.centrals,
 }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskList: () => mocks.tasks }))
-vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({ WorkbenchPane: () => <div data-testid="workbench" /> }))
+vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({
+  WorkbenchPane: ({ central }: { central: CentralDto }) => <div data-testid="workbench">{central.id}</div>,
+}))
 // A coluna de tarefas é reduzida ao essencial: mostra a central ativa e dispara a troca.
 vi.mock('@/features/agentic/components/dev-center/TasksPane', () => ({
   TasksPane: ({ central, onSelectCentral, className }: { central: CentralDto; onSelectCentral: (id: string) => void; className?: string }) => (
     <div data-testid="tasks-pane" className={className}>
       <span data-testid="active-central">{central.id}</span>
       <button type="button" onClick={() => onSelectCentral('c2')}>Trocar para c2</button>
+      <button type="button" onClick={() => onSelectCentral('all')}>Todos os projetos</button>
     </div>
   ),
 }))

@@ -28,6 +28,11 @@ interface CadastroMultiSelectProps {
     id?: string
     /** Nome acessível do gatilho quando não há `Label` associado. */
     "aria-label"?: string
+    /**
+     * Rótulo da opção que marca/desmarca todas de uma vez (ex.: "Todos"), no topo da lista; aparece
+     * parcialmente marcada quando só parte está escolhida. Sem o rótulo, a opção não existe.
+     */
+    selectAllLabel?: string
 }
 
 export function CadastroMultiSelect({ 
@@ -41,9 +46,13 @@ export function CadastroMultiSelect({
     searchable = false,
     searchPlaceholder = "Buscar...",
     id,
-    "aria-label": ariaLabel
+    "aria-label": ariaLabel,
+    selectAllLabel
 }: CadastroMultiSelectProps) {
     const [search, setSearch] = useState("")
+    const allSelected = options.length > 0 && options.every((option) => selected.includes(option.value))
+    const someSelected = !allSelected && options.some((option) => selected.includes(option.value))
+    const toggleAll = () => onSelect(allSelected ? [] : options.map((option) => option.value))
 
     const toggle = (value: string) => {
         if (selected.includes(value)) {
@@ -55,6 +64,7 @@ export function CadastroMultiSelect({
 
     const displayValue = () => {
         if (selected.length === 0) return placeholder
+        if (selectAllLabel && allSelected && options.length > 1) return selectAllLabel
         if (selected.length === 1) return options.find(o => o.value === selected[0])?.label || selected[0]
         return `${selected.length} selecionados`
     }
@@ -92,6 +102,20 @@ export function CadastroMultiSelect({
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="h-8 pl-7 text-xs"
                             />
+                        </div>
+                    </div>
+                )}
+                {selectAllLabel && options.length > 0 && (
+                    <div className="mb-1 border-b pb-1">
+                        <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer transition-colors" onClick={toggleAll}>
+                            <Checkbox
+                                checked={allSelected}
+                                indeterminate={someSelected}
+                                onCheckedChange={toggleAll}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={selectAllLabel}
+                            />
+                            <div className="flex-1 text-xs font-medium truncate">{selectAllLabel}</div>
                         </div>
                     </div>
                 )}

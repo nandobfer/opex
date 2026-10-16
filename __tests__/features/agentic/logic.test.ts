@@ -48,6 +48,11 @@ describe('workbenchActions', () => {
     expect(workbenchActions('planning', 'interrupted', false)).toEqual(['reconnect', 'retry'])
   })
 
+  it('aguardando vaga na central só permite cancelar a espera', () => {
+    expect(workbenchActions('plan_review', 'idle', false, true, true)).toEqual(['cancel-wait'])
+    expect(workbenchActions('done', 'idle', false, false, true)).toEqual(['cancel-wait'])
+  })
+
   it('sem sessão do OpenCode, não oferece Reconectar', () => {
     expect(workbenchActions('planning', 'interrupted', false, false)).toEqual(['retry'])
     expect(workbenchActions('building', 'failed', false, false)).toEqual(['retry', 'request-correction'])
@@ -103,6 +108,17 @@ describe('parseCentralConfig', () => {
     expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
   })
 
+  it('central antiga sem builder do Docker usa o padrão do host; o salvo é preservado', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { composeFile: 'x.yml' } }).environment.dockerBuilder).toBe('')
+    expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { dockerBuilder: 'limit-builder' } }).environment.dockerBuilder).toBe('limit-builder')
+  })
+
+  it('builder do Docker com caractere de shell é inválido', () => {
+    const base = defaultCentralConfig('/repo')
+    expect(centralConfigSchema.safeParse({ ...base, environment: { ...base.environment, dockerBuilder: 'x; rm -rf /' } }).success).toBe(false)
+    expect(centralConfigSchema.safeParse({ ...base, environment: { ...base.environment, dockerBuilder: 'my_builder.1-a' } }).success).toBe(true)
+  })
+
   it('a coluna da fila nasce desligada e é preservada quando salva', () => {
     expect(parseCentralConfig({ sessionDirectory: '/repo' }).columns.queue).toBeNull()
     expect(parseCentralConfig({ sessionDirectory: '/repo', columns: { queue: 'fila' } }).columns.queue).toBe('fila')
@@ -144,6 +160,11 @@ describe('workbenchWaitingReason', () => {
     expect(workbenchWaitingReason({ ...base, stage: 'implementing', runState: 'running', pendingForms: 2 })).toBe('Aguardando você responder uma pergunta')
   })
 
+  it('aguardando vaga mostra a posição na central', () => {
+    expect(workbenchWaitingReason({ ...base, waitingSlot: true, slotQueuePosition: 2 })).toBe('Aguardando vaga na central (#2)')
+    expect(workbenchWaitingReason({ ...base, stage: 'done', waitingSlot: true })).toBe('Aguardando vaga na central')
+  })
+
   it('falha e interrupção têm prioridade sobre pendências obsoletas', () => {
     expect(workbenchWaitingReason({ ...base, runState: 'failed', pendingPermissions: 1 })).toBe('A etapa falhou — use Tentar novamente')
     expect(workbenchWaitingReason({ ...base, runState: 'interrupted', pendingForms: 1 })).toBe('Execução interrompida — use Tentar novamente')
@@ -163,6 +184,10 @@ describe('workbenchUserWaitReason', () => {
   it('permissão e pergunta pendentes valem mesmo durante o turno', () => {
     expect(workbenchUserWaitReason({ ...base, stage: 'implementing', runState: 'running', pendingPermissions: 1 })).toBe('Aguardando você permitir uma ação')
     expect(workbenchUserWaitReason({ ...base, stage: 'implementing', runState: 'running', pendingForms: 1 })).toBe('Aguardando você responder uma pergunta')
+  })
+
+  it('aguardando vaga não é espera do usuário', () => {
+    expect(workbenchUserWaitReason({ ...base, waitingSlot: true })).toBeNull()
   })
 
   it('agente executando não tem motivo', () => {

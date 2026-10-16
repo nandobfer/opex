@@ -60,6 +60,9 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
   nunca `max-h-[--radix-...]` (sintaxe do Tailwind 3, que o 4 ignora em silêncio).
 - Popover (ex.: `Combobox`) dentro de `Dialog` usa `modal`: sem isso, o Dialog bloqueia a rolagem
   da lista pela roda do mouse (a lista é renderizada fora dele).
+- `SearchPicker`: Enter com busca preenchida escolhe o primeiro resultado habilitado se não houver
+  destaque por teclado; setas têm prioridade. Sem busca, só autoescolhe uma única opção habilitada.
+  `CadastroMultiSelect` aceita `selectAllLabel`; o checkbox Todos mostra estado parcial.
 
 ### Listas e tabelas genéricas (`src/components/list/`)
 

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
 
 /** Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa. */
 export const agentConfigSchema = z.object({
@@ -22,7 +22,23 @@ export type AgenticSettings = z.infer<typeof agenticSettingsSchema>
 
 export const DEFAULT_AGENTIC_SETTINGS: AgenticSettings = {
     enabled: false,
-    agents: { planning: { ...EMPTY_AGENT, agent: "plan" }, implementation: { ...EMPTY_AGENT, agent: "build" }, build: { ...EMPTY_AGENT, agent: "build" }, pr: { ...EMPTY_AGENT, agent: "build" } },
+    agents: {
+        planning: { ...EMPTY_AGENT, agent: "plan" },
+        implementation: { ...EMPTY_AGENT, agent: "build" },
+        build: { ...EMPTY_AGENT, agent: "build" },
+        pr: { ...EMPTY_AGENT, agent: "build" },
+        fork: { ...EMPTY_AGENT, agent: "plan" },
+    },
+}
+
+/**
+ * Configuração geral salva → completa: etapas ausentes (versões antigas) caem no padrão, e o agente
+ * dos forks, quando ainda não foi configurado, herda o do planejamento.
+ */
+export function withDefaultAgents(raw: unknown): unknown {
+    const value = typeof raw === "object" && raw !== null ? (raw as Partial<AgenticSettings>) : {}
+    const saved = (typeof value.agents === "object" && value.agents !== null ? value.agents : {}) as Partial<AgenticSettings["agents"]>
+    return { ...DEFAULT_AGENTIC_SETTINGS, ...value, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, ...saved, fork: saved.fork ?? saved.planning ?? DEFAULT_AGENTIC_SETTINGS.agents.fork } }
 }
 
 const absolutePath = z
@@ -72,6 +88,12 @@ export const centralConfigSchema = z.object({
         githubWorkflow: z.string().trim().min(1, "Informe o workflow").max(100).regex(/^[A-Za-z0-9_.-]+\.ya?ml$/, "Informe um arquivo YAML").default("preview.yml"),
         previewService: z.string().trim().min(1, "Informe o serviço").max(80).regex(/^[A-Za-z0-9_-]+$/, "Serviço inválido").default("app"),
         composeFile: optionalText(300),
+        /** Builder do Docker (buildx) usado no build da prévia; vazio = o builder padrão do host. Vai para o shell, daí o formato restrito. */
+        dockerBuilder: z
+            .string()
+            .trim()
+            .max(100, "Máximo 100 caracteres")
+            .regex(/^([A-Za-z0-9][A-Za-z0-9._-]*)?$/, "Nome de builder inválido"),
         portEnvVar: z.string().trim().min(1, "Informe a variável").max(60).regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "Nome de variável inválido"),
         previewHost: z.string().trim().min(1, "Informe o endereço").max(200).regex(/^[A-Za-z0-9.-]+$/, "Informe só o host (ex.: localhost ou 192.168.0.64)"),
         healthPath: z.string().trim().max(200).regex(/^(\/.*)?$/, "Comece com /"),
@@ -102,6 +124,7 @@ export const centralConfigSchema = z.object({
         deleteBranch: z.boolean(),
     }),
     include: z.object({ comments: z.boolean(), history: z.boolean() }),
+    forks: z.object({ onWorkbenchDone: z.enum(FORK_DONE_POLICIES) }),
     instructions: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, optionalText(4000)])) as Record<AgentRole, ReturnType<typeof optionalText>>),
 }).superRefine((value, ctx) => {
     if (value.environment.previewPortMin > value.environment.previewPortMax) {
@@ -120,7 +143,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
         sessionDirectory,
         worktreeRoot: sessionDirectory === "/" ? "" : `${sessionDirectory.replace(/\/+$/, "")}/worktrees`,
         maxConcurrent: 2,
-        agents: { planning: null, implementation: null, build: null, pr: null },
+        agents: { planning: null, implementation: null, build: null, pr: null, fork: null },
         git: {
             baseBranch: "main",
             prTargetBranch: "main",
@@ -134,11 +157,12 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         columns: { queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },
-        instructions: { planning: "", implementation: "", build: "", pr: "" },
+        forks: { onWorkbenchDone: "ask" },
+        instructions: { planning: "", implementation: "", build: "", pr: "", fork: "" },
     }
 }
 
@@ -179,6 +203,22 @@ export const formReplySchema = z.object({
     cancel: z.boolean().optional(),
 })
 export type FormReplyInput = z.infer<typeof formReplySchema>
+
+/** Mensagem do usuário num fork da conversa (a primeira abre o fork). */
+export const forkMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem") })
+export type ForkMessageInput = z.infer<typeof forkMessageSchema>
+
+/** Abrir fork: primeira mensagem e, num fork de fork, o fork pai. */
+export const openForkSchema = forkMessageSchema.extend({ parentForkId: z.string().trim().min(1).optional() })
+export type OpenForkInput = z.infer<typeof openForkSchema>
+
+/** Destino do resumo ao integrar o fork. */
+export const forkApplySchema = z.object({ target: z.enum(FORK_INTEGRATION_TARGETS, { error: "Escolha onde integrar" }) })
+export type ForkApplyInput = z.infer<typeof forkApplySchema>
+
+/** Resposta à pergunta da mesa concluída com forks em aberto. */
+export const forksDonePromptSchema = z.object({ decision: z.enum(["conclude", "keep"]) })
+export type ForksDonePromptInput = z.infer<typeof forksDonePromptSchema>
 
 /** Bloco JSON final pedido aos agentes de build, PR e limpeza. */
 export const buildResultSchema = z.object({ ok: z.boolean(), error: z.string().optional() })

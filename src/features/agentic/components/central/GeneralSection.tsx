@@ -1,21 +1,24 @@
 "use client"
 
 import Link from "next/link"
-import { useWatch } from "react-hook-form"
+import { Controller, useWatch } from "react-hook-form"
 import { AlertTriangle, Github } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
+import { OptionTabs } from "@/components/ui/option-tabs"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { integrationPath } from "@/lib/integrations/catalog"
+import { FORK_DONE_POLICIES, FORK_DONE_POLICY_LABELS } from "../../constants"
 import type { CentralDto } from "../../types"
 import type { CentralForm } from "./form"
 
-/** Aba Geral: ativa, diretório das sessões, pasta dos worktrees, limite de mesas e repositório. */
+/** Aba Geral: ativa, diretório das sessões, pasta dos worktrees, limite de mesas, forks e repositório. */
 export function GeneralSection({ form, central }: { form: CentralForm; central: CentralDto }) {
     const errors = form.formState.errors
     const directory = useWatch({ control: form.control, name: "sessionDirectory" })
+    const forkPolicy = useWatch({ control: form.control, name: "forks.onWorkbenchDone" })
     return (
         <Card>
             <CardHeader>
@@ -36,6 +39,28 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
                     </Field>
                 </div>
                 <p className="text-xs text-muted-foreground">Cada tarefa ganha um worktree em &lt;pasta dos worktrees&gt;/&lt;código&gt;, criado pelo agente de implementação.</p>
+                <p className="text-xs text-muted-foreground">
+                    Mesas em Plano pronto, Prévia pronta ou PR aberto não ocupam vaga. Ao voltarem a executar com o limite cheio, aguardam vaga e têm prioridade sobre as tarefas novas da fila.
+                </p>
+                <div className="space-y-1.5">
+                    <p id="central-forks-done" className="text-sm font-medium">
+                        Forks: ao concluir a mesa
+                    </p>
+                    <Controller
+                        control={form.control}
+                        name="forks.onWorkbenchDone"
+                        render={({ field }) => (
+                            <OptionTabs
+                                aria-labelledby="central-forks-done"
+                                className="w-full"
+                                value={field.value}
+                                onChange={field.onChange}
+                                options={FORK_DONE_POLICIES.map((policy) => ({ value: policy, label: FORK_DONE_POLICY_LABELS[policy].label, title: `${FORK_DONE_POLICY_LABELS[policy].label} — ${FORK_DONE_POLICY_LABELS[policy].description}` }))}
+                            />
+                        )}
+                    />
+                    <p className="text-xs text-muted-foreground">{FORK_DONE_POLICY_LABELS[forkPolicy ?? "ask"].description} Forks não ocupam vaga no limite de mesas.</p>
+                </div>
                 {central.repo ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Github className="h-4 w-4" aria-hidden /> Repositório vinculado:{" "}

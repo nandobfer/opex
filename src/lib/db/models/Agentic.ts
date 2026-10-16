@@ -6,7 +6,8 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
  *   configuração (validada pelo schema Zod `centralConfigSchema`);
  * - `agentic_workbenches`: uma mesa de trabalho por tarefa (etapa, sessão do OpenCode, worktree,
  *   porta da prévia, versões do plano e PR);
- * - `agentic_events`: a saída da IA de cada mesa, em ordem (`seq`), para reproduzir a tela.
+ * - `agentic_forks`: forks da conversa de uma mesa (sessão paralela somente leitura, resumo e integração);
+ * - `agentic_events`: a saída da IA de cada mesa (e de cada fork), em ordem (`seq`), para reproduzir a tela.
  */
 
 export interface IAgenticCentral {
@@ -63,6 +64,31 @@ export interface IWorkbenchPr {
     conflictBaseSha: string | null
     /** SHA da branch do PR na última resolução de conflito iniciada; muda a cada push. */
     conflictHeadSha: string | null
+    /** Replanejamentos causados pela revisão automática (aba "Revisão de PR"; limite opcional). */
+    autoReviewReplans?: number
+}
+
+/** Retomada de uma mesa (etapa isenta ou concluída) aguardando vaga na central; FIFO por `queuedAt`. */
+export interface IPendingTurn {
+    action: string
+    stage: string
+    text: string
+    userText: string | null
+    feedback: string | null
+    extraSet: Record<string, unknown> | null
+    /** Reabertura: os efeitos (PR para o histórico, mover o card, auditoria) rodam ao ganhar a vaga. */
+    reopen: boolean
+    /** Etapa da mesa ao entrar na espera; se mudar até a vaga chegar, a espera é descartada. */
+    fromStage: string
+    queuedAt: Date
+}
+
+/** Resumo de um fork integrado ao contexto da conversa principal (instrução durável da sessão da mesa). */
+export interface IForkNote {
+    forkId: string
+    number: number
+    summary: string
+    createdAt: Date
 }
 
 export interface IAgenticWorkbench {
@@ -114,6 +140,16 @@ export interface IAgenticWorkbench {
     deletionRequestedAt: Date | null
     plans: IPlanVersion[]
     pendingFeedback: string | null
+    /** Turno aguardando vaga no limite de mesas da central (`null` quando não há espera). */
+    pendingTurn: IPendingTurn | null
+    /** Último número de fork usado (os números não se repetem). */
+    forkSeq: number
+    /** Resumos de forks integrados ao contexto da conversa principal. */
+    forkNotes: IForkNote[]
+    /** `false` quando os resumos não puderam ser gravados como instrução da sessão: vão no próximo prompt. */
+    forkNotesSynced: boolean
+    /** Mesa concluída com forks em aberto aguardando a decisão do usuário (política "Sempre perguntar"). */
+    forksDonePrompt: { count: number; at: Date } | null
     pr: IWorkbenchPr | null
     pastPrs: IWorkbenchPr[]
     pendingPermissions: unknown[]
@@ -156,6 +192,11 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         deletionRequestedAt: { type: Date, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
         pendingFeedback: { type: String, default: null },
+        pendingTurn: { type: Schema.Types.Mixed, default: null },
+        forkSeq: { type: Number, default: 0 },
+        forkNotes: { type: [Schema.Types.Mixed] as unknown as IForkNote[], default: [] },
+        forkNotesSynced: { type: Boolean, default: true },
+        forksDonePrompt: { type: Schema.Types.Mixed, default: null },
         pr: { type: Schema.Types.Mixed, default: null },
         pastPrs: { type: [Schema.Types.Mixed] as unknown as IWorkbenchPr[], default: [] },
         pendingPermissions: { type: [Schema.Types.Mixed], default: [] },
@@ -171,6 +212,85 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
 AgenticWorkbenchSchema.index({ port: 1 }, { unique: true, partialFilterExpression: { port: { $type: "number" } } })
 // Fila global do build: mesas aguardando, na ordem de chegada.
 AgenticWorkbenchSchema.index({ buildQueuedAt: 1 }, { partialFilterExpression: { buildQueuedAt: { $type: "date" } } })
+// Retomadas aguardando vaga na central, na ordem de chegada.
+AgenticWorkbenchSchema.index({ centralId: 1, "pendingTurn.queuedAt": 1 }, { partialFilterExpression: { "pendingTurn.queuedAt": { $type: "date" } } })
+
+export interface IForkIntegration {
+    target: string
+    summary: string
+    appliedAt: Date
+}
+
+export interface IAgenticFork {
+    _id: Types.ObjectId
+    workbenchId: string
+    centralId: string
+    taskId: string
+    taskCode: string
+    /** Número do fork na mesa (1, 2, …; nunca reaproveitado). */
+    number: number
+    /** Fork pai (fork de fork); `null` quando aberto da conversa principal. */
+    parentForkId: string | null
+    /** Número do fork pai (mantido mesmo se o pai for descartado). */
+    parentNumber: number | null
+    /** Resumos de forks filhos integrados à conversa deste fork. */
+    childNotes: IForkNote[]
+    /** `false` quando os resumos dos filhos não viraram instrução da sessão: vão no próximo prompt. */
+    childNotesSynced: boolean
+    status: string
+    runState: string
+    error: string | null
+    sessionId: string | null
+    sessionDirectory: string | null
+    /** `fork`: cópia da sessão principal; `fresh`: sessão nova com o contexto da mesa (mesa sem sessão). */
+    origin: string
+    /** Etapa da mesa quando o fork foi aberto. */
+    forkedFromStage: string
+    /** Resumo proposto para integração (em revisão enquanto `integrating`). */
+    summary: string | null
+    integration: IForkIntegration | null
+    lastPrompt: { text: string } | null
+    turnStartedAt: Date | null
+    pendingPermissions: unknown[]
+    pendingForms: unknown[]
+    usage: { costUsd: number; inputTokens: number; outputTokens: number; reasoningTokens: number }
+    heartbeatAt: Date | null
+    closedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const AgenticForkSchema = new Schema<IAgenticFork>(
+    {
+        workbenchId: { type: String, required: true },
+        centralId: { type: String, required: true },
+        taskId: { type: String, required: true },
+        taskCode: { type: String, required: true },
+        number: { type: Number, required: true },
+        parentForkId: { type: String, default: null },
+        parentNumber: { type: Number, default: null },
+        childNotes: { type: [Schema.Types.Mixed] as unknown as IForkNote[], default: [] },
+        childNotesSynced: { type: Boolean, default: true },
+        status: { type: String, required: true, default: "active" },
+        runState: { type: String, required: true, default: "idle" },
+        error: { type: String, default: null },
+        sessionId: { type: String, default: null },
+        sessionDirectory: { type: String, default: null },
+        origin: { type: String, default: "fork" },
+        forkedFromStage: { type: String, required: true },
+        summary: { type: String, default: null },
+        integration: { type: Schema.Types.Mixed, default: null },
+        lastPrompt: { type: Schema.Types.Mixed, default: null },
+        turnStartedAt: { type: Date, default: null },
+        pendingPermissions: { type: [Schema.Types.Mixed], default: [] },
+        pendingForms: { type: [Schema.Types.Mixed], default: [] },
+        usage: { type: Schema.Types.Mixed, default: () => ({ costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }) },
+        heartbeatAt: { type: Date, default: null },
+        closedAt: { type: Date, default: null },
+    },
+    { collection: "agentic_forks", versionKey: false, timestamps: true, minimize: false },
+)
+AgenticForkSchema.index({ workbenchId: 1, number: 1 }, { unique: true })
 
 export interface IAgenticEvent {
     workbenchId: string
@@ -193,10 +313,12 @@ AgenticEventSchema.index({ workbenchId: 1, seq: 1 }, { unique: true })
 if (process.env.NODE_ENV === "development") {
     delete models.AgenticCentral
     delete models.AgenticWorkbench
+    delete models.AgenticFork
     delete models.AgenticEvent
 }
 
 export const AgenticCentral: Model<IAgenticCentral> = (models.AgenticCentral as Model<IAgenticCentral>) || model<IAgenticCentral>("AgenticCentral", AgenticCentralSchema)
 export const AgenticWorkbench: Model<IAgenticWorkbench> =
     (models.AgenticWorkbench as Model<IAgenticWorkbench>) || model<IAgenticWorkbench>("AgenticWorkbench", AgenticWorkbenchSchema)
+export const AgenticFork: Model<IAgenticFork> = (models.AgenticFork as Model<IAgenticFork>) || model<IAgenticFork>("AgenticFork", AgenticForkSchema)
 export const AgenticEvent: Model<IAgenticEvent> = (models.AgenticEvent as Model<IAgenticEvent>) || model<IAgenticEvent>("AgenticEvent", AgenticEventSchema)

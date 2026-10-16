@@ -4,19 +4,24 @@ import type { InProgressWorkbenchDto } from "../types"
 import { workbenchWaitingReason } from "../logic"
 import { asRunState, asStage } from "./dto"
 import { isWorkbenchActive } from "./hub"
+import { slotQueuePositions } from "./slots"
 
 /**
  * Mesas de trabalho em andamento (etapa diferente de concluída) para a lista "Trabalhos em
  * andamento": cada mesa executando (agente com período ativo) ou parada, com o motivo da espera
- * (revisão do plano, aprovação da prévia, PR, permissão/pergunta pendente, falha ou interrupção).
+ * (revisão do plano, aprovação da prévia, PR, permissão/pergunta pendente, falha, interrupção ou vaga
+ * na central — inclusive a reabertura de uma mesa concluída aguardando vaga).
  * Somente leitura — não escreve nem reconcilia (a limpeza de órfãos segue nas rotinas).
  */
 export async function listWorkbenchesInProgress(): Promise<InProgressWorkbenchDto[]> {
     await dbConnect()
-    const docs = await AgenticWorkbench.find({ stage: { $ne: "done" } })
-        .select({ centralId: 1, taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, updatedAt: 1 })
-        .sort({ updatedAt: -1 })
-        .lean()
+    const [docs, slots] = await Promise.all([
+        AgenticWorkbench.find({ $or: [{ stage: { $ne: "done" } }, { pendingTurn: { $ne: null } }] })
+            .select({ centralId: 1, taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, pendingTurn: 1, updatedAt: 1 })
+            .sort({ updatedAt: -1 })
+            .lean(),
+        slotQueuePositions(),
+    ])
     const items = docs.map((doc) => {
         const stage = asStage(doc.stage)
         // "running" sem turno vivo neste processo (o app reiniciou) é interrupção, não execução.
@@ -26,6 +31,8 @@ export async function listWorkbenchesInProgress(): Promise<InProgressWorkbenchDt
             runState,
             pendingPermissions: doc.pendingPermissions?.length ?? 0,
             pendingForms: doc.pendingForms?.length ?? 0,
+            waitingSlot: Boolean(doc.pendingTurn),
+            slotQueuePosition: slots.get(String(doc._id)) ?? null,
         })
         return {
             workbenchId: String(doc._id),

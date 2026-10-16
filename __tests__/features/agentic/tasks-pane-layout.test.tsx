@@ -3,6 +3,7 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CentralDto } from '@/features/agentic/types'
 import type { TaskBoardDto } from '@/features/tasks/board'
@@ -53,7 +54,7 @@ const task: TaskDto = {
   updatedAt: null,
 } as TaskDto
 
-async function renderPane() {
+async function renderPane(selected: CentralDto | null = central) {
   mocks.get.mockImplementation(async (url: string) => {
     if (url === '/tasks') return ok({ tasks: [task], fetchedAt: new Date().toISOString() })
     if (url === '/tasks/columns') return ok(board)
@@ -64,7 +65,9 @@ async function renderPane() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={client}>
-      <TasksPane central={central} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
+      <TooltipProvider>
+      <TasksPane central={selected} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
+      </TooltipProvider>
     </QueryClientProvider>,
   )
   await screen.findByText('OPE-41')
@@ -85,9 +88,12 @@ describe('cabeçalho da coluna de tarefas da Central de desenvolvimento', () => 
     expect(heading.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('remove o atalho "Configurar a central" e o botão "Restaurar filtros"', async () => {
+  it('engrenagem no fim da linha do título abre a central selecionada', async () => {
     await renderPane()
-    expect(screen.queryByRole('link', { name: 'Configurar a central' })).toBeNull()
+    const settings = screen.getByRole('link', { name: 'Configurar central selecionada' })
+    const heading = screen.getByRole('heading', { name: /Tarefas/ })
+    expect(settings.getAttribute('href')).toBe('/integracoes/ia/centrais/c1')
+    expect(heading.parentElement?.contains(settings)).toBe(true)
     expect(screen.queryByRole('button', { name: 'Restaurar filtros' })).toBeNull()
   })
 
@@ -101,7 +107,33 @@ describe('cabeçalho da coluna de tarefas da Central de desenvolvimento', () => 
 
   it('mantém a busca por código/título e o filtro de colunas', async () => {
     await renderPane()
-    expect(screen.getByLabelText('Buscar tarefas')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Colunas' })).toBeTruthy()
+    const order = [
+      screen.getByRole('button', { name: 'Opex' }),
+      screen.getByRole('button', { name: /Colunas|Em andamento|selecionados/ }),
+      screen.getByRole('button', { name: 'Estado da mesa' }),
+      screen.getByLabelText('Buscar tarefas'),
+    ]
+    for (let index = 1; index < order.length; index++) {
+      expect(order[index - 1]!.compareDocumentPosition(order[index]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+  })
+
+  it('filtra pelo estado da mesa: "Sem mesa" mantém a tarefa sem mesa e "Planejando" a esconde', async () => {
+    window.localStorage.setItem(DEV_CENTER_FILTERS_KEY, JSON.stringify({ search: '', columns: ['doing'], states: ['no_workbench'] }))
+    await renderPane()
+    expect(screen.getByText('OPE-41')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Sem mesa/ })).toBeTruthy()
+
+    window.localStorage.setItem(DEV_CENTER_FILTERS_KEY, JSON.stringify({ search: '', columns: ['doing'], states: ['planning'] }))
+    window.dispatchEvent(new StorageEvent('storage', { key: DEV_CENTER_FILTERS_KEY }))
+    await waitFor(() => expect(screen.queryByText('OPE-41')).toBeNull())
+    expect(screen.getByText('Nenhuma tarefa encontrada')).toBeTruthy()
+  })
+
+  it('em "Todos os projetos" o seletor mostra a opção e a lista usa as tarefas de todas as centrais', async () => {
+    await renderPane(null)
+    expect(screen.getByRole('button', { name: 'Todos os projetos' })).toBeTruthy()
+    expect(screen.getByRole('list', { name: 'Tarefas de todos os projetos' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Configurar centrais de desenvolvimento' }).getAttribute('href')).toBe('/integracoes/ia?aba=desenvolvimento-agentico&abaAgentic=centrais')
   })
 })

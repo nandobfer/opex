@@ -120,6 +120,7 @@ export function SearchPicker<T>({
         changeOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.nativeEvent.isComposing || loading || fetching || disabled) return
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault()
             if (visible.length === 0) return
@@ -127,7 +128,8 @@ export function SearchPicker<T>({
             setActive((current) => (current + step + visible.length) % visible.length)
         } else if (event.key === "Enter") {
             event.preventDefault()
-            const item = visible[active] ?? (visible.length === 1 ? visible[0] : undefined)
+            const available = visible.filter((item) => !disabledReason?.(item))
+            const item = visible[active] ?? (query || available.length === 1 ? available[0] : undefined)
             if (item) pick(item)
         }
     }

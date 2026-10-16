@@ -11,6 +11,7 @@ vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children
 import { CentralPicker, centralRepoLabel } from '@/features/agentic/components/dev-center/CentralPicker'
 import type { CentralDto } from '@/features/agentic/types'
 import type { GithubRepoOption } from '@/features/github/types'
+import { ALL_CENTRALS_ID } from '@/features/agentic/dev-center-central'
 
 const central = (id: string, patch: Partial<CentralDto> = {}): CentralDto =>
   ({ id, projectId: `p-${id}`, projectName: `Projeto ${id}`, sigla: id.toUpperCase(), repo: `org/${id}`, ...patch }) as unknown as CentralDto
@@ -36,5 +37,18 @@ describe('CentralPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'org/app' }))
     fireEvent.click(await screen.findByRole('option', { name: 'org/zip' }))
     expect(onSelect).toHaveBeenCalledWith('zip')
+  })
+
+  it('oferece "Todos os projetos" no topo e mostra a opção no gatilho quando escolhida', async () => {
+    const onSelect = vi.fn()
+    const { rerender } = render(<CentralPicker centrals={[central('app')]} active={central('app')} index={new Map()} onSelect={onSelect} />)
+    fireEvent.click(screen.getByRole('button', { name: /org\/app/ }))
+    const options = await screen.findAllByRole('option')
+    expect(options[0]!.textContent).toContain('Todos os projetos')
+    fireEvent.click(options[0]!)
+    expect(onSelect).toHaveBeenCalledWith(ALL_CENTRALS_ID)
+
+    rerender(<CentralPicker centrals={[central('app')]} active={null} index={new Map()} onSelect={onSelect} />)
+    expect(screen.getByRole('button', { name: /Todos os projetos/ })).toBeTruthy()
   })
 })

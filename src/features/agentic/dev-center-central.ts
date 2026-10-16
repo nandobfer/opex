@@ -13,6 +13,11 @@ export type DevCenterCentral = z.infer<typeof devCenterCentralSchema>
 
 export const DEFAULT_DEV_CENTER_CENTRAL: DevCenterCentral = { id: "" }
 
+/** Valor salvo quando o seletor está em "Todos os projetos" (tarefas de todas as centrais). */
+export const ALL_CENTRALS_ID = "all"
+
+export const isAllCentrals = (storedId: string): boolean => storedId === ALL_CENTRALS_ID
+
 /**
  * Central efetiva da tela: a do projeto da tarefa aberta (quando houver), senão a salva (se ainda
  * existir), senão a primeira. `null` quando não há centrais.

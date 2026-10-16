@@ -6,6 +6,8 @@ import { formatPrFeedback } from "../prompts"
 import { centralLogger } from "./log"
 import { closeOrphanWorkPeriods } from "./timer-sync"
 import { handlePrAutoMerge, handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
+import { loadPrReviewGate } from "@/features/pr-review/server/gate"
+import { isAutoReviewText } from "@/features/pr-review/logic"
 
 /**
  * Rotina "Acompanhar PRs do desenvolvimento agêntico" (Integrações › Crons): para cada mesa com PR
@@ -66,6 +68,8 @@ interface PrFeedbackSection {
     author: string | null
     body: string
     comments: { path: string | null; line: number | null; body: string }[]
+    /** Feedback publicado pela revisão automática (marcador oculto). */
+    auto?: boolean
 }
 
 /** `https://github.com/org/repo/pull/12` → `org/repo`. */
@@ -93,6 +97,7 @@ export async function watchPullRequests(): Promise<string> {
     await dbConnect()
     const closedOrphans = await closeOrphanWorkPeriods().catch(() => 0)
     const docs = await AgenticWorkbench.find({ stage: "pr_open", runState: { $ne: "running" }, pr: { $ne: null } }).lean()
+    const gate = await loadPrReviewGate()
     let merged = 0
     let replans = 0
     let conflicts = 0
@@ -104,6 +109,8 @@ export async function watchPullRequests(): Promise<string> {
         const repo = repoFromPrUrl(pr.url)
         const log = centralLogger(doc.centralId, doc.taskCode)
         if (!repo) continue
+        // Limpeza pós-merge aguardando vaga: o merge já foi tratado (não processa de novo).
+        if (doc.pendingTurn && pr.state === "merged") continue
         try {
             const pull = await githubRequest<GithubPull>(`/repos/${repo}/pulls/${pr.number}`)
             if (pull.merged) {
@@ -117,6 +124,8 @@ export async function watchPullRequests(): Promise<string> {
                 continue
             }
             if (pr.state === "closed") await handlePrReopened(id)
+            // Aguardando vaga: só merge/fechamento são tratados; comentários, conflito e merge automático ficam para depois da espera.
+            if (doc.pendingTurn) continue
 
             const lastReviewId = pr.lastReviewId ?? 0
             // Mesa aberta antes desta rotina conhecer comentários: a 1ª varredura só grava o cursor (não replaneja por comentários antigos).
@@ -138,7 +147,17 @@ export async function watchPullRequests(): Promise<string> {
                 })
 
                 // Revisões novas: pedindo mudanças (comportamento mantido) ou mencionando `@opex` no corpo.
-                const relevantReviews = freshReviews.filter((review) => review.state === "CHANGES_REQUESTED" || mentionsOpex(review.body ?? ""))
+                const autoReplans = pr.autoReviewReplans ?? 0
+                const decision = gate.replan(autoReplans)
+                let blockedAuto = false
+                const relevantReviews = freshReviews.filter((review) => {
+                    if (review.state !== "CHANGES_REQUESTED" && !mentionsOpex(review.body ?? "")) return false
+                    if (isAutoReviewText(review.body) && !decision.allowed) {
+                        blockedAuto = true
+                        return false
+                    }
+                    return true
+                })
                 const expanded = new Set(relevantReviews.map((review) => review.id))
                 const sections: PrFeedbackSection[] = await Promise.all(
                     relevantReviews.map(async (review) => {
@@ -147,22 +166,32 @@ export async function watchPullRequests(): Promise<string> {
                             author: review.user?.login ?? null,
                             body: review.body ?? "",
                             comments: comments.map((comment) => ({ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body })),
+                            auto: isAutoReviewText(review.body),
                         }
                     }),
                 )
                 if (!baseline) {
                     // Comentários soltos (conversa e linha) que mencionam `@opex`; os de linha de uma revisão já expandida ficam de fora.
-                    for (const comment of freshIssue) if (mentionsOpex(comment.body)) sections.push({ author: comment.user?.login ?? null, body: comment.body, comments: [] })
+                    for (const comment of freshIssue) {
+                        if (!mentionsOpex(comment.body)) continue
+                        if (isAutoReviewText(comment.body) && !decision.allowed) {
+                            blockedAuto = true
+                            continue
+                        }
+                        sections.push({ author: comment.user?.login ?? null, body: comment.body, comments: [], auto: isAutoReviewText(comment.body) })
+                    }
                     for (const comment of freshLine) {
                         if (expanded.has(comment.pull_request_review_id ?? -1) || !mentionsOpex(comment.body)) continue
                         sections.push({ author: comment.user?.login ?? null, body: "", comments: [{ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body }] })
                     }
                 }
+                if (blockedAuto) log.warn(`PR #${pr.number}: pedido de mudança da revisão automática ignorado (${decision.reason})`, { workbenchId: id })
 
                 const feedback = formatPrFeedback(sections)
                 // Revisão sem texto continua indo para `changes_requested` (a mesa pede o motivo ao usuário).
                 if (relevantReviews.length || feedback.trim()) {
                     log.warn(`PR #${pr.number}: pedido de mudança (comentário ou revisão)`, { workbenchId: id })
+                    if (sections.some((section) => section.auto)) await savePrCursors(id, { autoReviewReplans: autoReplans + 1 })
                     await handlePrFeedback(id, feedback)
                     replans++
                     replanned = true
@@ -187,7 +216,8 @@ export async function watchPullRequests(): Promise<string> {
             // Merge automático (OPE-50): a central pode mandar o agente mergear o próprio PR.
             // Só quando o PR está pronto (sem conflito, sem bloqueios e fora do rascunho); a mesa segue
             // elegível enquanto o GitHub não liberar as verificações/regras.
-            if (prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft })) {
+            // Com a revisão automática ligada, espera a revisão do commit atual (na fila, revisando ou pedindo mudanças).
+            if (prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft }) && !(await gate.blocksAutoMerge(repo, pr.number, pull.head?.sha))) {
                 const started = await handlePrAutoMerge(id, { baseBranch: pull.base?.ref ?? "a branch de destino" })
                 if (started) autoMerges++
             }

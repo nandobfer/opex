@@ -12,7 +12,7 @@ import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
-import { useLocalTabs } from "@/features/integrations/components/tabs/useLocalTabs"
+import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "../../hooks/useAgentic"
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
 import { AgentRolesCard } from "./AgentRolesCard"
@@ -22,6 +22,7 @@ const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1
 
 /** Abas internas da configuração: agentes padrão (com salvar) e a lista de centrais. */
 type SettingsTab = "agentes" | "centrais"
+const SETTINGS_TABS: readonly SettingsTab[] = ["agentes", "centrais"]
 const TABS: readonly IntegrationTabDef<SettingsTab>[] = [
     { id: "agentes", label: "Agentes", icon: Bot },
     { id: "centrais", label: "Centrais de desenvolvimento", icon: FolderGit2 },
@@ -38,7 +39,7 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     const form = useForm<AgenticSettings>({ resolver: zodResolver(agenticSettingsSchema), mode: "onChange", defaultValues: DEFAULT_AGENTIC_SETTINGS })
     const dirty = form.formState.isDirty
     const agents = useWatch({ control: form.control, name: "agents" })
-    const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useLocalTabs<SettingsTab>("agentes", dirty, () => (query.data ? form.reset(query.data.settings) : undefined))
+    const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab(SETTINGS_TABS, "agentes", dirty, () => (query.data ? form.reset(query.data.settings) : undefined), "abaAgentic")
 
     useEffect(() => {
         if (query.data) form.reset(query.data.settings)

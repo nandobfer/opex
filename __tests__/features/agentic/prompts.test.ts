@@ -63,6 +63,18 @@ describe('mensagens das etapas', () => {
     expect(text).toContain('4001–4098')
   })
 
+  it('build usa o builder do Docker da central quando configurado', () => {
+    const text = buildPrompt({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015, backup)
+    expect(text).toContain('BUILDX_BUILDER=limit-builder PORT=4015 docker compose -p portal-go-dev-12 up -d --build')
+    expect(text).toContain('NÃO troque o builder padrão do host')
+  })
+
+  it('sem builder configurado, o build usa o padrão do host', () => {
+    const text = buildPrompt(config, ctx, 4015, backup)
+    expect(text).toContain('`PORT=4015 docker compose -p portal-go-dev-12 up -d --build`')
+    expect(text).not.toContain('BUILDX_BUILDER')
+  })
+
   it('build manda criar o dump do MongoDB antes de publicar a prévia (OPE-54)', () => {
     const text = buildPrompt(config, ctx, 4015, backup)
     expect(text).toContain('## Backup do MongoDB (obrigatório ANTES de publicar a prévia)')

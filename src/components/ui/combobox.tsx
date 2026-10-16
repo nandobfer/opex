@@ -18,6 +18,8 @@ export interface ComboboxOption {
 }
 
 interface ComboboxProps {
+  /** Id do botão (liga o rótulo do campo). */
+  id?: string
   options: ComboboxOption[]
   value?: string
   onValueChange?: (value: string) => void
@@ -28,6 +30,7 @@ interface ComboboxProps {
 }
 
 export function Combobox({
+  id,
   options,
   value,
   onValueChange,
@@ -51,6 +54,7 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-expanded={open}

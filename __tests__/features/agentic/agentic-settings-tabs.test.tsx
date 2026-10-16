@@ -33,8 +33,10 @@ vi.mock("@/features/agentic/components/settings/CentralsCard", () => ({ Centrals
 
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { useLocalTabs } from "@/features/integrations/components/tabs/useLocalTabs"
+import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 
 beforeEach(() => {
+    window.history.replaceState({}, "", "/integracoes/ia?aba=desenvolvimento-agentico")
     window.matchMedia = vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn() })) as unknown as typeof window.matchMedia
 })
 afterEach(() => {
@@ -81,6 +83,28 @@ describe("useLocalTabs", () => {
 })
 
 describe("AgenticTab: abas internas", () => {
+    it("atalho abre diretamente Centrais de desenvolvimento", () => {
+        window.history.replaceState({}, "", "/integracoes/ia?aba=desenvolvimento-agentico&abaAgentic=centrais")
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        expect(screen.getByRole("tab", { name: "Centrais de desenvolvimento" }).getAttribute("aria-selected")).toBe("true")
+        expect(screen.getByTestId("centrals")).toBeTruthy()
+    })
+
+    it("subaba preserva aba principal, busca e hash e confirma descarte antes de alterar URL", () => {
+        window.history.replaceState({}, "", "/integracoes/ia?aba=desenvolvimento-agentico&buscaCentrais=opex#config")
+        const discard = vi.fn()
+        const { result } = renderHook(() => useIntegrationTab(["agentes", "centrais"] as const, "agentes", true, discard, "abaAgentic"))
+        act(() => result.current.requestTab("centrais"))
+        expect(window.location.search).not.toContain("abaAgentic")
+        expect(result.current.pendingTab).toBe("centrais")
+        act(() => result.current.confirmDiscard())
+        expect(discard).toHaveBeenCalledTimes(1)
+        expect(new URLSearchParams(window.location.search).get("aba")).toBe("desenvolvimento-agentico")
+        expect(new URLSearchParams(window.location.search).get("buscaCentrais")).toBe("opex")
+        expect(new URLSearchParams(window.location.search).get("abaAgentic")).toBe("centrais")
+        expect(window.location.hash).toBe("#config")
+    })
+
     it("abre na aba Agentes com os agentes padrão e Salvar/Desfazer, sem as centrais", () => {
         render(<AgenticTab onDirtyChange={vi.fn()} />)
         expect(screen.getByRole("tab", { name: "Agentes" }).getAttribute("aria-selected")).toBe("true")

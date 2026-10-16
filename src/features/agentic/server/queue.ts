@@ -7,7 +7,8 @@ import { logger } from "@/lib/logger"
 import { parseCentralConfig } from "../logic"
 import type { CentralConfig } from "../schemas"
 import type { QueueItemDto } from "../types"
-import { startWorkbench } from "./workflow"
+import { occupiedSlots, runInCentral, waitingResumes } from "./slots"
+import { startPendingTurn, startWorkbenchInCentral } from "./workflow"
 
 /**
  * Fila da central de desenvolvimento: uma **coluna configurável** da central (`columns.queue`). Ao
@@ -53,28 +54,45 @@ export async function listCentralQueue(centralId: string): Promise<QueueItemDto[
     return waitingTasks(centralId, central.projectId, columnKey)
 }
 
-const pumpChains = new Map<string, Promise<void>>()
-
-/** Processa a fila de uma central. Serializado por central (chain em memória) para respeitar o limite. */
+/** Processa a fila de uma central. Serializado por central (`runInCentral`) para respeitar o limite. */
 export function pumpCentralQueue(centralId: string): Promise<void> {
-    const previous = pumpChains.get(centralId) ?? Promise.resolve()
-    const next = previous.then(() => runPump(centralId)).catch(() => undefined)
-    pumpChains.set(centralId, next)
-    return next
+    return runInCentral(centralId, () => runPump(centralId)).catch(() => undefined)
 }
 
-/** Abre mesas enquanto `mesas abertas < maxConcurrent`, na ordem da fila. Nunca lança. */
+/**
+ * Lança as retomadas aguardando vaga (FIFO) enquanto houver vaga. Devolve as vagas ocupadas ao fim
+ * e se ainda sobrou retomada esperando (nesse caso, nenhuma mesa nova deve abrir).
+ */
+async function pumpResumes(centralId: string, max: number): Promise<{ open: number; blocked: boolean }> {
+    let open = await occupiedSlots(centralId)
+    const waiting = await waitingResumes(centralId)
+    for (const item of waiting) {
+        if (open >= max) return { open, blocked: true }
+        try {
+            if ((await startPendingTurn(String(item._id))) === "started") open++
+        } catch (error) {
+            // Indisponível agora (OpenCode, central desativada…): a retomada segue esperando na mesma posição.
+            logger.warn({ err: error, centralId, workbenchId: String(item._id) }, "[agentic-queue] Retomada aguardando vaga não iniciada")
+            return { open, blocked: true }
+        }
+    }
+    return { open, blocked: false }
+}
+
+/** Lança as retomadas e depois abre mesas novas enquanto houver vaga, na ordem da fila. Nunca lança. */
 async function runPump(centralId: string): Promise<void> {
     try {
         const central = await loadCentral(centralId)
-        const columnKey = central?.config.columns.queue
-        if (!central || !columnKey || !central.config.enabled) return
-        let open = await AgenticWorkbench.countDocuments({ centralId, stage: { $ne: "done" } })
+        if (!central) return
+        const resumed = await pumpResumes(centralId, central.config.maxConcurrent)
+        let open = resumed.open
+        const columnKey = central.config.columns.queue
+        if (resumed.blocked || !columnKey || !central.config.enabled) return
         if (open >= central.config.maxConcurrent) return
         for (const item of await waitingTasks(centralId, central.projectId, columnKey)) {
             if (open >= central.config.maxConcurrent) break
             try {
-                await startWorkbench(centralId, item.taskId)
+                await startWorkbenchInCentral(centralId, item.taskId)
                 open++
             } catch (error) {
                 const code = error instanceof DomainError ? error.code : undefined
@@ -93,7 +111,9 @@ export async function pumpAllCentralQueues(): Promise<string> {
     const docs = await AgenticCentral.find().select({ _id: 1, config: 1 }).lean()
     let processed = 0
     for (const doc of docs) {
-        if (!parseCentralConfig(doc.config).columns.queue) continue
+        // Sem coluna da fila, a central ainda pode ter retomadas aguardando vaga.
+        const hasQueue = Boolean(parseCentralConfig(doc.config).columns.queue)
+        if (!hasQueue && !(await AgenticWorkbench.exists({ centralId: String(doc._id), pendingTurn: { $ne: null } }))) continue
         await pumpCentralQueue(String(doc._id))
         processed++
     }

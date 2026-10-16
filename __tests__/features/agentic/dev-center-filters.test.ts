@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DEV_CENTER_FILTERS, filterCentralTasks } from '@/features/agentic/dev-center-filters'
+import { DEFAULT_DEV_CENTER_FILTERS, devCenterFiltersSchema, filterCentralTasks, matchesDevCenterState, type TaskWorkbenchState } from '@/features/agentic/dev-center-filters'
 import type { TaskDto } from '@/features/tasks/types'
 
 const task = (patch: Partial<TaskDto>): TaskDto =>
@@ -26,6 +26,32 @@ const tasks = [
 ]
 
 describe('filterCentralTasks', () => {
+  it('mantém filtros legados e distingue desmarcar todas as colunas de mostrar todas', () => {
+    const legacy = devCenterFiltersSchema.parse({ search: '', columns: [] })
+    expect(legacy.states).toEqual([])
+    expect(filterCentralTasks(tasks, 'p1', legacy)).toHaveLength(3)
+    expect(filterCentralTasks(tasks, 'p1', { ...legacy, allColumns: false })).toHaveLength(0)
+    expect(filterCentralTasks(tasks, 'p1', { ...legacy, allColumns: true })).toHaveLength(3)
+  })
+
+  it('Todos os projetos agrega somente projetos com central e busca no resumo', () => {
+    expect(filterCentralTasks(tasks, ['p1', 'p2'], DEFAULT_DEV_CENTER_FILTERS)).toHaveLength(4)
+    expect(filterCentralTasks([task({ summary: 'Configuração avançada' })], 'p1', { ...DEFAULT_DEV_CENTER_FILTERS, search: 'configuracao avancada' })).toHaveLength(1)
+  })
+
+  it('estados combinam por OU e continuam respeitando as colunas', () => {
+    const status = (item: TaskDto): TaskWorkbenchState => item.id === 'a' ? { workbench: { stage: 'implementing', runState: 'running', pendingForms: 0, pendingPermissions: 0 } } : {}
+    expect(filterCentralTasks(tasks, 'p1', { ...DEFAULT_DEV_CENTER_FILTERS, columns: ['doing'], states: ['running', 'no_workbench'] }, status).map((item) => item.id)).toEqual(['a'])
+  })
+
+  it('Na fila inclui retomadas aguardando vaga e distingue Sem mesa', () => {
+    expect(matchesDevCenterState('central_queue', { queued: true })).toBe(true)
+    const queued: TaskWorkbenchState = { workbench: { stage: 'plan_review', runState: 'idle', pendingForms: 0, pendingPermissions: 0, slotQueue: { position: 1 } } }
+    expect(matchesDevCenterState('central_queue', queued)).toBe(true)
+    expect(matchesDevCenterState('needs_interaction', queued)).toBe(false)
+    expect(matchesDevCenterState('no_workbench', queued)).toBe(false)
+  })
+
   it('só tarefas do projeto, na ordem do quadro', () => {
     expect(filterCentralTasks(tasks, 'p1', DEFAULT_DEV_CENTER_FILTERS).map((item) => item.id)).toEqual(['b', 'a', 'c'])
   })

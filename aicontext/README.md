@@ -51,6 +51,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | `modules/finance.md` | Financeiro | Faturamento das tarefas concluídas **e dos serviços** por cliente (`/financeiro`): valor pelo snapshot, conclusão derivada da auditoria, serviços manuais e filtros de período, clientes e repositórios |
 | `modules/services.md` | Serviços | Lançamentos manuais de faturamento (`/financeiro/servicos`): cliente obrigatório, repositório/tarefa opcionais, três campos reativos (`H:mm`/R$), IA (título/resumo/tags), anexos e soft delete |
 | `modules/agentic-dev.md` | Desenvolvimento agêntico | Centrais por projeto (repositório), mesa de trabalho (plano → implementação em worktree → prévia docker → PR → merge), OpenCode `@opencode/client`, `/desenvolvimento` |
+| `modules/pr-review.md` | Revisão de PR por IA | Critérios, agente/skill, revisão por commit, histórico e integração com replanejamento e merge automático |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
 | `modules/deployment.md` | Deploy (CI/CD) | GitHub Actions (testes, build da imagem no runner, transferência por SCP e recriação via Compose), configuração de secrets/variables e rollback |
 

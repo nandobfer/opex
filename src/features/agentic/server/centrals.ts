@@ -100,6 +100,8 @@ export async function deleteCentral(id: string, actorId: string): Promise<void> 
     const { doc } = await loadCentral(id)
     const active = await AgenticWorkbench.countDocuments({ centralId: id, stage: { $ne: "done" } })
     if (active > 0) throw new DomainError(409, `A central tem ${active} mesa(s) em andamento: conclua ou exclua as mesas antes`, "CENTRAL_IN_USE")
+    // Forks das mesas concluídas (sessões e saída); import dinâmico evita o ciclo com `forks.ts`.
+    await (await import("./forks")).deleteCentralForks(id)
     const finished = await AgenticWorkbench.find({ centralId: id }).select({ _id: 1 }).lean()
     await AgenticEvent.deleteMany({ workbenchId: { $in: finished.map((item) => String(item._id)) } })
     await AgenticWorkbench.deleteMany({ centralId: id })

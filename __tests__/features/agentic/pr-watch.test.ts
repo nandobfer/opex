@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   closed: vi.fn(),
   reopened: vi.fn(),
   saveCursors: vi.fn(),
+  replan: vi.fn((): { allowed: boolean; reason: string | null } => ({ allowed: true, reason: null })),
+  blocksAutoMerge: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
@@ -27,6 +29,7 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   savePrCursors: mocks.saveCursors,
 }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
+vi.mock('@/features/pr-review/server/gate', () => ({ loadPrReviewGate: async () => ({ replan: mocks.replan, blocksAutoMerge: mocks.blocksAutoMerge }) }))
 
 import { conflictUntried, mentionsOpex, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
 
@@ -52,6 +55,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.find.mockResolvedValue([workbench()])
   mocks.request.mockResolvedValue({ state: 'open', merged: false })
+  mocks.replan.mockReturnValue({ allowed: true, reason: null })
+  mocks.blocksAutoMerge.mockResolvedValue(false)
   respond()
 })
 
@@ -231,5 +236,47 @@ describe('merge automático', () => {
     await watchPullRequests()
     expect(mocks.feedback).toHaveBeenCalledTimes(1)
     expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+
+  it('espera a revisão automática do commit atual (na fila, revisando ou pedindo mudanças)', async () => {
+    mocks.blocksAutoMerge.mockResolvedValue(true)
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: true, mergeable_state: 'clean', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.blocksAutoMerge).toHaveBeenCalledWith('org/app', 7, 'h1')
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+})
+
+describe('revisão automática (Revisão de PR)', () => {
+  const autoReview = (id: number, state = 'CHANGES_REQUESTED', body = '**Bloqueio** em a.ts\n<!-- opex:pr-review sha=h1 -->') => ({ id, state, body, user: { login: 'eu' } })
+
+  it('pedido de mudanças da revisão automática replaneja e conta o replanejamento', async () => {
+    mocks.find.mockResolvedValue([workbench({ autoReviewReplans: 2 })])
+    respond({ reviews: [autoReview(12)] })
+    await watchPullRequests()
+    expect(mocks.replan).toHaveBeenCalledWith(2)
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', { autoReviewReplans: 3 })
+  })
+
+  it('limite atingido: ignora o pedido da revisão automática, mas segue replanejando por pessoas', async () => {
+    mocks.replan.mockReturnValue({ allowed: false, reason: 'limite de 3 replanejamento(s) pela revisão automática atingido' })
+    respond({ reviews: [autoReview(12)] })
+    await watchPullRequests()
+    expect(mocks.feedback).not.toHaveBeenCalled()
+    expect(mocks.saveCursors).not.toHaveBeenCalledWith('w1', expect.objectContaining({ autoReviewReplans: expect.any(Number) }))
+
+    respond({ reviews: [autoReview(13), { id: 14, state: 'CHANGES_REQUESTED', body: 'Ajustar o filtro', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.feedback.mock.calls[0]![1]).toContain('Ajustar o filtro')
+    expect(mocks.feedback.mock.calls[0]![1]).not.toContain('Bloqueio')
+  })
+
+  it('PR próprio: comentário da revisão com a menção da central replaneja', async () => {
+    respond({ reviews: [autoReview(12, 'COMMENTED', '@opex bloqueio em a.ts\n<!-- opex:pr-review sha=h1 -->')] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', { autoReviewReplans: 1 })
   })
 })

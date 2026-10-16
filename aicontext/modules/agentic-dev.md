@@ -25,7 +25,9 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa, com os botões
     **Salvar**/**Desfazer** (mesma configuração geral acima).
-  - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo).
+  - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
+    `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
+    mantém a confirmação de descarte. A subaba padrão continua Agentes.
   Trocar de aba com alterações não salvas pede *"Descartar alterações?"* e restaura os valores
   salvos (mesmo efeito do Desfazer). `AGENTIC_SETTINGS_HREF` (voltar da central, após excluir e
   atalho do `/desenvolvimento`) leva a esta aba na aba interna padrão (Agentes).
@@ -85,8 +87,12 @@ conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fi
 - **Sem vaga** → a tarefa **aguarda na fila** e a mesa é criada quando uma mesa conclui (ou é
   excluída). A ordem é a **dos cards no kanban** (`order`); a posição (1-based) aparece na lista de
   tarefas e na mesa como "Na fila · #N".
-- O **limite** (`maxConcurrent`, "Mesas abertas ao mesmo tempo", 1–10) conta mesas **não concluídas**
-  (`stage != done`). Uma mesa aberta nunca é bloqueada nos próprios turnos.
+- O **limite** (`maxConcurrent`, 1–10) conta o trabalho ativo: **Plano pronto**, **Prévia pronta**,
+  **PR aberto** e **Concluída** não ocupam vaga. Uma mesa já ocupando vaga pode encadear os turnos.
+  Retomar uma etapa isenta com a central cheia grava `pendingTurn` (FIFO), mostra posição e oferece
+  **Cancelar espera**. Retomadas têm prioridade sobre novas tarefas, inclusive sem coluna de fila.
+  Feedback de PR, resolução de conflito, merge e limpeza pós-merge respeitam a espera. Reabrir só
+  move a tarefa e arquiva o PR quando a vaga chega. A fila global de build permanece independente.
 - A fila é **derivada** (`DevTask` do projeto na coluna, não arquivadas e sem mesa) — não há coleção
   própria. `GET /api/agentic/centrals/[id]/queue` devolve a fila para a tela.
 - **Gatilhos**: mudança de coluna da tarefa (criar/atualizar/mover/lote) avisa a central; concluir
@@ -218,9 +224,9 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista
   é buscada por nome/projeto; a **busca por código/título**; e o **filtro de colunas**
-  (`CadastroMultiSelect`) também em linha inteira; por fim a lista. Não há atalho das configurações
-  da central nem botão de restaurar filtros na coluna (as configurações ficam em Integrações ›
-  Provedores de IA › Centrais e no botão do estado vazio). O avatar real vem do índice de
+  (`CadastroMultiSelect`) também em linha inteira; por fim a lista. A engrenagem à direita de
+  **Tarefas** abre a configuração da central selecionada; em **Todos os projetos**, abre diretamente
+  a subaba **Centrais de desenvolvimento** de `/integracoes/ia`. O avatar real vem do índice de
   repositórios do GitHub (`RepoIndexProvider`, montado no layout de `/desenvolvimento`); sem token,
   cai na inicial.
 - Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
@@ -418,6 +424,42 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Custo e tokens acumulados por mesa (`session.step.ended`). Cada passo também é registrado em
   `ai_consumption_logs` (origem `agentic`) para o painel de consumo do OpenCode — ver
   `modules/ai.md`, "Medição de consumo".
+
+## Forks da conversa
+
+- Agente **Fork** configurável globalmente e por central, com instruções próprias. Conversas
+  paralelas somente leitura não ocupam vaga nem alteram a tarefa/descrição. Sessão copiada da mesa;
+  sem sessão principal, nova sessão com o contexto preservado. Consumo separado (`agentic-fork`).
+- **Fork de fork** copia a sessão do pai, sem limite de profundidade; seletor em árvore e atalho para
+  o pai. Pai descartado é identificado sem perder os filhos. Filhos também integram no pai, além
+  dos demais destinos disponíveis na mesa.
+- Ciclo: conversar, parar, tentar novamente, encerrar, retomar, descartar ou integrar. Integração
+  consolida resumo ajustável; usuário escolhe **Contexto**, **Planejador**, **Reabertura** ou **Pai**
+  conforme estado/sessão. Resumo é adicional, nunca substitui o conteúdo original.
+- **Integrar a conversa** ocupa a área de leitura do fork: cabeçalho e ações separados da rolagem,
+  resumo com rolagem própria e quebra de conteúdo longo, destinos responsivos, motivos de bloqueio
+  visíveis e ajuste em largura total. Reabertura exige confirmação. Cancelar restaura a conversa.
+- Na conclusão, política `forks.onWorkbenchDone`: perguntar (padrão), concluir ou manter. Exclusão da
+  mesa remove forks e sessões sem dispensar a limpeza do ambiente do Opex. Sessões pendentes são
+  retomadas pelos Crons. Excluir uma central também preserva os registros se a limpeza das sessões
+  dos forks falhar, oferecendo nova tentativa. Auditoria `ForkConversa` e eventos `agentic-updated`
+  em `private-app`.
+- APIs autenticadas em `/api/agentic/workbenches/[id]/forks`: listar/criar (`parentForkId?`), detalhe,
+  excluir, mensagens, ações, permissões, formulários, eventos NDJSON e decisão `done-prompt`.
+
+## Filtros avançados e builder Docker
+
+- **Todos os projetos** agrega tarefas dos projetos com central. A seleção continua no navegador;
+  a mesa usa a central do projeto da tarefa aberta, sem sobrescrever a seleção Todos.
+- Ordem: seletor de central → colunas com **Todos** → estado da mesa → busca (inclui resumo).
+  Estados combinam por OU: interação, falha/interrupção, agente trabalhando, sem mesa, fila e etapas.
+  Filtros combinam entre si por E. Persistência aditiva compatível com `opex:dev-center-filters:v1`;
+  registros antigos sem estados continuam válidos. `allColumns` distingue ausência de seleção
+  explícita (nenhuma coluna) do filtro legado vazio (todas).
+- `environment.dockerBuilder` (vazio = padrão do host) lista builders reais via OpenCode em
+  `GET /api/agentic/centrals/[id]/docker-builders`; nome validado e disponibilidade no teste da
+  central. Prévia **Local** usa `BUILDX_BUILDER` sem `docker buildx use`; no **GitHub Action**, vale
+  o builder do runner, preservando backup opcional, portas e publicação remota.
 
 ## Saída ao vivo
 

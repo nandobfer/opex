@@ -89,7 +89,8 @@ e opções na própria aba da página "Provedores de IA".
   **Orçamentos**, **Estimar prazos**, **Refinar tarefa** e **Desenvolvimento agêntico**
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
-  (estado local, não vão à URL).
+  (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
+  histórico e saída ao vivo — ver `modules/pr-review.md`.
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**

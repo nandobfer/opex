@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
@@ -13,6 +13,7 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   approve: vi.fn(),
   retry: vi.fn(),
   interrupt: vi.fn(),
+  cancelWait: mocks.cancelWait,
 }))
 
 import { POST } from '@/app/api/agentic/workbenches/[id]/actions/[action]/route'
@@ -45,5 +46,12 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     const res = await call('reconnect')
     expect(res.status).toBe(200)
     expect(mocks.reconnect).toHaveBeenCalledWith('w1')
+  })
+
+  it('cancelar a espera por vaga não tem corpo e devolve a mesa', async () => {
+    mocks.cancelWait.mockResolvedValue({ id: 'w1', slotQueue: null })
+    const res = await call('cancel-wait')
+    expect(res.status).toBe(200)
+    expect(mocks.cancelWait).toHaveBeenCalledWith('w1')
   })
 })

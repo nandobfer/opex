@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCheck, ExternalLink, GitPullRequest, Hammer, ListOrdered, Loader2, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
+import { CheckCheck, ExternalLink, GitFork, GitPullRequest, Hammer, Hourglass, ListOrdered, Loader2, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -17,7 +17,9 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
 import { workbenchActions, type WorkbenchAction } from "../../logic"
-import type { WorkbenchDto } from "../../types"
+import type { ForkDto, WorkbenchDto } from "../../types"
+import { PENDING_TURN_LABELS } from "../../constants"
+import { ForkComposer } from "./ForkComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
 
@@ -54,22 +56,24 @@ function ActionLabel({ full, compact }: { full: string; compact: string }) {
 }
 
 /** Botões da etapa atual; correções abrem o campo de texto que vai para o planejador. */
-export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
+export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto; onForkOpened?: (fork: ForkDto) => void }) {
     const mutation = useWorkbenchAction(workbench)
     const reconnect = useWorkbenchReconnect(workbench.id)
-    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId))
+    const slotQueue = workbench.slotQueue
+    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId), Boolean(slotQueue))
     const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
     // Ciclo automático de reconexão: dispara quando a tela passa a oferecer Reconectar (e ao abrir
     // já nesse estado). Nunca depois de um Parar do usuário; um ciclo por episódio de queda.
     const autoReconnect = useAutoReconnect({
-        eligible: failed && Boolean(workbench.sessionId) && !workbench.stoppedByUser,
+        eligible: actions.includes("reconnect") && failed && !workbench.stoppedByUser,
         episodeKey: `${workbench.id}:${workbench.turnStartedAt ?? workbench.startedAt}`,
         attempt: () => reconnect.mutateAsync().then((saved) => (saved.runState === "running" ? "attached" : (saved.reconnect?.outcome ?? null)), () => null),
     })
     const [composer, setComposer] = useState<FeedbackAction | null>(workbench.stage === "changes_requested" && workbench.runState === "idle" ? "submit-pr-feedback" : null)
     const [text, setText] = useState("")
     const [additional, setAdditional] = useState("")
-    const [confirm, setConfirm] = useState<"interrupt" | "approve" | null>(null)
+    const [confirm, setConfirm] = useState<"interrupt" | "approve" | "cancel-wait" | null>(null)
+    const [forking, setForking] = useState(false)
     const pending = mutation.isPending
     const run = (action: WorkbenchAction, body?: string) =>
         mutation.mutate(
@@ -98,7 +102,12 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                         <PlugZap className="h-3.5 w-3.5" aria-hidden /> {autoReconnect.notice}
                     </motion.p>
                 )}
-                {workbench.stage === "pr_open" && workbench.runState === "idle" && (
+                {slotQueue && (
+                    <motion.p key="slot-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
+                        <Hourglass className="h-3.5 w-3.5 shrink-0" aria-hidden /> Aguardando vaga na central{slotQueue.position ? ` — posição #${slotQueue.position}` : ""}: {PENDING_TURN_LABELS[slotQueue.action]}.
+                    </motion.p>
+                )}
+                {!slotQueue && workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
@@ -123,7 +132,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.
                     </motion.p>
                 )}
-                {!composer && canImplement && (
+                {!composer && !forking && canImplement && (
                     <motion.div key="implement-info" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-1.5 overflow-hidden">
                         <label htmlFor="workbench-implement-info" className="text-sm font-medium">
                             Informações adicionais (opcional)
@@ -149,10 +158,24 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                         </div>
                     </motion.div>
                 )}
+                {forking && !composer && (
+                    <ForkComposer
+                        key="fork-composer"
+                        workbenchId={workbench.id}
+                        onCancel={() => setForking(false)}
+                        onOpened={(fork) => {
+                            setForking(false)
+                            onForkOpened?.(fork)
+                        }}
+                    />
+                )}
             </AnimatePresence>
 
-            {!composer && actions.length > 0 && (
+            {!composer && !forking && (
                 <div className="flex flex-wrap justify-end gap-2 max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
+                    <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={Boolean(workbench.deletionRequestedAt)} onClick={() => setForking(true)}>
+                        <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
+                    </Button>
                     {actions.map((action) => {
                         if (isFeedback(action)) {
                             const label = action === "request-correction" && failed ? "Voltar ao planejamento" : FEEDBACK[action].button
@@ -196,6 +219,12 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                         <ActionLabel full="Tentar novamente" compact="Tentar" />
                                     </Button>
                                 )
+                            case "cancel-wait":
+                                return (
+                                    <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("cancel-wait")}>
+                                        <X className="h-3.5 w-3.5" aria-hidden /> Cancelar espera
+                                    </Button>
+                                )
                             case "interrupt":
                                 return (
                                     <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => setConfirm("interrupt")}>
@@ -218,11 +247,13 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
             <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>{confirm === "interrupt" ? "Parar o agente?" : "Aprovar e abrir o PR?"}</AlertDialogTitle>
+                        <AlertDialogTitle>{confirm === "interrupt" ? "Parar o agente?" : confirm === "cancel-wait" ? "Cancelar a espera por vaga?" : "Aprovar e abrir o PR?"}</AlertDialogTitle>
                         <AlertDialogDescription>
                             {confirm === "interrupt"
                                 ? "A etapa atual é interrompida no OpenCode. Depois você pode tentar de novo ou voltar ao planejamento."
-                                : `O agente de PR vai validar, fazer commit e push da branch ${workbench.branch ?? ""} e ${workbench.pr?.state === "open" ? `atualizar o PR #${workbench.pr.number}` : "abrir o Pull Request"}.`}
+                                : confirm === "cancel-wait"
+                                  ? `"${slotQueue ? PENDING_TURN_LABELS[slotQueue.action] : ""}" não será executado e a mesa volta a aguardar sua ação nesta etapa.`
+                                  : `O agente de PR vai validar, fazer commit e push da branch ${workbench.branch ?? ""} e ${workbench.pr?.state === "open" ? `atualizar o PR #${workbench.pr.number}` : "abrir o Pull Request"}.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -233,7 +264,7 @@ export function ActionBar({ workbench }: { workbench: WorkbenchDto }) {
                                 setConfirm(null)
                             }}
                         >
-                            {confirm === "interrupt" ? "Parar" : "Aprovar"}
+                            {confirm === "interrupt" ? "Parar" : confirm === "cancel-wait" ? "Cancelar espera" : "Aprovar"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

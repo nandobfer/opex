@@ -1,6 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
-import type { RunState, WorkbenchStage } from "./constants"
+import type { ForkIntegrationTarget, ForkStatus, PendingTurnAction, RunState, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
 
@@ -77,6 +77,11 @@ export interface WorkbenchUsageDto {
     reasoningTokens: number
 }
 
+export interface SlotQueueDto {
+    position: number | null
+    action: PendingTurnAction
+}
+
 export interface WorkbenchDto {
     id: string
     centralId: string
@@ -99,6 +104,8 @@ export interface WorkbenchDto {
     deletionRequestedAt: string | null
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
     buildQueuePosition: number | null
+    /** Espera por vaga no limite de mesas da central (posição 1-based e o que será executado); `null` sem espera. */
+    slotQueue: SlotQueueDto | null
     plans: PlanVersionDto[]
     pr: WorkbenchPrDto | null
     pendingPermissions: OpencodePermissionDto[]
@@ -112,6 +119,7 @@ export interface WorkbenchDto {
     stoppedByUser: boolean
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
+    forksDonePrompt: { count: number; at: string } | null
     startedAt: string
     completedAt: string | null
     updatedAt: string
@@ -127,11 +135,45 @@ export interface WorkbenchSummaryDto {
     runState: RunState
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
     buildQueuePosition: number | null
+    /** Espera por vaga no limite de mesas da central; `null` sem espera. */
+    slotQueue: SlotQueueDto | null
     /** Permissões do agente pendentes (o agente está parado esperando o usuário permitir uma ação). */
     pendingPermissions: number
     /** Perguntas do agente pendentes (o agente está parado esperando o usuário responder). */
     pendingForms: number
+    /** Mesa concluída perguntando o que fazer com os forks em aberto. */
+    forksDonePrompt: boolean
     updatedAt: string
+}
+
+export interface ForkIntegrationDto {
+    target: ForkIntegrationTarget
+    summary: string
+    appliedAt: string
+}
+
+/** Fork da conversa de uma mesa (sessão paralela somente leitura). */
+export interface ForkDto {
+    id: string
+    workbenchId: string
+    number: number
+    /** Fork pai (fork de fork); `null` quando aberto da conversa principal. */
+    parentForkId: string | null
+    parentNumber: number | null
+    status: ForkStatus
+    runState: RunState
+    error: string | null
+    origin: "fork" | "fresh"
+    forkedFromStage: WorkbenchStage
+    /** Resumo proposto (em revisão enquanto `integrating`). */
+    summary: string | null
+    integration: ForkIntegrationDto | null
+    pendingPermissions: OpencodePermissionDto[]
+    pendingForms: OpencodeFormDto[]
+    usage: WorkbenchUsageDto
+    createdAt: string
+    updatedAt: string
+    closedAt: string | null
 }
 
 /**

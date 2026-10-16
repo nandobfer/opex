@@ -216,7 +216,7 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
     },
     {
         id: AGENTIC_PR_WATCH_JOB_ID,
-        label: "Acompanhar PRs do desenvolvimento agêntico",
+        label: "Acompanhar e revisar PRs (desenvolvimento agêntico e Revisão de PR)",
         kind: "internal",
         schedule: { type: "interval", minutes: 2 },
         enabled: true,

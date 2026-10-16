@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2 } from "lucide-react"
+import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -21,6 +21,7 @@ import { BudgetPreviewTab } from "./budget-preview/BudgetPreviewTab"
 import { EstimateHoursTab } from "./estimate-hours/EstimateHoursTab"
 import { TaskRefinementTab } from "./task-refinement/TaskRefinementTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
+import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -41,6 +42,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "orcamentos", label: "Orçamentos", icon: Calculator },
     { id: "estimar-prazos", label: "Estimar prazos", icon: Timer },
     { id: "refinar-tarefa", label: "Refinar tarefa", icon: Wand2 },
+    { id: "revisao-pr", label: "Revisão de PR", icon: GitPullRequest },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
 ]
 
@@ -86,6 +88,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "orcamentos" && <BudgetPreviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "estimar-prazos" && <EstimateHoursTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "refinar-tarefa" && <TaskRefinementTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "revisao-pr" && <PrReviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>

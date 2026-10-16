@@ -71,6 +71,7 @@ vi.mock('@/features/agentic/server/ports', () => ({ releasePreviewPort: mocks.re
 vi.mock('@/features/agentic/server/build-queue', () => ({ pumpBuildQueue: mocks.pumpBuild, buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()) }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ syncWorkbenchTimer: mocks.syncTimer, accumulateWorkPeriodUsage: vi.fn(), closeOrphanWorkPeriods: vi.fn(async () => 0) }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: vi.fn(async () => true), flushPendingSessionDeletions: mocks.flushPending }))
+vi.mock('@/features/agentic/server/forks', () => ({ deleteWorkbenchForks: vi.fn(async () => undefined), handleWorkbenchDone: vi.fn(async () => undefined) }))
 vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pumpQueue }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))

@@ -5,7 +5,7 @@ import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/cata
 import { AiProviderError } from "@/lib/ai/errors"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_ROLE_LABELS, AGENT_ROLES, AGENTIC_FEATURE, AGENTIC_UPDATED_EVENT } from "../constants"
-import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgentConfig, type AgenticSettings } from "../schemas"
+import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, withDefaultAgents, type AgentConfig, type AgenticSettings } from "../schemas"
 import type { AgenticAvailability, AgenticSettingsDto } from "../types"
 
 const AUDIT_ENTITY = "FeatureIA"
@@ -14,7 +14,7 @@ export async function loadAgenticSettings(): Promise<{ settings: AgenticSettings
     await dbConnect()
     const doc = await AiFeatureSetting.findOne({ feature: AGENTIC_FEATURE }).lean()
     if (!doc) return { settings: DEFAULT_AGENTIC_SETTINGS, isDefault: true, updatedAt: null }
-    const parsed = agenticSettingsSchema.safeParse({ ...DEFAULT_AGENTIC_SETTINGS, ...doc.settings })
+    const parsed = agenticSettingsSchema.safeParse(withDefaultAgents(doc.settings))
     return { settings: parsed.success ? parsed.data : DEFAULT_AGENTIC_SETTINGS, isDefault: !parsed.success, updatedAt: doc.updatedAt ?? null }
 }
 

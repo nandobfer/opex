@@ -283,7 +283,13 @@ export function registerBuiltInJobs(): void {
     })
     registerInternalJob(AGENTIC_PR_WATCH_JOB_ID, async () => {
         const { watchPullRequests } = await import("@/features/agentic/server/pr-watch")
-        return watchPullRequests()
+        const { scanPullRequestsForReview } = await import("@/features/pr-review/server/queue")
+        const { pumpPrReviews } = await import("@/features/pr-review/server/service")
+        // Revisão de PR: enfileira antes de acompanhar as mesas (o merge automático espera a revisão do commit atual).
+        const review = await scanPullRequestsForReview().catch((error: unknown) => `Revisão de PR com falha: ${error instanceof Error ? error.message : String(error)}`)
+        const summary = await watchPullRequests()
+        const started = await pumpPrReviews().catch(() => 0)
+        return `${summary}. ${review}${started ? `; ${started} iniciada(s)` : ""}`
     })
     registerInternalJob(AGENTIC_QUEUE_JOB_ID, async () => {
         const { pumpAllCentralQueues } = await import("@/features/agentic/server/queue")
@@ -297,7 +303,8 @@ export function registerBuiltInJobs(): void {
         const deleted = await processPendingSessionDeletions()
         // Sessões de refinamentos concluídos ainda pendentes de exclusão no OpenCode.
         const refinementDeleted = await processPendingRefinementSessionDeletions()
-        const totalDeleted = deleted + refinementDeleted
+        const { processPendingReviewSessionDeletions } = await import("@/features/pr-review/server/session-cleanup")
+        const totalDeleted = deleted + refinementDeleted + (await processPendingReviewSessionDeletions())
         return totalDeleted ? `${summary}; ${totalDeleted} sessão(ões) do OpenCode excluída(s)` : summary
     })
     registerInternalJob(TASK_SUMMARY_JOB_ID, async () => {

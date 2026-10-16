@@ -1,7 +1,7 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "revisao-pr", "desenvolvimento-agentico"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**
@@ -19,7 +19,7 @@ export const AI_PROVIDER_TAB_IDS: Record<"opencode" | "gemini" | "jev", readonly
 }
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement"] as const
+export const AI_FEATURE_IDS = ["understand-task", "task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"

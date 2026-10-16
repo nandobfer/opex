@@ -37,6 +37,7 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         columns: { ...base.columns, ...value.columns },
         cleanup: { ...base.cleanup, ...value.cleanup },
         include: { ...base.include, ...value.include },
+        forks: { ...base.forks, ...value.forks },
         instructions: { ...base.instructions, ...value.instructions },
     }
     const parsed = centralConfigSchema.safeParse(merged)
@@ -96,12 +97,15 @@ export type WorkbenchAction =
     | "retry"
     | "interrupt"
     | "open-preview"
+    | "cancel-wait"
 
 /**
  * Ações disponíveis na mesa (os botões da tela e a guarda das rotas usam a mesma regra).
  * `hasSession` controla a oferta de **Reconectar** (só faz sentido com uma sessão do OpenCode já criada).
+ * `waitingSlot`: a mesa aguarda vaga no limite da central — só é possível cancelar a espera.
  */
-export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true): WorkbenchAction[] {
+export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true, waitingSlot = false): WorkbenchAction[] {
+    if (waitingSlot) return ["cancel-wait"]
     if (runState === "running") return ["interrupt"]
     if (runState === "failed" || runState === "interrupted") {
         if (!RUNNING_STAGES.includes(stage)) return []
@@ -125,7 +129,7 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
     }
 }
 
-export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction) => workbenchActions(stage, runState, true).includes(action)
+export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction, waitingSlot = false) => workbenchActions(stage, runState, true, true, waitingSlot).includes(action)
 
 /** Tom do destaque de uma mesa em andamento: executando (verde), falhou (destructive) ou espera (warning). */
 export type WorkbenchProgressTone = "running" | "waiting" | "failed"
@@ -140,8 +144,9 @@ export function workbenchProgressTone(input: { running: boolean; runState: RunSt
  * precisa de ação, em falha/interrupção). `null` quando o agente está trabalhando (período ativo).
  * Falha/interrupção vêm antes das pendências: uma mesa reconciliada não deve exibir pedido obsoleto.
  */
-export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number }): string | null {
+export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number; slotQueuePosition?: number | null; waitingSlot?: boolean }): string | null {
     const { stage, runState, pendingPermissions, pendingForms } = input
+    if (input.waitingSlot) return `Aguardando vaga na central${input.slotQueuePosition ? ` (#${input.slotQueuePosition})` : ""}`
     if (runState === "running" && pendingPermissions === 0 && pendingForms === 0) return null
     if (runState === "failed") return "A etapa falhou — use Tentar novamente"
     if (runState === "interrupted") return "Execução interrompida — use Tentar novamente"
@@ -163,10 +168,11 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
 
 /**
  * Motivo (pt-BR) pelo qual a mesa aguarda o **usuário** na lista da Central de desenvolvimento;
- * `null` quando o agente trabalha, aguarda a vez do build (`build_queued`) ou a mesa concluiu
+ * `null` quando o agente trabalha, aguarda a vez do build (`build_queued`), aguarda vaga na central ou a mesa concluiu
  * (`done`). É o recorte de `workbenchWaitingReason` para o item da lista de tarefas/mesas.
  */
-export function workbenchUserWaitReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number }): string | null {
+export function workbenchUserWaitReason(input: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number; waitingSlot?: boolean }): string | null {
+    if (input.waitingSlot) return null
     if (input.stage === "done" || input.stage === "build_queued") return null
     return workbenchWaitingReason(input)
 }

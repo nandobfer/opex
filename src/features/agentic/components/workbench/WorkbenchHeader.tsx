@@ -19,6 +19,7 @@ import { useDeleteWorkbench } from "../../hooks/useAgentic"
 import type { CentralDto, WorkbenchDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
+import { ForksOpenBadge } from "./ForkStatusBadge"
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", maximumFractionDigits: 2 })
 const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 })
@@ -40,7 +41,10 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                         <Link href={`/tarefas/${workbench.taskId}`} className="font-mono text-sm font-semibold text-primary hover:underline">
                             {workbench.taskCode}
                         </Link>
-                        {workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
+                        {workbench.forksDonePrompt && <ForksOpenBadge />}
+                        {workbench.slotQueue?.position ? (
+                            <QueueBadge position={workbench.slotQueue.position} label="Aguardando vaga" title="Aguardando vaga no limite de mesas da central" />
+                        ) : workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
                             <QueueBadge position={workbench.buildQueuePosition} label="Na fila do build" title="Aguardando a vez do build" />
                         ) : (
                             <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />

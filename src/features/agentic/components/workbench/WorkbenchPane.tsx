@@ -12,8 +12,11 @@ import type { CentralDto } from "../../types"
 import { StartWorkbench } from "./StartWorkbench"
 import { WorkbenchView } from "./WorkbenchView"
 
-/** Painel da direita: nada selecionado, tarefa sem mesa (abrir) ou a mesa de trabalho. */
-export function WorkbenchPane({ central, taskId }: { central: CentralDto; taskId: string | null }) {
+/**
+ * Painel da direita: nada selecionado, tarefa sem mesa (abrir) ou a mesa de trabalho. `scopeName` é o
+ * produto escolhido no seletor (`null` em "Todos os projetos"), usado só no aviso sem tarefa.
+ */
+export function WorkbenchPane({ central, taskId, scopeName }: { central: CentralDto; taskId: string | null; scopeName: string | null }) {
     const workbench = useWorkbenchByTask(taskId)
     const view = !taskId ? "empty" : workbench.isLoading ? "loading" : workbench.isError ? "error" : workbench.data ? "workbench" : "start"
     return (
@@ -22,7 +25,7 @@ export function WorkbenchPane({ central, taskId }: { central: CentralDto; taskId
                 <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "empty" && (
                         <div className="flex flex-1 items-center justify-center p-6">
-                            <EmptyState icon={MousePointerClick} title="Selecione uma tarefa" description={`Escolha uma tarefa de ${central.projectName} para abrir a mesa de trabalho.`} />
+                            <EmptyState icon={MousePointerClick} title="Selecione uma tarefa" description={scopeName ? `Escolha uma tarefa de ${scopeName} para abrir a mesa de trabalho.` : "Escolha uma tarefa para abrir a mesa de trabalho."} />
                         </div>
                     )}
                     {view === "loading" && (
