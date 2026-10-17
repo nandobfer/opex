@@ -7,11 +7,11 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ListTodo, Search, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
+import { WorkspacePane } from "@/components/workspace/WorkspacePane"
 import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -66,12 +66,13 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
     const reduceMotion = useReducedMotion()
 
     return (
-        <Card role="region" aria-label="Lista de tarefas" data-testid="tasks-pane" className={cn("flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0", className)}>
-            <div className="space-y-2 border-b p-3">
-                <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold">
-                    Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
-                </h2>
+        <WorkspacePane
+            title="Tarefas"
+            count={tasks.length}
+            ariaLabel="Lista de tarefas"
+            testId="tasks-pane"
+            className={className}
+            actions={
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -84,15 +85,18 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                         <TooltipContent>{central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}</TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
-                </div>
-                <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
-                <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
-                <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
-                    <Input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
-                </div>
-            </div>
+            }
+            header={
+                <>
+                    <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
+                    <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
+                        <Input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
+                    </div>
+                </>
+            }
+        >
             {/* Trocar de central anima só a lista; trocar de tarefa não (a lista e a rolagem ficam). */}
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -166,6 +170,6 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                     )}
                 </motion.div>
             </AnimatePresence>
-        </Card>
+        </WorkspacePane>
     )
 }

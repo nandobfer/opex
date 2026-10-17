@@ -1,15 +1,20 @@
+"use client"
+
 import { useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { api, unwrapApi, apiErrorMessage } from "@/lib/api"
-import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FormActions } from "@/components/ui/form-actions"
+import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
+import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { ProviderModelCard } from "@/features/ai/components/understand-task/ProviderModelCard"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
 import { DEFAULT_ENVIRONMENT_SETTINGS, environmentSettingsSchema, type EnvironmentSettings } from "../schemas"
@@ -19,6 +24,8 @@ interface SettingsDto {
     settings: EnvironmentSettings
     availability: { available: boolean; reason: string | null }
 }
+
+/** Aba "Administração de sistema" (Integrações › Provedores de IA): agente e instruções do módulo Ambientes. */
 export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const cache = useQueryClient()
     const query = useQuery({
@@ -52,71 +59,83 @@ export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dir
     if (query.isError || !query.data)
         return <ErrorState title="Falha ao carregar Administração de sistema" onRetry={() => void query.refetch()} />
     const errors = form.formState.errors
+    const submit = () =>
+        void form.handleSubmit(async (values) => {
+            await save.mutateAsync(values).catch(() => null)
+        })()
     return (
         <>
-            <section className="space-y-4 rounded-lg border p-6">
-                <h2 className="font-semibold">Administração de sistema</h2>
-                <label className="flex gap-2 text-sm">
-                    <input type="checkbox" {...form.register("enabled")} />
-                    Habilitar agentes de Ambientes
-                </label>
-                <p className="text-sm text-muted-foreground">{query.data.availability.reason ?? "Agente disponível"}</p>
-            </section>
-            <ProviderModelCard form={form} providers={providers.providers} fixedProvider="opencode" />
-            <section className="space-y-5 rounded-lg border p-6">
-                <Field
-                    id="env-session-dir"
-                    label="Diretório administrativo no OpenCode"
-                    error={errors.sessionDirectory?.message}
-                >
-                    <Input id="env-session-dir" {...form.register("sessionDirectory")} />
-                </Field>
-                <Field
-                    id="env-access-dir"
-                    label="Diretório protegido de acesso temporário (0700)"
-                    error={errors.accessDirectory?.message}
-                >
-                    <Input id="env-access-dir" {...form.register("accessDirectory")} />
-                </Field>
-                <p className="text-sm text-muted-foreground">
-                    Esse diretório deve ser acessível ao Opex e ao OpenCode no mesmo caminho, com o mesmo usuário e sem
-                    leitura por terceiros. Em Docker, configure um volume compartilhado. O agente deve ter permissões
-                    administrativas previamente restritas ao ambiente; solicitações adicionais são recusadas.
-                </p>
-                <Field id="env-skill" label="Skill (opcional)" error={errors.skill?.message}>
-                    <Input id="env-skill" {...form.register("skill")} />
-                </Field>
-                <Field
-                    id="env-timeout"
-                    label="Tempo máximo da operação (minutos)"
-                    error={errors.timeoutMinutes?.message}
-                >
-                    <Input
-                        id="env-timeout"
-                        type="number"
-                        {...form.register("timeoutMinutes", { valueAsNumber: true })}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Administração de sistema</CardTitle>
+                    <CardDescription>
+                        O agente do OpenCode executa as operações dos ambientes (Git, Docker e SSH); o Opex só coordena e
+                        apresenta os resultados.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <FormToggleCard
+                        control={form.control}
+                        name="enabled"
+                        id="env-enabled"
+                        label="Habilitar agentes de Ambientes"
+                        description="Sem isso, publicar, restaurar e inspecionar ficam indisponíveis."
+                        onLabel="Ativado"
+                        offLabel="Desativado"
                     />
-                </Field>
-                <Field id="env-instructions" label="Instruções compartilhadas" error={errors.instructions?.message}>
-                    <Textarea id="env-instructions" {...form.register("instructions")} />
-                </Field>
-            </section>
-            <footer className="flex justify-end gap-2 border-t pt-6">
-                <Button type="button" variant="outline" onClick={() => form.reset(query.data.settings)}>
-                    Desfazer
-                </Button>
-                <Button
-                    type="button"
-                    disabled={save.isPending || !dirty}
-                    onClick={() =>
-                        void form.handleSubmit(async (values) => {
-                            await save.mutateAsync(values).catch(() => null)
-                        })()
-                    }
-                >
-                    Salvar
-                </Button>
-            </footer>
+                    <p className="text-sm text-muted-foreground">{query.data.availability.reason ?? "Agente disponível"}</p>
+                </CardContent>
+            </Card>
+            <ProviderModelCard form={form} providers={providers.providers} fixedProvider="opencode" />
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Execução dos agentes</CardTitle>
+                    <CardDescription>
+                        Diretórios precisam existir no mesmo caminho para o Opex e o OpenCode, com o mesmo usuário e sem leitura
+                        por terceiros. Em Docker, use um volume compartilhado.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className={FORM_GRID_WIDE}>
+                    <Field
+                        id="env-session-dir"
+                        label="Diretório administrativo no OpenCode"
+                        error={errors.sessionDirectory?.message}
+                    >
+                        <Input id="env-session-dir" className="font-mono" {...form.register("sessionDirectory")} />
+                    </Field>
+                    <Field
+                        id="env-access-dir"
+                        label="Diretório protegido de acesso temporário (0700)"
+                        error={errors.accessDirectory?.message}
+                    >
+                        <Input id="env-access-dir" className="font-mono" {...form.register("accessDirectory")} />
+                    </Field>
+                    <Field id="env-skill" label="Skill (opcional)" error={errors.skill?.message}>
+                        <Input id="env-skill" className="font-mono" {...form.register("skill")} />
+                    </Field>
+                    <Field
+                        id="env-timeout"
+                        label="Tempo máximo da operação (minutos)"
+                        error={errors.timeoutMinutes?.message}
+                    >
+                        <Input
+                            id="env-timeout"
+                            type="number"
+                            {...form.register("timeoutMinutes", { valueAsNumber: true })}
+                        />
+                    </Field>
+                    <Field id="env-instructions" label="Instruções compartilhadas" error={errors.instructions?.message}>
+                        <Textarea id="env-instructions" {...form.register("instructions")} />
+                    </Field>
+                </CardContent>
+            </Card>
+            <FormActions
+                dirty={dirty}
+                pending={save.isPending}
+                valid={form.formState.isValid}
+                onUndo={() => form.reset(query.data.settings)}
+                onSave={submit}
+            />
         </>
     )
 }

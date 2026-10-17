@@ -1,12 +1,11 @@
 "use client"
 
-import { FieldTrigger } from "@/components/ui/field-trigger"
 import { Layers } from "lucide-react"
-import { ALL_CENTRALS_ID } from "../../dev-center-central"
-import { SearchPicker } from "@/components/ui/search-picker"
+import { RepoPicker } from "@/features/github/components/RepoPicker"
 import { repoLabelOption } from "@/features/github/components/RepoIndexProvider"
 import { GithubRepoLabel } from "@/features/github/components/shared"
 import type { GithubRepoLabelData, GithubRepoOption } from "@/features/github/types"
+import { ALL_CENTRALS_ID } from "../../dev-center-central"
 import type { CentralDto } from "../../types"
 
 /** Dados do repositório de uma central para o `GithubRepoLabel`; sem repositório, usa o nome do projeto (inicial). */
@@ -34,25 +33,26 @@ interface CentralPickerProps {
 }
 
 /**
- * Seletor da central (repositório) da Central de desenvolvimento: um `SearchPicker` com a lista das
- * centrais mostrada no item de repositório do GitHub (avatar + `owner/repo` + cadeado).
+ * Seletor da central (repositório) da Central de desenvolvimento: um `RepoPicker` com a lista das
+ * centrais mostrada no item de repositório do GitHub (avatar + `owner/repo` + cadeado), com "Todos
+ * os projetos" no topo.
  */
 export function CentralPicker({ centrals, active, index, onSelect }: CentralPickerProps) {
     const items: PickerItem[] = [{ id: ALL_CENTRALS_ID, projectName: ALL_CENTRALS_LABEL, repo: null, sigla: "" }, ...centrals]
     return (
-        <SearchPicker<PickerItem>
-            trigger={<FieldTrigger id="dev-center-central" placeholder="Escolha a central" value={active ? <GithubRepoLabel repo={centralRepoLabel(active, index)} /> : <AllCentralsLabel />} />}
+        <RepoPicker<PickerItem>
+            id="dev-center-central"
             items={items}
+            active={active ?? items[0]!}
             getKey={(central) => central.id}
+            renderItem={(central) => (central.id === ALL_CENTRALS_ID ? <AllCentralsLabel /> : <GithubRepoLabel repo={centralRepoLabel(central, index)} />)}
             searchKeys={["projectName", "repo", "sigla"]}
-            renderItem={(central) => central.id === ALL_CENTRALS_ID ? <AllCentralsLabel /> : <GithubRepoLabel repo={centralRepoLabel(central, index)} />}
             onPick={(central) => onSelect(central.id)}
-            matchTriggerWidth
+            placeholder="Escolha a central"
             searchLabel="Buscar central"
             listLabel="Centrais de desenvolvimento"
             emptyText="Nenhuma central de desenvolvimento"
             emptySearchText="Nenhuma central encontrada"
-            align="start"
         />
     )
 }

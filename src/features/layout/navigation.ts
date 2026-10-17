@@ -23,8 +23,8 @@ export const APP_NAV: readonly NavSectionDef[] = [
 
 export const HOME_HREF = "/dashboard"
 
-/** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL). */
-export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
+/** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL; Ambientes: repositório e ambiente na URL). */
+export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento", "/ambientes"]
 
 export function flattenNav(sections: readonly NavSectionDef[]): readonly NavItemDef[] {
     return sections.flatMap((section) => section.items)

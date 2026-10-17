@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
-import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
+import { FormActions } from "@/components/ui/form-actions"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
 import type { Draft } from "@/features/integrations/components/detail/draft"
 import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
@@ -81,7 +81,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                     <>
                         <AiProvidersTab />
                         <GeneralCard draft={draft} setDraft={setDraft} />
-                        <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
+                        <FormActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
                 {tab === "entender-tarefas" && <UnderstandTaskTab key={resetKey} onDirtyChange={setTabDirty} />}

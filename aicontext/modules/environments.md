@@ -8,10 +8,15 @@
 `envId=novo` abre a criação. A entrada recupera o último repositório ainda acessível
 (`localStorage`, chave versionada por cliente/dono) ou seleciona o primeiro disponível.
 
-O workspace tem seletor/configuração de repositório e lista à esquerda; o ambiente selecionado
-fica em `?ambiente=ID`. À direita: cabeçalho, Publicar/Restaurar e abas Compose, Logs, Publicar,
-Restaurar e CI/CD. No mobile, os painéis são alternados com retorno à lista. Listas de ambientes
-e imagens acima de 50 itens usam TanStack Virtual. Formulários usam os mesmos schemas Zod das APIs.
+O workspace reusa o layout da **Central de desenvolvimento**: `WorkspaceShell` (duas colunas na
+altura visível do `<main>`, um painel por vez no celular com "voltar") e `WorkspacePane` (card com
+título/contador, ações, seletor de repositório pelo `RepoPicker` — avatar do GitHub —, busca por
+nome/branch e a lista). À direita, `EnvironmentHeader` (identidade, estado da operação, atalhos
+Publicar/Restaurar e metadados) e as abas Compose, Logs, Publicar, Restaurar e CI/CD em `ViewTabs`;
+as seções usam `Card` e o rodapé dos formulários é o `FormActions`. `/ambientes` é persistente na
+casca (`PERSISTENT_PAGE_HREFS`), então trocar repositório, ambiente ou aba anima só o trecho que
+mudou. Listas acima de 50 itens virtualizam (TanStack Virtual), a busca local usa fuse.js e os
+formulários usam os mesmos schemas Zod das APIs.
 
 ## Acesso e configuração
 

@@ -6,7 +6,7 @@ import { BarChart3, Cpu, Settings2 } from "lucide-react"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
-import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
+import { FormActions } from "@/components/ui/form-actions"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
 import type { Draft } from "@/features/integrations/components/detail/draft"
 import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
@@ -72,7 +72,7 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                         <GeneralCard draft={draft} setDraft={setDraft} />
                         {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
                         {regularFields.length > 0 && <PublicFieldsCard fields={regularFields} data={data} publicValues={draft.publicValues} setPublic={setPublic} />}
-                        <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
+                        <FormActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
                 {tab === "modelos" && provider && <AiModelsCard provider={provider.id} dirty={dirty} />}

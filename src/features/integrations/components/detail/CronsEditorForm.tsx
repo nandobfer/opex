@@ -7,7 +7,7 @@ import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalo
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
-import { DetailActions } from "./DetailActions"
+import { FormActions } from "@/components/ui/form-actions"
 import { DetailHeader } from "./DetailHeader"
 import type { Draft } from "./draft"
 import { GeneralCard } from "./GeneralCard"
@@ -71,7 +71,7 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
                         {regularFields.length > 0 && <PublicFieldsCard fields={regularFields} data={data} publicValues={draft.publicValues} setPublic={setPublic} />}
                         {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
                         <ApiDocsCard data={data} draft={draft} setDraft={setDraft} dirty={dirty} onExplore={onExplore} />
-                        <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
+                        <FormActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
                 {tab === "rotinas" && (
@@ -85,7 +85,7 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
                                 canRun
                             />
                         )}
-                        <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
+                        <FormActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
             </IntegrationTabs>

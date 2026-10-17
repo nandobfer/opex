@@ -2,16 +2,18 @@
 
 import { useEffect, useRef } from "react"
 import { useUrlFilters, urlFilterCodecs } from "@/hooks/useUrlFilters"
+import { OptionTabs } from "@/components/ui/option-tabs"
+import { ErrorState } from "@/components/feedback/ErrorState"
 import {
     IntegrationConsole,
     type IntegrationConsoleHandle,
 } from "@/features/integrations/components/IntegrationConsole"
-import { ErrorState } from "@/components/feedback/ErrorState"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEnvironmentLogs } from "../hooks/useEnvironmentLogs"
+
 const defaults = { servicoAmbiente: "" }
 const schema = { servicoAmbiente: urlFilterCodecs.string() }
 
+/** Aba Logs: acompanhamento compartilhado do ambiente, com o console ocupando o painel. */
 export function EnvironmentLogsTab({ repoId, envId, services }: { repoId: string; envId: string; services: string[] }) {
     const [filters, setFilters] = useUrlFilters(defaults, schema)
     const service = filters.servicoAmbiente
@@ -32,31 +34,28 @@ export function EnvironmentLogsTab({ repoId, envId, services }: { repoId: string
         lines.forEach((line) => written.current.add(line.id))
     }, [query.data])
     return (
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
             <p className="text-sm text-muted-foreground">
-                Acompanhamento compartilhado: sair desta aba não interrompe outros espectadores. Histórico retido pela
+                Acompanhamento compartilhado: sair desta aba não interrompe outros espectadores. O histórico é retido pela
                 infraestrutura de integrações.
             </p>
-            <Select value={service || "all"} onValueChange={(value) => setService(value === "all" ? "" : value)}>
-                <SelectTrigger className="w-full" aria-label="Serviço dos logs">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">Todos os serviços</SelectItem>
-                    {services.map((name) => (
-                        <SelectItem key={name} value={name}>
-                            {name}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            {query.isError && <ErrorState title="Falha ao carregar logs" onRetry={() => void query.refetch()} />}
-            <IntegrationConsole ref={consoleRef} className="h-[440px]" />
+            {services.length > 0 && (
+                <OptionTabs<string>
+                    id="environment-log-service"
+                    aria-label="Serviço dos logs"
+                    className="w-fit"
+                    options={[{ value: "", label: "Todos" }, ...services.map((name) => ({ value: name, label: name }))]}
+                    value={service}
+                    onChange={setService}
+                />
+            )}
+            {query.isError && <ErrorState title="Não foi possível carregar os logs" onRetry={() => void query.refetch()} />}
             {query.isLoading && (
                 <p role="status" className="text-sm text-muted-foreground">
                     Carregando histórico…
                 </p>
             )}
+            <IntegrationConsole ref={consoleRef} className="min-h-[320px] flex-1" />
         </div>
     )
 }

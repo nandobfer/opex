@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
 /**
- * Rodapé de ações de formulário no padrão do app (`DetailActions`, `TabFooter`): linha com
+ * Rodapé de ações de formulário no padrão do app (`FormActions`, `TabFooter`): linha com
  * borda superior e botões à direita. Nunca flutuante/sticky.
  */
 export function FormFooter({ children, className }: { children: ReactNode; className?: string }) {

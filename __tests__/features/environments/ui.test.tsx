@@ -25,7 +25,8 @@ vi.mock("@/features/environments/hooks/useEnvironments", () => ({
     }),
     useSaveEnvironment: () => ({ mutateAsync: mocks.save, isPending: false }),
 }))
-import { PublishRestoreTab } from "@/features/environments/components/PublishRestoreTab"
+import { PublishTab } from "@/features/environments/components/PublishTab"
+import { RestoreTab } from "@/features/environments/components/RestoreTab"
 import { EnvironmentEditor } from "@/features/environments/components/EnvironmentEditor"
 import { config, repoId, envId, imageId, observed } from "./fixtures"
 const detail = (): EnvironmentDetail => ({
@@ -61,7 +62,7 @@ beforeEach(() => {
 afterEach(cleanup)
 describe("confirmações e formulário do ambiente", () => {
     it("Publicar não executa antes da confirmação explícita", () => {
-        render(<PublishRestoreTab repoId={repoId} data={detail()} restore={false} />)
+        render(<PublishTab repoId={repoId} data={detail()} />)
         fireEvent.click(screen.getByRole("button", { name: "Publicar versão" }))
         expect(mocks.mutate).not.toHaveBeenCalled()
         fireEvent.click(screen.getByRole("button", { name: "Confirmar publicação" }))
@@ -71,7 +72,7 @@ describe("confirmações e formulário do ambiente", () => {
         )
     })
     it("banco desconhecido exige marcar o risco para confirmar restauração", () => {
-        render(<PublishRestoreTab repoId={repoId} data={detail()} restore />)
+        render(<RestoreTab repoId={repoId} data={detail()} />)
         fireEvent.click(screen.getByRole("button", { name: "Restaurar esta versão" }))
         expect((screen.getByRole("button", { name: "Confirmar restauração" }) as HTMLButtonElement).disabled).toBe(true)
         fireEvent.click(screen.getByRole("checkbox"))
@@ -84,17 +85,16 @@ describe("confirmações e formulário do ambiente", () => {
     it("incompatibilidade bloqueia e banco permanece Em desenvolvimento", () => {
         const data = detail()
         data.images[0].dbVersion = "m001"
-        render(<PublishRestoreTab repoId={repoId} data={data} restore />)
+        render(<RestoreTab repoId={repoId} data={data} />)
         expect((screen.getByRole("button", { name: "Restaurar esta versão" }) as HTMLButtonElement).disabled).toBe(true)
-        expect(
-            (screen.getByRole("button", { name: "Restaurar banco — Em desenvolvimento" }) as HTMLButtonElement)
-                .disabled,
-        ).toBe(true)
+        expect(screen.getByText("Restaurar banco — Em desenvolvimento")).toBeTruthy()
     })
     it("editar DTO não injeta id/revision no schema estrito da API", async () => {
         render(<EnvironmentEditor repoId={repoId} envId={envId} />)
         await waitFor(() => expect((screen.getByLabelText("Nome") as HTMLInputElement).value).toBe(config.name))
         fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Produção atualizada" } })
+        // A validade com o resolver do zod é assíncrona: o botão habilita depois da validação.
+        await waitFor(() => expect((screen.getByRole("button", { name: "Salvar ambiente" }) as HTMLButtonElement).disabled).toBe(false))
         fireEvent.click(screen.getByRole("button", { name: "Salvar ambiente" }))
         await waitFor(() => expect(mocks.save).toHaveBeenCalled())
         expect(mocks.save.mock.calls[0][0]).toEqual({ config: { ...config, name: "Produção atualizada" }, revision: 2 })

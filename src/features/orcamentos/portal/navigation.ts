@@ -21,4 +21,4 @@ export function clienteNav(isAdmin: boolean): readonly NavSectionDef[] {
 }
 
 /** Telas do portal com sub-rotas: navegar dentro delas não troca a página inteira. */
-export const CLIENTE_PERSISTENT_HREFS: readonly string[] = ["/cliente/tarefa"]
+export const CLIENTE_PERSISTENT_HREFS: readonly string[] = ["/cliente/tarefa", "/cliente/ambientes"]

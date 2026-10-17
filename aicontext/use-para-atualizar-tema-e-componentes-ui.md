@@ -66,6 +66,22 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
 - `SearchPicker`: Enter com busca preenchida escolhe o primeiro resultado habilitado se não houver
   destaque por teclado; setas têm prioridade. Sem busca, só autoescolhe uma única opção habilitada.
   `CadastroMultiSelect` aceita `selectAllLabel`; o checkbox Todos mostra estado parcial.
+- **Workspace em duas colunas** (`src/components/workspace/`): `WorkspaceShell` ocupa a altura
+  visível do `<main>` (painel lateral fixo `lg:w-[340px]` + painel principal), mostra um painel por
+  vez no celular (`backHref`/`backLabel`) e anima só o painel principal ao trocar `viewKey`;
+  `WorkspacePane` é o card lateral com título + contador, ações e controles. Usados pela Central de
+  desenvolvimento e por Ambientes — telas novas de workspace usam estes componentes, sem duplicar as
+  colunas.
+- **Abas do painel**: `ViewTabs` (`src/components/ui/view-tabs.tsx`) — faixa com sublinhado animado
+  (`layoutId`) e painel com `AnimatePresence`; usada pela mesa de trabalho e pelo painel do ambiente
+  (as abas de configuração continuam em `IntegrationTabs`).
+- **Rodapé de formulário**: `FormActions` (`src/components/ui/form-actions.tsx`) — Desfazer + Salvar
+  sobre o `FormFooter`; envia o formulário por padrão e usa `onSave` quando o salvar não é o envio do
+  `<form>`; `valid`/`disabled` bloqueiam o salvar.
+- **Seletor de repositório**: `RepoPicker` (`src/features/github/components/RepoPicker.tsx`) —
+  `SearchPicker` + `FieldTrigger` com `GithubRepoLabel` (avatar, `owner/repo`, cadeado) e o item
+  ativo no gatilho; `CentralPicker` e o painel de Ambientes usam-no.
+- Altura do workspace: `useScrollViewportHeight`/`useFillViewportHeight` em `src/hooks/`.
 
 ### Listas e tabelas genéricas (`src/components/list/`)
 
@@ -95,7 +111,8 @@ Kit de listagem copiado dos "cadastros" do CRM: `CadastroHeader` (título + desc
   conteúdo em cards, `gap-6` entre seções e entre cards lado a lado; cards com `p-6`.
 - Ações do formulário ficam num **rodapé em linha**, nunca em barra flutuante/`sticky`:
   `flex flex-wrap justify-end gap-2 border-t pt-6` com todos os botões à direita
-  (`FormFooter` de `src/components/ui/form-footer.tsx`, `DetailActions`, `TabFooter`).
+  (`FormActions` de `src/components/ui/form-actions.tsx`, `FormFooter` de
+  `src/components/ui/form-footer.tsx`, `TabFooter`).
 - Escolha múltipla em lista longa usa `MultiAutocomplete` (`src/components/ui/multi-autocomplete.tsx`):
   busca tolerante (fuse.js), teclado (↑/↓/Enter/Esc, Backspace remove o último), grupos com
   "Selecionar todas" opcional e os escolhidos como chips abaixo do campo. Valores livres usam

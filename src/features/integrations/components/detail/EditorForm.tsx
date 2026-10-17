@@ -7,7 +7,7 @@ import type { IntegrationDetailDto } from "../../types"
 import { ApiTokensCard } from "../internal-api/ApiTokensCard"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
-import { DetailActions } from "./DetailActions"
+import { FormActions } from "@/components/ui/form-actions"
 import { DetailHeader } from "./DetailHeader"
 import type { Draft } from "./draft"
 import { GeneralCard } from "./GeneralCard"
@@ -75,7 +75,7 @@ export function EditorForm({ def, data, draft, setDraft, dirty, pending, onSave,
                 />
             )}
 
-            <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
+            <FormActions dirty={dirty} pending={pending} onUndo={onUndo} />
         </motion.form>
     )
 }

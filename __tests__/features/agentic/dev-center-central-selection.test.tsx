@@ -18,7 +18,7 @@ const CENTRAL_KEY = 'opex:dev-center-central:v1'
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }) }))
-vi.mock('@/features/integrations/hooks/useScrollViewportHeight', () => ({ useScrollViewportHeight: () => undefined }))
+vi.mock('@/hooks/useScrollViewportHeight', () => ({ useScrollViewportHeight: () => undefined }))
 vi.mock('@/features/agentic/components/central/CentralPage', () => ({ AGENTIC_SETTINGS_HREF: '/integracoes/ia?aba=desenvolvimento-agentico' }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useAgenticRealtime: () => {},
