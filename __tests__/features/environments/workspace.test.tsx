@@ -124,6 +124,9 @@ describe("cabeçalho do ambiente", () => {
         expect(screen.getByRole("link", { name: "Configurações do ambiente" }).getAttribute("href")).toBe(
             "/ambientes/repo/ambiente/env",
         )
+        // Publicar é a ação principal (primária); Restaurar é secundária.
+        expect(screen.getByRole("button", { name: /Publicar/ }).className).toContain("bg-primary")
+        expect(screen.getByRole("button", { name: /Restaurar/ }).className).not.toContain("bg-primary")
 
         fireEvent.click(screen.getByRole("button", { name: /Publicar/ }))
         expect(onSelectTab).toHaveBeenCalledWith("publish")

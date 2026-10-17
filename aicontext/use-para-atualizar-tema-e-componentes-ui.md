@@ -83,6 +83,22 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
   ativo no gatilho; `CentralPicker` e o painel de Ambientes usam-no.
 - Altura do workspace: `useScrollViewportHeight`/`useFillViewportHeight` em `src/hooks/`.
 
+### Hierarquia de botões
+
+A cor comunica o papel do botão (sempre tokens do tema, nunca cor fixa):
+
+| Papel | Como | Exemplos |
+|---|---|---|
+| Ação principal da superfície (card, painel, formulário) | `Button` padrão (primária) com `className="gap-1.5"` | `ActionBar` ("Implementar", "Aprovar e abrir PR"), `StartWorkbench`, `PrReviewHistoryCard` ("Revisar PR"), `FormActions` (Salvar) |
+| Ação secundária ou alternativa | `variant="outline"` | "Abrir fork", "Solicitar correção", "Parar", "Anterior/Próxima", "Restaurar" |
+| Cancelar/descartar dentro de composer | `variant="ghost"` | `ForkComposer`, `ActionBar` (composer), `TaskForm` |
+| Ação de linha de lista | `variant="outline"` + `size="sm"` + `gap-1.5` | `PrReviewRow` ("Ver", "Parar"), `RestoreTab` ("Restaurar esta versão") |
+| Botão de ícone na linha do título | `variant="ghost"` + `size="icon"` | engrenagem de `TasksPane`, excluir de `WorkbenchHeader` |
+| Rodapé de formulário | Desfazer `outline` + Salvar primário | `FormActions`, `PrReviewTab` |
+
+Um botão primário por superfície: a ação principal em cinza tira a hierarquia da tela (foi o caso
+do painel de Ambientes). Estados vazios usam a ação embutida do `EmptyState` (outline).
+
 ### Listas e tabelas genéricas (`src/components/list/`)
 
 Kit de listagem copiado dos "cadastros" do CRM: `CadastroHeader` (título + descrição + ação),

@@ -20,7 +20,6 @@ export function ComposeTab({ environment, inspecting, onInspect }: { environment
                             </CardDescription>
                         </div>
                         <Button
-                            variant="outline"
                             size="sm"
                             className="gap-1.5"
                             disabled={Boolean(environment.activeOperationId) || inspecting}

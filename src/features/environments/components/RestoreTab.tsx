@@ -16,6 +16,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { randomId } from "@/lib/random-id"
 import { restoreCompatibility } from "../logic"
 import { useEnvironmentOperation } from "../hooks/useEnvironments"
 import type { EnvironmentDetail, ImageDto } from "../types"
@@ -58,7 +59,7 @@ export function RestoreTab({ repoId, data }: { repoId: string; data: Environment
                 confirmation: true,
                 riskConfirmed: risk,
                 expectedRevision: environment.revision,
-                requestId: crypto.randomUUID(),
+                requestId: randomId(),
             },
             { onSuccess: () => setRisk(false) },
         )

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { randomId } from "@/lib/random-id"
 import { useEnvironmentApi } from "./useEnvironments"
 
 export interface EnvironmentLogLine {
@@ -24,7 +25,7 @@ export function useEnvironmentLogs(repoId: string, envId: string, service: strin
         refetchInterval: 3000,
     })
     useEffect(() => {
-        const viewerId = crypto.randomUUID()
+        const viewerId = randomId()
         const path = `/${repoId}/environments/${envId}/viewer`
         const heartbeat = () => {
             void sendRef.current("post", path, { viewerId, remove: false }).catch(() => undefined)

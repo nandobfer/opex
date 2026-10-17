@@ -58,7 +58,7 @@ export function EnvironmentWorkspace({ repoId }: { repoId: string }) {
                 description={api.portal ? "Solicite o vínculo ao dono." : "Vincule um repositório na integração GitHub."}
             >
                 {!api.portal && (
-                    <Button asChild size="sm" variant="outline">
+                    <Button asChild size="sm" className="gap-1.5">
                         <Link href="/integracoes/github">Configurar GitHub</Link>
                     </Button>
                 )}

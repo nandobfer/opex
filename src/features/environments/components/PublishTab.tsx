@@ -16,6 +16,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { randomId } from "@/lib/random-id"
 import { useEnvironmentOperation } from "../hooks/useEnvironments"
 import type { EnvironmentDetail } from "../types"
 import { OperationsHistory } from "./OperationsHistory"
@@ -35,7 +36,7 @@ export function PublishTab({ repoId, data }: { repoId: string; data: Environment
                 confirmation: true,
                 riskConfirmed: false,
                 expectedRevision: environment.revision,
-                requestId: crypto.randomUUID(),
+                requestId: randomId(),
             },
             { onSuccess: () => setConfirming(false) },
         )

@@ -18,6 +18,12 @@ casca (`PERSISTENT_PAGE_HREFS`), então trocar repositório, ambiente ou aba ani
 mudou. Listas acima de 50 itens virtualizam (TanStack Virtual), a busca local usa fuse.js e os
 formulários usam os mesmos schemas Zod das APIs.
 
+O cliente roda em **contexto não seguro**: o app e a prévia são acessados por HTTP num IP/host da
+rede local, onde o navegador não expõe `crypto.randomUUID`, `crypto.subtle` nem
+`navigator.clipboard`. Identificadores de requisição (`requestId`) e de espectador (`viewerId`)
+vêm de `randomId()` (`src/lib/random-id.ts`, via `getRandomValues`) — nunca de
+`crypto.randomUUID()`, que estoura na tela com `Uncaught TypeError`.
+
 ## Acesso e configuração
 
 - Dono: acesso completo; ator local, sem introduzir papéis no app interno.

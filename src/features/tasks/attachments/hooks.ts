@@ -8,6 +8,7 @@ import api, { apiErrorCode, apiErrorMessage } from "@/lib/api"
 import { fallbackAttachmentName, formatAttachmentSize } from "@/lib/attachments"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
+import { randomId } from "@/lib/random-id"
 import type { MarkdownUploads } from "@/components/ui/markdown-field"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { createAttachmentClient, startAttachmentUpload, type AttachmentClient, type AttachmentTarget, type AttachmentUploadTask } from "./client"
@@ -104,12 +105,6 @@ export interface AttachmentUploadQueue {
     retry: (id: string) => void
     cancel: (id: string) => void
     dismiss: (id: string) => void
-}
-
-/** Identificador local (funciona fora de contexto seguro, onde `crypto.randomUUID` não existe). */
-function localId(): string {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID()
-    return `u${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
 }
 
 interface UploadWaiters {
@@ -218,7 +213,7 @@ export function useAttachmentUploads(options: {
                 toast.error(`"${file.name}" tem ${formatAttachmentSize(file.size)}: o limite por arquivo é ${formatAttachmentSize(latest.current.maxBytes)}`)
                 return null
             }
-            const id = localId()
+            const id = randomId()
             jobs.current.set(id, { file, controller: new AbortController(), task: null, waiters: [] })
             queue.current.push(id)
             const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null

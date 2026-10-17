@@ -42,7 +42,7 @@ export function EnvironmentHeader({ environment, operationStage, configHref, onS
                     <p>banco registrado</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onSelectTab("publish")}>
+                    <Button size="sm" className="gap-1.5" onClick={() => onSelectTab("publish")}>
                         <Upload className="h-4 w-4" aria-hidden /> Publicar
                     </Button>
                     <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onSelectTab("restore")}>

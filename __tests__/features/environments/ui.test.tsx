@@ -89,6 +89,13 @@ describe("confirmações e formulário do ambiente", () => {
         expect((screen.getByRole("button", { name: "Restaurar esta versão" }) as HTMLButtonElement).disabled).toBe(true)
         expect(screen.getByText("Restaurar banco — Em desenvolvimento")).toBeTruthy()
     })
+    it("ação principal usa a variante primária e a de linha fica secundária", () => {
+        const { unmount } = render(<PublishTab repoId={repoId} data={detail()} />)
+        expect(screen.getByRole("button", { name: "Publicar versão" }).className).toContain("bg-primary")
+        unmount()
+        render(<RestoreTab repoId={repoId} data={detail()} />)
+        expect(screen.getByRole("button", { name: "Restaurar esta versão" }).className).not.toContain("bg-primary")
+    })
     it("editar DTO não injeta id/revision no schema estrito da API", async () => {
         render(<EnvironmentEditor repoId={repoId} envId={envId} />)
         await waitFor(() => expect((screen.getByLabelText("Nome") as HTMLInputElement).value).toBe(config.name))

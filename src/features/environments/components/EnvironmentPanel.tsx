@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { ViewTabs, type ViewTabDef } from "@/components/ui/view-tabs"
 import { apiErrorMessage } from "@/lib/api"
+import { randomId } from "@/lib/random-id"
 import { useEnvironmentApi, useEnvironmentDetail, useEnvironmentOperation } from "../hooks/useEnvironments"
 import { CiCdTab } from "./CiCdTab"
 import { ComposeTab } from "./ComposeTab"
@@ -77,7 +78,7 @@ export function EnvironmentPanel({ repoId, envId }: { repoId: string; envId: str
                                 confirmation: true,
                                 riskConfirmed: false,
                                 expectedRevision: data.environment.revision,
-                                requestId: crypto.randomUUID(),
+                                requestId: randomId(),
                             })
                         }
                     />
