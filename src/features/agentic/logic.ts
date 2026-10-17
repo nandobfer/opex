@@ -1,6 +1,6 @@
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, type AgentRole, type RunState, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
-import { centralConfigSchema, defaultCentralConfig, type AgentConfig, type AgenticSettings, type CentralConfig } from "./schemas"
+import { centralConfigSchema, defaultCentralConfig, type AgentConfig, type AgenticColumns, type AgenticSettings, type CentralConfig } from "./schemas"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
@@ -34,7 +34,16 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         agents: { ...base.agents, ...value.agents },
         git: { ...base.git, ...value.git },
         environment: { ...base.environment, ...value.environment },
-        columns: { ...base.columns, ...value.columns },
+        // Colunas: valores salvos são preservados como personalização (centrais antigas continuam como
+        // estão); só o que foi explicitamente salvo herda o padrão global (`inheritQueue`/`inheritMovement`).
+        columns: {
+            inheritQueue: value.columns?.inheritQueue === true,
+            inheritMovement: value.columns?.inheritMovement === true,
+            queue: value.columns?.queue ?? null,
+            onStart: value.columns?.onStart ?? null,
+            onPr: value.columns?.onPr ?? null,
+            onDone: value.columns?.onDone ?? null,
+        },
         cleanup: { ...base.cleanup, ...value.cleanup },
         include: { ...base.include, ...value.include },
         forks: { ...base.forks, ...value.forks },
@@ -52,10 +61,35 @@ export function defaultSessionDirectory(codeRoot: string, projectName: string): 
 /**
  * Coluna de destino ao reabrir a mesa concluída: a mesma "Ao abrir a mesa" (desenvolvimento) e,
  * quando a central não a define, a coluna de entrada do vínculo — assim a tarefa sai da coluna de
- * conclusão e a issue é reaberta (`null` = não mover).
+ * conclusão e a issue é reaberta (`null` = não mover). Recebe as colunas **efetivas** (herdadas ou
+ * personalizadas).
  */
-export function reopenTargetColumn(config: CentralConfig, entryColumnKey: string | null): string | null {
-    return config.columns.onStart ?? entryColumnKey ?? null
+export function reopenTargetColumn(columns: { onStart: string | null }, entryColumnKey: string | null): string | null {
+    return columns.onStart ?? entryColumnKey ?? null
+}
+
+/** Colunas efetivas da central: o que ela não personaliza (`inherit*`) vem do padrão global da aba. */
+export function resolveCentralColumns(global: AgenticColumns | undefined, columns: CentralConfig["columns"]): AgenticColumns {
+    const fallback: AgenticColumns = {
+        queue: global?.queue ?? null,
+        onStart: global?.onStart ?? null,
+        onPr: global?.onPr ?? null,
+        onDone: global?.onDone ?? null,
+    }
+    return {
+        queue: columns.inheritQueue ? fallback.queue : columns.queue,
+        onStart: columns.inheritMovement ? fallback.onStart : columns.onStart,
+        onPr: columns.inheritMovement ? fallback.onPr : columns.onPr,
+        onDone: columns.inheritMovement ? fallback.onDone : columns.onDone,
+    }
+}
+
+/**
+ * Fluxo efetivo das mesas novas: a escolha explícita da tarefa sempre vence; sem ela, o padrão da
+ * central (`environment.publishPreview` ligado = `preview`, desligado = `auto_pr`).
+ */
+export function resolveCentralFlow(publishPreview: boolean, taskFlow: TaskAgenticFlow | null | undefined): TaskAgenticFlow {
+    return taskFlow ?? (publishPreview ? "preview" : "auto_pr")
 }
 
 /** Menor porta livre da faixa (`null` = faixa esgotada). */

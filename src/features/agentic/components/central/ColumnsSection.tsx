@@ -1,67 +1,57 @@
 "use client"
 
-import { Controller } from "react-hook-form"
+import { useWatch } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field } from "@/components/ui/field"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FormToggleCard } from "@/components/ui/toggle-card"
-import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { AGENTIC_INCLUDE_LABELS } from "../../constants"
+import { useAgenticSettings } from "../../hooks/useAgentic"
+import { ColumnsCard } from "../settings/ColumnsCard"
 import type { CentralForm } from "./form"
 
-const NONE = "__none__"
-
-/** Aba Colunas e conclusão: movimentação das colunas por etapa e o que vai para o planejador. */
+/**
+ * Aba Colunas e conclusão: a **fila** e a **movimentação** das colunas (que podem herdar o padrão
+ * global da aba "Desenvolvimento agêntico" ou ser personalizadas nesta central — OPE-79), a limpeza
+ * após o merge e o que vai para o planejador.
+ */
 export function ColumnsSection({ form }: { form: CentralForm }) {
-    const board = useTaskBoard()
     const control = form.control
+    const columns = useWatch({ control, name: "columns" })
+    const settings = useAgenticSettings()
+    const global = settings.data?.settings.columns
 
-    const columnField = (name: "columns.queue" | "columns.onStart" | "columns.onPr" | "columns.onDone", id: string, label: string, noneLabel = "Não mover") => (
-        <Field id={id} label={label}>
-            <Controller
-                control={control}
-                name={name}
-                render={({ field }) => (
-                    <Select value={field.value ?? NONE} onValueChange={(value) => field.onChange(value === NONE ? null : value)}>
-                        <SelectTrigger id={id} className="w-full">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={NONE}>{noneLabel}</SelectItem>
-                            {board.columns.map((column) => (
-                                <SelectItem key={column.key} value={column.key}>
-                                    {column.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
-            />
-        </Field>
-    )
+    const setColumn = (name: "columns.queue" | "columns.onStart" | "columns.onPr" | "columns.onDone", value: string | null) =>
+        form.setValue(name, value, { shouldDirty: true, shouldValidate: true })
+    const setInherit = (name: "columns.inheritQueue" | "columns.inheritMovement", value: boolean) => form.setValue(name, value, { shouldDirty: true, shouldValidate: true })
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Fila da central de desenvolvimento</CardTitle>
-                    <CardDescription>
-                        Ao mover um card para esta coluna, a mesa da tarefa entra na fila. Havendo vaga (limite de mesas abertas), a mesa abre na hora; senão, aguarda na ordem dos cards do kanban.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">{columnField("columns.queue", "central-col-queue", "Coluna que inicia a mesa automaticamente", "Nenhuma")}</CardContent>
-            </Card>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Movimentação das colunas</CardTitle>
-                    <CardDescription>Ao avançar o desenvolvimento, a tarefa é movida para a coluna escolhida. &quot;Não mover&quot; deixa como está.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    {columnField("columns.onStart", "central-col-start", "Ao abrir a mesa (implementação)")}
-                    {columnField("columns.onPr", "central-col-pr", "Ao abrir o Pull Request")}
-                    {columnField("columns.onDone", "central-col-done", "Ao concluir (PR mergeado)")}
-                </CardContent>
-            </Card>
+            <ColumnsCard
+                title="Fila da central de desenvolvimento"
+                description="Ao mover um card para esta coluna, a mesa da tarefa entra na fila. Havendo vaga (limite de mesas abertas), a mesa abre na hora; senão, aguarda na ordem dos cards do kanban."
+                idPrefix="central-queue"
+                inherited={{ value: columns.inheritQueue, onChange: (inherit) => setInherit("columns.inheritQueue", inherit) }}
+                fields={[
+                    {
+                        id: "central-col-queue",
+                        label: "Coluna que inicia a mesa automaticamente",
+                        noneLabel: "Nenhuma",
+                        value: columns.queue,
+                        globalValue: global?.queue,
+                        onChange: (value) => setColumn("columns.queue", value),
+                    },
+                ]}
+            />
+            <ColumnsCard
+                title="Movimentação das colunas"
+                description={`Ao avançar o desenvolvimento, a tarefa é movida para a coluna escolhida. "Não mover" deixa como está.`}
+                idPrefix="central-movement"
+                inherited={{ value: columns.inheritMovement, onChange: (inherit) => setInherit("columns.inheritMovement", inherit) }}
+                fields={[
+                    { id: "central-col-start", label: "Ao abrir a mesa (implementação)", value: columns.onStart, globalValue: global?.onStart, onChange: (value) => setColumn("columns.onStart", value) },
+                    { id: "central-col-pr", label: "Ao abrir o Pull Request", value: columns.onPr, globalValue: global?.onPr, onChange: (value) => setColumn("columns.onPr", value) },
+                    { id: "central-col-done", label: "Ao concluir (PR mergeado)", value: columns.onDone, globalValue: global?.onDone, onChange: (value) => setColumn("columns.onDone", value) },
+                ]}
+            />
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Limpeza após o merge</CardTitle>

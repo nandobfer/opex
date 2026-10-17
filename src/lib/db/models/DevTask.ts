@@ -53,10 +53,12 @@ export interface IDevTask {
     /** Estimativa/orçamento do portal do cliente (`null` quando não veio do portal). */
     estimate: ITaskEstimate | null
     /**
-     * Fluxo da mesa de trabalho escolhido na tela de desenvolvimento: `"preview"` (sobe a prévia,
-     * padrão) ou `"auto_pr"` (pula a prévia e abre o PR ao fim da implementação).
+     * Fluxo da mesa de trabalho escolhido na tela de desenvolvimento: `"preview"` (sobe a prévia),
+     * `"auto_pr"` (pula a prévia) ou `null` — a tarefa **não escolhe** e a mesa usa o padrão da
+     * central (`environment.publishPreview`, OPE-79). Tarefas anteriores à OPE-79 guardam o fluxo
+     * explícito (a migração `backfill-task-agentic-flow` preenche quem ainda não tinha o campo).
      */
-    agenticFlow: string
+    agenticFlow: string | null
     createdAt: Date
     updatedAt: Date
 }
@@ -94,7 +96,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         tagsSourceHash: { type: String, default: null },
         tagsUpdatedAt: { type: Date, default: null },
         estimate: { type: TaskEstimateSchema, default: null },
-        agenticFlow: { type: String, default: "preview" },
+        agenticFlow: { type: String, default: null },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },
 )

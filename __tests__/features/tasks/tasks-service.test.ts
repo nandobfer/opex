@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   notifyQueue: vi.fn(),
   pushIssues: vi.fn(),
   afterTasks: [] as Promise<unknown>[],
+  /** Colunas do padrão global do desenvolvimento agêntico (OPE-79). */
+  settingsColumns: { queue: null as string | null, onStart: null as string | null, onPr: null as string | null, onDone: null as string | null },
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }>; aggregate: (...args: unknown[]) => Promise<unknown[]> }>,
 }))
 
@@ -17,6 +19,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/pusher/channels', () => ({ appChannel: () => 'private-app', publishToChannels: mocks.publish }))
 vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => { mocks.afterTasks.push(task()) } }))
 vi.mock('@/features/agentic/server/queue', () => ({ notifyTasksColumnChanged: mocks.notifyQueue }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: async () => ({ settings: { columns: mocks.settingsColumns } }) }))
 vi.mock('@/features/github/server/issue-links', () => ({ issueRefsFor: async () => new Map() }))
 vi.mock('@/features/github/server/task-sync', () => ({ pushTasksToIssues: mocks.pushIssues }))
 vi.mock('@/lib/db/models/DevTask', async () => {
@@ -75,6 +78,7 @@ import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks,
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
   mocks.afterTasks.length = 0
+  mocks.settingsColumns.queue = null
 }
 
 const seedProject = async (overrides: Record<string, unknown> = {}) =>
@@ -260,6 +264,27 @@ describe('colunas do quadro', () => {
     await getBoard()
     await mocks.models.central.create({ projectId: 'p1', projectName: 'go', config: { columns: { queue: 'doing' } } })
     await expect(deleteColumn('doing', 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMN_QUEUE_IN_USE' })
+  })
+
+  it('não exclui a coluna que é a fila padrão global do desenvolvimento agêntico', async () => {
+    await getBoard()
+    mocks.settingsColumns.queue = 'doing'
+    await expect(deleteColumn('doing', 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMN_QUEUE_IN_USE' })
+  })
+
+  it('não exclui a coluna herdada do padrão global por uma central sem personalização', async () => {
+    await getBoard()
+    mocks.settingsColumns.queue = 'doing'
+    await mocks.models.central.create({ projectId: 'p1', projectName: 'go', config: { columns: { inheritQueue: true, queue: null } } })
+    await expect(deleteColumn('doing', 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMN_QUEUE_IN_USE' })
+  })
+
+  it('libera a coluna quando a central personaliza outra e o padrão global não a usa', async () => {
+    await getBoard()
+    await mocks.models.central.create({ projectId: 'p1', projectName: 'go', config: { columns: { inheritQueue: false, queue: 'todo' } } })
+    await mocks.models.central.create({ projectId: 'p2', projectName: 'outro', config: { columns: { inheritQueue: true, queue: null } } })
+    await deleteColumn('doing', 'local')
+    expect((await getBoard()).columns.map((c) => c.key)).toEqual(['todo', 'done'])
   })
 })
 
@@ -467,10 +492,10 @@ describe('cliente da tarefa (editar na página da tarefa)', () => {
 })
 
 describe('fluxo da mesa da tarefa (agenticFlow)', () => {
-  it('nasce em "preview" e passa para "auto_pr" com auditoria e tempo real', async () => {
+  it('nasce herdando o padrão da central (null) e passa para "auto_pr" com auditoria e tempo real', async () => {
     const pid = await seedProject()
     const a = await create(pid)
-    expect((await getTask(a.id)).agenticFlow).toBe('preview')
+    expect((await getTask(a.id)).agenticFlow).toBeNull()
 
     mocks.recordAudit.mockClear()
     mocks.publish.mockClear()
@@ -482,11 +507,28 @@ describe('fluxo da mesa da tarefa (agenticFlow)', () => {
         entidade: 'Tarefa',
         entidadeId: a.id,
         acao: 'ATUALIZAR',
-        antes: expect.objectContaining({ fluxo: 'Publicar prévia' }),
+        antes: expect.objectContaining({ fluxo: 'Padrão da central' }),
         depois: expect.objectContaining({ fluxo: 'PR automático' }),
       }),
     )
     expect(mocks.publish).toHaveBeenCalledWith(['private-app'], 'tasks-updated', { ids: [a.id] })
+  })
+
+  it('voltar a herdar o padrão da central grava null com o rótulo próprio na auditoria', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await updateTask(a.id, { agenticFlow: 'auto_pr' }, 'local')
+
+    mocks.recordAudit.mockClear()
+    await updateTask(a.id, { agenticFlow: null }, 'local')
+
+    expect((await getTask(a.id)).agenticFlow).toBeNull()
+    expect(mocks.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        antes: expect.objectContaining({ fluxo: 'PR automático' }),
+        depois: expect.objectContaining({ fluxo: 'Padrão da central' }),
+      }),
+    )
   })
 
   it('a mudança de fluxo não mexe em outros campos nem sincroniza com a issue do GitHub', async () => {

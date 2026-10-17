@@ -76,8 +76,10 @@ export type TaskViewMode = (typeof TASK_VIEW_MODES)[number]
 
 /**
  * Fluxo de execução escolhido para a mesa de trabalho da tarefa (estado inicial da mesa).
- * `preview`: sobe a prévia e espera a aprovação antes de abrir o PR (comportamento padrão).
+ * `preview`: sobe a prévia e espera a aprovação antes de abrir o PR.
  * `auto_pr`: pula a prévia e abre o PR assim que a implementação termina.
+ * `null` (OPE-79): a tarefa **não escolhe** — usa o padrão da central
+ * (`environment.publishPreview`), na abertura manual e na automática pela fila.
  */
 export const TASK_AGENTIC_FLOWS = ["preview", "auto_pr"] as const
 export type TaskAgenticFlow = (typeof TASK_AGENTIC_FLOWS)[number]
@@ -86,6 +88,9 @@ export const TASK_AGENTIC_FLOW_LABELS: Record<TaskAgenticFlow, string> = {
     preview: "Publicar prévia",
     auto_pr: "PR automático",
 }
+
+/** Rótulo do fluxo herdado (a tarefa segue o padrão da central de desenvolvimento). */
+export const TASK_AGENTIC_FLOW_INHERIT_LABEL = "Padrão da central"
 
 /** Evento Pusher (canal `private-app`) quando tarefas mudam. Payload: `{ ids: string[] }`. */
 export const TASKS_UPDATED_EVENT = "tasks-updated"

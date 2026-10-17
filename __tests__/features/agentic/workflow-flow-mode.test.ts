@@ -158,6 +158,45 @@ describe('fluxo PR automático', () => {
   })
 })
 
+describe('fluxo herdado do padrão da central (OPE-79)', () => {
+  const centralWith = (publishPreview: boolean) => {
+    const config = defaultCentralConfig('/home/u/app')
+    config.environment.publishPreview = publishPreview
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config })
+  }
+  const task = (overrides: Record<string, unknown>) =>
+    mocks.getTask.mockResolvedValue({ id: 't1', code: 'OPE-79', title: 'Fluxo herdado', columnId: 'col', project: { id: 'p1' }, agenticFlow: null, ...overrides })
+
+  it('tarefa sem escolha usa o padrão da central (Publicar prévia)', async () => {
+    centralWith(true)
+    await task({})
+    await startWorkbench('c1', 't1')
+    expect(model.docs[0]!.agenticFlow).toBe('preview')
+  })
+
+  it('tarefa sem escolha usa o padrão da central (PR automático)', async () => {
+    centralWith(false)
+    await task({ agenticFlow: null })
+    await startWorkbench('c1', 't1')
+    expect(model.docs[0]!.agenticFlow).toBe('auto_pr')
+  })
+
+  it('a escolha da tarefa vence o padrão da central', async () => {
+    centralWith(false)
+    await task({ agenticFlow: 'preview' })
+    await startWorkbench('c1', 't1')
+    expect(model.docs[0]!.agenticFlow).toBe('preview')
+  })
+
+  it('a coluna "Ao abrir a mesa" herdada do padrão global move a tarefa', async () => {
+    centralWith(true)
+    mocks.settings.mockResolvedValue({ settings: { ...DEFAULT_AGENTIC_SETTINGS, columns: { queue: null, onStart: 'doing', onPr: null, onDone: null } } })
+    await task({})
+    await startWorkbench('c1', 't1')
+    expect(mocks.moveTask).toHaveBeenCalledWith('t1', { targetColumn: 'doing' }, 'local')
+  })
+})
+
 describe('prévia GitHub Action', () => {
   const remote = () => {
     const config = defaultCentralConfig('/home/u/app')

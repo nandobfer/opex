@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildPrompt,
@@ -31,7 +31,7 @@ import {
     conflictPrompt,
     type WorkbenchContext,
 } from "../prompts"
-import { buildResultSchema, conflictResultSchema, prResultSchema, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
+import { buildResultSchema, conflictResultSchema, prResultSchema, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -118,6 +118,8 @@ export async function listCentralWorkbenches(centralId: string): Promise<Workben
 interface Loaded {
     doc: IAgenticWorkbench
     config: CentralConfig
+    /** Colunas efetivas da central (herdadas do padrão global ou personalizadas — OPE-79). */
+    columns: AgenticColumns
     projectName: string
     projectId: string
     repo: { repo: string; repoUrl: string } | null
@@ -126,7 +128,8 @@ interface Loaded {
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
-    return { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
+    const { settings } = await loadAgenticSettings()
+    return { doc, config, columns: resolveCentralColumns(settings.columns, config.columns), projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
 }
 
 function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
@@ -547,7 +550,7 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             notice("success", keep ? `PR #${pr.number} atualizado` : `PR #${pr.number} aberto: ${pr.url}`)
             await update(doc, { stage: "pr_open", runState: "idle", pr })
             pumpQueue(doc.centralId)
-            const prColumn = config.columns.onPr
+            const prColumn = loaded.columns.onPr
             if (prColumn) {
                 try {
                     await moveTask(doc.taskId, { targetColumn: prColumn }, actorId())
@@ -669,9 +672,9 @@ function taskMarkdown(task: TaskDetailDto, config: CentralConfig): string {
 }
 
 /** Efeitos na tarefa ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
-async function applyStartEffects(id: string, task: TaskDetailDto, config: CentralConfig): Promise<void> {
+async function applyStartEffects(id: string, task: TaskDetailDto, columns: AgenticColumns): Promise<void> {
     const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
-    const target = config.columns.onStart
+    const target = columns.onStart
     if (target && target !== task.columnId) {
         try {
             await moveTask(task.id, { targetColumn: target }, actorId())
@@ -686,7 +689,7 @@ async function applyStartEffects(id: string, task: TaskDetailDto, config: Centra
 async function applyReopenEffects(id: string, loaded: Loaded): Promise<void> {
     const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
     const task = await getTask(loaded.doc.taskId)
-    const target = reopenTargetColumn(loaded.config, await entryColumnForProject(loaded.projectId))
+    const target = reopenTargetColumn(loaded.columns, await entryColumnForProject(loaded.projectId))
     if (target && target !== task.columnId) {
         try {
             await moveTask(task.id, { targetColumn: target }, actorId())
@@ -757,6 +760,11 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     if (await AgenticWorkbench.exists({ centralId, pendingTurn: { $ne: null } })) {
         throw new DomainError(409, "Há mesas aguardando retomada nesta central; elas têm prioridade", "CENTRAL_BUSY")
     }
+    // Colunas efetivas e fluxo padrão da central: a escolha da tarefa vence; sem ela, vale
+    // `environment.publishPreview`. O fluxo resolvido é gravado na mesa (não muda depois).
+    const { settings } = await loadAgenticSettings()
+    const columns = resolveCentralColumns(settings.columns, config.columns)
+    const agenticFlow = resolveCentralFlow(config.environment.publishPreview, task.agenticFlow)
 
     let doc: IAgenticWorkbench
     try {
@@ -769,7 +777,7 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
                 stage: "planning",
                 runState: "idle",
                 composeProject: composeProjectFor(central.projectName, task.code),
-                agenticFlow: task.agenticFlow,
+                agenticFlow,
             })
         ).toObject()
     } catch (error) {
@@ -780,8 +788,8 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName } })
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
-    await applyStartEffects(id, task, config)
-    const loaded: Loaded = { doc, config, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
+    await applyStartEffects(id, task, columns)
+    const loaded: Loaded = { doc, config, columns, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
     // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).
     const additionalInfo = text?.trim() || null
     await launchTurn(
@@ -1181,7 +1189,7 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
     await update(doc, { pr })
     notice("success", `PR #${pr.number} mergeado`)
 
-    const doneColumn = config.columns.onDone
+    const doneColumn = loaded.columns.onDone
     if (doneColumn) {
         try {
             await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())

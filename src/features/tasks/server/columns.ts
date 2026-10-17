@@ -6,7 +6,8 @@ import { AgenticCentral } from "@/lib/db/models/Agentic"
 import { TaskBoardColumn, TaskBoardLayout, type ITaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { randomId } from "@/lib/random-id"
-import { parseCentralConfig } from "@/features/agentic/logic"
+import { parseCentralConfig, resolveCentralColumns } from "@/features/agentic/logic"
+import { loadAgenticSettings } from "@/features/agentic/server/settings"
 import { normalizeLayout, placeColumnAfter, type ColumnColor, type ColumnIcon, type TaskColumnDto, type TaskBoardDto } from "../board"
 import { TASK_COLUMNS_UPDATED_EVENT } from "../constants"
 import type { ColumnInput, CreateColumnInput } from "../schemas"
@@ -104,11 +105,17 @@ export async function deleteColumn(key: string, actorId: string): Promise<void> 
     if (repos.length > 0) {
         throw new DomainError(409, `A coluna é usada por ${repos.join(", ")}: ajuste o vínculo do GitHub antes de excluí-la`, "COLUMN_IN_USE")
     }
+    // A coluna pode ser a fila **global** (aba Desenvolvimento agêntico) ou a de uma central que a
+    // personaliza ou herda dela (OPE-79).
+    const { settings } = await loadAgenticSettings()
     const queueCentrals = (await AgenticCentral.find().select({ projectName: 1, config: 1 }).lean())
-        .filter((central) => parseCentralConfig(central.config).columns.queue === key)
+        .filter((central) => resolveCentralColumns(settings.columns, parseCentralConfig(central.config).columns).queue === key)
         .map((central) => central.projectName)
-    if (queueCentrals.length > 0) {
-        throw new DomainError(409, `A coluna inicia a mesa de ${queueCentrals.join(", ")}: troque a coluna da fila na central antes de excluí-la`, "COLUMN_QUEUE_IN_USE")
+    if (settings.columns.queue === key || queueCentrals.length > 0) {
+        const parts: string[] = []
+        if (settings.columns.queue === key) parts.push("é a fila padrão do desenvolvimento agêntico")
+        if (queueCentrals.length > 0) parts.push(`inicia a mesa de ${queueCentrals.join(", ")}`)
+        throw new DomainError(409, `A coluna ${parts.join(" e ")}: troque a coluna da fila antes de excluí-la`, "COLUMN_QUEUE_IN_USE")
     }
     const inside = await DevTask.find({ columnId: key }).select({ code: 1 }).limit(5).lean()
     const count = await DevTask.countDocuments({ columnId: key })

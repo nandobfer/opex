@@ -4,9 +4,10 @@ import { AgenticCentral, AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { DomainError } from "@/lib/api/route"
 import { logger } from "@/lib/logger"
-import { parseCentralConfig } from "../logic"
-import type { CentralConfig } from "../schemas"
+import { parseCentralConfig, resolveCentralColumns } from "../logic"
+import type { AgenticColumns, CentralConfig } from "../schemas"
 import type { QueueItemDto } from "../types"
+import { loadAgenticSettings } from "./settings"
 import { occupiedSlots, runInCentral, waitingResumes } from "./slots"
 import { startPendingTurn, startWorkbenchInCentral } from "./workflow"
 
@@ -25,13 +26,18 @@ const SKIP_CODES = new Set(["WORKBENCH_EXISTS", "TASK_OTHER_PROJECT", "TASK_NOT_
 interface LoadedCentral {
     projectId: string
     config: CentralConfig
+    /** Colunas efetivas da central (o que ela não personaliza vem do padrão global — OPE-79). */
+    columns: AgenticColumns
 }
 
 async function loadCentral(centralId: string): Promise<LoadedCentral | null> {
     if (!isValidObjectId(centralId)) return null
     await dbConnect()
     const doc = await AgenticCentral.findById(centralId).select({ projectId: 1, config: 1 }).lean().catch(() => null)
-    return doc ? { projectId: doc.projectId, config: parseCentralConfig(doc.config) } : null
+    if (!doc) return null
+    const config = parseCentralConfig(doc.config)
+    const { settings } = await loadAgenticSettings()
+    return { projectId: doc.projectId, config, columns: resolveCentralColumns(settings.columns, config.columns) }
 }
 
 /** Tarefas aguardando na fila, na ordem dos cards no kanban; a posição é 1-based. */
@@ -49,7 +55,7 @@ async function waitingTasks(centralId: string, projectId: string, columnKey: str
 /** Fila de uma central (para a tela). Vazia quando não há coluna da fila configurada. */
 export async function listCentralQueue(centralId: string): Promise<QueueItemDto[]> {
     const central = await loadCentral(centralId)
-    const columnKey = central?.config.columns.queue
+    const columnKey = central?.columns.queue
     if (!central || !columnKey || !central.config.enabled) return []
     return waitingTasks(centralId, central.projectId, columnKey)
 }
@@ -86,7 +92,7 @@ async function runPump(centralId: string): Promise<void> {
         if (!central) return
         const resumed = await pumpResumes(centralId, central.config.maxConcurrent)
         let open = resumed.open
-        const columnKey = central.config.columns.queue
+        const columnKey = central.columns.queue
         if (resumed.blocked || !columnKey || !central.config.enabled) return
         if (open >= central.config.maxConcurrent) return
         for (const item of await waitingTasks(centralId, central.projectId, columnKey)) {
@@ -109,10 +115,11 @@ async function runPump(centralId: string): Promise<void> {
 export async function pumpAllCentralQueues(): Promise<string> {
     await dbConnect()
     const docs = await AgenticCentral.find().select({ _id: 1, config: 1 }).lean()
+    const { settings } = await loadAgenticSettings()
     let processed = 0
     for (const doc of docs) {
         // Sem coluna da fila, a central ainda pode ter retomadas aguardando vaga.
-        const hasQueue = Boolean(parseCentralConfig(doc.config).columns.queue)
+        const hasQueue = Boolean(resolveCentralColumns(settings.columns, parseCentralConfig(doc.config).columns).queue)
         if (!hasQueue && !(await AgenticWorkbench.exists({ centralId: String(doc._id), pendingTurn: { $ne: null } }))) continue
         await pumpCentralQueue(String(doc._id))
         processed++

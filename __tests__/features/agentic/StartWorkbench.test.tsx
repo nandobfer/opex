@@ -133,4 +133,34 @@ describe('StartWorkbench · fluxo da mesa', () => {
       patch: { agenticFlow: 'preview' },
     })
   })
+
+  it('tarefa sem escolha segue o padrão da central (Publicar prévia) e oferece personalizar', () => {
+    renderStart({}, { agenticFlow: null })
+    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Publicar prévia')
+    expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Usar padrão da central' })).toBeNull()
+  })
+
+  it('central configurada em PR automático é o padrão herdado pela tarefa', () => {
+    const base = defaultCentralConfig('/home/u/app')
+    renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: null })
+    expect(flow().getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('PR automático')
+    expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
+  })
+
+  it('a escolha da tarefa vence o padrão da central e pode voltar a herdar', () => {
+    const base = defaultCentralConfig('/home/u/app')
+    renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: 'preview' })
+    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText(/Fluxo escolhido só para esta tarefa/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Usar padrão da central' }))
+    expect(mocks.updateTask).toHaveBeenCalledWith({
+      task: { id: 't1', code: 'OPE-10' },
+      body: { agenticFlow: null },
+      patch: { agenticFlow: null },
+    })
+  })
 })
