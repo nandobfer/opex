@@ -5,7 +5,7 @@ import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/cata
 import { AiProviderError } from "@/lib/ai/errors"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_ROLE_LABELS, AGENT_ROLES, AGENTIC_FEATURE, AGENTIC_UPDATED_EVENT } from "../constants"
-import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, withDefaultAgents, type AgentConfig, type AgenticSettings } from "../schemas"
+import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, withDefaultAgents, type AgentConfig, type AgenticColumns, type AgenticSettings } from "../schemas"
 import type { AgenticAvailability, AgenticSettingsDto } from "../types"
 
 const AUDIT_ENTITY = "FeatureIA"
@@ -57,8 +57,22 @@ export async function assertAgentConfigs(configs: { label: string; config: Agent
 
 const normalizeAgent = (config: AgentConfig): AgentConfig => ({ agent: config.agent || null, model: config.model || null, variant: config.model ? config.variant || null : null })
 
+/** Coluna global: texto vazio vira `null` ("nenhuma"/"não mover"). */
+const normalizeColumn = (value: string | null): string | null => (value && value.trim() ? value.trim() : null)
+
+const normalizeColumns = (columns: AgenticColumns): AgenticColumns => ({
+    queue: normalizeColumn(columns.queue),
+    onStart: normalizeColumn(columns.onStart),
+    onPr: normalizeColumn(columns.onPr),
+    onDone: normalizeColumn(columns.onDone),
+})
+
 export async function saveAgenticSettings(input: AgenticSettings, actorId: string): Promise<AgenticSettingsDto> {
-    const next: AgenticSettings = { enabled: input.enabled, agents: Object.fromEntries(AGENT_ROLES.map((role) => [role, normalizeAgent(input.agents[role])])) as AgenticSettings["agents"] }
+    const next: AgenticSettings = {
+        enabled: input.enabled,
+        agents: Object.fromEntries(AGENT_ROLES.map((role) => [role, normalizeAgent(input.agents[role])])) as AgenticSettings["agents"],
+        columns: normalizeColumns(input.columns),
+    }
     await assertAgentConfigs(
         AGENT_ROLES.map((role) => ({ label: AGENT_ROLE_LABELS[role].label, config: next.agents[role] })),
         next.enabled,
@@ -74,6 +88,10 @@ export async function saveAgenticSettings(input: AgenticSettings, actorId: strin
         depois: next,
     })
     await publishAppEvent(AGENTIC_UPDATED_EVENT, { scope: "settings" }).catch(() => undefined)
+    // A fila global pode ter mudado: reavalia as centrais que a herdam (import dinâmico evita ciclo).
+    void import("./queue")
+        .then((queue) => queue.pumpAllCentralQueues())
+        .catch(() => undefined)
     return getAgenticSettings()
 }
 

@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
         refetch: vi.fn(),
         save: vi.fn(),
         data: {
-            settings: { enabled: false, agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } } },
+            settings: { enabled: false, agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } }, columns: { queue: null, onStart: null, onPr: null, onDone: null } },
             isDefault: true,
             availability: { available: false, reason: "OpenCode não configurado" },
             updatedAt: null,
@@ -30,6 +30,7 @@ vi.mock("@/features/agentic/hooks/useAgentic", () => ({
 }))
 vi.mock("@/features/agentic/components/settings/AgentRolesCard", () => ({ AgentRolesCard: () => <div data-testid="agent-roles">agentes padrão</div> }))
 vi.mock("@/features/agentic/components/settings/CentralsCard", () => ({ CentralsCard: () => <div data-testid="centrals">centrais</div> }))
+vi.mock("@/features/agentic/components/settings/ColumnsCard", () => ({ ColumnsCard: ({ title }: { title: string }) => <div data-testid="columns-card">{title}</div> }))
 
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { useLocalTabs } from "@/features/integrations/components/tabs/useLocalTabs"
@@ -121,6 +122,14 @@ describe("AgenticTab: abas internas", () => {
         expect(screen.getByRole("tab", { name: "Centrais de desenvolvimento" }).getAttribute("aria-selected")).toBe("true")
         expect(screen.getByTestId("centrals")).toBeTruthy()
         expect(screen.queryByTestId("agent-roles")).toBeNull()
+        expect(screen.queryAllByTestId("columns-card")).toHaveLength(0)
         expect(screen.queryByRole("button", { name: /Salvar/ })).toBeNull()
+    })
+
+    it("traz a fila e a movimentação globais junto dos agentes padrão", () => {
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        const cards = screen.getAllByTestId("columns-card")
+        expect(cards).toHaveLength(2)
+        expect(cards.map((card) => card.textContent)).toEqual(["Fila da central de desenvolvimento", "Movimentação das colunas"])
     })
 })

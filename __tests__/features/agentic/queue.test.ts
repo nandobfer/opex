@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
     start: vi.fn(),
     startPending: vi.fn(),
     DomainError,
+    /** Colunas do padrão global da aba (a central pode herdá-las — OPE-79). */
+    settingsColumns: { queue: null as string | null, onStart: null as string | null, onPr: null as string | null, onDone: null as string | null },
     models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }>,
   }
 })
@@ -30,6 +32,7 @@ vi.mock('@/lib/db/models/DevTask', async () => {
   return { DevTask: mocks.models.task, TaskComment: memoryModel() }
 })
 vi.mock('@/features/agentic/server/workflow', () => ({ startWorkbenchInCentral: mocks.start, startPendingTurn: mocks.startPending }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: async () => ({ settings: { columns: mocks.settingsColumns } }) }))
 
 import { listCentralQueue, notifyTasksColumnChanged, pumpAllCentralQueues, pumpCentralQueue } from '@/features/agentic/server/queue'
 
@@ -48,6 +51,7 @@ const pendingTurn = (queuedAt: string) => ({ action: 'implement', stage: 'implem
 beforeEach(() => {
   vi.clearAllMocks()
   for (const model of Object.values(mocks.models)) model.docs.length = 0
+  mocks.settingsColumns.queue = null
 })
 
 describe('listCentralQueue', () => {
@@ -212,6 +216,44 @@ describe('notifyTasksColumnChanged', () => {
 
     await notifyTasksColumnChanged([moved])
     expect(mocks.start).not.toHaveBeenCalled()
+  })
+})
+
+describe('colunas globais herdadas (OPE-79)', () => {
+  it('a central que herda usa a coluna global da fila', async () => {
+    mocks.settingsColumns.queue = 'global-fila'
+    const cid = await central({ config: { maxConcurrent: 2, columns: { inheritQueue: true, queue: null } } })
+    const first = await task(1, { columnId: 'global-fila' })
+    const second = await task(2, { columnId: 'global-fila' })
+    mocks.start.mockResolvedValue(undefined)
+
+    const queue = await listCentralQueue(cid)
+    expect(queue.map((item) => item.taskId)).toEqual([first, second])
+
+    await pumpCentralQueue(cid)
+    expect(mocks.start.mock.calls.map((call) => call[1])).toEqual([first, second])
+  })
+
+  it('a coluna personalizada da central vence o padrão global', async () => {
+    mocks.settingsColumns.queue = 'global-fila'
+    const cid = await central({ config: { maxConcurrent: 2, columns: { inheritQueue: false, queue: 'fila' } } })
+    const own = await task(1)
+    await task(2, { columnId: 'global-fila' })
+    mocks.start.mockResolvedValue(undefined)
+
+    await pumpCentralQueue(cid)
+    expect(mocks.start.mock.calls.map((call) => call[1])).toEqual([own])
+  })
+
+  it('pumpAllCentralQueues processa a central que herda a fila global', async () => {
+    mocks.settingsColumns.queue = 'fila'
+    const cid = await central({ config: { maxConcurrent: 2, columns: { inheritQueue: true, queue: null } } })
+    const waiting = await task(1)
+    mocks.start.mockResolvedValue(undefined)
+
+    const summary = await pumpAllCentralQueues()
+    expect(summary).toContain('1 central')
+    expect(mocks.start).toHaveBeenCalledWith(cid, waiting)
   })
 })
 

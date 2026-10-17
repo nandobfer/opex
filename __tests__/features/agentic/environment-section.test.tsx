@@ -43,6 +43,17 @@ function BackupHarness() {
     </>
   )
 }
+function PublishHarness({ portEnvVar = 'PORT' }: { portEnvVar?: string }) {
+  const base = defaultCentralConfig('/home/u/app')
+  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, portEnvVar } } })
+  const value = useWatch({ control: form.control, name: 'environment.portEnvVar' })
+  return (
+    <>
+      <EnvironmentSection form={form} centralId="c1" />
+      <output data-testid="port-var">{String(value)}</output>
+    </>
+  )
+}
 afterEach(() => { cleanup(); buildersQuery = ready; refetch.mockReset() })
 describe('método da prévia por central', () => {
   it('inicia Local e exibe configuração remota somente ao selecionar GitHub Action', () => {
@@ -67,10 +78,48 @@ describe('método da prévia por central', () => {
   })
 })
 
+describe('publicar prévia (OPE-79)', () => {
+  it('nasce ligado e só mostra o ambiente com o switch ligado', () => {
+    render(<PublishHarness />)
+    const toggle = screen.getByLabelText('Publicar prévia') as HTMLButtonElement
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByLabelText('Variável da porta')).toBeTruthy()
+    expect(screen.getByLabelText('Backup do Banco de Dados')).toBeTruthy()
+
+    fireEvent.click(toggle)
+
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByLabelText('Variável da porta')).toBeNull()
+    expect(screen.queryByLabelText('Backup do Banco de Dados')).toBeNull()
+    expect(screen.queryByLabelText('Builder do Docker')).toBeNull()
+    expect(screen.queryByLabelText('Construir prévia')).toBeNull()
+    expect(document.body.textContent).toContain('PR automático')
+  })
+
+  it('desligar e religar preserva os valores já configurados', () => {
+    render(<PublishHarness portEnvVar="APP_PORT" />)
+    const toggle = screen.getByLabelText('Publicar prévia')
+
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('port-var').textContent).toBe('APP_PORT')
+    expect(screen.queryByLabelText('Variável da porta')).toBeNull()
+
+    fireEvent.click(toggle)
+    expect((screen.getByLabelText('Variável da porta') as HTMLInputElement).value).toBe('APP_PORT')
+  })
+
+  it('configuração antiga (sem o campo) continua publicando a prévia', () => {
+    const old = defaultCentralConfig('/home/u/app')
+    const environment: Partial<typeof old.environment> = { ...old.environment }
+    delete environment.publishPreview
+    expect(centralConfigSchema.parse({ ...old, environment }).environment.publishPreview).toBe(true)
+  })
+})
+
 describe('backup do banco de dados (OPE-72)', () => {
   it('nasce ligado e o desligar chega ao valor do formulário', () => {
     render(<BackupHarness />)
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByLabelText('Backup do Banco de Dados')
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('backup-value').textContent).toBe('true')
 

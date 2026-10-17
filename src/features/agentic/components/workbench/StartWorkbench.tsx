@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleCard } from "@/components/ui/toggle-card"
 import { apiErrorMessage } from "@/lib/api"
 import { useTaskDetail, useUpdateTask } from "@/features/tasks/hooks/useTasks"
-import type { TaskAgenticFlow } from "@/features/tasks/constants"
+import { TASK_AGENTIC_FLOW_LABELS, type TaskAgenticFlow } from "@/features/tasks/constants"
 import { useAgenticSettings, useCentralQueue, useStartWorkbench } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
 
@@ -30,13 +30,22 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
     const otherProject = task.data && task.data.project?.id !== central.projectId
     const queueItem = queue.data?.find((item) => item.taskId === taskId) ?? null
-    const flow: TaskAgenticFlow = task.data?.agenticFlow ?? "preview"
+    // O fluxo da mesa segue a escolha da tarefa e, sem ela (`null`), o padrão da central (OPE-79).
+    const taskFlow = task.data?.agenticFlow ?? null
+    const centralFlow: TaskAgenticFlow = central.config.environment.publishPreview ? "preview" : "auto_pr"
+    const flow: TaskAgenticFlow = taskFlow ?? centralFlow
 
     /** Salva o fluxo na tarefa na hora (otimista): a mesa nova nasce com a escolha já persistida. */
     const setFlow = (autoPr: boolean) => {
         if (!task.data) return
         const agenticFlow: TaskAgenticFlow = autoPr ? "auto_pr" : "preview"
         update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow }, patch: { agenticFlow } })
+    }
+
+    /** Volta a seguir o padrão da central (`agenticFlow: null`). */
+    const inheritFlow = () => {
+        if (!task.data) return
+        update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow: null }, patch: { agenticFlow: null } })
     }
 
     return (
@@ -69,16 +78,36 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     </p>
                 )}
                 {task.data && (
-                    <ToggleCard
-                        id="workbench-flow"
-                        checked={flow === "auto_pr"}
-                        onCheckedChange={setFlow}
-                        disabled={update.isPending}
-                        label="Fluxo da mesa"
-                        description={flow === "auto_pr" ? "O agente pula a prévia e abre o Pull Request assim que a implementação terminar. A revisão do plano continua obrigatória." : "O agente sobe a prévia depois da implementação e espera a sua aprovação antes de abrir o Pull Request."}
-                        onLabel="PR automático"
-                        offLabel="Publicar prévia"
-                    />
+                    <div className="space-y-1.5">
+                        <ToggleCard
+                            id="workbench-flow"
+                            checked={flow === "auto_pr"}
+                            onCheckedChange={setFlow}
+                            disabled={update.isPending}
+                            label="Fluxo da mesa"
+                            description={flow === "auto_pr" ? "O agente pula a prévia e abre o Pull Request assim que a implementação terminar. A revisão do plano continua obrigatória." : "O agente sobe a prévia depois da implementação e espera a sua aprovação antes de abrir o Pull Request."}
+                            onLabel="PR automático"
+                            offLabel="Publicar prévia"
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <span>
+                                {taskFlow === null ? (
+                                    <>
+                                        Seguindo o padrão da central: <span className="font-medium text-foreground">{TASK_AGENTIC_FLOW_LABELS[centralFlow]}</span>.
+                                    </>
+                                ) : (
+                                    <>
+                                        Fluxo escolhido só para esta tarefa (a central está em {TASK_AGENTIC_FLOW_LABELS[centralFlow]}).
+                                    </>
+                                )}
+                            </span>
+                            {taskFlow !== null && (
+                                <Button type="button" variant="ghost" size="sm" className="h-auto px-2 py-1 text-xs" disabled={update.isPending} onClick={inheritFlow}>
+                                    Usar padrão da central
+                                </Button>
+                            )}
+                        </div>
+                    </div>
                 )}
                 <div className="space-y-1.5">
                     <label htmlFor="workbench-start-context" className="text-sm font-medium">

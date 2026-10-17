@@ -27,7 +27,11 @@ de uma central de desenvolvimento: o card que entra nela pode abrir a mesa da ta
   horas do cliente, fator, custo/hora e faturamento) e **não depende do cliente**: sem cliente ela
   guarda só as **horas reais** (fator 1, custo 0, sem inflação); com cliente, o prazo e o faturamento
   são inflados. `estimate: null` significa **ainda não estimada** (a edição manual ou a IA cria).
-  Ver `modules/orcamentos.md`.
+  Ver `modules/orcamentos.md`. `agenticFlow` é o fluxo da mesa escolhido na tela de
+  `/desenvolvimento`: `"preview"` ou `"auto_pr"`; **`null`** (padrão das tarefas novas) significa que
+  a tarefa **não escolhe** e a mesa usa o padrão da central (`environment.publishPreview` — OPE-79).
+  A migração `backfill-task-agentic-flow` grava `"preview"` nas tarefas anteriores que não tinham o
+  campo, preservando o fluxo que já valia. Ver `modules/agentic-dev.md`.
 - `TaskComment` (`task_comments`): `{ taskId, content, authorType, authorName, createdAt }`. A origem
   do comentário (`authorType: "owner" | "client"`) e o nome exibido (`authorName`: o dono vindo de
   `APP_OWNER_NAME`/`getLocalUser()`, ou o nome do cliente no portal) permitem marcar quem comentou;
@@ -84,7 +88,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `GET /api/tasks[?includeArchived=true]` | `TaskListDto { tasks, fetchedAt }` |
 | `POST /api/tasks` | `createTaskSchema` |
 | `GET /api/tasks/[id]` | `TaskDetailDto` |
-| `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial; inclui `agenticFlow` — fluxo da mesa, ajustável só pela tela de desenvolvimento) |
+| `PATCH /api/tasks/[id]` | `updateTaskSchema` (parcial; inclui `agenticFlow` — fluxo da mesa, ajustável só pela tela de desenvolvimento; `null` volta a **seguir o padrão da central** — OPE-79) |
 | `PATCH /api/tasks/[id]/estimate` | `updateTaskEstimateSchema` (`hours`, **decimal**) — grava as horas reais (cria a estimativa se não existir) e recalcula prazo/faturamento com o cliente da tarefa; a página da tarefa edita em `hh:mm` e converte antes de enviar |
 | `POST /api/tasks/[id]/estimate/generate` | Estima as horas com IA (NDJSON; reusa "Estimar prazos") e grava o snapshot |
 | `PATCH /api/tasks/[id]/client` | `setTaskClientSchema` (`clientId: string \| null`) — define/troca/remove o cliente; recalcula a estimativa (`null` remove o cliente e a inflação, **preservando as horas reais**) |

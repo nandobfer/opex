@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   pumpQueue: vi.fn(async () => undefined),
   recordAudit: vi.fn(async () => undefined),
   central: vi.fn(),
+  settings: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
@@ -46,12 +47,12 @@ vi.mock('@/features/agentic/server/ports', () => ({ releasePreviewPort: mocks.re
 vi.mock('@/features/agentic/server/timer-sync', () => ({ syncWorkbenchTimer: mocks.syncTimer, accumulateWorkPeriodUsage: vi.fn() }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: mocks.deleteSession, flushPendingSessionDeletions: mocks.flushPending }))
 vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pumpQueue }))
-vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(), agenticAvailability: vi.fn() }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: vi.fn() }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(), moveTask: vi.fn() }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
-import { defaultCentralConfig } from '@/features/agentic/schemas'
+import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 import { handlePrMerged } from '@/features/agentic/server/workflow'
 
 const model = AgenticWorkbench as unknown as {
@@ -82,6 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   model.docs.length = 0
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: configWithoutCleanup() })
+  mocks.settings.mockResolvedValue({ settings: DEFAULT_AGENTIC_SETTINGS })
   mocks.deleteSession.mockResolvedValue(true)
 })
 

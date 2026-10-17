@@ -48,8 +48,8 @@ export interface TaskDto {
     issue?: TaskIssueRef | null
     /** Estimativa/orçamento (portal do cliente) — `null` quando não houver. */
     estimate: TaskEstimate | null
-    /** Fluxo da mesa de trabalho escolhido na tela de desenvolvimento (padrão `preview`). */
-    agenticFlow: TaskAgenticFlow
+    /** Fluxo da mesa de trabalho escolhido na tela de desenvolvimento; `null` = segue o padrão da central (OPE-79). */
+    agenticFlow: TaskAgenticFlow | null
 }
 
 export interface TaskIssueRef {

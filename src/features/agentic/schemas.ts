@@ -13,10 +13,30 @@ const EMPTY_AGENT: AgentConfig = { agent: null, model: null, variant: null }
 
 const agentsShape = Object.fromEntries(AGENT_ROLES.map((role) => [role, agentConfigSchema])) as Record<AgentRole, typeof agentConfigSchema>
 
-/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature e define os agentes padrão. */
+/**
+ * Colunas globais (aba "Desenvolvimento agêntico"): o padrão de fila e movimentação de todas as
+ * centrais. Uma central pode herdar estes valores ou personalizá-los (`CentralConfig.columns`).
+ */
+export const agenticColumnsSchema = z.object({
+    /** Coluna do quadro que, ao receber um card, entra na fila da central; `null` = desligado. */
+    queue: z.string().trim().max(60).nullable(),
+    /** Coluna de destino ao abrir a mesa (implementação); `null` = não move. */
+    onStart: z.string().trim().max(60).nullable(),
+    /** Coluna de destino quando o PR é aberto; `null` = não move. */
+    onPr: z.string().trim().max(60).nullable(),
+    /** Coluna de destino quando o PR é mergeado; `null` = não move. */
+    onDone: z.string().trim().max(60).nullable(),
+})
+export type AgenticColumns = z.infer<typeof agenticColumnsSchema>
+
+/** Padrão global das colunas: nada ligado (nenhuma fila e "não mover"). */
+export const DEFAULT_AGENTIC_COLUMNS: AgenticColumns = { queue: null, onStart: null, onPr: null, onDone: null }
+
+/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes e as colunas padrão. */
 export const agenticSettingsSchema = z.object({
     enabled: z.boolean(),
     agents: z.object(agentsShape),
+    columns: agenticColumnsSchema,
 })
 export type AgenticSettings = z.infer<typeof agenticSettingsSchema>
 
@@ -29,6 +49,7 @@ export const DEFAULT_AGENTIC_SETTINGS: AgenticSettings = {
         pr: { ...EMPTY_AGENT, agent: "build" },
         fork: { ...EMPTY_AGENT, agent: "plan" },
     },
+    columns: { ...DEFAULT_AGENTIC_COLUMNS },
 }
 
 /**
@@ -104,11 +125,21 @@ export const centralConfigSchema = z.object({
          * Padrão **ligado** (compatível com a obrigatoriedade anterior).
          */
         backupDatabase: z.boolean().default(true),
+        /**
+         * Fluxo padrão das mesas novas (OPE-79): ligado, a mesa sobe a prévia e espera a aprovação
+         * antes do PR; desligado, a implementação vai direto ao Pull Request. A escolha feita na
+         * tarefa (`DevTask.agenticFlow`) tem prioridade sobre este padrão. Padrão **ligado**.
+         */
+        publishPreview: z.boolean().default(true),
         /** Faixa de portas reservadas às prévias das mesas (min/max inclusive). */
         previewPortMin: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
         previewPortMax: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
     }),
     columns: z.object({
+        /** Fila: `true` usa a coluna global da aba; `false` personaliza nesta central. */
+        inheritQueue: z.boolean(),
+        /** Movimentação (abrir a mesa/PR/concluir): `true` usa as colunas globais da aba. */
+        inheritMovement: z.boolean(),
         /** Coluna do quadro que, ao receber um card, entra na fila da central e pode abrir a mesa automaticamente; `null` = desligado. */
         queue: z.string().trim().max(60).nullable(),
         /** Coluna de destino ao abrir a mesa (implementação); `null` = não move. */
@@ -157,8 +188,9 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
-        columns: { queue: null, onStart: null, onPr: null, onDone: null },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        // Central nova herda os padrões globais de fila e movimentação (a personalização é explícita).
+        columns: { inheritQueue: true, inheritMovement: true, queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },
         forks: { onWorkbenchDone: "ask" },

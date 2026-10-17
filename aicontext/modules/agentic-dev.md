@@ -17,14 +17,18 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 ## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
 
 - Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
-  `agenticSettingsSchema`): **ativa** e o **agente padrão** (agente, modelo `provedor/modelo`,
-  variante) de cada etapa: **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
-  limpeza) e **Pull Request**. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature
-  ativa, exige o OpenCode conectado).
+  `agenticSettingsSchema`): **ativa**, o **agente padrão** (agente, modelo `provedor/modelo`,
+  variante) de cada etapa — **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
+  limpeza) e **Pull Request** — e as **colunas globais** (`columns`, OPE-79): a coluna da **fila** e
+  os destinos da **movimentação** (ao abrir a mesa, ao abrir o PR e ao concluir), todos "nenhuma/não
+  mover" por padrão. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature ativa, exige
+  o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
-  - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa, com os botões
-    **Salvar**/**Desfazer** (mesma configuração geral acima).
+  - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
+    cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
+    **Movimentação das colunas** —, com os botões **Salvar**/**Desfazer** (mesma configuração geral
+    acima). Salvar reavalia as filas das centrais que herdam a coluna global.
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
     mantém a confirmação de descarte. A subaba padrão continua Agentes.
@@ -65,8 +69,8 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
-| Ambiente | arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72) |
-| Colunas e conclusão | coluna da fila (abre a mesa automaticamente ao receber um card — "Nenhuma" por padrão), coluna ao abrir a mesa (implementação), ao abrir o PR e ao concluir (PR mergeado) — cada uma "Não mover" por padrão; limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
+| Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
+| Colunas e conclusão | **Fila** e **Movimentação** das colunas, cada uma herdando o padrão global da aba ou **personalizada** nesta central (OPE-79); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
@@ -80,7 +84,9 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 ## Fila da central de desenvolvimento
 
 Cada central pode apontar uma **coluna da fila** (`columns.queue`, `null` = desligada; aba "Colunas e
-conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fila para abrir a mesa:
+conclusão"). A coluna pode ser **personalizada** na central ou **herdada** do padrão global da aba
+"Desenvolvimento agêntico" (`columns.inheritQueue`, OPE-79) — o que vale é sempre a **coluna
+efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila para abrir a mesa:
 
 - **Vaga livre** (mesas abertas `< maxConcurrent`) → a mesa é criada **na hora** e o planejamento
   começa (o mesmo fluxo de "Abrir mesa e gerar o plano").
@@ -100,8 +106,8 @@ conclusão"). Ao mover um card para essa coluna, a tarefa do projeto entra na fi
   **`agentic-queue-pump`** (1 min, Crons) cobre reinícios e vagas liberadas fora do processo.
 - Sem OpenCode conectado, ou com a feature/central desativada, a tarefa **permanece na fila** e é
   iniciada quando ficar disponível. Mover o card para fora da coluna remove a tarefa da fila.
-- Excluir a coluna da fila de uma central é bloqueado (`COLUMN_QUEUE_IN_USE`): troque a coluna na
-  central antes.
+- Excluir a coluna da fila é bloqueado (`COLUMN_QUEUE_IN_USE`): vale para a coluna de uma central
+  (personalizada ou herdada) **e** para a fila padrão global da aba. Troque a coluna da fila antes.
 
 ## Fila do build (um build por vez)
 
@@ -250,7 +256,9 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
   **concluída** não gera warning.
 - Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa, a
-  switch **Fluxo da mesa** (Publicar prévia / PR automático, ver "Fluxo da mesa") e um campo
+  switch **Fluxo da mesa** (Publicar prévia / PR automático, ver "Fluxo da mesa") — com a indicação
+  de que a tarefa **segue o padrão da central** e a ação **Usar padrão da central** quando há uma
+  escolha própria — e um campo
   opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
   e exibidas como mensagem do usuário na saída). O botão **Abrir mesa e gerar o plano** desabilita com
   o motivo quando indisponível, com a central desativada ou com a tarefa de outro projeto; em fila,
@@ -301,14 +309,17 @@ done → Reabrir mesa (texto ao planejador) → planning
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
   comportamento das informações informadas na abertura da mesa.
-- **Fluxo da mesa (OPE-53)**: o estado inicial da mesa traz a switch **Fluxo da mesa** —
-  **Publicar prévia** (padrão) ou **PR automático** —, salva na hora na tarefa
-  (`DevTask.agenticFlow`, ajustável por `PATCH /api/tasks/[id]`) e copiada para a mesa ao abrir
-  (`agenticFlow`; registros antigos caem em `preview`). Em **PR automático** a implementação vai
-  **direto** ao PR (etapa `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a
-  prévia e a aprovação: nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do
-  plano continua obrigatória nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR
-  automático.
+- **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a switch
+  **Fluxo da mesa** — **Publicar prévia** ou **PR automático**. A escolha salva na hora na tarefa
+  (`DevTask.agenticFlow`, ajustável por `PATCH /api/tasks/[id]`) e é copiada para a mesa ao abrir
+  (`agenticFlow`; registros antigos caem em `preview`). **Sem escolha** na tarefa (`agenticFlow`
+  `null`) vale o **padrão da central** (`environment.publishPreview`, aba Ambiente; ligado =
+  `preview`, desligado = `auto_pr`), tanto na abertura manual quanto na automática pela fila — a
+  linha abaixo da switch mostra se a tarefa está seguindo o padrão e o botão **Usar padrão da
+  central** volta a herdar. Em **PR automático** a implementação vai **direto** ao PR (etapa
+  `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a prévia e a aprovação:
+  nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
+  nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
 - **Build Local**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
@@ -514,8 +525,11 @@ releitura das pendências no buraco do SSE —, o ciclo automático de reconexã
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
 (`preview-backup` e `workflow-preview-backup`, com o backup **ligado e desligado** — OPE-72),
-aba Ambiente do formulário da central (`environment-section`, com o toggle do backup), fluxo da mesa — Publicar
-prévia vs PR automático (`workflow-flow-mode`) e **exclusão da mesa com limpeza do ambiente**
+aba Ambiente do formulário da central (`environment-section`, com o toggle do backup e o switch de
+**Publicar prévia** e ocultar os campos do ambiente — OPE-79), fila e movimentação globais/por central
+(`columns-section`), fluxo da mesa — Publicar prévia vs PR automático, incluindo o **padrão herdado da
+central** (`workflow-flow-mode`), a migração que preserva o fluxo das tarefas antigas
+(`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
 (`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
 `__tests__/deployment/preview-github.test.ts` (prévia remota, com e sem o dump obrigatório),
 `__tests__/components/agent-questions.test.tsx` (perguntas com descrição

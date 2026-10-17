@@ -10,6 +10,7 @@ import { backfillTaskClientId } from "./backfill-task-client-id"
 import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
 import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { backfillClientUsers } from "./backfill-client-users"
+import { backfillTaskAgenticFlow } from "./backfill-task-agentic-flow"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -19,4 +20,5 @@ registerMigrations(
     { name: "ensure-ai-usage-indexes", run: () => ensureAiUsageIndexes() },
     { name: "ensure-ai-consumption-indexes", run: () => ensureAiConsumptionIndexes() },
     { name: "backfill-client-users", run: () => backfillClientUsers() },
+    { name: "backfill-task-agentic-flow", run: () => backfillTaskAgenticFlow() },
 )

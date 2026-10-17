@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
 import { centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
@@ -204,15 +204,52 @@ describe('reopenTargetColumn', () => {
   it('reabrir usa a coluna "Ao abrir a mesa" (desenvolvimento) quando definida', () => {
     const base = defaultCentralConfig('/x')
     const config = { ...base, columns: { ...base.columns, onStart: 'doing', onDone: 'done' } }
-    expect(reopenTargetColumn(config, 'todo')).toBe('doing')
+    expect(reopenTargetColumn(config.columns, 'todo')).toBe('doing')
   })
 
   it('sem "Ao abrir a mesa", cai na coluna de entrada do vínculo', () => {
-    expect(reopenTargetColumn(defaultCentralConfig('/x'), 'todo')).toBe('todo')
+    expect(reopenTargetColumn(defaultCentralConfig('/x').columns, 'todo')).toBe('todo')
   })
 
   it('sem destino definido, não move (null)', () => {
-    expect(reopenTargetColumn(defaultCentralConfig('/x'), null)).toBeNull()
+    expect(reopenTargetColumn(defaultCentralConfig('/x').columns, null)).toBeNull()
+  })
+})
+
+describe('colunas globais da central (OPE-79)', () => {
+  const globalColumns = { queue: 'global-fila', onStart: 'global-doing', onPr: 'global-pr', onDone: 'global-done' }
+
+  it('a central nova herda todos os padrões globais', () => {
+    expect(resolveCentralColumns(globalColumns, defaultCentralConfig('/x').columns)).toEqual(globalColumns)
+  })
+
+  it('a central antiga (sem os modos) preserva o que tinha, com "Nenhuma/Não mover" valendo', () => {
+    const parsed = parseCentralConfig({ sessionDirectory: '/repo', columns: { queue: 'fila', onStart: null } })
+    expect(parsed.columns).toEqual({ inheritQueue: false, inheritMovement: false, queue: 'fila', onStart: null, onPr: null, onDone: null })
+    expect(resolveCentralColumns(globalColumns, parsed.columns)).toEqual({ queue: 'fila', onStart: null, onPr: null, onDone: null })
+  })
+
+  it('cada grupo herda separadamente e o valor personalizado vence o global', () => {
+    const base = defaultCentralConfig('/x')
+    const custom = { ...base.columns, inheritQueue: true, inheritMovement: false, onStart: 'doing', onPr: null, onDone: 'done' }
+    expect(resolveCentralColumns(globalColumns, custom)).toEqual({ queue: 'global-fila', onStart: 'doing', onPr: null, onDone: 'done' })
+  })
+
+  it('o modo herdado é preservado ao salvar', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', columns: { inheritQueue: true, inheritMovement: true, queue: 'x' } }).columns.inheritQueue).toBe(true)
+  })
+})
+
+describe('fluxo padrão da central (OPE-79)', () => {
+  it('sem escolha na tarefa vale o padrão da central', () => {
+    expect(resolveCentralFlow(true, null)).toBe('preview')
+    expect(resolveCentralFlow(false, null)).toBe('auto_pr')
+    expect(resolveCentralFlow(true, undefined)).toBe('preview')
+  })
+
+  it('a escolha explícita da tarefa vence o padrão da central', () => {
+    expect(resolveCentralFlow(false, 'preview')).toBe('preview')
+    expect(resolveCentralFlow(true, 'auto_pr')).toBe('auto_pr')
   })
 })
 

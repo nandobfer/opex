@@ -17,6 +17,7 @@ import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
 import { AgentRolesCard } from "./AgentRolesCard"
 import { CentralsCard } from "./CentralsCard"
+import { ColumnsCard } from "./ColumnsCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
@@ -39,6 +40,7 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     const form = useForm<AgenticSettings>({ resolver: zodResolver(agenticSettingsSchema), mode: "onChange", defaultValues: DEFAULT_AGENTIC_SETTINGS })
     const dirty = form.formState.isDirty
     const agents = useWatch({ control: form.control, name: "agents" })
+    const columns = useWatch({ control: form.control, name: "columns" })
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab(SETTINGS_TABS, "agentes", dirty, () => (query.data ? form.reset(query.data.settings) : undefined), "abaAgentic")
 
     useEffect(() => {
@@ -94,6 +96,31 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                         idPrefix="agentic-default"
                         values={agents}
                         onChange={(role, next) => form.setValue(`agents.${role}`, next ?? { agent: null, model: null, variant: null }, { shouldDirty: true, shouldValidate: true })}
+                    />
+
+                    <ColumnsCard
+                        title="Fila da central de desenvolvimento"
+                        description="Ao mover um card para esta coluna, a mesa da tarefa entra na fila. Havendo vaga, a mesa abre na hora; senão, aguarda na ordem dos cards do kanban. As centrais herdam esta coluna, salvo quando personalizam."
+                        idPrefix="agentic-queue"
+                        fields={[
+                            {
+                                id: "agentic-col-queue",
+                                label: "Coluna que inicia a mesa automaticamente",
+                                noneLabel: "Nenhuma",
+                                value: columns.queue,
+                                onChange: (value) => form.setValue("columns.queue", value, { shouldDirty: true, shouldValidate: true }),
+                            },
+                        ]}
+                    />
+                    <ColumnsCard
+                        title="Movimentação das colunas"
+                        description={`Ao avançar o desenvolvimento, a tarefa é movida para a coluna escolhida. "Não mover" deixa como está. As centrais herdam estas colunas, salvo quando personalizam.`}
+                        idPrefix="agentic-movement"
+                        fields={[
+                            { id: "agentic-col-start", label: "Ao abrir a mesa (implementação)", value: columns.onStart, onChange: (value) => form.setValue("columns.onStart", value, { shouldDirty: true, shouldValidate: true }) },
+                            { id: "agentic-col-pr", label: "Ao abrir o Pull Request", value: columns.onPr, onChange: (value) => form.setValue("columns.onPr", value, { shouldDirty: true, shouldValidate: true }) },
+                            { id: "agentic-col-done", label: "Ao concluir (PR mergeado)", value: columns.onDone, onChange: (value) => form.setValue("columns.onDone", value, { shouldDirty: true, shouldValidate: true }) },
+                        ]}
                     />
 
                     <div className="flex flex-wrap justify-end gap-2">

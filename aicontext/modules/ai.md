@@ -88,7 +88,8 @@ e opções na própria aba da página "Provedores de IA".
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
   **Orçamentos**, **Estimar prazos**, **Refinar tarefa** e **Desenvolvimento agêntico**
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
-  A aba **Desenvolvimento agêntico** tem abas internas **Agentes** e **Centrais de desenvolvimento**
+  A aba **Desenvolvimento agêntico** tem abas internas **Agentes** (agentes padrão e as **colunas
+  globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
   (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
   histórico e saída ao vivo — ver `modules/pr-review.md`.
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e

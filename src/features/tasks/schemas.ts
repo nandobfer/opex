@@ -35,10 +35,11 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>
 /**
  * Edição parcial: ao menos um campo. `agenticFlow` fica FORA do `taskInputSchema` (não aparece no
  * formulário nem na criação): é ajustado na tela de desenvolvimento, ao abrir/preparar a mesa.
+ * `null` volta a seguir o padrão da central (OPE-79).
  */
 export const updateTaskSchema = taskInputSchema
     .partial()
-    .extend({ agenticFlow: z.enum(TASK_AGENTIC_FLOWS).optional() })
+    .extend({ agenticFlow: z.enum(TASK_AGENTIC_FLOWS).nullable().optional() })
     .refine((value) => Object.values(value).some((item) => item !== undefined), "Nada para atualizar")
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>
 
