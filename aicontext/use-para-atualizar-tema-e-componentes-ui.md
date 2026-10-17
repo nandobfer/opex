@@ -32,6 +32,9 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
   componente base.
 - Use `cn()` (`clsx` + `tailwind-merge`, em `src/lib/utils.ts`) para combinar classes.
 - Ícones: somente `lucide-react`.
+- Tooltips: não há `TooltipProvider` global. Cada composição com `Tooltip` deve incluir o provider
+  em produção (como a engrenagem de `TasksPane`). Testes dessas composições não devem injetá-lo
+  apenas no wrapper de teste: devem verificar a renderização real sem um provider externo.
 - Toasts: somente `sonner` (`<Toaster />` no layout raiz; `toast.success`, `toast.error`,
   `toast.promise`).
 - Datas: `date-fns` com locale `ptBR`; seletor de datas com `react-day-picker` (`DatePicker`,

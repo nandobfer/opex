@@ -3,7 +3,6 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CentralDto, WorkbenchSummaryDto } from '@/features/agentic/types'
 import type { TaskBoardDto } from '@/features/tasks/board'
@@ -76,9 +75,7 @@ async function renderPane(workbenches: WorkbenchSummaryDto[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={client}>
-      <TooltipProvider>
-        <TasksPane central={central} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
-      </TooltipProvider>
+      <TasksPane central={central} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
     </QueryClientProvider>,
   )
   await screen.findAllByText('OPE-16')

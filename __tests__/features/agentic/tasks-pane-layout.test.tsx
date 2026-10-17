@@ -3,7 +3,6 @@
 import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CentralDto } from '@/features/agentic/types'
 import type { TaskBoardDto } from '@/features/tasks/board'
@@ -65,9 +64,7 @@ async function renderPane(selected: CentralDto | null = central) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const result = render(
     <QueryClientProvider client={client}>
-      <TooltipProvider>
       <TasksPane central={selected} centrals={[central]} activeTaskId={null} onSelectCentral={() => {}} />
-      </TooltipProvider>
     </QueryClientProvider>,
   )
   await screen.findByText('OPE-41')
@@ -81,6 +78,11 @@ beforeEach(() => {
 })
 
 describe('cabeçalho da coluna de tarefas da Central de desenvolvimento', () => {
+  it('renderiza o atalho de configurações sem TooltipProvider fornecido pela página', async () => {
+    await renderPane()
+    expect(screen.getByRole('link', { name: 'Configurar central selecionada' }).getAttribute('href')).toBe('/integracoes/ia/centrais/c1')
+  })
+
   it('põe o título "Tarefas" acima do seletor da central', async () => {
     await renderPane()
     const heading = screen.getByRole('heading', { name: /Tarefas/ })

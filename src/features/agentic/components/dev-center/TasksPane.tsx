@@ -6,7 +6,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ListTodo, Search, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -72,7 +72,18 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                 <h2 className="text-sm font-semibold">
                     Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
                 </h2>
-                <Tooltip><TooltipTrigger asChild><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><Link href={central ? centralSettingsPath(central.id) : AGENTIC_CENTRALS_HREF} aria-label={central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}><Settings className="h-4 w-4" aria-hidden /></Link></Button></TooltipTrigger><TooltipContent>{central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}</TooltipContent></Tooltip>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                                <Link href={central ? centralSettingsPath(central.id) : AGENTIC_CENTRALS_HREF} aria-label={central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}>
+                                    <Settings className="h-4 w-4" aria-hidden />
+                                </Link>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}</TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
                 </div>
                 <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
                 <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
