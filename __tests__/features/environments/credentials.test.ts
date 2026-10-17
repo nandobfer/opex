@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mkdtemp, readFile, stat, rm, chmod } from "node:fs/promises"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 import type { IEnvironmentOperation } from "@/lib/db/models/EnvironmentOperation"
 vi.mock("@/lib/db/models/Environment", async () => ({ Environment: (await import("./fixtures")).store.env }))
 vi.mock("@/lib/db/models/EnvironmentRepoConfig", async () => ({
@@ -14,7 +16,7 @@ beforeEach(async () => {
     resetStore()
     seedOperation()
     process.env.INTEGRATIONS_ENCRYPTION_KEY = "test-environments"
-    root = await mkdtemp("/tmp/opencode/ope-67-credentials-")
+    root = await mkdtemp(join(tmpdir(), "ope-67-credentials-"))
 })
 afterEach(async () => {
     if (root) await rm(root, { recursive: true, force: true })
