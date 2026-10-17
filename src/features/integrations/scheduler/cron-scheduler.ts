@@ -292,6 +292,10 @@ export function registerBuiltInJobs(): void {
         return `${summary}. ${review}${started ? `; ${started} iniciada(s)` : ""}`
     })
     registerInternalJob(AGENTIC_QUEUE_JOB_ID, async () => {
+        const { reconcileEnvironments } = await import("@/features/environments/server/queue")
+        const { reconcileLogs } = await import("@/features/environments/server/logs")
+        await reconcileEnvironments()
+        await reconcileLogs()
         const { pumpAllCentralQueues } = await import("@/features/agentic/server/queue")
         const { pumpBuildQueue } = await import("@/features/agentic/server/build-queue")
         const { processPendingSessionDeletions } = await import("@/features/agentic/server/session-cleanup")

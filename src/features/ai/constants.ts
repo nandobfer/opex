@@ -1,7 +1,7 @@
 /** Constantes das features de IA (módulo puro). */
 
 /** Abas da página "Provedores de IA". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "revisao-pr", "desenvolvimento-agentico"] as const
+export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "revisao-pr", "desenvolvimento-agentico", "administracao-sistema"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**

@@ -150,17 +150,20 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
 
 - A mesa vai para a etapa **`build_queued`** ("Na fila do build") e aguarda; a posição (1-based)
   aparece na lista de tarefas e na mesa como "Na fila do build · #N".
-- Um **motor** (`build-queue.ts`, `pumpBuildQueue`) inicia o próximo build quando **não há nenhum
-  build vivo no processo** (mesa em `building` e executando). A ordem é **FIFO** pela hora de entrada
-  (`buildQueuedAt`); a porta da prévia só é reservada quando a vez chega (`startBuildTurn`).
+- Um **motor** (`build-queue.ts`, `pumpBuildQueue`) compartilha a fila com builds Local/host de
+  **Ambientes**. Participantes entram por `build-participants.ts`; FIFO compara `buildQueuedAt`
+  da mesa e criação da operação. Posições incluem ambos. Lease Mongo (`build_queue_leases`)
+  serializa despachantes; a porta da prévia só é reservada quando a vez chega (`startBuildTurn`).
+  Builds de Ambientes em execução/reconciliação permanecem bloqueadores persistidos após reinício.
 - **Gatilhos**: fim da implementação, fim de cada build (sucesso ou falha/interrupção) e a rotina
   interna **`agentic-queue-pump`** (1 min, Crons), que cobre reinícios e vagas liberadas fora do
   processo.
 - **Tentar novamente** num build que falhou **volta para a fila** (`build_queued`) em vez de subir
   direto. Enquanto aguarda, a mesa fica `idle` (o apontamento de horas não corre) e **não** oferece
   ações além de excluir a mesa.
-- Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
-  turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
+- Uma mesa órfã com sessão preservada é consultada no OpenCode antes de liberar a fila: sessão
+  rodando ou indisponível bloqueia; sem sessão ativa, segue a recuperação existente da mesa.
+  Operações de Ambientes têm reconciliação própria, sem repetir publicação (ver `environments.md`).
 
 ## Backup do MongoDB da prévia (OPE-54 · opcional pela OPE-72)
 

@@ -2,6 +2,8 @@ import { dbConnect } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { logger } from "@/lib/logger"
 import { isWorkbenchActive } from "./hub"
+import { externalBuilds, hasExternalBuild } from "./build-participants"
+import { withBuildQueueLease } from "./build-lease"
 
 /**
  * Fila **global** do build: uma mesa que termina a implementação entra em `build_queued` e espera a
@@ -17,8 +19,20 @@ import { isWorkbenchActive } from "./hub"
 
 /** Um build está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
 async function hasActiveBuild(): Promise<boolean> {
-    const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1 }).lean()
-    return building.some((item) => item.previewBuild?.method !== "github" && isWorkbenchActive(String(item._id)))
+    const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1, sessionId: 1, updatedAt: 1 }).lean()
+    for (const item of building) {
+        if (item.previewBuild?.method === "github") continue
+        if (isWorkbenchActive(String(item._id))) return true
+        if (item.sessionId) {
+            const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+            const { probeAttachSession } = await import("@/lib/ai/opencode-run")
+            try {
+                const probe = await probeAttachSession(await getOpencodeClient(), item.sessionId, item.updatedAt?.getTime() ?? 0)
+                if (probe.kind === "running" || probe.kind === "unavailable") return true
+            } catch { return true }
+        }
+    }
+    return false
 }
 
 /** Mesas aguardando a vez do build, na ordem de chegada (FIFO). */
@@ -29,8 +43,9 @@ export async function waitingBuilds(): Promise<IAgenticWorkbench[]> {
 
 /** Posição 1-based na fila por mesa (vazio quando não há ninguém aguardando). */
 export async function buildQueuePositions(): Promise<Map<string, number>> {
-    const queue = await waitingBuilds()
-    return new Map(queue.map((item, index) => [String(item._id), index + 1]))
+    const queue = [...(await waitingBuilds()).map(item => ({ id: String(item._id), queuedAt: item.buildQueuedAt ?? new Date(0) })), ...await externalBuilds()]
+        .sort((a, b) => a.queuedAt.getTime() - b.queuedAt.getTime() || a.id.localeCompare(b.id))
+    return new Map(queue.map((item, index) => [item.id, index + 1]))
 }
 
 /** Posição 1-based da mesa na fila do build (`null` quando ela não está aguardando a vez). */
@@ -46,7 +61,7 @@ let pumpChain: Promise<void> | null = null
  */
 export function pumpBuildQueue(): Promise<void> {
     const previous = pumpChain ?? Promise.resolve()
-    const next = previous.then(() => runBuildPump()).catch(() => undefined)
+    const next = previous.then(async () => { await dbConnect(); await withBuildQueueLease(runBuildPump) }).catch(() => undefined)
     pumpChain = next
     return next
 }
@@ -55,15 +70,19 @@ export function pumpBuildQueue(): Promise<void> {
 async function runBuildPump(): Promise<void> {
     try {
         await dbConnect()
-        if (await hasActiveBuild()) return
+        // Carrega os participantes persistidos também antes do primeiro tick após reinício.
+        await import("@/features/environments/server/queue")
+        if (await hasActiveBuild() || await hasExternalBuild()) return
         // Import dinâmico: o workflow depende deste módulo (busca posições e dispara o motor).
         const { startBuildTurn } = await import("./workflow")
-        for (const item of await waitingBuilds()) {
+        const candidates = [...(await waitingBuilds()).map(item => ({ id: String(item._id), queuedAt: item.buildQueuedAt ?? new Date(0), start: () => startBuildTurn(String(item._id)) })), ...await externalBuilds()]
+            .sort((a, b) => a.queuedAt.getTime() - b.queuedAt.getTime() || a.id.localeCompare(b.id))
+        for (const item of candidates) {
             try {
                 // `false` = a mesa saiu da fila (ex.: o usuário pediu correção); tenta a próxima.
-                if (await startBuildTurn(String(item._id))) break
+                if (await item.start()) break
             } catch (error) {
-                logger.warn({ err: error, workbenchId: String(item._id) }, "[agentic-build-queue] Build não iniciado para a mesa da fila")
+                logger.warn({ err: error, workbenchId: item.id }, "[agentic-build-queue] Build não iniciado para o item da fila")
                 break
             }
         }

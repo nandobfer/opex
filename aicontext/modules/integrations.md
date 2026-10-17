@@ -160,6 +160,12 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 ### Modo debug
 
+Ambientes reutiliza `IntegrationConsole` e a coleção de logs, `integrationId=ai` com
+`scope=environment:ID`, sem nova integração. Histórico/leases passam por rotas próprias
+autorizadas; o portal nunca assina o canal geral da integração IA. Eventos de Ambientes
+carregam só IDs, com leitura revalidada por HTTP. `agentic-queue-pump` também reconcilia
+operações e sessões de logs órfãs de Ambientes. Ver `modules/environments.md`.
+
 - `integrationDebug(id)` (`src/lib/integrations/debug.ts`) e `debugFetch(...)`: só atuam com o
   debug ligado — exceto `integrationDebug(id, { always: true })`, para logs operacionais que a tela
   sempre mostra (ex.: as centrais de desenvolvimento). Cada evento vai para o console do servidor, para `integration_logs` (TTL 48 h) e

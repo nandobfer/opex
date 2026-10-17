@@ -20,9 +20,11 @@ export type ParsedChannel =
     | { kind: "integration"; integrationId: string }
     | { kind: "client"; clientId: string }
     | { kind: "repoRecents"; actorId: string }
+    | { kind: "environment"; environmentId: string }
     | { kind: "unknown" }
 
 export function parseChannel(channel: string): ParsedChannel {
+    if (/^private-environment-[a-f0-9]{24}$/i.test(channel)) return { kind: "environment", environmentId: channel.slice("private-environment-".length) }
     if (channel === appChannel()) return { kind: "app" }
     if (channel.startsWith("private-integration-")) {
         return { kind: "integration", integrationId: channel.slice("private-integration-".length) }

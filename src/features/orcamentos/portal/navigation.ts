@@ -1,4 +1,4 @@
-import { Banknote, LayoutDashboard, ListTodo, Users } from "lucide-react"
+import { Banknote, Container, LayoutDashboard, ListTodo, Users } from "lucide-react"
 import type { NavSectionDef } from "@/features/layout/types"
 import { clienteDashboardPath, clienteFinanceiroPath, clienteTarefasPath, clienteUsuariosPath } from "../constants"
 
@@ -11,6 +11,7 @@ export function clienteNav(isAdmin: boolean): readonly NavSectionDef[] {
     const items = [
         { href: clienteDashboardPath(), label: "Dashboard", title: "Dashboard", icon: LayoutDashboard },
         { href: clienteTarefasPath(), label: "Tarefas", title: "Tarefas", icon: ListTodo },
+        { href: "/cliente/ambientes", label: "Ambientes", title: "Ambientes", icon: Container },
     ]
     if (isAdmin) {
         items.push({ href: clienteFinanceiroPath(), label: "Financeiro", title: "Financeiro", icon: Banknote })

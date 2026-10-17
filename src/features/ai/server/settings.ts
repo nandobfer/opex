@@ -33,6 +33,7 @@ import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSett
 import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
 import type { PrReviewSettingsDto } from "@/features/pr-review/types"
+import { DEFAULT_ENVIRONMENT_SETTINGS, environmentSettingsSchema, type EnvironmentSettings } from "@/features/environments/schemas"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
@@ -331,4 +332,18 @@ export async function savePrReviewSettings(input: PrReviewSettings, actorId: str
     const before = await loadPrReviewSettings()
     await persistFeature(PR_REVIEW_FEATURE, next, actorId, before)
     return getPrReviewSettings()
+}
+
+export async function loadEnvironmentSettings() {
+    return loadFeature("system-administration", environmentSettingsSchema, DEFAULT_ENVIRONMENT_SETTINGS)
+}
+export async function getEnvironmentSettings() {
+    const { settings, isDefault } = await loadEnvironmentSettings()
+    return { settings, isDefault, availability: await availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Administração de sistema"') }
+}
+export async function saveEnvironmentSettings(input: EnvironmentSettings, actorId: string) {
+    if (input.enabled && !input.model) throw new DomainError(400, "Selecione o modelo")
+    await assertCatalog({ ...input, provider: "opencode", temperature: null, maxOutputTokens: null })
+    await persistFeature("system-administration", input, actorId, await loadEnvironmentSettings())
+    return getEnvironmentSettings()
 }

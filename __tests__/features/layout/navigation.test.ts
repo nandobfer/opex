@@ -19,6 +19,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             ["Horas agênticas", "/tarefas/horas"],
             ["Financeiro", "/financeiro"],
             ["Central de desenvolvimento", "/desenvolvimento"],
+            ["Ambientes", "/ambientes"],
             ["Integrações", "/integracoes"],
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)

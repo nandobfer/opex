@@ -120,6 +120,15 @@ e opções na própria aba da página "Provedores de IA".
   originais em `ai_usage_log_reconciliations`, auditoria `UsoIA/IMPORTAR`; atualização condicionada
   a métricas/lote ausentes permite retomada sem sobrescrever métricas reais nem repetir o rateio.
 
+## Administração de sistema (Ambientes)
+
+A aba `administracao-sistema` configura o agente OpenCode compartilhado do módulo Ambientes:
+habilitação, modelo/agente/variante/skill, instruções, timeout e diretórios administrativo e de
+acesso temporário protegido. Persistência na feature `system-administration`, consumo com origem
+`environments`. Configuração exclusiva do dono em `/api/ai/features/system-administration`.
+Não cria integração nem variável de ambiente. Requisitos de volume compartilhado e ciclo de vida
+das credenciais/execuções em [environments.md](./environments.md).
+
 ## Feature "Entender tarefas"
 
 - Configuração em `ai_feature_settings` (`feature: "understand-task"`), schema Zod
