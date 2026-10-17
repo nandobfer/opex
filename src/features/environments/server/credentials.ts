@@ -1,12 +1,27 @@
-import { chmod, mkdir, mkdtemp, writeFile, rm, lstat } from "node:fs/promises"
-import { join, resolve } from "node:path"
-import { decryptSecret } from "@/lib/crypto/secretBox"
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import { decryptSecret, type EncryptedSecret } from "@/lib/crypto/secretBox"
+import { dbConnect } from "@/lib/db"
 import { EnvironmentRepoConfig } from "@/lib/db/models/EnvironmentRepoConfig"
 import { Environment } from "@/lib/db/models/Environment"
 import { DomainError } from "@/lib/api/route"
-import type { IEnvironmentOperation } from "@/lib/db/models/EnvironmentOperation"
+import type { EnvironmentSettings } from "../schemas"
+import {
+    accessGrant,
+    accessDirectoryFor,
+    markAccessGrantUsed,
+    registerAccessGrant,
+    revokeAccessGrant,
+    type AccessGrantInput,
+} from "./access-registry"
 
-/** Executado SOMENTE pelo agente, no host OpenCode. Opex apenas provisiona arquivos de acesso. */
+/**
+ * Acesso temporário protegido das operações. O servidor **não** grava mais esses arquivos: ele roda
+ * em outro filesystem que o agente (app em container × OpenCode no host), então o agente busca o
+ * envelope **uma única vez** com um token da operação e materializa os arquivos no host dele.
+ * Ver `aicontext/modules/environments.md`.
+ */
+
+/** Executado SOMENTE pelo agente, no host OpenCode. Opex apenas entrega o conteúdo do acesso. */
 const SSH_HELPER = `#!/usr/bin/env node
 const fs = require('node:fs'), cp = require('node:child_process'), path = require('node:path');
 const dir = __dirname, data = JSON.parse(fs.readFileSync(path.join(dir, 'access.json'), 'utf8'));
@@ -21,69 +36,129 @@ child.on('exit', code => process.exit(code ?? 1));
 child.on('error', () => process.exit(1));
 `
 
-export async function provisionAccess(op: IEnvironmentOperation, root: string) {
-    const config = await EnvironmentRepoConfig.findOne({ projectId: op.projectId }).select("+secrets").lean()
-    const env = await Environment.findById(op.environmentId).select("+secretVariables").lean()
-    const secrets = config?.secrets ? (JSON.parse(decryptSecret(config.secrets)) as Record<string, string>) : {}
-    const variables = env?.secretVariables
-        ? (JSON.parse(decryptSecret(env.secretVariables)) as Record<string, string>)
-        : {}
-    if (op.repoConfig.mode === "remote" && !(op.repoConfig.auth === "key" ? secrets.privateKey : secrets.password))
-        throw new DomainError(409, "Credenciais SSH ausentes: solicite a configuração ao dono")
-    const absolute = resolve(root)
-    await mkdir(absolute, { recursive: true, mode: 0o700 })
-    const info = await lstat(absolute)
-    if (
-        info.isSymbolicLink() ||
-        !info.isDirectory() ||
-        (typeof process.getuid === "function" && info.uid !== process.getuid()) ||
-        (info.mode & 0o077) !== 0
-    )
-        throw new DomainError(409, "Diretório de acesso temporário precisa de permissão 0700")
-    const dir = await mkdtemp(join(absolute, "operation-"))
-    await chmod(dir, 0o700)
-    try {
-        await writeFile(
-            join(dir, "variables.json"),
-            JSON.stringify({
-                ...Object.fromEntries(op.config.variables.filter((v) => !v.secret).map((v) => [v.name, v.value])),
-                ...variables,
-            }),
-            { mode: 0o600 },
+export interface AccessPayload {
+    /** `null` quando o acesso não carrega variáveis (sessão de logs). */
+    variables: Record<string, string> | null
+    /** Só no acesso remoto: destino e credenciais SSH. */
+    repo: Record<string, unknown> | null
+    /** Helper de SSH que o agente grava como `ssh.cjs` (só no acesso remoto). */
+    helper: string | null
+    expiresAt: string
+}
+
+export interface AccessGrant {
+    id: string
+    dir: string
+    token: string
+    baseUrl: string
+    ttlMinutes: number
+    /** Valores secretos, para censurar o texto do agente antes de persistir. */
+    secretValues: string[]
+}
+
+export function hashAccessToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex")
+}
+
+function sameHash(left: string, right: string): boolean {
+    const a = Buffer.from(left, "utf8")
+    const b = Buffer.from(right, "utf8")
+    return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** URL base do agente (sem barra final) ou falha dizendo onde configurar. */
+export function agentBaseUrl(settings: EnvironmentSettings): string {
+    const base = settings.agentBaseUrl.trim().replace(/\/+$/, "")
+    if (!base)
+        throw new DomainError(
+            409,
+            "Informe a URL base do agente em Integrações › Provedores de IA › Administração de sistema",
+            "AGENT_BASE_URL_MISSING",
         )
-        if (op.repoConfig.mode === "remote") {
-            await writeFile(
-                join(dir, "access.json"),
-                JSON.stringify({ ...op.repoConfig, ...secrets, expiresAt: Date.now() + 5 * 60 * 60_000 }),
-                { mode: 0o600 },
-            )
-            if (secrets.privateKey) await writeFile(join(dir, "identity"), secrets.privateKey + "\n", { mode: 0o600 })
-            await writeFile(join(dir, "known_hosts"), op.repoConfig.hostKey + "\n", { mode: 0o600 })
-            await writeFile(join(dir, "ssh.cjs"), SSH_HELPER, { mode: 0o700 })
-            await writeFile(
-                join(dir, "askpass"),
-                `#!/bin/sh\nexec node '${join(dir, "ssh.cjs").replace(/'/g, "'\\''")}' --askpass\n`,
-                { mode: 0o700 },
-            )
-        }
-        return {
-            dir,
-            secretValues: [...Object.values(secrets), ...Object.values(variables)],
-            cleanup: () => removeAccess(dir, absolute),
-        }
-    } catch (error) {
-        await removeAccess(dir, absolute)
-        throw error
+    return base
+}
+
+function parseSecrets(value: EncryptedSecret | null | undefined): Record<string, string> {
+    if (!value) return {}
+    try {
+        return JSON.parse(decryptSecret(value)) as Record<string, string>
+    } catch {
+        throw new DomainError(409, "Não foi possível ler as credenciais salvas; substitua-as novamente")
     }
 }
-export async function removeAccess(dir: string, root: string): Promise<void> {
-    const absolute = resolve(root)
-    if (
-        !resolve(dir).startsWith(absolute + "/operation-") ||
-        resolve(dir)
-            .slice(absolute.length + 1)
-            .includes("/")
+
+/** Credenciais SSH e variáveis secretas da operação (nunca toca no disco do servidor). */
+async function readSecrets(context: AccessGrantInput) {
+    await dbConnect()
+    const config = await EnvironmentRepoConfig.findOne({ projectId: context.projectId }).select("+secrets").lean()
+    const env = await Environment.findById(context.environmentId).select("+secretVariables").lean()
+    return { secrets: parseSecrets(config?.secrets), secretVariables: parseSecrets(env?.secretVariables) }
+}
+
+/** Valores secretos conhecidos da operação, para `redact` do texto do agente. */
+export async function readAccessSecrets(context: AccessGrantInput): Promise<string[]> {
+    const { secrets, secretVariables } = await readSecrets(context)
+    return [...Object.values(secrets), ...Object.values(secretVariables)]
+}
+
+/** Sem credenciais não há acesso remoto: falha antes de despachar o agente. */
+export async function assertRemoteCredentials(context: AccessGrantInput): Promise<void> {
+    if (context.repoConfig.mode !== "remote") return
+    const { secrets } = await readSecrets(context)
+    if (!(context.repoConfig.auth === "key" ? secrets.privateKey : secrets.password))
+        throw new DomainError(409, "Credenciais SSH ausentes: solicite a configuração ao dono")
+}
+
+/** Conteúdo entregue ao agente quando ele busca o envelope. */
+export async function buildAccessPayload(context: AccessGrantInput, expiresAt: number): Promise<AccessPayload> {
+    const { secrets, secretVariables } = await readSecrets(context)
+    const repo = context.repoConfig.mode === "remote" ? { ...context.repoConfig, ...secrets } : null
+    const publicVariables = Object.fromEntries(
+        (context.variables ?? []).filter((variable) => !variable.secret).map((variable) => [variable.name, variable.value]),
     )
-        throw new Error("Acesso temporário fora do escopo")
-    await rm(dir, { recursive: true, force: true })
+    return {
+        variables: context.variables ? { ...publicVariables, ...secretVariables } : null,
+        repo,
+        helper: repo ? SSH_HELPER : null,
+        expiresAt: new Date(expiresAt).toISOString(),
+    }
+}
+
+/**
+ * Prepara o acesso de uma operação/sessão: diretório que o agente deve criar, token de uso único
+ * (registrado só em memória) e os valores secretos para censura.
+ */
+export async function grantAccess(
+    context: AccessGrantInput,
+    settings: EnvironmentSettings,
+    prefix: string,
+): Promise<AccessGrant> {
+    const baseUrl = agentBaseUrl(settings)
+    await assertRemoteCredentials(context)
+    const token = randomBytes(32).toString("base64url")
+    const dir = accessDirectoryFor(settings.accessDirectory, prefix, context.id)
+    registerAccessGrant({ ...context, dir }, hashAccessToken(token), settings.accessTokenTtlMinutes)
+    return {
+        id: context.id,
+        dir,
+        token,
+        baseUrl,
+        ttlMinutes: settings.accessTokenTtlMinutes,
+        secretValues: await readAccessSecrets(context),
+    }
+}
+
+export function releaseAccess(id: string): void {
+    revokeAccessGrant(id)
+}
+
+/** Valida o token e devolve o envelope do acesso. Uso único: a segunda chamada é recusada. */
+export async function consumeAccessToken(id: string, token: string): Promise<AccessPayload> {
+    const grant = accessGrant(id)
+    if (!grant || !sameHash(grant.tokenHash, hashAccessToken(token)))
+        throw new DomainError(403, "Acesso temporário inválido", "ACCESS_TOKEN_REJECTED")
+    if (grant.usedAt !== null) throw new DomainError(409, "Acesso temporário já utilizado", "ACCESS_TOKEN_REJECTED")
+    if (grant.expiresAt <= Date.now()) throw new DomainError(410, "Acesso temporário expirado", "ACCESS_TOKEN_EXPIRED")
+    markAccessGrantUsed(id)
+    return buildAccessPayload(grant, grant.expiresAt)
 }

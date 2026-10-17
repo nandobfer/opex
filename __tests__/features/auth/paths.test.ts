@@ -20,6 +20,13 @@ describe("guarda de acesso", () => {
         }
     })
 
+    it("libera só a rota de acesso do agente de Ambientes (autenticada pelo token da operação)", () => {
+        expect(resolveAuthDecision("/api/environments/agent-access", null).action).toBe("allow")
+        for (const path of ["/api/environments", "/api/environments/access-probe", "/api/environments/agent-access/x"]) {
+            expect(resolveAuthDecision(path, null).action).toBe("unauthorized")
+        }
+    })
+
     it("a documentação liberada não abre as APIs internas vizinhas", () => {
         for (const path of ["/api/integrations/internal_api", "/api/ai/providers/opencode/usage", "/api/openapi", "/api/docs/private"]) {
             expect(resolveAuthDecision(path, null).action).toBe("unauthorized")

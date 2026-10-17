@@ -6,6 +6,8 @@
  * - a tela de login e as rotas internas de auth (`/login`, `/api/auth/login`, `/api/auth/logout`,
  *   `/api/auth/client-login` — a entrada do portal por token);
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
+ * - o **acesso temporário dos agentes de Ambientes** (`/api/environments/agent-access`), autenticado
+ *   pelo token de uso único da operação (o agente do OpenCode não tem sessão do app);
  * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
@@ -33,6 +35,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
     // Documentação OpenAPI (contrato público; sem dados). Ver `src/app/api/openapi.json` e `api/docs`.
     "/api/openapi.json",
     "/api/docs",
+    // Acesso temporário dos agentes de Ambientes: o token de uso único da operação é a autenticação.
+    "/api/environments/agent-access",
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */

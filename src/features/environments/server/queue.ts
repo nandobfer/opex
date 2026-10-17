@@ -5,8 +5,8 @@ import { registerBuildParticipant } from "@/features/agentic/server/build-partic
 import { pumpBuildQueue } from "@/features/agentic/server/build-queue"
 import { executeEnvironment, isEnvironmentRunning } from "./runner"
 import { logger } from "@/lib/logger"
-import { dirname } from "node:path"
-import { removeAccess } from "./credentials"
+import { sweepAccessGrants } from "./access-registry"
+import { sweepAccessProbes } from "./access-probe"
 
 async function start(id: string) {
     const op = await EnvironmentOperation.findOneAndUpdate(
@@ -73,21 +73,14 @@ export async function reconcileEnvironments() {
                 { $set: { activeOperationId: null } },
             )
         }
-    const cleanup = await EnvironmentOperation.find({
-        state: { $nin: ["queued", "running", "reconciling"] },
-        accessPath: { $ne: null },
-    })
-        .select("+accessPath")
-        .lean()
-    for (const op of cleanup)
-        if (op.accessPath) {
-            try {
-                await removeAccess(op.accessPath, dirname(op.accessPath))
-                await EnvironmentOperation.updateOne({ _id: op._id }, { $set: { accessPath: null } })
-            } catch {
-                logger.warn({ operationId: String(op._id) }, "[environments] Limpeza de acesso pendente")
-            }
-        }
+    // O acesso temporário vive só na memória do processo (o diretório é do host do agente):
+    // encerrada a operação, apenas esquecemos o caminho e descartamos tokens vencidos/consumidos.
+    await EnvironmentOperation.updateMany(
+        { state: { $nin: ["queued", "running", "reconciling"] }, accessPath: { $ne: null } },
+        { $set: { accessPath: null } },
+    )
+    sweepAccessGrants()
+    sweepAccessProbes()
     const operations = await EnvironmentOperation.find({ state: { $in: ["running", "reconciling"] } })
         .sort({ createdAt: 1 })
         .lean()

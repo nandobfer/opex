@@ -11,8 +11,15 @@ vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }))
 vi.mock("@/features/environments/server/events", () => ({ publishEnvironment: vi.fn() }))
 vi.mock("@/features/environments/server/runner", () => ({ appendEnvironmentLog: vi.fn() }))
 vi.mock("@/features/environments/server/credentials", () => ({
-    provisionAccess: async () => ({ dir: "/tmp/opencode/operation-logs", secretValues: [], cleanup: mocks.cleanup }),
-    removeAccess: mocks.cleanup,
+    grantAccess: async () => ({
+        id: "logs-session",
+        dir: "/tmp/opencode/operation-logs",
+        token: "t".repeat(43),
+        baseUrl: "http://127.0.0.1:7001",
+        ttlMinutes: 30,
+        secretValues: [],
+    }),
+    releaseAccess: mocks.cleanup,
 }))
 vi.mock("@/features/ai/server/settings", async () => ({
     loadEnvironmentSettings: async () => ({ settings: (await import("./fixtures")).settings }),

@@ -28,6 +28,7 @@ vi.mock("@/features/environments/hooks/useEnvironments", () => ({
 import { PublishTab } from "@/features/environments/components/PublishTab"
 import { RestoreTab } from "@/features/environments/components/RestoreTab"
 import { EnvironmentEditor } from "@/features/environments/components/EnvironmentEditor"
+import { OperationsHistory } from "@/features/environments/components/OperationsHistory"
 import { config, repoId, envId, imageId, observed } from "./fixtures"
 const detail = (): EnvironmentDetail => ({
     environment: {
@@ -61,6 +62,33 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe("confirmações e formulário do ambiente", () => {
+    it("falha com código conhecido mostra a orientação, não o texto cru do agente", () => {
+        render(
+            <OperationsHistory
+                operations={[
+                    {
+                        id: "op-1",
+                        environmentId: envId,
+                        kind: "inspect",
+                        state: "failed",
+                        stage: "Falhou",
+                        steps: [],
+                        error: 'Envelope ausente\n```json\n{"verified":false}\n```',
+                        failureCode: "ACCESS_ENVELOPE_MISSING",
+                        createdAt: new Date().toISOString(),
+                        finishedAt: null,
+                        sessionId: null,
+                        evidence: [],
+                        migrations: [],
+                        runUrl: null,
+                    },
+                ]}
+            />,
+        )
+        const alert = screen.getByRole("alert").textContent ?? ""
+        expect(alert).toContain("URL base do agente")
+        expect(alert).not.toContain("verified")
+    })
     it("Publicar não executa antes da confirmação explícita", () => {
         render(<PublishTab repoId={repoId} data={detail()} />)
         fireEvent.click(screen.getByRole("button", { name: "Publicar versão" }))

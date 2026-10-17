@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
     composeProject,
+    environmentFailureMessage,
+    parseAgentFailure,
     parseAgentResult,
     redact,
     restoreCompatibility,
@@ -86,5 +88,22 @@ describe("contratos e isolamento de Ambientes", () => {
                 expectedRevision: 0,
             }).success,
         ).toBe(false)
+    })
+})
+
+describe("falhas conhecidas da operação", () => {
+    it("lê o marcador isolado do agente e ignora marcador de outro formato", () => {
+        expect(parseAgentFailure('texto\nOPEX_FAILURE {"code":"ACCESS_ENVELOPE_MISSING"}\nfim')).toBe(
+            "ACCESS_ENVELOPE_MISSING",
+        )
+        expect(parseAgentFailure('OPEX_FAILURE {"code":"OUTRO"}')).toBeNull()
+        expect(parseAgentFailure("sem marcador")).toBeNull()
+        expect(parseAgentFailure('OPEX_CHECKPOINT {"stage":"x"}')).toBeNull()
+    })
+    it("traduz o código para orientação em pt-BR e preserva a mensagem sem código", () => {
+        expect(environmentFailureMessage("ACCESS_ENVELOPE_MISSING", "genérico")).toContain("URL base do agente")
+        expect(environmentFailureMessage("ACCESS_TOKEN_EXPIRED", "genérico")).toContain("expirou")
+        expect(environmentFailureMessage(null, "genérico")).toBe("genérico")
+        expect(environmentFailureMessage("DESCONHECIDO", "genérico")).toBe("genérico")
     })
 })

@@ -198,6 +198,7 @@ export async function environmentDetail(
             stage: op.stage,
             steps: (op.steps ?? []).map((step) => ({ name: step.name, at: step.at.toISOString() })),
             error: op.error,
+            failureCode: op.failureCode ?? null,
             createdAt: op.createdAt.toISOString(),
             finishedAt: op.finishedAt?.toISOString() ?? null,
             sessionId: actor.owner ? op.sessionId : null,

@@ -46,20 +46,34 @@ logs e publicação/restauração. O Opex só coordena, persiste, autoriza e apr
 executor direto SSH/Docker/Git. Consultas/disparos GitHub usam a integração existente.
 
 Integrações › IA › **Administração de sistema** (`aba=administracao-sistema`) configura habilitação,
-modelo, agente, variante, skill, instruções, timeout, diretório administrativo e diretório de acesso
-temporário. Configuração persistida em `ai_feature_settings`, feature `system-administration`;
-consumo em `environments`, deduplicado por etapa/tentativa pelo executor compartilhado.
+modelo, agente, variante, skill, instruções, timeout, diretório administrativo, diretório de acesso,
+**URL base do agente** e **validade do acesso temporário**. Configuração persistida em
+`ai_feature_settings`, feature `system-administration`; consumo em `environments`, deduplicado por
+etapa/tentativa pelo executor compartilhado.
 
 SSH e variáveis privadas usam AES-GCM (`secretBox.ts`), `select:false` e DTOs explícitos. Nunca
 retornam valores, apenas indicação de configuração. Auditoria não recebe segredos.
 
-O provisionamento cria uma pasta aleatória 0700 dentro do diretório de acesso, que precisa ser
-**compartilhado no mesmo caminho entre Opex e OpenCode**, pelo mesmo usuário, sem permissão para
-terceiros (em Docker, um volume compartilhado). Raiz simbólica, com proprietário divergente ou
-permissões abertas é rejeitada. Arquivos 0600 contêm as variáveis e credenciais da tentativa;
-o prompt recebe apenas o caminho. O helper SSH é executado **pelo agente**, lê senha/passphrase
-em memória via SSH_ASKPASS, usa chave por arquivo e known_hosts obrigatório; nenhum segredo vai
-nos argumentos ou no prompt. As credenciais temporárias têm prazo máximo de cinco horas.
+O agente roda **no host do dono** e o servidor pode estar em container: os dois **não compartilham
+filesystem**. Por isso o Opex não escreve mais o envelope em disco — ele entrega o acesso pela rota
+`POST /api/environments/agent-access` (sem sessão, autenticada por **token de uso único** da
+operação/sessão), e o **agente** cria `<accessDirectory>/operation-<id>` com `umask 077`, busca o
+envelope uma única vez e materializa `variables.json` (quando há variáveis), `access.json`,
+`identity`, `known_hosts`, `ssh.cjs` e `askpass`, apagando o `envelope.json`. O token vive só na
+memória do processo, expira em `accessTokenTtlMinutes` e é descartado ao terminar, falhar ou
+interromper; o prompt recebe o caminho e o token (nunca valores). O helper SSH é executado **pelo
+agente**, lê senha/passphrase em memória via SSH_ASKPASS, usa chave por arquivo e known_hosts
+obrigatório; nenhum segredo vai nos argumentos ou no prompt.
+
+O mesmo diretório é reutilizado quando a sessão é retomada (reconciliação): o agente não busca de
+novo. O começo do diretório é do agente — um acesso expirado/perdido exige uma nova operação.
+
+**Testar acesso do agente** (botão na Administração de sistema) é o preflight do módulo: o servidor
+registra um acesso de teste, o agente cria o diretório, busca o envelope e devolve o valor que só o
+Opex conhece (`OPEX_PROBE <echo>`); sem essa prova, correção de URL/permissões antes de operar.
+Quando o agente não consegue buscar o acesso, ele emite `OPEX_FAILURE {"code":"ACCESS_ENVELOPE_MISSING"}`,
+que a operação grava em `failureCode` e a UI traduz como orientação em pt-BR (o texto cru do agente
+fica registrado, mas não é a mensagem principal).
 
 O agente precisa de uma política administrativa previamente autorizada e restrita ao escopo.
 Pedidos adicionais de permissão são recusados; não há aprovação intermediária de plano nem
@@ -78,14 +92,20 @@ interromper/reconciliar, nunca liberando o ambiente para uma segunda operação.
 - `environments`: configuração, revisão, último Compose/banco observado e reserva da operação.
 - `environment_operations`: tentativa idempotente por ator/requestId, configuração e agente
   congelados, fases (`preflight`, `action`, `cd`, `inspect`, `reconcile`), sessão/turno, heartbeat,
-  etapas com data/hora (últimas 100), evidências, migrações, run e resultado. Checkpoints têm
-  limite de 200 por turno; falha na persistência interrompe o agente para reconciliação.
+  etapas com data/hora (últimas 100), evidências, migrações, run, resultado, `accessPath` (caminho
+  no host do agente) e `failureCode` (falha conhecida, traduzida na UI). Checkpoints têm limite de
+  200 por turno; falha na persistência interrompe o agente para reconciliação.
 - `environment_images`: conjuntos de imagens por serviço, IDs imutáveis, tags/versões, banco
   associado, origem (`opex`, `cd`, `external`) e data de build comprovada pelo Docker (`null`
   quando desconhecida, nunca substituída pela hora da consulta). Não há S3/registry novo.
 - `environment_deployments`: histórico separado por operação, banco anterior/observado,
   migrações, evidências, imagens e resultado; não cresce dentro do ambiente.
 - `environment_log_sessions`: sessão compartilhada e leases de espectadores com expiração.
+
+O acesso temporário **não é persistido**: token e diretório vivem na memória do processo
+(`server/access-registry.ts`) e morrem com ele — reinício no meio da operação cai na reconciliação,
+que emite um acesso novo quando a sessão não é retomada. O tick das rotinas descarta tokens
+vencidos/consumidos e limpa `accessPath` das operações encerradas.
 
 O projeto Compose é `<slug-repo>-<slug-ambiente>` (repo completo normalizado). Overrides são
 exclusivos; Compose versionado não muda. O agente recusa conflitos de diretório/remote, alterações
@@ -162,8 +182,13 @@ APIs autenticadas em `/api/environments` e `/api/cliente/ambientes`:
   Filtros, paginação dos runs e aba/serviço selecionados ficam na URL; workflows são paginados
   internamente para preencher o seletor. Runs aparecem em páginas de 50.
 - `GET/PUT /api/ai/features/system-administration`: configuração global, exclusiva do dono.
+- `POST /api/environments/agent-access`: entrega o envelope ao agente (token de uso único, sem
+  sessão; `no-store` e nunca registrado em log).
+- `POST /api/environments/access-probe`: preflight do dono que confirma o caminho servidor → agente.
 
 São rotas por sessão, não API pública por token; não mudam OpenAPI nem `PUBLIC_TOKEN_ROUTES`.
+A exceção é `agent-access`: fica fora do OpenAPI por ser autenticada pelo token da própria operação
+(o agente do OpenCode não tem sessão do app) e está listada em `PUBLIC_ROUTES` de `auth/paths.ts`.
 
 ## Validação
 

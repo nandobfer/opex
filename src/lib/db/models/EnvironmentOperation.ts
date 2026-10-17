@@ -24,6 +24,7 @@ export interface IEnvironmentOperation {
     finishedAt: Date | null
     heartbeatAt: Date | null
     error: string | null
+    failureCode: string | null
     evidence: string[]
     migrations: string[]
     result: AgentResult | null
@@ -64,6 +65,7 @@ const schema = new Schema<IEnvironmentOperation>(
         finishedAt: { type: Date, default: null },
         heartbeatAt: { type: Date, default: null },
         error: { type: String, default: null },
+        failureCode: { type: String, default: null },
         evidence: { type: [String], default: [] },
         migrations: { type: [String], default: [] },
         result: { type: Schema.Types.Mixed, default: null },

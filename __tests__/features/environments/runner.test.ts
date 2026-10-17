@@ -16,8 +16,9 @@ vi.mock("@/features/environments/server/events", () => ({ publishEnvironment: vi
 vi.mock("@/features/environments/server/queue", () => ({ pumpEnvironments: vi.fn().mockResolvedValue(undefined) }))
 vi.mock("@/features/environments/server/github", () => ({ dispatchAndWatch: mocks.dispatch }))
 vi.mock("@/features/environments/server/credentials", () => ({
-    provisionAccess: mocks.access,
-    removeAccess: mocks.cleanup,
+    grantAccess: mocks.access,
+    readAccessSecrets: async () => ["segredo-privado"],
+    releaseAccess: mocks.cleanup,
 }))
 vi.mock("@/features/ai/server/settings", async () => ({
     loadEnvironmentSettings: async () => ({ settings: (await import("./fixtures")).settings }),
@@ -61,9 +62,12 @@ beforeEach(() => {
     mocks.run.mockResolvedValue(success())
     mocks.cleanup.mockResolvedValue(undefined)
     mocks.access.mockResolvedValue({
+        id: opId,
         dir: "/tmp/opencode/access/operation-test",
+        token: "t".repeat(43),
+        baseUrl: "http://127.0.0.1:7001",
+        ttlMinutes: 30,
         secretValues: ["segredo-privado"],
-        cleanup: mocks.cleanup,
     })
 })
 describe("executor por agentes e recuperação conservadora", () => {

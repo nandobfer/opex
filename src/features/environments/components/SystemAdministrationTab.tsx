@@ -5,12 +5,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
+import { Loader2, PlugZap } from "lucide-react"
 import { api, unwrapApi, apiErrorMessage } from "@/lib/api"
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { FormActions } from "@/components/ui/form-actions"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
@@ -47,6 +49,12 @@ export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dir
         mode: "onChange",
     })
     const providers = useAiProviderStatuses()
+    const probe = useMutation({
+        mutationFn: async () =>
+            unwrapApi<{ ok: boolean; directory: string; detail: string }>((await api.post("/environments/access-probe")).data),
+        onSuccess: (data) => (data.ok ? toast.success(data.detail) : toast.error(data.detail)),
+        onError: (error) => toast.error(apiErrorMessage(error, "Falha ao testar o acesso do agente")),
+    })
     useEffect(() => {
         if (query.data) form.reset(query.data.settings)
     }, [query.data, form])
@@ -91,11 +99,12 @@ export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dir
                 <CardHeader>
                     <CardTitle className="text-base">Execução dos agentes</CardTitle>
                     <CardDescription>
-                        Diretórios precisam existir no mesmo caminho para o Opex e o OpenCode, com o mesmo usuário e sem leitura
-                        por terceiros. Em Docker, use um volume compartilhado.
+                        O agente do OpenCode roda no host dele (o app pode estar em container), então ele cria o diretório
+                        protegido e busca o acesso temporário pela URL abaixo. O diretório não deve ser lido por terceiros.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className={FORM_GRID_WIDE}>
+                <CardContent className="space-y-4">
+                    <div className={FORM_GRID_WIDE}>
                     <Field
                         id="env-session-dir"
                         label="Diretório administrativo no OpenCode"
@@ -105,10 +114,31 @@ export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dir
                     </Field>
                     <Field
                         id="env-access-dir"
-                        label="Diretório protegido de acesso temporário (0700)"
+                        label="Diretório protegido de acesso (no host do agente, 0700)"
                         error={errors.accessDirectory?.message}
                     >
                         <Input id="env-access-dir" className="font-mono" {...form.register("accessDirectory")} />
+                    </Field>
+                    <Field
+                        id="env-agent-url"
+                        label="URL base do agente"
+                        error={errors.agentBaseUrl?.message}
+                    >
+                        <Input id="env-agent-url" className="font-mono" placeholder="http://127.0.0.1:7001" {...form.register("agentBaseUrl")} />
+                        <p className="text-xs text-muted-foreground">
+                            Endereço do Opex que o host do agente alcança para buscar o acesso temporário.
+                        </p>
+                    </Field>
+                    <Field
+                        id="env-access-ttl"
+                        label="Validade do acesso temporário (minutos)"
+                        error={errors.accessTokenTtlMinutes?.message}
+                    >
+                        <Input
+                            id="env-access-ttl"
+                            type="number"
+                            {...form.register("accessTokenTtlMinutes", { valueAsNumber: true })}
+                        />
                     </Field>
                     <Field id="env-skill" label="Skill (opcional)" error={errors.skill?.message}>
                         <Input id="env-skill" className="font-mono" {...form.register("skill")} />
@@ -127,6 +157,28 @@ export function SystemAdministrationTab({ onDirtyChange }: { onDirtyChange: (dir
                     <Field id="env-instructions" label="Instruções compartilhadas" error={errors.instructions?.message}>
                         <Textarea id="env-instructions" {...form.register("instructions")} />
                     </Field>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            disabled={probe.isPending}
+                            onClick={() => probe.mutate()}
+                        >
+                            {probe.isPending ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            ) : (
+                                <PlugZap className="h-3.5 w-3.5" aria-hidden />
+                            )}
+                            Testar acesso do agente
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            Salve a configuração antes de testar: o teste confirma que o agente alcança esta URL e grava o
+                            acesso no host dele.
+                        </p>
+                    </div>
                 </CardContent>
             </Card>
             <FormActions

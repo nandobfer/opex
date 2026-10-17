@@ -1,4 +1,3 @@
-import { dirname } from "node:path"
 import { getOpencodeClient } from "@/lib/ai/opencode-client"
 import { runAgentTurn, probeAttachSession } from "@/lib/ai/opencode-run"
 import { loadEnvironmentSettings } from "@/features/ai/server/settings"
@@ -11,9 +10,17 @@ import { IntegrationLog } from "@/lib/db/models/IntegrationLog"
 import { AcaoAuditoria, recordAudit } from "@/lib/audit/record"
 import { logger } from "@/lib/logger"
 import { agentCheckpointSchema, type AgentResult } from "../schemas"
-import { parseAgentResult, redact, restoreCompatibility, imageBuiltAt } from "../logic"
-import { provisionAccess, removeAccess } from "./credentials"
-import { operationPrompt } from "./prompts"
+import {
+    imageBuiltAt,
+    parseAgentFailure,
+    parseAgentResult,
+    redact,
+    restoreCompatibility,
+    type EnvironmentFailureCode,
+} from "../logic"
+import { grantAccess, readAccessSecrets, releaseAccess, type AccessGrant } from "./credentials"
+import { accessDirectoryFor, type AccessGrantInput } from "./access-registry"
+import { operationPrompt, type PromptAccess } from "./prompts"
 import { publishEnvironment } from "./events"
 import { dispatchAndWatch } from "./github"
 
@@ -40,7 +47,11 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
     if (running.has(id)) return
     running.add(id)
     let op: (IEnvironmentOperation & { _id: unknown }) | null = null
-    let access: Awaited<ReturnType<typeof provisionAccess>> | null = null
+    let access: AccessGrant | null = null
+    /** Acesso usado no texto do prompt; em reconexão o texto não é enviado, mas precisa existir. */
+    let promptAccess: PromptAccess | null = null
+    let secretValues: string[] = []
+    let failureCode: EnvironmentFailureCode | null = null
     let state: IEnvironmentOperation["state"] = "failed"
     let result: AgentResult | null = null
     let message: string | null = null
@@ -102,14 +113,32 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
             (probe?.kind === "running" || probe?.kind === "finished")
         if (!attach && probe?.kind === "running" && op.sessionId)
             await client.session.interrupt({ sessionID: op.sessionId })
-        if (reconcile && op.accessPath && !attach) {
-            await removeAccess(op.accessPath, dirname(op.accessPath))
-            await EnvironmentOperation.updateOne({ _id: id }, { $set: { accessPath: null } })
+        const accessContext: AccessGrantInput = {
+            id,
+            environmentId: op.environmentId,
+            projectId: op.projectId,
+            repoConfig: op.repoConfig,
+            variables: op.config.variables,
         }
         // Attach reusa o acesso existente; não envia credenciais nem novo prompt à sessão.
-        access = await provisionAccess(op, settings.accessDirectory)
-        const accessPath = attach && op.accessPath ? op.accessPath : access.dir
-        await EnvironmentOperation.updateOne({ _id: id }, { $set: { accessPath, heartbeatAt: new Date() } })
+        if (attach) {
+            secretValues = await readAccessSecrets(accessContext)
+            promptAccess = {
+                id,
+                dir: op.accessPath ?? accessDirectoryFor(settings.accessDirectory, "operation", id),
+                baseUrl: settings.agentBaseUrl,
+                token: "",
+            }
+            await EnvironmentOperation.updateOne({ _id: id }, { $set: { heartbeatAt: new Date() } })
+        } else {
+            access = await grantAccess(accessContext, settings, "operation")
+            secretValues = access.secretValues
+            promptAccess = access
+            await EnvironmentOperation.updateOne(
+                { _id: id },
+                { $set: { accessPath: access.dir, heartbeatAt: new Date() } },
+            )
+        }
         let cdEvidence = ""
         if (op.method === "cd" && (!reconcile || op.cdDispatched || op.runId)) {
             mutationMayHaveStarted = true
@@ -158,7 +187,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                     stage: "environment-preflight",
                     title: op.config.name,
                     agent: settings,
-                    text: operationPrompt({ ...op, kind: "inspect" }, accessPath, settings),
+                    text: operationPrompt({ ...op, kind: "inspect" }, promptAccess!, settings),
                     timeoutMs: settings.timeoutMinutes * 60_000,
                     signal: controller.signal,
                     consumption: { origin: "environments", subject: `${op.repo} · preflight` },
@@ -176,9 +205,11 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                     },
                 },
             )
-            const observed = parseAgentResult(redact(preflight.text, access.secretValues))
-            if (!observed?.verified || preflight.outcome !== "succeeded")
+            const observed = parseAgentResult(redact(preflight.text, secretValues))
+            if (!observed?.verified || preflight.outcome !== "succeeded") {
+                failureCode = parseAgentFailure(preflight.text) ?? "PREFLIGHT_UNVERIFIED"
                 throw new Error("Preflight sem comprovação. Nenhuma publicação autorizada.")
+            }
             const dbVersion = observed.databaseCertain ? observed.dbVersion : null
             await Environment.updateOne(
                 { _id: op.environmentId, activeOperationId: id },
@@ -255,7 +286,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                 text:
                     operationPrompt(
                         op,
-                        accessPath,
+                        promptAccess!,
                         settings,
                         image?.images ?? [],
                         reconcile,
@@ -282,7 +313,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                         }
                         let raw: unknown
                         try {
-                            raw = JSON.parse(redact(line.slice(16), access!.secretValues))
+                            raw = JSON.parse(redact(line.slice(16), secretValues))
                         } catch {
                             continue
                         }
@@ -292,8 +323,8 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                             const cp = parsed.data
                             const safe = {
                                 ...cp,
-                                evidence: cp.evidence.map((x) => redact(x, access!.secretValues)),
-                                migrations: cp.migrations.map((x) => redact(x, access!.secretValues)),
+                                evidence: cp.evidence.map((x) => redact(x, secretValues)),
+                                migrations: cp.migrations.map((x) => redact(x, secretValues)),
                             }
                             const dbVersion = safe.databaseCertain ? safe.dbVersion : null
                             await EnvironmentOperation.updateOne(
@@ -348,7 +379,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                 },
             },
         )
-        result = parseAgentResult(redact(turn.text, access.secretValues))
+        result = parseAgentResult(redact(turn.text, secretValues))
         const imageSetVerified = !result
             ? false
             : op.kind === "inspect" || (reconcile && !attach)
@@ -376,6 +407,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                     "Host reconciliado sem repetir ações. Consulte as evidências antes de confirmar uma nova operação."
         } else {
             state = turn.outcome === "interrupted" ? "interrupted" : "failed"
+            failureCode = parseAgentFailure(turn.text) ?? "AGENT_UNVERIFIED"
             message =
                 "A operação terminou sem comprovação completa. Confira o estado registrado e reconcilie antes de repetir."
             // Um turno terminado não comprova que subprocessos no host pararam.
@@ -417,7 +449,8 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
             )
         }
     } catch (error) {
-        message = error instanceof Error ? redact(error.message, access?.secretValues) : "Falha ao executar agente"
+        message = error instanceof Error ? redact(error.message, secretValues) : "Falha ao executar agente"
+        failureCode = failureCode ?? parseAgentFailure(message)
         // Só falhas ANTES da sessão permitem liberar sem inspeção do host.
         keepReservation = mutationMayHaveStarted
         const latest = op
@@ -432,9 +465,7 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
         clearInterval(heartbeatTimer)
         try {
             if (!preserveAccess) {
-                await access?.cleanup()
-                if (op?.accessPath && op.accessPath !== access?.dir)
-                    await removeAccess(op.accessPath, dirname(op.accessPath))
+                releaseAccess(id)
                 await EnvironmentOperation.updateOne({ _id: id }, { $set: { accessPath: null } })
             }
         } catch {
@@ -458,6 +489,8 @@ export async function executeEnvironment(id: string, reconcile = false): Promise
                                       ? "Interrompido após reconciliação"
                                       : "Falhou",
                             error: message,
+                            failureCode:
+                                finalState === "failed" || finalState === "interrupted" ? failureCode : null,
                             finishedAt: keepReservation ? null : new Date(),
                         },
                     },

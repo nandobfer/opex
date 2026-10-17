@@ -30,6 +30,8 @@ export interface OperationDto {
     stage: string
     steps: { name: string; at: string }[]
     error: string | null
+    /** Código conhecido da falha (ex.: `ACCESS_ENVELOPE_MISSING`), para a UI explicar o que fazer. */
+    failureCode: string | null
     createdAt: string
     finishedAt: string | null
     sessionId: string | null

@@ -27,6 +27,12 @@ export const environmentSettingsSchema = z
         instructions: z.string().max(8000),
         sessionDirectory: path,
         accessDirectory: path,
+        agentBaseUrl: z
+            .string()
+            .trim()
+            .max(300)
+            .refine((v) => !v || /^https?:\/\/\S+$/.test(v), "Use uma URL http(s) alcançável pelo agente"),
+        accessTokenTtlMinutes: z.number().int().min(5).max(240),
         timeoutMinutes: z.number().int().min(1).max(240),
     })
     .strict()
@@ -39,6 +45,8 @@ export const DEFAULT_ENVIRONMENT_SETTINGS = {
     instructions: "",
     sessionDirectory: "/tmp",
     accessDirectory: "/tmp/opex-environments",
+    agentBaseUrl: "",
+    accessTokenTtlMinutes: 30,
     timeoutMinutes: 60,
 } satisfies z.infer<typeof environmentSettingsSchema>
 
