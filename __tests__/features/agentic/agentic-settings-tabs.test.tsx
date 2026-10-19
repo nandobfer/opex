@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
         refetch: vi.fn(),
         save: vi.fn(),
         data: {
-            settings: { enabled: false, agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } }, columns: { queue: null, onStart: null, onPr: null, onDone: null } },
+            settings: { enabled: false, agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } }, columns: { queue: null, onStart: null, onPr: null, onDone: null }, ci: { fixCi: true, ciFixLimit: null } },
             isDefault: true,
             availability: { available: false, reason: "OpenCode não configurado" },
             updatedAt: null,
@@ -131,5 +131,13 @@ describe("AgenticTab: abas internas", () => {
         const cards = screen.getAllByTestId("columns-card")
         expect(cards).toHaveLength(2)
         expect(cards.map((card) => card.textContent)).toEqual(["Fila da central de desenvolvimento", "Movimentação das colunas"])
+    })
+
+    it("traz o padrão global da correção de CI (ligada, sem limite) junto dos agentes padrão", () => {
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        expect(screen.getByText("Corrigir CI falho")).toBeTruthy()
+        expect((screen.getByLabelText("Corrigir automaticamente") as HTMLElement).getAttribute("aria-checked")).toBe("true")
+        expect((screen.getByLabelText(/Máximo de correções seguidas por PR/) as HTMLInputElement).value).toBe("")
+        expect(screen.queryByRole("radio", { name: "Padrão global" })).toBeNull()
     })
 })

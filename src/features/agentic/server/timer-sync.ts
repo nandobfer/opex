@@ -3,10 +3,10 @@ import { getLocalUser } from "@/lib/local-user"
 import { logger } from "@/lib/logger"
 import { beginWorkPeriod, endWorkPeriod, endWorkPeriodById, listActiveWorkPeriods, touchWorkPeriod } from "@/features/time/server/service"
 import { STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../constants"
-import { resolveAgent } from "../logic"
 import { loadCentral } from "./centrals"
 import { isWorkbenchActive } from "./hub"
 import { centralLogger } from "./log"
+import { workbenchTurnAgent } from "./models"
 import { loadAgenticSettings } from "./settings"
 
 /**
@@ -44,7 +44,7 @@ export async function syncWorkbenchTimer(workbenchId: string): Promise<void> {
         const role = STAGE_ROLE[doc.stage as WorkbenchStage] ?? "planning"
         const { settings } = await loadAgenticSettings()
         const { config } = await loadCentral(doc.centralId)
-        const agent = resolveAgent(settings, config, role)
+        const agent = workbenchTurnAgent(settings, config, doc, role)
         await beginWorkPeriod({ taskId: doc.taskId, workbenchId, stage: doc.stage, agent: agent.agent, model: agent.model, description: descriptionFor(doc.stage) }, actorId())
         await touchWorkPeriod(workbenchId, { stage: doc.stage, agent: agent.agent, model: agent.model, description: descriptionFor(doc.stage) })
     } catch (error) {

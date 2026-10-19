@@ -38,9 +38,14 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### A — Corrigir CI falho (`fixing_ci`) — bc915ca
 
+> **Entregue na v2.61.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "CI falho". Decisão: além
+> da central, há **padrão global** (`AgenticSettings.ci`), herdado pelas centrais novas e pelas antigas
+> sem valor próprio (`git.inheritCi`, mesmo modelo das colunas globais da OPE-79); o limite é um
+> número opcional (`ciFixLimit`, vazio = sem limite).
+
 - Central (aba Git e PR): `git.fixCi` (padrão ligado) e `git.ciFixLimit` (opcional, 1–20; vazio =
-  sem limite), com `parseCentralConfig` preenchendo centrais antigas. Decisão em aberto: só por
-  central (sugerido) ou também padrão na configuração global da OPE-79.
+  sem limite), com `parseCentralConfig` preenchendo centrais antigas; também padrão na configuração
+  global da OPE-79.
 - `src/features/agentic/ci.ts` (puro): `ciFailureState` espera todas as verificações terminarem,
   considera a última execução de cada uma; falha = `failure`, `timed_out`, `startup_failure`,
   `action_required` e status `failure`/`error` (`cancelled`/`skipped` não contam);
@@ -61,6 +66,9 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### B — PR acompanhado ao vivo — ff0ecd0
 
+> **Entregue na v2.60.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Acompanhamento do PR ao
+> vivo". O CI aparece por ora só como passo informativo (`describeChecks`, gancho para o bloco A).
+
 - `pr-watch-report.ts`: cada varredura vira um bloco **"Verificação do PR #N"** na Saída da IA
   com passos e horário (consulta, estado de merge, revisões/comentários, revisão automática via
   `gate.reviewStatus`, conflito, CI, merge automático, aguardando vaga) e desfecho
@@ -76,6 +84,9 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### C — Fork: modo Plan/Build e somente leitura — 836cb9d, 90bb384
 
+> **Entregue na v2.58.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Forks da conversa"
+> (ação de trava chamada `lock`).
+
 - Fork guarda `readOnly` e o modo (`plan`/`build`); o modo inicial vem do agente (plan = somente
   leitura; demais = permissões do agente).
 - `ForkModeSelect`: troca com o agente parado, refazendo permissões/protocolo da sessão e avisando
@@ -86,6 +97,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### D — Fork: "Pausar conversa" e integração no corpo — e2a42f3, 072fb79
 
+> **Entregue na v2.57.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Forks da conversa".
+
 - "Encerrar fork" → **"Pausar conversa"**, status "Encerrado" → **"Pausado"**, aviso com o
   próximo passo.
 - Uma única área rolável: resumo/destino/ajuste da integração, resumo integrado (`ForkIntegrated`)
@@ -93,6 +106,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 - Testes: `ForkPanel`, `forks`.
 
 ### E — Atalhos da barra da mesa — 7c1bab8, 8482b0e
+
+> **Entregue na v2.57.0** (OPE-81) — descrito em `modules/agentic-dev.md`, etapa da prévia.
 
 - `ActionBar`: **"Abrir em nova guia"** como primeiro botão e **"Ver PR #N"** (`GitPullRequest`)
   quando há PR.
@@ -110,6 +125,31 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
   raciocínio). Testers, `ProviderModelCard`, `task-tags.ts`, `catalog.ts`/`providers.ts`.
 - Atualizar `modules/ai.md` e a stack do `AGENTS.md`.
 - Testes: `ai-providers`, `ai-stream`, `catalog`, páginas de IA (rede sempre mockada).
+
+### G — Trocar o modelo na mesa e no fork — af504ce
+
+> **Entregue na v2.59.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Trocar o modelo na mesa
+> e no fork".
+
+- Seletor de modelo (variante e "Voltar ao padrão") na barra da mesa (`WorkbenchModelPicker`, papel da
+  etapa via `STAGE_MODEL_ROLE`) e do fork (ao lado do Modo), sobre o `ModelSearchPicker` extraído de
+  `AgentConfigFields`. Troca só modelo/variante, validada no OpenCode; vale a partir do próximo turno.
+- Mesa: `modelOverrides` por papel (`planning`, `implementation`, `build`, `pr`); fork:
+  `modelOverride` (fork novo não herda; integrado/concluído → 409).
+- Rotas `PUT …/workbenches/[id]/model` e `PUT …/forks/[forkId]/model`; DTO `models`/`model`.
+- Ao portar o bloco A, `fixing_ci` entra em `STAGE_MODEL_ROLE` com o papel `pr`.
+- Testes: `model-override`, `workflow-model`, `forks-model`, `model-routes`, `ModelOverridePicker`,
+  `ActionBar`, `ForkPanel`.
+
+### H — Agente Opex — b434dea, 261d10c
+
+> **Entregue na v2.62.0** (OPE-81) — descrito em `modules/opex-agent.md`.
+
+- Nativo (sem Recursos beta): `src/features/opex-agent/`, rotas `/api/opex/*` e
+  `/api/ai/features/opex-agent`, item na barra lateral do dono e aba `agente-opex` em `/integracoes/ia`.
+- Arquivos do chat no S3 com upload assinado (rotina `opex-files-cleanup` limpa pendentes em 24 h).
+- Ferramentas sem Go! Sipal/beta, com os grupos extras Serviços, Financeiro (leitura) e Clientes, e
+  `set_workbench_model` (bloco G).
 
 ## Riscos
 

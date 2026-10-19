@@ -1,4 +1,15 @@
-import { FORK_INTEGRATION_TARGET_LABELS, FORK_INTEGRATION_TARGETS, FORK_READ_ONLY_COMMANDS, OPEN_FORK_STATUSES, WORKBENCH_STAGE_LABELS, type ForkIntegrationTarget, type ForkStatus, type RunState, type WorkbenchStage } from "./constants"
+import {
+    FORK_INTEGRATION_TARGET_LABELS,
+    FORK_INTEGRATION_TARGETS,
+    FORK_READ_ONLY_COMMANDS,
+    OPEN_FORK_STATUSES,
+    WORKBENCH_STAGE_LABELS,
+    type ForkIntegrationTarget,
+    type ForkMode,
+    type ForkStatus,
+    type RunState,
+    type WorkbenchStage,
+} from "./constants"
 import { canRun, type WorkbenchAction } from "./logic"
 import type { WorkbenchContext } from "./prompts"
 
@@ -25,11 +36,70 @@ export function forkActions(status: ForkStatus, runState: RunState, hasSummary =
 
 export const canRunFork = (status: ForkStatus, runState: RunState, action: ForkAction, hasSummary = false) => forkActions(status, runState, hasSummary).includes(action)
 
-/** Fork em aberto (ativo, encerrado ou integrando) — pode ter filhos e receber resumos deles. */
+/** Fork em aberto (ativo, pausado ou integrando) — pode ter filhos e receber resumos deles. */
 export const isOpenFork = (status: ForkStatus) => OPEN_FORK_STATUSES.includes(status)
 
 /** Abrir fork a partir deste fork: em qualquer estado em aberto, inclusive com o agente respondendo. */
 export const canOpenChildFork = isOpenFork
+
+// ---------------------------------------------------------------------------
+// Modo (Plan/Build) e trava de somente leitura
+// ---------------------------------------------------------------------------
+
+/** Agente que abre o fork em Plan (somente leitura); os demais (ex.: `build`) abrem em Build. */
+export const READ_ONLY_FORK_AGENT = "plan"
+
+/** Agente do turno no modo Build quando o agente configurado é o `plan`. */
+export const WRITE_FORK_AGENT = "build"
+
+export const isReadOnlyForkAgent = (agent: string | null | undefined) => agent === READ_ONLY_FORK_AGENT
+
+/** Modo gravado no fork; forks antigos (sem o campo) eram sempre somente leitura → `plan`. */
+export const asForkMode = (value: unknown): ForkMode => (value === "build" ? "build" : "plan")
+
+export const forkModeReadOnly = (mode: ForkMode) => mode === "plan"
+
+/** Modo efetivo: a trava de somente leitura sempre força `plan`. */
+export const effectiveForkMode = (mode: unknown, readOnly: boolean | null | undefined): ForkMode => (readOnly ? "plan" : asForkMode(mode))
+
+/**
+ * Modo inicial do fork: travado (`readOnly`) = `plan`; modo pedido na abertura; senão, o do agente do
+ * papel Fork configurado (`plan` = somente leitura, demais = Build com as permissões do agente).
+ */
+export function initialForkMode(configuredAgent: string | null | undefined, options: { readOnly?: boolean; mode?: ForkMode } = {}): ForkMode {
+    if (options.readOnly) return "plan"
+    if (options.mode) return options.mode
+    return isReadOnlyForkAgent(configuredAgent) ? "plan" : "build"
+}
+
+/** Agente do turno pelo modo: Plan usa o `plan`; Build usa o agente configurado (ou `build` se ele for o `plan`). */
+export function forkTurnAgent(mode: ForkMode, configuredAgent: string | null | undefined): string {
+    if (forkModeReadOnly(mode)) return READ_ONLY_FORK_AGENT
+    return configuredAgent && !isReadOnlyForkAgent(configuredAgent) ? configuredAgent : WRITE_FORK_AGENT
+}
+
+/** Texto curto do modo (aviso de abertura e cabeçalho do fork). */
+export function forkModeText(mode: ForkMode, readOnly: boolean): string {
+    if (readOnly) return "somente leitura (travado)"
+    return forkModeReadOnly(mode) ? "Plan, somente leitura" : "Build, pode alterar arquivos"
+}
+
+/** Aviso ao agente, no início da próxima mensagem, de que o modo mudou durante a conversa. */
+export function forkModeNote(mode: ForkMode, readOnly: boolean): string {
+    if (forkModeReadOnly(mode))
+        return `[Modo alterado para Plan${readOnly ? " (travado)" : ""}: a partir de agora esta conversa é SOMENTE LEITURA — não altere, crie nem apague arquivos e só rode comandos de leitura.]`
+    return "[Modo alterado para Build: a partir de agora você PODE alterar arquivos e executar comandos, dentro das permissões do seu agente. A pasta é a mesma da mesa; não faça commit, push, merge nem troque de branch sem pedido explícito.]"
+}
+
+/** Motivo (pt-BR) de não poder trocar o modo nem travar agora; `null` = pode. */
+export function forkModeBlockReason(status: ForkStatus, runState: RunState, readOnly: boolean): string | null {
+    if (readOnly) return "Fork travado como somente leitura"
+    if (!isOpenFork(status)) return "O fork não está mais em aberto"
+    if (runState === "running") return "Aguarde o agente terminar de responder"
+    return null
+}
+
+export const canChangeForkMode = (status: ForkStatus, runState: RunState, readOnly: boolean) => forkModeBlockReason(status, runState, readOnly) === null
 
 /** Fork pai visto pelo filho: `null` quando o filho veio da conversa principal; `status: null` = pai descartado. */
 export interface ForkParentView {
@@ -153,12 +223,21 @@ export function extractForkSummary(text: string): string | null {
 // Prompts
 // ---------------------------------------------------------------------------
 
-/** Protocolo fixo dos forks (entrada durável da sessão do fork). */
-export function forkInstructions(extra: string): string {
+/** Protocolo fixo dos forks (entrada durável da sessão do fork); `readOnly` = modo Plan. */
+export function forkInstructions(extra: string, readOnly = true): string {
     const parts = [
-        "Esta é uma CONVERSA PARALELA (fork) de uma mesa de trabalho do Opex: o usuário quer tirar dúvidas, investigar ou discutir algo sem interferir no trabalho principal.",
-        "Você está em modo SOMENTE LEITURA: NÃO altere, crie nem apague arquivos; NÃO faça commits, push, merges nem mude de branch; NÃO execute comandos que modifiquem o repositório, o banco ou o ambiente.",
-        `Comandos permitidos: só os de leitura (${FORK_READ_ONLY_COMMANDS.map((command) => command.replace(/\*$/, "").trim()).join(", ")}). Leia arquivos e busque no código com as ferramentas de leitura.`,
+        readOnly
+            ? "Esta é uma CONVERSA PARALELA (fork) de uma mesa de trabalho do Opex: o usuário quer tirar dúvidas, investigar ou discutir algo sem interferir no trabalho principal."
+            : "Esta é uma CONVERSA PARALELA (fork) de uma mesa de trabalho do Opex: o usuário quer tirar dúvidas, investigar, discutir ou experimentar algo em paralelo ao trabalho principal.",
+        ...(readOnly
+            ? [
+                  "Você está em modo SOMENTE LEITURA: NÃO altere, crie nem apague arquivos; NÃO faça commits, push, merges nem mude de branch; NÃO execute comandos que modifiquem o repositório, o banco ou o ambiente.",
+                  `Comandos permitidos: só os de leitura (${FORK_READ_ONLY_COMMANDS.map((command) => command.replace(/\*$/, "").trim()).join(", ")}). Leia arquivos e busque no código com as ferramentas de leitura.`,
+              ]
+            : [
+                  "Você PODE alterar arquivos e executar comandos, dentro das permissões do seu agente, quando o usuário pedir.",
+                  "O fork compartilha a pasta (worktree/branch) da mesa: suas alterações afetam o trabalho principal. NÃO faça commits, push, merges nem mude de branch sem o usuário pedir explicitamente, e diga ao final o que alterou.",
+              ]),
         "Responda em português do Brasil, de forma direta. Pergunte quando algo estiver ambíguo.",
     ]
     const text = extra.trim()

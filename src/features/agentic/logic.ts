@@ -1,6 +1,6 @@
 import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, type AgentRole, type RunState, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
-import { centralConfigSchema, defaultCentralConfig, type AgentConfig, type AgenticColumns, type AgenticSettings, type CentralConfig } from "./schemas"
+import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticSettings, type CentralConfig } from "./schemas"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
@@ -22,6 +22,25 @@ export function resolveAgent(settings: AgenticSettings, central: Pick<CentralCon
     }
 }
 
+/** Modelo/variante trocados na mesa ou no fork (o agente continua o da etapa ou do Mode). */
+export interface ModelOverride {
+    model: string
+    variant: string | null
+}
+
+/** Troca salva → válida (`null` quando ausente ou sem modelo). */
+export function asModelOverride(value: unknown): ModelOverride | null {
+    if (!value || typeof value !== "object") return null
+    const { model, variant } = value as { model?: unknown; variant?: unknown }
+    if (typeof model !== "string" || !model) return null
+    return { model, variant: typeof variant === "string" && variant ? variant : null }
+}
+
+/** Agente do turno com a troca de modelo aplicada: substitui modelo e variante e mantém o agente. */
+export function applyModelOverride(agent: AgentConfig, override: ModelOverride | null | undefined): AgentConfig {
+    return override?.model ? { ...agent, model: override.model, variant: override.variant } : agent
+}
+
 /** Configuração salva → validada; campos ausentes (versões antigas) caem nos padrões. */
 export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): CentralConfig {
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<CentralConfig>) : {}
@@ -32,7 +51,8 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         ...value,
         worktreeRoot: value.worktreeRoot?.trim() ? value.worktreeRoot : base.worktreeRoot,
         agents: { ...base.agents, ...value.agents },
-        git: { ...base.git, ...value.git },
+        // Correção de CI: central sem valor próprio (anterior à OPE-81) herda o padrão global.
+        git: { ...base.git, ...value.git, inheritCi: typeof value.git?.inheritCi === "boolean" ? value.git.inheritCi : value.git?.fixCi === undefined },
         environment: { ...base.environment, ...value.environment },
         // Colunas: valores salvos são preservados como personalização (centrais antigas continuam como
         // estão); só o que foi explicitamente salvo herda o padrão global (`inheritQueue`/`inheritMovement`).
@@ -82,6 +102,12 @@ export function resolveCentralColumns(global: AgenticColumns | undefined, column
         onPr: columns.inheritMovement ? fallback.onPr : columns.onPr,
         onDone: columns.inheritMovement ? fallback.onDone : columns.onDone,
     }
+}
+
+/** Correção de CI efetiva da central: herdada do padrão global da aba (`inheritCi`) ou personalizada. */
+export function resolveCentralCi(global: AgenticCi | undefined, git: Pick<CentralConfig["git"], "inheritCi" | "fixCi" | "ciFixLimit">): AgenticCi {
+    if (git.inheritCi) return { ...DEFAULT_AGENTIC_CI, ...global }
+    return { fixCi: git.fixCi, ciFixLimit: git.ciFixLimit }
 }
 
 /**

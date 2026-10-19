@@ -19,41 +19,52 @@ import {
     WORKBENCH_STAGE_LABELS,
     type ForkDonePolicy,
     type ForkIntegrationTarget,
+    type ForkMode,
     type ForkStatus,
 } from "../constants"
 import {
+    asForkMode,
     canOpenChildFork,
     canRunFork,
+    effectiveForkMode,
     extractForkSummary,
     forkFirstPrompt,
     forkFreshContextPrompt,
     forkInstructions,
     forkIntegratePrompt,
     forkIntegrationTargets,
+    forkModeBlockReason,
+    forkModeNote,
+    forkModeReadOnly,
+    forkModeText,
     forkNotesInstructions,
     forkPlannerFeedback,
     forkRetryPrompt,
     forkReviseSummaryPrompt,
+    forkTurnAgent,
+    initialForkMode,
     plannerActionFor,
     type ForkAction,
     type ForkParentView,
 } from "../fork-logic"
-import { resolveAgent } from "../logic"
+import { applyModelOverride, asModelOverride, resolveAgent } from "../logic"
 import { branchNameFor, composeProjectFor, worktreePathFor, type WorkbenchContext } from "../prompts"
-import type { CentralConfig, FormReplyInput, PermissionReplyInput } from "../schemas"
-import type { ForkDto, WorkbenchDto, WorkbenchEventPayload } from "../types"
+import type { CentralConfig, FormReplyInput, ModelOverrideInput, PermissionReplyInput } from "../schemas"
+import type { ForkDto, ModelChoiceDto, WorkbenchDto, WorkbenchEventPayload } from "../types"
 import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
+import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { deleteWorkbenchSession } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { getWorkbench, reopen, requestCorrection, revisePlan, submitPrFeedback } from "./workflow"
 
 /**
- * Forks da conversa (SOMENTE servidor): conversas paralelas de uma mesa, somente leitura, numa
+ * Forks da conversa (SOMENTE servidor): conversas paralelas de uma mesa, em modo Plan (somente
+ * leitura) ou Build (altera arquivos conforme as permissões do agente; travável em Plan sem volta), numa
  * sessão própria do OpenCode — cópia da sessão principal (`session.fork`) ou, sem ela (mesa
- * concluída), uma sessão nova com o contexto da mesa. Encerrado, o fork pode ser retomado,
+ * concluída), uma sessão nova com o contexto da mesa. Com a conversa pausada, o fork pode ser retomado,
  * descartado (some por completo) ou integrado: o agente consolida um resumo, o usuário ajusta até
  * fechar o escopo e escolhe o destino (contexto da conversa principal, planejador ou reabertura).
  *
@@ -99,7 +110,7 @@ async function reconcile(doc: IAgenticFork): Promise<IAgenticFork> {
     return { ...doc, runState: "interrupted", error, pendingForms: [], pendingPermissions: [] }
 }
 
-function toForkDto(doc: IAgenticFork): ForkDto {
+function toForkDto(doc: IAgenticFork, model: ModelChoiceDto | null = null): ForkDto {
     const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
     return {
         id: String(doc._id),
@@ -111,6 +122,9 @@ function toForkDto(doc: IAgenticFork): ForkDto {
         runState: asRunState(doc.runState),
         error: doc.error ?? null,
         origin: doc.origin === "fresh" ? "fresh" : "fork",
+        mode: effectiveForkMode(doc.mode, doc.readOnly),
+        readOnly: doc.readOnly === true,
+        model,
         forkedFromStage: asStage(doc.forkedFromStage),
         summary: doc.summary ?? null,
         integration: doc.integration ? { target: doc.integration.target as ForkIntegrationTarget, summary: doc.integration.summary, appliedAt: new Date(doc.integration.appliedAt).toISOString() } : null,
@@ -154,11 +168,12 @@ async function assertForkReady(config: CentralConfig): Promise<void> {
 export async function listForks(workbenchId: string): Promise<ForkDto[]> {
     await loadWorkbenchDoc(workbenchId)
     const docs = (await AgenticFork.find({ workbenchId }).sort({ number: 1 }).lean()) as unknown as IAgenticFork[]
-    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc))))
+    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc))))
 }
 
 export async function getFork(workbenchId: string, forkId: string): Promise<ForkDto> {
-    return toForkDto(await loadFork(workbenchId, forkId))
+    const doc = await loadFork(workbenchId, forkId)
+    return toForkDto(doc, await forkModel(doc))
 }
 
 /** Confere que o fork existe (stream de eventos: 404 antes de abrir). */
@@ -176,8 +191,8 @@ interface ForkSession {
     origin: "fork" | "fresh"
 }
 
-/** Sessão do fork: cópia da sessão principal ou, sem ela, uma sessão nova no diretório da central. */
-async function createForkSession(client: OpencodeClient, workbench: IAgenticWorkbench, config: CentralConfig, number: number): Promise<ForkSession> {
+/** Sessão do fork: cópia da sessão principal ou, sem ela, uma sessão nova no diretório da central (restrita só em Plan). */
+async function createForkSession(client: OpencodeClient, workbench: IAgenticWorkbench, config: CentralConfig, number: number, readOnly: boolean): Promise<ForkSession> {
     const title = `${workbench.taskCode} · Fork ${number}: ${workbench.taskTitle}`.slice(0, 120)
     if (workbench.sessionId) {
         try {
@@ -190,7 +205,7 @@ async function createForkSession(client: OpencodeClient, workbench: IAgenticWork
         }
     }
     const directory = config.sessionDirectory
-    const session = await client.session.create({ title, location: { directory }, metadata: { app: "opex", taskId: workbench.taskId, kind: "fork" }, permissions: [...FORK_READONLY_PERMISSIONS] })
+    const session = await client.session.create({ title, location: { directory }, metadata: { app: "opex", taskId: workbench.taskId, kind: "fork" }, ...(readOnly ? { permissions: [...FORK_READONLY_PERMISSIONS] } : {}) })
     return { sessionId: session.id, directory: session.location?.directory ?? directory, origin: "fresh" }
 }
 
@@ -237,16 +252,24 @@ async function applyChildNotes(client: OpencodeClient, fork: Pick<IAgenticFork, 
     }
 }
 
-/** Restringe a sessão a somente leitura; `false` quando o servidor recusa (o protocolo ainda proíbe alterações). */
-async function restrictSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
+/**
+ * Permissões da sessão do fork: somente leitura (Plan) ou sem restrição própria (Build: valem as do
+ * agente — a cópia de uma sessão restrita não herda o bloqueio). `false` quando o servidor recusa.
+ */
+async function setSessionPermissions(client: OpencodeClient, sessionId: string, readOnly: boolean): Promise<boolean> {
     try {
-        await client.session.update({ sessionID: sessionId, permissions: [...FORK_READONLY_PERMISSIONS] })
+        await client.session.update({ sessionID: sessionId, permissions: readOnly ? [...FORK_READONLY_PERMISSIONS] : [] })
         return true
     } catch (error) {
-        log.warn({ err: errorText(error), sessionId }, "[agentic-fork] não foi possível restringir as permissões da sessão")
+        log.warn({ err: errorText(error), sessionId }, "[agentic-fork] não foi possível ajustar as permissões da sessão")
         return false
     }
 }
+
+const permissionsWarning = (readOnly: boolean) =>
+    readOnly
+        ? "Não foi possível restringir as permissões da sessão do fork; o agente foi instruído a não alterar arquivos."
+        : "Não foi possível liberar as permissões da sessão do fork; ela pode continuar com as restrições da conversa de origem."
 
 /** Protocolo do fork como entrada durável da sessão; `false` = vai no primeiro prompt. */
 async function applyProtocol(client: OpencodeClient, sessionId: string, instructions: string): Promise<boolean> {
@@ -300,9 +323,17 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
     if (!fork.sessionId) throw new Error("O fork não tem uma sessão do OpenCode")
     const { config } = await loadCentral(fork.centralId)
     const { settings } = await loadAgenticSettings()
-    const agent = resolveAgent(settings, config, "fork")
+    // Agente do turno pelo modo atual (Plan = `plan`); modelo e variante vêm do papel Fork ou da troca
+    // feita neste fork (relida a cada mensagem, inclusive na consolidação do resumo).
+    const configured = applyModelOverride(resolveAgent(settings, config, "fork"), asModelOverride(fork.modelOverride))
+    const agent = { ...configured, agent: forkTurnAgent(effectiveForkMode(fork.mode, fork.readOnly), configured.agent) }
     const client = await getOpencodeClient()
     const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
+    // Modo trocado durante a conversa: avisa o agente no início da próxima mensagem (uma vez).
+    if (fork.pendingModeNote) {
+        text = `${fork.pendingModeNote}\n\n${text}`
+        await AgenticFork.updateOne({ _id: fork._id }, { $set: { pendingModeNote: null } })
+    }
     // Resumos de forks filhos que não viraram instrução da sessão vão no prompt (uma vez).
     if (fork.childNotes?.length && fork.childNotesSynced === false) {
         text = `${forkNotesInstructions(fork.childNotes, "fork")}\n\n---\n${text}`
@@ -393,17 +424,22 @@ function workbenchContext(workbench: IAgenticWorkbench, config: CentralConfig, p
 /**
  * Abre um fork da conversa com a primeira mensagem do usuário. Disponível em qualquer etapa, inclusive
  * com o agente principal trabalhando (o fork copia o histórico até aqui e não ocupa vaga na central).
- * Com `parentForkId`, é um fork de fork: copia a conversa do fork pai (em aberto) até aqui.
+ * Com `parentForkId`, é um fork de fork: copia a conversa do fork pai (em aberto) até aqui. O modo
+ * inicial vem do agente do papel Fork (`plan` = somente leitura; demais = Build), de `mode` ou da trava
+ * `readOnly` (Plan sem volta). Fork de fork não herda a trava nem o modo do pai.
  */
-export async function openFork(workbenchId: string, text: string, parentForkId?: string): Promise<ForkDto> {
+export async function openFork(workbenchId: string, text: string, options: { parentForkId?: string; readOnly?: boolean; mode?: ForkMode } = {}): Promise<ForkDto> {
+    const { parentForkId, readOnly: locked = false } = options
     const workbench = await loadWorkbenchDoc(workbenchId)
     const { doc: central, config } = await loadCentral(workbench.centralId)
     await assertForkReady(config)
     const parent = parentForkId ? await loadParentFork(workbenchId, parentForkId) : null
+    const mode = initialForkMode(resolveAgent((await loadAgenticSettings()).settings, config, "fork").agent, { readOnly: locked, mode: options.mode })
+    const readOnly = forkModeReadOnly(mode)
     const numbered = (await AgenticWorkbench.findOneAndUpdate({ _id: workbench._id }, { $inc: { forkSeq: 1 } }, { new: true }).lean()) as unknown as Pick<IAgenticWorkbench, "forkSeq"> | null
     const number = numbered?.forkSeq ?? (workbench.forkSeq ?? 0) + 1
     const client = await getOpencodeClient()
-    const session = parent ? await createChildForkSession(client, workbench, parent, number) : await createForkSession(client, workbench, config, number)
+    const session = parent ? await createChildForkSession(client, workbench, parent, number) : await createForkSession(client, workbench, config, number, readOnly)
 
     let fork: IAgenticFork
     try {
@@ -421,6 +457,8 @@ export async function openFork(workbenchId: string, text: string, parentForkId?:
                 sessionId: session.sessionId,
                 sessionDirectory: session.directory,
                 origin: session.origin,
+                mode,
+                readOnly: locked,
                 forkedFromStage: workbench.stage,
             })
         ).toObject() as unknown as IAgenticFork
@@ -430,27 +468,29 @@ export async function openFork(workbenchId: string, text: string, parentForkId?:
     }
     const id = String(fork._id)
     await prepareHub(id)
-    const restricted = session.origin === "fresh" || (await restrictSession(client, session.sessionId))
-    const instructions = forkInstructions(config.instructions.fork)
+    // Sessão nova já nasce com as permissões certas; a cópia herda as da origem e é ajustada.
+    const permissionsApplied = (session.origin === "fresh" && !parent) || (await setSessionPermissions(client, session.sessionId, readOnly))
+    const instructions = forkInstructions(config.instructions.fork, readOnly)
+    const modeText = forkModeText(mode, locked)
     const protocolApplied = await applyProtocol(client, session.sessionId, instructions)
     const stageLabel = WORKBENCH_STAGE_LABELS[asStage(workbench.stage)]
     notice(
         id,
         "info",
         parent
-            ? `Fork ${number} da conversa do Fork ${parent.number} (etapa "${stageLabel}"), somente leitura.`
+            ? `Fork ${number} da conversa do Fork ${parent.number} (etapa "${stageLabel}"), ${modeText}.`
             : session.origin === "fork"
-              ? `Fork ${number} da conversa principal (etapa "${stageLabel}"), somente leitura.`
-              : `Fork ${number}: a conversa principal não está disponível; sessão nova com o contexto da mesa (etapa "${stageLabel}"), somente leitura.`,
+              ? `Fork ${number} da conversa principal (etapa "${stageLabel}"), ${modeText}.`
+              : `Fork ${number}: a conversa principal não está disponível; sessão nova com o contexto da mesa (etapa "${stageLabel}"), ${modeText}.`,
     )
-    if (!restricted) notice(id, "warn", "Não foi possível restringir as permissões da sessão do fork; o agente foi instruído a não alterar arquivos.")
+    if (!permissionsApplied) notice(id, "warn", permissionsWarning(readOnly))
 
     const freshContext =
         session.origin === "fresh"
             ? forkFreshContextPrompt(workbenchContext(workbench, config, central.projectName, (await repoForProject(central.projectId))?.repo ?? null), { stage: asStage(workbench.stage), plan: workbench.plans?.at(-1)?.text ?? null, prUrl: workbench.pr?.url ?? null })
             : null
     const prompt = forkFirstPrompt(text, freshContext)
-    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_FORK, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: workbench.taskCode, fork: number, origem: session.origin, etapa: workbench.stage, ...(parent ? { forkPai: parent.number } : {}) } })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_FORK, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: workbench.taskCode, fork: number, origem: session.origin, modo: mode, somenteLeitura: locked, etapa: workbench.stage, ...(parent ? { forkPai: parent.number } : {}) } })
     log.info({ forkId: id, workbenchId, origin: session.origin, parentForkId: parent ? String(parent._id) : null }, `Fork ${number} ${workbench.taskCode}: aberto`)
     await launchForkTurn(fork, protocolApplied ? prompt : `${instructions}\n\n---\n${prompt}`, { userText: text })
     return getFork(workbenchId, id)
@@ -473,19 +513,99 @@ async function setStatus(fork: IAgenticFork, set: Record<string, unknown>, audit
     await publishFork(fork)
 }
 
-/** Encerra o fork: libera Retomar conversa, Integrar fork e Descartar fork. */
+/** Pausa a conversa do fork: libera Retomar conversa, Integrar fork e Descartar fork. */
 export async function closeFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "close")
-    await setStatus(fork, { status: "closed", closedAt: new Date(), runState: "idle", error: null }, { antes: { status: fork.status }, depois: { status: "closed" } }, "Fork encerrado.")
+    await setStatus(fork, { status: "closed", closedAt: new Date(), runState: "idle", error: null }, { antes: { status: fork.status }, depois: { status: "closed" } }, "Conversa pausada: retome, integre ou descarte o fork.")
     return getFork(workbenchId, forkId)
 }
 
-/** Retoma a conversa de um fork encerrado. */
+/** Retoma a conversa pausada de um fork. */
 export async function resumeFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "resume")
     await setStatus(fork, { status: "active", closedAt: null }, { antes: { status: fork.status }, depois: { status: "active" } }, "Conversa retomada.")
+    return getFork(workbenchId, forkId)
+}
+
+/** Aplica um modo na sessão do fork (permissões + protocolo), grava o aviso ao agente, audita e publica. */
+async function applyForkMode(fork: IAgenticFork, mode: ForkMode, lock: boolean): Promise<void> {
+    const id = String(fork._id)
+    const runState = isWorkbenchActive(id) ? "running" : asRunState(fork.runState)
+    const reason = forkModeBlockReason(asForkStatus(fork.status), runState, fork.readOnly === true)
+    if (reason) throw new DomainError(409, reason, "FORK_INVALID_STATE")
+    if (!fork.sessionId) throw new DomainError(409, "O fork não tem uma conversa no OpenCode", "FORK_INVALID_STATE")
+    const before = asForkMode(fork.mode)
+    const readOnly = forkModeReadOnly(mode)
+    const client = await getOpencodeClient()
+    const { config } = await loadCentral(fork.centralId)
+    const permissionsApplied = await setSessionPermissions(client, fork.sessionId, readOnly)
+    await applyProtocol(client, fork.sessionId, forkInstructions(config.instructions.fork, readOnly))
+    await AgenticFork.updateOne({ _id: fork._id }, { $set: { mode, readOnly: lock, pendingModeNote: forkModeNote(mode, lock) } })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_FORK,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: fork.taskCode, fork: fork.number, modo: before, somenteLeitura: false },
+        depois: { tarefa: fork.taskCode, fork: fork.number, modo: mode, somenteLeitura: lock },
+    })
+    await prepareHub(id)
+    notice(
+        id,
+        "info",
+        lock
+            ? "Fork travado como somente leitura (Plan): não é mais possível voltar para Build."
+            : readOnly
+              ? "Modo alterado para Plan: o fork é somente leitura a partir da próxima mensagem."
+              : "Modo alterado para Build: o fork pode alterar arquivos a partir da próxima mensagem.",
+    )
+    if (!permissionsApplied) notice(id, "warn", permissionsWarning(readOnly))
+    log.info({ forkId: id, mode, lock }, `Fork ${fork.number} ${fork.taskCode}: modo ${mode}${lock ? " (travado)" : ""}`)
+    await publishFork(fork)
+}
+
+/** Troca o modo do fork (Plan = somente leitura; Build = pode alterar arquivos), com o agente parado. */
+export async function setForkMode(workbenchId: string, forkId: string, mode: ForkMode): Promise<ForkDto> {
+    const fork = await loadFork(workbenchId, forkId)
+    if (fork.readOnly || asForkMode(fork.mode) !== mode) await applyForkMode(fork, mode, false)
+    return getFork(workbenchId, forkId)
+}
+
+/** Trava o fork como somente leitura (Plan), sem volta. */
+export async function lockFork(workbenchId: string, forkId: string): Promise<ForkDto> {
+    const fork = await loadFork(workbenchId, forkId)
+    await applyForkMode(fork, "plan", true)
+    return getFork(workbenchId, forkId)
+}
+
+/**
+ * Troca o modelo (e a variante) deste fork; `model: null` volta ao modelo do papel Fork da conversa.
+ * Vale a partir da próxima mensagem (inclusive a consolidação do resumo); o modo não muda.
+ */
+export async function setForkModel(workbenchId: string, forkId: string, input: ModelOverrideInput): Promise<ForkDto> {
+    const fork = await loadFork(workbenchId, forkId)
+    if (!OPEN_FORK_STATUSES.includes(asForkStatus(fork.status))) throw new DomainError(409, "O fork não está mais em aberto: não é possível trocar o modelo", "FORK_INVALID_STATE")
+    const override = await validatedModelOverride(input, "Modelo do fork")
+    const { settings } = await loadAgenticSettings()
+    const base = resolveAgent(settings, (await loadCentral(fork.centralId)).config, "fork")
+    const before = toModelChoice(base, asModelOverride(fork.modelOverride))
+    const after = toModelChoice(base, override)
+    const id = String(fork._id)
+    await AgenticFork.updateOne({ _id: fork._id }, { $set: { modelOverride: override } })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_FORK,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: fork.taskCode, fork: fork.number, modelo: describeModel(before), trocado: before.overridden },
+        depois: { tarefa: fork.taskCode, fork: fork.number, modelo: describeModel(after), trocado: after.overridden },
+    })
+    await prepareHub(id)
+    notice(id, "info", override ? `Modelo do fork trocado para ${describeModel(after)}: vale a partir da próxima mensagem.` : `Modelo do fork voltou ao padrão (${describeModel(after)}): vale a partir da próxima mensagem.`)
+    log.info({ forkId: id, model: after.model, variant: after.variant }, `Fork ${fork.number} ${fork.taskCode}: modelo ${describeModel(after)}`)
+    await publishFork(fork)
     return getFork(workbenchId, forkId)
 }
 
@@ -524,7 +644,7 @@ export async function reviseForkSummary(workbenchId: string, forkId: string, req
     return getFork(workbenchId, forkId)
 }
 
-/** Cancela a integração: o fork volta a Encerrado e o resumo proposto é descartado. */
+/** Cancela a integração: o fork volta a Pausado e o resumo proposto é descartado. */
 export async function cancelForkIntegration(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "cancel-integration")

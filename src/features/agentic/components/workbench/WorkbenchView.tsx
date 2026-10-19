@@ -3,8 +3,10 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { usePrWatchSchedule } from "../../hooks/useAgentic"
 import { useWorkbenchForks } from "../../hooks/useForks"
 import { useWorkbenchStream } from "../../hooks/useWorkbenchStream"
+import { latestPrWatch, nextPrWatchAt } from "../../timeline"
 import type { CentralDto, WorkbenchDto } from "../../types"
 import { ActionBar } from "./ActionBar"
 import { ForksDonePrompt } from "./ForksDonePrompt"
@@ -24,6 +26,11 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     const [forkId, setForkId] = useState<string | null>(null)
     const forks = useWorkbenchForks(workbench.id).data ?? []
     const plans = workbench.plans
+    // PR aberto e parado: a saída mostra quando o acompanhamento do PR verifica de novo.
+    const watchingPr = workbench.stage === "pr_open" && workbench.runState !== "running"
+    const schedule = usePrWatchSchedule(watchingPr).data
+    const lastCheck = latestPrWatch(timeline.items)
+    const prWatch = watchingPr && schedule ? { enabled: schedule.enabled, nextCheckAt: nextPrWatchAt(schedule.nextCheckAt, lastCheck?.nextCheckAt), checking: lastCheck?.outcome === null } : null
     // Sem forks (todos descartados), a aba some e a visão volta para a saída.
     const view: View = selected === "forks" && !forks.length ? "output" : selected
     const tabs: { id: View; label: string; disabled?: boolean; hidden?: boolean }[] = [
@@ -55,7 +62,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} role="tabpanel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "output" ? (
-                        <Timeline timeline={timeline} running={workbench.runState === "running"} />
+                        <Timeline timeline={timeline} running={workbench.runState === "running"} prWatch={prWatch} />
                     ) : view === "plan" ? (
                         <PlanView plans={plans} />
                     ) : (

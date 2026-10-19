@@ -1,6 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
-import type { ForkIntegrationTarget, ForkStatus, PendingTurnAction, RunState, WorkbenchStage } from "./constants"
+import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchModelRole, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
 
@@ -82,6 +82,14 @@ export interface SlotQueueDto {
     action: PendingTurnAction
 }
 
+/** Modelo efetivo de um papel na mesa ou no fork: o do papel (`overridden: false`) ou o trocado. */
+export interface ModelChoiceDto {
+    /** `provedor/modelo`; `null` = modelo padrão do agente. */
+    model: string | null
+    variant: string | null
+    overridden: boolean
+}
+
 export interface WorkbenchDto {
     id: string
     centralId: string
@@ -120,6 +128,8 @@ export interface WorkbenchDto {
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
     forksDonePrompt: { count: number; at: string } | null
+    /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
+    models: Record<WorkbenchModelRole, ModelChoiceDto> | null
     startedAt: string
     completedAt: string | null
     updatedAt: string
@@ -164,6 +174,12 @@ export interface ForkDto {
     runState: RunState
     error: string | null
     origin: "fork" | "fresh"
+    /** Modo atual: `plan` (somente leitura) ou `build` (pode alterar arquivos conforme o agente). */
+    mode: ForkMode
+    /** Travado como somente leitura (sem volta): o modo fica `plan`. */
+    readOnly: boolean
+    /** Modelo efetivo do fork (papel Fork da conversa ou o trocado; `null` quando a central não pôde ser lida). */
+    model: ModelChoiceDto | null
     forkedFromStage: WorkbenchStage
     /** Resumo proposto (em revisão enquanto `integrating`). */
     summary: string | null
@@ -206,6 +222,27 @@ export interface QueueItemDto {
 }
 
 /** Linha do stream da mesa (NDJSON). `seq` existe nos eventos gravados; os transitórios não têm. */
+export type PrWatchLevel = "info" | "success" | "warn" | "error"
+
+/** Passo de uma verificação do acompanhamento do PR (rotina `agentic-pr-watch`). */
+export interface PrWatchStep {
+    ts: string
+    level: PrWatchLevel
+    text: string
+}
+
+/** Desfecho da verificação: `idle` = nada a fazer (só a última fica gravada); `action` = encontrou algo e agiu; `error` = falha. */
+export type PrWatchOutcome = "idle" | "action" | "error"
+
+/** Agendamento do acompanhamento do PR (contagem até a próxima verificação). */
+export interface PrWatchScheduleDto {
+    /** Agendador e rotina ligados em Integrações › Crons. */
+    enabled: boolean
+    nextCheckAt: string | null
+    /** A rotina está executando agora. */
+    running: boolean
+}
+
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "user"; text: string }
@@ -219,6 +256,10 @@ export type WorkbenchEventPayload =
     | { type: "form"; form: OpencodeFormDto }
     | { type: "form-closed"; id: string }
     | { type: "turn-end"; outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number }
+    /** Passo ao vivo de uma verificação do PR (transitório). */
+    | { type: "pr-watch-step"; checkId: string; prNumber: number; level: PrWatchLevel; text: string }
+    /** Verificação do PR concluída (gravada). */
+    | { type: "pr-watch"; checkId: string; prNumber: number; startedAt: string; steps: PrWatchStep[]; outcome: PrWatchOutcome; summary: string; nextCheckAt: string | null }
 
 export type WorkbenchEvent = WorkbenchEventPayload & { seq?: number; ts: string }
 

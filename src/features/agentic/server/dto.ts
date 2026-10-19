@@ -37,7 +37,7 @@ export function toCentralDto(
     }
 }
 
-export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: number | null = null, slotQueuePosition: number | null = null): WorkbenchDto {
+export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: number | null = null, slotQueuePosition: number | null = null, models: WorkbenchDto["models"] = null): WorkbenchDto {
     return {
         id: String(doc._id),
         centralId: doc.centralId,
@@ -67,6 +67,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         turnStartedAt: iso(doc.turnStartedAt),
         stoppedByUser: Boolean(doc.stopRequestedAt),
         forksDonePrompt: doc.forksDonePrompt ? { count: doc.forksDonePrompt.count, at: new Date(doc.forksDonePrompt.at).toISOString() } : null,
+        models,
         reconnect: doc.reconnect ? { outcome: asReconnectOutcome(doc.reconnect.outcome) ?? "transient", message: doc.reconnect.message ?? null, at: new Date(doc.reconnect.at).toISOString() } : null,
         startedAt: new Date(doc.startedAt).toISOString(),
         completedAt: iso(doc.completedAt),

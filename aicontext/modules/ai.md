@@ -112,7 +112,9 @@ e opções na própria aba da página "Provedores de IA".
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** (agentes padrão e as **colunas
   globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
   (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
-  histórico e saída ao vivo — ver `modules/pr-review.md`.
+  histórico e saída ao vivo — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
+  configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
+  DeepSeek) — ver `modules/opex-agent.md`.
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**

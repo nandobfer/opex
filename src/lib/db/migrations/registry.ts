@@ -11,6 +11,7 @@ import { ensureAiUsageIndexes } from "./ensure-ai-usage-indexes"
 import { ensureAiConsumptionIndexes } from "./ensure-ai-consumption-indexes"
 import { backfillClientUsers } from "./backfill-client-users"
 import { backfillTaskAgenticFlow } from "./backfill-task-agentic-flow"
+import { ensureOpexIndexes } from "./ensure-opex-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -21,4 +22,5 @@ registerMigrations(
     { name: "ensure-ai-consumption-indexes", run: () => ensureAiConsumptionIndexes() },
     { name: "backfill-client-users", run: () => backfillClientUsers() },
     { name: "backfill-task-agentic-flow", run: () => backfillTaskAgenticFlow() },
+    { name: "ensure-opex-indexes", run: () => ensureOpexIndexes() },
 )

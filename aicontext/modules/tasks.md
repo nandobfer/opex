@@ -364,6 +364,10 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
   resposta (`runAfterResponse`). A rotina **`task-attachments-cleanup`** (30 min) remove uploads
   abandonados (pendentes há mais de 24 h) e **conclui** as remoções físicas que falharam na hora — os
   metadados só somem depois de o objeto sair do storage (ver `modules/integrations.md`).
+- **Cópia de objeto do storage** (`importAttachmentFromStorage`): cria o anexo já `ready` copiando
+  server-side um objeto existente (sem novo envio pelo navegador), na tarefa ou num rascunho de prévia,
+  com auditoria e `tasks-updated`. Usado pelo Agente Opex para anexar arquivos do chat
+  (`modules/opex-agent.md`).
 - **Autenticação**: as rotas de anexos atendem **dono e portal** (`resolveAttachmentActor`); o
   middleware libera `/api/attachments` para a sessão de cliente e cada rota autoriza o escopo (ver
   `modules/auth.md` e `modules/orcamentos.md`). Toda mutação relevante grava auditoria — vinculada à

@@ -17,6 +17,7 @@ import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
 import { AgentRolesCard } from "./AgentRolesCard"
 import { CentralsCard } from "./CentralsCard"
+import { CiFixCard } from "./CiFixCard"
 import { ColumnsCard } from "./ColumnsCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
@@ -41,6 +42,7 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
     const dirty = form.formState.isDirty
     const agents = useWatch({ control: form.control, name: "agents" })
     const columns = useWatch({ control: form.control, name: "columns" })
+    const ci = useWatch({ control: form.control, name: "ci" })
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab(SETTINGS_TABS, "agentes", dirty, () => (query.data ? form.reset(query.data.settings) : undefined), "abaAgentic")
 
     useEffect(() => {
@@ -121,6 +123,13 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                             { id: "agentic-col-pr", label: "Ao abrir o Pull Request", value: columns.onPr, onChange: (value) => form.setValue("columns.onPr", value, { shouldDirty: true, shouldValidate: true }) },
                             { id: "agentic-col-done", label: "Ao concluir (PR mergeado)", value: columns.onDone, onChange: (value) => form.setValue("columns.onDone", value, { shouldDirty: true, shouldValidate: true }) },
                         ]}
+                    />
+
+                    <CiFixCard
+                        idPrefix="agentic-ci"
+                        value={ci}
+                        limitError={form.formState.errors.ci?.ciFixLimit?.message}
+                        onChange={(next) => form.setValue("ci", next, { shouldDirty: true, shouldValidate: true })}
                     />
 
                     <div className="flex flex-wrap justify-end gap-2">

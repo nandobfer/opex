@@ -66,6 +66,14 @@ export interface IWorkbenchPr {
     conflictHeadSha: string | null
     /** Replanejamentos causados pela revisão automática (aba "Revisão de PR"; limite opcional). */
     autoReviewReplans?: number
+    /** SHA da branch do PR na última correção de CI iniciada (no mesmo commit, só a primeira pode reexecutar). */
+    ciFixHeadSha?: string | null
+    /** Falhas tratadas na última correção (`sha:ids das verificações`): o mesmo conjunto não é tratado de novo; uma reexecução gera ids novos. */
+    ciFixKey?: string | null
+    /** Correções de CI seguidas (zera quando o CI do PR fica verde); limite opcional na central. */
+    ciFixAttempts?: number
+    /** Aviso de limite de correções de CI já dado para a sequência atual. */
+    ciFixLimitNotified?: boolean
 }
 
 /** Retomada de uma mesa (etapa isenta ou concluída) aguardando vaga na central; FIFO por `queuedAt`. */
@@ -84,6 +92,12 @@ export interface IPendingTurn {
 }
 
 /** Resumo de um fork integrado ao contexto da conversa principal (instrução durável da sessão da mesa). */
+/** Modelo (`provedor/modelo`) e variante trocados na mesa ou no fork (o agente continua o da etapa/modo). */
+export interface IModelOverride {
+    model: string
+    variant: string | null
+}
+
 export interface IForkNote {
     forkId: string
     number: number
@@ -144,6 +158,8 @@ export interface IAgenticWorkbench {
     pendingTurn: IPendingTurn | null
     /** Último número de fork usado (os números não se repetem). */
     forkSeq: number
+    /** Modelo/variante trocados na mesa por papel (planning, implementation, build, pr); ausente = modelo do papel. */
+    modelOverrides?: Partial<Record<string, IModelOverride>> | null
     /** Resumos de forks integrados ao contexto da conversa principal. */
     forkNotes: IForkNote[]
     /** `false` quando os resumos não puderam ser gravados como instrução da sessão: vão no próximo prompt. */
@@ -194,6 +210,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         pendingFeedback: { type: String, default: null },
         pendingTurn: { type: Schema.Types.Mixed, default: null },
         forkSeq: { type: Number, default: 0 },
+        modelOverrides: { type: Schema.Types.Mixed, default: null },
         forkNotes: { type: [Schema.Types.Mixed] as unknown as IForkNote[], default: [] },
         forkNotesSynced: { type: Boolean, default: true },
         forksDonePrompt: { type: Schema.Types.Mixed, default: null },
@@ -244,6 +261,14 @@ export interface IAgenticFork {
     sessionDirectory: string | null
     /** `fork`: cópia da sessão principal; `fresh`: sessão nova com o contexto da mesa (mesa sem sessão). */
     origin: string
+    /** Modo atual: `plan` (somente leitura) ou `build` (pode alterar arquivos). Ausente (forks antigos) = `plan`. */
+    mode?: string
+    /** Travado como somente leitura (na abertura ou depois, sem volta): o modo fica `plan`. Ausente = `false`. */
+    readOnly?: boolean
+    /** Aviso de troca de modo que vai no início da próxima mensagem ao agente (uma vez). */
+    pendingModeNote?: string | null
+    /** Modelo/variante trocados neste fork; `null` = modelo do papel Fork da conversa. */
+    modelOverride?: IModelOverride | null
     /** Etapa da mesa quando o fork foi aberto. */
     forkedFromStage: string
     /** Resumo proposto para integração (em revisão enquanto `integrating`). */
@@ -277,6 +302,10 @@ const AgenticForkSchema = new Schema<IAgenticFork>(
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         origin: { type: String, default: "fork" },
+        mode: { type: String, default: "plan" },
+        readOnly: { type: Boolean, default: false },
+        pendingModeNote: { type: String, default: null },
+        modelOverride: { type: Schema.Types.Mixed, default: null },
         forkedFromStage: { type: String, required: true },
         summary: { type: String, default: null },
         integration: { type: Schema.Types.Mixed, default: null },

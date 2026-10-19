@@ -60,6 +60,7 @@ import {
     cancelAttachmentUpload,
     cleanupAbandonedAttachments,
     completeAttachmentUpload,
+    importAttachmentFromStorage,
     deleteAttachment,
     listAttachments,
     linkAttachmentsToTask,
@@ -342,5 +343,25 @@ describe("anexos — rascunho", () => {
         expect(reservation.id).toBeTruthy()
 
         await expect(reserve(clientActor("c2"), { draftId })).rejects.toMatchObject({ code: "DRAFT_NOT_FOUND", status: 404 })
+    })
+})
+
+describe("anexos — cópia de um objeto do storage (arquivos do chat do Agente Opex)", () => {
+    const owner: AttachmentActor = { kind: "owner", userId: "local", name: "Dono", clientId: null }
+
+    it("cria o anexo pronto na tarefa copiando o objeto, sem novo envio, e audita no histórico", async () => {
+        const task = await (mocks.devTasks as MemoryModel).create({ clientId: null, code: "OPX-1" })
+        const dto = await importAttachmentFromStorage(owner, { sourceKey: "opex/s/f/print.png", name: "print.png", size: 3, mimeType: "image/png", taskId: String(task._id) })
+        expect(mocks.copyFile).toHaveBeenCalledWith("opex/s/f/print.png", `attachments/${dto.id}/print.png`)
+        expect(mocks.getUploadUrl).not.toHaveBeenCalled()
+        expect((mocks.attachments as MemoryModel).docs.at(-1)).toMatchObject({ status: "ready", taskId: String(task._id), size: 3 })
+        expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "Tarefa", depois: expect.objectContaining({ anexo: "adicionado" }) }))
+        expect(mocks.publish).toHaveBeenCalledWith([String(task._id)])
+    })
+
+    it("recusa arquivo acima de 100 MB e objeto de origem ausente", async () => {
+        await expect(importAttachmentFromStorage(owner, { sourceKey: "k", name: "a.zip", size: ATTACHMENT_MAX_BYTES + 1, mimeType: "application/zip" })).rejects.toMatchObject({ status: 413 })
+        mocks.copyFile.mockRejectedValueOnce({ name: "NoSuchKey", $metadata: { httpStatusCode: 404 } })
+        await expect(importAttachmentFromStorage(owner, { sourceKey: "k", name: "a.txt", size: 2, mimeType: "text/plain" })).rejects.toMatchObject({ status: 404 })
     })
 })

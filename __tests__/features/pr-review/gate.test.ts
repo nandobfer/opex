@@ -42,3 +42,24 @@ describe('revisão obrigatória antes do merge automático', () => {
     expect(mocks.find).not.toHaveBeenCalled()
   })
 })
+
+describe('estado da revisão automática do commit atual (acompanhamento do PR)', () => {
+  it('revisão automática desligada', async () => {
+    mocks.settings.mockResolvedValue({ settings: DEFAULT_PR_REVIEW_SETTINGS })
+    expect(await (await loadPrReviewGate()).reviewStatus('Org/App', 7, 'h1')).toEqual({ enabled: false })
+    expect(mocks.find).not.toHaveBeenCalled()
+  })
+
+  it('estado e veredito da revisão do commit atual (repo em minúsculas)', async () => {
+    mocks.lean.mockResolvedValue({ state: 'done', verdict: 'approved' })
+    expect(await (await loadPrReviewGate()).reviewStatus('Org/App', 7, 'h1')).toEqual({ enabled: true, state: 'done', verdict: 'approved' })
+    expect(mocks.find).toHaveBeenCalledWith({ repo: 'org/app', number: 7, headSha: 'h1' })
+  })
+
+  it('ainda não revisado ou sem commit conhecido', async () => {
+    mocks.lean.mockResolvedValue(null)
+    const gate = await loadPrReviewGate()
+    expect(await gate.reviewStatus('org/app', 7, 'h1')).toEqual({ enabled: true, state: null, verdict: null })
+    expect(await gate.reviewStatus('org/app', 7, null)).toEqual({ enabled: true, state: null, verdict: null })
+  })
+})

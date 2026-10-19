@@ -22,6 +22,7 @@ import { PENDING_TURN_LABELS } from "../../constants"
 import { ForkComposer } from "./ForkComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
+import { WorkbenchModelPicker } from "./WorkbenchModelPicker"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
 
@@ -109,12 +110,17 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                 )}
                 {!slotQueue && workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; CI falho é corrigido pelo agente (quando a central permite); merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
                 )}
                 {workbench.stage === "resolving_conflicts" && workbench.runState === "running" && (
                     <motion.p key="conflicts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O PR está com o merge bloqueado por conflito: o agente está integrando a branch de destino, resolvendo os conflitos e atualizando o PR. Você pode parar a qualquer momento.
+                    </motion.p>
+                )}
+                {workbench.stage === "fixing_ci" && workbench.runState === "running" && (
+                    <motion.p key="fixing-ci" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O CI do PR falhou: o agente está lendo os logs, corrigindo a branch do PR e enviando a correção (push). Você pode parar a qualquer momento.
                     </motion.p>
                 )}
                 {workbench.stage === "merging_pr" && workbench.runState === "running" && (
@@ -172,69 +178,82 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
             </AnimatePresence>
 
             {!composer && !forking && (
-                <div className="flex flex-wrap justify-end gap-2 max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
-                    <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={Boolean(workbench.deletionRequestedAt)} onClick={() => setForking(true)}>
-                        <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
-                    </Button>
-                    {actions.map((action) => {
-                        if (isFeedback(action)) {
-                            const label = action === "request-correction" && failed ? "Voltar ao planejamento" : FEEDBACK[action].button
-                            const compact = action === "request-correction" && failed ? "Replanejar" : COMPACT_LABEL[action]
-                            return (
-                                <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label={label} onClick={() => setComposer(action)}>
-                                    {action === "reopen" ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden />}
-                                    <ActionLabel full={label} compact={compact} />
-                                </Button>
-                            )
-                        }
-                        switch (action) {
-                            case "open-preview":
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Modelo da etapa atual (à esquerda); os botões ficam à direita. */}
+                    <div className="mr-auto min-w-0 max-w-full">
+                        <WorkbenchModelPicker workbench={workbench} />
+                    </div>
+                    <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
+                        {/* Abrir em nova guia (prévia) é sempre o primeiro da linha. */}
+                        {actions.includes("open-preview") && (
+                            <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
+                                <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                                    <span className="max-md:hidden">Abrir em nova guia</span>
+                                </a>
+                            </Button>
+                        )}
+                        {workbench.pr && (
+                            <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
+                                <a href={workbench.pr.url} target="_blank" rel="noreferrer noopener">
+                                    <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Ver PR #{workbench.pr.number}
+                                </a>
+                            </Button>
+                        )}
+                        <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={Boolean(workbench.deletionRequestedAt)} onClick={() => setForking(true)}>
+                            <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
+                        </Button>
+                        {actions.map((action) => {
+                            if (isFeedback(action)) {
+                                const label = action === "request-correction" && failed ? "Voltar ao planejamento" : FEEDBACK[action].button
+                                const compact = action === "request-correction" && failed ? "Replanejar" : COMPACT_LABEL[action]
                                 return (
-                                    <Button key={action} asChild variant="outline" size="sm" className={ACTION_BUTTON}>
-                                        <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
-                                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                                            <span className="max-md:hidden">Abrir em nova guia</span>
-                                        </a>
+                                    <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label={label} onClick={() => setComposer(action)}>
+                                        {action === "reopen" ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden />}
+                                        <ActionLabel full={label} compact={compact} />
                                     </Button>
                                 )
-                            case "implement":
-                                return (
-                                    <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
-                                        <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
-                                    </Button>
-                                )
-                            case "approve":
-                                return (
-                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Aprovar e abrir PR" onClick={() => setConfirm("approve")}>
-                                        <CheckCheck className="h-3.5 w-3.5" aria-hidden />
-                                        <ActionLabel full="Aprovar e abrir PR" compact="Aprovar PR" />
-                                    </Button>
-                                )
-                            case "reconnect":
-                                return <ReconnectButton key={action} reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={autoReconnect.retryNow} />
-                            case "retry":
-                                return (
-                                    <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Tentar novamente" onClick={() => run("retry")}>
-                                        <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                                        <ActionLabel full="Tentar novamente" compact="Tentar" />
-                                    </Button>
-                                )
-                            case "cancel-wait":
-                                return (
-                                    <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("cancel-wait")}>
-                                        <X className="h-3.5 w-3.5" aria-hidden /> Cancelar espera
-                                    </Button>
-                                )
-                            case "interrupt":
-                                return (
-                                    <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => setConfirm("interrupt")}>
-                                        <Square className="h-3.5 w-3.5" aria-hidden /> Parar
-                                    </Button>
-                                )
-                            default:
-                                return null
-                        }
-                    })}
+                            }
+                            switch (action) {
+                                case "implement":
+                                    return (
+                                        <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
+                                            <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
+                                        </Button>
+                                    )
+                                case "approve":
+                                    return (
+                                        <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Aprovar e abrir PR" onClick={() => setConfirm("approve")}>
+                                            <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+                                            <ActionLabel full="Aprovar e abrir PR" compact="Aprovar PR" />
+                                        </Button>
+                                    )
+                                case "reconnect":
+                                    return <ReconnectButton key={action} reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={autoReconnect.retryNow} />
+                                case "retry":
+                                    return (
+                                        <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Tentar novamente" onClick={() => run("retry")}>
+                                            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                                            <ActionLabel full="Tentar novamente" compact="Tentar" />
+                                        </Button>
+                                    )
+                                case "cancel-wait":
+                                    return (
+                                        <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("cancel-wait")}>
+                                            <X className="h-3.5 w-3.5" aria-hidden /> Cancelar espera
+                                        </Button>
+                                    )
+                                case "interrupt":
+                                    return (
+                                        <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => setConfirm("interrupt")}>
+                                            <Square className="h-3.5 w-3.5" aria-hidden /> Parar
+                                        </Button>
+                                    )
+                                default:
+                                    return null
+                            }
+                        })}
+                    </div>
                 </div>
             )}
 

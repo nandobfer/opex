@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Forks da conversa (servidor): abrir (cópia da sessão principal ou sessão nova com o contexto da
- * mesa), somente leitura, encerrar/retomar, integrar (resumo, ajuste, destino), descartar e o
+ * mesa), somente leitura, pausar/retomar a conversa, integrar (resumo, ajuste, destino), descartar e o
  * tratamento dos forks em aberto na conclusão e na exclusão da mesa. OpenCode sempre mockado.
  */
 
@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   requestCorrection: vi.fn(async () => undefined),
   submitPrFeedback: vi.fn(async () => undefined),
   reopen: vi.fn(async () => undefined),
+  forkAgent: { value: 'plan' },
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -59,12 +60,12 @@ vi.mock('@/features/agentic/server/hub', () => ({
   flushWorkbenchEvents: vi.fn(async () => undefined),
 }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: mocks.deleteSession }))
-vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, agents: { fork: { agent: 'plan', model: null, variant: null } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
 vi.mock('@/features/agentic/server/workflow', () => ({ getWorkbench: mocks.getWorkbench, revisePlan: mocks.revisePlan, requestCorrection: mocks.requestCorrection, submitPrFeedback: mocks.submitPrFeedback, reopen: mocks.reopen }))
 
 import { AgenticFork, AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
-import { FORK_CHILD_NOTES_INSTRUCTIONS_KEY, FORK_NOTES_INSTRUCTIONS_KEY } from '@/features/agentic/constants'
+import { FORK_CHILD_NOTES_INSTRUCTIONS_KEY, FORK_INSTRUCTIONS_KEY, FORK_NOTES_INSTRUCTIONS_KEY } from '@/features/agentic/constants'
 import {
   applyForkIntegration,
   closeFork,
@@ -74,11 +75,13 @@ import {
   getFork,
   handleWorkbenchDone,
   integrateFork,
+  lockFork,
   openFork,
   resolveForksDonePrompt,
   resumeFork,
   reviseForkSummary,
   sendForkMessage,
+  setForkMode,
 } from '@/features/agentic/server/forks'
 
 type Docs = { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
@@ -135,7 +138,7 @@ const settle = async (forkId: string) => vi.waitFor(() => expect(mocks.active.ha
 
 const asDto = (id: string, patch: Record<string, unknown> = {}) => ({ id, stage: bench(id).stage, runState: bench(id).runState, sessionId: bench(id).sessionId, slotQueue: null, ...patch })
 
-/** Abre um fork e o deixa encerrado e com o resumo proposto (pronto para aplicar). */
+/** Abre um fork e o deixa pausado e com o resumo proposto (pronto para aplicar). */
 async function integratingFork(id: string, summary = 'Usar o serviço X') {
   const opened = await openFork(id, 'Por que X?')
   await settle(opened.id)
@@ -151,6 +154,7 @@ beforeEach(() => {
   workbenches.docs.length = 0
   forks.docs.length = 0
   mocks.active.clear()
+  mocks.forkAgent.value = 'plan'
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
   mocks.client.session.fork.mockResolvedValue({ id: 'fork-sess-1', location: { directory: '/home/u/app/worktrees/ope-1' } })
   mocks.client.session.create.mockResolvedValue({ id: 'fresh-sess-1', location: { directory: '/home/u/app' } })
@@ -200,14 +204,107 @@ describe('abrir fork', () => {
   })
 })
 
-describe('ciclo de vida', () => {
-  it('encerrado não aceita mensagem; retomar volta a conversar', async () => {
+describe('modo Plan/Build e trava de somente leitura', () => {
+  const permissionsOf = (sessionID: string) => mocks.client.session.update.mock.calls.map((call) => call[0]).filter((arg) => arg.sessionID === sessionID && 'permissions' in arg).at(-1)?.permissions
+
+  it('agente build no papel Fork: fork em Build pode alterar arquivos (sem restrição própria)', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench()
+    const dto = await openFork(id, 'Corrija o teste')
+    expect(dto).toMatchObject({ mode: 'build', readOnly: false })
+    expect(permissionsOf('fork-sess-1')).toEqual([])
+    expect(mocks.client.session.instructions.entry.put).toHaveBeenCalledWith(expect.objectContaining({ key: FORK_INSTRUCTIONS_KEY, value: expect.stringContaining('PODE alterar arquivos') }))
+    expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ agent: expect.objectContaining({ agent: 'build' }) }), expect.anything())
+    expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', message: expect.stringContaining('Build, pode alterar arquivos') }))
+  })
+
+  it('agente build e mesa sem sessão: sessão nova nasce sem as permissões de leitura', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench({ stage: 'done', sessionId: null })
+    await openFork(id, 'a')
+    expect(mocks.client.session.create.mock.calls[0]![0]).not.toHaveProperty('permissions')
+  })
+
+  it('"Somente leitura" na abertura trava em Plan mesmo com o agente build e audita', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench()
+    const dto = await openFork(id, 'Só investigue', { readOnly: true })
+    expect(dto).toMatchObject({ mode: 'plan', readOnly: true })
+    expect(permissionsOf('fork-sess-1')).toEqual(expect.arrayContaining([{ action: 'edit', resource: '*', effect: 'deny' }]))
+    expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ agent: expect.objectContaining({ agent: 'plan' }) }), expect.anything())
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'ForkDaMesa', acao: 'CRIAR', depois: expect.objectContaining({ modo: 'plan', somenteLeitura: true }) }))
+  })
+
+  it('trocar para Build refaz permissões e protocolo e avisa o agente na próxima mensagem (uma vez)', async () => {
     const id = await workbench()
     const opened = await openFork(id, 'a')
     await settle(opened.id)
+    const dto = await setForkMode(id, opened.id, 'build')
+    expect(dto).toMatchObject({ mode: 'build', readOnly: false })
+    expect(permissionsOf('fork-sess-1')).toEqual([])
+    expect(mocks.client.session.instructions.entry.put).toHaveBeenLastCalledWith(expect.objectContaining({ key: FORK_INSTRUCTIONS_KEY, value: expect.stringContaining('PODE alterar arquivos') }))
+    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ acao: 'ATUALIZAR', antes: expect.objectContaining({ modo: 'plan' }), depois: expect.objectContaining({ modo: 'build', somenteLeitura: false }) }))
+    expect(mocks.publishAgentic).toHaveBeenCalledWith(expect.objectContaining({ forkId: opened.id }))
+
+    await sendForkMessage(id, opened.id, 'altere o X')
+    const turn = mocks.runTurn.mock.lastCall![1]
+    expect(turn.text).toMatch(/^\[Modo alterado para Build/)
+    expect(turn.text).toContain('altere o X')
+    expect(turn.agent.agent).toBe('build')
+    await settle(opened.id)
+    await sendForkMessage(id, opened.id, 'e o Y?')
+    expect(mocks.runTurn.mock.lastCall![1].text).toBe('e o Y?')
+  })
+
+  it('não troca o modo com o agente respondendo', async () => {
+    const id = await workbench()
+    const created = await forks.create({ workbenchId: id, centralId: 'c1', taskId: 't1', taskCode: 'OPE-1', number: 1, status: 'active', runState: 'running', forkedFromStage: 'plan_review', sessionId: 's', mode: 'plan' })
+    mocks.active.add(String(created._id))
+    await expect(setForkMode(id, String(created._id), 'build')).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('travar é sem volta: Plan fixo, troca e nova trava recusadas', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench()
+    const opened = await openFork(id, 'a')
+    await settle(opened.id)
+    const dto = await lockFork(id, opened.id)
+    expect(dto).toMatchObject({ mode: 'plan', readOnly: true })
+    expect(permissionsOf('fork-sess-1')).toEqual(expect.arrayContaining([{ action: 'bash', resource: '*', effect: 'deny' }]))
+    expect(mocks.publish).toHaveBeenCalledWith(opened.id, expect.objectContaining({ message: expect.stringContaining('travado como somente leitura') }))
+    await expect(setForkMode(id, opened.id, 'build')).rejects.toMatchObject({ status: 409 })
+    await expect(lockFork(id, opened.id)).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('fork de fork não herda a trava do pai', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench()
+    const parent = await openFork(id, 'a', { readOnly: true })
+    await settle(parent.id)
+    mocks.client.session.fork.mockResolvedValueOnce({ id: 'child-sess', location: { directory: '/x' } })
+    const child = await openFork(id, 'b', { parentForkId: parent.id })
+    expect(child).toMatchObject({ mode: 'build', readOnly: false, parentForkId: parent.id })
+    expect(permissionsOf('child-sess')).toEqual([])
+  })
+
+  it('fork antigo sem modo nem trava é exibido em Plan, sem trava', async () => {
+    const id = await workbench()
+    const created = await forks.create({ workbenchId: id, centralId: 'c1', taskId: 't1', taskCode: 'OPE-1', number: 1, status: 'closed', runState: 'idle', forkedFromStage: 'plan_review', sessionId: 's' })
+    expect(await getFork(id, String(created._id))).toMatchObject({ mode: 'plan', readOnly: false })
+  })
+})
+
+describe('ciclo de vida', () => {
+  it('pausado não aceita mensagem; retomar volta a conversar (avisos na saída do fork)', async () => {
+    const id = await workbench()
+    const opened = await openFork(id, 'a')
+    await settle(opened.id)
+    mocks.publish.mockClear()
     await closeFork(id, opened.id)
+    expect(mocks.publish).toHaveBeenCalledWith(opened.id, { type: 'notice', level: 'info', message: 'Conversa pausada: retome, integre ou descarte o fork.' })
     await expect(sendForkMessage(id, opened.id, 'b')).rejects.toMatchObject({ status: 409 })
     await resumeFork(id, opened.id)
+    expect(mocks.publish).toHaveBeenCalledWith(opened.id, { type: 'notice', level: 'info', message: 'Conversa retomada.' })
     await sendForkMessage(id, opened.id, 'b')
     expect(mocks.runTurn).toHaveBeenLastCalledWith(mocks.client, expect.objectContaining({ text: 'b' }), expect.anything())
   })
@@ -287,7 +384,7 @@ describe('fork de fork', () => {
     const parent = await openFork(id, 'Por que X?')
     await settle(parent.id)
     mocks.client.session.fork.mockResolvedValueOnce({ id: 'child-sess-1', location: { directory: '/home/u/app/worktrees/ope-1' } })
-    const child = await openFork(id, 'E o detalhe Y?', parent.id)
+    const child = await openFork(id, 'E o detalhe Y?', { parentForkId: parent.id })
     await settle(child.id)
     return { id, parent, child }
   }
@@ -300,13 +397,13 @@ describe('fork de fork', () => {
     expect(mocks.runTurn).toHaveBeenLastCalledWith(mocks.client, expect.objectContaining({ sessionId: 'child-sess-1', text: 'E o detalhe Y?' }), expect.anything())
   })
 
-  it('abre com o pai encerrado ou respondendo; recusa pai integrado', async () => {
+  it('abre com o pai pausado ou respondendo; recusa pai integrado', async () => {
     const id = await workbench()
     mocks.runTurn.mockReturnValueOnce(new Promise(() => undefined))
     const parent = await openFork(id, 'a')
-    expect((await openFork(id, 'filho com o pai respondendo', parent.id)).parentForkId).toBe(parent.id)
+    expect((await openFork(id, 'filho com o pai respondendo', { parentForkId: parent.id })).parentForkId).toBe(parent.id)
     forks.docs.find((doc) => String(doc._id) === parent.id)!.status = 'integrated'
-    await expect(openFork(id, 'b', parent.id)).rejects.toMatchObject({ status: 409 })
+    await expect(openFork(id, 'b', { parentForkId: parent.id })).rejects.toMatchObject({ status: 409 })
   })
 
   it('pai sem a conversa no OpenCode: 409 sem criar o fork', async () => {
@@ -314,7 +411,7 @@ describe('fork de fork', () => {
     const parent = await openFork(id, 'a')
     await settle(parent.id)
     mocks.client.session.fork.mockRejectedValueOnce(Object.assign(new Error('Session not found'), { notFound: true }))
-    await expect(openFork(id, 'b', parent.id)).rejects.toMatchObject({ status: 409, message: expect.stringContaining('Fork 1') })
+    await expect(openFork(id, 'b', { parentForkId: parent.id })).rejects.toMatchObject({ status: 409, message: expect.stringContaining('Fork 1') })
     expect(forks.docs).toHaveLength(1)
   })
 

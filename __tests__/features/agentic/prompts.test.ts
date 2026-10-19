@@ -5,6 +5,7 @@ import {
   buildPrompt,
   cleanupPrompt,
   composeProjectFor,
+  ciFixPrompt,
   conflictPrompt,
   extractJsonBlock,
   extractPrUrl,
@@ -224,5 +225,30 @@ describe('fluxos alternativos (prévia vs PR automático)', () => {
     expect(text).toContain('session_move')
     expect(text).toContain('git worktree remove')
     expect(text).toContain('git branch -D')
+  })
+})
+
+describe('ciFixPrompt', () => {
+  const failures = [{ id: 'check:31', name: 'test', url: 'https://github.com/org/app/actions/runs/900/job/901', runId: 900, jobId: 901, summary: '2 testes falharam' }]
+  const pr = { number: 7, url: 'https://github.com/org/app/pull/7', headBranch: 'feat/x', headSha: 'abcdef1234567890', rerunAllowed: true }
+
+  it('lê os logs, corrige o mínimo sem desativar testes, faz push e comenta no PR', () => {
+    const text = ciFixPrompt({ ...config, git: { ...config.git, validateCommands: 'pnpm lint' } }, ctx, pr, failures)
+    expect(text).toContain('**test** — run 900, job 901')
+    expect(text).toContain('gh run view <run> --log-failed')
+    expect(text).toContain('NÃO desative, pule nem apague testes')
+    expect(text).toContain('pnpm lint')
+    expect(text).toContain('`git push`')
+    expect(text).toContain('NÃO use force-push nem rebase')
+    expect(text).toContain('gh pr comment 7')
+    expect(text).toContain('<!-- opex:ci-fix -->')
+    expect(text).toContain('gh run rerun <run> --failed')
+    expect(text).toContain('{"ok": true, "rerun": true}')
+  })
+
+  it('depois da 1ª tentativa no mesmo commit não oferece reexecução', () => {
+    const text = ciFixPrompt(config, ctx, { ...pr, rerunAllowed: false }, failures)
+    expect(text).not.toContain('gh run rerun <run> --failed')
+    expect(text).toContain('NÃO reexecute de novo')
   })
 })

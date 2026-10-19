@@ -12,7 +12,9 @@ vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ muta
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }),
   useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
+  useSetWorkbenchModel: () => ({ mutate: vi.fn(), isPending: false }),
 }))
+vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'
 import type { WorkbenchDto } from '@/features/agentic/types'
@@ -99,6 +101,51 @@ describe('ActionBar', () => {
     expect(approve.textContent).toContain('Aprovar PR')
   })
 
+  it('seletor do modelo da etapa fica à esquerda, fora da linha de botões', () => {
+    const models = {
+      planning: { model: 'anthropic/opus', variant: null, overridden: false },
+      implementation: { model: null, variant: null, overridden: false },
+      build: { model: null, variant: null, overridden: false },
+      pr: { model: null, variant: null, overridden: false },
+    }
+    render(<ActionBar workbench={workbench({ stage: 'plan_review', models } as never)} />)
+    const picker = screen.getByRole('button', { name: /Modelo do Plano: Claude Opus \(padrão\)/ })
+    const fork = screen.getByRole('button', { name: /Abrir fork/ })
+    expect(picker.compareDocumentPosition(fork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(fork.parentElement!.contains(picker)).toBe(false)
+  })
+
+  it('sem os modelos da central o seletor fica oculto', () => {
+    render(<ActionBar workbench={workbench({ stage: 'plan_review', models: null } as never)} />)
+    expect(screen.queryByRole('button', { name: /Modelo do Plano/ })).toBeNull()
+  })
+
+  it('Abrir em nova guia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
+    const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: 'open', mergedAt: null }
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr } as never)} />)
+    const preview = screen.getByRole('link', { name: /Abrir em nova guia/ })
+    const row = preview.parentElement!
+    expect(row.firstElementChild).toBe(preview)
+    const order = Array.from(row.children).map((element) => element.textContent?.trim())
+    expect(order.slice(0, 3)).toEqual(['Abrir em nova guia', 'Ver PR #12', 'Abrir fork'])
+  })
+
+  it.each(['pr_open', 'planning', 'implementing', 'preview', 'resolving_conflicts', 'done'] as const)('com PR: Ver PR #N abre o PR em nova guia (etapa %s)', (stage) => {
+    const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: stage === 'done' ? 'merged' : 'open', mergedAt: null }
+    render(<ActionBar workbench={workbench({ stage, runState: stage === 'planning' || stage === 'resolving_conflicts' ? 'running' : 'idle', pr } as never)} />)
+    const link = screen.getByRole('link', { name: /Ver PR #12/ })
+    expect(link.getAttribute('href')).toBe('https://github.com/org/app/pull/12')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noreferrer noopener')
+    const fork = screen.getByRole('button', { name: /Abrir fork/ })
+    expect(link.compareDocumentPosition(fork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sem PR não mostra Ver PR', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    expect(screen.queryByRole('link', { name: /Ver PR/ })).toBeNull()
+  })
+
   it('executando: só Parar; falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
     expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])
@@ -150,7 +197,7 @@ describe('ActionBar', () => {
     expect(submit.hasAttribute('disabled')).toBe(true)
     fireEvent.change(screen.getByLabelText(/O que você quer perguntar ou investigar no fork/), { target: { value: 'Por que o serviço X?' } })
     fireEvent.click(screen.getAllByRole('button', { name: /Abrir fork/ }).at(-1)!)
-    expect(mocks.openFork).toHaveBeenCalledWith({ text: 'Por que o serviço X?', parentForkId: undefined }, expect.anything())
+    expect(mocks.openFork).toHaveBeenCalledWith({ text: 'Por que o serviço X?', parentForkId: undefined, readOnly: false }, expect.anything())
     expect(onForkOpened).toHaveBeenCalledWith({ id: 'f1' })
   })
 

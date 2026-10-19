@@ -55,7 +55,7 @@ const log = loggerFor({ module: "ai" })
 
 type StreamTextOptions = Parameters<typeof streamText>[0]
 
-interface PreparedModel {
+export interface PreparedModel {
     model: LanguageModel
     providerOptions?: StreamTextOptions["providerOptions"]
     /** Nível de raciocínio da AI SDK (Anthropic, OpenAI e DeepSeek). */
@@ -72,7 +72,8 @@ const DIRECT_PROVIDERS = {
     deepseek: createDeepseekProvider,
 } as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
-async function prepareModel(request: AiStreamRequest): Promise<PreparedModel> {
+/** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
+export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
         const { provider, directory } = await createOpencodeProvider()
         const model = provider(request.model, {
@@ -106,7 +107,7 @@ async function prepareModel(request: AiStreamRequest): Promise<PreparedModel> {
 
 /** Temperatura e máximo de tokens só nos provedores com amostragem. A Anthropic não aceita temperatura
  * com raciocínio ligado; nos modelos de raciocínio da OpenAI a AI SDK descarta o que não se aplica. */
-export function samplingOptions(request: AiStreamRequest): Pick<StreamTextOptions, "temperature" | "maxOutputTokens"> {
+export function samplingOptions(request: Pick<AiStreamRequest, "provider" | "variant" | "temperature" | "maxOutputTokens">): Pick<StreamTextOptions, "temperature" | "maxOutputTokens"> {
     if (!getAiProvider(request.provider).supportsSampling) return {}
     const skipTemperature = request.provider === "anthropic" && Boolean(request.variant)
     return {

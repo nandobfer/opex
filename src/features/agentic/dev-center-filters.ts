@@ -17,7 +17,7 @@ export const DEV_CENTER_STATE_LABELS: Record<DevCenterState, string> = {
 const STATE_STAGES: Partial<Record<DevCenterState, readonly WorkbenchStage[]>> = {
     planning: ["planning"], plan_review: ["plan_review"], implementing: ["implementing", "build_queued", "building"],
     preview: ["preview"], opening_pr: ["opening_pr"], pr_open: ["pr_open"],
-    github_actions: ["changes_requested", "resolving_conflicts", "merging_pr", "deleting_pr_branch", "finishing"],
+    github_actions: ["changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"],
 }
 export interface TaskWorkbenchState {
     workbench?: { stage: WorkbenchStage; runState: RunState; pendingPermissions: number; pendingForms: number; slotQueue?: unknown }

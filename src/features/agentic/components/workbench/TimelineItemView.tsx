@@ -5,6 +5,7 @@ import { AlertTriangle, Bot, CheckCircle2, CircleSlash, Info, ShieldQuestion, Us
 import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
 import { DECISION_LABELS, type TimelineItem } from "../../timeline"
+import { PrWatchItem } from "./PrWatchItem"
 import { ToolItem } from "./ToolItem"
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", maximumFractionDigits: 3 })
@@ -22,7 +23,7 @@ const NOTICE_STYLE = {
 } as const
 
 /** Um item da saída da mesa (turno, texto do agente, ferramenta, aviso, pedido…). */
-export function TimelineItemView({ item }: { item: TimelineItem }) {
+export function TimelineItemView({ item, latestPrWatch = false }: { item: TimelineItem; latestPrWatch?: boolean }) {
     switch (item.kind) {
         case "turn":
             return (
@@ -81,5 +82,7 @@ export function TimelineItemView({ item }: { item: TimelineItem }) {
                     </span>
                 </p>
             )
+        case "pr-watch":
+            return <PrWatchItem item={item} latest={latestPrWatch} />
     }
 }

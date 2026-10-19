@@ -130,6 +130,14 @@ export async function getDraft(scope: DraftScope, id: string): Promise<Orcamento
     return draftToDto(await getDraftDoc(scope, id))
 }
 
+/** Rascunhos do escopo, do mais recente para o mais antigo (consulta do Agente Opex). */
+export async function listDrafts(scope: DraftScope, options: { status?: "draft" | "approved"; limit?: number } = {}): Promise<OrcamentoDraftDto[]> {
+    await dbConnect()
+    const filter = { ...filterOf(scope), ...(options.status ? { status: options.status } : {}) }
+    const drafts = (await OrcamentoDraft.find(filter).sort({ createdAt: -1 }).limit(options.limit ?? 50).lean()) as DraftDoc[]
+    return Promise.all(drafts.map(draftToDto))
+}
+
 /** Exige um rascunho em edição (409 se já aprovado). */
 export function assertDraftEditable(draft: DraftDoc): void {
     if (draft.status !== "draft") throw new DomainError(409, "Este rascunho já foi aprovado", "DRAFT_APPROVED")

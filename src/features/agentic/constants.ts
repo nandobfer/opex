@@ -9,7 +9,7 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, { label: string; description: 
     implementation: { label: "Implementação", description: "Cria o worktree, move a sessão e implementa o plano aprovado" },
     build: { label: "Build e ambiente", description: "Sobe a prévia com docker compose e, no fim, limpa o ambiente" },
     pr: { label: "Pull Request", description: "Valida, faz commit e push e abre o PR com o gh" },
-    fork: { label: "Fork da conversa", description: "Responde nos forks da conversa (somente leitura) e consolida o resumo para integrar" },
+    fork: { label: "Fork da conversa", description: "Responde nos forks da conversa e consolida o resumo para integrar. Com o agente plan, o fork abre em Plan (somente leitura); com outros (ex.: build), em Build (pode alterar arquivos). O modo pode ser trocado na conversa" },
 }
 
 /**
@@ -27,6 +27,7 @@ export const WORKBENCH_STAGES = [
     "pr_open",
     "changes_requested",
     "resolving_conflicts",
+    "fixing_ci",
     "merging_pr",
     "deleting_pr_branch",
     "finishing",
@@ -34,7 +35,7 @@ export const WORKBENCH_STAGES = [
 ] as const
 export type WorkbenchStage = (typeof WORKBENCH_STAGES)[number]
 
-export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "building", "opening_pr", "resolving_conflicts", "merging_pr", "deleting_pr_branch", "finishing"]
+export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "building", "opening_pr", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"]
 
 /**
  * Etapas que NÃO ocupam vaga no limite de mesas da central (`maxConcurrent`): a mesa espera o
@@ -43,7 +44,7 @@ export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implement
 export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "preview", "pr_open"]
 
 /** O que uma mesa aguardando vaga vai executar quando a vaga chegar. */
-export const PENDING_TURN_ACTIONS = ["revise-plan", "implement", "request-correction", "approve", "submit-pr-feedback", "reopen", "pr-feedback", "pr-conflict", "pr-auto-merge", "pr-cleanup"] as const
+export const PENDING_TURN_ACTIONS = ["revise-plan", "implement", "request-correction", "approve", "submit-pr-feedback", "reopen", "pr-feedback", "pr-conflict", "pr-ci-fix", "pr-auto-merge", "pr-cleanup"] as const
 export type PendingTurnAction = (typeof PENDING_TURN_ACTIONS)[number]
 
 export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
@@ -55,6 +56,7 @@ export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
     reopen: "Reabrir a mesa",
     "pr-feedback": "Replanejar com o pedido do PR",
     "pr-conflict": "Resolver o conflito do PR",
+    "pr-ci-fix": "Corrigir o CI do PR",
     "pr-auto-merge": "Mergear o PR",
     "pr-cleanup": "Limpar o ambiente após o merge",
 }
@@ -70,6 +72,7 @@ export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     pr_open: "PR aberto",
     changes_requested: "Mudanças pedidas no PR",
     resolving_conflicts: "Resolvendo conflitos",
+    fixing_ci: "Corrigindo o CI",
     merging_pr: "Mergeando o PR",
     deleting_pr_branch: "Excluindo a branch remota",
     finishing: "Concluindo",
@@ -83,9 +86,45 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
     building: "build",
     opening_pr: "pr",
     resolving_conflicts: "pr",
+    fixing_ci: "pr",
     merging_pr: "pr",
     deleting_pr_branch: "pr",
     finishing: "build",
+}
+
+/** Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca). */
+export const WORKBENCH_MODEL_ROLES = ["planning", "implementation", "build", "pr"] as const satisfies readonly AgentRole[]
+export type WorkbenchModelRole = (typeof WORKBENCH_MODEL_ROLES)[number]
+
+/** Rótulo do seletor de modelo da mesa e dos avisos ("Modelo do Plano"). */
+export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
+    planning: "Modelo do Plano",
+    implementation: "Modelo da Implementação",
+    build: "Modelo da Prévia",
+    pr: "Modelo do Pull Request",
+}
+
+/**
+ * Papel cujo modelo o seletor da mesa troca em cada etapa (`null` = seletor oculto: Concluindo e
+ * Concluída). "Mudanças pedidas" troca o do Plano (o próximo turno dali é o replanejamento). Com falha,
+ * vale a etapa em que a mesa parou. Etapa nova entra aqui (o `Record` é exaustivo).
+ */
+export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null> = {
+    planning: "planning",
+    plan_review: "planning",
+    changes_requested: "planning",
+    implementing: "implementation",
+    build_queued: "build",
+    building: "build",
+    preview: "build",
+    opening_pr: "pr",
+    pr_open: "pr",
+    resolving_conflicts: "pr",
+    fixing_ci: "pr",
+    merging_pr: "pr",
+    deleting_pr_branch: "pr",
+    finishing: null,
+    done: null,
 }
 
 /** Passos exibidos no topo da mesa (várias etapas caem no mesmo passo). */
@@ -93,7 +132,7 @@ export const WORKBENCH_STEPS = [
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },
     { id: "implement", label: "Implementação", stages: ["implementing"] },
     { id: "preview", label: "Prévia", stages: ["build_queued", "building", "preview"] },
-    { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "merging_pr", "deleting_pr_branch"] },
+    { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch"] },
     { id: "done", label: "Concluída", stages: ["finishing", "done"] },
 ] as const satisfies readonly { id: string; label: string; stages: readonly WorkbenchStage[] }[]
 
@@ -130,7 +169,7 @@ export const AGENTIC_INCLUDE_LABELS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Ciclo de vida de um fork: `active` (conversando), `closed` (encerrado: retomar, integrar ou
+ * Ciclo de vida de um fork: `active` (conversando), `closed` (conversa pausada: retomar, integrar ou
  * descartar), `integrating` (resumo em revisão), `integrated` (histórico somente leitura) e
  * `concluded` (finalizado junto com a mesa; histórico somente leitura).
  */
@@ -139,7 +178,7 @@ export type ForkStatus = (typeof FORK_STATUSES)[number]
 
 export const FORK_STATUS_LABELS: Record<ForkStatus, string> = {
     active: "Ativo",
-    closed: "Encerrado",
+    closed: "Pausado",
     integrating: "Integrando",
     integrated: "Integrado",
     concluded: "Concluído",
@@ -147,6 +186,15 @@ export const FORK_STATUS_LABELS: Record<ForkStatus, string> = {
 
 /** Forks ainda em aberto (nem integrados, nem descartados, nem concluídos). */
 export const OPEN_FORK_STATUSES: readonly ForkStatus[] = ["active", "closed", "integrating"]
+
+/** Modo do fork: `plan` (somente leitura) ou `build` (pode alterar arquivos conforme as permissões do agente). */
+export const FORK_MODES = ["plan", "build"] as const
+export type ForkMode = (typeof FORK_MODES)[number]
+
+export const FORK_MODE_LABELS: Record<ForkMode, { label: string; description: string }> = {
+    plan: { label: "Plan", description: "Somente leitura: lê o código e responde, sem alterar arquivos" },
+    build: { label: "Build", description: "Pode alterar arquivos e rodar comandos (na pasta da mesa)" },
+}
 
 /** Destino do resumo ao integrar um fork. */
 export const FORK_INTEGRATION_TARGETS = ["parent", "context", "planner", "reopen"] as const
@@ -175,7 +223,7 @@ export const FORK_NOTES_INSTRUCTIONS_KEY = "opex-fork-notes"
 export const FORK_CHILD_NOTES_INSTRUCTIONS_KEY = "opex-fork-child-notes"
 
 /**
- * Permissões da sessão de um fork (somente leitura): nega edição, subagentes e comandos, liberando
+ * Permissões da sessão de um fork em Plan (somente leitura): nega edição, subagentes e comandos, liberando
  * só os comandos de leitura. A última regra que casa vale (as liberações vêm depois do bloqueio geral).
  */
 export const FORK_READ_ONLY_COMMANDS = ["git status*", "git log*", "git diff*", "git show*", "git branch*", "ls*", "cat *", "grep *", "rg *", "find *", "head *", "tail *", "wc *"] as const

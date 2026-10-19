@@ -1,6 +1,6 @@
 "use client"
 
-import { Controller } from "react-hook-form"
+import { Controller, useWatch } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChipInput } from "@/components/ui/chip-input"
 import { Field } from "@/components/ui/field"
@@ -8,11 +8,16 @@ import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
+import { useAgenticSettings } from "../../hooks/useAgentic"
+import { CiFixCard } from "../settings/CiFixCard"
 import type { CentralForm } from "./form"
 
-/** Aba Git e PR: branches, padrões de nome, revisores, labels e comandos de preparo/validação. */
+/** Aba Git e PR: branches, padrões de nome, correção de CI, revisores, labels e comandos de preparo/validação. */
 export function GitSection({ form }: { form: CentralForm }) {
     const errors = form.formState.errors.git
+    const [inheritCi, fixCi, ciFixLimit] = useWatch({ control: form.control, name: ["git.inheritCi", "git.fixCi", "git.ciFixLimit"] })
+    const settings = useAgenticSettings()
+    const options = { shouldDirty: true, shouldValidate: true } as const
     const text = (name: "baseBranch" | "prTargetBranch" | "branchPattern" | "commitPattern" | "prTitlePattern", label: string, mono = true) => (
         <Field id={`central-git-${name}`} label={label} error={errors?.[name]?.message}>
             <Input id={`central-git-${name}`} className={mono ? "font-mono" : undefined} {...form.register(`git.${name}`)} aria-invalid={errors?.[name] ? true : undefined} />
@@ -62,6 +67,17 @@ export function GitSection({ form }: { form: CentralForm }) {
                     </div>
                 </CardContent>
             </Card>
+            <CiFixCard
+                idPrefix="central-git-ci"
+                value={{ fixCi, ciFixLimit }}
+                globalValue={settings.data?.settings.ci}
+                limitError={errors?.ciFixLimit?.message}
+                inherited={{ value: inheritCi, onChange: (inherit) => form.setValue("git.inheritCi", inherit, options) }}
+                onChange={(next) => {
+                    form.setValue("git.fixCi", next.fixCi, options)
+                    form.setValue("git.ciFixLimit", next.ciFixLimit, options)
+                }}
+            />
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Comandos</CardTitle>
