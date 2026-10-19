@@ -16,6 +16,9 @@ vi.mock('@/lib/integrations/debug', () => ({
 import { getOpencodeInfo, listOpencodeAgents, listOpencodeModels } from '@/lib/ai/opencode'
 import { listGeminiModels } from '@/lib/ai/gemini'
 import { listJevModels } from '@/lib/ai/jev'
+import { listAnthropicModels } from '@/lib/ai/anthropic'
+import { listOpenaiModels } from '@/lib/ai/openai'
+import { listDeepseekModels } from '@/lib/ai/deepseek'
 import { AI_PROVIDERS, AI_TEXT_PROVIDER_IDS } from '@/lib/ai/providers'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -26,6 +29,9 @@ beforeEach(() => {
     ai_opencode: { baseUrl: 'http://opencode:4096/', password: 'segredo' },
     ai_gemini: { apiKey: 'chave' },
     ai_jev: { apiKey: 'chave-jev' },
+    ai_anthropic: { apiKey: 'chave-anthropic' },
+    ai_openai: { apiKey: 'chave-openai' },
+    ai_deepseek: { apiKey: 'chave-deepseek' },
   }
 })
 
@@ -124,6 +130,92 @@ describe('Gemini', () => {
   })
 })
 
+describe('Anthropic', () => {
+  it('pagina os modelos, do mais novo ao mais antigo, com níveis de raciocínio só nos que raciocinam', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(json({ data: [{ id: 'claude-3-5-haiku-20241022', display_name: 'Claude Haiku 3.5', created_at: '2024-10-22T00:00:00Z' }], has_more: true, last_id: 'claude-3-5-haiku-20241022' }))
+      .mockResolvedValueOnce(json({ data: [{ id: 'claude-sonnet-4-5', display_name: 'Claude Sonnet 4.5', created_at: '2025-09-29T00:00:00Z', max_input_tokens: 200000 }], has_more: false }))
+    const models = await listAnthropicModels()
+    expect(models.map((model) => model.id)).toEqual(['claude-sonnet-4-5', 'claude-3-5-haiku-20241022'])
+    expect(models[0]).toMatchObject({ name: 'Claude Sonnet 4.5', variants: ['low', 'medium', 'high'], contextWindow: 200000 })
+    expect(models[1]?.variants).toEqual([])
+
+    const [firstUrl, init] = mocks.fetch.mock.calls[0]!
+    expect(firstUrl).toBe('https://api.anthropic.com/v1/models?limit=1000')
+    expect(init.headers).toMatchObject({ 'x-api-key': 'chave-anthropic', 'anthropic-version': '2023-06-01' })
+    expect(mocks.fetch.mock.calls[1]![0]).toBe('https://api.anthropic.com/v1/models?limit=1000&after_id=claude-3-5-haiku-20241022')
+  })
+
+  it('API key recusada vira mensagem em pt-BR; sem chave nem chama a rede', async () => {
+    mocks.fetch.mockResolvedValueOnce(json({}, 401))
+    await expect(listAnthropicModels()).rejects.toThrow('A Anthropic recusou a API key (HTTP 401)')
+
+    mocks.config.ai_anthropic = {}
+    mocks.fetch.mockClear()
+    await expect(listAnthropicModels()).rejects.toThrow('Anthropic sem API key')
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('OpenAI', () => {
+  it('só modelos de texto, mais novos primeiro, com esforço de raciocínio na série o e no GPT-5+', async () => {
+    mocks.fetch.mockResolvedValue(
+      json({
+        data: [
+          { id: 'gpt-4o', created: 100 },
+          { id: 'gpt-5', created: 300 },
+          { id: 'o3', created: 200 },
+          { id: 'gpt-5-chat-latest', created: 250 },
+          { id: 'text-embedding-3-large', created: 400 },
+          { id: 'gpt-4o-realtime-preview', created: 400 },
+          { id: 'gpt-image-1', created: 400 },
+          { id: 'whisper-1', created: 400 },
+        ],
+      }),
+    )
+    const models = await listOpenaiModels()
+    expect(models.map((model) => model.id)).toEqual(['gpt-5', 'gpt-5-chat-latest', 'o3', 'gpt-4o'])
+    expect(models.map((model) => model.variants.length > 0)).toEqual([true, false, true, false])
+    const [url, init] = mocks.fetch.mock.calls[0]!
+    expect(url).toBe('https://api.openai.com/v1/models')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer chave-openai')
+  })
+
+  it('API key recusada vira mensagem em pt-BR; sem chave nem chama a rede', async () => {
+    mocks.fetch.mockResolvedValueOnce(json({}, 401))
+    await expect(listOpenaiModels()).rejects.toThrow('A OpenAI recusou a API key (HTTP 401)')
+
+    mocks.config.ai_openai = {}
+    mocks.fetch.mockClear()
+    await expect(listOpenaiModels()).rejects.toThrow('OpenAI sem API key')
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('DeepSeek', () => {
+  it('lista os modelos; o alias deepseek-chat não tem raciocínio', async () => {
+    mocks.fetch.mockResolvedValue(json({ data: [{ id: 'deepseek-reasoner' }, { id: 'deepseek-chat' }] }))
+    const models = await listDeepseekModels()
+    expect(models.map((model) => [model.id, model.variants.length])).toEqual([
+      ['deepseek-chat', 0],
+      ['deepseek-reasoner', 3],
+    ])
+    const [url, init] = mocks.fetch.mock.calls[0]!
+    expect(url).toBe('https://api.deepseek.com/models')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer chave-deepseek')
+  })
+
+  it('API key recusada vira mensagem em pt-BR; sem chave nem chama a rede', async () => {
+    mocks.fetch.mockResolvedValueOnce(json({}, 403))
+    await expect(listDeepseekModels()).rejects.toThrow('A DeepSeek recusou a API key (HTTP 403)')
+
+    mocks.config.ai_deepseek = {}
+    mocks.fetch.mockClear()
+    await expect(listDeepseekModels()).rejects.toThrow('DeepSeek sem API key')
+    expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('JEV', () => {
   it('lista os modelos/aliases e envia a API key como Bearer', async () => {
     mocks.fetch.mockResolvedValue(
@@ -159,5 +251,12 @@ describe('capacidade dos provedores', () => {
     expect([...AI_TEXT_PROVIDER_IDS]).toEqual(AI_PROVIDERS.filter((provider) => provider.supportsTextGeneration).map((provider) => provider.id))
     expect(AI_TEXT_PROVIDER_IDS).not.toContain('jev')
     expect(AI_PROVIDERS.map((provider) => provider.id)).toContain('jev')
+  })
+
+  it('Anthropic, OpenAI e DeepSeek são provedores de texto com amostragem e sem agente', () => {
+    for (const id of ['anthropic', 'openai', 'deepseek'] as const) {
+      expect(AI_TEXT_PROVIDER_IDS).toContain(id)
+      expect(AI_PROVIDERS.find((provider) => provider.id === id)).toMatchObject({ integrationId: `ai_${id}`, supportsSampling: true, supportsAgent: false })
+    }
   })
 })

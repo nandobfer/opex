@@ -38,6 +38,9 @@ describe("páginas dos Provedores de IA", () => {
     it.each([
         ["opencode", "ai_opencode"],
         ["gemini", "ai_gemini"],
+        ["anthropic", "ai_anthropic"],
+        ["openai", "ai_openai"],
+        ["deepseek", "ai_deepseek"],
         ["jev", "ai_jev"],
     ])("/integracoes/ia/%s abre a integração %s", async (provider, id) => {
         render(await ProvedorIaPage({ params: Promise.resolve({ provider }) }))
@@ -45,6 +48,6 @@ describe("páginas dos Provedores de IA", () => {
     })
 
     it("provedor desconhecido cai no 404", async () => {
-        await expect(ProvedorIaPage({ params: Promise.resolve({ provider: "openai" }) })).rejects.toThrow("NEXT_NOT_FOUND")
+        await expect(ProvedorIaPage({ params: Promise.resolve({ provider: "mistral" }) })).rejects.toThrow("NEXT_NOT_FOUND")
     })
 })

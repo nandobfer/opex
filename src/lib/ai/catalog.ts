@@ -2,8 +2,11 @@ import { dbConnect } from "@/lib/db"
 import { IntegrationStatus, type IIntegrationStatus } from "@/lib/db/models/IntegrationStatus"
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
+import { listAnthropicModels } from "./anthropic"
+import { listDeepseekModels } from "./deepseek"
 import { listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
+import { listOpenaiModels } from "./openai"
 import { listOpencodeAgents, listOpencodeModels } from "./opencode"
 import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
 
@@ -11,6 +14,15 @@ import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiP
  * Catálogo dos provedores de IA (SOMENTE servidor): situação de cada provedor e modelos/agentes
  * disponíveis, com cache curto por configuração (`version` da integração).
  */
+
+const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiModelDto[]>> = {
+    opencode: listOpencodeModels,
+    gemini: listGeminiModels,
+    anthropic: listAnthropicModels,
+    openai: listOpenaiModels,
+    deepseek: listDeepseekModels,
+    jev: listJevModels,
+}
 
 const CACHE_MS = 2 * 60_000
 const cache = new Map<string, { at: number; value: unknown }>()
@@ -48,15 +60,7 @@ export async function getAiProviderStatuses(): Promise<AiProviderStatusDto[]> {
 
 export async function listAiModels(providerId: AiProviderId, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiModelDto[]> {
     const { version } = await getIntegration(getAiProvider(providerId).integrationId)
-    return cached(
-        `models:${providerId}:${version}`,
-        () => {
-            if (providerId === "opencode") return listOpencodeModels(options.signal)
-            if (providerId === "gemini") return listGeminiModels(options.signal)
-            return listJevModels(options.signal)
-        },
-        options.fresh === true,
-    )
+    return cached(`models:${providerId}:${version}`, () => MODEL_LISTERS[providerId](options.signal), options.fresh === true)
 }
 
 export async function listAiAgents(options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiAgentDto[]> {

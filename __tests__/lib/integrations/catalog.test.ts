@@ -18,7 +18,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -83,20 +83,28 @@ describe('catálogo de integrações', () => {
     expect(integrationPath('ai')).toBe('/integracoes/ia')
     expect(integrationPath('ai_opencode')).toBe('/integracoes/ia/opencode')
     expect(integrationPath('ai_gemini')).toBe('/integracoes/ia/gemini')
+    expect(integrationPath('ai_anthropic')).toBe('/integracoes/ia/anthropic')
+    expect(integrationPath('ai_openai')).toBe('/integracoes/ia/openai')
+    expect(integrationPath('ai_deepseek')).toBe('/integracoes/ia/deepseek')
     expect(integrationPath('ai_jev')).toBe('/integracoes/ia/jev')
     expect(hasCustomIntegrationPath('ai_opencode')).toBe(true)
     expect(hasCustomIntegrationPath('github')).toBe(false)
     expect(INTEGRATIONS.filter((def) => def.parent).map((def) => [def.id, def.parent])).toEqual([
       ['ai_opencode', 'ai'],
       ['ai_gemini', 'ai'],
+      ['ai_anthropic', 'ai'],
+      ['ai_openai', 'ai'],
+      ['ai_deepseek', 'ai'],
       ['ai_jev', 'ai'],
     ])
-    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_jev'] as const) {
+    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev'] as const) {
       const def = getIntegrationDef(id)
       expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
     }
     expect(getIntegrationDef('ai_opencode').secretFields).toEqual([expect.objectContaining({ key: 'password', required: true })])
-    expect(getIntegrationDef('ai_gemini').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
+    for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek'] as const) {
+      expect(getIntegrationDef(id).secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
+    }
     expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
   })
