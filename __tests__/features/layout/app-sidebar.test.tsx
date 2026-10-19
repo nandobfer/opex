@@ -39,7 +39,7 @@ const SECTIONS: readonly NavSectionDef[] = [
     },
 ]
 
-function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[] } = {}) {
+function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[]; footerItems?: (collapsed: boolean) => React.ReactNode } = {}) {
     return render(
         <AppSidebar
             brand={{ name: "Meu App", subtitle: "Pessoal", homeHref: "/tarefas" }}
@@ -49,6 +49,7 @@ function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; secti
             badges={options.badges}
             ownerName="Ana Souza"
             version="1.2.3"
+            footerItems={options.footerItems}
         />,
     )
 }
@@ -133,5 +134,15 @@ describe("AppSidebar — padrão SideNavigation do DS Sipal", () => {
         // O estado salvo é lido depois da montagem: espera aplicar em vez de contar microtarefas.
         await waitFor(() => expect(screen.getByRole("button", { name: "Sistema" }).getAttribute("aria-expanded")).toBe("false"))
         expect(screen.getByRole("button", { name: "Trabalho" }).getAttribute("aria-expanded")).toBe("true")
+    })
+
+    it("itens extras do rodapé (Agente Opex no menu do dono) recebem o estado recolhido; sem eles, nada aparece", () => {
+        const footerItems = vi.fn((collapsed: boolean) => <li>{collapsed ? "Agente (recolhido)" : "Agente Opex"}</li>)
+        renderSidebar({ collapsed: true, footerItems })
+        expect(screen.getByText("Agente (recolhido)")).toBeTruthy()
+        expect(footerItems).toHaveBeenCalledWith(true)
+        cleanup()
+        renderSidebar()
+        expect(screen.queryByText(/Agente/)).toBeNull()
     })
 })

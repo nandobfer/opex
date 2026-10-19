@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, useReducedMotion } from "framer-motion"
@@ -32,6 +33,11 @@ interface AppSidebarProps {
     badges?: NavBadges
     ownerName: string
     version?: string
+    /**
+     * Itens extras acima do rodapé (ex.: "Agente Opex", só no menu do dono). Recebe se a barra está
+     * recolhida; cada item renderiza o próprio `<li>`.
+     */
+    footerItems?: (collapsed: boolean) => ReactNode
 }
 
 /**
@@ -42,7 +48,7 @@ interface AppSidebarProps {
  * linha inferior e o avatar do dono abre o popover com a ação "Sair" (`SidebarFooter`). A gaveta do
  * mobile usa o mesmo componente expandido.
  */
-export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, onClose, badges, ownerName, version }: AppSidebarProps) {
+export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, onClose, badges, ownerName, version, footerItems }: AppSidebarProps) {
     const pathname = usePathname()
     const reduceMotion = useReducedMotion() ?? false
     const activeHref = activeNavHref(pathname, flattenNav(sections))
@@ -116,6 +122,8 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
                             </SidebarNavSection>
                 ))}
             </nav>
+
+            {footerItems && <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-2">{footerItems(collapsed)}</ul>}
 
             {collapsed && version && (
                 <div className="flex justify-center border-t border-sidebar-border p-2">

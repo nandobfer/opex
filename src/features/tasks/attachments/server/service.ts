@@ -265,6 +265,56 @@ export async function completeAttachmentUpload(actor: AttachmentActor, id: strin
     return toAttachmentDto(ready)
 }
 
+/**
+ * Cria um anexo **já pronto** copiando um objeto que já está no storage (cópia server-side, sem novo
+ * envio pelo navegador) — ex.: arquivo enviado no chat do Agente Opex anexado a uma tarefa ou a um
+ * rascunho de prévia. O objeto de origem continua onde está.
+ */
+export async function importAttachmentFromStorage(
+    actor: AttachmentActor,
+    input: { sourceKey: string; name: string; size: number; mimeType: string; taskId?: string; draftId?: string },
+): Promise<TaskAttachmentDto> {
+    await dbConnect()
+    if (input.size <= 0) throw new DomainError(400, "O arquivo está vazio.", "ATTACHMENT_EMPTY")
+    if (input.size > ATTACHMENT_MAX_BYTES) throw new DomainError(413, "Arquivo maior que 100 MB.", "ATTACHMENT_TOO_LARGE")
+    let clientId = actor.clientId
+    if (input.taskId) clientId = (await requireTask(actor, input.taskId)).clientId
+    else if (input.draftId) clientId = (await requireDraft(actor, input.draftId)).clientId
+
+    const _id = new Types.ObjectId()
+    const id = String(_id)
+    const name = safeAttachmentName(input.name)
+    const key = `attachments/${id}/${name}`
+    try {
+        await copyFile(input.sourceKey, key)
+    } catch (error) {
+        const info = storageErrorInfo(error)
+        logger.warn({ err: error, attachmentId: id, operation: "copy", httpStatus: info.httpStatus, code: info.code, kind: info.kind }, "[attachments] Falha ao copiar o objeto para o anexo")
+        if (info.kind === "not_found") throw new DomainError(404, "O arquivo de origem não está mais no storage.", "ATTACHMENT_NOT_FOUND")
+        throw new DomainError(502, "Não foi possível copiar o arquivo no storage. Tente novamente em instantes.", "ATTACHMENT_STORAGE_UNAVAILABLE")
+    }
+    const mimeType = (input.mimeType?.trim() || ATTACHMENT_FALLBACK_MIME).toLowerCase()
+    const doc = (await TaskAttachment.create({
+        _id,
+        taskId: input.taskId ?? null,
+        draftId: input.taskId ? null : (input.draftId ?? null),
+        serviceId: null,
+        uploaderKind: actor.kind,
+        uploaderId: actor.userId,
+        uploaderName: actor.name,
+        clientId,
+        name,
+        size: input.size,
+        mimeType,
+        key,
+        uploadKey: key,
+        status: "ready",
+    })).toObject() as AttachmentDoc
+    await auditAttachment(actor, doc, "adicionado")
+    if (doc.taskId) await notifyTaskChanged(doc.taskId)
+    return toAttachmentDto(doc)
+}
+
 /** Cancela um upload **ainda não confirmado** (o autor ou o dono). */
 export async function cancelAttachmentUpload(actor: AttachmentActor, id: string): Promise<void> {
     const doc = await getAttachmentDoc(id)

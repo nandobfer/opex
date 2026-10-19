@@ -141,6 +141,16 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 - Testes: `model-override`, `workflow-model`, `forks-model`, `model-routes`, `ModelOverridePicker`,
   `ActionBar`, `ForkPanel`.
 
+### H — Agente Opex — b434dea, 261d10c
+
+> **Entregue na v2.62.0** (OPE-81) — descrito em `modules/opex-agent.md`.
+
+- Nativo (sem Recursos beta): `src/features/opex-agent/`, rotas `/api/opex/*` e
+  `/api/ai/features/opex-agent`, item na barra lateral do dono e aba `agente-opex` em `/integracoes/ia`.
+- Arquivos do chat no S3 com upload assinado (rotina `opex-files-cleanup` limpa pendentes em 24 h).
+- Ferramentas sem Go! Sipal/beta, com os grupos extras Serviços, Financeiro (leitura) e Clientes, e
+  `set_workbench_model` (bloco G).
+
 ## Riscos
 
 - `pr-watch.ts` do Opex já combina revisão de PR, merge automático e vagas: A e B exigem port

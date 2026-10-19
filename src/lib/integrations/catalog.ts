@@ -186,6 +186,8 @@ export const TASK_TAGS_JOB_ID = "ai-task-tags"
 export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
 /** Limpeza de anexos abandonados (uploads nunca vinculados) e remoções pendentes no storage. */
 export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
+/** Limpeza dos arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h (S3 + metadados). */
+export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
 
 /** Rotinas internas que processam tarefas e deixam escolher o escopo (`scope`). */
 export function jobSupportsScope(jobId: string): boolean {
@@ -255,6 +257,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Limpar anexos abandonados das tarefas",
         kind: "internal",
         schedule: { type: "interval", minutes: 30 },
+        enabled: true,
+    },
+    {
+        id: OPEX_FILES_CLEANUP_JOB_ID,
+        label: "Limpar arquivos pendentes do chat do Agente Opex",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 60 },
         enabled: true,
     },
 ]

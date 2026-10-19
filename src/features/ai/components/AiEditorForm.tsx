@@ -22,6 +22,7 @@ import { EstimateHoursTab } from "./estimate-hours/EstimateHoursTab"
 import { TaskRefinementTab } from "./task-refinement/TaskRefinementTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
+import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -44,6 +45,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "refinar-tarefa", label: "Refinar tarefa", icon: Wand2 },
     { id: "revisao-pr", label: "Revisão de PR", icon: GitPullRequest },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
+    { id: "agente-opex", label: "Agente Opex", icon: Bot },
 ]
 
 /**
@@ -90,6 +92,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "refinar-tarefa" && <TaskRefinementTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "revisao-pr" && <PrReviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>
     )

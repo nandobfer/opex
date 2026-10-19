@@ -163,6 +163,8 @@ sem pedido explícito.
   (debug/status das integrações) — só o dono —, `private-client-{clientId}` (portal do cliente) e
   `private-repo-recents-{ator}` (histórico do próprio ator). Canal novo exige regra em
   `src/lib/pusher/channel-auth.ts`.
+- Agente Opex: `opex-session-updated` / `opex-session-deleted` em `private-app` (payload `{ id }`);
+  a resposta ao vivo do chat vai por NDJSON (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.
@@ -179,6 +181,10 @@ sem pedido explícito.
   instanciar clientes novos em cada feature.
 - Serviço externo novo = entrada no catálogo de integrações (`src/lib/integrations/catalog.ts`)
   com campos públicos/privados, tester e debug, seguindo `aicontext/modules/integrations.md`.
+- **Ferramentas do Agente Opex** (`src/features/opex-agent/server/tools/`) chamam a **função de
+  serviço real** do app (nunca HTTP). Ferramenta de exclusão, arquivamento, gravação de integração ou
+  usuário/senha/token de cliente é `destructive` (sempre pede Confirmar/Cancelar no chat); segredos
+  nunca vão para o modelo, os cards ou o histórico (`redact`). Ver `aicontext/modules/opex-agent.md`.
 
 ## 4. Fluxo obrigatório: implementar → documentar → testar
 

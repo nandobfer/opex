@@ -42,7 +42,7 @@ const ESTIMATE_HOURS_FEATURE = "estimate-hours"
 const TASK_REFINEMENT_FEATURE = "task-refinement"
 
 /** Campos de provedor comuns a toda feature de IA. */
-type ProviderSettings = {
+export type ProviderSettings = {
     enabled: boolean
     provider: AiProviderId | null
     model: string | null
@@ -53,7 +53,7 @@ type ProviderSettings = {
 }
 
 /** Configuração salva (validada); inválida ou ausente cai nos valores iniciais. */
-async function loadFeature<T>(feature: string, schema: ZodType<T>, defaults: T): Promise<{ settings: T; isDefault: boolean; updatedAt: Date | null }> {
+export async function loadFeature<T>(feature: string, schema: ZodType<T>, defaults: T): Promise<{ settings: T; isDefault: boolean; updatedAt: Date | null }> {
     await dbConnect()
     const doc = await AiFeatureSetting.findOne({ feature }).lean()
     if (!doc) return { settings: defaults, isDefault: true, updatedAt: null }
@@ -62,7 +62,7 @@ async function loadFeature<T>(feature: string, schema: ZodType<T>, defaults: T):
 }
 
 /** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
-async function availability(settings: Pick<ProviderSettings, "enabled" | "provider" | "model">, featureLabel: string): Promise<AiFeatureAvailability> {
+export async function availability(settings: Pick<ProviderSettings, "enabled" | "provider" | "model">, featureLabel: string): Promise<AiFeatureAvailability> {
     if (!settings.enabled) return { available: false, reason: `${featureLabel} está desativada em Integrações › Provedores de IA` }
     if (!settings.provider || !settings.model) return { available: false, reason: "Selecione o provedor e o modelo em Integrações › Provedores de IA" }
     const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
@@ -72,7 +72,7 @@ async function availability(settings: Pick<ProviderSettings, "enabled" | "provid
 }
 
 /** Confere no provedor o modelo, a variante e o agente escolhidos. */
-async function assertCatalog(settings: ProviderSettings): Promise<void> {
+export async function assertCatalog(settings: ProviderSettings): Promise<void> {
     if (!settings.provider || !settings.model) return
     const provider = getAiProvider(settings.provider)
     const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
@@ -115,7 +115,7 @@ export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTask
 export function normalizeTaskSummarySettings(input: TaskSummarySettings): TaskSummarySettings {
     return normalizeProvider(input)
 }
-async function persistFeature<T>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
+export async function persistFeature<T>(feature: string, next: T, actorId: string, before: { isDefault: boolean; settings: T }): Promise<void> {
     await AiFeatureSetting.updateOne({ feature }, { $set: { settings: next, updatedAt: new Date(), updatedBy: actorId } }, { upsert: true })
     await recordAudit({
         userId: actorId,
