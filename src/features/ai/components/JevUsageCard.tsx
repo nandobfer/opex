@@ -15,6 +15,7 @@ import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { formatJevCost, jevUsageRangeQuery } from "../jev-usage"
 import { useJevUsage } from "../hooks/useJevUsage"
+import { UsageBreakdownTable } from "./UsageBreakdownTable"
 
 const RANGE_SCHEMA = { usageFrom: urlFilterCodecs.string(), usageTo: urlFilterCodecs.string() }
 
@@ -56,7 +57,10 @@ export function JevUsageCard() {
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.15 }}>
                     {view === "invalid" && <ErrorState title="Período inválido" description="Selecione datas válidas, com início anterior ao fim." onRetry={() => setRange(defaults)} />}
-                    {view === "loading" && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" role="status" aria-label="Carregando consumo"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>}
+                    {view === "loading" && <div className="space-y-4" role="status" aria-label="Carregando consumo">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
+                        <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
+                    </div>}
                     {view === "error" && <ErrorState title="Não foi possível carregar o consumo" description={apiErrorMessage(usage.error, "Tente novamente.")} onRetry={() => void usage.refetch()} />}
                     {view === "empty" && <EmptyState icon={BarChart3} title="Nenhum uso do JEV neste período" description="Selecione outro período para consultar o consumo." actionLabel="Último mês" onAction={() => setRange(defaults)} />}
                     {view === "data" && data && <div className="space-y-4">
@@ -66,6 +70,11 @@ export function JevUsageCard() {
                             <Metric label="Tokens de entrada conhecidos" value={data.inputTokens} />
                             <Metric label="Tokens de saída conhecidos" value={data.outputTokens} />
                         </div>
+                        <UsageBreakdownTable
+                            firstColumnLabel="Recurso"
+                            rows={data.features.map((row) => ({ key: row.feature, ...row }))}
+                            total={{ requests: data.requests, inputTokens: data.inputTokens, outputTokens: data.outputTokens, totalTokens: data.totalTokens, costUsd: data.costUsd }}
+                        />
                         <p className="text-xs text-muted-foreground">{data.requests.toLocaleString("pt-BR")} chamada(s) · {data.failedRequests.toLocaleString("pt-BR")} falha(s) na requisição</p>
                         {data.reconstructedRequests > 0 && <p role="note" className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">Parte deste consumo foi reconstruída por rateio; valores por período são aproximados. {data.reconstructedRequests.toLocaleString("pt-BR")} registro(s) histórico(s), sem separação entre entrada e saída.</p>}
                         {(data.missingTokenRequests > 0 || data.missingCostRequests > 0) && <p role="note" className="text-xs text-muted-foreground">Totais parciais: {data.missingTokenRequests} registro(s) sem tokens totais e {data.missingCostRequests} sem custo. Métricas desconhecidas não são consideradas zero.</p>}

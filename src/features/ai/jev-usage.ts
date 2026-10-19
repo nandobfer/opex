@@ -8,6 +8,17 @@ export const jevUsageQuerySchema = z.object({ from: optionalDate, to: optionalDa
 )
 export type JevUsageQuery = z.infer<typeof jevUsageQuerySchema>
 
+/** Consumo de uma feature de IA no período. Métricas ausentes ficam `null`. */
+export interface JevUsageFeatureRow {
+    feature: string
+    label: string
+    requests: number
+    inputTokens: number | null
+    outputTokens: number | null
+    totalTokens: number | null
+    costUsd: number | null
+}
+
 export interface JevUsageSummary {
     requests: number
     failedRequests: number
@@ -18,6 +29,8 @@ export interface JevUsageSummary {
     reconstructedRequests: number
     missingTokenRequests: number
     missingCostRequests: number
+    /** Uma linha por recurso que consumiu o JEV no período, do maior custo para o menor. */
+    features: JevUsageFeatureRow[]
 }
 
 /** Datas do calendário são locais; a API recebe instantes ISO, incluindo o dia final inteiro. */

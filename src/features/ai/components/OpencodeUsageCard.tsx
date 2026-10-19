@@ -9,39 +9,15 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DATE_PRESET, PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
-import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
-import { formatTokens, formatUsd, opencodeUsageRangeQuery, type OpencodeUsageOriginRow } from "../opencode-usage"
+import { opencodeUsageRangeQuery } from "../opencode-usage"
 import { useOpencodeUsage } from "../hooks/useOpencodeUsage"
+import { UsageBreakdownTable } from "./UsageBreakdownTable"
 
 const RANGE_SCHEMA = { usageFrom: urlFilterCodecs.string(), usageTo: urlFilterCodecs.string() }
-
-const HEADER = "p-2 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
-const CELL = "p-2 align-middle"
-
-function Tokens({ value }: { value: number | null }) {
-    return value === null ? <span className="text-muted-foreground" title="Métrica não informada">—</span> : <AnimatedNumber value={value} formatter={formatTokens} duration={0.2} />
-}
-
-function Cost({ value }: { value: number | null }) {
-    return value === null ? <span className="text-muted-foreground" title="Métrica não informada">—</span> : <AnimatedNumber value={value} formatter={formatUsd} duration={0.2} />
-}
-
-function Row({ label, row, bold }: { label: string; row: Omit<OpencodeUsageOriginRow, "origin" | "label">; bold?: boolean }) {
-    return (
-        <tr className={bold ? "border-t bg-muted/30 font-semibold" : "border-t"}>
-            <td className={CELL}>{label}</td>
-            <td className={`${CELL} tabular-nums`}>{row.requests.toLocaleString("pt-BR")}</td>
-            <td className={`${CELL} tabular-nums`}><Tokens value={row.inputTokens} /></td>
-            <td className={`${CELL} tabular-nums`}><Tokens value={row.outputTokens} /></td>
-            <td className={`${CELL} tabular-nums`}><Tokens value={row.totalTokens} /></td>
-            <td className={`${CELL} tabular-nums`}><Cost value={row.costUsd} /></td>
-        </tr>
-    )
-}
 
 /** Painel de consumo do OpenCode: uso medido separado por origem (feature, refinamento, mesa) e total. */
 export function OpencodeUsageCard() {
@@ -81,24 +57,11 @@ export function OpencodeUsageCard() {
                         {view === "empty" && <EmptyState icon={BarChart3} title="Nenhum uso do OpenCode neste período" description="Selecione outro período para consultar o consumo." actionLabel="Último mês" onAction={() => setRange(defaults)} />}
                         {view === "data" && data && (
                             <div className="space-y-3">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr>
-                                                <th className={HEADER}>Origem</th>
-                                                <th className={HEADER}>Chamadas</th>
-                                                <th className={HEADER}>Entrada</th>
-                                                <th className={HEADER}>Saída</th>
-                                                <th className={HEADER}>Total</th>
-                                                <th className={HEADER}>Custo (USD)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {data.origins.map((row) => <Row key={row.origin} label={row.label} row={row} />)}
-                                            <Row label="Total" row={data.total} bold />
-                                        </tbody>
-                                    </table>
-                                </div>
+                                <UsageBreakdownTable
+                                    firstColumnLabel="Origem"
+                                    rows={data.origins.map((row) => ({ key: row.origin, ...row }))}
+                                    total={data.total}
+                                />
                                 {data.coverageFrom && <p className="text-xs text-muted-foreground">Medição iniciada em {formatLogTimestamp(data.coverageFrom).slice(0, 16)}.</p>}
                             </div>
                         )}

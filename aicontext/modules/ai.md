@@ -124,7 +124,11 @@ e opções na própria aba da página "Provedores de IA".
   conectados podem ser escolhidos. Refinar tarefa, Revisão de PR e Desenvolvimento agêntico são
   exclusivos do OpenCode.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
-  custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Filtro na URL
+  custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Abaixo dos cards há uma
+  **tabela por recurso** (feature de IA que consumiu o JEV: "Tags de tarefas", "Estimar prazos"…)
+  com chamadas, entrada, saída, total e custo, mais a linha **Total** — as colunas seguem a tabela do
+  OpenCode (`UsageBreakdownTable`), com métricas ausentes como `—`. A linha Total usa os mesmos
+  totais do servidor, então não diverge dos cards quando um recurso não informa a métrica. Filtro na URL
   (`usageFrom`/`usageTo`) com `PresetDateRangeFilter`: padrão **Último mês** (um mês atrás até hoje),
   atalhos Hoje/Última semana/Último mês e intervalo personalizado. As datas são convertidas do
   fuso do navegador para ISO, incluindo o dia final inteiro. Limpar consulta todos os logs retidos.
@@ -313,7 +317,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | Rota | Descrição |
 |---|---|
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
-| `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna); intervalo inválido → 400; sem limites → logs retidos |
+| `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
@@ -343,7 +347,8 @@ refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinem
 
 Uso JEV: `__tests__/lib/ai/jev-usage.test.ts` (normalização/custo/rateio),
 `jev-request-usage.test.ts` (persistência/auditoria/evento por requisição e falhas),
-`__tests__/features/ai/jev-usage.test.ts` (agregação/períodos), `jev-usage-route.test.ts`
-(API interna), `jev-usage-card.test.tsx` (painel/filtro/estados) e `jev-usage-hook.test.tsx`
+`__tests__/features/ai/jev-usage.test.ts` (agregação/períodos e consumo por recurso), `jev-usage-route.test.ts`
+(API interna), `jev-usage-card.test.tsx` (painel/filtro/estados/tabela), `usage-breakdown-table.test.tsx`
+(tabela compartilhada entre JEV e OpenCode) e `jev-usage-hook.test.tsx`
 (consulta/tempo real/cleanup). Os testes de tags e estimativas verificam referências e ausência de
 logs JEV duplicados, inclusive tags avulsas e falha de negócio posterior à resposta.
