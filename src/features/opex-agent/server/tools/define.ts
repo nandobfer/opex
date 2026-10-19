@@ -1,6 +1,8 @@
 import type { ZodType } from "zod"
 import { DomainError } from "@/lib/api/route"
 import type { OpexToolGroup } from "../../constants"
+import type { OpexClientToolGroup } from "../../client-tools"
+import type { OpexServerScope } from "../scope"
 
 /**
  * Ferramenta do Agente Opex: descreve para o modelo o que faz, valida a entrada com Zod e chama a
@@ -14,15 +16,19 @@ export interface OpexToolContext {
     sessionId: string
     actorId: string
     signal?: AbortSignal
+    /** Escopo do turno (dono ou portal do cliente); ausente = dono (compatibilidade das ferramentas). */
+    scope?: OpexServerScope
 }
 
 export interface OpexToolDef<I = unknown> {
     name: string
-    group: OpexToolGroup
+    group: OpexToolGroup | OpexClientToolGroup
     /** Rótulo curto em pt-BR exibido no card da ferramenta. */
     label: string
     description: string
     risk: OpexToolRisk
+    /** Só o **admin** do cliente recebe a ferramenta (catálogo do portal). */
+    adminOnly?: boolean
     input: ZodType<I>
     /** Frase do card de confirmação ("Excluir o apontamento de 2 h da GO-DEV-12"). */
     // Sintaxe de método: permite guardar ferramentas de entradas diferentes numa lista `OpexTool`.

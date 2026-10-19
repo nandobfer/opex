@@ -103,6 +103,14 @@ export const updateOpexSessionSchema = z
     })
     .refine((value) => value.title !== undefined || value.archived !== undefined, { message: "Nada para alterar" })
 
+/** Configuração do Agente Opex de um cliente do portal (mesmo schema na tela e na API). */
+export const clientOpexAgentConfigSchema = z.object({
+    enabled: z.boolean(),
+    /** Ferramentas ligadas; nomes são validados contra o catálogo no servidor. */
+    enabledTools: z.array(z.string().trim().min(1).max(64)).max(200),
+})
+export type ClientOpexAgentConfigInput = z.infer<typeof clientOpexAgentConfigSchema>
+
 export const decideOpexActionSchema = z.object({
     decision: z.enum(["confirm", "cancel"]),
 })

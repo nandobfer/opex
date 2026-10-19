@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef } from "react"
-import { useOpexSettings } from "../../hooks/useOpexSettings"
+import { useOpexView } from "../../hooks/useOpexSettings"
 import { useCreateOpexSession } from "../../hooks/useOpexSessions"
 import { useOpexUploads } from "../../hooks/useOpexUploads"
 import { DEFAULT_OPEX_AGENT_SETTINGS } from "../../schemas"
@@ -15,13 +15,13 @@ import { OpexUnavailable } from "./OpexChat"
  * arquivo também cria a sessão na hora (o envio precisa dela); o texto digitado vai junto para a aba.
  */
 export function OpexDraftChat({ onCreated }: { onCreated: (sessionId: string, draftText?: string) => void }) {
-    const settings = useOpexSettings()
+    const view = useOpexView()
     const create = useCreateOpexSession()
     const uploads = useOpexUploads(null)
     const composerRef = useRef<OpexComposerHandle>(null)
-    const availability = settings.data?.availability
+    const availability = view.data?.availability
     const disabledReason = availability && !availability.available ? (availability.reason ?? "O Agente Opex não está disponível") : null
-    const limits = settings.data?.settings.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
+    const limits = view.data?.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
 
     const start = (text: string) => create.mutate(text, { onSuccess: ({ session }) => onCreated(session.id) })
     const attach = (files: File[]) => {

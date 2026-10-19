@@ -8,13 +8,16 @@ import { VisuallyHidden } from "@/components/ui/visually-hidden"
 import { formatAttachmentSize } from "@/lib/attachments"
 import { withBasePath } from "@/lib/base-path"
 import { cn } from "@/lib/utils"
-import { opexFilePath } from "../../files"
 import type { OpexFileDto } from "../../types"
+import { useOpexScope } from "../OpexScopeProvider"
 import { OPEX_FILE_ICONS } from "./file-icons"
 
 /** Arquivos de uma mensagem do usuário: imagens em miniatura (ampliam ao clicar) e os demais para baixar. */
 export function OpexMessageFiles({ files, align = "end" }: { files: OpexFileDto[]; align?: "start" | "end" }) {
+    const { apiBase } = useOpexScope()
     const [zoomed, setZoomed] = useState<OpexFileDto | null>(null)
+    // A rota do conteúdo segue o escopo (dono: `/api/opex`, portal: `/api/cliente/opex`).
+    const fileHref = (id: string, download = false) => withBasePath(`/api${apiBase}/files/${id}${download ? "?download=1" : ""}`)
     if (!files.length) return null
     const images = files.filter((file) => file.kind === "image")
     const others = files.filter((file) => file.kind !== "image")
@@ -34,7 +37,7 @@ export function OpexMessageFiles({ files, align = "end" }: { files: OpexFileDto[
                             className="overflow-hidden rounded-lg border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                         >
                             {/* eslint-disable-next-line @next/next/no-img-element -- conteúdo autenticado do app */}
-                            <img src={withBasePath(file.url)} alt={file.name} loading="lazy" className="h-24 w-24 object-cover" />
+                            <img src={fileHref(file.id)} alt={file.name} loading="lazy" className="h-24 w-24 object-cover" />
                         </motion.button>
                     ))}
                 </div>
@@ -42,7 +45,7 @@ export function OpexMessageFiles({ files, align = "end" }: { files: OpexFileDto[
             {others.map((file) => (
                 <a
                     key={file.id}
-                    href={withBasePath(opexFilePath(file.id, true))}
+                    href={fileHref(file.id, true)}
                     download={file.name}
                     className="group flex max-w-full items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-xs transition-colors hover:border-primary/50"
                 >
@@ -72,10 +75,10 @@ export function OpexMessageFiles({ files, align = "end" }: { files: OpexFileDto[
                                         <DialogPrimitive.Title>{zoomed.name}</DialogPrimitive.Title>
                                     </VisuallyHidden>
                                     {/* eslint-disable-next-line @next/next/no-img-element -- conteúdo autenticado do app */}
-                                    <img src={withBasePath(zoomed.url)} alt={zoomed.name} className="max-h-[85%] max-w-full rounded-lg border object-contain shadow-2xl" />
+                                    <img src={fileHref(zoomed.id)} alt={zoomed.name} className="max-h-[85%] max-w-full rounded-lg border object-contain shadow-2xl" />
                                     <div className="flex items-center gap-2 rounded-full border bg-popover px-3 py-1.5 text-xs shadow-lg">
                                         <span className="max-w-[40vw] truncate">{zoomed.name}</span>
-                                        <a href={withBasePath(opexFilePath(zoomed.id, true))} download={zoomed.name} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Baixar">
+                                        <a href={fileHref(zoomed.id, true)} download={zoomed.name} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Baixar">
                                             <Download className="h-3.5 w-3.5" aria-hidden />
                                         </a>
                                         <DialogPrimitive.Close className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Fechar">

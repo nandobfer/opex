@@ -23,8 +23,9 @@ import { ClientTokenDialog } from "./ClientTokenDialog"
 import { ClienteTokenTab } from "./ClienteTokenTab"
 import { RemoveClienteDialog } from "./RemoveClienteDialog"
 import { ClienteUsersTab } from "../users/ClienteUsersTab"
+import { ClienteOpexAgentTab } from "@/features/opex-agent/components/settings/client/ClienteOpexAgentTab"
 
-type ConfigTab = "settings" | "users" | "token"
+type ConfigTab = "settings" | "users" | "opex" | "token"
 
 /** Página de configuração de um cliente: dados, usuários e token do portal. */
 export function ClienteConfigPage({ clientId }: { clientId: string }) {
@@ -49,7 +50,7 @@ export function ClienteConfigPage({ clientId }: { clientId: string }) {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h1 className="text-lg font-semibold md:text-2xl">{client?.name ?? "Cliente"}</h1>
-                        <p className="text-sm text-muted-foreground">Dados, usuários e token do portal deste cliente.</p>
+                        <p className="text-sm text-muted-foreground">Dados, usuários, Agente Opex e token do portal deste cliente.</p>
                     </div>
                     {client && (
                         <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -71,6 +72,7 @@ export function ClienteConfigPage({ clientId }: { clientId: string }) {
                     <TabsList>
                         <TabsTrigger value="settings">Configurações</TabsTrigger>
                         <TabsTrigger value="users">Usuários</TabsTrigger>
+                        <TabsTrigger value="opex">Agente Opex</TabsTrigger>
                         <TabsTrigger value="token">Token</TabsTrigger>
                     </TabsList>
 
@@ -126,6 +128,10 @@ export function ClienteConfigPage({ clientId }: { clientId: string }) {
 
                     <TabsContent value="users" className="mt-4">
                         <ClienteUsersTab clientId={clientId} />
+                    </TabsContent>
+
+                    <TabsContent value="opex" className="mt-4">
+                        <ClienteOpexAgentTab clientId={clientId} />
                     </TabsContent>
 
                     <TabsContent value="token" className="mt-4">

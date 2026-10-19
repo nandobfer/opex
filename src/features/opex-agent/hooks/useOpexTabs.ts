@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react"
 import { z } from "zod"
 import { usePersistentState } from "@/hooks/usePersistentState"
-import { OPEX_TABS_STORAGE_KEY } from "../constants"
+import { useOpexScope } from "../components/OpexScopeProvider"
 import type { OpexSessionDto } from "../types"
 
 /** Aba da nova sessão (ainda não criada). */
@@ -39,7 +39,8 @@ export function pruneTabs(state: OpexTabsState, sessions: readonly Pick<OpexSess
 
 /** Abas de sessão do popover, guardadas no navegador. */
 export function useOpexTabs(sessions: readonly OpexSessionDto[] | undefined) {
-    const { value, setValue, ready } = usePersistentState(OPEX_TABS_STORAGE_KEY, tabsSchema, INITIAL)
+    const { tabsKey } = useOpexScope()
+    const { value, setValue, ready } = usePersistentState(tabsKey, tabsSchema, INITIAL)
 
     useEffect(() => {
         if (sessions) setValue((current) => pruneTabs(current, sessions))

@@ -11,6 +11,12 @@ import { Schema, model, models, type Model } from "mongoose"
  *   rascunho do dono, o cliente escolhido para calcular o custo).
  */
 
+export interface IOrcamentoClientOpexAgent {
+    enabled: boolean
+    /** Nomes das ferramentas desligadas (guardar as desligadas faz ferramenta nova entrar ligada). */
+    disabledTools: string[]
+}
+
 export interface IOrcamentoClient {
     name: string
     /** Valor do token de acesso ao portal (`cli_…`), para montar a URL copiável no painel. */
@@ -26,6 +32,8 @@ export interface IOrcamentoClient {
     /** Multiplicador de lucro aplicado às horas exibidas ao cliente. */
     profitFactor: number
     active: boolean
+    /** Agente Opex no portal: ativação (padrão ligado) e ferramentas **desligadas** pelo dono. */
+    opexAgent?: IOrcamentoClientOpexAgent
     createdAt: Date
     updatedAt: Date
 }
@@ -40,6 +48,10 @@ const OrcamentoClientSchema = new Schema<IOrcamentoClient>(
         hourlyRate: { type: Number, default: 0 },
         profitFactor: { type: Number, default: 1 },
         active: { type: Boolean, default: true },
+        opexAgent: {
+            enabled: { type: Boolean, default: true },
+            disabledTools: { type: [String], default: [] },
+        },
     },
     { collection: "orcamento_clients", versionKey: false, timestamps: true },
 )

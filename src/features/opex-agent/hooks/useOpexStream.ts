@@ -6,6 +6,7 @@ import { withBasePath } from "@/lib/base-path"
 import { applyLiveLine } from "../live-message"
 import type { OpexLiveMessage, OpexSessionStatus, OpexStreamLine } from "../types"
 import { opexSessionKey, opexSessionsKey } from "./useOpexSessions"
+import { useOpexScope } from "../components/OpexScopeProvider"
 
 const RETRY_MS = 3_000
 /** Sem nada (nem `ping`) por este tempo, a conexão é refeita. */
@@ -53,6 +54,7 @@ export function reduceStream(state: OpexStreamState, line: OpexStreamLine): Opex
  */
 export function useOpexStream(sessionId: string | null): OpexStreamState {
     const queryClient = useQueryClient()
+    const { apiBase, queryPrefix } = useOpexScope()
     const [state, setState] = useState<{ id: string | null; value: OpexStreamState }>({ id: null, value: INITIAL })
 
     useEffect(() => {
@@ -61,15 +63,15 @@ export function useOpexStream(sessionId: string | null): OpexStreamState {
         let controller: AbortController | null = null
         let retry: ReturnType<typeof setTimeout> | null = null
         let watchdog: ReturnType<typeof setTimeout> | null = null
-        const url = withBasePath(`/api/opex/sessions/${sessionId}/stream`)
+        const url = withBasePath(`/api${apiBase}/sessions/${sessionId}/stream`)
 
         const armWatchdog = () => {
             if (watchdog) clearTimeout(watchdog)
             watchdog = setTimeout(() => controller?.abort(), STALE_MS)
         }
         const refresh = () => {
-            void queryClient.invalidateQueries({ queryKey: opexSessionKey(sessionId) })
-            void queryClient.invalidateQueries({ queryKey: opexSessionsKey })
+            void queryClient.invalidateQueries({ queryKey: opexSessionKey(queryPrefix, sessionId) })
+            void queryClient.invalidateQueries({ queryKey: opexSessionsKey(queryPrefix) })
         }
 
         const connect = async () => {
@@ -111,7 +113,7 @@ export function useOpexStream(sessionId: string | null): OpexStreamState {
             if (retry) clearTimeout(retry)
             if (watchdog) clearTimeout(watchdog)
         }
-    }, [sessionId, queryClient])
+    }, [sessionId, queryClient, apiBase, queryPrefix])
 
     return state.id === sessionId ? state.value : INITIAL
 }

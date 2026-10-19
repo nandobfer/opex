@@ -1,11 +1,13 @@
 import { Types } from "mongoose"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
-import { publishAppEvent } from "@/lib/pusher/channels"
+import { publishAppEvent, publishToChannels } from "@/lib/pusher/channels"
+import { opexChannel } from "@/lib/pusher/channel-names"
 import { OPEX_AUDIT_ENTITY, OPEX_DEFAULT_TITLE, OPEX_SESSION_DELETED_EVENT, OPEX_SESSION_UPDATED_EVENT } from "../constants"
 import { opexFileKind, opexFilePath } from "../files"
 import type { OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { forgetSession, isTurnActive } from "./hub"
+import { OWNER_SCOPE, sessionFilterOf, type OpexServerScope } from "./scope"
 import { OpexMessage, OpexPendingAction, OpexSession, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
 
 /** Conecta ao banco (os índices das coleções vêm da migração `ensure-opex-indexes`). */
@@ -56,8 +58,20 @@ export function assertSessionId(id: string): void {
     if (!Types.ObjectId.isValid(id)) throw new DomainError(404, "Sessão não encontrada", "OPEX_SESSION_NOT_FOUND")
 }
 
+/**
+ * Avisa o dono (`private-app`) ou o usuário dono da sessão no portal
+ * (`private-opex-{clientId}-{userId}`), conforme o escopo gravado na sessão.
+ */
 export async function publishSessionUpdated(id: string): Promise<void> {
-    await publishAppEvent(OPEX_SESSION_UPDATED_EVENT, { id })
+    const doc = await OpexSession.findById(id).select({ clientId: 1, userId: 1 }).lean<Pick<IOpexSession, "clientId" | "userId">>()
+    if (doc?.clientId && doc.userId) await publishToChannels([opexChannel(doc.clientId, doc.userId)], OPEX_SESSION_UPDATED_EVENT, { id })
+    else await publishAppEvent(OPEX_SESSION_UPDATED_EVENT, { id })
+}
+
+/** Mesma escolha de canal do `publishSessionUpdated`, para a exclusão. */
+async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "userId">, id: string): Promise<void> {
+    if (session.clientId && session.userId) await publishToChannels([opexChannel(session.clientId, session.userId)], OPEX_SESSION_DELETED_EVENT, { id })
+    else await publishAppEvent(OPEX_SESSION_DELETED_EVENT, { id })
 }
 
 /**
@@ -71,7 +85,17 @@ async function reconcile(doc: SessionDoc): Promise<SessionDoc> {
     return { ...doc, status: "error", lastError }
 }
 
-export async function loadSession(id: string): Promise<SessionDoc> {
+/** Sessão **no escopo**: de outro cliente/usuário responde 404 (não revela existência). */
+export async function loadSession(id: string, scope: OpexServerScope = OWNER_SCOPE): Promise<SessionDoc> {
+    assertSessionId(id)
+    await opexDb()
+    const doc = await OpexSession.findOne({ _id: id, ...sessionFilterOf(scope) }).lean<SessionDoc>()
+    if (!doc) throw new DomainError(404, "Sessão não encontrada", "OPEX_SESSION_NOT_FOUND")
+    return reconcile(doc)
+}
+
+/** Sessão sem filtro de escopo: usada só para reconstruir o escopo gravado (follow-up/confirmação). */
+export async function loadSessionRaw(id: string): Promise<SessionDoc> {
     assertSessionId(id)
     await opexDb()
     const doc = await OpexSession.findById(id).lean<SessionDoc>()
@@ -79,28 +103,34 @@ export async function loadSession(id: string): Promise<SessionDoc> {
     return reconcile(doc)
 }
 
-export async function listSessions(): Promise<OpexSessionDto[]> {
+export async function listSessions(scope: OpexServerScope = OWNER_SCOPE): Promise<OpexSessionDto[]> {
     await opexDb()
-    const docs = await OpexSession.find({}).sort({ lastMessageAt: -1 }).limit(1000).lean<SessionDoc[]>()
+    const docs = await OpexSession.find(sessionFilterOf(scope)).sort({ lastMessageAt: -1 }).limit(1000).lean<SessionDoc[]>()
     return Promise.all(docs.map(async (doc) => toSessionDto(await reconcile(doc))))
 }
 
-export async function getSessionDetail(id: string): Promise<OpexSessionDetailDto> {
-    const session = await loadSession(id)
+export async function getSessionDetail(id: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexSessionDetailDto> {
+    const session = await loadSession(id, scope)
     const messages = await OpexMessage.find({ sessionId: session._id }).sort({ seq: 1 }).select({ modelMessages: 0 }).lean<MessageDoc[]>()
     return { session: toSessionDto(session), messages: messages.map(toMessageDto) }
 }
 
-export async function createSession(actorId: string): Promise<OpexSessionDto> {
+export async function createSession(actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexSessionDto> {
     await opexDb()
-    const doc = await OpexSession.create({ title: OPEX_DEFAULT_TITLE, summary: "", lastMessageAt: new Date() })
+    const doc = await OpexSession.create({
+        title: OPEX_DEFAULT_TITLE,
+        summary: "",
+        lastMessageAt: new Date(),
+        clientId: scope.kind === "client" ? String(scope.actor.client._id) : null,
+        userId: scope.kind === "client" ? scope.actor.userId : actorId,
+    })
     await recordAudit({ userId: actorId, entidade: OPEX_AUDIT_ENTITY, entidadeId: doc._id.toString(), acao: AcaoAuditoria.CRIAR, depois: { titulo: doc.title } })
     await publishSessionUpdated(doc._id.toString())
     return toSessionDto(doc.toObject() as SessionDoc)
 }
 
-export async function updateSession(id: string, input: { title?: string; archived?: boolean }, actorId: string): Promise<OpexSessionDto> {
-    const before = await loadSession(id)
+export async function updateSession(id: string, input: { title?: string; archived?: boolean }, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexSessionDto> {
+    const before = await loadSession(id, scope)
     const $set: Partial<IOpexSession> = {}
     if (input.title !== undefined) Object.assign($set, { title: input.title, titleSource: "manual" as const })
     if (input.archived !== undefined) $set.archived = input.archived
@@ -118,8 +148,21 @@ export async function updateSession(id: string, input: { title?: string; archive
     return toSessionDto(doc)
 }
 
-export async function deleteSession(id: string, actorId: string): Promise<void> {
-    const session = await loadSession(id)
+/** Cliente excluído: apaga as sessões do agente, mensagens, ações e arquivos (sem escopo de ator). */
+export async function deleteClientOpexData(clientId: string): Promise<void> {
+    await opexDb()
+    const sessions = await OpexSession.find({ clientId }).select({ _id: 1 }).lean<Pick<SessionDoc, "_id">[]>()
+    for (const session of sessions) {
+        const id = session._id.toString()
+        forgetSession(id)
+        const { deleteSessionFiles } = await import("./files")
+        await deleteSessionFiles(id)
+        await Promise.all([OpexMessage.deleteMany({ sessionId: session._id }), OpexPendingAction.deleteMany({ sessionId: session._id }), OpexSession.deleteOne({ _id: session._id })])
+    }
+}
+
+export async function deleteSession(id: string, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
+    const session = await loadSession(id, scope)
     forgetSession(id)
     // Arquivos primeiro (objetos no storage + metadados), depois o resto da sessão.
     const { deleteSessionFiles } = await import("./files")
@@ -130,5 +173,5 @@ export async function deleteSession(id: string, actorId: string): Promise<void> 
         OpexSession.deleteOne({ _id: session._id }),
     ])
     await recordAudit({ userId: actorId, entidade: OPEX_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { titulo: session.title, mensagens: session.messageCount } })
-    await publishAppEvent(OPEX_SESSION_DELETED_EVENT, { id })
+    await publishSessionDeleted(session, id)
 }

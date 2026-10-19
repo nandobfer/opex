@@ -5,19 +5,23 @@ import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
-import { OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
+import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
 import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from "../history"
 import { closeRunningTools, partsText } from "../live-message"
 import type { OpexAgentSettings } from "../schemas"
+import type { OpexTool, OpexToolContext } from "./tools/define"
 import type { OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "../types"
 import { refreshConfirmations, requestConfirmation } from "./confirmations"
 import { beginTurn, endTurn, enqueueFollowUp, isTurnActive, liveMessageOf, publishLine, takeFollowUp, abortTurn, type OpexFollowUp } from "./hub"
 import { OpexMessage, OpexSession, type IOpexFileRef, type IOpexMessage } from "@/lib/db/models/Opex"
 import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
-import { loadSession, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
+import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
 import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
+import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
+import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
+import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
 import { nowContext } from "./tools/context"
 import { enabledOpexTools, findOpexTool } from "./tools/registry"
 
@@ -25,8 +29,29 @@ const log = loggerFor({ module: "opex-agent" })
 const INTERRUPTED = "Interrompido pelo usuário"
 
 /** Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema. */
-function instructionsFor(settings: OpexAgentSettings): string {
-    return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`].join("\n")
+function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope): string {
+    if (scope.kind === "owner") {
+        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`].join("\n")
+    }
+    const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
+    return [
+        DEFAULT_OPEX_CLIENT_INSTRUCTIONS,
+        "",
+        `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${role}).`,
+        "A data e a hora de cada turno vêm ao fim da mensagem do usuário.",
+    ].join("\n")
+}
+
+/** Ferramentas e política do turno, conforme o escopo. */
+async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): Promise<{ tools: OpexTool[]; policy: OpexAgentSettings["confirmation"] }> {
+    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.toolGroups), policy: settings.confirmation }
+    await assertClientOpexEnabled(scope.actor)
+    const { names } = await enabledClientToolNamesFor(scope.actor)
+    return { tools: enabledClientOpexServerTools(names, scope.actor.isAdmin), policy: settings.confirmation }
+}
+
+function findTool(scope: OpexServerScope, name: string): OpexTool | undefined {
+    return scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)
 }
 
 function turnContext(): string {
@@ -34,8 +59,8 @@ function turnContext(): string {
     return `Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`
 }
 
-const redactInput = (toolName: string, input: unknown) => {
-    const tool = findOpexTool(toolName)
+const redactInput = (scope: OpexServerScope, toolName: string, input: unknown) => {
+    const tool = findTool(scope, toolName)
     if (!tool?.redact) return input
     const parsed = tool.input.safeParse(input)
     return parsed.success ? tool.redact(parsed.data) : input
@@ -47,11 +72,12 @@ const numberOrNull = (value: unknown) => (typeof value === "number" && Number.is
  * Reserva a sessão para um turno (atômico: um turno por sessão), grava a mensagem do usuário e
  * dispara o turno em segundo plano — fechar o chat não interrompe.
  */
-async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: string): Promise<OpexMessageDto> {
+async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexMessageDto> {
+    if (scope.kind === "client") await assertClientOpexEnabled(scope.actor)
     const settings = (await loadOpexSettings()).settings
     const availability = await opexAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? "O Agente Opex não está disponível", "OPEX_UNAVAILABLE")
-    await loadSession(sessionId)
+    await loadSession(sessionId, scope)
     const now = new Date()
     const claimed = await OpexSession.findOneAndUpdate(
         { _id: sessionId, status: { $ne: "running" } },
@@ -90,13 +116,13 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
     })
     await publishSessionUpdated(sessionId)
     const userText = files.length ? `${text}${text ? "\n" : ""}(arquivos: ${files.map((file) => file.name).join(", ")})` : text
-    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, actorId, userText })
+    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, actorId, scope, userText })
     return toMessageDto(userDoc.toObject() as IOpexMessage & { _id: Types.ObjectId })
 }
 
-export async function sendMessage(sessionId: string, input: { text: string; fileIds?: string[] }, actorId: string): Promise<OpexMessageDto> {
+export async function sendMessage(sessionId: string, input: { text: string; fileIds?: string[] }, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexMessageDto> {
     await opexDb()
-    return startTurn(sessionId, { kind: "message", text: input.text, fileIds: input.fileIds ?? [] }, actorId)
+    return startTurn(sessionId, { kind: "message", text: input.text, fileIds: input.fileIds ?? [] }, actorId, scope)
 }
 
 /** Mensagem do sistema (decisão de confirmação): roda já ou depois do turno atual. */
@@ -105,13 +131,22 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
         enqueueFollowUp(sessionId, followUp)
         return
     }
-    await startTurn(sessionId, followUp, getLocalUser().id).catch((error: unknown) => {
+    // O escopo é reconstruído da sessão gravada (nunca do pedido): o dono continua dono e o usuário
+    // do portal tem o vínculo e o papel revalidados antes do turno.
+    const session = await loadSessionRaw(sessionId).catch(() => null)
+    if (!session) return
+    const scope = await sessionScopeOf(session).catch((error: unknown) => {
+        log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] escopo da sessão não resolve")
+        return null
+    })
+    if (!scope) return
+    await startTurn(sessionId, followUp, actorIdOf(scope), scope).catch((error: unknown) => {
         log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] não foi possível continuar após a confirmação")
     })
 }
 
-export async function interruptSession(sessionId: string): Promise<void> {
-    await loadSession(sessionId)
+export async function interruptSession(sessionId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
+    await loadSession(sessionId, scope)
     if (!abortTurn(sessionId, INTERRUPTED)) {
         await OpexSession.updateOne({ _id: sessionId, status: "running" }, { $set: { status: "idle" } })
         await publishSessionUpdated(sessionId)
@@ -125,6 +160,7 @@ interface TurnArgs {
     controller: AbortController
     settings: OpexAgentSettings
     actorId: string
+    scope: OpexServerScope
     userText: string
 }
 
@@ -147,7 +183,7 @@ function parseModelMessages(json: string): unknown[] {
 }
 
 async function executeTurn(args: TurnArgs): Promise<void> {
-    const { sessionId, assistantId, controller, settings } = args
+    const { sessionId, assistantId, controller, settings, scope } = args
     const startedAt = Date.now()
     const main = settings.main
     let prepared: PreparedModel | null = null
@@ -158,15 +194,29 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     const toolNames: string[] = []
 
     try {
-        const session = await loadSession(sessionId)
+        const session = await loadSession(sessionId, scope)
         const history = await loadHistory(sessionId, session.summary, main.provider!)
-        const runtime = buildToolRuntime(enabledOpexTools(settings.toolGroups), { sessionId, actorId: args.actorId, signal: controller.signal }, settings.confirmation, {
+        const { tools, policy } = await toolsForTurn(scope, settings)
+        // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
+        // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
+        const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
+        const runtime = buildToolRuntime(tools, toolContext, policy, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
+            ...(scope.kind === "client"
+                ? {
+                      authorize: async (tool: OpexTool) => {
+                          const current = toolContext.scope
+                          if (!current || current.kind !== "client") return
+                          const actor = await assertClientToolAllowed(tool.name, current.actor)
+                          toolContext.scope = { kind: "client", actor }
+                      },
+                  }
+                : {}),
         })
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings),
+            instructions: instructionsFor(settings, scope),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),
@@ -184,15 +234,15 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     publishLine(sessionId, { type: "reasoning-delta", text: part.text ?? "" })
                     break
                 case "tool-input-start": {
-                    const tool = findOpexTool(part.toolName)
+                    const tool = findTool(scope, part.toolName)
                     publishLine(sessionId, { type: "tool-start", id: part.id, name: part.toolName, group: tool?.group ?? null, label: tool?.label ?? part.toolName })
                     break
                 }
                 case "tool-call": {
-                    const tool = findOpexTool(part.toolName)
+                    const tool = findTool(scope, part.toolName)
                     toolNames.push(tool?.label ?? part.toolName)
                     publishLine(sessionId, { type: "tool-start", id: part.toolCallId, name: part.toolName, group: tool?.group ?? null, label: tool?.label ?? part.toolName })
-                    publishLine(sessionId, { type: "tool-input", id: part.toolCallId, input: stringifyForDisplay(redactInput(part.toolName, part.input)) })
+                    publishLine(sessionId, { type: "tool-input", id: part.toolCallId, input: stringifyForDisplay(redactInput(scope, part.toolName, part.input)) })
                     break
                 }
                 case "tool-result": {
@@ -231,7 +281,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     break
             }
         }
-        if (!aborted && !errorMessage) responseMessages = redactToolCalls(await result.responseMessages, redactInput)
+        if (!aborted && !errorMessage) responseMessages = redactToolCalls(await result.responseMessages, (name, input) => redactInput(scope, name, input))
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
@@ -255,7 +305,7 @@ interface TurnOutcome {
 }
 
 async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
-    const { sessionId, assistantId, controller, settings } = args
+    const { sessionId, assistantId, controller, settings, scope } = args
     const status: OpexMessageStatus = outcome.aborted ? "interrupted" : outcome.errorMessage ? "error" : "complete"
     const error = outcome.aborted ? INTERRUPTED : outcome.errorMessage
     let parts: OpexPart[] = liveMessageOf(sessionId)?.parts ?? []
@@ -297,7 +347,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
         await recordAiConsumption({
             dedupKey: `opex:${assistantId.toString()}`,
             provider: settings.main.provider,
-            origin: OPEX_CONSUMPTION_ORIGIN,
+            origin: scope.kind === "client" ? OPEX_CLIENT_CONSUMPTION_ORIGIN : OPEX_CONSUMPTION_ORIGIN,
             subject: sessionId,
             model: settings.main.model,
             ...outcome.usage,
@@ -305,7 +355,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
         })
     }
     if (status !== "interrupted" || text) {
-        await refreshSessionTitle(sessionId, settings, { userText: args.userText, assistantText: text, tools: outcome.toolNames }).catch((titleError: unknown) =>
+        await refreshSessionTitle(sessionId, settings, { userText: args.userText, assistantText: text, tools: outcome.toolNames }, scope).catch((titleError: unknown) =>
             log.warn({ err: titleError, sessionId }, "[opex] falha no subagente de título"),
         )
     }

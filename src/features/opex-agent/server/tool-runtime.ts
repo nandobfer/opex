@@ -38,6 +38,12 @@ export function compactToolOutput(value: unknown): unknown {
 export interface ToolRuntimeHooks {
     /** Grava a ação pendente e devolve o card de confirmação. */
     requestConfirmation: (tool: OpexTool, input: unknown, toolCallId: string) => Promise<OpexConfirmationDto>
+    /**
+     * Revalida o acesso à ferramenta **imediatamente antes** de executar ou pedir confirmação:
+     * no portal, relê a configuração do cliente e o papel do usuário (desligar no meio do turno vale
+     * na hora). Ausente = confia no catálogo montado no início do turno (dono).
+     */
+    authorize?: (tool: OpexTool) => Promise<void>
 }
 
 export interface ToolRuntime {
@@ -59,6 +65,7 @@ export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolCon
             execute: async (input: unknown, options) => {
                 const startedAt = Date.now()
                 try {
+                    await hooks.authorize?.(def)
                     if (needsConfirmation(def, policy)) {
                         const confirmation = await hooks.requestConfirmation(def, input, options.toolCallId)
                         confirmations.set(options.toolCallId, confirmation)

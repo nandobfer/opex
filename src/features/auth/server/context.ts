@@ -107,6 +107,26 @@ export async function requireClientActor(req: NextRequest): Promise<ClientActor>
     return { userId: String(user._id), displayName: user.username, username: user.username, email: user.email ?? null, client, isAdmin: Boolean(membership.admin), preview: false }
 }
 
+/**
+ * Ator do portal para um par usuário + cliente (usado pelo Agente Opex, que guarda o escopo na sessão).
+ * Revalida no banco o usuário ativo, o vínculo e o cliente ativo a cada uso — perder o vínculo ou
+ * desativar o cliente bloqueia na hora. O dono (`userId` local) entra como pré-visualização.
+ */
+export async function clientActorFor(userId: string, clientId: string): Promise<ClientActor> {
+    const owner = getLocalUser()
+    if (userId === owner.id) {
+        const client = await loadActiveClient(clientId)
+        return { userId: owner.id, displayName: owner.name, username: owner.name, email: null, client, isAdmin: true, preview: true }
+    }
+    await dbConnect()
+    const user = (await User.findById(userId).lean()) as UserDoc | null
+    if (!user || user.active === false) throw new DomainError(401, "Usuário inativo ou removido.", "UNAUTHENTICATED")
+    const membership = (user.memberships ?? []).find((item) => item.clientId === clientId)
+    if (!membership) throw new DomainError(403, "Você não tem acesso a este cliente.", "FORBIDDEN")
+    const client = await loadActiveClient(clientId)
+    return { userId: String(user._id), displayName: user.username, username: user.username, email: user.email ?? null, client, isAdmin: Boolean(membership.admin), preview: false }
+}
+
 /** Exige o **admin** do cliente em escopo (Financeiro e Usuários do portal). */
 export function assertClientAdmin(actor: ClientActor): void {
     if (!actor.isAdmin) throw new DomainError(403, "Apenas administradores do cliente podem acessar.", "FORBIDDEN")

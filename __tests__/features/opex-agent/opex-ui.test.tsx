@@ -26,6 +26,8 @@ import { OpexSessionTabs } from '@/features/opex-agent/components/OpexSessionTab
 import { OpexAttachmentChips } from '@/features/opex-agent/components/chat/OpexAttachmentChips'
 import { OpexComposer } from '@/features/opex-agent/components/chat/OpexComposer'
 import { OpexUploadsProvider, useOpexUploads, type OpexUploadItem } from '@/features/opex-agent/hooks/useOpexUploads'
+import { ClienteOpexToolsCard } from '@/features/opex-agent/components/settings/client/ClienteOpexToolsCard'
+import { OPEX_CLIENT_TOOLS } from '@/features/opex-agent/client-tools'
 import type { OpexMessageDto, OpexPart, OpexSessionDto } from '@/features/opex-agent/types'
 
 type ToolPart = Extract<OpexPart, { type: 'tool' }>
@@ -249,5 +251,36 @@ describe('fila de envio (PUT assinado no S3)', () => {
     act(() => result.current.retry(result.current.items[0]!.localId))
     await waitFor(() => expect(result.current.items[0]?.status).toBe('done'))
     expect(net.put).not.toHaveBeenCalled()
+  })
+})
+
+describe('ferramentas do Agente Opex no cliente', () => {
+  const taskTools = OPEX_CLIENT_TOOLS.filter((tool) => tool.group === 'tasks').map((tool) => tool.name)
+
+  it('marca e desmarca o grupo inteiro, mostrando o total selecionado', () => {
+    const onChange = vi.fn()
+    render(<ClienteOpexToolsCard value={['list_tasks']} onChange={onChange} />)
+    expect(screen.getByText(`Tarefas (1/${taskTools.length})`)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Marcar todas as ferramentas de Tarefas' }))
+    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set(taskTools))
+
+    onChange.mockClear()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Marcar todas as ferramentas de Tarefas' }))
+    expect(onChange.mock.calls[0]![0]).toEqual([])
+  })
+
+  it('o contexto é sempre ativo e as ferramentas de admin aparecem com o selo', () => {
+    render(<ClienteOpexToolsCard value={[]} onChange={() => undefined} />)
+    expect(screen.getByText('Sempre ativo')).toBeTruthy()
+    expect(screen.getAllByText('Só admin do cliente').length).toBeGreaterThan(0)
+    expect(screen.getByRole('checkbox', { name: 'Contexto sempre ativo' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('marcar uma ferramenta individual mantém as demais', () => {
+    const onChange = vi.fn()
+    render(<ClienteOpexToolsCard value={['list_tasks']} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: /Comentar tarefa/ }))
+    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set(['list_tasks', 'add_comment']))
   })
 })

@@ -19,7 +19,12 @@ vi.mock('@/lib/db/models/Opex', () => {
   return { OpexMessage: store.messages, OpexPendingAction: store.actions, OpexSession: memoryModel() }
 })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR' } }))
-vi.mock('@/features/opex-agent/server/sessions', () => ({ opexDb: async () => {}, publishSessionUpdated: async () => {} }))
+vi.mock('@/features/opex-agent/server/sessions', () => ({
+  opexDb: async () => {},
+  publishSessionUpdated: async () => {},
+  // A ação só é decidida por quem enxerga a sessão dona (escopo do dono nestes casos).
+  loadSession: async () => ({ _id: 'a'.repeat(24), clientId: null, userId: 'local' }),
+}))
 vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.queueFollowUp }))
 vi.mock('ai', () => ({ dynamicTool: (def: unknown) => def }))
 const tool = { name: 'delete_thing', group: 'tasks', label: 'Excluir', risk: 'destructive', description: 'd', input: z.object({ id: z.string() }), summarize: (input: { id: string }) => `Excluir ${input.id}`, execute: mocks.execute }
@@ -58,7 +63,7 @@ describe('confirmações do Agente Opex', () => {
     const actionId = await pending()
     const result = await decideAction(actionId, 'confirm', 'local')
     expect(result.status).toBe('confirmed')
-    expect(mocks.execute).toHaveBeenCalledWith({ id: 'x1' }, { sessionId: SESSION, actorId: 'local' })
+    expect(mocks.execute).toHaveBeenCalledWith({ id: 'x1' }, { sessionId: SESSION, actorId: 'local', scope: { kind: 'owner' } })
     expect((messages().docs[0]!.parts as Doc[])[0]).toMatchObject({ confirmation: { status: 'confirmed' }, output: expect.stringContaining('x1') })
     expect(mocks.queueFollowUp).toHaveBeenCalledWith(SESSION, expect.objectContaining({ kind: 'confirmation', display: 'Confirmado: Excluir x1', text: expect.stringContaining('CONFIRMOU') }))
     expect(actions().docs[0]!.input).toBeNull()

@@ -18,3 +18,11 @@ export const CLIENT_CHANNEL_PREFIX = "private-client-"
 export const repoRecentsChannel = (actorId: string) => `private-repo-recents-${actorId}`
 
 export const REPO_RECENTS_CHANNEL_PREFIX = "private-repo-recents-"
+
+/**
+ * Canal do **Agente Opex** de um usuário dentro de um cliente (sessões do chat e configuração).
+ * Cada usuário só assina o próprio canal; o dono na pré-visualização usa o `userId` local.
+ */
+export const opexChannel = (clientId: string, userId: string) => `private-opex-${clientId}-${userId}`
+
+export const OPEX_CHANNEL_PREFIX = "private-opex-"

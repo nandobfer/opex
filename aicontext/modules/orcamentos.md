@@ -69,6 +69,10 @@ Logins e sessões: `aicontext/modules/auth.md`.
   - **Configurações** — dados do cliente (custo/hora, fator, repositórios, situação), **Editar**
     (`ClienteDialog`) e a **zona de risco** com **Excluir** (`RemoveClienteDialog`);
   - **Usuários** — lista + criação/edição/exclusão/copiar URL/regenerar (mesmos componentes do portal);
+  - **Agente Opex** — ativa/desativa o agente no portal (padrão **ativado**) e escolhe, ferramenta a
+    ferramenta, o que ele pode usar; ferramentas de admin (Financeiro e Usuários) só chegam ao admin
+    do cliente. Sem configuração salva, vale o padrão com todas as ferramentas. Salvar é auditado e
+    publica `opex-client-config-updated`. Detalhes em `opex-agent.md`, "Agente no portal do cliente";
   - **Token** — prefixo, **Copiar URL** e **Regenerar token** (com aviso: invalida a URL do cliente e
     do usuário padrão).
 - **Pré-visualizar portal** no cabeçalho: entra no portal como o cliente (cookie de prévia).
@@ -86,7 +90,9 @@ Logins e sessões: `aicontext/modules/auth.md`.
 - **Layout autenticado** (`src/app/cliente/(portal)/`): reusa o `AppShell` com a navegação do portal
   (`clienteNav`) — **Dashboard, Tarefas** e, para o admin, **Financeiro e Usuários** — e a **barra de
   contexto** (`ClienteContextBar`): seletor de cliente (troca sem novo login), aviso de
-  pré-visualização e atalho de volta ao Opex. Sem itens internos do dono.
+  pré-visualização e atalho de volta ao Opex. Sem itens internos do dono. No rodapé, o **Agente
+  Opex** aparece quando o dono o ativou para o cliente (sessões e ferramentas privadas por usuário;
+  ver `opex-agent.md`).
 - Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
   `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin) e, para o
   **admin**, `/cliente/servicos/[id]` (detalhe de um serviço criado pelo dono).

@@ -1,5 +1,6 @@
 import { BrainCircuit, CalendarClock, Clock, Compass, GitPullRequest, LayoutDashboard, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
+import type { OpexClientToolGroup } from "../client-tools"
 
 export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     context: Compass,
@@ -19,4 +20,17 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     clients: Users,
 }
 
-export const toolIcon = (group: OpexToolGroup | null): LucideIcon => (group ? OPEX_TOOL_GROUP_ICONS[group] : Wrench)
+const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
+    context: Compass,
+    tasks: ListTodo,
+    previews: Sparkles,
+    files: Paperclip,
+    dashboard: LayoutDashboard,
+    finance: Wallet,
+    users: Users,
+}
+
+export const toolIcon = (group: OpexToolGroup | OpexClientToolGroup | null): LucideIcon => {
+    if (!group) return Wrench
+    return OPEX_TOOL_GROUP_ICONS[group as OpexToolGroup] ?? OPEX_CLIENT_GROUP_ICONS[group as OpexClientToolGroup] ?? Wrench
+}

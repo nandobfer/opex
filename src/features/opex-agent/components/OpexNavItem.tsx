@@ -11,6 +11,8 @@ import { SidebarTooltip } from "@/features/layout/components/sidebar/SidebarTool
 import { SIDEBAR_FOCUS_RING, sidebarItemVariants } from "@/features/layout/components/sidebar/sidebar-styles"
 import { isOpexShortcut } from "../constants"
 import { useOpexRealtime, useOpexSessions } from "../hooks/useOpexSessions"
+import { useOpexStatus } from "../hooks/useOpexSettings"
+import { useOpexScope } from "./OpexScopeProvider"
 import { OpexUploadsProvider } from "../hooks/useOpexUploads"
 import { OpexPanel } from "./OpexPanel"
 
@@ -48,16 +50,21 @@ export function OpexNavItem(props: OpexNavItemProps) {
 }
 
 function OpexNavItemContent({ collapsed }: OpexNavItemProps) {
+    const scope = useOpexScope()
+    // No portal, o dono pode desativar o agente: o item só existe com o agente ativo.
+    const status = useOpexStatus(scope.kind === "client")
+    const enabled = scope.kind === "owner" || status.data?.enabled === true
     const [open, setOpen] = useState(false)
     const [maximized, setMaximized] = useState(false)
     const reduceMotion = useReducedMotion() ?? false
     const viewport = useViewport()
     const mobile = viewport.width < MOBILE_MAX
-    const sessions = useOpexSessions()
-    useOpexRealtime(true)
+    const sessions = useOpexSessions(enabled)
+    useOpexRealtime(enabled)
     const busy = (sessions.data ?? []).some((session) => session.status === "running" || session.status === "awaiting_confirmation")
 
     useEffect(() => {
+        if (!enabled) return
         const onKey = (event: KeyboardEvent) => {
             if (!isOpexShortcut(event)) return
             event.preventDefault()
@@ -65,7 +72,9 @@ function OpexNavItemContent({ collapsed }: OpexNavItemProps) {
         }
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
-    }, [])
+    }, [enabled])
+
+    if (!enabled) return null
 
     const trigger = (
         <button type="button" aria-label={collapsed ? LABEL : undefined} aria-expanded={open} aria-haspopup="dialog" className={cn("block w-full rounded-[4px]", SIDEBAR_FOCUS_RING)} onClick={() => setOpen((value) => !value)}>

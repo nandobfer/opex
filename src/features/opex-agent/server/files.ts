@@ -1,4 +1,5 @@
 import { Types } from "mongoose"
+import type { AttachmentActor } from "@/features/tasks/attachments/server/actor"
 import { DomainError } from "@/lib/api/route"
 import { fallbackAttachmentName, formatAttachmentSize, isInlineAttachmentMime, safeAttachmentName } from "@/lib/attachments"
 import { OpexFile, type IOpexFile, type IOpexFileRef } from "@/lib/db/models/Opex"
@@ -8,6 +9,7 @@ import { OPEX_FILE_PENDING_TTL_MS, OPEX_FILE_TEXT_INLINE_MAX, OPEX_FILE_UPLOAD_U
 import { opexFileDelivery, opexFileKind, opexFileReference, opexFileWeight, opexMaxBytes } from "../files"
 import type { OpexFilesSettings, ReserveOpexFileInput } from "../schemas"
 import type { OpexFileDto, OpexFileReservationDto } from "../types"
+import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 import { loadSession, opexDb, toFileDto } from "./sessions"
 
 /**
@@ -40,11 +42,13 @@ function assertFileId(id: string): void {
     if (!Types.ObjectId.isValid(id)) throw new DomainError(404, "Arquivo não encontrado", "OPEX_FILE_NOT_FOUND")
 }
 
-async function findFile(id: string): Promise<OpexFileDoc> {
+/** Arquivo **no escopo**: a sessão dona precisa ser visível para quem pede (404 nos demais casos). */
+async function findFile(id: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexFileDoc> {
     assertFileId(id)
     await opexDb()
     const doc = await OpexFile.findById(id).lean<OpexFileDoc>()
     if (!doc) throw new DomainError(404, "Arquivo não encontrado", "OPEX_FILE_NOT_FOUND")
+    await loadSession(doc.sessionId.toString(), scope)
     return doc
 }
 
@@ -66,8 +70,8 @@ function tooLarge(size: number, limits: OpexFilesSettings): DomainError {
 // ── Envio em duas fases ────────────────────────────────────────────────────
 
 /** Reserva o envio de um arquivo para a próxima mensagem (fica pendente até ir numa mensagem). */
-export async function reserveOpexFile(sessionId: string, input: ReserveOpexFileInput, limits: OpexFilesSettings): Promise<OpexFileReservationDto> {
-    await loadSession(sessionId)
+export async function reserveOpexFile(sessionId: string, input: ReserveOpexFileInput, limits: OpexFilesSettings, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexFileReservationDto> {
+    await loadSession(sessionId, scope)
     if (input.size > opexMaxBytes(limits.maxSizeMb)) throw tooLarge(input.size, limits)
     const mediaType = (input.mediaType?.trim() || FALLBACK_MIME).toLowerCase()
     const name = safeAttachmentName(input.name.trim() || fallbackAttachmentName(mediaType))
@@ -89,8 +93,8 @@ async function discard(doc: OpexFileDoc): Promise<void> {
  * definitiva e marca pronto. Idempotente. Só a ausência comprovada do objeto descarta a reserva;
  * recusa de acesso e indisponibilidade viram 502 com a reserva preservada (repetir sem reenviar).
  */
-export async function completeOpexFile(id: string, limits: OpexFilesSettings): Promise<OpexFileDto> {
-    const doc = await findFile(id)
+export async function completeOpexFile(id: string, limits: OpexFilesSettings, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexFileDto> {
+    const doc = await findFile(id, scope)
     if (doc.ready) return toFileDto(refOf(doc))
     let head: { contentLength: number | undefined; contentType: string | undefined }
     try {
@@ -124,8 +128,8 @@ export async function completeOpexFile(id: string, limits: OpexFilesSettings): P
 }
 
 /** Remove um arquivo ainda não enviado numa mensagem (o chip removido antes de mandar). */
-export async function deletePendingOpexFile(id: string): Promise<void> {
-    const doc = await findFile(id)
+export async function deletePendingOpexFile(id: string, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
+    const doc = await findFile(id, scope)
     if (!doc.pending) throw new DomainError(409, "O arquivo já foi enviado numa mensagem", "OPEX_FILE_SENT")
     await removeObjectQuietly(doc.uploadKey)
     await removeObjectQuietly(doc.key)
@@ -133,8 +137,8 @@ export async function deletePendingOpexFile(id: string): Promise<void> {
 }
 
 /** Conteúdo do arquivo por rota autenticada: imagem, áudio e vídeo inline; o resto sempre baixa. */
-export async function opexFileContent(id: string, options: { download?: boolean; range?: string } = {}): Promise<Response> {
-    const doc = await findFile(id)
+export async function opexFileContent(id: string, options: { download?: boolean; range?: string } = {}, scope: OpexServerScope = OWNER_SCOPE): Promise<Response> {
+    const doc = await findFile(id, scope)
     if (!doc.ready) throw new DomainError(404, "Arquivo não encontrado", "OPEX_FILE_NOT_FOUND")
     let file
     try {
@@ -257,10 +261,15 @@ export async function listSessionFiles(sessionId: string): Promise<(OpexFileDto 
 }
 
 /** Copia um arquivo do chat para os anexos de uma tarefa ou de um rascunho de prévia (sem novo envio). */
-export async function copyChatFileToAttachments(sessionId: string, fileId: string, target: { taskId?: string; draftId?: string }) {
+export async function copyChatFileToAttachments(
+    sessionId: string,
+    fileId: string,
+    target: { taskId?: string; draftId?: string },
+    actor?: AttachmentActor,
+) {
     const doc = await loadSessionFile(sessionId, fileId)
     const [{ importAttachmentFromStorage }, { ownerAttachmentActor }] = await Promise.all([import("@/features/tasks/attachments/server/service"), import("@/features/tasks/attachments/server/actor")])
-    return importAttachmentFromStorage(ownerAttachmentActor(), { sourceKey: doc.key, name: doc.name, size: doc.size, mimeType: doc.mediaType, ...target })
+    return importAttachmentFromStorage(actor ?? ownerAttachmentActor(), { sourceKey: doc.key, name: doc.name, size: doc.size, mimeType: doc.mediaType, ...target })
 }
 
 // ── Limpeza ────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isChannelAuthorized, parseChannel } from '@/lib/pusher/channel-auth'
-import { appChannel, clientChannel, integrationChannel, repoRecentsChannel } from '@/lib/pusher/channel-names'
+import { appChannel, clientChannel, integrationChannel, opexChannel, repoRecentsChannel } from '@/lib/pusher/channel-names'
 import type { SessionPayload } from '@/features/auth/session'
 
 const ADMIN: SessionPayload = { iat: 0, exp: 9_999_999_999, kind: 'admin' }
@@ -54,6 +54,16 @@ describe('autorização dos canais privados', () => {
 
     expect(isChannelAuthorized(repoRecentsChannel('local'), null)).toBe(false)
     expect(isChannelAuthorized('private-repo-recents-', ADMIN)).toBe(false)
+  })
+
+  it('o canal do Agente Opex é do próprio usuário no cliente (e do dono local)', () => {
+    expect(parseChannel(opexChannel('c1', 'u1'))).toEqual({ kind: 'opex', clientId: 'c1', userId: 'u1' })
+    expect(isChannelAuthorized(opexChannel('c1', 'u1'), CLIENT('c1'))).toBe(true)
+    expect(isChannelAuthorized(opexChannel('c2', 'u1'), CLIENT('c1'))).toBe(false)
+    expect(isChannelAuthorized(opexChannel('c1', 'u2'), CLIENT('c1'))).toBe(false)
+    expect(isChannelAuthorized(opexChannel('c1', 'local'), ADMIN)).toBe(true)
+    expect(isChannelAuthorized(opexChannel('c1', 'u1'), ADMIN)).toBe(false)
+    expect(isChannelAuthorized(opexChannel('c1', 'u1'), null)).toBe(false)
   })
 
   it('qualquer outro canal é negado', () => {

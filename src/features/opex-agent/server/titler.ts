@@ -1,10 +1,11 @@
 import { streamAi } from "@/lib/ai/stream"
 import { loggerFor } from "@/lib/logger"
-import { OPEX_DEFAULT_TITLE, OPEX_SUMMARY_MAX, OPEX_TITLE_CONSUMPTION_ORIGIN, OPEX_TITLE_MAX } from "../constants"
+import { OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN, OPEX_DEFAULT_TITLE, OPEX_SUMMARY_MAX, OPEX_TITLE_CONSUMPTION_ORIGIN, OPEX_TITLE_MAX } from "../constants"
 import { parseTitleOutput, fallbackTitle } from "../title"
 import type { OpexAgentSettings } from "../schemas"
 import { OpexSession } from "@/lib/db/models/Opex"
 import { publishSessionUpdated } from "./sessions"
+import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 
 const log = loggerFor({ module: "opex-agent", feature: "title" })
 
@@ -34,7 +35,7 @@ function buildPrompt(current: { title: string; summary: string; titleSource: str
  * principal). Falha nunca afeta o turno; no primeiro turno, sem resposta válida, o título vira o
  * começo da mensagem do usuário.
  */
-export async function refreshSessionTitle(sessionId: string, settings: OpexAgentSettings, turn: TitleTurn): Promise<void> {
+export async function refreshSessionTitle(sessionId: string, settings: OpexAgentSettings, turn: TitleTurn, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
     const session = await OpexSession.findById(sessionId).lean()
     if (!session) return
     const model = settings.title.provider && settings.title.model ? settings.title : settings.main
@@ -47,7 +48,7 @@ export async function refreshSessionTitle(sessionId: string, settings: OpexAgent
             variant: model.variant,
             instructions: settings.titleInstructions,
             prompt: buildPrompt(session, turn),
-            consumption: { origin: OPEX_TITLE_CONSUMPTION_ORIGIN, subject: sessionId },
+            consumption: { origin: scope.kind === "client" ? OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN : OPEX_TITLE_CONSUMPTION_ORIGIN, subject: sessionId },
         })) {
             if (event.type === "delta") text += event.text
             if (event.type === "error") error = event.message

@@ -134,7 +134,8 @@ export async function regenerateClientToken(id: string, actorId: string): Promis
 export async function deleteClient(id: string, actorId: string): Promise<void> {
     await dbConnect()
     const before = await getClientDoc(id)
-    await Promise.all([OrcamentoClient.deleteOne({ _id: id }), OrcamentoDraft.deleteMany({ clientId: id })])
+    const { deleteClientOpexData } = await import("@/features/opex-agent/server/sessions")
+    await Promise.all([OrcamentoClient.deleteOne({ _id: id }), OrcamentoDraft.deleteMany({ clientId: id }), deleteClientOpexData(id)])
     // Remove os vínculos dos usuários com este cliente (o **padrão** incluído); órfãos são excluídos.
     await removeClientUsers(id)
     await recordAudit({ userId: actorId, entidade: CLIENTE_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { nome: before.name } })

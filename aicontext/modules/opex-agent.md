@@ -6,8 +6,9 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 
 ## Onde fica e como abre
 
-- Item **"Agente Opex"** (ícone `Bot`) no rodapé da barra lateral, **só no menu do dono**
-  (`AppLayoutShell` passa `sidebarFooterItems` ao `AppShell`; o portal do cliente não tem).
+- Item **"Agente Opex"** (ícone `Bot`) no rodapé da barra lateral do **dono** (`AppLayoutShell`
+  passa `sidebarFooterItems` ao `AppShell`) e no **portal do cliente** quando o dono ativa o agente
+  para aquele cliente (`ClientePortalShell`; ver "Agente no portal do cliente").
 - Clicar abre um **popover** ancorado no item, com abertura animada (spring de escala a partir da
   âncora, Framer Motion, respeitando movimento reduzido). O botão **Maximizar** amplia o painel.
 - No celular (< 768 px) abre em painel de tela cheia (Dialog do Radix).
@@ -82,6 +83,53 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
   popover não interrompe. Quem conecta no meio recebe o retrato (`snapshot`). Sessão "respondendo"
   sem turno vivo (servidor reiniciou) volta a erro com aviso.
 
+## Agente no portal do cliente (OPE-83)
+
+O mesmo painel/hooks do dono atende o portal. O **escopo** (`src/features/opex-agent/scope.ts`
+puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app interno) ou
+`client` (portal, com o `ClientActor` revalidado no banco).
+
+- **Configuração por cliente**: aba **"Agente Opex"** em `/integracoes/clientes/[id-cliente]`
+  (`ClienteOpexAgentTab`), salva em `orcamento_clients.opexAgent` (`{ enabled, disabledTools }`).
+  Sem configuração, vale o padrão: **ativado** e com todas as ferramentas do portal. Guardar as
+  **desligadas** faz ferramenta nova entrar ligada; o contexto (`get_portal_overview`) é sempre
+  ativo. A seleção é por ferramenta, agrupada, com caixa "todas" por grupo e selo "Só admin do
+  cliente" nas de admin. Salvar é auditado (`ClienteOrcamentoOpexAgent`) e publica
+  `opex-client-config-updated` em `private-app` e `private-client-{clientId}`.
+- **Ativação**: `orçamento_clients.opexAgent.enabled`. Desativado, o item **não aparece** no portal
+  (o layout calcula `opexEnabled` e o `OpexNavItem` também consulta `GET /api/cliente/opex/status`)
+  e todas as rotas do agente respondem 403 `OPEX_CLIENT_DISABLED`.
+- **Sessões privadas**: cada usuário só vê as próprias sessões naquele cliente
+  (`opex_sessions.clientId` + `userId`); o dono (app interno) só vê `clientId: null`, e na
+  pré-visualização do portal usa `userId` local. Sessão de outro escopo responde **404**.
+- **Ferramentas próprias do portal** (`server/client-tools/`, catálogo puro em `client-tools.ts`):
+  não reaproveitam as do dono — chamam os serviços do portal, que já filtram pelo cliente.
+
+  | Grupo | Ferramentas |
+  |---|---|
+  | Contexto (sempre) | `get_portal_overview` |
+  | Tarefas | `list_tasks`, `get_task`, `add_comment`, `set_task_priority` |
+  | Orçamentos | `list_previews`, `get_preview`, `create_preview`, `generate_preview`, `set_preview_correction`, `estimate_preview`, `approve_preview` |
+  | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task`, `attach_files_to_preview` |
+  | Dashboard | `get_dashboard` |
+  | Financeiro (**admin**) | `get_finance`, `get_service` |
+  | Usuários (**admin**) | `list_users`, `update_user`, `delete_user`* |
+
+  `*` destrutivo. Criar usuário e gerar token ficam **fora**: devolvem segredo que não pode chegar
+  ao modelo. `update_user` redige a senha. As de admin só entram no turno quando o usuário é
+  **admin do cliente**.
+- **Escopo no servidor, não na interface**: o turno monta o catálogo pela configuração + papel, e
+  o runtime **revalida antes de cada ferramenta** (`authorize`): relê o vínculo, o cliente e a
+  configuração, e troca o ator pelo atual (papel pode mudar no meio do turno). A confirmação
+  (`decideAction`) também resolve a sessão no escopo e revalida antes de executar. Cada ferramenta
+  chama o serviço do portal, que filtra de novo pelo cliente — três camadas independentes.
+- **Instruções** próprias (`DEFAULT_OPEX_CLIENT_INSTRUCTIONS`) + cliente, usuário e papel; o
+  modelo do dono é reaproveitado. Consumo em origens `opex-client-agent` / `opex-client-title`.
+- **Interface**: `OpexScopeProvider` (dono por padrão) fornece `apiBase` (`/opex` ou
+  `/cliente/opex`), o axios do portal (`x-client-id`), o canal, a chave do cache e a chave das abas
+  (`opex:opex-agent:tabs:v1:{clientId}:{userId}`). Hooks e painel não sabem em qual escopo estão.
+- Excluir o cliente apaga as sessões, mensagens, ações e arquivos do agente daquele cliente.
+
 ## Configuração
 
 - Aba **"Agente Opex"** (`agente-opex`, ícone `Bot`) em `/integracoes/ia?aba=agente-opex`
@@ -135,11 +183,13 @@ senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas).
 - **Prompt de sistema estável**: instruções + dono do app. A data e a hora do turno vão como uma
   parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
   prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.
-- **Consumo** em `ai_consumption_logs`, origens `opex-agent` (turno) e `opex-title` (subagente).
+- **Consumo** em `ai_consumption_logs`, origens `opex-agent`/`opex-title` (dono) e
+  `opex-client-agent`/`opex-client-title` (portal).
 - **Auditoria** na entidade `AgenteOpex` (criar/renomear/arquivar/excluir sessão; confirmar/cancelar
   ação). As mutações das ferramentas auditam pelos próprios serviços, como usuário local.
-- **Tempo real**: `opex-session-updated` / `opex-session-deleted` em `private-app` (payload `{ id }`).
-  A resposta ao vivo chega por NDJSON em `GET /api/opex/sessions/[id]/stream`.
+- **Tempo real**: `opex-session-updated` / `opex-session-deleted` em `private-app` (dono) ou em
+  `private-opex-{clientId}-{userId}` (portal), com payload `{ id }`. A resposta ao vivo chega por
+  NDJSON em `GET /api/opex/sessions/[id]/stream`.
 
 ## APIs (sessão do dono)
 
@@ -156,22 +206,45 @@ senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas).
 | `POST /api/opex/sessions/[id]/interrupt` | Para a resposta |
 | `POST /api/opex/actions/[id]` | `{ decision: "confirm" \| "cancel" }` |
 
+### Portal do cliente
+
+| Rota | Descrição |
+|---|---|
+| `GET /api/cliente/opex/status` | `{ enabled, available, reason, modelLabel, files }` |
+| `GET/POST /api/cliente/opex/sessions` | Sessões do próprio usuário; criar (com `text` opcional) |
+| `GET/PATCH/DELETE /api/cliente/opex/sessions/[id]` | Detalhe; renomear/arquivar; excluir |
+| `POST /api/cliente/opex/sessions/[id]/messages` | `{ text?, fileIds? }` |
+| `POST /api/cliente/opex/sessions/[id]/files` · `POST /api/cliente/opex/files/[id]/complete` · `GET/DELETE /api/cliente/opex/files/[id]` | Mesmo fluxo de arquivos do dono |
+| `GET /api/cliente/opex/sessions/[id]/stream` · `POST …/interrupt` · `POST /api/cliente/opex/actions/[id]` | Resposta ao vivo, parar e confirmar/cancelar |
+
+Todas exigem `requireClientActor` + `assertClientOpexEnabled`; o dono só entra com `x-client-id`
+(pré-visualização).
+
+### Configuração do cliente (dono)
+
+`GET/PUT /api/integrations/orcamentos/clients/[id]/opex-agent` (`{ enabled, enabledTools }`),
+auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
+
 ## Dados
 
-- Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions`, `opex_messages`, `opex_pending_actions`
-  e `opex_files` (só metadados: sessão, nome, mime, tamanho, `key`/`uploadKey`, `pending`, `ready`,
-  `messageId`). Índices pela migração `ensure-opex-indexes`.
+- Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
+  `opex_messages`, `opex_pending_actions` e `opex_files` (só metadados: sessão, nome, mime,
+  tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
+  `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`.
 - `{ feature: "opex-agent" }` em `ai_feature_settings`; objetos em `opex/…` no bucket do Storage S3.
 
 ## Código
 
-- Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`.
+- Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
+  `scope`, `client-tools` (catálogo do portal).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`; `server/tools/` (um arquivo por grupo + `define`, `helpers`, `json`,
-  `registry`).
-- `hooks/`: `useOpexSettings`, `useOpexSessions`, `useOpexStream`, `useOpexTabs`, `useOpexUploads`.
+  `tool-runtime`, `files`, `scope`, `client-config`; `server/tools/` (um arquivo por grupo +
+  `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
+  + `registry`).
+- `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
+  `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`.
 - `components/`: `OpexNavItem`, `OpexPanel`, `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
-  `VirtualStack`; `chat/` e `settings/`.
+  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` e `settings/client/`.
 - Pontos de montagem: `AppSidebar` (`footerItems`), `AppShell` (`sidebarFooterItems`),
   `AppLayoutShell`, `AiEditorForm`/`AI_TABS`, `prepareModel`/`PreparedModel` exportados de
   `src/lib/ai/stream.ts`, `loadFeature`/`availability`/`assertCatalog`/`persistFeature`/
@@ -183,4 +256,7 @@ senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas).
 `__tests__/features/opex-agent/`: `pure` (módulos puros, entrega de arquivos), `tools` (registro,
 riscos — inclui a varredura que garante `destructive` nas exclusões/arquivamentos/integração/
 credenciais —, redação de segredos e chamadas aos serviços), `runner`, `confirmations`, `files`
-(reserva/confirmação/limpeza com S3 mockado) e `opex-ui` (componentes).
+(reserva/confirmação/limpeza com S3 mockado), `opex-ui` (componentes), `client-config` (padrão
+ativado, ferramentas desligadas, auditoria/eventos, revalidação), `client-tools` (catálogo do
+portal, adminOnly, escopo do ator e prévia sem horas reais) e `client-scope` (sessões privadas,
+404 entre escopos e canal do Pusher).

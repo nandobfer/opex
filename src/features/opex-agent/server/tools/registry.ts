@@ -37,7 +37,7 @@ export function findOpexTool(name: string): OpexTool | undefined {
 
 /** Ferramentas dos grupos ligados (o grupo Contexto fica sempre disponível). */
 export function enabledOpexTools(groups: Record<OpexToolGroup, boolean>): OpexTool[] {
-    return OPEX_TOOLS.filter((tool) => tool.group === "context" || groups[tool.group] !== false)
+    return OPEX_TOOLS.filter((tool) => tool.group === "context" || groups[tool.group as OpexToolGroup] !== false)
 }
 
 export function needsConfirmation(tool: OpexTool, policy: OpexConfirmationPolicy): boolean {
