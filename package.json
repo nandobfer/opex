@@ -1,6 +1,6 @@
 {
   "name": "opex",
-  "version": "2.55.1",
+  "version": "2.56.0",
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "scripts": {
@@ -11,7 +11,10 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.82",
+    "@ai-sdk/deepseek": "^3.0.67",
     "@ai-sdk/google": "^4.0.92",
+    "@ai-sdk/openai": "^4.0.96",
     "@aws-sdk/client-s3": "^3.1149.0",
     "@aws-sdk/s3-request-presigner": "^3.1149.0",
     "@codemirror/commands": "^6.11.1",

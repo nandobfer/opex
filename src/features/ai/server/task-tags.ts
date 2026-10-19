@@ -7,6 +7,7 @@ import type { CronJobScope } from "@/lib/integrations/catalog"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { AiProviderError } from "@/lib/ai/errors"
 import { askJevSystemOne } from "@/lib/ai/jev"
+import { isAiTextProviderId } from "@/lib/ai/providers"
 import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
 import { concludedColumnKeys, getTask, publishTasksUpdated } from "@/features/tasks/server/service"
 import type { TaskTagDef } from "@/features/tasks/tags"
@@ -72,7 +73,7 @@ async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]
         const response = await askJevSystemOne({ model: settings.model, state: buildTaskTagsPrompt(input), questions: buildJevTagQuestions(taxonomy), tracking: { feature: "task-tags", subject: prepared.taskId || null } })
         return { tags: selectJevTags(response.answers, taxonomy, settings.jevThreshold, settings.maxTags), streamed: null }
     }
-    if (settings.provider === "gemini" || settings.provider === "opencode") {
+    if (settings.provider && isAiTextProviderId(settings.provider)) {
         let text = ""
         let last: AiStreamEvent | null = null
         for await (const event of streamAi({

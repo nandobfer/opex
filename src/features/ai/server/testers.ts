@@ -46,6 +46,26 @@ export const testGemini: IntegrationTester = async ({ emit, signal }) => {
     return `API key válida; ${models.length} modelo(s)`
 }
 
+/** Provedores diretos por API key: o teste lista os modelos de texto. */
+const API_KEY_INTEGRATIONS = { anthropic: "ai_anthropic", openai: "ai_openai", deepseek: "ai_deepseek" } as const
+
+function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHint: string, endpoint: string): IntegrationTester {
+    return async ({ emit, signal }) => {
+        const resolved = await getIntegration(API_KEY_INTEGRATIONS[providerId])
+        if (!resolved.values.apiKey) fail(`Sem API key: cadastre a chave ${keyHint} em Campos privados`)
+        clearAiCatalogCache()
+        emit("step", `GET ${endpoint}`)
+        const models = await listAiModels(providerId, { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
+        emit(models.length ? "success" : "warn", `${models.length} modelo(s) de texto disponível(is)`)
+        if (!models.length) return warnResult("API key válida, mas nenhum modelo de texto disponível")
+        return `API key válida; ${models.length} modelo(s)`
+    }
+}
+
+export const testAnthropic = apiKeyModelsTester("anthropic", "do Claude Console", "/v1/models")
+export const testOpenai = apiKeyModelsTester("openai", "da plataforma OpenAI", "/v1/models")
+export const testDeepseek = apiKeyModelsTester("deepseek", "da plataforma DeepSeek", "/models")
+
 export const testJev: IntegrationTester = async ({ emit, signal }) => {
     const resolved = await getIntegration("ai_jev")
     if (!resolved.values.apiKey) fail("Sem API key: cadastre a chave da TypeSafe em Campos privados")

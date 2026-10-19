@@ -2,7 +2,7 @@
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
  * Integrações ativas: Pusher, API interna, Crons, GitHub, Provedores de IA (hub `ai`
- * com os provedores `ai_opencode`, `ai_gemini` e `ai_jev`, que só aparecem dentro do hub), Clientes,
+ * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e `ai_jev`, que só aparecem dentro do hub), Clientes,
  * SMTP e Storage S3.
  * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_jev", "orcamentos", "smtp", "storage_s3"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -458,7 +458,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     {
         id: "ai",
         name: "Provedores de IA",
-        description: "Provedores de IA (OpenCode, Gemini) e as features do app que os usam",
+        description: "Provedores de IA (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, JEV) e as features do app que os usam",
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
         publicFields: [],
@@ -507,6 +507,36 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         parent: "ai",
         publicFields: [],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Google AI Studio (aistudio.google.com/apikey)", required: true }],
+    },
+    {
+        id: "ai_anthropic",
+        name: "Anthropic",
+        description: "Modelos Claude pela API da Anthropic",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Claude Console (platform.claude.com/settings/keys)", required: true }],
+    },
+    {
+        id: "ai_openai",
+        name: "OpenAI",
+        description: "Modelos GPT e da série o pela API da OpenAI",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma OpenAI (platform.openai.com/api-keys)", required: true }],
+    },
+    {
+        id: "ai_deepseek",
+        name: "DeepSeek",
+        description: "Modelos DeepSeek pela API da DeepSeek",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys)", required: true }],
     },
     {
         id: "ai_jev",
@@ -591,6 +621,9 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai: `${INTEGRATIONS_BASE_PATH}/ia`,
     ai_opencode: `${INTEGRATIONS_BASE_PATH}/ia/opencode`,
     ai_gemini: `${INTEGRATIONS_BASE_PATH}/ia/gemini`,
+    ai_anthropic: `${INTEGRATIONS_BASE_PATH}/ia/anthropic`,
+    ai_openai: `${INTEGRATIONS_BASE_PATH}/ia/openai`,
+    ai_deepseek: `${INTEGRATIONS_BASE_PATH}/ia/deepseek`,
     ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
     orcamentos: `${INTEGRATIONS_BASE_PATH}/clientes`,
 }

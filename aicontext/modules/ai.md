@@ -10,6 +10,9 @@ e opções na própria aba da página "Provedores de IA".
 |---|---|---|---|
 | OpenCode | `ai_opencode` | `ai-sdk-provider-opencode-sdk` (5.x, OpenCode **2.x**) | URL do `opencode serve` (origem), diretório das sessões (opcional), senha (segredo) |
 | Gemini | `ai_gemini` | `@ai-sdk/google` | API key do Google AI Studio (segredo) |
+| Anthropic | `ai_anthropic` | `@ai-sdk/anthropic` | API key do Claude Console (segredo) |
+| OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | API key da plataforma OpenAI (segredo) |
+| DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | API key da plataforma DeepSeek (segredo) |
 | JEV | `ai_jev` | — (HTTP TypeSafe) | API key da TypeSafe (segredo); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
@@ -22,6 +25,17 @@ e opções na própria aba da página "Provedores de IA".
 - **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.
+- **Anthropic** (`src/lib/ai/anthropic.ts`): `GET v1/models` (headers `x-api-key` e
+  `anthropic-version: 2023-06-01`, paginado por `after_id`), do mais novo ao mais antigo. Variantes
+  `low`/`medium`/`high` (`AI_REASONING_LEVELS`) em todos os modelos, exceto Claude 3.x anteriores ao
+  3.7 (sem raciocínio).
+- **OpenAI** (`src/lib/ai/openai.ts`): `GET v1/models` (`Bearer`), só modelos de texto (`gpt-*`,
+  `o*`, `chatgpt-*`, sem embedding, áudio, imagem, realtime, transcrição, moderação, busca e
+  `instruct`), mais novos primeiro. Variantes `low`/`medium`/`high` na série o e no GPT-5 em diante
+  (exceto `-chat`).
+- **DeepSeek** (`src/lib/ai/deepseek.ts`): `GET /models` (`Bearer`). Variantes `low`/`medium`/`high`
+  em todos, exceto o alias `deepseek-chat` (sem raciocínio).
+- Configuração dos três só pela tela (API key em campo privado cifrado, sem `env`).
 - **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
   texto). Além do catálogo (`GET v1/models`, header `Authorization: Bearer <apiKey>`), expõe
   `askJevSystemOne` (`POST v1/systemone`): envia `state` + `questions` tipadas (`choice`, `score`,
@@ -44,7 +58,8 @@ e opções na própria aba da página "Provedores de IA".
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
 - Testes de conexão (`src/features/ai/server/testers.ts`): OpenCode = info + modelos + agentes
-  (amarelo sem modelos); Gemini = lista de modelos; hub `ai` = testa cada provedor configurado
+  (amarelo sem modelos); Gemini, Anthropic, OpenAI e DeepSeek = lista de modelos (amarelo sem
+  modelos de texto); hub `ai` = testa cada provedor configurado
   (gravando o status de cada um) e resume (amarelo se só parte conecta; erro se nenhum).
 
 ## Geração (`src/lib/ai/stream.ts`)
@@ -59,6 +74,13 @@ e opções na própria aba da página "Provedores de IA".
   OpenCode não aceita). Falha do modelo informada só nos metadados do passo (`finish: "error"`)
   vira `error` com a mensagem do servidor. O provider é descartado (`dispose`) ao fim.
 - **Gemini**: temperatura, máximo de tokens e `thinkingConfig.thinkingLevel` (variante).
+- **Anthropic, OpenAI e DeepSeek**: temperatura e máximo de tokens (`supportsSampling`) e a variante
+  vira a opção `reasoning` da AI SDK, que a traduz para cada provedor (thinking/effort da Anthropic,
+  `reasoningEffort` da OpenAI, thinking da DeepSeek). Variante fora de `AI_REASONING_LEVELS` é
+  ignorada. Na Anthropic com raciocínio ligado a temperatura não é enviada (a API recusa); nos
+  modelos de raciocínio da OpenAI a AI SDK descarta o que não se aplica. Essas APIs não informam
+  custo: `costUsd` fica `null` ("—").
+- `streamAi` com o JEV termina em `error` (o JEV não gera texto).
 - **JEV**: não passa pelo `streamAi` (não gera texto); quem o usa chama `askJevSystemOne` direto.
 - Não há saída estruturada garantida pelo OpenCode: features que precisarem de JSON validam com Zod.
 - **Exceção — sessões longas**: o desenvolvimento agêntico usa o cliente oficial `@opencode/client`
@@ -79,11 +101,10 @@ e opções na própria aba da página "Provedores de IA".
 
 ## Página `/integracoes/ia`
 
-- `ai` é o hub do catálogo ("Provedores de IA"); `ai_opencode`, `ai_gemini` e `ai_jev` são
-  **filhas** (`parent: "ai"`): ficam fora da lista de `/integracoes` e têm rotas próprias
-  (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`; `/integracoes/ia/opencode`,
-  `/integracoes/ia/gemini` e `/integracoes/ia/jev` em `ia/[provider]/page.tsx`, provedor
-  desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
+- `ai` é o hub do catálogo ("Provedores de IA"); `ai_opencode`, `ai_gemini`, `ai_anthropic`,
+  `ai_openai`, `ai_deepseek` e `ai_jev` são **filhas** (`parent: "ai"`): ficam fora da lista de
+  `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
+  `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
   **Orçamentos**, **Estimar prazos**, **Refinar tarefa** e **Desenvolvimento agêntico**
@@ -95,7 +116,11 @@ e opções na própria aba da página "Provedores de IA".
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**
-  (OpenCode e JEV; o Gemini não tem essa aba). Trocar de aba com alterações pede descarte.
+  (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não têm essa aba). Trocar de aba com alterações pede descarte.
+- **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
+  OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
+  conectados podem ser escolhidos. Refinar tarefa, Revisão de PR e Desenvolvimento agêntico são
+  exclusivos do OpenCode.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Filtro na URL
   (`usageFrom`/`usageTo`) com `PresetDateRangeFilter`: padrão **Último mês** (um mês atrás até hoje),
@@ -125,7 +150,7 @@ e opções na própria aba da página "Provedores de IA".
 
 - Configuração em `ai_feature_settings` (`feature: "understand-task"`), schema Zod
   `understandTaskSettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente
-  (OpenCode), variante/raciocínio, temperatura e máximo de tokens (só Gemini), formato (**Seções
+  (OpenCode), variante/raciocínio, temperatura e máximo de tokens (provedores com amostragem: Gemini, Anthropic, OpenAI e DeepSeek), formato (**Seções
   fixas**: Resumo, O que precisa ser feito, Pontos de atenção e riscos, Dúvidas para o solicitante;
   ou **Texto livre**), instruções (prompt de sistema, "Restaurar padrão") e o que enviar
   (comentários, histórico, apontamentos).
@@ -153,7 +178,7 @@ e opções na própria aba da página "Provedores de IA".
 
 - Configuração em `ai_feature_settings` (`feature: "task-summary"`), schema Zod
   `taskSummarySettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
-  variante/raciocínio, temperatura e máximo de tokens (só Gemini), **tamanho máximo** do resumo
+  variante/raciocínio, temperatura e máximo de tokens (provedores com amostragem: Gemini, Anthropic, OpenAI e DeepSeek), **tamanho máximo** do resumo
   (40–400 caracteres, padrão 140) e instruções (prompt de sistema, "Restaurar padrão").
 - Regras ao salvar iguais às de "Entender tarefas" (ativa exige provedor+modelo conectado; modelo,
   variante e agente conferidos no catálogo; campos que não se aplicam ao provedor viram vazios).
@@ -228,7 +253,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 
 - Configuração em `ai_feature_settings` (`feature: "budget-preview"`), schema Zod
   `budgetPreviewSettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
-  variante/raciocínio, temperatura e máximo de tokens (só Gemini) e instruções (prompt de sistema).
+  variante/raciocínio, temperatura e máximo de tokens (provedores com amostragem: Gemini, Anthropic, OpenAI e DeepSeek) e instruções (prompt de sistema).
   Regras ao salvar iguais às demais features (ativa exige provedor+modelo conectados; modelo,
   variante e agente conferidos no catálogo; campos que não se aplicam viram vazios).
 - Gera **somente a prévia** da tarefa (1ª fase, `parseDraftPreview`): a IA interpreta a **descrição

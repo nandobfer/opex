@@ -1,15 +1,18 @@
 import { streamText, type LanguageModel } from "ai"
 import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
+import { createAnthropicProvider } from "./anthropic"
+import { createDeepseekProvider } from "./deepseek"
 import { createGeminiProvider } from "./gemini"
+import { createOpenaiProvider } from "./openai"
 import { createOpencodeProvider } from "./opencode"
-import type { AiProviderId } from "./providers"
+import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
 import { recordAiConsumption } from "./consumption"
 
 /**
  * Geração em streaming pela Vercel AI SDK — SOMENTE servidor. Ponto único das features: nenhuma
- * feature fala com OpenCode ou Gemini diretamente.
+ * feature fala com OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek diretamente.
  */
 
 export interface AiStreamRequest {
@@ -17,11 +20,11 @@ export interface AiStreamRequest {
     model: string
     instructions: string
     prompt: string
-    /** OpenCode: variante do modelo; Gemini: nível de thinking. */
+    /** OpenCode: variante do modelo; Gemini: nível de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio. */
     variant?: string | null
     /** Só OpenCode. */
     agent?: string | null
-    /** Só Gemini (o OpenCode ignora parâmetros de amostragem). */
+    /** Só provedores com amostragem (o OpenCode ignora). */
     temperature?: number | null
     maxOutputTokens?: number | null
     /** Título da sessão criada no OpenCode. */
@@ -50,11 +53,24 @@ export type AiStreamEvent =
 
 const log = loggerFor({ module: "ai" })
 
+type StreamTextOptions = Parameters<typeof streamText>[0]
+
 interface PreparedModel {
     model: LanguageModel
-    providerOptions?: Parameters<typeof streamText>[0]["providerOptions"]
+    providerOptions?: StreamTextOptions["providerOptions"]
+    /** Nível de raciocínio da AI SDK (Anthropic, OpenAI e DeepSeek). */
+    reasoning?: StreamTextOptions["reasoning"]
     dispose: () => Promise<void>
 }
+
+const noDispose = async () => {}
+
+/** Provedores diretos por API key: a AI SDK traduz o `reasoning` para cada um. */
+const DIRECT_PROVIDERS = {
+    anthropic: createAnthropicProvider,
+    openai: createOpenaiProvider,
+    deepseek: createDeepseekProvider,
+} as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
 async function prepareModel(request: AiStreamRequest): Promise<PreparedModel> {
     if (request.provider === "opencode") {
@@ -71,11 +87,31 @@ async function prepareModel(request: AiStreamRequest): Promise<PreparedModel> {
         })
         return { model, dispose: () => provider.dispose() }
     }
-    const google = await createGeminiProvider()
+    if (request.provider === "gemini") {
+        const google = await createGeminiProvider()
+        return {
+            model: google(request.model),
+            providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
+            dispose: noDispose,
+        }
+    }
+    if (request.provider === "jev") throw new AiProviderError("O JEV decide de forma estruturada e não gera texto")
+    const provider = await DIRECT_PROVIDERS[request.provider]()
     return {
-        model: google(request.model),
-        providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
-        dispose: async () => {},
+        model: provider(request.model),
+        reasoning: request.variant && isAiReasoningLevel(request.variant) ? request.variant : undefined,
+        dispose: noDispose,
+    }
+}
+
+/** Temperatura e máximo de tokens só nos provedores com amostragem. A Anthropic não aceita temperatura
+ * com raciocínio ligado; nos modelos de raciocínio da OpenAI a AI SDK descarta o que não se aplica. */
+export function samplingOptions(request: AiStreamRequest): Pick<StreamTextOptions, "temperature" | "maxOutputTokens"> {
+    if (!getAiProvider(request.provider).supportsSampling) return {}
+    const skipTemperature = request.provider === "anthropic" && Boolean(request.variant)
+    return {
+        ...(request.temperature != null && !skipTemperature ? { temperature: request.temperature } : {}),
+        ...(request.maxOutputTokens != null ? { maxOutputTokens: request.maxOutputTokens } : {}),
     }
 }
 
@@ -115,8 +151,8 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
             prompt: request.prompt,
             abortSignal: request.signal,
             providerOptions: prepared.providerOptions,
-            ...(request.provider === "gemini" && request.temperature != null ? { temperature: request.temperature } : {}),
-            ...(request.provider === "gemini" && request.maxOutputTokens != null ? { maxOutputTokens: request.maxOutputTokens } : {}),
+            ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
+            ...samplingOptions(request),
         })
         for await (const part of result.fullStream) {
             switch (part.type) {

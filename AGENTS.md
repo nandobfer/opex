@@ -260,8 +260,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   tooltip padronizado e cores por variáveis `--chart-1..6`
 - Utilitários de estilo: `clsx` + `tailwind-merge` (`cn()`), `class-variance-authority`
 - Logging: Pino
-- IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) e `@ai-sdk/google`
-  (Gemini), sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
+- IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
+  (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai` e `@ai-sdk/deepseek`, sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
   Integrações › Provedores de IA (`aicontext/modules/ai.md`)
 - Testes: Vitest + React Testing Library
 - Build e execução: scripts de `package.json`; Docker (`Dockerfile` + `docker-compose.yml`)

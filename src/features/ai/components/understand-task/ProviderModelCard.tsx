@@ -54,14 +54,14 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
                 {!fixedProvider && (
                     <Field id="ai-provider" label="Provedor" error={errors.provider?.message}>
                         {connected.length === 0 ? (
-                            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor conectado: configure e teste o OpenCode ou o Gemini.</p>
+                            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor conectado: configure e teste um provedor na aba Provedores.</p>
                         ) : (
                             <OptionTabs<AiProviderId>
                                 id="ai-provider"
                                 options={providers.map((item) => ({ value: item.id, label: item.name, disabled: !item.connected, title: item.connected ? item.name : `${item.name}: não conectado` }))}
                                 value={provider ?? ("" as AiProviderId)}
                                 onChange={(next) => onProviderChange?.(next)}
-                                className="w-full"
+                                className="w-full flex-wrap"
                             />
                         )}
                     </Field>

@@ -17,7 +17,7 @@ vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { find: () => ({ 
 vi.mock('@/lib/db/models/ApiToken', () => ({ ApiToken: { countDocuments: vi.fn() } }))
 vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { countDocuments: vi.fn() } }))
 vi.mock('@/lib/pusher/server', () => ({ getRawPusherServer: vi.fn() }))
-vi.mock('@/features/ai/server/testers', () => ({ testAiHub: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpencode: vi.fn() }))
+vi.mock('@/features/ai/server/testers', () => ({ testAiHub: vi.fn(), testAnthropic: vi.fn(), testDeepseek: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpenai: vi.fn(), testOpencode: vi.fn() }))
 
 import type { IntegrationId } from '@/lib/integrations/catalog'
 import { INTEGRATION_TESTERS } from '@/features/integrations/testers/testers'

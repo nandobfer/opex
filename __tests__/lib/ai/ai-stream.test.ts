@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   opencodeModel: vi.fn((id: string, settings: unknown) => ({ kind: 'opencode', id, settings })),
   dispose: vi.fn(async () => {}),
   google: vi.fn((id: string) => ({ kind: 'gemini', id })),
+  anthropic: vi.fn((id: string) => ({ kind: 'anthropic', id })),
+  openai: vi.fn((id: string) => ({ kind: 'openai', id })),
+  deepseek: vi.fn((id: string) => ({ kind: 'deepseek', id })),
 }))
 
 vi.mock('ai', () => ({
@@ -22,6 +25,9 @@ vi.mock('@/lib/ai/opencode', () => ({
   createOpencodeProvider: async () => ({ provider: Object.assign(mocks.opencodeModel, { dispose: mocks.dispose }), directory: '/home/eu/ia' }),
 }))
 vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => mocks.google }))
+vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => mocks.anthropic }))
+vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => mocks.openai }))
+vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => mocks.deepseek }))
 
 import { streamAi, type AiStreamEvent } from '@/lib/ai/stream'
 
@@ -71,6 +77,39 @@ describe('streamAi', () => {
       maxOutputTokens: 2048,
       providerOptions: { google: { thinkingConfig: { thinkingLevel: 'low', includeThoughts: false } } },
     })
+  })
+
+  it('OpenAI e DeepSeek: nível de raciocínio pela opção `reasoning` da AI SDK, com temperatura e máximo de tokens', async () => {
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'openai', model: 'gpt-5', variant: 'medium', temperature: 0.2, maxOutputTokens: 1000, instructions: 'i', prompt: 'p' })
+    expect(mocks.openai).toHaveBeenCalledWith('gpt-5')
+    expect(mocks.streamText.mock.calls[0]![0]).toMatchObject({ reasoning: 'medium', temperature: 0.2, maxOutputTokens: 1000 })
+
+    await collect({ provider: 'deepseek', model: 'deepseek-chat', temperature: 0.5, instructions: 'i', prompt: 'p' })
+    expect(mocks.deepseek).toHaveBeenCalledWith('deepseek-chat')
+    const options = mocks.streamText.mock.calls[1]![0] as Record<string, unknown>
+    expect(options).toMatchObject({ temperature: 0.5 })
+    expect(options).not.toHaveProperty('reasoning')
+  })
+
+  it('Anthropic: com raciocínio ligado não envia temperatura (a API recusa); sem ele, envia', async () => {
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'anthropic', model: 'claude-sonnet-4-5', variant: 'high', temperature: 0.3, maxOutputTokens: 4000, instructions: 'i', prompt: 'p' })
+    const thinking = mocks.streamText.mock.calls[0]![0] as Record<string, unknown>
+    expect(thinking).toMatchObject({ reasoning: 'high', maxOutputTokens: 4000 })
+    expect(thinking).not.toHaveProperty('temperature')
+
+    await collect({ provider: 'anthropic', model: 'claude-sonnet-4-5', temperature: 0.3, instructions: 'i', prompt: 'p' })
+    expect(mocks.streamText.mock.calls[1]![0]).toMatchObject({ temperature: 0.3 })
+  })
+
+  it('variante desconhecida não vira `reasoning`; JEV não gera texto', async () => {
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'openai', model: 'gpt-5', variant: 'turbo', instructions: 'i', prompt: 'p' })
+    expect(mocks.streamText.mock.calls[0]![0]).not.toHaveProperty('reasoning')
+
+    const events = await collect({ provider: 'jev', model: 'jev-latest', instructions: 'i', prompt: 'p' })
+    expect(events).toEqual([{ type: 'error', message: 'O JEV decide de forma estruturada e não gera texto' }])
   })
 
   it('erro do provedor vira evento final de erro, sem "done"', async () => {

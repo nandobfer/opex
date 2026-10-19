@@ -100,6 +100,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### F — Provedores Anthropic, OpenAI e DeepSeek — 3d4ee61
 
+> **Entregue na v2.56.0.**
+
 - Integrações `ai_anthropic`, `ai_openai`, `ai_deepseek` (API key como campo privado, sem `env`)
   com `@ai-sdk/anthropic`, `@ai-sdk/openai` (API Responses) e `@ai-sdk/deepseek` (validar
   compatibilidade com `ai` v7 no Context7).
