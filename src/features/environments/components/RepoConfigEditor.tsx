@@ -77,8 +77,9 @@ export function RepoConfigEditor({ repoId }: { repoId: string }) {
                     <CardHeader>
                         <CardTitle className="text-base">Acesso ao host</CardTitle>
                         <CardDescription>
-                            Local usa a máquina do OpenCode/Opex; Remoto acessa por SSH. O agente executa Git, Docker e SSH — o
-                            servidor Opex não executa comandos no host. Apenas o dono altera o destino SSH e as credenciais.
+                            Local usa a máquina do OpenCode; Remoto acessa por SSH a partir dela. Tudo roda no host pelo
+                            OpenCode — o servidor do Opex não executa comandos. Apenas o dono altera o destino SSH e as
+                            credenciais.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className={FORM_GRID_WIDE}>

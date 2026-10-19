@@ -45,7 +45,7 @@ export async function runOpencodeShell(
     client: OpencodeClient,
     directory: string,
     command: string,
-    options: { timeoutMs?: number; signal?: AbortSignal } = {},
+    options: { timeoutMs?: number; signal?: AbortSignal; outputLimit?: number } = {},
 ): Promise<OpencodeShellResult> {
     const timeoutMs = options.timeoutMs ?? 30_000
     const location = { directory }
@@ -63,8 +63,59 @@ export async function runOpencodeShell(
             await sleep(400, options.signal)
             info = (await client.shell.get({ id, location }, { signal: options.signal })).data
         }
-        const output = await client.shell.output({ id, location, limit: 20_000 }, { signal: options.signal }).catch(() => null)
+        const output = await client.shell.output({ id, location, limit: options.outputLimit ?? 20_000 }, { signal: options.signal }).catch(() => null)
         return { exitCode: typeof info.exit === "number" ? info.exit : null, status: info.status, output: output?.data.output.trim() ?? "" }
+    } finally {
+        await client.shell.remove({ id, location }).catch(() => undefined)
+    }
+}
+
+/**
+ * Executa um comando longo na máquina do OpenCode entregando a saída aos poucos (cursor), até o
+ * comando terminar, o prazo vencer ou o `signal` abortar. Ao abortar, o shell é removido — o que
+ * encerra o processo no host. Usado para acompanhar logs (`docker compose logs -f`).
+ */
+export async function streamOpencodeShell(
+    client: OpencodeClient,
+    directory: string,
+    command: string,
+    options: {
+        onOutput: (chunk: string) => void | Promise<void>
+        onStart?: (shellId: string) => void | Promise<void>
+        signal?: AbortSignal
+        timeoutMs?: number
+        intervalMs?: number
+    },
+): Promise<OpencodeShellResult> {
+    const timeoutMs = options.timeoutMs ?? 4 * 60 * 60_000
+    const location = { directory }
+    let created: Awaited<ReturnType<OpencodeClient["shell"]["create"]>>
+    try {
+        created = await client.shell.create({ location, command, timeout: timeoutMs })
+    } catch (error) {
+        throw new AiProviderError(`Não foi possível executar comandos no OpenCode: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    const id = created.data.id
+    await options.onStart?.(id)
+    let info = created.data
+    let cursor = 0
+    const drain = async () => {
+        const page = (await client.shell.output({ id, location, cursor, limit: 64_000 })).data
+        if (page.output) await options.onOutput(page.output)
+        cursor = page.cursor
+    }
+    try {
+        while (!options.signal?.aborted) {
+            await drain()
+            if (info.status !== "running") break
+            try {
+                await sleep(options.intervalMs ?? 1_000, options.signal)
+            } catch {
+                break
+            }
+            info = (await client.shell.get({ id, location })).data
+        }
+        return { exitCode: typeof info.exit === "number" ? info.exit : null, status: info.status, output: "" }
     } finally {
         await client.shell.remove({ id, location }).catch(() => undefined)
     }

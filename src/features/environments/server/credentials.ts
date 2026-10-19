@@ -1,28 +1,18 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
 import { decryptSecret, type EncryptedSecret } from "@/lib/crypto/secretBox"
 import { dbConnect } from "@/lib/db"
 import { EnvironmentRepoConfig } from "@/lib/db/models/EnvironmentRepoConfig"
 import { Environment } from "@/lib/db/models/Environment"
 import { DomainError } from "@/lib/api/route"
-import type { EnvironmentSettings } from "../schemas"
-import {
-    accessGrant,
-    accessDirectoryFor,
-    markAccessGrantUsed,
-    registerAccessGrant,
-    revokeAccessGrant,
-    type AccessGrantInput,
-} from "./access-registry"
+import type { EnvironmentInput, RepoConfigInput } from "../schemas"
 
 /**
- * Acesso temporário protegido das operações. O servidor **não** grava mais esses arquivos: ele roda
- * em outro filesystem que o agente (app em container × OpenCode no host), então o agente busca o
- * envelope **uma única vez** com um token da operação e materializa os arquivos no host dele.
- * Ver `aicontext/modules/environments.md`.
+ * Conteúdo do acesso temporário protegido. O servidor do Opex roda em outro filesystem que o agente
+ * (app em container × OpenCode no host), então os arquivos são gravados **no host pelo shell do
+ * OpenCode** (`server/host.ts`), nunca no disco do servidor. Ver `aicontext/modules/environments.md`.
  */
 
-/** Executado SOMENTE pelo agente, no host OpenCode. Opex apenas entrega o conteúdo do acesso. */
-const SSH_HELPER = `#!/usr/bin/env node
+/** Executado SOMENTE no host do OpenCode (pelo agente ou pelos comandos de leitura do Opex). */
+export const SSH_HELPER = `#!/usr/bin/env node
 const fs = require('node:fs'), cp = require('node:child_process'), path = require('node:path');
 const dir = __dirname, data = JSON.parse(fs.readFileSync(path.join(dir, 'access.json'), 'utf8'));
 if (Date.now() > data.expiresAt) process.exit(124);
@@ -36,47 +26,23 @@ child.on('exit', code => process.exit(code ?? 1));
 child.on('error', () => process.exit(1));
 `
 
-export interface AccessPayload {
-    /** `null` quando o acesso não carrega variáveis (sessão de logs). */
-    variables: Record<string, string> | null
-    /** Só no acesso remoto: destino e credenciais SSH. */
-    repo: Record<string, unknown> | null
-    /** Helper de SSH que o agente grava como `ssh.cjs` (só no acesso remoto). */
-    helper: string | null
-    expiresAt: string
+/** Escopo do acesso: de qual ambiente/repositório e o que ele carrega. */
+export interface AccessScope {
+    environmentId: string
+    projectId: string
+    repoConfig: RepoConfigInput
+    /** Variáveis congeladas na operação; `null` não grava `variables.json` (ex.: sessão de logs). */
+    variables: EnvironmentInput["variables"] | null
 }
 
-export interface AccessGrant {
-    id: string
-    dir: string
-    token: string
-    baseUrl: string
-    ttlMinutes: number
-    /** Valores secretos, para censurar o texto do agente antes de persistir. */
-    secretValues: string[]
+/** Arquivo a gravar no diretório de acesso: conteúdo e permissão. */
+export interface AccessFile {
+    content: string
+    mode: number
 }
 
-export function hashAccessToken(token: string): string {
-    return createHash("sha256").update(token).digest("hex")
-}
-
-function sameHash(left: string, right: string): boolean {
-    const a = Buffer.from(left, "utf8")
-    const b = Buffer.from(right, "utf8")
-    return a.length === b.length && timingSafeEqual(a, b)
-}
-
-/** URL base do agente (sem barra final) ou falha dizendo onde configurar. */
-export function agentBaseUrl(settings: EnvironmentSettings): string {
-    const base = settings.agentBaseUrl.trim().replace(/\/+$/, "")
-    if (!base)
-        throw new DomainError(
-            409,
-            "Informe a URL base do agente em Integrações › Provedores de IA › Administração de sistema",
-            "AGENT_BASE_URL_MISSING",
-        )
-    return base
-}
+/** Prazo máximo do acesso remoto (o helper SSH recusa depois disso). */
+const ACCESS_TTL_MS = 5 * 60 * 60_000
 
 function parseSecrets(value: EncryptedSecret | null | undefined): Record<string, string> {
     if (!value) return {}
@@ -87,78 +53,51 @@ function parseSecrets(value: EncryptedSecret | null | undefined): Record<string,
     }
 }
 
-/** Credenciais SSH e variáveis secretas da operação (nunca toca no disco do servidor). */
-async function readSecrets(context: AccessGrantInput) {
+async function readSecrets(scope: AccessScope) {
     await dbConnect()
-    const config = await EnvironmentRepoConfig.findOne({ projectId: context.projectId }).select("+secrets").lean()
-    const env = await Environment.findById(context.environmentId).select("+secretVariables").lean()
+    const config = await EnvironmentRepoConfig.findOne({ projectId: scope.projectId }).select("+secrets").lean()
+    const env = await Environment.findById(scope.environmentId).select("+secretVariables").lean()
     return { secrets: parseSecrets(config?.secrets), secretVariables: parseSecrets(env?.secretVariables) }
 }
 
-/** Valores secretos conhecidos da operação, para `redact` do texto do agente. */
-export async function readAccessSecrets(context: AccessGrantInput): Promise<string[]> {
-    const { secrets, secretVariables } = await readSecrets(context)
-    return [...Object.values(secrets), ...Object.values(secretVariables)]
-}
-
-/** Sem credenciais não há acesso remoto: falha antes de despachar o agente. */
-export async function assertRemoteCredentials(context: AccessGrantInput): Promise<void> {
-    if (context.repoConfig.mode !== "remote") return
-    const { secrets } = await readSecrets(context)
-    if (!(context.repoConfig.auth === "key" ? secrets.privateKey : secrets.password))
-        throw new DomainError(409, "Credenciais SSH ausentes: solicite a configuração ao dono")
-}
-
-/** Conteúdo entregue ao agente quando ele busca o envelope. */
-export async function buildAccessPayload(context: AccessGrantInput, expiresAt: number): Promise<AccessPayload> {
-    const { secrets, secretVariables } = await readSecrets(context)
-    const repo = context.repoConfig.mode === "remote" ? { ...context.repoConfig, ...secrets } : null
-    const publicVariables = Object.fromEntries(
-        (context.variables ?? []).filter((variable) => !variable.secret).map((variable) => [variable.name, variable.value]),
-    )
-    return {
-        variables: context.variables ? { ...publicVariables, ...secretVariables } : null,
-        repo,
-        helper: repo ? SSH_HELPER : null,
-        expiresAt: new Date(expiresAt).toISOString(),
-    }
+/** Valores secretos conhecidos do escopo, para `redact` das saídas do host e do agente. */
+export async function readAccessSecrets(scope: AccessScope): Promise<string[]> {
+    const { secrets, secretVariables } = await readSecrets(scope)
+    return [...Object.values(secrets), ...Object.values(secretVariables)].filter(Boolean)
 }
 
 /**
- * Prepara o acesso de uma operação/sessão: diretório que o agente deve criar, token de uso único
- * (registrado só em memória) e os valores secretos para censura.
+ * Arquivos do acesso: `variables.json` (variáveis públicas + secretas, quando o escopo tem variáveis)
+ * e, no acesso remoto, `access.json`, `identity`, `known_hosts`, `ssh.cjs` e `askpass`.
  */
-export async function grantAccess(
-    context: AccessGrantInput,
-    settings: EnvironmentSettings,
-    prefix: string,
-): Promise<AccessGrant> {
-    const baseUrl = agentBaseUrl(settings)
-    await assertRemoteCredentials(context)
-    const token = randomBytes(32).toString("base64url")
-    const dir = accessDirectoryFor(settings.accessDirectory, prefix, context.id)
-    registerAccessGrant({ ...context, dir }, hashAccessToken(token), settings.accessTokenTtlMinutes)
-    return {
-        id: context.id,
-        dir,
-        token,
-        baseUrl,
-        ttlMinutes: settings.accessTokenTtlMinutes,
-        secretValues: await readAccessSecrets(context),
+export async function buildAccessFiles(
+    scope: AccessScope,
+    dir: string,
+    now = Date.now(),
+): Promise<{ files: Record<string, AccessFile>; secretValues: string[] }> {
+    const { secrets, secretVariables } = await readSecrets(scope)
+    const remote = scope.repoConfig.mode === "remote"
+    if (remote && !(scope.repoConfig.auth === "key" ? secrets.privateKey : secrets.password))
+        throw new DomainError(409, "Credenciais SSH ausentes: solicite a configuração ao dono", "ACCESS_WRITE_FAILED")
+    const files: Record<string, AccessFile> = {}
+    if (scope.variables) {
+        const publicVariables = Object.fromEntries(
+            scope.variables.filter((variable) => !variable.secret).map((variable) => [variable.name, variable.value]),
+        )
+        files["variables.json"] = { content: JSON.stringify({ ...publicVariables, ...secretVariables }), mode: 0o600 }
     }
-}
-
-export function releaseAccess(id: string): void {
-    revokeAccessGrant(id)
-}
-
-/** Valida o token e devolve o envelope do acesso. Uso único: a segunda chamada é recusada. */
-export async function consumeAccessToken(id: string, token: string): Promise<AccessPayload> {
-    const grant = accessGrant(id)
-    if (!grant || !sameHash(grant.tokenHash, hashAccessToken(token)))
-        throw new DomainError(403, "Acesso temporário inválido", "ACCESS_TOKEN_REJECTED")
-    if (grant.usedAt !== null) throw new DomainError(409, "Acesso temporário já utilizado", "ACCESS_TOKEN_REJECTED")
-    if (grant.expiresAt <= Date.now()) throw new DomainError(410, "Acesso temporário expirado", "ACCESS_TOKEN_EXPIRED")
-    markAccessGrantUsed(id)
-    return buildAccessPayload(grant, grant.expiresAt)
+    if (remote) {
+        files["access.json"] = {
+            content: JSON.stringify({ ...scope.repoConfig, ...secrets, expiresAt: now + ACCESS_TTL_MS }),
+            mode: 0o600,
+        }
+        if (secrets.privateKey) files.identity = { content: `${secrets.privateKey}\n`, mode: 0o600 }
+        files.known_hosts = { content: `${scope.repoConfig.hostKey}\n`, mode: 0o600 }
+        files["ssh.cjs"] = { content: SSH_HELPER, mode: 0o700 }
+        files.askpass = {
+            content: `#!/bin/sh\nexec node '${`${dir}/ssh.cjs`.replace(/'/g, "'\\''")}' --askpass\n`,
+            mode: 0o700,
+        }
+    }
+    return { files, secretValues: [...Object.values(secrets), ...Object.values(secretVariables)].filter(Boolean) }
 }

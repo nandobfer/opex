@@ -33,7 +33,7 @@ import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSett
 import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
 import type { PrReviewSettingsDto } from "@/features/pr-review/types"
-import { DEFAULT_ENVIRONMENT_SETTINGS, environmentSettingsSchema, type EnvironmentSettings } from "@/features/environments/schemas"
+import { DEFAULT_ENVIRONMENT_SETTINGS, storedEnvironmentSettingsSchema, type EnvironmentSettings } from "@/features/environments/schemas"
 
 const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
@@ -335,7 +335,7 @@ export async function savePrReviewSettings(input: PrReviewSettings, actorId: str
 }
 
 export async function loadEnvironmentSettings() {
-    return loadFeature("system-administration", environmentSettingsSchema, DEFAULT_ENVIRONMENT_SETTINGS)
+    return loadFeature("system-administration", storedEnvironmentSettingsSchema, DEFAULT_ENVIRONMENT_SETTINGS)
 }
 export async function getEnvironmentSettings() {
     const { settings, isDefault } = await loadEnvironmentSettings()

@@ -1,36 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { TurnRequest, TurnResult } from "@/lib/ai/opencode-run"
 const mocks = vi.hoisted(() => ({
-    create: vi.fn(),
-    interrupt: vi.fn(),
-    cleanup: vi.fn(),
-    run: vi.fn<(client: unknown, req: TurnRequest) => Promise<TurnResult>>(),
+    stream: vi.fn(),
+    shellRemove: vi.fn(),
+    write: vi.fn(),
+    remove: vi.fn(),
 }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn() } }))
 vi.mock("@/features/environments/server/events", () => ({ publishEnvironment: vi.fn() }))
-vi.mock("@/features/environments/server/runner", () => ({ appendEnvironmentLog: vi.fn() }))
-vi.mock("@/features/environments/server/credentials", () => ({
-    grantAccess: async () => ({
-        id: "logs-session",
-        dir: "/tmp/opencode/operation-logs",
-        token: "t".repeat(43),
-        baseUrl: "http://127.0.0.1:7001",
-        ttlMinutes: 30,
-        secretValues: [],
-    }),
-    releaseAccess: mocks.cleanup,
+vi.mock("@/features/environments/server/runner", () => ({ appendEnvironmentLog: vi.fn().mockResolvedValue(undefined) }))
+vi.mock("@/features/environments/server/host", async (original) => ({
+    ...(await original<typeof import("@/features/environments/server/host")>()),
+    writeAccess: mocks.write,
+    removeAccess: mocks.remove,
 }))
 vi.mock("@/features/ai/server/settings", async () => ({
     loadEnvironmentSettings: async () => ({ settings: (await import("./fixtures")).settings }),
 }))
 vi.mock("@/lib/ai/opencode-client", () => ({
-    getOpencodeClient: async () => ({
-        session: { create: mocks.create, interrupt: mocks.interrupt, form: { cancel: vi.fn() } },
-        permission: { reply: vi.fn() },
-    }),
+    getOpencodeClient: async () => ({ shell: { remove: mocks.shellRemove } }),
+    streamOpencodeShell: mocks.stream,
 }))
-vi.mock("@/lib/ai/opencode-run", () => ({ runAgentTurn: mocks.run }))
 vi.mock("@/lib/db/models/Project", async () => ({ Project: (await import("./fixtures")).store.project }))
 vi.mock("@/lib/db/models/Environment", async () => ({ Environment: (await import("./fixtures")).store.env }))
 vi.mock("@/lib/db/models/EnvironmentRepoConfig", async () => ({
@@ -46,78 +36,94 @@ vi.mock("@/lib/db/models/EnvironmentLogSession", async () => ({
     EnvironmentLogSession: (await import("./fixtures")).store.viewers,
 }))
 vi.mock("@/lib/db/models/IntegrationLog", async () => ({ IntegrationLog: (await import("./fixtures")).store.log }))
-import { logViewer, logsHistory, reconcileLogs } from "@/features/environments/server/logs"
+import { logLineService, logViewer, logsHistory, reconcileLogs, splitLogLines } from "@/features/environments/server/logs"
 import { resetStore, store, repoId, envId } from "./fixtures"
 const actor = { userId: "u", clientId: "c", projectIds: [repoId], canEdit: false, owner: false }
 
 beforeEach(() => {
     vi.clearAllMocks()
     resetStore()
-    mocks.create.mockResolvedValue({ id: "logs-session" })
-    mocks.interrupt.mockResolvedValue(undefined)
-    mocks.cleanup.mockResolvedValue(undefined)
-    mocks.run.mockImplementation(async (_client, req) => {
-        await new Promise<void>((resolve) => req.signal.addEventListener("abort", () => resolve(), { once: true }))
-        return { outcome: "interrupted", text: "", message: null, costUsd: 0, durationMs: 1 }
-    })
+    mocks.shellRemove.mockResolvedValue(undefined)
+    mocks.remove.mockResolvedValue(undefined)
+    mocks.write.mockResolvedValue({ secretValues: ["segredo"] })
+    // Simula o `docker compose logs -f`: entrega um bloco e fica rodando até o abort.
+    mocks.stream.mockImplementation(
+        async (
+            _client: unknown,
+            _dir: string,
+            _command: string,
+            options: { signal: AbortSignal; onStart: (id: string) => Promise<void>; onOutput: (chunk: string) => Promise<void> },
+        ) => {
+            await options.onStart("shell-1")
+            await options.onOutput("app-1  | pronto segredo\nworker-1  | fila ok\nparci")
+            await new Promise<void>((resolve) => options.signal.addEventListener("abort", () => resolve(), { once: true }))
+            return { exitCode: null, status: "running", output: "" }
+        },
+    )
 })
-describe("espectadores independentes e histórico autorizado", () => {
-    it("dois espectadores compartilham sessão; só o último encerra", async () => {
+
+describe("logs pelo shell do OpenCode, compartilhados entre espectadores", () => {
+    it("dois espectadores compartilham um shell; só o último encerra", async () => {
         const first = crypto.randomUUID(),
             second = crypto.randomUUID()
         await logViewer(actor, repoId, envId, first, false)
-        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalledTimes(1))
+        await vi.waitFor(() => expect(store.log.docs.length).toBeGreaterThanOrEqual(2))
         await logViewer(actor, repoId, envId, second, false)
-        expect(mocks.create).toHaveBeenCalledTimes(1)
+        expect(mocks.stream).toHaveBeenCalledTimes(1)
+        expect(mocks.stream.mock.calls[0][2]).toMatch(/^sh -c '.*org-app-producao.* logs -f --no-color/)
+        expect(store.viewers.docs[0].sessionId).toBe("shell-1")
         await logViewer(actor, repoId, envId, first, true)
-        expect(mocks.interrupt).not.toHaveBeenCalled()
-        expect(store.viewers.docs[0].viewers).toHaveLength(1)
+        expect(store.viewers.docs[0].state).toBe("running")
         await logViewer(actor, repoId, envId, second, true)
         await vi.waitFor(() => expect(store.viewers.docs[0].state).toBe("idle"))
-        expect(mocks.interrupt).toHaveBeenCalledTimes(1)
-        expect(mocks.cleanup).toHaveBeenCalled()
+        // Acesso local: nada de helper SSH gravado no host.
+        expect(mocks.write).not.toHaveBeenCalled()
     })
-    it("history é isolado por scope e serviço, sem expor outro ambiente", async () => {
-        store.log.docs.push(
-            {
-                _id: "1",
-                integrationId: "ai",
-                ts: new Date(),
-                message: "app | pronto",
-                data: { scope: `environment:${envId}` },
-            },
-            {
-                _id: "2",
-                integrationId: "ai",
-                ts: new Date(),
-                message: "db | pronto",
-                data: { scope: `environment:${envId}` },
-            },
-            {
-                _id: "3",
-                integrationId: "ai",
-                ts: new Date(),
-                message: "outro cliente",
-                data: { scope: "environment:outro" },
-            },
-        )
-        expect(await logsHistory(actor, repoId, envId, undefined, "app")).toEqual([
-            expect.objectContaining({ id: "1", message: "app | pronto" }),
+    it("grava uma linha por entrada, com serviço identificado e sem linha parcial", async () => {
+        const viewer = crypto.randomUUID()
+        await logViewer(actor, repoId, envId, viewer, false)
+        await vi.waitFor(() => expect(store.log.docs.length).toBe(2))
+        expect(store.log.docs.map((doc) => [doc.message, (doc.data as { service?: string }).service])).toEqual([
+            ["app-1  | pronto segredo", "app"],
+            ["worker-1  | fila ok", "worker"],
+        ])
+        expect(await logsHistory(actor, repoId, envId, undefined, "worker")).toEqual([
+            expect.objectContaining({ message: "worker-1  | fila ok" }),
         ])
         await expect(logsHistory({ ...actor, projectIds: [] }, repoId, envId)).rejects.toMatchObject({ status: 404 })
+        await logViewer(actor, repoId, envId, viewer, true)
+        await vi.waitFor(() => expect(store.viewers.docs[0].state).toBe("idle"))
     })
-    it("reconciliação interrompe sessão órfã antes de limpar acesso", async () => {
+    it("no remoto grava o helper SSH no host, censura segredos e remove o acesso ao encerrar", async () => {
+        store.repo.docs[0].config = { ...store.repo.docs[0].config, mode: "remote" }
+        const viewer = crypto.randomUUID()
+        await logViewer(actor, repoId, envId, viewer, false)
+        await vi.waitFor(() => expect(store.log.docs.length).toBe(2))
+        expect(mocks.write.mock.calls[0][2]).toMatchObject({ variables: null })
+        expect(mocks.stream.mock.calls[0][2]).toMatch(/^node '\/tmp\/opex-environments\/logs-/)
+        expect(store.log.docs[0].message).toBe("app-1  | pronto [protegido]")
+        await logViewer(actor, repoId, envId, viewer, true)
+        await vi.waitFor(() => expect(store.viewers.docs[0]).toMatchObject({ state: "idle", accessPath: null }))
+        expect(mocks.remove).toHaveBeenCalledWith(expect.anything(), expect.anything(), `/tmp/opex-environments/logs-${envId}`)
+    })
+    it("reconciliação remove shell órfão e acesso deixado no host", async () => {
         store.viewers.docs.push({
             _id: "v",
             environmentId: envId,
             state: "running",
             viewers: [{ id: "old", expiresAt: new Date(0) }],
             sessionId: "orphan",
-            accessPath: "/tmp/opencode/operation-old",
+            accessPath: `/tmp/opex-environments/logs-${envId}`,
         })
         await reconcileLogs()
-        expect(mocks.interrupt).toHaveBeenCalledWith({ sessionID: "orphan" })
-        expect(mocks.cleanup).toHaveBeenCalled()
+        expect(mocks.shellRemove).toHaveBeenCalledWith({ id: "orphan", location: { directory: "/tmp" } })
+        expect(mocks.remove).toHaveBeenCalled()
         expect(store.viewers.docs[0]).toMatchObject({ state: "idle", viewers: [], accessPath: null })
+    })
+    it("separa linhas e identifica o serviço do prefixo do compose", () => {
+        expect(splitLogLines("ab", "c\nd\ne")).toEqual({ lines: ["abc", "d"], rest: "e" })
+        expect(logLineService("app-1  | x")).toBe("app")
+        expect(logLineService("db  | x")).toBe("db")
+        expect(logLineService("sem prefixo")).toBeNull()
     })
 })

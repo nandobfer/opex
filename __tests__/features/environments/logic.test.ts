@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
     composeProject,
-    environmentFailureMessage,
-    parseAgentFailure,
+    environmentFailureHint,
+    parseDbEvidence,
+    verifyHostResult,
     parseAgentResult,
     redact,
     restoreCompatibility,
@@ -91,19 +92,29 @@ describe("contratos e isolamento de Ambientes", () => {
     })
 })
 
-describe("falhas conhecidas da operação", () => {
-    it("lê o marcador isolado do agente e ignora marcador de outro formato", () => {
-        expect(parseAgentFailure('texto\nOPEX_FAILURE {"code":"ACCESS_ENVELOPE_MISSING"}\nfim')).toBe(
-            "ACCESS_ENVELOPE_MISSING",
-        )
-        expect(parseAgentFailure('OPEX_FAILURE {"code":"OUTRO"}')).toBeNull()
-        expect(parseAgentFailure("sem marcador")).toBeNull()
-        expect(parseAgentFailure('OPEX_CHECKPOINT {"stage":"x"}')).toBeNull()
+describe("falhas conhecidas e conferência no host", () => {
+    it("orienta em pt-BR pelos códigos conhecidos", () => {
+        expect(environmentFailureHint("HOST_UNREACHABLE")).toContain("Testar acesso ao host")
+        expect(environmentFailureHint("COMPOSE_NOT_FOUND")).toContain("arquivo Compose")
+        expect(environmentFailureHint(null)).toBeNull()
+        expect(environmentFailureHint("ACCESS_ENVELOPE_MISSING")).toBeNull()
     })
-    it("traduz o código para orientação em pt-BR e preserva a mensagem sem código", () => {
-        expect(environmentFailureMessage("ACCESS_ENVELOPE_MISSING", "genérico")).toContain("URL base do agente")
-        expect(environmentFailureMessage("ACCESS_TOKEN_EXPIRED", "genérico")).toContain("expirou")
-        expect(environmentFailureMessage(null, "genérico")).toBe("genérico")
-        expect(environmentFailureMessage("DESCONHECIDO", "genérico")).toBe("genérico")
+    it("lê a versão do banco do último bloco json", () => {
+        const text = "x\n```json\n{\"dbVersion\":\"m3\",\"databaseCertain\":true,\"migrations\":[\"m3\"],\"evidence\":[]}\n```"
+        expect(parseDbEvidence(text)).toMatchObject({ dbVersion: "m3", databaseCertain: true })
+        expect(parseDbEvidence("sem json")).toBeNull()
+    })
+    it("publicação exige os serviços de pé; restauração exige cada ID imutável", () => {
+        const image = { service: "app", imageId: `sha256:${"a".repeat(64)}`, tag: "", version: "", builtAt: "2026-10-16T12:00:00Z" }
+        const up = { images: [image], containers: [{ service: "app", state: "running" }] }
+        expect(verifyHostResult("publish", up, { services: [] })).toBe(true)
+        expect(verifyHostResult("publish", { ...up, containers: [{ service: "app", state: "exited" }] }, { services: [] })).toBe(false)
+        expect(verifyHostResult("publish", up, { services: ["app", "worker"] })).toBe(false)
+        expect(verifyHostResult("restore", up, { services: [], images: [image] })).toBe(true)
+        expect(verifyHostResult("restore", up, { services: [], images: [{ ...image, imageId: `sha256:${"b".repeat(64)}` }] })).toBe(false)
+        expect(verifyHostResult("restore", up, { services: [], images: [] })).toBe(false)
+        // CD: imagem construída antes do disparo não comprova a nova versão.
+        expect(verifyHostResult("publish", up, { services: [], since: new Date("2026-10-16T11:00:00Z") })).toBe(true)
+        expect(verifyHostResult("publish", up, { services: [], since: new Date("2026-10-17T00:00:00Z") })).toBe(false)
     })
 })

@@ -62,7 +62,7 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 describe("confirmações e formulário do ambiente", () => {
-    it("falha com código conhecido mostra a orientação, não o texto cru do agente", () => {
+    it("falha com código conhecido mostra a mensagem e a orientação do que fazer", () => {
         render(
             <OperationsHistory
                 operations={[
@@ -73,8 +73,8 @@ describe("confirmações e formulário do ambiente", () => {
                         state: "failed",
                         stage: "Falhou",
                         steps: [],
-                        error: 'Envelope ausente\n```json\n{"verified":false}\n```',
-                        failureCode: "ACCESS_ENVELOPE_MISSING",
+                        error: "Diretório /srv/app ou arquivo docker-compose.yml não encontrado no host.",
+                        failureCode: "COMPOSE_NOT_FOUND",
                         createdAt: new Date().toISOString(),
                         finishedAt: null,
                         sessionId: null,
@@ -86,8 +86,8 @@ describe("confirmações e formulário do ambiente", () => {
             />,
         )
         const alert = screen.getByRole("alert").textContent ?? ""
-        expect(alert).toContain("URL base do agente")
-        expect(alert).not.toContain("verified")
+        expect(alert).toContain("/srv/app")
+        expect(alert).toContain("Confira o diretório e o arquivo Compose")
     })
     it("Publicar não executa antes da confirmação explícita", () => {
         render(<PublishTab repoId={repoId} data={detail()} />)

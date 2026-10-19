@@ -27,15 +27,18 @@ export const environmentSettingsSchema = z
         instructions: z.string().max(8000),
         sessionDirectory: path,
         accessDirectory: path,
-        agentBaseUrl: z
-            .string()
-            .trim()
-            .max(300)
-            .refine((v) => !v || /^https?:\/\/\S+$/.test(v), "Use uma URL http(s) alcançável pelo agente"),
-        accessTokenTtlMinutes: z.number().int().min(5).max(240),
         timeoutMinutes: z.number().int().min(1).max(240),
     })
     .strict()
+/** Chaves de versões anteriores da configuração (entrega por HTTP), descartadas ao carregar. */
+const LEGACY_ENVIRONMENT_SETTINGS_KEYS = ["agentBaseUrl", "accessTokenTtlMinutes"] as const
+/** Configuração salva: chaves legadas não podem invalidar (e desligar) o módulo. */
+export const storedEnvironmentSettingsSchema = z.preprocess((input) => {
+    if (!input || typeof input !== "object") return input
+    const clean: Record<string, unknown> = { ...(input as Record<string, unknown>) }
+    for (const key of LEGACY_ENVIRONMENT_SETTINGS_KEYS) delete clean[key]
+    return clean
+}, environmentSettingsSchema)
 export const DEFAULT_ENVIRONMENT_SETTINGS = {
     enabled: false,
     agent: null,
@@ -45,8 +48,6 @@ export const DEFAULT_ENVIRONMENT_SETTINGS = {
     instructions: "",
     sessionDirectory: "/tmp",
     accessDirectory: "/tmp/opex-environments",
-    agentBaseUrl: "",
-    accessTokenTtlMinutes: 30,
     timeoutMinutes: 60,
 } satisfies z.infer<typeof environmentSettingsSchema>
 
@@ -199,6 +200,16 @@ export const agentCheckpointSchema = z
         evidence: z.array(z.string().max(2000)).min(1).max(100),
     })
     .strict()
+/** Resposta do turno curto do agente que identifica a versão do banco. */
+export const dbEvidenceSchema = z
+    .object({
+        dbVersion: z.string().max(200).nullable(),
+        databaseCertain: z.boolean(),
+        migrations: z.array(z.string().max(1000)).max(100),
+        evidence: z.array(z.string().max(2000)).max(100),
+    })
+    .strict()
+export type DbEvidence = z.infer<typeof dbEvidenceSchema>
 export type EnvironmentInput = z.infer<typeof environmentSchema>
 export type RepoConfigInput = z.infer<typeof repoConfigSchema>
 export type EnvironmentSettings = z.infer<typeof environmentSettingsSchema>

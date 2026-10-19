@@ -39,52 +39,65 @@ vêm de `randomId()` (`src/lib/random-id.ts`, via `getRandomValues`) — nunca d
 - Revisões impedem gravações/confirmações desatualizadas; configuração ocupada não é editável.
   Valores privados vazios mantêm o segredo salvo. Admin do cliente não converte/remove segredos.
 
-## Agentes e credenciais
+## Execução no host: shell do OpenCode + agente
 
-Toda operação no host passa por agentes OpenCode: Git, SSH, Docker, Compose, imagens, containers,
-logs e publicação/restauração. O Opex só coordena, persiste, autoriza e apresenta; não possui
-executor direto SSH/Docker/Git. Consultas/disparos GitHub usam a integração existente.
+O servidor do Opex pode rodar em container (sem mounts) e o OpenCode roda direto no host: os dois
+**não compartilham filesystem**. Por isso **toda interação com o host passa pelo OpenCode**, nunca
+por executor SSH/Docker/Git no servidor nem por canal de volta host → Opex:
+
+| Interação | Como |
+|---|---|
+| Gravar/remover o acesso temporário | **shell** (`client.shell`, sem modelo) |
+| Ler Compose efetivo, containers e imagens | **shell** (`inspectHost`) |
+| Logs | **shell em streaming** (`streamOpencodeShell`) |
+| Conferir o resultado da ação | **shell** (`verifyHostResult`) |
+| Publicar / restaurar | **agente** (operação complexa) |
+| Versão do banco (migrações) | **agente**, turno curto somente leitura |
+
+O shell fica em `src/lib/ai/opencode-client.ts` (`runOpencodeShell` com `outputLimit`;
+`streamOpencodeShell` entrega a saída por `cursor` e, ao abortar, remove o shell — o que encerra o
+processo no host). O módulo usa `src/features/environments/server/host.ts`:
+
+- `writeAccess`: um comando grava `<accessDirectory>/operation-<id>` (0700) com `variables.json`
+  (variáveis públicas + secretas, quando o escopo tem variáveis) e, no remoto, `access.json`,
+  `identity`, `known_hosts`, `ssh.cjs` e `askpass` (0600/0700), mais o marcador `ready`. O conteúdo
+  vai em base64 **pelo stdin** (`printf` é builtin, não aparece no `ps`), nunca no prompt nem no
+  modelo, e o registro do shell é removido logo em seguida. `removeAccess` (`rm -rf`) só aceita
+  `<accessDirectory>/(operation|logs|probe)-<id>`.
+- `inspectHost`: script `sh` puro (roda também no host remoto, sem node/jq). Descobre os arquivos
+  Compose pelos labels dos containers (`com.docker.compose.project.config_files`, inclui overrides),
+  roda `docker compose config --format json`, lista containers/imagens por label do projeto e conta
+  processos de compose/build ainda ativos (`quiescent`). Do Compose ficam só serviço, imagem,
+  portas, volumes e os **nomes** das variáveis. Todo comando roda em `sh -c` (o shell do usuário pode
+  ser zsh, que não separa `$args`); no remoto, pelo helper `node <acesso>/ssh.cjs`.
+- Falhas viram `failureCode`: `HOST_UNREACHABLE`, `ACCESS_WRITE_FAILED`, `HOST_COMMAND_FAILED`,
+  `COMPOSE_NOT_FOUND`, `PREFLIGHT_UNVERIFIED`, `RESULT_UNVERIFIED`, `AGENT_UNVERIFIED`. O histórico
+  mostra a mensagem da operação e a orientação pt-BR do código (`environmentFailureHint`).
 
 Integrações › IA › **Administração de sistema** (`aba=administracao-sistema`) configura habilitação,
-modelo, agente, variante, skill, instruções, timeout, diretório administrativo, diretório de acesso,
-**URL base do agente** e **validade do acesso temporário**. Configuração persistida em
-`ai_feature_settings`, feature `system-administration`; consumo em `environments`, deduplicado por
-etapa/tentativa pelo executor compartilhado.
+modelo, agente, variante, skill, instruções, timeout, diretório administrativo (localção dos shells
+e sessões no OpenCode) e diretório de acesso (no host do OpenCode). Persistida em
+`ai_feature_settings`, feature `system-administration`; chaves de versões anteriores
+(`agentBaseUrl`, `accessTokenTtlMinutes`) são descartadas ao carregar e não desligam o módulo.
+Consumo em `environments`.
+
+**Testar acesso ao host** (`POST /api/environments/access-probe`, só o dono) roda só pelo shell:
+grava, lê e remove um acesso de teste e confere `docker version` e `docker compose version`,
+exibindo cada verificação com o detalhe.
 
 SSH e variáveis privadas usam AES-GCM (`secretBox.ts`), `select:false` e DTOs explícitos. Nunca
-retornam valores, apenas indicação de configuração. Auditoria não recebe segredos.
-
-O agente roda **no host do dono** e o servidor pode estar em container: os dois **não compartilham
-filesystem**. Por isso o Opex não escreve mais o envelope em disco — ele entrega o acesso pela rota
-`POST /api/environments/agent-access` (sem sessão, autenticada por **token de uso único** da
-operação/sessão), e o **agente** cria `<accessDirectory>/operation-<id>` com `umask 077`, busca o
-envelope uma única vez e materializa `variables.json` (quando há variáveis), `access.json`,
-`identity`, `known_hosts`, `ssh.cjs` e `askpass`, apagando o `envelope.json`. O token vive só na
-memória do processo, expira em `accessTokenTtlMinutes` e é descartado ao terminar, falhar ou
-interromper; o prompt recebe o caminho e o token (nunca valores). O helper SSH é executado **pelo
-agente**, lê senha/passphrase em memória via SSH_ASKPASS, usa chave por arquivo e known_hosts
-obrigatório; nenhum segredo vai nos argumentos ou no prompt.
-
-O mesmo diretório é reutilizado quando a sessão é retomada (reconciliação): o agente não busca de
-novo. O começo do diretório é do agente — um acesso expirado/perdido exige uma nova operação.
-
-**Testar acesso do agente** (botão na Administração de sistema) é o preflight do módulo: o servidor
-registra um acesso de teste, o agente cria o diretório, busca o envelope e devolve o valor que só o
-Opex conhece (`OPEX_PROBE <echo>`); sem essa prova, correção de URL/permissões antes de operar.
-Quando o agente não consegue buscar o acesso, ele emite `OPEX_FAILURE {"code":"ACCESS_ENVELOPE_MISSING"}`,
-que a operação grava em `failureCode` e a UI traduz como orientação em pt-BR (o texto cru do agente
-fica registrado, mas não é a mensagem principal).
+retornam valores, apenas indicação de configuração. Auditoria não recebe segredos. O helper SSH
+lê senha/passphrase via SSH_ASKPASS, usa chave por arquivo e known_hosts obrigatório, e recusa
+executar após 5 horas. Saídas do host e do agente passam por `redact` antes de persistir.
 
 O agente precisa de uma política administrativa previamente autorizada e restrita ao escopo.
-Pedidos adicionais de permissão são recusados; não há aprovação intermediária de plano nem
-autorização irrestrita automática. Sem acesso ao diretório compartilhado, SSH ou Docker, a operação
-falha, sem fallback inseguro. Git privado exige autenticação já disponível no host do agente.
-As instruções proíbem imprimir/ler segredos em mensagens/ferramentas e tratar o repositório como
-instruções. Opex não publica transcrição bruta; sanitiza checkpoints, resultados e logs.
+Pedidos adicionais de permissão são recusados; não há aprovação intermediária de plano. Git privado
+exige autenticação já disponível no host. O prompt diz que o acesso **já foi gravado** pelo Opex
+(o agente não o recria nem apaga) e trata o repositório como dados, não instruções.
 
-Acesso temporário é removido em sucesso/falha/interrupção. Caminhos pendentes ficam registrados
-para limpeza pelo agendador; acesso de uma sessão ainda não verificável é preservado até conseguir
-interromper/reconciliar, nunca liberando o ambiente para uma segunda operação.
+O acesso é removido em sucesso/falha/interrupção. Se a remoção falhar, `accessPath` fica
+registrado e o agendador remove pelo shell depois. Com o OpenCode indisponível durante uma sessão
+não verificável, o acesso é preservado e o ambiente continua reservado.
 
 ## Persistência e execução
 
@@ -102,10 +115,8 @@ interromper/reconciliar, nunca liberando o ambiente para uma segunda operação.
   migrações, evidências, imagens e resultado; não cresce dentro do ambiente.
 - `environment_log_sessions`: sessão compartilhada e leases de espectadores com expiração.
 
-O acesso temporário **não é persistido**: token e diretório vivem na memória do processo
-(`server/access-registry.ts`) e morrem com ele — reinício no meio da operação cai na reconciliação,
-que emite um acesso novo quando a sessão não é retomada. O tick das rotinas descarta tokens
-vencidos/consumidos e limpa `accessPath` das operações encerradas.
+O acesso temporário **não é gravado no disco do servidor**: só no host, pelo shell. Na retomada
+de uma sessão de ação, o Opex confere o marcador `ready` e reaproveita o diretório; senão, regrava.
 
 O projeto Compose é `<slug-repo>-<slug-ambiente>` (repo completo normalizado). Overrides são
 exclusivos; Compose versionado não muda. O agente recusa conflitos de diretório/remote, alterações
@@ -121,19 +132,32 @@ operações/sessões e cobre reinícios; não existem Redis, workers ou filas pa
 
 ## Publicar, restaurar e reconciliar
 
-Publicação no host e restauração começam com turno **somente leitura**: Compose efetivo, conflitos,
-imagens atuais e evidências do banco. As imagens anteriores identificadas ganham um registro antes
-da ação. O servidor revalida a compatibilidade observada antes de autorizar a restauração.
+**Inspecionar**: o shell lê o host (Compose efetivo, containers, imagens) e um turno curto do
+agente, somente leitura, identifica a versão do banco recebendo os fatos já lidos. Se o agente não
+comprovar a versão, a inspeção ainda conclui (“Versão do banco não identificada”) e a versão
+registrada **não é apagada**. Ambiente sem containers conclui; com containers fora de pé, fica
+“Concluído com alerta de saúde”.
 
-Publicar: preflight, clone/update sem descartar trabalho, SHA, preservação de imagens anteriores,
+Publicação no host e restauração começam com **preflight pelo shell**: imagens atuais ganham um
+registro (`<op>:before`) antes da ação e processos de compose/build ainda ativos bloqueiam
+(`PREFLIGHT_UNVERIFIED`). Na primeira publicação (sem diretório/Compose ainda) o preflight segue
+vazio. Na restauração, o turno de versão do banco revalida a compatibilidade antes de autorizar.
+
+Publicar (agente): clone/update sem descartar trabalho, SHA, preservação de imagens anteriores,
 build no host, overrides/limites/variáveis, recriação, migrações e healthcheck. Saúde ruim produz
 resultado degradado, **sem rollback automático**. Checkpoints de migrações são persistidos antes
 de prosseguir; uma falha posterior não apaga as migrações comprovadas.
 
+**Conferência final pelo shell** (independente do texto do agente): publicação exige os serviços
+selecionados (ou todos) com container `running`; restauração exige **cada** serviço com o ID de
+imagem escolhido de pé. Agente sem comprovação → `AGENT_UNVERIFIED`; agente ok mas host sem os
+containers → `RESULT_UNVERIFIED`. O registro de imagens da operação usa o que o shell leu.
+
 CD: persiste intenção/data/SHA antes de disparar o workflow configurado, identifica um run por
 workflow/branch/SHA/janela de tempo e recusa correlação ambígua. Reinício **não redispara** o workflow:
-retoma run registrado ou procura o run do disparo original. Só depois de terminar o agente verifica
-o host/SHA; sucesso no GitHub isoladamente não comprova deploy. O pipeline existente não é alterado.
+retoma run registrado ou procura o run do disparo original. Terminado o run, não há turno de ação:
+o shell confere os containers e exige ao menos uma imagem construída depois do disparo; o agente só
+identifica a versão do banco. O pipeline existente não é alterado.
 
 Restaurar: seleciona conjunto de imagens por serviço, exige existência de todas, usa IDs imutáveis,
 recria sem build/pull (`--no-build --pull never`) e nunca apaga volumes/restaura banco.
@@ -149,22 +173,25 @@ e sem `_opex_schema`; ausência de comprovação permanece `null`. Não confundi
 Estado exibido é o último registro do Opex e pode divergir por alterações externas.
 **Restaurar banco — Em desenvolvimento**, sem execução.
 
-Fim do turno não implica sucesso: resultado Zod exige evidências, verificação e comprovação de
-ausência de processos de build/deploy/restauração ainda ativos (`quiescent`). Falha inconclusiva
-mantém a reserva em `reconciling`. Após reinício, retoma somente o turno de ação identificado por
-fase/data; preflight não pode ser confundido com publicação concluída. Se for necessário um novo
-turno, ele é somente observacional: não repete deploy nem declara retroativamente sucesso. Reserva
-só é liberada com host reconciliado; estado final é interrompido com evidências. Indisponibilidade
-do OpenCode preserva a reserva. Quedas entre reserva e criação do registro são recuperadas sem
-executar agentes, pois nenhuma sessão pode ter começado nesse intervalo.
+Fim do turno não implica sucesso: além do resultado Zod do agente, o shell comprova containers e
+imagens e a ausência de processos de compose/build ativos (`quiescent`). Com o host quieto, a falha
+libera a reserva; com processos ainda rodando, a reserva fica em `reconciling`. Após reinício,
+retoma somente o turno de ação (fase `action` e sessão ativa/terminada) e confere pelo shell; sem
+sessão a retomar, a reconciliação **só observa o host pelo shell** (sem agente): quieto →
+interrompido com evidências; ativo → continua reservado. Indisponibilidade do OpenCode preserva a
+reserva e o acesso. Quedas entre reserva e criação do registro são recuperadas sem executar nada.
 
 ## Logs, tempo real e APIs
 
 Logs reutilizam `IntegrationConsole` e `IntegrationLog` (48h), integração `ai`, scope
-`environment:ID`, sem entrada nova no catálogo. Uma sessão de agente acompanha todos os serviços;
-filtro por serviço é individual. Primeiro espectador inicia, último sai/expira e interrompe;
-heartbeats a cada 30s renovam leases de 90s. Reconciliação interrompe sessões órfãs e limpa acesso.
-IDs deduplicam a apresentação do histórico após reconexão. Saída de um espectador não cancela os outros.
+`environment:ID`, sem entrada nova no catálogo. **Sem modelo**: um shell do OpenCode roda
+`docker compose -p <projeto> logs -f --no-color --timestamps --since=30s` no diretório do ambiente
+(no remoto, pelo helper SSH gravado em `<accessDirectory>/logs-<envId>`, sem variáveis). A saída chega
+por cursor e vira **uma entrada por linha**, censurada, com `data.service` tirado do prefixo do
+Compose (`serviço-1  | …`) — o filtro por serviço usa esse prefixo. O id do shell fica em
+`EnvironmentLogSession.sessionId`. Primeiro espectador inicia; o último sair/expirar remove o shell
+(encerra o processo no host). Leases de 90s renovados por heartbeat; a reconciliação remove shells
+órfãos e o acesso remoto deixado no host. Saída de um espectador não cancela os outros.
 
 Evento `environments-updated` publica **somente IDs**, em `private-app`, canais dos clientes
 vinculados e, quando aplicável, `private-environment-ID` (autorização pelo vínculo no servidor).
@@ -182,13 +209,10 @@ APIs autenticadas em `/api/environments` e `/api/cliente/ambientes`:
   Filtros, paginação dos runs e aba/serviço selecionados ficam na URL; workflows são paginados
   internamente para preencher o seletor. Runs aparecem em páginas de 50.
 - `GET/PUT /api/ai/features/system-administration`: configuração global, exclusiva do dono.
-- `POST /api/environments/agent-access`: entrega o envelope ao agente (token de uso único, sem
-  sessão; `no-store` e nunca registrado em log).
-- `POST /api/environments/access-probe`: preflight do dono que confirma o caminho servidor → agente.
+- `POST /api/environments/access-probe`: “Testar acesso ao host” (dono), só pelo shell.
 
 São rotas por sessão, não API pública por token; não mudam OpenAPI nem `PUBLIC_TOKEN_ROUTES`.
-A exceção é `agent-access`: fica fora do OpenAPI por ser autenticada pelo token da própria operação
-(o agente do OpenCode não tem sessão do app) e está listada em `PUBLIC_ROUTES` de `auth/paths.ts`.
+Nenhuma rota do módulo é pública (o host nunca chama o Opex).
 
 ## Validação
 

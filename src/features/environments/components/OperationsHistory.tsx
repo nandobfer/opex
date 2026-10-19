@@ -5,7 +5,7 @@ import { ptBR } from "date-fns/locale"
 import { ExternalLink } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { OperationDto } from "../types"
-import { environmentFailureMessage } from "../logic"
+import { environmentFailureHint } from "../logic"
 import { EnvironmentStatusBadge, type EnvironmentTone } from "./EnvironmentStatusBadge"
 
 const KIND_LABELS: Record<string, string> = { publish: "Publicação", restore: "Restauração", inspect: "Inspeção" }
@@ -47,9 +47,14 @@ export function OperationsHistory({ operations }: { operations: readonly Operati
                                     </span>
                                 </div>
                                 {operation.error && (
-                                    <p role="alert" className="text-sm text-destructive">
-                                        {environmentFailureMessage(operation.failureCode, operation.error)}
-                                    </p>
+                                    <div role="alert" className="space-y-1 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
+                                        <p className="text-sm text-destructive">{operation.error}</p>
+                                        {environmentFailureHint(operation.failureCode) && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {environmentFailureHint(operation.failureCode)}
+                                            </p>
+                                        )}
+                                    </div>
                                 )}
                                 {operation.runUrl && (
                                     <a

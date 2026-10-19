@@ -20,9 +20,8 @@ describe("guarda de acesso", () => {
         }
     })
 
-    it("libera só a rota de acesso do agente de Ambientes (autenticada pelo token da operação)", () => {
-        expect(resolveAuthDecision("/api/environments/agent-access", null).action).toBe("allow")
-        for (const path of ["/api/environments", "/api/environments/access-probe", "/api/environments/agent-access/x"]) {
+    it("nenhuma rota de Ambientes é pública (o acesso ao host vai pelo shell do OpenCode)", () => {
+        for (const path of ["/api/environments", "/api/environments/access-probe", "/api/environments/agent-access"]) {
             expect(resolveAuthDecision(path, null).action).toBe("unauthorized")
         }
     })
