@@ -22,6 +22,25 @@ export function resolveAgent(settings: AgenticSettings, central: Pick<CentralCon
     }
 }
 
+/** Modelo/variante trocados na mesa ou no fork (o agente continua o da etapa ou do Mode). */
+export interface ModelOverride {
+    model: string
+    variant: string | null
+}
+
+/** Troca salva → válida (`null` quando ausente ou sem modelo). */
+export function asModelOverride(value: unknown): ModelOverride | null {
+    if (!value || typeof value !== "object") return null
+    const { model, variant } = value as { model?: unknown; variant?: unknown }
+    if (typeof model !== "string" || !model) return null
+    return { model, variant: typeof variant === "string" && variant ? variant : null }
+}
+
+/** Agente do turno com a troca de modelo aplicada: substitui modelo e variante e mantém o agente. */
+export function applyModelOverride(agent: AgentConfig, override: ModelOverride | null | undefined): AgentConfig {
+    return override?.model ? { ...agent, model: override.model, variant: override.variant } : agent
+}
+
 /** Configuração salva → validada; campos ausentes (versões antigas) caem nos padrões. */
 export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): CentralConfig {
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<CentralConfig>) : {}

@@ -5,13 +5,15 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), discard: vi.fn(), openFork: vi.fn(), timeline: { items: [] as unknown[], reasoning: false, loaded: true } }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), discard: vi.fn(), openFork: vi.fn(), setModel: vi.fn(), timeline: { items: [] as unknown[], reasoning: false, loaded: true } }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'openai/gpt-5', name: 'GPT-5', group: 'OpenAI', variants: [] }], isLoading: false, isError: false, error: null }) }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({
   useForkAction: () => ({ mutate: mocks.mutate, isPending: false }),
   useDiscardFork: () => ({ mutate: mocks.discard, isPending: false }),
   useOpenFork: () => ({ mutate: mocks.openFork, isPending: false }),
+  useSetForkModel: () => ({ mutate: mocks.setModel, isPending: false }),
   useForkStream: () => ({ timeline: mocks.timeline }),
   useReplyForkPermission: () => ({ mutate: vi.fn(), isPending: false }),
   useReplyForkForm: () => ({ mutate: vi.fn(), isPending: false }),
@@ -34,6 +36,7 @@ const fork = (patch: Partial<ForkDto> = {}): ForkDto => ({
   origin: 'fork',
   mode: 'plan',
   readOnly: false,
+  model: null,
   forkedFromStage: 'plan_review',
   summary: null,
   integration: null,
@@ -60,6 +63,17 @@ beforeEach(() => {
 })
 
 describe('ForkActionBar', () => {
+  it('mostra o Modelo do fork ao lado do Modo', () => {
+    render(<ForkActionBar workbenchId="w1" fork={fork({ model: { model: 'openai/gpt-5', variant: null, overridden: true } })} />)
+    const picker = screen.getByRole('button', { name: /Modelo: GPT-5 \(trocado\)/ })
+    expect(picker.closest('.mr-auto')?.contains(screen.getByText('Modo'))).toBe(true)
+  })
+
+  it('fork integrado não mostra o seletor de modelo', () => {
+    render(<ForkActionBar workbenchId="w1" fork={fork({ status: 'integrated', model: { model: 'openai/gpt-5', variant: null, overridden: false } })} extra={<span>extra</span>} />)
+    expect(screen.queryByRole('button', { name: /Modelo: GPT-5/ })).toBeNull()
+  })
+
   it('ativo: envia a mensagem e pausa a conversa', () => {
     render(<ForkActionBar workbenchId="w1" fork={fork()} />)
     fireEvent.change(screen.getByLabelText('Mensagem para o fork'), { target: { value: 'e o Y?' } })

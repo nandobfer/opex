@@ -5,13 +5,15 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), discard: vi.fn(), openFork: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), discard: vi.fn(), openFork: vi.fn(), setModel: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'openai/gpt-5', name: 'GPT-5', group: 'OpenAI', variants: [] }], isLoading: false, isError: false, error: null }) }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({
   useForkAction: () => ({ mutate: mocks.mutate, isPending: false }),
   useDiscardFork: () => ({ mutate: mocks.discard, isPending: false }),
   useOpenFork: () => ({ mutate: mocks.openFork, isPending: false }),
+  useSetForkModel: () => ({ mutate: mocks.setModel, isPending: false }),
 }))
 
 import { ForkActionBar } from '@/features/agentic/components/workbench/ForkActionBar'
@@ -31,6 +33,7 @@ const fork = (patch: Partial<ForkDto> = {}): ForkDto => ({
   origin: 'fork',
   mode: 'plan',
   readOnly: false,
+  model: null,
   forkedFromStage: 'plan_review',
   summary: null,
   integration: null,

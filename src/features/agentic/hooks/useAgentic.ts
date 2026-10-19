@@ -11,7 +11,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
 import type { WorkbenchAction } from "../logic"
-import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput } from "../schemas"
+import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
@@ -187,6 +187,35 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
             }
             const message = ACTION_TOASTS[action]
             if (message) toast.success(message)
+        },
+    })
+}
+
+/** Troca o modelo de um papel da mesa (resposta otimista; reverte e avisa em caso de falha). */
+export function useSetWorkbenchModel(workbench: WorkbenchDto) {
+    const queryClient = useQueryClient()
+    const setWorkbench = useSetWorkbench()
+    const key = agenticKey("workbench", workbench.taskId)
+    return useMutation({
+        mutationFn: async (input: WorkbenchModelInput) => unwrapApi((await api.put<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/model`, input)).data),
+        onMutate: async (input) => {
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<WorkbenchDto | null>(key) ?? workbench
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => {
+                const models = (current ?? workbench).models
+                if (!models) return current
+                const choice = input.model ? { model: input.model, variant: input.variant, overridden: true } : { ...models[input.role], overridden: false }
+                return { ...(current ?? workbench), models: { ...models, [input.role]: choice } }
+            })
+            return { previous }
+        },
+        onError: (error, _input, context) => {
+            if (context?.previous) queryClient.setQueryData(key, context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível trocar o modelo"))
+        },
+        onSuccess: (saved, input) => {
+            setWorkbench(saved)
+            toast.success(input.model ? "Modelo trocado: vale a partir do próximo turno" : "Modelo de volta ao padrão: vale a partir do próximo turno")
         },
     })
 }

@@ -88,6 +88,40 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
     finishing: "build",
 }
 
+/** Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca). */
+export const WORKBENCH_MODEL_ROLES = ["planning", "implementation", "build", "pr"] as const satisfies readonly AgentRole[]
+export type WorkbenchModelRole = (typeof WORKBENCH_MODEL_ROLES)[number]
+
+/** Rótulo do seletor de modelo da mesa e dos avisos ("Modelo do Plano"). */
+export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
+    planning: "Modelo do Plano",
+    implementation: "Modelo da Implementação",
+    build: "Modelo da Prévia",
+    pr: "Modelo do Pull Request",
+}
+
+/**
+ * Papel cujo modelo o seletor da mesa troca em cada etapa (`null` = seletor oculto: Concluindo e
+ * Concluída). "Mudanças pedidas" troca o do Plano (o próximo turno dali é o replanejamento). Com falha,
+ * vale a etapa em que a mesa parou. Etapa nova entra aqui (o `Record` é exaustivo).
+ */
+export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null> = {
+    planning: "planning",
+    plan_review: "planning",
+    changes_requested: "planning",
+    implementing: "implementation",
+    build_queued: "build",
+    building: "build",
+    preview: "build",
+    opening_pr: "pr",
+    pr_open: "pr",
+    resolving_conflicts: "pr",
+    merging_pr: "pr",
+    deleting_pr_branch: "pr",
+    finishing: null,
+    done: null,
+}
+
 /** Passos exibidos no topo da mesa (várias etapas caem no mesmo passo). */
 export const WORKBENCH_STEPS = [
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },

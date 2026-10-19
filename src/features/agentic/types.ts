@@ -1,6 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
-import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchStage } from "./constants"
+import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchModelRole, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
 
@@ -82,6 +82,14 @@ export interface SlotQueueDto {
     action: PendingTurnAction
 }
 
+/** Modelo efetivo de um papel na mesa ou no fork: o do papel (`overridden: false`) ou o trocado. */
+export interface ModelChoiceDto {
+    /** `provedor/modelo`; `null` = modelo padrão do agente. */
+    model: string | null
+    variant: string | null
+    overridden: boolean
+}
+
 export interface WorkbenchDto {
     id: string
     centralId: string
@@ -120,6 +128,8 @@ export interface WorkbenchDto {
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
     forksDonePrompt: { count: number; at: string } | null
+    /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
+    models: Record<WorkbenchModelRole, ModelChoiceDto> | null
     startedAt: string
     completedAt: string | null
     updatedAt: string
@@ -168,6 +178,8 @@ export interface ForkDto {
     mode: ForkMode
     /** Travado como somente leitura (sem volta): o modo fica `plan`. */
     readOnly: boolean
+    /** Modelo efetivo do fork (papel Fork da conversa ou o trocado; `null` quando a central não pôde ser lida). */
+    model: ModelChoiceDto | null
     forkedFromStage: WorkbenchStage
     /** Resumo proposto (em revisão enquanto `integrating`). */
     summary: string | null

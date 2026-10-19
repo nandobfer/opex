@@ -47,14 +47,15 @@ import {
     type ForkAction,
     type ForkParentView,
 } from "../fork-logic"
-import { resolveAgent } from "../logic"
+import { applyModelOverride, asModelOverride, resolveAgent } from "../logic"
 import { branchNameFor, composeProjectFor, worktreePathFor, type WorkbenchContext } from "../prompts"
-import type { CentralConfig, FormReplyInput, PermissionReplyInput } from "../schemas"
-import type { ForkDto, WorkbenchDto, WorkbenchEventPayload } from "../types"
+import type { CentralConfig, FormReplyInput, ModelOverrideInput, PermissionReplyInput } from "../schemas"
+import type { ForkDto, ModelChoiceDto, WorkbenchDto, WorkbenchEventPayload } from "../types"
 import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
+import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { deleteWorkbenchSession } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { getWorkbench, reopen, requestCorrection, revisePlan, submitPrFeedback } from "./workflow"
@@ -109,7 +110,7 @@ async function reconcile(doc: IAgenticFork): Promise<IAgenticFork> {
     return { ...doc, runState: "interrupted", error, pendingForms: [], pendingPermissions: [] }
 }
 
-function toForkDto(doc: IAgenticFork): ForkDto {
+function toForkDto(doc: IAgenticFork, model: ModelChoiceDto | null = null): ForkDto {
     const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
     return {
         id: String(doc._id),
@@ -123,6 +124,7 @@ function toForkDto(doc: IAgenticFork): ForkDto {
         origin: doc.origin === "fresh" ? "fresh" : "fork",
         mode: effectiveForkMode(doc.mode, doc.readOnly),
         readOnly: doc.readOnly === true,
+        model,
         forkedFromStage: asStage(doc.forkedFromStage),
         summary: doc.summary ?? null,
         integration: doc.integration ? { target: doc.integration.target as ForkIntegrationTarget, summary: doc.integration.summary, appliedAt: new Date(doc.integration.appliedAt).toISOString() } : null,
@@ -166,11 +168,12 @@ async function assertForkReady(config: CentralConfig): Promise<void> {
 export async function listForks(workbenchId: string): Promise<ForkDto[]> {
     await loadWorkbenchDoc(workbenchId)
     const docs = (await AgenticFork.find({ workbenchId }).sort({ number: 1 }).lean()) as unknown as IAgenticFork[]
-    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc))))
+    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc))))
 }
 
 export async function getFork(workbenchId: string, forkId: string): Promise<ForkDto> {
-    return toForkDto(await loadFork(workbenchId, forkId))
+    const doc = await loadFork(workbenchId, forkId)
+    return toForkDto(doc, await forkModel(doc))
 }
 
 /** Confere que o fork existe (stream de eventos: 404 antes de abrir). */
@@ -320,8 +323,9 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
     if (!fork.sessionId) throw new Error("O fork não tem uma sessão do OpenCode")
     const { config } = await loadCentral(fork.centralId)
     const { settings } = await loadAgenticSettings()
-    // Agente do turno pelo modo atual (Plan = `plan`); modelo e variante vêm do papel Fork.
-    const configured = resolveAgent(settings, config, "fork")
+    // Agente do turno pelo modo atual (Plan = `plan`); modelo e variante vêm do papel Fork ou da troca
+    // feita neste fork (relida a cada mensagem, inclusive na consolidação do resumo).
+    const configured = applyModelOverride(resolveAgent(settings, config, "fork"), asModelOverride(fork.modelOverride))
     const agent = { ...configured, agent: forkTurnAgent(effectiveForkMode(fork.mode, fork.readOnly), configured.agent) }
     const client = await getOpencodeClient()
     const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
@@ -573,6 +577,35 @@ export async function setForkMode(workbenchId: string, forkId: string, mode: For
 export async function lockFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     await applyForkMode(fork, "plan", true)
+    return getFork(workbenchId, forkId)
+}
+
+/**
+ * Troca o modelo (e a variante) deste fork; `model: null` volta ao modelo do papel Fork da conversa.
+ * Vale a partir da próxima mensagem (inclusive a consolidação do resumo); o modo não muda.
+ */
+export async function setForkModel(workbenchId: string, forkId: string, input: ModelOverrideInput): Promise<ForkDto> {
+    const fork = await loadFork(workbenchId, forkId)
+    if (!OPEN_FORK_STATUSES.includes(asForkStatus(fork.status))) throw new DomainError(409, "O fork não está mais em aberto: não é possível trocar o modelo", "FORK_INVALID_STATE")
+    const override = await validatedModelOverride(input, "Modelo do fork")
+    const { settings } = await loadAgenticSettings()
+    const base = resolveAgent(settings, (await loadCentral(fork.centralId)).config, "fork")
+    const before = toModelChoice(base, asModelOverride(fork.modelOverride))
+    const after = toModelChoice(base, override)
+    const id = String(fork._id)
+    await AgenticFork.updateOne({ _id: fork._id }, { $set: { modelOverride: override } })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_FORK,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: fork.taskCode, fork: fork.number, modelo: describeModel(before), trocado: before.overridden },
+        depois: { tarefa: fork.taskCode, fork: fork.number, modelo: describeModel(after), trocado: after.overridden },
+    })
+    await prepareHub(id)
+    notice(id, "info", override ? `Modelo do fork trocado para ${describeModel(after)}: vale a partir da próxima mensagem.` : `Modelo do fork voltou ao padrão (${describeModel(after)}): vale a partir da próxima mensagem.`)
+    log.info({ forkId: id, model: after.model, variant: after.variant }, `Fork ${fork.number} ${fork.taskCode}: modelo ${describeModel(after)}`)
+    await publishFork(fork)
     return getFork(workbenchId, forkId)
 }
 

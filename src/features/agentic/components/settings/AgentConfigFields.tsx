@@ -5,11 +5,11 @@ import { Field } from "@/components/ui/field"
 import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { SearchPicker } from "@/components/ui/search-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiErrorMessage } from "@/lib/api"
 import type { AiAgentDto, AiModelDto } from "@/lib/ai/providers"
 import type { AgentConfig } from "../../schemas"
+import { ModelSearchPicker } from "./ModelSearchPicker"
 
 const DEFAULT_OPTION = "__default__"
 const EMPTY: AgentConfig = { agent: null, model: null, variant: null }
@@ -75,25 +75,11 @@ export function AgentConfigFields({ id, value, onChange, agents, models, inherit
                             </Select>
                         </Field>
                         <Field id={`${id}-model`} label="Modelo" error={models.isError ? apiErrorMessage(models.error, "Não foi possível listar os modelos") : undefined}>
-                            <SearchPicker<AiModelDto>
+                            <ModelSearchPicker
                                 trigger={<FieldTrigger id={`${id}-model`} placeholder="Modelo padrão do agente" value={model ? model.name : current.model || undefined} />}
-                                items={models.data ?? []}
-                                getKey={(item) => item.id}
-                                searchKeys={["name", "id", "group"]}
-                                renderItem={(item) => (
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block truncate font-medium">{item.name}</span>
-                                        <span className="block truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>
-                                    </span>
-                                )}
+                                models={models}
                                 onPick={(item) => set({ model: item.id, variant: null })}
-                                loading={models.isLoading}
                                 matchTriggerWidth
-                                placeholder="Buscar modelo"
-                                searchLabel="Buscar modelo"
-                                listLabel="Modelos"
-                                emptyText="Nenhum modelo disponível"
-                                emptySearchText="Nenhum modelo encontrado"
                                 footer={
                                     current.model ? (
                                         <button type="button" className="w-full px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground" onClick={() => set({ model: null, variant: null })}>

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
 
 /** Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa. */
 export const agentConfigSchema = z.object({
@@ -10,6 +10,19 @@ export const agentConfigSchema = z.object({
 export type AgentConfig = z.infer<typeof agentConfigSchema>
 
 const EMPTY_AGENT: AgentConfig = { agent: null, model: null, variant: null }
+
+/** Troca do modelo na mesa ou no fork: `model: null` volta ao modelo do papel. */
+export const modelOverrideSchema = z.object({
+    model: z.string().trim().min(1, "Informe o modelo").max(200).nullable(),
+    variant: z.string().trim().min(1).max(50).nullable().default(null),
+})
+export type ModelOverrideInput = z.infer<typeof modelOverrideSchema>
+
+/** Troca do modelo de um papel da conversa principal da mesa. */
+export const workbenchModelSchema = modelOverrideSchema.extend({
+    role: z.enum(WORKBENCH_MODEL_ROLES, { error: "Etapa inválida para trocar o modelo" }),
+})
+export type WorkbenchModelInput = z.infer<typeof workbenchModelSchema>
 
 const agentsShape = Object.fromEntries(AGENT_ROLES.map((role) => [role, agentConfigSchema])) as Record<AgentRole, typeof agentConfigSchema>
 

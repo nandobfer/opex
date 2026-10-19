@@ -118,6 +118,21 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 - Atualizar `modules/ai.md` e a stack do `AGENTS.md`.
 - Testes: `ai-providers`, `ai-stream`, `catalog`, páginas de IA (rede sempre mockada).
 
+### G — Trocar o modelo na mesa e no fork — af504ce
+
+> **Entregue na v2.59.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Trocar o modelo na mesa
+> e no fork".
+
+- Seletor de modelo (variante e "Voltar ao padrão") na barra da mesa (`WorkbenchModelPicker`, papel da
+  etapa via `STAGE_MODEL_ROLE`) e do fork (ao lado do Modo), sobre o `ModelSearchPicker` extraído de
+  `AgentConfigFields`. Troca só modelo/variante, validada no OpenCode; vale a partir do próximo turno.
+- Mesa: `modelOverrides` por papel (`planning`, `implementation`, `build`, `pr`); fork:
+  `modelOverride` (fork novo não herda; integrado/concluído → 409).
+- Rotas `PUT …/workbenches/[id]/model` e `PUT …/forks/[forkId]/model`; DTO `models`/`model`.
+- Ao portar o bloco A, `fixing_ci` entra em `STAGE_MODEL_ROLE` com o papel `pr`.
+- Testes: `model-override`, `workflow-model`, `forks-model`, `model-routes`, `ModelOverridePicker`,
+  `ActionBar`, `ForkPanel`.
+
 ## Riscos
 
 - `pr-watch.ts` do Opex já combina revisão de PR, merge automático e vagas: A e B exigem port

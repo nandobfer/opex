@@ -9,7 +9,7 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
+import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
 import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
@@ -31,7 +31,7 @@ import {
     conflictPrompt,
     type WorkbenchContext,
 } from "../prompts"
-import { buildResultSchema, conflictResultSchema, prResultSchema, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput } from "../schemas"
+import { buildResultSchema, conflictResultSchema, prResultSchema, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -45,6 +45,7 @@ import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup }
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
+import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { syncWorkbenchTimer } from "./timer-sync"
 import { needsSlotToRun, occupiedSlots, runInCentral, slotQueuePosition, slotQueuePositions } from "./slots"
@@ -92,14 +93,14 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null)
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null)
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -298,6 +299,43 @@ export async function cancelWait(id: string): Promise<WorkbenchDto> {
     })
 }
 
+/**
+ * Troca o modelo (e a variante) de um papel da conversa principal desta mesa; `model: null` volta ao
+ * modelo do papel. Vale a partir do próximo turno desse papel (o turno em andamento não muda).
+ */
+export async function setWorkbenchModel(id: string, input: WorkbenchModelInput): Promise<WorkbenchDto> {
+    const doc = await loadWorkbench(id)
+    const title = WORKBENCH_MODEL_ROLE_LABELS[input.role]
+    const roleLabel = AGENT_ROLE_LABELS[input.role].label
+    const override = await validatedModelOverride(input, title)
+    const [{ settings }, { config }] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId)])
+    const base = resolveAgent(settings, config, input.role)
+    const current = workbenchOverrides(doc)
+    const before = toModelChoice(base, current[input.role] ?? null)
+    const after = toModelChoice(base, override)
+    // Grava o objeto inteiro (o campo pode estar `null` em mesas antigas, o que impede `$set` no caminho).
+    const overrides = { ...current }
+    if (override) overrides[input.role] = override
+    else delete overrides[input.role]
+    await update(doc, { modelOverrides: overrides })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_WORKBENCH,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: doc.taskCode, etapa: roleLabel, modelo: describeModel(before), trocado: before.overridden },
+        depois: { tarefa: doc.taskCode, etapa: roleLabel, modelo: describeModel(after), trocado: after.overridden },
+    })
+    await prepareHub(id)
+    publishWorkbenchEvent(id, {
+        type: "notice",
+        level: "info",
+        message: override ? `${title} trocado para ${describeModel(after)}: vale a partir do próximo turno.` : `${title} voltou ao padrão (${describeModel(after)}): vale a partir do próximo turno.`,
+    })
+    centralLogger(doc.centralId, doc.taskCode).info(`${title}: ${describeModel(after)}${override ? " (trocado na mesa)" : " (padrão)"}`, { workbenchId: id })
+    return getWorkbench(id)
+}
+
 // ---------------------------------------------------------------------------
 // Turnos
 // ---------------------------------------------------------------------------
@@ -373,7 +411,8 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const text = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
             const { settings } = await loadAgenticSettings()
             const role = STAGE_ROLE[turn.stage] ?? "planning"
-            const agent = resolveAgent(settings, loaded.config, role)
+            // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
+            const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
             log.step(`${WORKBENCH_STAGE_LABELS[turn.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
             const result = await runAgentTurn(
                 client,

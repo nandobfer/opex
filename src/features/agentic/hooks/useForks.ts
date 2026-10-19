@@ -7,7 +7,7 @@ import { withBasePath } from "@/lib/base-path"
 import type { ApiResponse } from "@/lib/types/api"
 import { FORK_INTEGRATION_TARGET_LABELS, type ForkIntegrationTarget, type ForkMode } from "../constants"
 import type { ForkAction } from "../fork-logic"
-import type { FormReplyInput, PermissionReplyInput } from "../schemas"
+import type { FormReplyInput, ModelOverrideInput, PermissionReplyInput } from "../schemas"
 import type { TimelineState } from "../timeline"
 import type { ForkDto, WorkbenchDto } from "../types"
 import { agenticKey } from "./useAgentic"
@@ -124,6 +124,30 @@ export function useForkAction(workbenchId: string, fork: ForkDto) {
             }
             const message = ACTION_TOASTS[input.action]
             if (message) toast.success(message)
+        },
+    })
+}
+
+/** Troca o modelo do fork (resposta otimista; reverte e avisa em caso de falha). */
+export function useSetForkModel(workbenchId: string, fork: ForkDto) {
+    const queryClient = useQueryClient()
+    const setFork = useSetFork(workbenchId)
+    return useMutation({
+        mutationFn: async (input: ModelOverrideInput) => unwrapApi((await api.put<ApiResponse<ForkDto>>(`${base(workbenchId)}/${fork.id}/model`, input)).data),
+        onMutate: async (input) => {
+            const key = forksKey(workbenchId)
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<ForkDto[]>(key)
+            if (fork.model) setFork({ ...fork, model: input.model ? { model: input.model, variant: input.variant, overridden: true } : { ...fork.model, overridden: false } })
+            return { previous }
+        },
+        onError: (error, _input, context) => {
+            if (context?.previous) queryClient.setQueryData(forksKey(workbenchId), context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível trocar o modelo do fork"))
+        },
+        onSuccess: (saved, input) => {
+            setFork(saved)
+            toast.success(input.model ? "Modelo do fork trocado: vale a partir da próxima mensagem" : "Modelo do fork de volta ao padrão")
         },
     })
 }
