@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyLiveLine, closeRunningTools, partsText } from '@/features/opex-agent/live-message'
-import { redactToolCalls, selectHistory } from '@/features/opex-agent/history'
+import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from '@/features/opex-agent/history'
 import { clampWords, fallbackTitle, parseTitleOutput } from '@/features/opex-agent/title'
 import { closeTab, openTab, pruneTabs, OPEX_DRAFT_TAB } from '@/features/opex-agent/hooks/useOpexTabs'
 import { reduceStream, splitLines } from '@/features/opex-agent/hooks/useOpexStream'
@@ -73,6 +73,31 @@ describe('histórico (selectHistory)', () => {
     )
     expect(messages[0]).toEqual({ role: 'assistant', content: [{ type: 'tool-call', toolName: 'update_integration', input: { secret: '[segredo omitido]' } }, { type: 'text', text: 'ok' }] })
     expect(messages[1]).toEqual({ role: 'user', content: 'oi' })
+  })
+})
+
+describe('histórico enviado (raciocínio e contexto do turno)', () => {
+  it('tira o raciocínio do assistente e descarta a mensagem que só tinha raciocínio', () => {
+    const messages = stripPastReasoning([
+      { role: 'user', content: [{ type: 'text', text: 'oi' }] },
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'x' }, { type: 'text', text: 'olá' }] },
+      { role: 'assistant', content: [{ type: 'redacted-reasoning', data: 'y' }] },
+      { role: 'assistant', content: 'texto puro' },
+    ])
+    expect(messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'oi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'olá' }] },
+      { role: 'assistant', content: 'texto puro' },
+    ])
+  })
+
+  it('acrescenta o contexto só à última mensagem do usuário, com texto ou partes', () => {
+    const history = [{ role: 'user', content: 'antes' }, { role: 'assistant', content: 'ok' }, { role: 'user', content: [{ type: 'image', image: 'x' }] }]
+    const messages = withTurnContext(history, 'agora')
+    expect(messages[0]).toEqual({ role: 'user', content: 'antes' })
+    expect(messages[2]).toEqual({ role: 'user', content: [{ type: 'image', image: 'x' }, { type: 'text', text: '(agora)' }] })
+    expect(withTurnContext([{ role: 'user', content: 'oi' }], 'agora')).toEqual([{ role: 'user', content: [{ type: 'text', text: 'oi' }, { type: 'text', text: '(agora)' }] }])
+    expect(history[2]).toEqual({ role: 'user', content: [{ type: 'image', image: 'x' }] })
   })
 })
 

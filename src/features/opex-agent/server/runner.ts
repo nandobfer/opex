@@ -6,7 +6,7 @@ import { describeAiError, prepareModel, samplingOptions, type PreparedModel } fr
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
-import { redactToolCalls, selectHistory } from "../history"
+import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from "../history"
 import { closeRunningTools, partsText } from "../live-message"
 import type { OpexAgentSettings } from "../schemas"
 import type { OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "../types"
@@ -24,9 +24,14 @@ import { enabledOpexTools, findOpexTool } from "./tools/registry"
 const log = loggerFor({ module: "opex-agent" })
 const INTERRUPTED = "Interrompido pelo usuário"
 
+/** Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema. */
 function instructionsFor(settings: OpexAgentSettings): string {
+    return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`].join("\n")
+}
+
+function turnContext(): string {
     const now = nowContext()
-    return [settings.instructions, "", `Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}). Dono do app: ${getLocalUser().name}.`].join("\n")
+    return `Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`
 }
 
 const redactInput = (toolName: string, input: unknown) => {
@@ -127,7 +132,9 @@ async function loadHistory(sessionId: string, summary: string, provider: OpexPro
     const stored = await OpexMessage.find({ sessionId: new Types.ObjectId(sessionId) }).sort({ seq: 1 }).select({ role: 1, modelMessages: 1 }).lean<Pick<IOpexMessage, "role" | "modelMessages">[]>()
     const turns = stored.map((item) => ({ role: item.role, modelMessages: parseModelMessages(item.modelMessages) }))
     // Os arquivos entram só nos turnos que couberam no orçamento, no formato que o provedor atual lê.
-    return (await resolveFileMarkers(selectHistory(turns, summary).messages, provider)) as ModelMessage[]
+    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider)
+    // A data e a hora do turno vão só no envio, ao fim da mensagem do usuário, para o prompt de sistema não mudar.
+    return withTurnContext(messages, turnContext()) as ModelMessage[]
 }
 
 function parseModelMessages(json: string): unknown[] {
