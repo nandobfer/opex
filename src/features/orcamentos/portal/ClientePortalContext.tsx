@@ -13,6 +13,8 @@ export interface ClientePortalSession {
     preview: boolean
     user: { id: string; username: string; email: string | null }
     clients: ClienteSelectableDto[]
+    /** Agente Opex liberado para este cliente (configuração do dono; padrão ativado). */
+    opexEnabled: boolean
 }
 
 interface ClientePortalContextValue extends ClientePortalSession {

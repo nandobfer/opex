@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   publishAppEvent: vi.fn(async () => {}),
   available: true,
   gate: null as Promise<void> | null,
+  assertClientEnabled: vi.fn(async () => ({ enabled: true, disabledTools: [] })),
+  assertToolAllowed: vi.fn(),
+  enabledNames: vi.fn(async () => ({ names: ['list_tasks'], config: { enabled: true, disabledTools: [] } })),
 }))
 
 vi.mock('ai', () => ({
@@ -34,7 +37,7 @@ vi.mock('@/lib/ai/stream', () => ({
 }))
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
 vi.mock('@/lib/storage/s3', () => ({
   getFileObject: vi.fn(async () => ({ body: new Blob(['png']).stream() })),
   getUploadUrl: vi.fn(),
@@ -97,6 +100,15 @@ vi.mock('@/features/opex-agent/server/confirmations', () => ({
 }))
 vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () => ({ iso: '2026-10-19T12:00:00.000Z', local: 'segunda', timeZone: 'America/Sao_Paulo' }) }))
 const fakeTool = { name: 'list_tasks', group: 'tasks', label: 'Listar tarefas', risk: 'read', description: 'd', input: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) }, execute: async () => [] }
+vi.mock('@/features/opex-agent/server/client-config', () => ({
+  assertClientOpexEnabled: mocks.assertClientEnabled,
+  assertClientToolAllowed: mocks.assertToolAllowed,
+  enabledClientToolNamesFor: mocks.enabledNames,
+}))
+vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({
+  enabledClientOpexServerTools: () => [fakeTool],
+  findOpexClientServerTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
+}))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
   enabledOpexTools: () => [fakeTool],
   findOpexTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
@@ -131,6 +143,23 @@ async function runTurn(sessionId: string, text: string, fileIds: string[] = []):
   await ended
   await vi.waitFor(() => expect(mocks.refreshSessionTitle).toHaveBeenCalled())
   return lines
+}
+
+const clientActor = { userId: 'u1', displayName: 'Ana', username: 'ana', email: null, client: { _id: 'c1', name: 'ACME' }, isAdmin: false, preview: false }
+
+async function newClientSession(): Promise<string> {
+  const doc = await sessions().create({
+    title: 'Nova sessão',
+    summary: '',
+    titleSource: 'auto',
+    status: 'idle',
+    nextSeq: 1,
+    messageCount: 0,
+    lastMessageAt: new Date(),
+    clientId: 'c1',
+    userId: 'u1',
+  })
+  return String(doc._id)
 }
 
 beforeEach(() => {
@@ -172,7 +201,7 @@ describe('runner do Agente Opex', () => {
     ])
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', lastError: null })
     expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-agent', subject: sessionId, totalTokens: 60, costUsd: null }))
-    expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, { userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.', tools: ['Listar tarefas'] })
+    expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, { userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.', tools: ['Listar tarefas'] }, { kind: 'owner' })
     expect(isTurnActive(sessionId)).toBe(false)
   })
 
@@ -237,7 +266,7 @@ describe('runner do Agente Opex', () => {
     const sent = (mocks.streamText.mock.calls[0]![0] as { messages: { content: { type: string }[] }[] }).messages[0]!
     expect(sent.content.map((part) => part.type)).toEqual(['text', 'text', 'image', 'text'])
     expect((store.files as Model).docs[0]).toMatchObject({ pending: false })
-    expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, expect.objectContaining({ userText: 'Olha o erro\n(arquivos: print.png)' }))
+    expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, expect.objectContaining({ userText: 'Olha o erro\n(arquivos: print.png)' }), { kind: 'owner' })
   })
 
   it('arquivo inválido recusa a mensagem e libera a sessão', async () => {
@@ -265,5 +294,44 @@ describe('runner do Agente Opex', () => {
     await expect(sendMessage(sessionId, { text: 'Segunda' }, 'local')).rejects.toMatchObject({ status: 409, code: 'OPEX_SESSION_BUSY' })
     release()
     await vi.waitFor(() => expect(isTurnActive(sessionId)).toBe(false))
+  })
+})
+
+describe('runner no portal do cliente', () => {
+  it('usa o catálogo do cliente, as instruções do portal e a origem de consumo própria', async () => {
+    mocks.assertToolAllowed.mockResolvedValue(clientActor)
+    const sessionId = await newClientSession()
+    mocks.parts = [
+      { type: 'text-delta', id: 'x', text: 'Olá!' },
+      { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+    ]
+    mocks.responseMessages = [{ role: 'assistant', content: 'Olá!' }]
+    const lines: unknown[] = []
+    const ended = new Promise<void>((resolve) => {
+      const unsubscribe = subscribeSession(sessionId, (line) => {
+        lines.push(line)
+        if (line.type === 'turn-end') {
+          unsubscribe()
+          resolve()
+        }
+      })
+    })
+    await sendMessage(sessionId, { text: 'Quais tarefas?' }, 'u1', { kind: 'client', actor: clientActor as never })
+    await ended
+
+    expect(mocks.assertClientEnabled).toHaveBeenCalledWith(clientActor)
+    expect(mocks.enabledNames).toHaveBeenCalledWith(clientActor)
+    const options = mocks.streamText.mock.calls[0]![0] as { instructions: string; tools: Record<string, unknown> }
+    expect(options.instructions).toContain('portal do cliente')
+    expect(options.instructions).toContain('ACME')
+    expect(options.tools).toHaveProperty('list_tasks')
+    await vi.waitFor(() => expect(mocks.refreshSessionTitle).toHaveBeenCalled())
+    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-client-agent' }))
+  })
+
+  it('agente desativado para o cliente recusa o turno', async () => {
+    mocks.assertClientEnabled.mockRejectedValueOnce(Object.assign(new Error('O Agente Opex está desativado para este cliente.'), { code: 'OPEX_CLIENT_DISABLED', status: 403 }))
+    const sessionId = await newClientSession()
+    await expect(sendMessage(sessionId, { text: 'Oi' }, 'u1', { kind: 'client', actor: clientActor as never })).rejects.toMatchObject({ code: 'OPEX_CLIENT_DISABLED' })
   })
 })

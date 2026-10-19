@@ -3,13 +3,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import axios from "axios"
 import { toast } from "sonner"
-import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
+import { apiErrorMessage, unwrapApi } from "@/lib/api"
 import { fallbackAttachmentName, formatAttachmentSize } from "@/lib/attachments"
 import { randomId } from "@/lib/random-id"
 import type { ApiResponse } from "@/lib/types/api"
 import { opexFileKind, opexMaxBytes, type OpexFileKind } from "../files"
 import type { OpexFilesSettings } from "../schemas"
 import type { OpexFileDto, OpexFileReservationDto } from "../types"
+import { useOpexScope } from "../components/OpexScopeProvider"
 
 /**
  * Fila de envio dos arquivos do chat, por sessão. Fica acima do popover (no item da barra lateral):
@@ -66,6 +67,7 @@ interface UploadsContextValue {
 const UploadsContext = createContext<UploadsContextValue | null>(null)
 
 export function OpexUploadsProvider({ children }: { children: ReactNode }) {
+    const { http, apiBase } = useOpexScope()
     const [items, setItems] = useState<OpexUploadItem[]>([])
     const controllers = useRef(new Map<string, AbortController>())
     const itemsRef = useRef(items)
@@ -89,7 +91,7 @@ export function OpexUploadsProvider({ children }: { children: ReactNode }) {
             try {
                 if (!item.putDone) {
                     const reservation = unwrapApi(
-                        (await api.post<ApiResponse<OpexFileReservationDto>>(`/opex/sessions/${item.sessionId}/files`, { name: item.name, size: item.size, mediaType: item.mediaType }, { signal: controller.signal })).data,
+                        (await http.post<ApiResponse<OpexFileReservationDto>>(`${apiBase}/sessions/${item.sessionId}/files`, { name: item.name, size: item.size, mediaType: item.mediaType }, { signal: controller.signal })).data,
                     )
                     reservationId = reservation.id
                     patch(localId, { reservationId })
@@ -104,13 +106,13 @@ export function OpexUploadsProvider({ children }: { children: ReactNode }) {
                         })
                     } catch (error) {
                         // PUT recusado: a reserva é liberada e a nova tentativa reserva de novo.
-                        void api.delete(`/opex/files/${reservation.id}`).catch(() => undefined)
+                        void http.delete(`${apiBase}/files/${reservation.id}`).catch(() => undefined)
                         patch(localId, { reservationId: null })
                         throw error
                     }
                     patch(localId, { putDone: true, status: "confirming", progress: 100 })
                 }
-                const uploaded = unwrapApi((await api.post<ApiResponse<OpexFileDto>>(`/opex/files/${reservationId}/complete`, {}, { signal: controller.signal })).data)
+                const uploaded = unwrapApi((await http.post<ApiResponse<OpexFileDto>>(`${apiBase}/files/${reservationId}/complete`, {}, { signal: controller.signal })).data)
                 patch(localId, { status: "done", progress: 100, uploaded })
             } catch (error) {
                 if (controller.signal.aborted) return
@@ -119,7 +121,7 @@ export function OpexUploadsProvider({ children }: { children: ReactNode }) {
                 controllers.current.delete(localId)
             }
         },
-        [patch],
+        [patch, http, apiBase],
     )
 
     const enqueue = useCallback<UploadsContextValue["enqueue"]>(
@@ -173,10 +175,10 @@ export function OpexUploadsProvider({ children }: { children: ReactNode }) {
             controllers.current.get(localId)?.abort()
             // Já reservado no servidor: apaga (sem uso, a rotina também o remove em 24 h).
             const fileId = item.uploaded?.id ?? item.reservationId
-            if (fileId) void api.delete(`/opex/files/${fileId}`).catch(() => undefined)
+            if (fileId) void http.delete(`${apiBase}/files/${fileId}`).catch(() => undefined)
             forget([localId])
         },
-        [forget],
+        [forget, http, apiBase],
     )
 
     useEffect(() => {

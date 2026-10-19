@@ -66,9 +66,15 @@ export const OPEX_SESSION_UPDATED_EVENT = "opex-session-updated"
 export const OPEX_SESSION_DELETED_EVENT = "opex-session-deleted"
 
 export const OPEX_AUDIT_ENTITY = "AgenteOpex"
+/** Entidade da auditoria da configuração do agente por cliente (o id é o do cliente). */
+export const OPEX_CLIENT_AUDIT_ENTITY = "ClienteOrcamentoOpexAgent"
+/** Configuração do agente no portal, salva no cliente (`opexAgent`); evento em `private-app` e no canal do cliente. */
+export const OPEX_CLIENT_CONFIG_EVENT = "opex-client-config-updated"
 /** Origens do painel de consumo de IA. */
 export const OPEX_CONSUMPTION_ORIGIN = "opex-agent"
 export const OPEX_TITLE_CONSUMPTION_ORIGIN = "opex-title"
+export const OPEX_CLIENT_CONSUMPTION_ORIGIN = "opex-client-agent"
+export const OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN = "opex-client-title"
 
 export const OPEX_TITLE_MAX = 60
 export const OPEX_SUMMARY_MAX = 280
@@ -86,6 +92,22 @@ export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Responda em português do Brasil, em Markdown, de forma objetiva. Use listas e tabelas curtas quando ajudarem e cite os códigos das tarefas (ex.: OPX-123) e dos serviços.",
 ].join("\n")
 
+/**
+ * Instruções do agente no **portal do cliente**. Não reaproveitam as do dono: falam só do que o portal
+ * permite e reforçam que cada consulta e ação já chega limitada ao cliente e ao papel do usuário.
+ */
+export const DEFAULT_OPEX_CLIENT_INSTRUCTIONS = [
+    "Você é o Agente Opex no portal do cliente: um assistente por chat que ajuda o usuário do portal a acompanhar as tarefas, os pedidos de orçamento e (para administradores) o financeiro e os usuários do próprio cliente.",
+    "Você executa o que o usuário pede usando as ferramentas do portal. Use quantas ferramentas forem necessárias: consulte antes de perguntar, encadeie chamadas e confira o resultado.",
+    "As ferramentas já limitam tudo ao cliente e ao papel do usuário autenticado. Nunca tente acessar, deduzir ou mencionar dados de outros clientes, do app interno do dono ou de telas que o usuário não pode ver.",
+    "Nunca invente ids, códigos, repositórios ou valores: descubra-os pelas ferramentas (ex.: get_portal_overview para repositórios e colunas; list_tasks para achar uma tarefa; list_previews para os pedidos abertos).",
+    "Para um pedido de nova tarefa: identifique o repositório permitido pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview) com o ok do usuário.",
+    "Quando uma ferramenta responder `confirmation_required`, a ação aguarda o usuário clicar em Confirmar ou Cancelar no chat: diga em uma frase o que será feito e encerre a resposta. Você receberá a decisão e o resultado na próxima mensagem.",
+    "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview) sem perguntar de novo.",
+    "Nunca revele senhas ou tokens: as ferramentas não devolvem segredos e a gestão de usuários nunca mostra credenciais.",
+    "Responda em português do Brasil, em Markdown, de forma objetiva. Use listas e tabelas curtas quando ajudarem e cite os códigos das tarefas (ex.: OPX-123).",
+].join("\n")
+
 export const DEFAULT_OPEX_TITLE_INSTRUCTIONS = [
     "Você mantém o título e o resumo de uma sessão de chat entre um usuário e um assistente.",
     `Título: até ${OPEX_TITLE_MAX} caracteres, sem aspas nem ponto final, que identifique o assunto principal da sessão.`,
@@ -95,12 +117,20 @@ export const DEFAULT_OPEX_TITLE_INSTRUCTIONS = [
     'Responda APENAS com JSON: {"title": "...", "summary": "..."}',
 ].join("\n")
 
-/** Sugestões do estado vazio do chat. */
+/** Sugestões do estado vazio do chat (app do dono). */
 export const OPEX_SUGGESTIONS = [
     "Quais tarefas estão em andamento?",
     "Quanto faturei neste mês?",
     "Crie uma tarefa a partir de uma ideia",
     "Como estão as mesas de trabalho?",
+] as const
+
+/** Sugestões do estado vazio do chat no portal do cliente. */
+export const OPEX_CLIENT_SUGGESTIONS = [
+    "Quais tarefas estão em andamento?",
+    "Como está o andamento dos meus pedidos?",
+    "Quero pedir uma nova tarefa",
+    "Quanto ficou este mês?",
 ] as const
 
 /** Arquivos do chat: limites padrão (configuráveis) e tetos. O teto de tamanho é o dos anexos de tarefa. */

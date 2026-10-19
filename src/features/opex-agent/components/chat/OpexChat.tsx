@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { OPEX_AI_TAB } from "../../constants"
-import { useOpexSettings } from "../../hooks/useOpexSettings"
+import { useOpexView } from "../../hooks/useOpexSettings"
+import { useOpexScope, OWNER_OPEX_SETTINGS_HREF } from "../OpexScopeProvider"
 import { useDecideOpexAction, useInterruptOpex, useOpexSession, useSendOpexMessage } from "../../hooks/useOpexSessions"
 import { useOpexStream } from "../../hooks/useOpexStream"
 import { DEFAULT_OPEX_AGENT_SETTINGS } from "../../schemas"
@@ -19,18 +19,21 @@ import { OpexDropZone } from "./OpexDropZone"
 import { OpexEmptyChat } from "./OpexEmptyChat"
 import { buildChatItems, OpexMessageList } from "./OpexMessageList"
 
-export const OPEX_SETTINGS_HREF = `/integracoes/ia?aba=${OPEX_AI_TAB}`
+export const OPEX_SETTINGS_HREF = OWNER_OPEX_SETTINGS_HREF
 
-/** Agente sem configuração ativa: explica e leva à aba de configuração. */
+/** Agente sem configuração ativa: explica e (no app do dono) leva à aba de configuração. */
 export function OpexUnavailable({ reason }: { reason: string }) {
+    const { settingsHref } = useOpexScope()
     return (
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
             <Settings2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1 space-y-1.5">
                 <p>{reason}</p>
-                <Button asChild size="sm" variant="outline" className="h-7">
-                    <Link href={OPEX_SETTINGS_HREF}>Configurar o Agente Opex</Link>
-                </Button>
+                {settingsHref && (
+                    <Button asChild size="sm" variant="outline" className="h-7">
+                        <Link href={settingsHref}>Configurar o Agente Opex</Link>
+                    </Button>
+                )}
             </div>
         </div>
     )
@@ -38,7 +41,7 @@ export function OpexUnavailable({ reason }: { reason: string }) {
 
 /** Sessão aberta: mensagens gravadas + resposta ao vivo + campo de mensagem. */
 export function OpexChat({ sessionId, initialText }: { sessionId: string; initialText?: string }) {
-    const settings = useOpexSettings()
+    const view = useOpexView()
     const query = useOpexSession(sessionId)
     const stream = useOpexStream(sessionId)
     const send = useSendOpexMessage(sessionId)
@@ -46,9 +49,9 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
     const decide = useDecideOpexAction(sessionId)
     const composerRef = useRef<OpexComposerHandle>(null)
     const uploads = useOpexUploads(sessionId)
-    const limits = settings.data?.settings.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
+    const limits = view.data?.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
 
-    const availability = settings.data?.availability
+    const availability = view.data?.availability
     const disabledReason = availability && !availability.available ? (availability.reason ?? "O Agente Opex não está disponível") : null
     const running = stream.live !== null || (stream.status ?? query.data?.session.status) === "running" || send.isPending
 

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { getOwnerDraftDoc } from "@/features/orcamentos/server/owner"
 import { getTask, updateTask } from "@/features/tasks/server/service"
+import type { AttachmentActor } from "@/features/tasks/attachments/server/actor"
 import { formatAttachmentSize } from "@/lib/attachments"
 import { OPEX_FILE_TEXT_INLINE_MAX, OPEX_FILE_TEXT_MAX_BYTES } from "../../constants"
 import { opexFileKind } from "../../files"
@@ -11,12 +12,12 @@ import { resolveTask, taskRefSchema } from "./helpers"
 const fileIds = z.array(z.string()).min(1).max(50).describe("fileIds dos arquivos do chat (de list_chat_files ou das referências nas mensagens)")
 
 /** Copia os arquivos do chat para os anexos (tarefa ou rascunho de prévia), sem novo envio pelo navegador. */
-export async function chatFilesToAttachments(sessionId: string, ids: readonly string[], target: { taskId?: string; draftId?: string }) {
+export async function chatFilesToAttachments(sessionId: string, ids: readonly string[], target: { taskId?: string; draftId?: string }, actor?: AttachmentActor) {
     const attached = []
     const failed: { fileId: string; error: string }[] = []
     for (const id of ids) {
         try {
-            attached.push(await copyChatFileToAttachments(sessionId, id, target))
+            attached.push(await copyChatFileToAttachments(sessionId, id, target, actor))
         } catch (error) {
             failed.push({ fileId: id, error: toolErrorMessage(error) })
         }

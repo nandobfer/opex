@@ -19,11 +19,10 @@ interface ToggleCardProps {
 }
 
 /**
- * Card de liga/desliga (rótulo + descrição à esquerda; situação + Switch à direita) — cópia do
- * card "Status do Usuário" do formulário de usuários do Smart Desk. Use para opções liga/desliga
- * em formulários (ex.: "Produto ativo", "Oferta ativa").
+ * Linha compartilhada dos cards de liga/desliga (e das listas de ferramentas): rótulo + descrição à
+ * esquerda e o controle à direita. Use quando o controle não é um `Switch` (ex.: checkbox de grupo).
  */
-export function ToggleCard({ id, checked, onCheckedChange, label, description, disabled, onLabel = "Ativo", offLabel = "Inativo" }: ToggleCardProps) {
+export function ToggleRow({ id, label, description, disabled, right }: { id: string; label: ReactNode; description: ReactNode; disabled?: boolean; right: ReactNode }) {
     return (
         <div className={cn("flex items-center justify-between gap-4 rounded-xl border bg-muted/40 p-3", disabled && "opacity-80")}>
             <div className="min-w-0 space-y-0.5">
@@ -32,13 +31,32 @@ export function ToggleCard({ id, checked, onCheckedChange, label, description, d
                 </Label>
                 <p className="text-xs text-muted-foreground">{description}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
-                <span data-testid={`${id}-status`} className={cn("text-[10px] font-bold uppercase", checked ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
-                    {checked ? onLabel : offLabel}
-                </span>
-                <Switch id={id} role="switch" aria-checked={checked} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
-            </div>
+            <div className="flex shrink-0 items-center gap-3">{right}</div>
         </div>
+    )
+}
+
+/**
+ * Card de liga/desliga (rótulo + descrição à esquerda; situação + Switch à direita) — cópia do
+ * card "Status do Usuário" do formulário de usuários do Smart Desk. Use para opções liga/desliga
+ * em formulários (ex.: "Produto ativo", "Oferta ativa").
+ */
+export function ToggleCard({ id, checked, onCheckedChange, label, description, disabled, onLabel = "Ativo", offLabel = "Inativo" }: ToggleCardProps) {
+    return (
+        <ToggleRow
+            id={id}
+            label={label}
+            description={description}
+            disabled={disabled}
+            right={
+                <>
+                    <span data-testid={`${id}-status`} className={cn("text-[10px] font-bold uppercase", checked ? "text-emerald-600 dark:text-emerald-400" : "text-destructive")}>
+                        {checked ? onLabel : offLabel}
+                    </span>
+                    <Switch id={id} role="switch" aria-checked={checked} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+                </>
+            }
+        />
     )
 }
 

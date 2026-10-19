@@ -8,18 +8,22 @@
  *   (pré-visualização);
  * - `private-repo-recents-{ator}`: o **próprio ator** — o dono (`private-repo-recents-local`) ou o
  *   usuário de cliente do seu `userId`. O histórico de um usuário nunca chega a outro.
+ * - `private-opex-{clientId}-{userId}`: o **Agente Opex** do próprio usuário no cliente (sessões e
+ *   configuração). O usuário de cliente só assina o seu; o dono assina o do `userId` local.
  */
 
 import { isIntegrationId } from "@/lib/integrations/catalog"
 import { LOCAL_USER_ID } from "@/lib/local-user"
 import type { SessionPayload } from "@/features/auth/session"
-import { appChannel, CLIENT_CHANNEL_PREFIX, REPO_RECENTS_CHANNEL_PREFIX } from "./channel-names"
+import { appChannel, CLIENT_CHANNEL_PREFIX, OPEX_CHANNEL_PREFIX, REPO_RECENTS_CHANNEL_PREFIX } from "./channel-names"
+import { parseOpexClientChannel } from "@/features/opex-agent/scope"
 
 export type ParsedChannel =
     | { kind: "app" }
     | { kind: "integration"; integrationId: string }
     | { kind: "client"; clientId: string }
     | { kind: "repoRecents"; actorId: string }
+    | { kind: "opex"; clientId: string; userId: string }
     | { kind: "unknown" }
 
 export function parseChannel(channel: string): ParsedChannel {
@@ -30,6 +34,8 @@ export function parseChannel(channel: string): ParsedChannel {
     if (channel.startsWith(REPO_RECENTS_CHANNEL_PREFIX)) {
         return { kind: "repoRecents", actorId: channel.slice(REPO_RECENTS_CHANNEL_PREFIX.length) }
     }
+    const opex = parseOpexClientChannel(channel)
+    if (channel.startsWith(OPEX_CHANNEL_PREFIX) && opex) return { kind: "opex", ...opex }
     if (channel.startsWith(CLIENT_CHANNEL_PREFIX)) {
         return { kind: "client", clientId: channel.slice(CLIENT_CHANNEL_PREFIX.length) }
     }
@@ -47,6 +53,9 @@ export function isChannelAuthorized(channel: string, session: SessionPayload | n
         case "client":
             if (session?.kind === "admin") return true
             return session?.kind === "client" && session.clientId === parsed.clientId
+        case "opex":
+            if (session?.kind === "admin") return parsed.userId === LOCAL_USER_ID
+            return session?.kind === "client" && session.clientId === parsed.clientId && session.userId === parsed.userId
         case "repoRecents":
             if (session?.kind === "admin") return parsed.actorId === LOCAL_USER_ID
             return session?.kind === "client" && session.userId === parsed.actorId

@@ -184,7 +184,7 @@ describe('arquivos do chat pelo agente', () => {
   it('copia para os anexos da tarefa (sem novo envio) e, se pedido, insere no fim da descrição', async () => {
     const tool = findOpexTool('attach_files_to_task')!
     const result = (await tool.execute(tool.input.parse({ task: TASK_ID, fileIds: ['f1', 'outro'], appendToDescription: true }), context)) as { attached: unknown[]; failed: { fileId: string }[] }
-    expect(mocks.copyChatFileToAttachments).toHaveBeenCalledWith('s1', 'f1', { taskId: TASK_ID })
+    expect(mocks.copyChatFileToAttachments).toHaveBeenCalledWith('s1', 'f1', { taskId: TASK_ID }, undefined)
     expect(result.attached).toHaveLength(1)
     expect(result.failed).toEqual([{ fileId: 'outro', error: expect.stringContaining('não encontrado') }])
     expect(mocks.updateTask).toHaveBeenCalledWith(TASK_ID, { description: 'Descrição atual\n\n![f1.png](/api/attachments/att-f1/content)' }, 'local')

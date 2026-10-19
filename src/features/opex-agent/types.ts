@@ -1,6 +1,7 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import type { OpexAgentSettings } from "./schemas"
+import type { OpexAgentSettings, OpexFilesSettings } from "./schemas"
 import type { OpexToolGroup } from "./constants"
+import type { OpexClientToolGroup } from "./client-tools"
 import type { OpexFileKind } from "./files"
 
 /** Arquivo enviado no chat (o binário fica no Storage S3). */
@@ -34,6 +35,23 @@ export interface OpexAgentSettingsDto {
     toolCounts: Record<OpexToolGroup, number>
 }
 
+/** Configuração do Agente Opex de um cliente do portal (tela do dono). */
+export interface OpexClientAgentConfigDto {
+    enabled: boolean
+    /** Ferramentas ligadas (o contexto entra sempre). */
+    enabledTools: string[]
+}
+
+/** Situação do Agente Opex no portal do cliente. */
+export interface OpexClientStatusDto {
+    enabled: boolean
+    available: boolean
+    reason: string | null
+    /** Provedor · modelo configurado pelo dono (sem segredos). */
+    modelLabel: string | null
+    files: OpexFilesSettings
+}
+
 export type OpexSessionStatus = "idle" | "running" | "awaiting_confirmation" | "error"
 
 export interface OpexSessionDto {
@@ -65,7 +83,7 @@ export interface OpexToolPart {
     type: "tool"
     id: string
     name: string
-    group: OpexToolGroup | null
+    group: OpexToolGroup | OpexClientToolGroup | null
     label: string
     state: OpexToolState
     /** Entrada e saída resumidas (JSON) para exibição. */
@@ -124,7 +142,7 @@ export type OpexStreamLine =
     | { type: "turn-start"; messageId: string; startedAt: string }
     | { type: "text-delta"; text: string }
     | { type: "reasoning-delta"; text: string }
-    | { type: "tool-start"; id: string; name: string; group: OpexToolGroup | null; label: string }
+    | { type: "tool-start"; id: string; name: string; group: OpexToolGroup | OpexClientToolGroup | null; label: string }
     | { type: "tool-input"; id: string; input: string | null }
     | { type: "tool-end"; id: string; state: "done" | "error"; output: string | null; error: string | null; confirmation: OpexConfirmationDto | null; durationMs: number | null }
     | { type: "turn-end"; messageId: string; status: OpexMessageStatus; error: string | null }

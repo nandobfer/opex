@@ -14,6 +14,7 @@ import { CLIENTE_REPO_RECENTS_PATH } from "@/features/repository-recency/constan
 import { useRepoRecentsSource, type RepoRecentsSource } from "@/features/repository-recency/hooks"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "../constants"
 import { SERVICES_UPDATED_EVENT } from "@/features/services/constants"
+import { OPEX_CLIENT_CONFIG_EVENT } from "@/features/opex-agent/constants"
 import type { CreateDraftInput, ClienteUserInput } from "../schemas"
 import type { ClienteDashboardDto, ClienteFinanceDto, ClientePortalOptionsDto, ClienteServiceDto, ClienteTaskDetailDto, ClienteTaskDto, ClienteTaskListDto, ClienteUserDto, CreatedClienteUserDto, OrcamentoDraftDto } from "../types"
 import { useClientePortal } from "./ClientePortalContext"
@@ -181,12 +182,16 @@ export function useClienteRealtime(): void {
             void queryClient.invalidateQueries({ queryKey: [CLIENTE_QUERY_KEY, "finance"] })
             // Anexos das tarefas do cliente (o dono publica neste canal ao mudar os anexos).
             void queryClient.invalidateQueries({ queryKey: [ATTACHMENTS_QUERY_KEY] })
+            // Agente Opex: o dono pode ativar/desativar ou mudar as ferramentas do cliente.
+            void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "status" && typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("opex-agent:") })
         }
         channel.bind(CLIENTE_TASKS_UPDATED_EVENT, handler)
         channel.bind(SERVICES_UPDATED_EVENT, handler)
+        channel.bind(OPEX_CLIENT_CONFIG_EVENT, handler)
         return () => {
             channel.unbind(CLIENTE_TASKS_UPDATED_EVENT, handler)
             channel.unbind(SERVICES_UPDATED_EVENT, handler)
+            channel.unbind(OPEX_CLIENT_CONFIG_EVENT, handler)
             releaseChannel(name)
         }
     }, [clientId, queryClient])

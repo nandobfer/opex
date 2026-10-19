@@ -1,6 +1,7 @@
 import type { OpexStreamLine } from "../types"
 import { liveMessageOf, subscribeSession } from "./hub"
 import { loadSession } from "./sessions"
+import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 
 const PING_MS = 15_000
 
@@ -8,8 +9,8 @@ const PING_MS = 15_000
  * Stream NDJSON da sessão: `snapshot` (situação + resposta em andamento) e as linhas ao vivo, com
  * `ping` a cada 15 s. Reconectar recomeça pelo `snapshot`, então nada se perde no meio do turno.
  */
-export async function openSessionStream(sessionId: string, signal: AbortSignal): Promise<Response> {
-    const session = await loadSession(sessionId)
+export async function openSessionStream(sessionId: string, signal: AbortSignal, scope: OpexServerScope = OWNER_SCOPE): Promise<Response> {
+    const session = await loadSession(sessionId, scope)
     const encoder = new TextEncoder()
     let cleanup = () => {}
     const stream = new ReadableStream<Uint8Array>({

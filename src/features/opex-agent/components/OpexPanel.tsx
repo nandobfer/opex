@@ -5,8 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Bot, History, Maximize2, MessageSquarePlus, Minimize2, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { getAiProvider } from "@/lib/ai/providers"
-import { useOpexSettings } from "../hooks/useOpexSettings"
+import { useOpexView } from "../hooks/useOpexSettings"
 import { useOpexSessions } from "../hooks/useOpexSessions"
 import { OPEX_DRAFT_TAB, useOpexTabs } from "../hooks/useOpexTabs"
 import { OpexChat } from "./chat/OpexChat"
@@ -23,13 +22,12 @@ interface OpexPanelProps {
 /** Conteúdo do popover: cabeçalho, abas das sessões, lista de sessões e o chat da aba ativa. */
 export function OpexPanel({ maximized, onToggleMaximize, onClose }: OpexPanelProps) {
     const sessions = useOpexSessions()
-    const settings = useOpexSettings()
+    const view = useOpexView()
     const { tabs, ready, open, close, activate, startDraft } = useOpexTabs(sessions.data)
     const [listOpen, setListOpen] = useState(false)
     const [handoff, setHandoff] = useState<{ sessionId: string; text: string } | null>(null)
     const byId = useMemo(() => new Map((sessions.data ?? []).map((session) => [session.id, session])), [sessions.data])
-    const main = settings.data?.settings.main
-    const modelLabel = main?.provider && main.model ? `${getAiProvider(main.provider).name} · ${main.model}` : null
+    const modelLabel = view.data?.modelLabel ?? null
     const active = tabs.active ?? OPEX_DRAFT_TAB
 
     return (

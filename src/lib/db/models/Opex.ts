@@ -17,6 +17,10 @@ export interface IOpexSession {
     messageCount: number
     /** Próximo número de ordem das mensagens. */
     nextSeq: number
+    /** Cliente do portal dono da sessão; `null` = sessão do app do dono. */
+    clientId: string | null
+    /** Usuário dono da sessão (`local` no app do dono; id do usuário no portal). */
+    userId: string
     lastMessageAt: Date
     createdAt: Date
     updatedAt: Date
@@ -98,11 +102,14 @@ const OpexSessionSchema = new Schema<IOpexSession>(
         archived: { type: Boolean, default: false },
         messageCount: { type: Number, default: 0 },
         nextSeq: { type: Number, default: 1 },
+        clientId: { type: String, default: null },
+        userId: { type: String, default: "" },
         lastMessageAt: { type: Date, default: () => new Date() },
     },
     { collection: "opex_sessions", versionKey: false, timestamps: true },
 )
-OpexSessionSchema.index({ archived: 1, lastMessageAt: -1 })
+// Sessões do dono (`clientId: null`, inclusive as antigas sem o campo) e as privadas por cliente/usuário.
+OpexSessionSchema.index({ clientId: 1, userId: 1, archived: 1, lastMessageAt: -1 })
 
 const OpexMessageSchema = new Schema<IOpexMessage>(
     {

@@ -26,6 +26,7 @@ vi.mock("@/lib/db/models/Project", async () => {
     mocks.projects = memoryModel()
     return { Project: mocks.projects }
 })
+vi.mock("@/features/opex-agent/server/sessions", () => ({ deleteClientOpexData: async () => {} }))
 vi.mock("@/lib/db/models/User", async () => {
     const { memoryModel } = await import("../../helpers/memory-model")
     mocks.users = memoryModel()

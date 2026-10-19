@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { previewClientFromCookies, resolvePortalContext, sessionFromCookies } from "@/features/auth/server/context"
 import { ClientePortalProvider, type ClientePortalSession } from "@/features/orcamentos/portal/ClientePortalContext"
 import { ClientePortalShell } from "@/features/orcamentos/portal/ClientePortalShell"
+import { loadClientOpexConfig } from "@/features/opex-agent/server/client-config"
 
 export const dynamic = "force-dynamic"
 export const metadata: Metadata = { title: "Portal do cliente", robots: { index: false, follow: false } }
@@ -21,6 +22,7 @@ export default async function ClientePortalLayout({ children }: { children: Reac
     const context = await resolvePortalContext(session, previewClient)
     if (!context) redirect("/cliente")
 
+    const opex = await loadClientOpexConfig(String(context.client._id))
     const dto: ClientePortalSession = {
         clientId: String(context.client._id),
         clientName: context.client.name,
@@ -28,6 +30,7 @@ export default async function ClientePortalLayout({ children }: { children: Reac
         preview: context.preview,
         user: { id: context.userId, username: context.username, email: context.email },
         clients: context.clients,
+        opexEnabled: opex.enabled,
     }
 
     return (

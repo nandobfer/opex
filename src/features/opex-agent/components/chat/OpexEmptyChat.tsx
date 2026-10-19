@@ -3,10 +3,17 @@
 import { motion } from "framer-motion"
 import { Bot, Sparkles } from "lucide-react"
 import { listContainer, listItem } from "@/components/motion/presets"
-import { OPEX_SUGGESTIONS } from "../../constants"
+import { OPEX_CLIENT_SUGGESTIONS, OPEX_SUGGESTIONS } from "../../constants"
+import { useOpexScope } from "../OpexScopeProvider"
 
 /** Estado vazio do chat: o robô, o que o agente faz e sugestões para começar. */
 export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => void; disabled?: boolean }) {
+    const { kind, clientName } = useOpexScope()
+    const suggestions = kind === "client" ? OPEX_CLIENT_SUGGESTIONS : OPEX_SUGGESTIONS
+    const description =
+        kind === "client"
+            ? `Ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos de nova tarefa, estimar orçamentos e (para administradores) consultar o financeiro. Peça em linguagem natural.`
+            : "Crio tarefas e prévias, conduzo as mesas de trabalho, lanço serviços, consulto o financeiro e configuro centrais e integrações. Peça em linguagem natural."
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-8 text-center">
             <motion.span
@@ -20,10 +27,10 @@ export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => 
             </motion.span>
             <div className="max-w-sm space-y-1">
                 <p className="text-sm font-semibold">Como posso ajudar?</p>
-                <p className="text-xs text-muted-foreground">Crio tarefas e prévias, conduzo as mesas de trabalho, lanço serviços, consulto o financeiro e configuro centrais e integrações. Peça em linguagem natural.</p>
+                <p className="text-xs text-muted-foreground">{description}</p>
             </div>
             <motion.ul variants={listContainer} initial="hidden" animate="visible" className="flex w-full max-w-md flex-wrap justify-center gap-2">
-                {OPEX_SUGGESTIONS.map((suggestion) => (
+                {suggestions.map((suggestion) => (
                     <motion.li key={suggestion} variants={listItem}>
                         <button
                             type="button"

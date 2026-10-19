@@ -6,7 +6,10 @@ import { loggerFor } from "@/lib/logger"
 import { OPEX_AUDIT_ENTITY } from "../constants"
 import type { OpexConfirmationDto, OpexConfirmationStatus, OpexPart } from "../types"
 import { OpexMessage, OpexPendingAction, type IOpexPendingAction } from "@/lib/db/models/Opex"
-import { opexDb, publishSessionUpdated } from "./sessions"
+import { loadSession, opexDb, publishSessionUpdated } from "./sessions"
+import { assertClientOpexEnabled, assertClientToolAllowed } from "./client-config"
+import { findOpexClientServerTool } from "./client-tools/registry"
+import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 import { compactToolOutput, stringifyForDisplay } from "./tool-runtime"
 import { toolErrorMessage, type OpexTool } from "./tools/define"
 import { findOpexTool } from "./tools/registry"
@@ -79,11 +82,13 @@ async function syncMessagePart(action: ActionDoc, output: unknown): Promise<void
  * Confirma (executa a ferramenta de verdade) ou cancela a ação pendente. A decisão e o resultado
  * voltam ao agente como uma nova mensagem da sessão, e o turno seguinte começa sozinho.
  */
-export async function decideAction(actionId: string, decision: "confirm" | "cancel", actorId: string): Promise<OpexConfirmationDto> {
+export async function decideAction(actionId: string, decision: "confirm" | "cancel", actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexConfirmationDto> {
     if (!Types.ObjectId.isValid(actionId)) throw new DomainError(404, "Ação não encontrada", "OPEX_ACTION_NOT_FOUND")
     await opexDb()
     const current = await OpexPendingAction.findById(actionId).lean<ActionDoc>()
     if (!current) throw new DomainError(404, "Ação não encontrada", "OPEX_ACTION_NOT_FOUND")
+    // A ação só existe para quem enxerga a sessão dona (404 nos demais escopos).
+    await loadSession(current.sessionId.toString(), scope)
     const dto = toConfirmationDto(current)
     if (dto.status === "expired") throw new DomainError(409, "A confirmação expirou: peça ao agente para repetir a ação", "OPEX_ACTION_EXPIRED")
     // Trava: só uma decisão vence.
@@ -95,7 +100,7 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
     if (!claimed) throw new DomainError(409, "Esta ação já foi decidida", "OPEX_ACTION_DECIDED")
 
     const sessionId = claimed.sessionId.toString()
-    const tool = findOpexTool(claimed.toolName)
+    const tool = scope.kind === "owner" ? findOpexTool(claimed.toolName) : findOpexClientServerTool(claimed.toolName)
     let followUp: string
     let output: unknown
     let final: ActionDoc = claimed
@@ -106,7 +111,15 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
         followUp = `O usuário confirmou a ação "${claimed.summary}", mas a ferramenta ${claimed.toolName} não existe mais.`
     } else {
         try {
-            output = compactToolOutput(await tool.execute(tool.input.parse(openInput(claimed.input)), { sessionId, actorId }))
+            // Revalida o cliente, o vínculo e a ferramenta na hora de executar (a configuração pode ter
+            // mudado depois do card) e devolve o ator atualizado para o contexto.
+            let executionScope = scope
+            if (scope.kind === "client") {
+                await assertClientOpexEnabled(scope.actor)
+                const actor = await assertClientToolAllowed(claimed.toolName, scope.actor)
+                executionScope = { kind: "client", actor }
+            }
+            output = compactToolOutput(await tool.execute(tool.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope }))
             final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { result: JSON.stringify(output ?? null), input: null } }, { new: true }).lean<ActionDoc>())!
             followUp = `O usuário CONFIRMOU a ação "${claimed.summary}" (actionId ${actionId}) e ela foi executada. Resultado: ${JSON.stringify(output)}`
         } catch (error) {
