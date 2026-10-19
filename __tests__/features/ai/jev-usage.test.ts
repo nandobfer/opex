@@ -7,27 +7,55 @@ vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.aggregate 
 import { formatJevCost, jevUsageQuerySchema, jevUsageRangeQuery } from "@/features/ai/jev-usage"
 import { getJevUsage } from "@/features/ai/server/jev-usage"
 
+const feature = (overrides: Record<string, unknown>) => ({
+    requests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+    missingInput: 0,
+    missingOutput: 0,
+    missingTotal: 0,
+    missingCost: 0,
+    ...overrides,
+})
+
+const total = (overrides: Record<string, unknown>) => ({
+    requests: 0,
+    failedRequests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+    reconstructedRequests: 0,
+    missingInput: 0,
+    missingOutput: 0,
+    missingTokenRequests: 0,
+    missingCostRequests: 0,
+    ...overrides,
+})
+
 beforeEach(() => vi.clearAllMocks())
 
 describe("consumo JEV por período", () => {
     it("filtra só JEV, em limites ISO inclusivos, retornando as somas conhecidas", async () => {
-        mocks.aggregate.mockResolvedValue([{ requests: 2, failedRequests: 1, inputTokens: 100, outputTokens: 20, totalTokens: 120, costUsd: 0.0000042, reconstructedRequests: 0, missingInput: 1, missingOutput: 1, missingTokenRequests: 1, missingCostRequests: 1 }])
+        mocks.aggregate.mockResolvedValue([{ summary: [total({ requests: 2, failedRequests: 1, inputTokens: 100, outputTokens: 20, totalTokens: 120, costUsd: 0.0000042, missingInput: 1, missingOutput: 1, missingTokenRequests: 1, missingCostRequests: 1 })], features: [] }])
         const query = { from: "2026-10-10T03:00:00.000Z", to: "2026-10-11T02:59:59.999Z" }
         expect(await getJevUsage(query)).toMatchObject({ requests: 2, failedRequests: 1, totalTokens: 120, costUsd: 0.0000042, missingTokenRequests: 1, missingCostRequests: 1 })
         expect(mocks.aggregate.mock.calls[0]![0][0]).toEqual({ $match: { provider: "jev", createdAt: { $gte: new Date(query.from), $lte: new Date(query.to) } } })
     })
 
     it("histórico exibe total e custo, mas mantém entrada e saída desconhecidos", async () => {
-        mocks.aggregate.mockResolvedValue([{ requests: 149, failedRequests: 0, inputTokens: 0, outputTokens: 0, totalTokens: 235088, costUsd: 0.0067, reconstructedRequests: 149, missingInput: 149, missingOutput: 149, missingTokenRequests: 0, missingCostRequests: 0 }])
+        mocks.aggregate.mockResolvedValue([{ summary: [total({ requests: 149, totalTokens: 235088, costUsd: 0.0067, reconstructedRequests: 149, missingInput: 149, missingOutput: 149 })], features: [] }])
         expect(await getJevUsage({})).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: 235088, costUsd: 0.0067, reconstructedRequests: 149 })
         expect(mocks.aggregate.mock.calls[0]![0][0]).toEqual({ $match: { provider: "jev" } })
     })
 
     it("chamadas todas sem métricas retornam null, diferente de período vazio", async () => {
-        mocks.aggregate.mockResolvedValueOnce([{ requests: 1, failedRequests: 1, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, reconstructedRequests: 0, missingInput: 1, missingOutput: 1, missingTokenRequests: 1, missingCostRequests: 1 }])
+        mocks.aggregate.mockResolvedValueOnce([{ summary: [total({ requests: 1, failedRequests: 1, missingInput: 1, missingOutput: 1, missingTokenRequests: 1, missingCostRequests: 1 })], features: [] }])
         expect(await getJevUsage({})).toMatchObject({ requests: 1, totalTokens: null, costUsd: null })
         mocks.aggregate.mockResolvedValueOnce([])
-        expect(await getJevUsage({})).toMatchObject({ requests: 0, totalTokens: 0, costUsd: 0 })
+        expect(await getJevUsage({})).toMatchObject({ requests: 0, totalTokens: 0, costUsd: 0, features: [] })
     })
 
     it("converte calendário local incluindo todo o dia final e rejeita períodos inválidos", () => {
@@ -45,5 +73,39 @@ describe("consumo JEV por período", () => {
     it("formata custo histórico e custos pequenos sem reduzi-los a zero", () => {
         expect(formatJevCost(0.0067)).toContain("0,0067")
         expect(formatJevCost(0.000000042)).toContain("0,000000042")
+    })
+})
+
+describe("consumo JEV por recurso", () => {
+    it("devolve uma linha por feature, com rótulo em pt-BR e somas conhecidas", async () => {
+        mocks.aggregate.mockResolvedValue([{ summary: [total({ requests: 3 })], features: [
+            feature({ _id: "task-tags", requests: 2, inputTokens: 100, outputTokens: 20, totalTokens: 120, costUsd: 0.0000042, missingInput: 1, missingOutput: 1 }),
+            feature({ _id: "estimate-hours", requests: 1, totalTokens: 50, costUsd: 0.0000021, missingInput: 1, missingOutput: 1 }),
+        ] }])
+        const usage = await getJevUsage({})
+        expect(usage.features).toEqual([
+            { feature: "task-tags", label: "Tags de tarefas", requests: 2, inputTokens: 100, outputTokens: 20, totalTokens: 120, costUsd: 0.0000042 },
+            { feature: "estimate-hours", label: "Estimar prazos", requests: 1, inputTokens: null, outputTokens: null, totalTokens: 50, costUsd: 0.0000021 },
+        ])
+    })
+
+    it("recurso todo reconstruído mantém total e custo e zera entrada e saída", async () => {
+        mocks.aggregate.mockResolvedValue([{ summary: [total({ requests: 1 })], features: [
+            feature({ _id: "task-tags", requests: 1, totalTokens: 235088, costUsd: 0.0067, missingInput: 1, missingOutput: 1 }),
+        ] }])
+        expect((await getJevUsage({})).features[0]).toMatchObject({ label: "Tags de tarefas", inputTokens: null, outputTokens: null, totalTokens: 235088, costUsd: 0.0067 })
+    })
+
+    it("feature desconhecida ou ausente não some da tabela", async () => {
+        mocks.aggregate.mockResolvedValue([{ summary: [total({ requests: 2 })], features: [
+            feature({ _id: "nova-feature", requests: 1, totalTokens: 10 }),
+            feature({ _id: null, requests: 1, totalTokens: 5 }),
+        ] }])
+        expect((await getJevUsage({})).features.map((row) => row.label)).toEqual(["nova-feature", "Não identificado"])
+    })
+
+    it("período sem registros devolve tabela vazia", async () => {
+        mocks.aggregate.mockResolvedValue([{ summary: [], features: [] }])
+        expect((await getJevUsage({})).features).toEqual([])
     })
 })

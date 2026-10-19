@@ -16,7 +16,13 @@ import { JevUsageCard } from "@/features/ai/components/JevUsageCard"
 import { DATE_PRESET } from "@/components/ui/preset-date-range-filter"
 import { jevUsageRangeQuery } from "@/features/ai/jev-usage"
 
-const summary = { requests: 149, failedRequests: 0, totalTokens: 235088, inputTokens: null, outputTokens: null, costUsd: 0.0067, reconstructedRequests: 149, missingTokenRequests: 0, missingCostRequests: 0 }
+const summary = {
+    requests: 149, failedRequests: 0, totalTokens: 235088, inputTokens: null, outputTokens: null, costUsd: 0.0067, reconstructedRequests: 149, missingTokenRequests: 0, missingCostRequests: 0,
+    features: [
+        { feature: "task-tags", label: "Tags de tarefas", requests: 141, inputTokens: null, outputTokens: null, totalTokens: 222000, costUsd: 0.0063 },
+        { feature: "estimate-hours", label: "Estimar prazos", requests: 8, inputTokens: 12000, outputTokens: null, totalTokens: 13088, costUsd: 0.0004 },
+    ],
+}
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -30,8 +36,8 @@ describe("Consumo do JEV", () => {
         render(<JevUsageCard />)
         const period = DATE_PRESET.month.getRange()
         expect(mocks.usage).toHaveBeenLastCalledWith(jevUsageRangeQuery(period.startDate, period.endDate))
-        expect(screen.getByText("235.088")).toBeTruthy()
-        expect(screen.getByText(/0,0067/)).toBeTruthy()
+        expect(screen.getAllByText("235.088").length).toBeGreaterThan(0)
+        expect(screen.getAllByText(/0,0067/).length).toBeGreaterThan(0)
         expect(screen.getAllByText("Não informado")).toHaveLength(2)
         expect(screen.getByRole("note").textContent).toContain("valores por período são aproximados")
         expect(screen.getByText(/Logs retidos por 90 dias/)).toBeTruthy()
@@ -48,11 +54,21 @@ describe("Consumo do JEV", () => {
         expect(mocks.refetch).toHaveBeenCalledOnce()
     })
 
+    it("lista o consumo por recurso, com total do período e métricas ausentes como —", () => {
+        render(<JevUsageCard />)
+        expect(screen.getByRole("columnheader", { name: "Recurso" })).toBeTruthy()
+        expect(screen.getByText("Tags de tarefas")).toBeTruthy()
+        expect(screen.getByText("Estimar prazos")).toBeTruthy()
+        expect(screen.getAllByText("Total").length).toBeGreaterThan(0)
+        expect(screen.getAllByTitle("Métrica não informada").length).toBeGreaterThan(0)
+    })
+
     it("mostra vazio com ação para selecionar outro período", () => {
-        mocks.usage.mockReturnValue({ data: { ...summary, requests: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
+        mocks.usage.mockReturnValue({ data: { ...summary, requests: 0, features: [] }, isLoading: false, isError: false, refetch: mocks.refetch })
         render(<JevUsageCard />)
         expect(screen.getByText("Nenhum uso do JEV neste período")).toBeTruthy()
         expect(screen.getByRole("button", { name: "Último mês" })).toBeTruthy()
+        expect(screen.queryByRole("columnheader", { name: "Recurso" })).toBeNull()
     })
 
     it("mostra skeleton e erro com tentar novamente", () => {
