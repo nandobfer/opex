@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
-import { centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
+import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { agenticSettingsSchema, centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig, withDefaultAgents } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
   const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } } }
@@ -292,5 +292,33 @@ describe('configuração do merge automático', () => {
       expect(parsed.error.issues[0]!.path).toEqual(['git', 'autoMerge'])
     }
     expect(centralConfigSchema.safeParse({ ...base, git: { ...base.git, autoMerge: true, prDraft: false } }).success).toBe(true)
+  })
+})
+
+describe('correção de CI: padrão global e central (OPE-81)', () => {
+  const global = { fixCi: false, ciFixLimit: 5 }
+
+  it('central nova herda o padrão global', () => {
+    const git = defaultCentralConfig('/x').git
+    expect(git).toMatchObject({ inheritCi: true, fixCi: true, ciFixLimit: null })
+    expect(resolveCentralCi(global, git)).toEqual(global)
+    expect(resolveCentralCi(undefined, git)).toEqual({ fixCi: true, ciFixLimit: null })
+  })
+
+  it('central antiga (sem valor próprio) herda; a que personaliza preserva o seu valor', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', git: { baseBranch: 'dev' } }).git.inheritCi).toBe(true)
+    const custom = parseCentralConfig({ sessionDirectory: '/repo', git: { inheritCi: false, fixCi: true, ciFixLimit: 2 } }).git
+    expect(resolveCentralCi(global, custom)).toEqual({ fixCi: true, ciFixLimit: 2 })
+  })
+
+  it('configuração global antiga (sem `ci`) cai no padrão: ligada e sem limite', () => {
+    expect(agenticSettingsSchema.parse(withDefaultAgents({ enabled: true, columns: DEFAULT_AGENTIC_SETTINGS.columns })).ci).toEqual({ fixCi: true, ciFixLimit: null })
+  })
+
+  it('limite fora de 1–20 é inválido; vazio (null) = sem limite', () => {
+    const base = defaultCentralConfig('/x')
+    expect(centralConfigSchema.safeParse({ ...base, git: { ...base.git, ciFixLimit: 21 } }).success).toBe(false)
+    expect(centralConfigSchema.safeParse({ ...base, git: { ...base.git, ciFixLimit: 0 } }).success).toBe(false)
+    expect(centralConfigSchema.safeParse({ ...base, git: { ...base.git, ciFixLimit: null } }).success).toBe(true)
   })
 })

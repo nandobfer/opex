@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildPrompt,
@@ -29,9 +29,11 @@ import {
     revisePlanPrompt,
     worktreePathFor,
     conflictPrompt,
+    ciFixPrompt,
     type WorkbenchContext,
 } from "../prompts"
-import { buildResultSchema, conflictResultSchema, prResultSchema, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput } from "../schemas"
+import type { CiFailure } from "../ci"
+import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -121,6 +123,8 @@ interface Loaded {
     config: CentralConfig
     /** Colunas efetivas da central (herdadas do padrão global ou personalizadas — OPE-79). */
     columns: AgenticColumns
+    /** Correção de CI efetiva da central (herdada do padrão global ou personalizada — OPE-81). */
+    ci: AgenticCi
     projectName: string
     projectId: string
     repo: { repo: string; repoUrl: string } | null
@@ -130,7 +134,7 @@ async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
     const { settings } = await loadAgenticSettings()
-    return { doc, config, columns: resolveCentralColumns(settings.columns, config.columns), projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
+    return { doc, config, columns: resolveCentralColumns(settings.columns, config.columns), ci: resolveCentralCi(settings.ci, config.git), projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
 }
 
 function contextOf({ doc, config, projectName, repo }: Loaded): WorkbenchContext {
@@ -613,6 +617,20 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             pumpQueue(doc.centralId)
             return null
         }
+        case "fixing_ci": {
+            const parsed = ciFixResultSchema.safeParse(extractJsonBlock(result.text))
+            if (!parsed.success || !parsed.data.ok) {
+                throw new Error(`A correção do CI não foi concluída: ${parsed.success ? (parsed.data.error ?? "o agente não confirmou a publicação") : "resposta sem o bloco JSON esperado"}`)
+            }
+            // Só reexecução (sem push): o código não mudou e a prévia continua valendo.
+            const rerun = Boolean(parsed.data.rerun && !parsed.data.sha)
+            notice("success", rerun ? `CI do PR #${doc.pr?.number ?? ""}: falhas reexecutadas (causa fora do código). O PR volta a aguardar o CI.` : `CI do PR #${doc.pr?.number ?? ""} corrigido e enviado (push). O PR volta a aguardar o CI.`)
+            if (!rerun && doc.previewHealthy) notice("warn", "A prévia pode estar desatualizada em relação ao código publicado na correção do CI.")
+            await update(doc, { stage: "pr_open", runState: "idle", ...(!rerun && doc.previewHealthy ? { previewHealthy: false } : {}) })
+            await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: doc.pr?.url ?? null, ciCorrigido: rerun ? "reexecução" : (parsed.data.sha ?? "push") } })
+            pumpQueue(doc.centralId)
+            return null
+        }
         case "merging_pr": {
             const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
             if (parsed.success && !parsed.data.ok) throw new Error(`O merge não foi concluído: ${parsed.data.error ?? "motivo não informado"}`)
@@ -828,7 +846,7 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
     await prepareHub(id)
     await applyStartEffects(id, task, columns)
-    const loaded: Loaded = { doc, config, columns, projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
+    const loaded: Loaded = { doc, config, columns, ci: resolveCentralCi(settings.ci, config.git), projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
     // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).
     const additionalInfo = text?.trim() || null
     await launchTurn(
@@ -1203,6 +1221,50 @@ export async function handlePrConflict(id: string, info: { baseBranch: string; h
     }
 }
 
+/**
+ * CI falho no PR (todas as verificações terminadas): aciona o agente para corrigir a branch do PR e
+ * fazer push — ou reexecutar a falha de infraestrutura — sem nova aprovação. Grava as falhas tratadas
+ * (`pr.ciFixKey`) e a contagem de tentativas ao iniciar o turno (na espera por vaga, ao ganhar a
+ * vaga); falha ao iniciar mantém a mesa elegível à próxima varredura.
+ */
+export async function handlePrCiFailure(id: string, info: { headBranch: string; headSha: string; failures: CiFailure[]; key: string; rerunAllowed: boolean; attempt: number }): Promise<boolean> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    const pr = doc.pr
+    if (!loaded.ci.fixCi || doc.deletionRequestedAt) return false
+    if (asStage(doc.stage) !== "pr_open" || !pr || pr.state !== "open") return false
+    if (isWorkbenchActive(id) || asRunState(doc.runState) === "running" || doc.pendingTurn) return false
+    await prepareHub(id)
+    const names = info.failures.map((failure) => failure.name).join(", ")
+    try {
+        const started = await launchOrQueue(
+            loaded,
+            "pr-ci-fix",
+            { stage: "fixing_ci", text: ciFixPrompt(config, contextOf(loaded), { number: pr.number, url: pr.url, headBranch: info.headBranch, headSha: info.headSha, rerunAllowed: info.rerunAllowed }, info.failures) },
+            {
+                userText: `CI falhou no PR #${pr.number} (${names}): corrigindo automaticamente.`,
+                extraSet: { "pr.ciFixKey": info.key, "pr.ciFixHeadSha": info.headSha, "pr.ciFixAttempts": info.attempt, "pr.ciFixLimitNotified": false },
+            },
+        )
+        if (started) centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: CI falhou (${names}) — correção automática iniciada`, { workbenchId: id })
+        await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: pr.url, ciFalhou: names, tentativa: info.attempt } })
+        return true
+    } catch (error) {
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O CI do PR #${pr.number} falhou, mas a correção não pôde começar (${errorText(error)}).` })
+        return false
+    }
+}
+
+/** Limite de correções de CI seguidas atingido: avisa uma vez (a mesa segue acompanhando o PR). */
+export async function handlePrCiLimit(id: string, { max }: { max: number }): Promise<void> {
+    const doc = await loadWorkbench(id)
+    if (doc.deletionRequestedAt || !doc.pr) return
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O CI do PR #${doc.pr.number} continua falhando e o limite de ${max} correção(ões) automática(s) foi atingido: corrija manualmente ou comente no PR com @opex para replanejar.` })
+    centralLogger(doc.centralId, doc.taskCode).warn(`PR #${doc.pr.number}: limite de correções de CI atingido`, { workbenchId: id })
+    await savePrCursors(id, { ciFixLimitNotified: true })
+}
+
 interface GithubPullMerge {
     merged: boolean
     merged_at: string | null
@@ -1327,8 +1389,10 @@ export async function handlePrReopened(id: string): Promise<void> {
 }
 
 /** Grava os cursores de acompanhamento do PR (maior id de revisão e de comentário já tratados). */
-export async function savePrCursors(id: string, cursors: { lastReviewId?: number; lastCommentId?: number; autoReviewReplans?: number }): Promise<void> {
-    const set: Record<string, number> = {}
+export async function savePrCursors(id: string, cursors: { lastReviewId?: number; lastCommentId?: number; autoReviewReplans?: number; ciFixAttempts?: number; ciFixLimitNotified?: boolean }): Promise<void> {
+    const set: Record<string, number | boolean> = {}
+    if (cursors.ciFixAttempts !== undefined) set["pr.ciFixAttempts"] = cursors.ciFixAttempts
+    if (cursors.ciFixLimitNotified !== undefined) set["pr.ciFixLimitNotified"] = cursors.ciFixLimitNotified
     if (cursors.lastReviewId !== undefined) set["pr.lastReviewId"] = cursors.lastReviewId
     if (cursors.lastCommentId !== undefined) set["pr.lastCommentId"] = cursors.lastCommentId
     if (cursors.autoReviewReplans !== undefined) set["pr.autoReviewReplans"] = cursors.autoReviewReplans

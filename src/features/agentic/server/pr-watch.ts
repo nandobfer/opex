@@ -1,11 +1,14 @@
 import { dbConnect } from "@/lib/db"
 import { AgenticCentral, AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { githubPaginate, githubRequest } from "@/features/github/client"
-import { parseCentralConfig, prMergeReady } from "../logic"
+import { parseCentralConfig, prMergeReady, resolveCentralCi } from "../logic"
+import { CI_CHECK_MERGE_STATES, ciFailureState, ciFixDecision, describeCiState, type CiResult, type GithubCheckRun, type GithubCommitStatus } from "../ci"
+import { DEFAULT_AGENTIC_CI, type AgenticCi } from "../schemas"
 import { formatPrFeedback } from "../prompts"
 import { centralLogger } from "./log"
 import { closeOrphanWorkPeriods } from "./timer-sync"
-import { handlePrAutoMerge, handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
+import { loadAgenticSettings } from "./settings"
+import { handlePrAutoMerge, handlePrCiFailure, handlePrCiLimit, handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
 import { loadPrReviewGate, type PrReviewStatus } from "@/features/pr-review/server/gate"
 import { startPrWatchReport } from "./pr-watch-report"
 import { loadPrWatchSchedule } from "./pr-watch-schedule"
@@ -15,8 +18,10 @@ import { isAutoReviewText } from "@/features/pr-review/logic"
  * Rotina "Acompanhar PRs do desenvolvimento agêntico" (Integrações › Crons): para cada mesa com PR
  * aberto, consulta o GitHub — merge conclui a mesa; comentário novo com `@opex` (na conversa, na
  * linha ou no corpo de uma revisão) ou revisão pedindo mudanças volta ao planejamento; merge
- * bloqueado por conflito aciona a resolução automática no próprio PR. Cada varredura de uma mesa vira
- * um bloco "Verificação do PR #N" na saída da mesa (`pr-watch-report.ts`).
+ * bloqueado por conflito aciona a resolução automática no próprio PR; CI falho (todas as verificações
+ * terminadas) aciona a correção automática, quando a central permite. Prioridade: feedback →
+ * conflito → CI → merge automático. Cada varredura de uma mesa vira um bloco "Verificação do PR #N"
+ * na saída da mesa (`pr-watch-report.ts`).
  */
 
 interface GithubRef {
@@ -144,12 +149,21 @@ export function describeReviewStatus(status: PrReviewStatus, headSha: string | n
 }
 
 /**
- * Verificações (CI) do PR em texto. Gancho da correção automática de CI: por ora só relata o que o
- * estado de merge do GitHub indica (`unstable` = verificações com falha ou pendentes).
+ * Verificações (CI) do PR em texto quando elas não são consultadas (sem indício de falha ou correção
+ * desligada): só relata o que o estado de merge do GitHub indica (`unstable` = com falha ou pendentes).
  */
 export function describeChecks(pull: Pick<GithubPull, "mergeable_state">): { text: string; level: "info" | "warn" } | null {
     if (pull.mergeable_state === "unstable") return { text: "Verificações (CI) com falha ou pendentes", level: "warn" }
     return null
+}
+
+/** Verificações do commit (check runs + status de commit) resumidas no estado do CI. */
+export async function fetchCiState(repo: string, sha: string): Promise<CiResult> {
+    const [checks, combined] = await Promise.all([
+        githubRequest<{ check_runs?: GithubCheckRun[] }>(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`),
+        githubRequest<{ statuses?: GithubCommitStatus[] }>(`/repos/${repo}/commits/${sha}/status`),
+    ])
+    return ciFailureState(checks.check_runs ?? [], combined.statuses ?? [])
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -159,7 +173,13 @@ export async function watchPullRequests(): Promise<string> {
     const closedOrphans = await closeOrphanWorkPeriods().catch(() => 0)
     const docs = await AgenticWorkbench.find({ stage: "pr_open", runState: { $ne: "running" }, pr: { $ne: null } }).lean()
     const centrals = docs.length ? await AgenticCentral.find({ _id: { $in: [...new Set(docs.map((doc) => doc.centralId))] } }).lean() : []
-    const autoMergeOf = new Map(centrals.map((central) => [String(central._id), parseCentralConfig(central.config).git.autoMerge]))
+    const globalCi = centrals.length ? (await loadAgenticSettings()).settings.ci : DEFAULT_AGENTIC_CI
+    const configOf = new Map(
+        centrals.map((central) => {
+            const git = parseCentralConfig(central.config).git
+            return [String(central._id), { autoMerge: git.autoMerge, ci: resolveCentralCi(globalCi, git) }] as const
+        }),
+    )
     const gate = await loadPrReviewGate()
     // A rotina já avançou o `nextRunAt` ao começar: é o horário da próxima verificação.
     const nextCheckAt = docs.length ? ((await loadPrWatchSchedule().catch(() => null))?.nextCheckAt ?? null) : null
@@ -167,6 +187,7 @@ export async function watchPullRequests(): Promise<string> {
     let replans = 0
     let conflicts = 0
     let autoMerges = 0
+    let ciFixes = 0
     let failures = 0
     for (const doc of docs) {
         const id = String(doc._id)
@@ -322,15 +343,53 @@ export async function watchPullRequests(): Promise<string> {
                 report.step("Sem conflito de merge", "success")
             }
 
-            // Verificações (CI): gancho da correção automática de CI.
-            const checks = describeChecks(pull)
-            if (checks) report.step(checks.text, checks.level)
+            // CI falho: só consulta as verificações quando o GitHub indica bloqueio (ou para zerar a contagem quando o CI volta a passar).
+            const ci: AgenticCi = configOf.get(doc.centralId)?.ci ?? DEFAULT_AGENTIC_CI
+            const attempts = pr.ciFixAttempts ?? 0
+            const ciSuspect = pull.mergeable === true && (CI_CHECK_MERGE_STATES as readonly string[]).includes(pull.mergeable_state ?? "")
+            if (headSha && ((ci.fixCi && ciSuspect) || attempts > 0)) {
+                let state: CiResult | null = null
+                try {
+                    state = await fetchCiState(repo, headSha)
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error)
+                    log.warn(`PR #${pr.number}: não foi possível consultar o CI (${message})`, { workbenchId: id })
+                    report.step(`Não foi possível consultar o CI: ${message}`, "warn")
+                }
+                if (state) {
+                    const described = describeCiState(state, headSha)
+                    report.step(described.text, described.level)
+                    if ((state.state === "passed" || state.state === "none") && attempts > 0) {
+                        await savePrCursors(id, { ciFixAttempts: 0, ciFixLimitNotified: false })
+                        report.step("CI sem falhas: a contagem de correções automáticas foi zerada", "success")
+                    }
+                }
+                if (state?.state === "failed") {
+                    const decision = ciFixDecision(pr, ci, headSha, state.failures)
+                    if (decision.action === "limit") {
+                        report.step(`Limite de ${ci.ciFixLimit ?? 0} correção(ões) automática(s) de CI atingido: corrija manualmente`, "warn")
+                        if (decision.notify) await handlePrCiLimit(id, { max: ci.ciFixLimit ?? 0 })
+                    } else if (decision.action === "fix") {
+                        report.step(`Corrigindo o CI automaticamente (tentativa ${decision.attempt}${ci.ciFixLimit !== null ? ` de ${ci.ciFixLimit}` : ""})`, "warn")
+                        await report.finish("action", "CI falhou → corrigindo automaticamente")
+                        log.warn(`PR #${pr.number}: CI falhou — corrigindo automaticamente`, { workbenchId: id })
+                        const started = await handlePrCiFailure(id, { headBranch: pull.head?.ref ?? doc.branch ?? "a branch do PR", headSha, failures: state.failures, key: decision.key, rerunAllowed: decision.rerunAllowed, attempt: decision.attempt })
+                        if (started) ciFixes++
+                        continue
+                    } else {
+                        report.step(decision.reason === "handled" ? "Estas falhas já foram tratadas: aguardando um novo push ou o resultado da reexecução" : "Correção automática de CI desligada na central")
+                    }
+                }
+            } else {
+                const checks = describeChecks(pull)
+                if (checks) report.step(ci.fixCi ? checks.text : `${checks.text} · correção automática desligada na central`, checks.level)
+            }
 
             // Merge automático (OPE-50): a central pode mandar o agente mergear o próprio PR.
             // Só quando o PR está pronto (sem conflito, sem bloqueios e fora do rascunho); a mesa segue
             // elegível enquanto o GitHub não liberar as verificações/regras.
             // Com a revisão automática ligada, espera a revisão do commit atual (na fila, revisando ou pedindo mudanças).
-            if (autoMergeOf.get(doc.centralId) === false) {
+            if (configOf.get(doc.centralId)?.autoMerge === false) {
                 report.step("Merge automático desligado na central")
             } else if (!prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft })) {
                 report.step(`Merge automático aguardando: ${mergeWaitReason(pull)}`)
@@ -350,5 +409,5 @@ export async function watchPullRequests(): Promise<string> {
             await report.fail(`Falha ao consultar o PR no GitHub: ${error instanceof Error ? error.message : String(error)}`)
         }
     }
-    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${autoMerges ? `; ${autoMerges} com merge automático iniciado` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
+    return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${ciFixes ? `; ${ciFixes} com CI em correção` : ""}${autoMerges ? `; ${autoMerges} com merge automático iniciado` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`
 }

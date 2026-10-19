@@ -38,9 +38,14 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### A — Corrigir CI falho (`fixing_ci`) — bc915ca
 
+> **Entregue na v2.61.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "CI falho". Decisão: além
+> da central, há **padrão global** (`AgenticSettings.ci`), herdado pelas centrais novas e pelas antigas
+> sem valor próprio (`git.inheritCi`, mesmo modelo das colunas globais da OPE-79); o limite é um
+> número opcional (`ciFixLimit`, vazio = sem limite).
+
 - Central (aba Git e PR): `git.fixCi` (padrão ligado) e `git.ciFixLimit` (opcional, 1–20; vazio =
-  sem limite), com `parseCentralConfig` preenchendo centrais antigas. Decisão em aberto: só por
-  central (sugerido) ou também padrão na configuração global da OPE-79.
+  sem limite), com `parseCentralConfig` preenchendo centrais antigas; também padrão na configuração
+  global da OPE-79.
 - `src/features/agentic/ci.ts` (puro): `ciFailureState` espera todas as verificações terminarem,
   considera a última execução de cada uma; falha = `failure`, `timed_out`, `startup_failure`,
   `action_required` e status `failure`/`error` (`cancelled`/`skipped` não contam);

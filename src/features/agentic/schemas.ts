@@ -45,11 +45,29 @@ export type AgenticColumns = z.infer<typeof agenticColumnsSchema>
 /** Padrão global das colunas: nada ligado (nenhuma fila e "não mover"). */
 export const DEFAULT_AGENTIC_COLUMNS: AgenticColumns = { queue: null, onStart: null, onPr: null, onDone: null }
 
-/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes e as colunas padrão. */
+/** Limite de correções de CI seguidas por PR: 1–20; `null` (campo vazio) = sem limite. */
+const ciFixLimitSchema = z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1, "Mínimo 1").max(20, "Máximo 20").nullable()
+
+/**
+ * Correção do CI falho do PR (OPE-81): padrão global da aba "Desenvolvimento agêntico", herdado pelas
+ * centrais que não personalizam (`CentralConfig.git.inheritCi`).
+ */
+export const agenticCiSchema = z.object({
+    /** CI falho no PR aberto: o agente corrige a branch do PR e faz push (ou reexecuta a falha de infraestrutura). */
+    fixCi: z.boolean(),
+    ciFixLimit: ciFixLimitSchema,
+})
+export type AgenticCi = z.infer<typeof agenticCiSchema>
+
+/** Padrão global da correção de CI: ligada e sem limite. */
+export const DEFAULT_AGENTIC_CI: AgenticCi = { fixCi: true, ciFixLimit: null }
+
+/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes, as colunas e a correção de CI padrão. */
 export const agenticSettingsSchema = z.object({
     enabled: z.boolean(),
     agents: z.object(agentsShape),
     columns: agenticColumnsSchema,
+    ci: agenticCiSchema,
 })
 export type AgenticSettings = z.infer<typeof agenticSettingsSchema>
 
@@ -63,16 +81,19 @@ export const DEFAULT_AGENTIC_SETTINGS: AgenticSettings = {
         fork: { ...EMPTY_AGENT, agent: "plan" },
     },
     columns: { ...DEFAULT_AGENTIC_COLUMNS },
+    ci: { ...DEFAULT_AGENTIC_CI },
 }
 
 /**
- * Configuração geral salva → completa: etapas ausentes (versões antigas) caem no padrão, e o agente
- * dos forks, quando ainda não foi configurado, herda o do planejamento.
+ * Configuração geral salva → completa: etapas ausentes (versões antigas) caem no padrão, o agente
+ * dos forks, quando ainda não foi configurado, herda o do planejamento, e a correção de CI ausente
+ * usa o padrão (ligada, sem limite).
  */
 export function withDefaultAgents(raw: unknown): unknown {
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<AgenticSettings>) : {}
     const saved = (typeof value.agents === "object" && value.agents !== null ? value.agents : {}) as Partial<AgenticSettings["agents"]>
-    return { ...DEFAULT_AGENTIC_SETTINGS, ...value, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, ...saved, fork: saved.fork ?? saved.planning ?? DEFAULT_AGENTIC_SETTINGS.agents.fork } }
+    const ci = typeof value.ci === "object" && value.ci !== null ? value.ci : {}
+    return { ...DEFAULT_AGENTIC_SETTINGS, ...value, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, ...saved, fork: saved.fork ?? saved.planning ?? DEFAULT_AGENTIC_SETTINGS.agents.fork }, ci: { ...DEFAULT_AGENTIC_CI, ...ci } }
 }
 
 const absolutePath = z
@@ -112,6 +133,12 @@ export const centralConfigSchema = z.object({
         prDraft: z.boolean(),
         /** Merge automático do PR pelo agente (merge commit + exclusão da branch remota); não combina com PR rascunho. */
         autoMerge: z.boolean(),
+        /** Correção de CI: `true` usa o padrão global da aba (`AgenticSettings.ci`); `false` personaliza nesta central. */
+        inheritCi: z.boolean(),
+        /** CI falho no PR aberto: o agente corrige a branch do PR e faz push (vale quando a central personaliza). */
+        fixCi: z.boolean(),
+        /** Limite de correções de CI seguidas por PR (`null` = sem limite; vale quando a central personaliza). */
+        ciFixLimit: ciFixLimitSchema,
         prReviewers: nameList,
         prLabels: nameList,
         setupCommands: optionalText(2000),
@@ -196,6 +223,10 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             prTitlePattern: "{title} ({code})",
             prDraft: false,
             autoMerge: false,
+            // Central nova herda a correção de CI padrão (ligada); a personalização é explícita.
+            inheritCi: true,
+            fixCi: true,
+            ciFixLimit: null,
             prReviewers: [],
             prLabels: [],
             setupCommands: "",
@@ -277,3 +308,5 @@ export const buildResultSchema = z.object({ ok: z.boolean(), error: z.string().o
 export const prResultSchema = z.object({ url: z.string().url(), number: z.number().int().positive().optional() })
 /** Bloco JSON final do agente de resolução de conflitos: `ok` confirma o push feito no próprio PR. */
 export const conflictResultSchema = z.object({ ok: z.boolean(), error: z.string().optional(), sha: z.string().regex(/^[0-9a-f]{7,40}$/i, "SHA inválido").optional() })
+/** Resultado da correção de CI: push da correção (`sha`) ou só a reexecução das falhas (`rerun`). */
+export const ciFixResultSchema = conflictResultSchema.extend({ rerun: z.boolean().optional() })

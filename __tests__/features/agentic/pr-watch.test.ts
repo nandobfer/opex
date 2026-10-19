@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   feedback: vi.fn(),
   conflict: vi.fn(),
   autoMerge: vi.fn(),
+  ciFix: vi.fn(async () => true),
+  ciLimit: vi.fn(),
+  globalCi: { fixCi: true, ciFixLimit: null as number | null },
   closed: vi.fn(),
   reopened: vi.fn(),
   saveCursors: vi.fn(),
@@ -27,10 +30,13 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   handlePrFeedback: mocks.feedback,
   handlePrConflict: mocks.conflict,
   handlePrAutoMerge: mocks.autoMerge,
+  handlePrCiFailure: mocks.ciFix,
+  handlePrCiLimit: mocks.ciLimit,
   handlePrClosed: mocks.closed,
   handlePrReopened: mocks.reopened,
   savePrCursors: mocks.saveCursors,
 }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: async () => ({ settings: { ci: mocks.globalCi } }) }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
 vi.mock('@/features/pr-review/server/gate', () => ({ loadPrReviewGate: async () => ({ replan: mocks.replan, blocksAutoMerge: mocks.blocksAutoMerge, reviewStatus: mocks.reviewStatus }) }))
 vi.mock('@/features/agentic/server/pr-watch-schedule', () => ({ loadPrWatchSchedule: async () => ({ enabled: true, nextCheckAt: '2026-10-16T12:02:00.000Z', running: true }) }))
@@ -91,6 +97,8 @@ beforeEach(() => {
   mocks.blocksAutoMerge.mockResolvedValue(false)
   mocks.reviewStatus.mockResolvedValue({ enabled: false })
   mocks.centrals.mockReturnValue([])
+  mocks.ciFix.mockResolvedValue(true)
+  mocks.globalCi = { fixCi: true, ciFixLimit: null }
   mocks.reports.length = 0
   respond()
 })
@@ -432,10 +440,113 @@ describe('acompanhamento ao vivo (relato da verificação)', () => {
     expect(describeReviewStatus({ enabled: true, state: 'queued', verdict: null }, null)).toBe('Revisão automática: na fila')
   })
 
-  it('gancho de CI: PR instável relata as verificações com falha ou pendentes', async () => {
+  it('correção de CI desligada: PR instável só relata as verificações com falha ou pendentes', async () => {
     expect(describeChecks({ mergeable_state: 'clean' })).toBeNull()
+    mocks.centrals.mockReturnValue([central({ inheritCi: false, fixCi: false, ciFixLimit: null })])
     mocks.request.mockResolvedValue({ ...ready, mergeable_state: 'unstable' })
     await watchPullRequests()
-    expect(mocks.reports[0]!.steps).toContainEqual({ text: 'Verificações (CI) com falha ou pendentes', level: 'warn' })
+    expect(mocks.reports[0]!.steps).toContainEqual({ text: 'Verificações (CI) com falha ou pendentes · correção automática desligada na central', level: 'warn' })
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.stringContaining('/check-runs'))
+  })
+})
+
+describe('CI falho (correção automática)', () => {
+  const central = (git: Record<string, unknown>) => ({ _id: 'c1', config: { git } })
+  const unstable = { state: 'open', merged: false, mergeable: true, mergeable_state: 'unstable', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1234567890' } }
+  const failed = { id: 31, name: 'test', status: 'completed', conclusion: 'failure', details_url: 'https://github.com/org/app/actions/runs/900/job/901' }
+  /** Roteia `githubRequest`: PR, check runs e status do commit. */
+  const github = (pull: Record<string, unknown>, checkRuns: unknown[] = [failed], statuses: unknown[] = []) =>
+    mocks.request.mockImplementation(async (path: string) => {
+      if (path.includes('/check-runs')) return { check_runs: checkRuns }
+      if (path.endsWith('/status')) return { statuses }
+      return pull
+    })
+
+  it('CI falho com tudo terminado aciona a correção (1ª tentativa pode reexecutar)', async () => {
+    github(unstable)
+    const summary = await watchPullRequests()
+    expect(mocks.request).toHaveBeenCalledWith('/repos/org/app/commits/h1234567890/check-runs?per_page=100')
+    expect(mocks.request).toHaveBeenCalledWith('/repos/org/app/commits/h1234567890/status')
+    expect(mocks.ciFix).toHaveBeenCalledWith('w1', expect.objectContaining({ headSha: 'h1234567890', headBranch: 'feat/x', key: 'h1234567890:check:31', rerunAllowed: true, attempt: 1 }))
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'CI falhou → corrigindo automaticamente' })
+    expect(summary).toContain('1 com CI em correção')
+    expect(mocks.reports[0]!.steps).toContainEqual({ text: 'CI falhou no commit h123456: test', level: 'warn' })
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+
+  it('verificações em andamento: espera todas terminarem', async () => {
+    github(unstable, [failed, { id: 32, name: 'lint', status: 'in_progress', conclusion: null }])
+    await watchPullRequests()
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+  })
+
+  it('só consulta o CI com mergeable true e estado unstable/blocked', async () => {
+    github({ ...unstable, mergeable_state: 'clean' })
+    await watchPullRequests()
+    github({ ...unstable, mergeable: null })
+    await watchPullRequests()
+    expect(mocks.request).not.toHaveBeenCalledWith(expect.stringContaining('/check-runs'))
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+  })
+
+  it('mesmas falhas já tratadas não repetem; mesmo commit não pode reexecutar de novo', async () => {
+    mocks.find.mockResolvedValue([workbench({ ciFixKey: 'h1234567890:check:31', ciFixHeadSha: 'h1234567890', ciFixAttempts: 1 })])
+    github(unstable)
+    await watchPullRequests()
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+
+    // Reexecução falhou de novo (id novo) no mesmo commit: corrige sem reexecutar.
+    github(unstable, [{ ...failed, id: 40 }])
+    await watchPullRequests()
+    expect(mocks.ciFix).toHaveBeenCalledWith('w1', expect.objectContaining({ key: 'h1234567890:check:40', rerunAllowed: false, attempt: 2 }))
+  })
+
+  it('limite da central atingido avisa uma vez e não corrige', async () => {
+    mocks.centrals.mockReturnValue([central({ inheritCi: false, fixCi: true, ciFixLimit: 2 })])
+    mocks.find.mockResolvedValue([workbench({ ciFixKey: 'old', ciFixAttempts: 2 })])
+    github(unstable)
+    await watchPullRequests()
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+    expect(mocks.ciLimit).toHaveBeenCalledWith('w1', { max: 2 })
+
+    mocks.find.mockResolvedValue([workbench({ ciFixKey: 'old', ciFixAttempts: 2, ciFixLimitNotified: true })])
+    await watchPullRequests()
+    expect(mocks.ciLimit).toHaveBeenCalledTimes(1)
+  })
+
+  it('central sem valor próprio herda o padrão global (desligado = não corrige)', async () => {
+    mocks.centrals.mockReturnValue([central({ autoMerge: false })])
+    mocks.globalCi = { fixCi: false, ciFixLimit: null }
+    github(unstable)
+    await watchPullRequests()
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+  })
+
+  it('CI verde zera a contagem de correções', async () => {
+    mocks.find.mockResolvedValue([workbench({ ciFixKey: 'old', ciFixAttempts: 2, ciFixLimitNotified: true })])
+    github({ ...unstable, mergeable_state: 'clean' }, [{ ...failed, conclusion: 'success' }])
+    await watchPullRequests()
+    expect(mocks.saveCursors).toHaveBeenCalledWith('w1', { ciFixAttempts: 0, ciFixLimitNotified: false })
+  })
+
+  it('prioridade: feedback e conflito vêm antes do CI', async () => {
+    github(unstable)
+    respond({ issues: [{ id: 25, body: '@opex ajuste', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+
+    respond()
+    github({ ...unstable, mergeable: false, mergeable_state: 'dirty' })
+    await watchPullRequests()
+    expect(mocks.conflict).toHaveBeenCalledTimes(1)
+    expect(mocks.ciFix).not.toHaveBeenCalled()
+  })
+
+  it('aguardando vaga: não corrige o CI', async () => {
+    mocks.find.mockResolvedValue([{ ...workbench(), pendingTurn: { action: 'pr-conflict' } }])
+    github(unstable)
+    await watchPullRequests()
+    expect(mocks.ciFix).not.toHaveBeenCalled()
   })
 })

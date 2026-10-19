@@ -1,3 +1,4 @@
+import type { CiFailure } from "./ci"
 import type { AgentRole } from "./constants"
 import { backupExistsCommand, shellQuote } from "./preview-backup"
 import type { CentralConfig } from "./schemas"
@@ -229,6 +230,49 @@ export function conflictPrompt(config: CentralConfig, ctx: WorkbenchContext, pr:
         `- Comente um resumo da resolução no PR: \`gh pr comment ${pr.number} --body "..."\`. NÃO mencione @opex no comentário.`,
         "- NÃO abra outro Pull Request, NÃO faça merge do PR, NÃO use force-push e NÃO descarte alterações locais.",
         `- ${JSON_RULE} Formato: {"ok": true, "sha": "<sha publicado>"} quando o push concluir a resolução, ou {"ok": false, "error": "motivo"}.`,
+    ]
+        .filter(Boolean)
+        .join("\n") + extra(config, "pr")
+}
+
+/** Marcador oculto dos comentários da correção de CI no PR. */
+export const CI_FIX_MARKER = "<!-- opex:ci-fix -->"
+
+export function ciFixPrompt(
+    config: CentralConfig,
+    ctx: WorkbenchContext,
+    pr: { number: number; url: string; headBranch: string; headSha: string; rerunAllowed: boolean },
+    failures: CiFailure[],
+): string {
+    const validate = config.git.validateCommands.trim()
+    const list = failures
+        .map((failure) => {
+            const ids = failure.runId ? ` — run ${failure.runId}${failure.jobId ? `, job ${failure.jobId}` : ""}` : ""
+            const link = failure.url ? ` (${failure.url})` : ""
+            const summary = failure.summary ? `\n  ${failure.summary.replace(/\n/g, "\n  ")}` : ""
+            return `- **${failure.name}**${ids}${link}${summary}`
+        })
+        .join("\n")
+    return [
+        `Você agora é o agente de CORREÇÃO DE CI. O CI do PR #${pr.number} (${pr.url}) FALHOU no commit ${pr.headSha.slice(0, 12)} da branch ${pr.headBranch}. Corrija e atualize o PR — sem nova aprovação do usuário.`,
+        "",
+        "## Verificações que falharam",
+        list,
+        "",
+        "## Como corrigir",
+        `- Trabalhe no worktree ${ctx.worktreePath}, na branch ${ctx.branch} (a branch do PR). Confirme o diretório atual e, se não for o worktree, ajuste antes de continuar.`,
+        `- \`git fetch origin\` e alinhe a branch local com \`origin/${pr.headBranch}\` (\`git pull --ff-only\`), sem descartar alterações locais.`,
+        "- Leia os logs das falhas: `gh run view <run> --log-failed` (ou `gh run view --job <job> --log-failed`).",
+        "- Reproduza localmente rodando SÓ o que falhou (os testes, o lint ou o typecheck apontados), nunca a suíte completa.",
+        "- Corrija o mínimo necessário, preservando o comportamento da tarefa e as regras do projeto (AGENTS.md etc.). NÃO desative, pule nem apague testes ou verificações para o CI passar.",
+        validate ? `- Antes de publicar, rode a validação e corrija o que falhar:\n\`\`\`sh\n${validate}\n\`\`\`` : "",
+        `- Faça commit seguindo a convenção do projeto (mantenha o código ${ctx.code} no título) e \`git push\` na branch do PR.`,
+        pr.rerunAllowed
+            ? "- Se a falha NÃO for do código (infraestrutura do runner, rede, serviço externo fora do ar, tempo esgotado sem relação com a mudança), não altere arquivos: reexecute só as falhas com `gh run rerun <run> --failed` e informe `\"rerun\": true`."
+            : "- Estas falhas já foram reexecutadas neste commit: NÃO reexecute de novo. Corrija o código ou, se a causa estiver fora do repositório, pare e informe o motivo.",
+        `- Comente um resumo no PR (causa e correção, ou a reexecução), começando o corpo com o marcador ${CI_FIX_MARKER}: \`gh pr comment ${pr.number} --body "..."\`. NÃO mencione @opex no comentário.`,
+        "- NÃO abra outro Pull Request, NÃO faça merge do PR, NÃO use force-push nem rebase.",
+        `- ${JSON_RULE} Formato: {"ok": true, "sha": "<sha publicado>"} quando o push concluir a correção, {"ok": true, "rerun": true} quando só reexecutou, ou {"ok": false, "error": "motivo"}.`,
     ]
         .filter(Boolean)
         .join("\n") + extra(config, "pr")

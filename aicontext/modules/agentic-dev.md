@@ -21,13 +21,14 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   variante) de cada etapa — **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
   limpeza) e **Pull Request** — e as **colunas globais** (`columns`, OPE-79): a coluna da **fila** e
   os destinos da **movimentação** (ao abrir a mesa, ao abrir o PR e ao concluir), todos "nenhuma/não
-  mover" por padrão. Agentes/modelos são conferidos no OpenCode ao salvar (com a feature ativa, exige
+  mover" por padrão — e a **correção de CI padrão** (`ci`, OPE-81: `fixCi` ligada e `ciFixLimit`
+  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`). Agentes/modelos são conferidos no OpenCode ao salvar (com a feature ativa, exige
   o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
     cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
-    **Movimentação das colunas** —, com os botões **Salvar**/**Desfazer** (mesma configuração geral
+    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81), com os botões **Salvar**/**Desfazer** (mesma configuração geral
     acima). Salvar reavalia as filas das centrais que herdam a coluna global.
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
@@ -68,7 +69,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 |---|---|
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
-| Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
+| Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
 | Colunas e conclusão | **Fila** e **Movimentação** das colunas, cada uma herdando o padrão global da aba ou **personalizada** nesta central (OPE-79); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
@@ -284,6 +285,7 @@ pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → 
          ├─ revisão "pediu mudanças" com texto → planning (automático)
          ├─ revisão sem texto → changes_requested (usuário descreve) → planning
          ├─ merge bloqueado por conflito → resolving_conflicts (automático) → pr_open
+         ├─ CI falho (todas as verificações terminadas) → fixing_ci (automático) → pr_open
          ├─ merge automático (se ligado na central) → merging_pr → deleting_pr_branch → finishing (limpeza) → done
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
@@ -348,10 +350,12 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Acompanhamento do PR ao vivo** (`pr-watch-report.ts`): cada varredura de uma mesa com PR aparece
   na **Saída da IA** como um bloco **"Verificação do PR #N"** com os passos e o horário de cada um
   (consulta ao GitHub, estado de merge, revisões/comentários novos e se pedem mudança, estado da
-  revisão automática do commit atual — só o estado, via `gate.reviewStatus` —, conflito, verificações
-  de CI (`describeChecks`: por ora só relata `mergeable_state: unstable`; gancho da correção de CI),
-  merge automático e o motivo da espera, mesa aguardando vaga) e o desfecho: `idle` ("Nada a fazer",
-  "Aguardando vaga", PR que continua fechado), `action` (pedido de mudança, conflito, merge automático,
+  revisão automática do commit atual — só o estado, via `gate.reviewStatus` —, conflito, CI
+  (`describeCiState` quando as verificações são consultadas: nenhuma, em andamento, sem falha ou quais
+  falharam; limite atingido, falhas já tratadas ou correção desligada; sem consulta, `describeChecks`
+  só relata `mergeable_state: unstable`), merge automático e o motivo da espera, mesa aguardando vaga)
+  e o desfecho: `idle` ("Nada a fazer", "Aguardando vaga", PR que continua fechado), `action` (pedido
+  de mudança, conflito, correção de CI, merge automático,
   merge, fechamento, reabertura) ou `error`.
   - Eventos: `pr-watch-step` (transitório, só ao vivo no hub) e `pr-watch` (a verificação inteira,
     gravada no log da mesa). O relato é fechado **antes** de acionar a ação (o turno aparece depois
@@ -379,6 +383,31 @@ done → Reabrir mesa (texto ao planejador) → planning
   planejamento e o conflito fica para a próxima. Se a resolução não puder começar (OpenCode
   indisponível, limite de mesas…), a mesa permanece elegível e o motivo vira aviso; falha/interrupção
   do turno deixam **Tentar novamente** e **Voltar ao planejamento** na barra de ações.
+- **CI falho (OPE-81)**: com a correção ligada (efetiva da central: herdada do padrão global ou
+  personalizada), a rotina consulta as verificações do commit atual do PR
+  (`commits/{sha}/check-runs` + `commits/{sha}/status`, `fetchCiState`) só quando o GitHub indica
+  bloqueio (`mergeable: true` e `mergeable_state` `unstable`/`blocked`) — ou, havendo tentativas
+  contadas, para zerar a contagem. Regras puras em `src/features/agentic/ci.ts`: `ciFailureState`
+  **espera todas** as verificações terminarem, considera a **última execução** de cada check (por nome)
+  e conta como falha `failure`, `timed_out`, `startup_failure`, `action_required` e os status
+  `failure`/`error` (`cancelled`/`skipped`/`neutral` não contam). `ciFixDecision` decide:
+  - **corrigir**: etapa **`fixing_ci`** (agente da etapa **Pull Request**, papel de modelo `pr`,
+    sem aprovação; ocupa vaga como trabalho ativo e respeita a espera por vaga — ação
+    `pr-ci-fix`). O prompt (`ciFixPrompt`) lista as verificações (run/job do Actions, link e resumo)
+    e manda alinhar a branch com `origin/<branch>` (`git pull --ff-only`), ler os logs
+    (`gh run view <run> --log-failed`), reproduzir só o que falhou, corrigir o **mínimo** (nunca
+    desativar/pular testes), rodar a validação, commitar e `git push` (nunca force-push/rebase) e
+    comentar no PR com o marcador `<!-- opex:ci-fix -->` (sem `@opex`). Falha de **infraestrutura**
+    pode só ser reexecutada (`gh run rerun <run> --failed`, resposta `{"ok": true, "rerun": true}`),
+    **apenas na 1ª tentativa daquele commit** (`pr.ciFixHeadSha`).
+  - **não repetir**: o conjunto tratado fica em `pr.ciFixKey` (`sha:ids` das verificações); uma
+    reexecução gera ids novos e libera outra tentativa (já sem reexecução).
+  - **limite** (`ciFixLimit`): `pr.ciFixAttempts` conta as correções seguidas e **zera quando o CI
+    passa**; atingido o limite, a mesa avisa **uma vez** (`pr.ciFixLimitNotified`) e para de tentar.
+  Concluído, volta a `pr_open`: com push a prévia aprovada deixa de valer (`previewHealthy: false`);
+  só reexecução não a invalida. Falha/interrupção deixam **Tentar novamente**/**Voltar ao
+  planejamento**. Prioridade na varredura: **feedback → conflito → CI → merge automático**. Auditoria
+  ao iniciar e ao concluir; log da central; a barra mostra o aviso da etapa com **Parar**.
 - **Merge automático (OPE-50)**: opção **"Merge automático"** nas configurações da central (aba Git e PR, `git.autoMerge`, padrão **desligada**; campos antigos caem nela pelo `parseCentralConfig`). Não combina com **PR rascunho** (o schema recusa as duas ligadas — `centralConfigSchema`, mesma regra na tela e na API). Com a opção ligada, a rotina `agentic-pr-watch` mergeia o **PR do próprio agente** assim que ele fica pronto no GitHub (`prMergeReady`: `mergeable: true`, `mergeable_state` `clean`/`behind`/`has_hooks` e fora do rascunho), na etapa **`merging_pr`** (agente da etapa **Pull Request**), sem nova aprovação. O prompt exige **merge commit** (`gh pr merge --merge`), proíbe `--admin`/`--auto`/squash/rebase/force-push e manda parar se o repositório recusar por verificações/revisões/regras (as proteções nunca são contornadas). O **bloco JSON do agente não basta**: o merge é confirmado no GitHub (`merged` + `merge_commit_sha`) antes de concluir. Confirmado o merge, o agente apaga a **branch remota de origem** na etapa **`deleting_pr_branch`** (`git push origin --delete <branch>`; branch já ausente conta como sucesso) — só quando a branch do PR é a esperada pela mesa; se divergir, a exclusão é cancelada com aviso. A exclusão remota é um passo próprio, independente de **"apagar a branch local"** da limpeza (`cleanup.deleteBranch`). Depois vem a **mesma conclusão** do merge manual: tarefa para a coluna "Ao concluir" (fecha a issue pelo vínculo), auditoria, limpeza e exclusão da sessão. Ligar a opção vale também para os **PRs já abertos** pelas mesas da central (verificados a cada varredura). Falha/interrupção em `merging_pr`/`deleting_pr_branch` deixa a mesa em **Tentar novamente**/**Reconectar** (sem "Voltar ao planejamento") e a mesa **não** fica em `pr_open`, então a varredura não repete a operação sozinha.
 - **Conclusão (merge)**: a tarefa vai para a coluna configurada em "Ao concluir" (se houver) — que
   é a coluna de conclusão do vínculo, então a issue é **fechada** pela sincronização do serviço de
@@ -540,7 +569,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   | Planejando, Plano pronto, Mudanças pedidas no PR | Plano (papel Planejamento) |
   | Implementando | Implementação |
   | Na fila do build, Subindo a prévia, Prévia pronta | Prévia (papel Build e ambiente) |
-  | Abrindo o PR, PR aberto, Resolvendo conflitos, Mergeando o PR, Excluindo a branch remota | Pull Request |
+  | Abrindo o PR, PR aberto, Resolvendo conflitos, Corrigindo o CI, Mergeando o PR, Excluindo a branch remota | Pull Request |
   | Concluindo, Concluída | seletor oculto |
 
   Com falha, vale a etapa em que a mesa parou. "Mudanças pedidas" troca o do Plano (o turno seguinte
@@ -631,7 +660,9 @@ releitura das pendências no buraco do SSE —, o ciclo automático de reconexã
 `pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
 `forks-model`, `model-routes`, `ModelOverridePicker`), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
-(`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia
+(`workflow-pr-conflicts`), CI falho do PR (`ci`, `workflow-pr-ci`, prioridades e limite em
+`pr-watch`, `ciFixPrompt` em `prompts`, padrão global/central em `logic`, `git-section` e
+`agentic-settings-tabs`), merge automático do PR (`pr-automation`), backup da prévia
 (`preview-backup` e `workflow-preview-backup`, com o backup **ligado e desligado** — OPE-72),
 aba Ambiente do formulário da central (`environment-section`, com o toggle do backup e o switch de
 **Publicar prévia** e ocultar os campos do ambiente — OPE-79), fila e movimentação globais/por central

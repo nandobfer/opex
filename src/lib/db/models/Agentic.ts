@@ -66,6 +66,14 @@ export interface IWorkbenchPr {
     conflictHeadSha: string | null
     /** Replanejamentos causados pela revisão automática (aba "Revisão de PR"; limite opcional). */
     autoReviewReplans?: number
+    /** SHA da branch do PR na última correção de CI iniciada (no mesmo commit, só a primeira pode reexecutar). */
+    ciFixHeadSha?: string | null
+    /** Falhas tratadas na última correção (`sha:ids das verificações`): o mesmo conjunto não é tratado de novo; uma reexecução gera ids novos. */
+    ciFixKey?: string | null
+    /** Correções de CI seguidas (zera quando o CI do PR fica verde); limite opcional na central. */
+    ciFixAttempts?: number
+    /** Aviso de limite de correções de CI já dado para a sequência atual. */
+    ciFixLimitNotified?: boolean
 }
 
 /** Retomada de uma mesa (etapa isenta ou concluída) aguardando vaga na central; FIFO por `queuedAt`. */

@@ -110,12 +110,17 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                 )}
                 {!slotQueue && workbench.stage === "pr_open" && workbench.runState === "idle" && (
                     <motion.p key="watching" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; merge conclui a mesa e move a tarefa para Validação.
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Acompanhando o PR a cada 2 minutos: um comentário com @opex ou um pedido de mudanças volta ao planejamento; CI falho é corrigido pelo agente (quando a central permite); merge conclui a mesa e move a tarefa para Validação.
                     </motion.p>
                 )}
                 {workbench.stage === "resolving_conflicts" && workbench.runState === "running" && (
                     <motion.p key="conflicts" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
                         <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O PR está com o merge bloqueado por conflito: o agente está integrando a branch de destino, resolvendo os conflitos e atualizando o PR. Você pode parar a qualquer momento.
+                    </motion.p>
+                )}
+                {workbench.stage === "fixing_ci" && workbench.runState === "running" && (
+                    <motion.p key="fixing-ci" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> O CI do PR falhou: o agente está lendo os logs, corrigindo a branch do PR e enviando a correção (push). Você pode parar a qualquer momento.
                     </motion.p>
                 )}
                 {workbench.stage === "merging_pr" && workbench.runState === "running" && (
