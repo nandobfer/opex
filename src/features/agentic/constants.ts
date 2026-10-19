@@ -130,7 +130,7 @@ export const AGENTIC_INCLUDE_LABELS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Ciclo de vida de um fork: `active` (conversando), `closed` (encerrado: retomar, integrar ou
+ * Ciclo de vida de um fork: `active` (conversando), `closed` (conversa pausada: retomar, integrar ou
  * descartar), `integrating` (resumo em revisão), `integrated` (histórico somente leitura) e
  * `concluded` (finalizado junto com a mesa; histórico somente leitura).
  */
@@ -139,7 +139,7 @@ export type ForkStatus = (typeof FORK_STATUSES)[number]
 
 export const FORK_STATUS_LABELS: Record<ForkStatus, string> = {
     active: "Ativo",
-    closed: "Encerrado",
+    closed: "Pausado",
     integrating: "Integrando",
     integrated: "Integrado",
     concluded: "Concluído",

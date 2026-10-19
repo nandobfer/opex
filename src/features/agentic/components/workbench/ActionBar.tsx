@@ -173,6 +173,22 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
 
             {!composer && !forking && (
                 <div className="flex flex-wrap justify-end gap-2 max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
+                    {/* Abrir em nova guia (prévia) é sempre o primeiro da linha. */}
+                    {actions.includes("open-preview") && (
+                        <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
+                            <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
+                                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                                <span className="max-md:hidden">Abrir em nova guia</span>
+                            </a>
+                        </Button>
+                    )}
+                    {workbench.pr && (
+                        <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
+                            <a href={workbench.pr.url} target="_blank" rel="noreferrer noopener">
+                                <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Ver PR #{workbench.pr.number}
+                            </a>
+                        </Button>
+                    )}
                     <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={Boolean(workbench.deletionRequestedAt)} onClick={() => setForking(true)}>
                         <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
                     </Button>
@@ -188,15 +204,6 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                             )
                         }
                         switch (action) {
-                            case "open-preview":
-                                return (
-                                    <Button key={action} asChild variant="outline" size="sm" className={ACTION_BUTTON}>
-                                        <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
-                                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                                            <span className="max-md:hidden">Abrir em nova guia</span>
-                                        </a>
-                                    </Button>
-                                )
                             case "implement":
                                 return (
                                     <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>

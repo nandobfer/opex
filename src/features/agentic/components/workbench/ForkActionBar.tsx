@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Combine, GitFork, Loader2, MessageSquareReply, RefreshCw, Send, Square, SquareCheck, Trash2 } from "lucide-react"
+import { Combine, GitFork, Loader2, MessageSquareReply, Pause, RefreshCw, Send, Square, Trash2 } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -21,10 +21,11 @@ import type { ForkDto } from "../../types"
 import { ForkComposer } from "./ForkComposer"
 
 /**
- * Conversa e ciclo de vida do fork: enviar, encerrar, parar, tentar de novo, retomar, integrar,
- * descartar e **Abrir fork** a partir deste fork (fork de fork, com o fork em aberto).
+ * Conversa e ciclo de vida do fork: enviar, pausar a conversa, parar, tentar de novo, retomar, integrar,
+ * descartar e **Abrir fork** a partir deste fork (fork de fork, com o fork em aberto). `extra` entra
+ * na linha de botões depois do Abrir fork (ex.: os botões da integração).
  */
-export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId: string; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void }) {
+export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }: { workbenchId: string; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void; extra?: ReactNode }) {
     const mutation = useForkAction(workbenchId, fork)
     const discard = useDiscardFork(workbenchId)
     const [text, setText] = useState("")
@@ -33,7 +34,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId
     const actions = forkActions(fork.status, fork.runState, Boolean(fork.summary)).filter((action) => !["apply", "revise-summary", "cancel-integration"].includes(action))
     const canFork = canOpenChildFork(fork.status)
     const pending = mutation.isPending || discard.isPending
-    if (!actions.length && !canFork) return null
+    if (!actions.length && !canFork && !extra) return null
     const send = () => mutation.mutate({ action: "send", text: text.trim() }, { onSuccess: () => setText("") })
 
     if (forking)
@@ -67,7 +68,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId
                 )}
                 {fork.status === "closed" && (
                     <motion.p key="fork-closed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs text-muted-foreground">
-                        Fork encerrado: retome a conversa, integre o que foi levantado à mesa ou descarte o fork.
+                        Conversa pausada: retome a conversa, integre o que foi levantado à mesa ou descarte o fork.
                     </motion.p>
                 )}
             </AnimatePresence>
@@ -77,6 +78,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId
                         <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
                     </Button>
                 )}
+                {extra}
                 {actions.map((action) => {
                     switch (action) {
                         case "send":
@@ -88,7 +90,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId
                         case "close":
                             return (
                                 <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => mutation.mutate({ action: "close" })}>
-                                    <SquareCheck className="h-3.5 w-3.5" aria-hidden /> Encerrar fork
+                                    <Pause className="h-3.5 w-3.5" aria-hidden /> Pausar conversa
                                 </Button>
                             )
                         case "interrupt":
@@ -134,7 +136,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened }: { workbenchId
                         <AlertDialogDescription>
                             {confirm === "discard"
                                 ? "A conversa do fork, a saída e a sessão do OpenCode são apagadas e o fork fica inacessível. Esta ação não pode ser desfeita."
-                                : "A resposta em andamento é interrompida. Depois você pode tentar de novo ou encerrar o fork."}
+                                : "A resposta em andamento é interrompida. Depois você pode tentar de novo ou pausar a conversa."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

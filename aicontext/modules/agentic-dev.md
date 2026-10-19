@@ -326,8 +326,10 @@ done → Reabrir mesa (texto ao planejador) → planning
   (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
-  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia**,
-  **Solicitar correção**, **Aprovar e abrir PR**. No **celular** as ações da etapa ficam na **mesma
+  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir em nova guia** (sempre o
+  primeiro botão da linha, antes de Ver PR e Abrir fork), **Solicitar correção**, **Aprovar e abrir
+  PR**. Com PR registrado (qualquer etapa, inclusive executando e concluída), a barra mostra antes do
+  **Abrir fork** o atalho **Ver PR #N** (ícone de PR), que abre o PR em nova guia. No **celular** as ações da etapa ficam na **mesma
   linha** (sem quebrar): **Abrir em nova guia** só com o ícone e as demais com rótulo compacto
   (**Correção**, **Aprovar PR**…), preservando o nome acessível completo; se não couber, a barra rola
   na horizontal. Assim a saída do agente ganha altura de leitura.
@@ -444,12 +446,24 @@ done → Reabrir mesa (texto ao planejador) → planning
 - **Fork de fork** copia a sessão do pai, sem limite de profundidade; seletor em árvore e atalho para
   o pai. Pai descartado é identificado sem perder os filhos. Filhos também integram no pai, além
   dos demais destinos disponíveis na mesa.
-- Ciclo: conversar, parar, tentar novamente, encerrar, retomar, descartar ou integrar. Integração
-  consolida resumo ajustável; usuário escolhe **Contexto**, **Planejador**, **Reabertura** ou **Pai**
-  conforme estado/sessão. Resumo é adicional, nunca substitui o conteúdo original.
-- **Integrar a conversa** ocupa a área de leitura do fork: cabeçalho e ações separados da rolagem,
-  resumo com rolagem própria e quebra de conteúdo longo, destinos responsivos, motivos de bloqueio
-  visíveis e ajuste em largura total. Reabertura exige confirmação. Cancelar restaura a conversa.
+- Ciclo: conversar, parar, tentar novamente, **pausar a conversa**, retomar, descartar ou integrar.
+  Integração consolida resumo ajustável; usuário escolhe **Contexto**, **Planejador**, **Reabertura**
+  ou **Pai** conforme estado/sessão. Resumo é adicional, nunca substitui o conteúdo original.
+- **Pausar conversa** (status `closed`, rótulo **"Pausado"** no selo e no seletor) é instantâneo e
+  reversível: só libera **Retomar conversa**, **Integrar fork** e **Descartar fork**. A barra do fork
+  avisa "Conversa pausada: retome a conversa, integre o que foi levantado à mesa ou descarte o fork.";
+  a saída registra "Conversa pausada: retome, integre ou descarte o fork." e, ao retomar, "Conversa
+  retomada." O fim real do fork é Integrado, Concluído ou Descartado.
+- **Uma única área rolável** usa toda a altura do fork: a saída da conversa e, no fim dela (prop
+  `footer` da `Timeline`, com transição Framer Motion), o bloco do estado — **Integrar a conversa ·
+  Fork N** (resumo com quebra de conteúdo longo, "Integrar em" com destinos responsivos e motivos de
+  bloqueio visíveis, e o campo "O que mudar no resumo?"), o **resumo integrado** (`ForkIntegrated`:
+  data, destino e resumo aplicado) ou o aviso de **fork concluído**. Nada disso tem caixa ou rolagem
+  própria; a área acompanha o fim quando o bloco muda.
+- Os botões da integração (**Cancelar integração** · **Modificar resumo** · **Integrar**, ou
+  **Voltar** · **Enviar ajuste**) ficam na **barra inferior fixa** do fork, ao lado do Abrir fork
+  (`useForkIntegration` compartilha o estado entre o corpo e os botões; Ctrl+Enter no ajuste aciona
+  Enviar ajuste). Reabertura exige confirmação. Cancelar volta o fork a Pausado.
 - Na conclusão, política `forks.onWorkbenchDone`: perguntar (padrão), concluir ou manter. Exclusão da
   mesa remove forks e sessões sem dispensar a limpeza do ambiente do Opex. Sessões pendentes são
   retomadas pelos Crons. Excluir uma central também preserva os registros se a limpeza das sessões

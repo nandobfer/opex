@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect } from "react"
+import { useLayoutEffect, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowDown, Brain, Loader2, MessageSquareDashed } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,12 @@ import { useStickToBottom } from "../../hooks/useStickToBottom"
 import type { TimelineState } from "../../timeline"
 import { TimelineItemView } from "./TimelineItemView"
 
-/** Saída da IA ao vivo; acompanha o fim enquanto o usuário não rolar para cima. */
-export function Timeline({ timeline, running }: { timeline: TimelineState; running: boolean }) {
+/**
+ * Saída da IA ao vivo; acompanha o fim enquanto o usuário não rolar para cima. `footer` entra no fim
+ * da mesma área rolável (ex.: integração do fork), como o último bloco da conversa; `footerKey`
+ * identifica o bloco (anima a troca e prende ao fim quando ele muda).
+ */
+export function Timeline({ timeline, running, footer = null, footerKey = null }: { timeline: TimelineState; running: boolean; footer?: ReactNode; footerKey?: string | null }) {
     const { scrollRef, atBottom, stickToBottom, scrollToBottom } = useStickToBottom()
     const reduceMotion = useReducedMotion()
 
@@ -17,7 +21,7 @@ export function Timeline({ timeline, running }: { timeline: TimelineState; runni
     // se o usuário ainda estiver acompanhando.
     useLayoutEffect(() => {
         stickToBottom()
-    }, [timeline, running, stickToBottom])
+    }, [timeline, running, footerKey, stickToBottom])
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -47,6 +51,13 @@ export function Timeline({ timeline, running }: { timeline: TimelineState; runni
                             {timeline.reasoning ? <Brain className="h-3.5 w-3.5 animate-pulse text-primary" aria-hidden /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                             {timeline.reasoning ? "Pensando…" : "Trabalhando…"}
                         </motion.p>
+                    )}
+                </AnimatePresence>
+                <AnimatePresence initial={false}>
+                    {footer && timeline.loaded && (
+                        <motion.div key={footerKey ?? "footer"} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="mt-3">
+                            {footer}
+                        </motion.div>
                     )}
                 </AnimatePresence>
             </div>

@@ -53,7 +53,7 @@ export function useOpenFork(workbenchId: string) {
 type ForkMutation = { action: Exclude<ForkAction, "discard">; text?: string; target?: ForkIntegrationTarget }
 
 const ACTION_TOASTS: Partial<Record<ForkAction, string>> = {
-    close: "Fork encerrado",
+    close: "Conversa pausada: retome, integre ou descarte o fork",
     resume: "Conversa retomada",
     interrupt: "Interrompendo o agente do fork",
     integrate: "Consolidando o resumo do fork",

@@ -25,7 +25,7 @@ export function forkActions(status: ForkStatus, runState: RunState, hasSummary =
 
 export const canRunFork = (status: ForkStatus, runState: RunState, action: ForkAction, hasSummary = false) => forkActions(status, runState, hasSummary).includes(action)
 
-/** Fork em aberto (ativo, encerrado ou integrando) — pode ter filhos e receber resumos deles. */
+/** Fork em aberto (ativo, pausado ou integrando) — pode ter filhos e receber resumos deles. */
 export const isOpenFork = (status: ForkStatus) => OPEN_FORK_STATUSES.includes(status)
 
 /** Abrir fork a partir deste fork: em qualquer estado em aberto, inclusive com o agente respondendo. */

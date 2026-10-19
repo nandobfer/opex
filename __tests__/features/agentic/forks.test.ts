@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Forks da conversa (servidor): abrir (cópia da sessão principal ou sessão nova com o contexto da
- * mesa), somente leitura, encerrar/retomar, integrar (resumo, ajuste, destino), descartar e o
+ * mesa), somente leitura, pausar/retomar a conversa, integrar (resumo, ajuste, destino), descartar e o
  * tratamento dos forks em aberto na conclusão e na exclusão da mesa. OpenCode sempre mockado.
  */
 
@@ -135,7 +135,7 @@ const settle = async (forkId: string) => vi.waitFor(() => expect(mocks.active.ha
 
 const asDto = (id: string, patch: Record<string, unknown> = {}) => ({ id, stage: bench(id).stage, runState: bench(id).runState, sessionId: bench(id).sessionId, slotQueue: null, ...patch })
 
-/** Abre um fork e o deixa encerrado e com o resumo proposto (pronto para aplicar). */
+/** Abre um fork e o deixa pausado e com o resumo proposto (pronto para aplicar). */
 async function integratingFork(id: string, summary = 'Usar o serviço X') {
   const opened = await openFork(id, 'Por que X?')
   await settle(opened.id)
@@ -201,13 +201,16 @@ describe('abrir fork', () => {
 })
 
 describe('ciclo de vida', () => {
-  it('encerrado não aceita mensagem; retomar volta a conversar', async () => {
+  it('pausado não aceita mensagem; retomar volta a conversar (avisos na saída do fork)', async () => {
     const id = await workbench()
     const opened = await openFork(id, 'a')
     await settle(opened.id)
+    mocks.publish.mockClear()
     await closeFork(id, opened.id)
+    expect(mocks.publish).toHaveBeenCalledWith(opened.id, { type: 'notice', level: 'info', message: 'Conversa pausada: retome, integre ou descarte o fork.' })
     await expect(sendForkMessage(id, opened.id, 'b')).rejects.toMatchObject({ status: 409 })
     await resumeFork(id, opened.id)
+    expect(mocks.publish).toHaveBeenCalledWith(opened.id, { type: 'notice', level: 'info', message: 'Conversa retomada.' })
     await sendForkMessage(id, opened.id, 'b')
     expect(mocks.runTurn).toHaveBeenLastCalledWith(mocks.client, expect.objectContaining({ text: 'b' }), expect.anything())
   })
@@ -300,7 +303,7 @@ describe('fork de fork', () => {
     expect(mocks.runTurn).toHaveBeenLastCalledWith(mocks.client, expect.objectContaining({ sessionId: 'child-sess-1', text: 'E o detalhe Y?' }), expect.anything())
   })
 
-  it('abre com o pai encerrado ou respondendo; recusa pai integrado', async () => {
+  it('abre com o pai pausado ou respondendo; recusa pai integrado', async () => {
     const id = await workbench()
     mocks.runTurn.mockReturnValueOnce(new Promise(() => undefined))
     const parent = await openFork(id, 'a')

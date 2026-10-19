@@ -53,7 +53,7 @@ import { getWorkbench, reopen, requestCorrection, revisePlan, submitPrFeedback }
 /**
  * Forks da conversa (SOMENTE servidor): conversas paralelas de uma mesa, somente leitura, numa
  * sessão própria do OpenCode — cópia da sessão principal (`session.fork`) ou, sem ela (mesa
- * concluída), uma sessão nova com o contexto da mesa. Encerrado, o fork pode ser retomado,
+ * concluída), uma sessão nova com o contexto da mesa. Com a conversa pausada, o fork pode ser retomado,
  * descartado (some por completo) ou integrado: o agente consolida um resumo, o usuário ajusta até
  * fechar o escopo e escolhe o destino (contexto da conversa principal, planejador ou reabertura).
  *
@@ -473,15 +473,15 @@ async function setStatus(fork: IAgenticFork, set: Record<string, unknown>, audit
     await publishFork(fork)
 }
 
-/** Encerra o fork: libera Retomar conversa, Integrar fork e Descartar fork. */
+/** Pausa a conversa do fork: libera Retomar conversa, Integrar fork e Descartar fork. */
 export async function closeFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "close")
-    await setStatus(fork, { status: "closed", closedAt: new Date(), runState: "idle", error: null }, { antes: { status: fork.status }, depois: { status: "closed" } }, "Fork encerrado.")
+    await setStatus(fork, { status: "closed", closedAt: new Date(), runState: "idle", error: null }, { antes: { status: fork.status }, depois: { status: "closed" } }, "Conversa pausada: retome, integre ou descarte o fork.")
     return getFork(workbenchId, forkId)
 }
 
-/** Retoma a conversa de um fork encerrado. */
+/** Retoma a conversa pausada de um fork. */
 export async function resumeFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "resume")
@@ -524,7 +524,7 @@ export async function reviseForkSummary(workbenchId: string, forkId: string, req
     return getFork(workbenchId, forkId)
 }
 
-/** Cancela a integração: o fork volta a Encerrado e o resumo proposto é descartado. */
+/** Cancela a integração: o fork volta a Pausado e o resumo proposto é descartado. */
 export async function cancelForkIntegration(workbenchId: string, forkId: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
     assertForkAction(fork, "cancel-integration")

@@ -99,6 +99,32 @@ describe('ActionBar', () => {
     expect(approve.textContent).toContain('Aprovar PR')
   })
 
+  it('Abrir em nova guia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
+    const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: 'open', mergedAt: null }
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr } as never)} />)
+    const preview = screen.getByRole('link', { name: /Abrir em nova guia/ })
+    const row = preview.parentElement!
+    expect(row.firstElementChild).toBe(preview)
+    const order = Array.from(row.children).map((element) => element.textContent?.trim())
+    expect(order.slice(0, 3)).toEqual(['Abrir em nova guia', 'Ver PR #12', 'Abrir fork'])
+  })
+
+  it.each(['pr_open', 'planning', 'implementing', 'preview', 'resolving_conflicts', 'done'] as const)('com PR: Ver PR #N abre o PR em nova guia (etapa %s)', (stage) => {
+    const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: stage === 'done' ? 'merged' : 'open', mergedAt: null }
+    render(<ActionBar workbench={workbench({ stage, runState: stage === 'planning' || stage === 'resolving_conflicts' ? 'running' : 'idle', pr } as never)} />)
+    const link = screen.getByRole('link', { name: /Ver PR #12/ })
+    expect(link.getAttribute('href')).toBe('https://github.com/org/app/pull/12')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noreferrer noopener')
+    const fork = screen.getByRole('button', { name: /Abrir fork/ })
+    expect(link.compareDocumentPosition(fork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sem PR não mostra Ver PR', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    expect(screen.queryByRole('link', { name: /Ver PR/ })).toBeNull()
+  })
+
   it('executando: só Parar; falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
     expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])

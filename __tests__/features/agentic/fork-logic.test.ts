@@ -10,17 +10,17 @@ const view = (patch: Partial<Parameters<typeof forkIntegrationTargets>[0]> = {})
 const available = (options: ReturnType<typeof forkIntegrationTargets>) => options.filter((item) => item.available).map((item) => item.target)
 
 describe('forkActions', () => {
-  it('ativo: enviar e encerrar; executando: só parar', () => {
+  it('ativo: enviar e pausar a conversa; executando: só parar', () => {
     expect(forkActions('active', 'idle')).toEqual(['send', 'close'])
     expect(forkActions('active', 'running')).toEqual(['interrupt'])
   })
 
-  it('ativo com falha: tentar de novo ou encerrar', () => {
+  it('ativo com falha: tentar de novo ou pausar a conversa', () => {
     expect(forkActions('active', 'failed')).toEqual(['retry', 'close'])
     expect(forkActions('active', 'interrupted')).toEqual(['retry', 'close'])
   })
 
-  it('encerrado: retomar, integrar ou descartar', () => {
+  it('pausado: retomar, integrar ou descartar', () => {
     expect(forkActions('closed', 'idle')).toEqual(['resume', 'integrate', 'discard'])
   })
 
@@ -80,7 +80,7 @@ describe('forkIntegrationTargets', () => {
 })
 
 describe('fork de fork', () => {
-  it('abre a partir de forks em aberto (ativo, encerrado, integrando)', () => {
+  it('abre a partir de forks em aberto (ativo, pausado, integrando)', () => {
     expect(['active', 'closed', 'integrating'].every((status) => canOpenChildFork(status as never))).toBe(true)
     expect(canOpenChildFork('integrated')).toBe(false)
     expect(canOpenChildFork('concluded')).toBe(false)

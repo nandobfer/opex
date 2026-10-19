@@ -86,6 +86,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### D — Fork: "Pausar conversa" e integração no corpo — e2a42f3, 072fb79
 
+> **Entregue na v2.57.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Forks da conversa".
+
 - "Encerrar fork" → **"Pausar conversa"**, status "Encerrado" → **"Pausado"**, aviso com o
   próximo passo.
 - Uma única área rolável: resumo/destino/ajuste da integração, resumo integrado (`ForkIntegrated`)
@@ -93,6 +95,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 - Testes: `ForkPanel`, `forks`.
 
 ### E — Atalhos da barra da mesa — 7c1bab8, 8482b0e
+
+> **Entregue na v2.57.0** (OPE-81) — descrito em `modules/agentic-dev.md`, etapa da prévia.
 
 - `ActionBar`: **"Abrir em nova guia"** como primeiro botão e **"Ver PR #N"** (`GitPullRequest`)
   quando há PR.
