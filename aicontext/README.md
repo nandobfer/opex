@@ -26,6 +26,11 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 - Animações com Framer Motion, mock em testes
 - Formulários, filtros na URL, listas virtualizadas
 
+### Port do My Tasks
+
+**[my-tasks-port-ope-80.md](./my-tasks-port-ope-80.md)**
+- Recursos do My Tasks ainda ausentes no Opex (blocos A–F aprovados), o que já existe e o que fica de fora
+
 ### Diretrizes e Decisões Arquiteturais
 
 **[use-diretrizes-do-projeto.md](./use-diretrizes-do-projeto.md)**
@@ -68,6 +73,7 @@ Novos módulos ganham um arquivo aqui quando forem implementados, conforme o flu
 | Modo Vim nos campos de texto (atalhos, selo, números de linha) | `modules/editor-mode.md` |
 | Tempo real (Pusher) | `use-sempre-que-desenvolver.md`, seção "Tempo real" + `modules/integrations.md` |
 | Issues do GitHub viram tarefas | `modules/github.md` |
+| Trazer recursos do My Tasks (o que falta e o que já existe) | `my-tasks-port-ope-80.md` |
 | Componente que existe no CRM e ainda não foi copiado | `~/code/crm-marketing-campanhas` (somente leitura; copie e adapte) |
 
 ## Princípios-Chave
