@@ -5,17 +5,20 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ArrowDown, Brain, Loader2, MessageSquareDashed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStickToBottom } from "../../hooks/useStickToBottom"
-import type { TimelineState } from "../../timeline"
+import { latestPrWatch, type TimelineState } from "../../timeline"
+import { PrWatchCountdown, type PrWatchCountdownProps } from "./PrWatchCountdown"
 import { TimelineItemView } from "./TimelineItemView"
 
 /**
  * Saída da IA ao vivo; acompanha o fim enquanto o usuário não rolar para cima. `footer` entra no fim
  * da mesma área rolável (ex.: integração do fork), como o último bloco da conversa; `footerKey`
- * identifica o bloco (anima a troca e prende ao fim quando ele muda).
+ * identifica o bloco (anima a troca e prende ao fim quando ele muda). `prWatch` mostra, com a mesa em
+ * PR aberto e parada, a contagem até a próxima verificação do PR.
  */
-export function Timeline({ timeline, running, footer = null, footerKey = null }: { timeline: TimelineState; running: boolean; footer?: ReactNode; footerKey?: string | null }) {
+export function Timeline({ timeline, running, footer = null, footerKey = null, prWatch = null }: { timeline: TimelineState; running: boolean; footer?: ReactNode; footerKey?: string | null; prWatch?: PrWatchCountdownProps | null }) {
     const { scrollRef, atBottom, stickToBottom, scrollToBottom } = useStickToBottom()
     const reduceMotion = useReducedMotion()
+    const latestCheckKey = latestPrWatch(timeline.items)?.key ?? null
 
     // A cada mudança da saída (inclusive itens do meio, como o fim de um turno) prende ao fim,
     // se o usuário ainda estiver acompanhando.
@@ -39,7 +42,7 @@ export function Timeline({ timeline, running, footer = null, footerKey = null }:
                         <AnimatePresence initial={false}>
                             {timeline.items.map((item) => (
                                 <motion.li key={item.key} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-                                    <TimelineItemView item={item} />
+                                    <TimelineItemView item={item} latestPrWatch={item.key === latestCheckKey} />
                                 </motion.li>
                             ))}
                         </AnimatePresence>
@@ -51,6 +54,13 @@ export function Timeline({ timeline, running, footer = null, footerKey = null }:
                             {timeline.reasoning ? <Brain className="h-3.5 w-3.5 animate-pulse text-primary" aria-hidden /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                             {timeline.reasoning ? "Pensando…" : "Trabalhando…"}
                         </motion.p>
+                    )}
+                </AnimatePresence>
+                <AnimatePresence>
+                    {!running && prWatch && timeline.loaded && (
+                        <motion.div key="pr-watch-countdown" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="mt-3">
+                            <PrWatchCountdown {...prWatch} />
+                        </motion.div>
                     )}
                 </AnimatePresence>
                 <AnimatePresence initial={false}>

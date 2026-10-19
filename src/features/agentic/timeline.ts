@@ -1,4 +1,4 @@
-import type { OpencodeFormDto, OpencodePermissionDto, WorkbenchStreamLine } from "./types"
+import type { OpencodeFormDto, OpencodePermissionDto, PrWatchOutcome, PrWatchStep, WorkbenchStreamLine } from "./types"
 
 /** Saída da mesa como a tela desenha (módulo puro: o hook só aplica as linhas do stream). */
 
@@ -10,6 +10,8 @@ export type TimelineItem =
     | { kind: "notice"; key: string; level: "info" | "warn" | "error" | "success"; message: string }
     | { kind: "permission"; key: string; permission: OpencodePermissionDto; decision: string | null }
     | { kind: "form"; key: string; form: OpencodeFormDto; closed: boolean }
+    /** Verificação do PR: `outcome: null` enquanto os passos chegam ao vivo. */
+    | { kind: "pr-watch"; key: string; checkId: string; prNumber: number; startedAt: string; steps: PrWatchStep[]; outcome: PrWatchOutcome | null; summary: string | null; nextCheckAt: string | null }
 
 export interface TimelineState {
     items: TimelineItem[]
@@ -105,7 +107,38 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
             const item = items[index] as Extract<TimelineItem, { kind: "form" }>
             return { ...state, items: replaceLast(items, index, { ...item, closed: true }) }
         }
+        case "pr-watch-step": {
+            const step: PrWatchStep = { ts: line.ts, level: line.level, text: line.text }
+            const index = findLastIndex(items, (item) => item.kind === "pr-watch" && item.checkId === line.checkId)
+            if (index >= 0) {
+                const check = items[index] as Extract<TimelineItem, { kind: "pr-watch" }>
+                if (check.outcome) return state
+                return { ...state, items: replaceLast(items, index, { ...check, steps: [...check.steps, step] }) }
+            }
+            const item: TimelineItem = { kind: "pr-watch", key: `prw-${line.checkId}`, checkId: line.checkId, prNumber: line.prNumber, startedAt: line.ts, steps: [step], outcome: null, summary: null, nextCheckAt: null }
+            return { ...state, items: [...items, item] }
+        }
+        case "pr-watch": {
+            // Verificação sem novidade substitui as anteriores sem novidade (fica só a última, como no histórico gravado).
+            const kept = line.outcome === "idle" ? items.filter((item) => item.kind !== "pr-watch" || item.outcome !== "idle" || item.checkId === line.checkId) : items
+            const item: TimelineItem = { kind: "pr-watch", key: `prw-${line.checkId}`, checkId: line.checkId, prNumber: line.prNumber, startedAt: line.startedAt, steps: line.steps, outcome: line.outcome, summary: line.summary, nextCheckAt: line.nextCheckAt }
+            const index = findLastIndex(kept, (candidate) => candidate.kind === "pr-watch" && candidate.checkId === line.checkId)
+            return { ...state, items: index >= 0 ? replaceLast(kept, index, item) : [...kept, item] }
+        }
     }
+}
+
+/** Última verificação do PR da saída (a que aparece aberta e alimenta a contagem). */
+export function latestPrWatch(items: TimelineItem[]): Extract<TimelineItem, { kind: "pr-watch" }> | null {
+    const index = findLastIndex(items, (item) => item.kind === "pr-watch")
+    return index >= 0 ? (items[index] as Extract<TimelineItem, { kind: "pr-watch" }>) : null
+}
+
+/** Horário da próxima verificação: o mais recente entre o agendamento consultado e o informado pela última verificação. */
+export function nextPrWatchAt(...candidates: (string | null | undefined)[]): string | null {
+    const times = candidates.filter((value): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value)))
+    if (!times.length) return null
+    return times.reduce((latest, value) => (Date.parse(value) > Date.parse(latest) ? value : latest))
 }
 
 /** Divide um pedaço NDJSON em linhas completas e o resto. */

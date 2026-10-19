@@ -222,6 +222,27 @@ export interface QueueItemDto {
 }
 
 /** Linha do stream da mesa (NDJSON). `seq` existe nos eventos gravados; os transitórios não têm. */
+export type PrWatchLevel = "info" | "success" | "warn" | "error"
+
+/** Passo de uma verificação do acompanhamento do PR (rotina `agentic-pr-watch`). */
+export interface PrWatchStep {
+    ts: string
+    level: PrWatchLevel
+    text: string
+}
+
+/** Desfecho da verificação: `idle` = nada a fazer (só a última fica gravada); `action` = encontrou algo e agiu; `error` = falha. */
+export type PrWatchOutcome = "idle" | "action" | "error"
+
+/** Agendamento do acompanhamento do PR (contagem até a próxima verificação). */
+export interface PrWatchScheduleDto {
+    /** Agendador e rotina ligados em Integrações › Crons. */
+    enabled: boolean
+    nextCheckAt: string | null
+    /** A rotina está executando agora. */
+    running: boolean
+}
+
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "user"; text: string }
@@ -235,6 +256,10 @@ export type WorkbenchEventPayload =
     | { type: "form"; form: OpencodeFormDto }
     | { type: "form-closed"; id: string }
     | { type: "turn-end"; outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number }
+    /** Passo ao vivo de uma verificação do PR (transitório). */
+    | { type: "pr-watch-step"; checkId: string; prNumber: number; level: PrWatchLevel; text: string }
+    /** Verificação do PR concluída (gravada). */
+    | { type: "pr-watch"; checkId: string; prNumber: number; startedAt: string; steps: PrWatchStep[]; outcome: PrWatchOutcome; summary: string; nextCheckAt: string | null }
 
 export type WorkbenchEvent = WorkbenchEventPayload & { seq?: number; ts: string }
 

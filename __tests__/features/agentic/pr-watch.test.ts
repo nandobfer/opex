@@ -13,10 +13,13 @@ const mocks = vi.hoisted(() => ({
   saveCursors: vi.fn(),
   replan: vi.fn((): { allowed: boolean; reason: string | null } => ({ allowed: true, reason: null })),
   blocksAutoMerge: vi.fn(async () => false),
+  centrals: vi.fn((): unknown[] => []),
+  reviewStatus: vi.fn(async (): Promise<{ enabled: false } | { enabled: true; state: string | null; verdict: string | null }> => ({ enabled: false })),
+  reports: [] as { workbenchId: string; prNumber: number; nextCheckAt: string | null; steps: { text: string; level: string }[]; outcome: string | null; summary: string | null; failed: string | null }[],
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: { find: () => ({ lean: mocks.find }) } }))
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: { find: () => ({ lean: mocks.find }) }, AgenticCentral: { find: () => ({ lean: async () => mocks.centrals() }) } }))
 vi.mock('@/features/github/client', () => ({ githubRequest: mocks.request, githubPaginate: mocks.paginate }))
 vi.mock('@/features/agentic/server/log', () => ({ centralLogger: () => ({ info: vi.fn(), step: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/agentic/server/workflow', () => ({
@@ -29,9 +32,38 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   savePrCursors: mocks.saveCursors,
 }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ closeOrphanWorkPeriods: vi.fn(async () => 0) }))
-vi.mock('@/features/pr-review/server/gate', () => ({ loadPrReviewGate: async () => ({ replan: mocks.replan, blocksAutoMerge: mocks.blocksAutoMerge }) }))
+vi.mock('@/features/pr-review/server/gate', () => ({ loadPrReviewGate: async () => ({ replan: mocks.replan, blocksAutoMerge: mocks.blocksAutoMerge, reviewStatus: mocks.reviewStatus }) }))
+vi.mock('@/features/agentic/server/pr-watch-schedule', () => ({ loadPrWatchSchedule: async () => ({ enabled: true, nextCheckAt: '2026-10-16T12:02:00.000Z', running: true }) }))
+// Relato da verificação gravado em memória (ordem dos passos, desfecho e resumo).
+vi.mock('@/features/agentic/server/pr-watch-report', () => ({
+  startPrWatchReport: async (workbenchId: string, prNumber: number, nextCheckAt: string | null) => {
+    const report = { workbenchId, prNumber, nextCheckAt, steps: [] as { text: string; level: string }[], outcome: null as string | null, summary: null as string | null, failed: null as string | null }
+    mocks.reports.push(report)
+    return {
+      step: (text: string, level = 'info') => {
+        if (!report.outcome) report.steps.push({ text, level })
+      },
+      finish: async (outcome: string, summary: string) => {
+        if (report.outcome) return
+        report.outcome = outcome
+        report.summary = summary
+      },
+      fail: async (message: string) => {
+        report.failed = message
+        if (!report.outcome) {
+          report.outcome = 'error'
+          report.summary = 'Falha na verificação do PR'
+        }
+      },
+      get finished() {
+        return report.outcome !== null
+      },
+    }
+  },
+}))
 
-import { conflictUntried, mentionsOpex, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
+
+import { conflictUntried, describeChecks, describePull, describeReviewStatus, mentionsOpex, mergeWaitReason, repoFromPrUrl, watchPullRequests } from '@/features/agentic/server/pr-watch'
 
 const workbench = (pr: Record<string, unknown> = {}) => ({
   _id: 'w1',
@@ -57,6 +89,9 @@ beforeEach(() => {
   mocks.request.mockResolvedValue({ state: 'open', merged: false })
   mocks.replan.mockReturnValue({ allowed: true, reason: null })
   mocks.blocksAutoMerge.mockResolvedValue(false)
+  mocks.reviewStatus.mockResolvedValue({ enabled: false })
+  mocks.centrals.mockReturnValue([])
+  mocks.reports.length = 0
   respond()
 })
 
@@ -278,5 +313,129 @@ describe('revisão automática (Revisão de PR)', () => {
     await watchPullRequests()
     expect(mocks.feedback).toHaveBeenCalledTimes(1)
     expect(mocks.saveCursors).toHaveBeenCalledWith('w1', { autoReviewReplans: 1 })
+  })
+})
+
+describe('acompanhamento ao vivo (relato da verificação)', () => {
+  const texts = () => mocks.reports[0]!.steps.map((step) => step.text)
+  const central = (git: Record<string, unknown>) => ({ _id: 'c1', config: { git } })
+  const ready = { state: 'open', merged: false, mergeable: true, mergeable_state: 'clean', draft: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1234567890' } }
+
+  it('sem novidade: passo a passo e "Nada a fazer" (idle), com o horário da próxima verificação', async () => {
+    mocks.centrals.mockReturnValue([central({ autoMerge: false })])
+    mocks.request.mockResolvedValue(ready)
+    respond({ issues: [{ id: 25, body: 'valeu!', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.reports).toHaveLength(1)
+    const report = mocks.reports[0]!
+    expect(report).toMatchObject({ workbenchId: 'w1', prNumber: 7, nextCheckAt: '2026-10-16T12:02:00.000Z', outcome: 'idle', summary: 'Nada a fazer' })
+    expect(texts()).toEqual([
+      'Consultando o PR #7 no GitHub…',
+      'PR aberto · estado de merge: pronto para merge (clean)',
+      'Lendo revisões e comentários…',
+      'Novos: 0 revisões, 1 comentário',
+      'Nenhum pede mudança nem menciona @opex',
+      'Revisão automática de PR desligada',
+      'Sem conflito de merge',
+      'Merge automático desligado na central',
+    ])
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+  })
+
+  it('pedido de mudança: fecha o relato (action) ANTES de replanejar', async () => {
+    mocks.feedback.mockImplementation(async () => {
+      expect(mocks.reports[0]!.outcome).toBe('action')
+    })
+    respond({ issues: [{ id: 25, body: '@opex ajuste o filtro', user: { login: 'ana' } }] })
+    await watchPullRequests()
+    expect(mocks.feedback).toHaveBeenCalledTimes(1)
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'Pedido de mudança → replanejando' })
+    expect(texts()).toContain('Pedido de mudança encontrado (@ana)')
+  })
+
+  it('conflito já tentado no mesmo estado: avisa e segue sem nova resolução', async () => {
+    mocks.find.mockResolvedValue([workbench({ conflictBaseSha: 'b1', conflictHeadSha: 'h1' })])
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, mergeable_state: 'dirty', base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.conflict).not.toHaveBeenCalled()
+    expect(texts()).toContain('Conflito de merge já tentado neste estado: aguardando um novo push ou uma nova base')
+    expect(texts()).toContain('Merge automático aguardando: há conflito de merge')
+    expect(mocks.reports[0]!.outcome).toBe('idle')
+  })
+
+  it('conflito novo: relato "resolvendo automaticamente" (action)', async () => {
+    mocks.request.mockResolvedValue({ state: 'open', merged: false, mergeable: false, base: { ref: 'main', sha: 'b1' }, head: { ref: 'feat/x', sha: 'h1' } })
+    await watchPullRequests()
+    expect(mocks.conflict).toHaveBeenCalledTimes(1)
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'Conflito de merge → resolvendo automaticamente' })
+  })
+
+  it('merge automático aguardando a revisão automática do commit atual', async () => {
+    mocks.centrals.mockReturnValue([central({ autoMerge: true })])
+    mocks.request.mockResolvedValue(ready)
+    mocks.reviewStatus.mockResolvedValue({ enabled: true, state: 'running', verdict: null })
+    mocks.blocksAutoMerge.mockResolvedValue(true)
+    await watchPullRequests()
+    expect(texts()).toContain('Revisão automática do commit h123456: revisando')
+    expect(texts()).toContain('Merge automático aguardando a revisão automática do commit h123456')
+    expect(mocks.autoMerge).not.toHaveBeenCalled()
+    expect(mocks.reports[0]!.outcome).toBe('idle')
+  })
+
+  it('PR pronto com merge automático ligado: relato "merge automático" (action)', async () => {
+    mocks.centrals.mockReturnValue([central({ autoMerge: true })])
+    mocks.request.mockResolvedValue(ready)
+    await watchPullRequests()
+    expect(mocks.autoMerge).toHaveBeenCalledTimes(1)
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'PR pronto → merge automático' })
+  })
+
+  it('mesa aguardando vaga: avisa que só merge e fechamento são verificados', async () => {
+    mocks.find.mockResolvedValue([{ ...workbench(), pendingTurn: { action: 'pr-feedback' } }])
+    await watchPullRequests()
+    expect(texts()).toContain('Mesa aguardando vaga na central: só merge e fechamento são verificados')
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'idle', summary: 'Aguardando vaga' })
+  })
+
+  it('PR mergeado e PR fechado: relatos com o desfecho', async () => {
+    mocks.request.mockResolvedValue({ state: 'closed', merged: true, merged_at: null, merge_commit_sha: 'abc' })
+    await watchPullRequests()
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'PR mergeado → concluindo a mesa' })
+
+    mocks.reports.length = 0
+    mocks.request.mockResolvedValue({ state: 'closed', merged: false })
+    await watchPullRequests()
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'action', summary: 'PR fechado sem merge → avisando' })
+
+    // Já avisado: continua fechado, sem novidade.
+    mocks.reports.length = 0
+    mocks.find.mockResolvedValue([workbench({ closedNotified: true })])
+    await watchPullRequests()
+    expect(mocks.reports[0]!.outcome).toBe('idle')
+  })
+
+  it('falha do GitHub: relato com erro', async () => {
+    mocks.request.mockRejectedValue(new Error('HTTP 502'))
+    const summary = await watchPullRequests()
+    expect(summary).toContain('1 com falha')
+    expect(mocks.reports[0]).toMatchObject({ outcome: 'error', failed: 'Falha ao consultar o PR no GitHub: HTTP 502' })
+  })
+
+  it('textos de estado do PR e da revisão automática', () => {
+    expect(describePull({ draft: true, mergeable_state: 'draft' })).toBe('PR aberto (rascunho) · estado de merge: rascunho (draft)')
+    expect(describePull({ mergeable_state: null })).toBe('PR aberto · estado de merge: ainda sendo calculado pelo GitHub (unknown)')
+    expect(mergeWaitReason({ draft: true })).toBe('o PR está como rascunho')
+    expect(mergeWaitReason({ mergeable: null })).toBe('o GitHub ainda está calculando o estado de merge')
+    expect(mergeWaitReason({ mergeable: true, mergeable_state: 'blocked' })).toContain('blocked')
+    expect(describeReviewStatus({ enabled: true, state: null, verdict: null }, 'abcdef123')).toBe('Revisão automática do commit abcdef1: ainda não revisado')
+    expect(describeReviewStatus({ enabled: true, state: 'done', verdict: 'changes_requested' }, 'abcdef123')).toBe('Revisão automática do commit abcdef1: pediu mudanças')
+    expect(describeReviewStatus({ enabled: true, state: 'queued', verdict: null }, null)).toBe('Revisão automática: na fila')
+  })
+
+  it('gancho de CI: PR instável relata as verificações com falha ou pendentes', async () => {
+    expect(describeChecks({ mergeable_state: 'clean' })).toBeNull()
+    mocks.request.mockResolvedValue({ ...ready, mergeable_state: 'unstable' })
+    await watchPullRequests()
+    expect(mocks.reports[0]!.steps).toContainEqual({ text: 'Verificações (CI) com falha ou pendentes', level: 'warn' })
   })
 })

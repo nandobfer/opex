@@ -12,7 +12,7 @@ import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
 import type { WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, WorkbenchModelInput } from "../schemas"
-import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
 
@@ -123,6 +123,10 @@ function flattenResults<T>(results: readonly { data?: T[] }[]): T[] {
 /** Mesas em andamento (executando ou aguardando ação humana) — lista "Trabalhos em andamento". */
 export const useWorkbenchesInProgress = (enabled = true) =>
     useQuery({ queryKey: agenticKey("workbenches", "in-progress"), queryFn: () => get<InProgressWorkbenchDto[]>("/agentic/workbenches/in-progress"), enabled, staleTime: 15_000 })
+
+/** Agendamento do acompanhamento do PR (contagem até a próxima verificação na mesa em PR aberto). */
+export const usePrWatchSchedule = (enabled: boolean) =>
+    useQuery({ queryKey: agenticKey("pr-watch"), queryFn: () => get<PrWatchScheduleDto>("/agentic/pr-watch"), enabled, refetchInterval: enabled ? 30_000 : false })
 
 export const useWorkbenchByTask = (taskId: string | null) =>
     useQuery({ queryKey: agenticKey("workbench", taskId), queryFn: () => get<WorkbenchDto | null>(`/agentic/workbenches/by-task/${taskId}`), enabled: Boolean(taskId) })

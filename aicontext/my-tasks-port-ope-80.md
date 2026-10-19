@@ -61,6 +61,9 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### B — PR acompanhado ao vivo — ff0ecd0
 
+> **Entregue na v2.60.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Acompanhamento do PR ao
+> vivo". O CI aparece por ora só como passo informativo (`describeChecks`, gancho para o bloco A).
+
 - `pr-watch-report.ts`: cada varredura vira um bloco **"Verificação do PR #N"** na Saída da IA
   com passos e horário (consulta, estado de merge, revisões/comentários, revisão automática via
   `gate.reviewStatus`, conflito, CI, merge automático, aguardando vaga) e desfecho

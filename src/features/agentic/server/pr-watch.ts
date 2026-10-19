@@ -1,19 +1,22 @@
 import { dbConnect } from "@/lib/db"
-import { AgenticWorkbench } from "@/lib/db/models/Agentic"
+import { AgenticCentral, AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { githubPaginate, githubRequest } from "@/features/github/client"
-import { prMergeReady } from "../logic"
+import { parseCentralConfig, prMergeReady } from "../logic"
 import { formatPrFeedback } from "../prompts"
 import { centralLogger } from "./log"
 import { closeOrphanWorkPeriods } from "./timer-sync"
 import { handlePrAutoMerge, handlePrClosed, handlePrConflict, handlePrFeedback, handlePrMerged, handlePrReopened, savePrCursors } from "./workflow"
-import { loadPrReviewGate } from "@/features/pr-review/server/gate"
+import { loadPrReviewGate, type PrReviewStatus } from "@/features/pr-review/server/gate"
+import { startPrWatchReport } from "./pr-watch-report"
+import { loadPrWatchSchedule } from "./pr-watch-schedule"
 import { isAutoReviewText } from "@/features/pr-review/logic"
 
 /**
  * Rotina "Acompanhar PRs do desenvolvimento agêntico" (Integrações › Crons): para cada mesa com PR
  * aberto, consulta o GitHub — merge conclui a mesa; comentário novo com `@opex` (na conversa, na
  * linha ou no corpo de uma revisão) ou revisão pedindo mudanças volta ao planejamento; merge
- * bloqueado por conflito aciona a resolução automática no próprio PR.
+ * bloqueado por conflito aciona a resolução automática no próprio PR. Cada varredura de uma mesa vira
+ * um bloco "Verificação do PR #N" na saída da mesa (`pr-watch-report.ts`).
  */
 
 interface GithubRef {
@@ -93,11 +96,73 @@ export function conflictUntried(pr: { conflictBaseSha?: string | null; conflictH
     return (pr.conflictBaseSha ?? null) !== (pull.base?.sha ?? null) || (pr.conflictHeadSha ?? null) !== head
 }
 
+const MERGE_STATE_LABELS: Record<string, string> = {
+    clean: "pronto para merge (clean)",
+    has_hooks: "pronto para merge (has_hooks)",
+    behind: "atrás da branch de destino (behind)",
+    blocked: "bloqueado por verificações ou revisões obrigatórias (blocked)",
+    unstable: "verificações com falha ou pendentes (unstable)",
+    dirty: "com conflito (dirty)",
+    draft: "rascunho (draft)",
+    unknown: "ainda sendo calculado pelo GitHub (unknown)",
+}
+
+const mergeStateLabel = (state: string | null | undefined) => (state ? (MERGE_STATE_LABELS[state] ?? state) : MERGE_STATE_LABELS.unknown!)
+
+/** Estado do PR aberto em texto (passo da verificação). */
+export function describePull(pull: Pick<GithubPull, "draft" | "mergeable_state">): string {
+    return `PR aberto${pull.draft ? " (rascunho)" : ""} · estado de merge: ${mergeStateLabel(pull.mergeable_state)}`
+}
+
+/** Por que o PR ainda não está pronto para o merge automático. */
+export function mergeWaitReason(pull: Pick<GithubPull, "draft" | "mergeable" | "mergeable_state">): string {
+    if (pull.draft) return "o PR está como rascunho"
+    if (pull.mergeable === false) return "há conflito de merge"
+    if (pull.mergeable == null) return "o GitHub ainda está calculando o estado de merge"
+    return `o GitHub ainda não liberou o merge (${mergeStateLabel(pull.mergeable_state)})`
+}
+
+/** Estado da revisão automática do commit atual em texto (só o estado, sem a saída do revisor). */
+export function describeReviewStatus(status: PrReviewStatus, headSha: string | null | undefined): string {
+    if (!status.enabled) return "Revisão automática de PR desligada"
+    const prefix = `Revisão automática${headSha ? ` do commit ${headSha.slice(0, 7)}` : ""}`
+    if (!status.state) return `${prefix}: ainda não revisado`
+    switch (status.state) {
+        case "queued":
+            return `${prefix}: na fila`
+        case "running":
+            return `${prefix}: revisando`
+        case "done":
+            return `${prefix}: ${status.verdict === "approved" ? "aprovou" : status.verdict === "changes_requested" ? "pediu mudanças" : "comentou"}`
+        case "failed":
+            return `${prefix}: falhou`
+        case "interrupted":
+            return `${prefix}: interrompida`
+        default:
+            return `${prefix}: ${status.state}`
+    }
+}
+
+/**
+ * Verificações (CI) do PR em texto. Gancho da correção automática de CI: por ora só relata o que o
+ * estado de merge do GitHub indica (`unstable` = verificações com falha ou pendentes).
+ */
+export function describeChecks(pull: Pick<GithubPull, "mergeable_state">): { text: string; level: "info" | "warn" } | null {
+    if (pull.mergeable_state === "unstable") return { text: "Verificações (CI) com falha ou pendentes", level: "warn" }
+    return null
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
 export async function watchPullRequests(): Promise<string> {
     await dbConnect()
     const closedOrphans = await closeOrphanWorkPeriods().catch(() => 0)
     const docs = await AgenticWorkbench.find({ stage: "pr_open", runState: { $ne: "running" }, pr: { $ne: null } }).lean()
+    const centrals = docs.length ? await AgenticCentral.find({ _id: { $in: [...new Set(docs.map((doc) => doc.centralId))] } }).lean() : []
+    const autoMergeOf = new Map(centrals.map((central) => [String(central._id), parseCentralConfig(central.config).git.autoMerge]))
     const gate = await loadPrReviewGate()
+    // A rotina já avançou o `nextRunAt` ao começar: é o horário da próxima verificação.
+    const nextCheckAt = docs.length ? ((await loadPrWatchSchedule().catch(() => null))?.nextCheckAt ?? null) : null
     let merged = 0
     let replans = 0
     let conflicts = 0
@@ -111,26 +176,45 @@ export async function watchPullRequests(): Promise<string> {
         if (!repo) continue
         // Limpeza pós-merge aguardando vaga: o merge já foi tratado (não processa de novo).
         if (doc.pendingTurn && pr.state === "merged") continue
+        const report = await startPrWatchReport(id, pr.number, nextCheckAt)
         try {
+            report.step(`Consultando o PR #${pr.number} no GitHub…`)
             const pull = await githubRequest<GithubPull>(`/repos/${repo}/pulls/${pr.number}`)
             if (pull.merged) {
+                report.step("PR mergeado no GitHub", "success")
+                await report.finish("action", "PR mergeado → concluindo a mesa")
                 log.success(`PR #${pr.number} mergeado`, { workbenchId: id })
                 await handlePrMerged(id, { mergedAt: pull.merged_at ? new Date(pull.merged_at) : new Date(), mergeCommitSha: pull.merge_commit_sha })
                 merged++
                 continue
             }
             if (pull.state === "closed") {
+                report.step("PR fechado sem merge", "warn")
+                // O aviso sai uma vez; enquanto continuar fechado, a verificação é "sem novidade".
+                await report.finish(pr.closedNotified ? "idle" : "action", pr.closedNotified ? "PR continua fechado: reabra o PR no GitHub ou exclua a mesa" : "PR fechado sem merge → avisando")
                 await handlePrClosed(id)
                 continue
             }
-            if (pr.state === "closed") await handlePrReopened(id)
+            let reopened = false
+            if (pr.state === "closed") {
+                report.step("PR reaberto no GitHub: voltando a acompanhar", "success")
+                reopened = true
+                await handlePrReopened(id)
+            }
+            report.step(describePull(pull))
+            const idle = (summary: string) => report.finish(reopened ? "action" : "idle", reopened ? `PR reaberto · ${summary}` : summary)
             // Aguardando vaga: só merge/fechamento são tratados; comentários, conflito e merge automático ficam para depois da espera.
-            if (doc.pendingTurn) continue
+            if (doc.pendingTurn) {
+                report.step("Mesa aguardando vaga na central: só merge e fechamento são verificados", "warn")
+                await idle("Aguardando vaga")
+                continue
+            }
 
             const lastReviewId = pr.lastReviewId ?? 0
             // Mesa aberta antes desta rotina conhecer comentários: a 1ª varredura só grava o cursor (não replaneja por comentários antigos).
             const baseline = pr.lastCommentId === undefined
             const lastCommentId = pr.lastCommentId ?? 0
+            report.step("Lendo revisões e comentários…")
             const [reviews, issueComments, reviewComments] = await Promise.all([
                 githubPaginate<GithubReview>(`/repos/${repo}/pulls/${pr.number}/reviews?per_page=100`, { maxPages: 5 }),
                 githubPaginate<GithubIssueComment>(`/repos/${repo}/issues/${pr.number}/comments?per_page=100`, { maxPages: 5 }),
@@ -141,6 +225,8 @@ export async function watchPullRequests(): Promise<string> {
             const freshLine = reviewComments.filter((comment) => comment.id > lastCommentId)
             let replanned = false
             if (freshReviews.length || freshIssue.length || freshLine.length) {
+                report.step(`Novos: ${plural(freshReviews.length, "revisão", "revisões")}, ${plural(freshIssue.length + freshLine.length, "comentário", "comentários")}`)
+                if (baseline && (freshIssue.length || freshLine.length)) report.step("Primeira leitura desta mesa: os comentários existentes foram marcados como lidos (não replanejam)")
                 await savePrCursors(id, {
                     lastReviewId: freshReviews.length ? Math.max(...freshReviews.map((review) => review.id)) : lastReviewId,
                     lastCommentId: Math.max(lastCommentId, ...freshIssue.map((comment) => comment.id), ...freshLine.map((comment) => comment.id)),
@@ -185,45 +271,83 @@ export async function watchPullRequests(): Promise<string> {
                         sections.push({ author: comment.user?.login ?? null, body: "", comments: [{ path: comment.path, line: comment.line ?? comment.original_line ?? null, body: comment.body }] })
                     }
                 }
-                if (blockedAuto) log.warn(`PR #${pr.number}: pedido de mudança da revisão automática ignorado (${decision.reason})`, { workbenchId: id })
+                if (blockedAuto) {
+                    log.warn(`PR #${pr.number}: pedido de mudança da revisão automática ignorado (${decision.reason})`, { workbenchId: id })
+                    report.step(`Pedido de mudança da revisão automática ignorado (${decision.reason ?? "limite atingido"})`, "warn")
+                }
 
                 const feedback = formatPrFeedback(sections)
                 // Revisão sem texto continua indo para `changes_requested` (a mesa pede o motivo ao usuário).
                 if (relevantReviews.length || feedback.trim()) {
+                    const authors = [...new Set(sections.map((section) => section.author).filter(Boolean))].map((author) => `@${author}`)
+                    report.step(`Pedido de mudança encontrado${authors.length ? ` (${authors.join(", ")})` : ""}`, "warn")
+                    await report.finish("action", feedback.trim() ? "Pedido de mudança → replanejando" : "Pedido de mudança sem texto → aguardando você descrever as mudanças")
                     log.warn(`PR #${pr.number}: pedido de mudança (comentário ou revisão)`, { workbenchId: id })
                     if (sections.some((section) => section.auto)) await savePrCursors(id, { autoReviewReplans: autoReplans + 1 })
                     await handlePrFeedback(id, feedback)
                     replans++
                     replanned = true
+                } else {
+                    report.step("Nenhum pede mudança nem menciona @opex")
                 }
+            } else {
+                report.step("Sem revisões nem comentários novos")
             }
             // O feedback tem prioridade: não inicia a resolução de conflito na mesma varredura em que replanejou.
             if (replanned) continue
 
+            const headSha = pull.head?.sha
+            report.step(describeReviewStatus(await gate.reviewStatus(repo, pr.number, headSha), headSha))
+
             // Merge bloqueado por conflito: aciona a resolução automática no próprio PR (sem aprovação).
-            if (pull.mergeable === false && conflictUntried(pr, pull)) {
-                log.warn(`PR #${pr.number}: conflito de merge — resolvendo automaticamente`, { workbenchId: id })
-                const started = await handlePrConflict(id, {
-                    baseBranch: pull.base?.ref ?? "a branch de destino",
-                    headBranch: pull.head?.ref ?? doc.branch ?? "a branch do PR",
-                    baseSha: pull.base?.sha ?? "",
-                    headSha: pull.head?.sha ?? "",
-                })
-                if (started) conflicts++
-                continue
+            if (pull.mergeable === false) {
+                if (conflictUntried(pr, pull)) {
+                    const baseBranch = pull.base?.ref ?? "a branch de destino"
+                    report.step(`Conflito de merge com ${baseBranch}`, "warn")
+                    await report.finish("action", "Conflito de merge → resolvendo automaticamente")
+                    log.warn(`PR #${pr.number}: conflito de merge — resolvendo automaticamente`, { workbenchId: id })
+                    const started = await handlePrConflict(id, {
+                        baseBranch,
+                        headBranch: pull.head?.ref ?? doc.branch ?? "a branch do PR",
+                        baseSha: pull.base?.sha ?? "",
+                        headSha: headSha ?? "",
+                    })
+                    if (started) conflicts++
+                    continue
+                }
+                report.step("Conflito de merge já tentado neste estado: aguardando um novo push ou uma nova base", "warn")
+            } else if (pull.mergeable == null) {
+                report.step("O GitHub ainda está calculando se há conflito")
+            } else {
+                report.step("Sem conflito de merge", "success")
             }
+
+            // Verificações (CI): gancho da correção automática de CI.
+            const checks = describeChecks(pull)
+            if (checks) report.step(checks.text, checks.level)
 
             // Merge automático (OPE-50): a central pode mandar o agente mergear o próprio PR.
             // Só quando o PR está pronto (sem conflito, sem bloqueios e fora do rascunho); a mesa segue
             // elegível enquanto o GitHub não liberar as verificações/regras.
             // Com a revisão automática ligada, espera a revisão do commit atual (na fila, revisando ou pedindo mudanças).
-            if (prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft }) && !(await gate.blocksAutoMerge(repo, pr.number, pull.head?.sha))) {
+            if (autoMergeOf.get(doc.centralId) === false) {
+                report.step("Merge automático desligado na central")
+            } else if (!prMergeReady({ mergeable: pull.mergeable, mergeableState: pull.mergeable_state, draft: pull.draft })) {
+                report.step(`Merge automático aguardando: ${mergeWaitReason(pull)}`)
+            } else if (await gate.blocksAutoMerge(repo, pr.number, headSha)) {
+                report.step(`Merge automático aguardando a revisão automática${headSha ? ` do commit ${headSha.slice(0, 7)}` : ""}`)
+            } else {
+                report.step("PR pronto para o merge automático", "success")
+                await report.finish("action", "PR pronto → merge automático")
                 const started = await handlePrAutoMerge(id, { baseBranch: pull.base?.ref ?? "a branch de destino" })
                 if (started) autoMerges++
+                continue
             }
+            await idle("Nada a fazer")
         } catch (error) {
             failures++
             log.error(`Falha ao consultar o PR #${pr.number}`, error, { workbenchId: id })
+            await report.fail(`Falha ao consultar o PR no GitHub: ${error instanceof Error ? error.message : String(error)}`)
         }
     }
     return `${docs.length} PR(s) acompanhado(s); ${merged} mergeado(s); ${replans} com pedido de mudança${conflicts ? `; ${conflicts} com conflito em resolução` : ""}${autoMerges ? `; ${autoMerges} com merge automático iniciado` : ""}${failures ? `; ${failures} com falha` : ""}${closedOrphans ? `; ${closedOrphans} apontamento(s) encerrado(s)` : ""}`

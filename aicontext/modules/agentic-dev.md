@@ -345,6 +345,27 @@ done → Reabrir mesa (texto ao planejador) → planning
   entram como seção própria. Os cursores `lastReviewId`/`lastCommentId` são gravados a cada varredura;
   mesas abertas antes desta rotina (sem `lastCommentId`) fazem uma 1ª varredura só de linha de base,
   sem replanejar por comentários antigos.
+- **Acompanhamento do PR ao vivo** (`pr-watch-report.ts`): cada varredura de uma mesa com PR aparece
+  na **Saída da IA** como um bloco **"Verificação do PR #N"** com os passos e o horário de cada um
+  (consulta ao GitHub, estado de merge, revisões/comentários novos e se pedem mudança, estado da
+  revisão automática do commit atual — só o estado, via `gate.reviewStatus` —, conflito, verificações
+  de CI (`describeChecks`: por ora só relata `mergeable_state: unstable`; gancho da correção de CI),
+  merge automático e o motivo da espera, mesa aguardando vaga) e o desfecho: `idle` ("Nada a fazer",
+  "Aguardando vaga", PR que continua fechado), `action` (pedido de mudança, conflito, merge automático,
+  merge, fechamento, reabertura) ou `error`.
+  - Eventos: `pr-watch-step` (transitório, só ao vivo no hub) e `pr-watch` (a verificação inteira,
+    gravada no log da mesa). O relato é fechado **antes** de acionar a ação (o turno aparece depois
+    do bloco). Falhas do relato nunca interrompem a varredura; falha depois do fechamento vira aviso.
+  - Gravação: uma verificação `idle` apaga as `idle` anteriores (`dropIdlePrWatchEvents`) — fica só
+    a última, também na tela (`applyTimelineLine`); as que encontraram algo ficam no histórico.
+  - Tela: a verificação em andamento e a mais recente ficam abertas; as anteriores, recolhidas
+    (`PrWatchItem`). No fim da saída, com a mesa em PR aberto e parada, a contagem
+    **"Próxima verificação em m:ss"** (`PrWatchCountdown`; "Verificação em instantes…" ao zerar,
+    "Verificando o PR agora…" durante a rodada, ou "Acompanhamento automático do PR desligado" com a
+    rotina/agendador desligados). O horário vem de `GET /api/agentic/pr-watch` (`usePrWatchSchedule`,
+    refeito a cada 30 s; `loadPrWatchSchedule`: `CronJobState.nextRunAt` da rotina `agentic-pr-watch`
+    + agendador e rotina ligados; `running` = lease vigente) e do `nextCheckAt` da última verificação
+    (o mais recente dos dois, `nextPrWatchAt`).
 - **Conflito de merge (OPE-49)**: quando o PR aberto responde `mergeable: false` no GitHub, a rotina
   aciona o agente para resolver o conflito **sozinho** (etapa `resolving_conflicts`, agente da etapa
   **Pull Request**), **sem nova aprovação** do usuário. O prompt manda confirmar a branch do PR, fazer
@@ -587,6 +608,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
 | `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
@@ -605,7 +627,8 @@ merge, reabrir, excluir).
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em
 andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconexão** (`attach`) e a
 releitura das pendências no buraco do SSE —, o ciclo automático de reconexão (`reconnect`,
-`auto-reconnect`), acompanhamento do PR, rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
+`auto-reconnect`), acompanhamento do PR (inclusive o relato ao vivo: `pr-watch`, `pr-watch-report`,
+`pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
 `forks-model`, `model-routes`, `ModelOverridePicker`), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), merge automático do PR (`pr-automation`), backup da prévia

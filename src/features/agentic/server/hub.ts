@@ -38,7 +38,7 @@ const hub: HubState = (globalHub.__agenticHub ??= {
     active: new Map(),
 })
 
-const TRANSIENT = new Set<WorkbenchEventPayload["type"]>(["reasoning", "tool-progress"])
+const TRANSIENT = new Set<WorkbenchEventPayload["type"]>(["reasoning", "tool-progress", "pr-watch-step"])
 
 function clip(value: string | null | undefined, max = MAX_TOOL_OUTPUT): string | null | undefined {
     if (typeof value !== "string" || value.length <= max) return value
@@ -126,6 +126,16 @@ export function flushWorkbenchEvents(workbenchId: string): Promise<void> {
         if (hub.flushing.get(workbenchId) === next) hub.flushing.delete(workbenchId)
     })
     return next
+}
+
+/**
+ * Verificação do PR sem novidade: apaga as verificações sem novidade já gravadas da mesa, para que
+ * fique só a última (as que encontraram algo são mantidas).
+ */
+export async function dropIdlePrWatchEvents(workbenchId: string): Promise<void> {
+    await flushWorkbenchEvents(workbenchId)
+    await dbConnect()
+    await AgenticEvent.deleteMany({ workbenchId, "payload.type": "pr-watch", "payload.outcome": "idle" })
 }
 
 export function subscribeWorkbench(workbenchId: string, listener: Listener): () => void {

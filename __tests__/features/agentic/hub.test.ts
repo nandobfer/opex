@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/Agentic', () => ({ AgenticEvent: {} }))
+const deleteMany = vi.hoisted(() => vi.fn(async () => ({ deletedCount: 1 })))
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticEvent: { deleteMany, insertMany: vi.fn(async () => []) } }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
 
-import { coalesceEvents, publishWorkbenchEvent, subscribeWorkbench } from '@/features/agentic/server/hub'
+import { coalesceEvents, dropIdlePrWatchEvents, publishWorkbenchEvent, subscribeWorkbench } from '@/features/agentic/server/hub'
 
 const ts = '2026-10-09T12:00:00.000Z'
 
@@ -32,6 +33,21 @@ describe('hub da mesa', () => {
     stop()
     expect(seen).toMatchObject([{ type: 'text', seq: 1 }, { type: 'reasoning' }, { type: 'notice', seq: 2 }])
     expect((seen[1] as { seq?: number }).seq).toBeUndefined()
+  })
+
+  it('passo da verificação do PR é transitório; a verificação concluída é gravada', () => {
+    const seen: { type: string; seq?: number }[] = []
+    const stop = subscribeWorkbench('wb-prw', (event) => seen.push(event))
+    publishWorkbenchEvent('wb-prw', { type: 'pr-watch-step', checkId: 'a', prNumber: 7, level: 'info', text: 'Consultando…' })
+    publishWorkbenchEvent('wb-prw', { type: 'pr-watch', checkId: 'a', prNumber: 7, startedAt: ts, steps: [], outcome: 'idle', summary: 'Nada a fazer', nextCheckAt: null })
+    stop()
+    expect(seen[0]!.seq).toBeUndefined()
+    expect(seen[1]).toMatchObject({ type: 'pr-watch', seq: 1 })
+  })
+
+  it('dropIdlePrWatchEvents apaga só as verificações sem novidade da mesa', async () => {
+    await dropIdlePrWatchEvents('wb-drop')
+    expect(deleteMany).toHaveBeenCalledWith({ workbenchId: 'wb-drop', 'payload.type': 'pr-watch', 'payload.outcome': 'idle' })
   })
 
   it('corta a saída longa de ferramenta guardando o fim', () => {
