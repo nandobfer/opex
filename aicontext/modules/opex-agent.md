@@ -129,7 +129,12 @@ senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas).
 - **Prévia**: não aprova prévia cuja clareza indique critérios de aceite ou localização ausentes.
 - **Segredos**: não ficam no histórico enviado ao modelo nem nos cards (`redact`).
 - **Histórico**: mensagens da AI SDK de cada turno, cortadas por turno num orçamento de ~400 mil
-  caracteres; as antigas dão lugar ao resumo da sessão.
+  caracteres; as antigas dão lugar ao resumo da sessão. No envio, o raciocínio dos turnos gravados
+  sai (`stripPastReasoning`): a Anthropic assina cada bloco e recusa o que volta com outro prompt
+  de sistema ou outro modelo. As mensagens do assistente que ficariam vazias saem do histórico.
+- **Prompt de sistema estável**: instruções + dono do app. A data e a hora do turno vão como uma
+  parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
+  prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.
 - **Consumo** em `ai_consumption_logs`, origens `opex-agent` (turno) e `opex-title` (subagente).
 - **Auditoria** na entidade `AgenteOpex` (criar/renomear/arquivar/excluir sessão; confirmar/cancelar
   ação). As mutações das ferramentas auditam pelos próprios serviços, como usuário local.

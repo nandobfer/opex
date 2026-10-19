@@ -158,9 +158,9 @@ describe('runner do Agente Opex', () => {
 
     expect(lines.map((line) => line.type)).toEqual(['turn-start', 'tool-start', 'tool-input', 'tool-end', 'text-delta', 'text-delta', 'turn-end'])
     const options = mocks.streamText.mock.calls[0]![0] as { messages: unknown[]; instructions: string; tools: Record<string, unknown> }
-    expect(options.messages).toEqual([{ role: 'user', content: 'Quais tarefas do CRM?' }])
+    expect(options.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Quais tarefas do CRM?' }, { type: 'text', text: '(Contexto do turno: agora é segunda (America/Sao_Paulo; 2026-10-19T12:00:00.000Z).)' }] }])
     expect(options.instructions).toContain('Seja útil')
-    expect(options.instructions).toContain('America/Sao_Paulo')
+    expect(options.instructions).not.toContain('America/Sao_Paulo')
     expect(Object.keys(options.tools)).toEqual(['list_tasks'])
 
     const assistant = messages().docs.find((doc) => doc.role === 'assistant')!
@@ -184,7 +184,33 @@ describe('runner do Agente Opex', () => {
     mocks.refreshSessionTitle.mockClear()
     await runTurn(sessionId, 'Tudo bem?')
     const options = mocks.streamText.mock.calls[1]![0] as { messages: unknown[] }
-    expect(options.messages).toEqual([{ role: 'user', content: 'Olá' }, { role: 'assistant', content: 'Oi!' }, { role: 'user', content: 'Tudo bem?' }])
+    expect(options.messages).toEqual([
+      { role: 'user', content: 'Olá' },
+      { role: 'assistant', content: 'Oi!' },
+      { role: 'user', content: [{ type: 'text', text: 'Tudo bem?' }, { type: 'text', text: '(Contexto do turno: agora é segunda (America/Sao_Paulo; 2026-10-19T12:00:00.000Z).)' }] },
+    ])
+  })
+
+  it('regressão: o próximo turno não reenvia o raciocínio assinado e mantém o prompt de sistema igual', async () => {
+    const sessionId = await newSession()
+    mocks.parts = [{ type: 'text-delta', id: 'x', text: 'Criei.' }, { type: 'finish', finishReason: 'stop', totalUsage: {} }]
+    mocks.responseMessages = [
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'pensando', providerOptions: { anthropic: { signature: 'assinatura' } } }, { type: 'tool-call', toolCallId: 't1', toolName: 'list_tasks', input: {} }] },
+      { role: 'tool', content: [] },
+      { role: 'assistant', content: [{ type: 'reasoning', text: 'só pensei' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Criei.' }] },
+    ]
+    await runTurn(sessionId, 'Crie a prévia')
+    mocks.refreshSessionTitle.mockClear()
+    await runTurn(sessionId, 'Mais detalhes')
+    const [first, second] = mocks.streamText.mock.calls.map((call) => call[0] as { messages: unknown[]; instructions: string })
+    expect(second!.instructions).toBe(first!.instructions)
+    expect(JSON.stringify(second!.messages)).not.toContain('reasoning')
+    expect(second!.messages.slice(1, 4)).toEqual([
+      { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 't1', toolName: 'list_tasks', input: {} }] },
+      { role: 'tool', content: [] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Criei.' }] },
+    ])
   })
 
   it('falha do provedor: mensagem com erro, sessão em erro e histórico de reserva que mantém a alternância', async () => {
@@ -209,7 +235,7 @@ describe('runner do Agente Opex', () => {
     expect(user.files).toEqual([{ id: String(file._id), name: 'print.png', mediaType: 'image/png', size: 3 }])
     expect(JSON.parse(user.modelMessages as string)).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Olha o erro' }, { type: 'opex-file', fileId: String(file._id), weight: 8000 }] }])
     const sent = (mocks.streamText.mock.calls[0]![0] as { messages: { content: { type: string }[] }[] }).messages[0]!
-    expect(sent.content.map((part) => part.type)).toEqual(['text', 'text', 'image'])
+    expect(sent.content.map((part) => part.type)).toEqual(['text', 'text', 'image', 'text'])
     expect((store.files as Model).docs[0]).toMatchObject({ pending: false })
     expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, expect.objectContaining({ userText: 'Olha o erro\n(arquivos: print.png)' }))
   })
