@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { AgentQuestionsCard } from "@/components/agent-questions/AgentQuestionsCard"
 import { PermissionCard } from "@/components/agent-questions/PermissionCard"
 import { WORKBENCH_STAGE_LABELS } from "../../constants"
-import type { ForkParentView } from "../../fork-logic"
+import { forkModeText, type ForkParentView } from "../../fork-logic"
 import { useForkIntegration, type ForkIntegrationState } from "../../hooks/useForkIntegration"
 import { useForkStream, useReplyForkForm, useReplyForkPermission } from "../../hooks/useForks"
 import type { ForkDto, WorkbenchDto } from "../../types"
@@ -74,7 +74,7 @@ export function ForkPanel({ workbench, fork, parent, onSelectFork }: { workbench
     return (
         <div className="flex min-h-0 flex-1 flex-col" data-ctrl-enter-scope>
             <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">
-                <ForkOrigin fork={fork} parentId={parent?.id ?? null} onSelectFork={onSelectFork} /> · aberto em {when(fork.createdAt)} na etapa &ldquo;{WORKBENCH_STAGE_LABELS[fork.forkedFromStage]}&rdquo; · somente leitura
+                <ForkOrigin fork={fork} parentId={parent?.id ?? null} onSelectFork={onSelectFork} /> · aberto em {when(fork.createdAt)} na etapa &ldquo;{WORKBENCH_STAGE_LABELS[fork.forkedFromStage]}&rdquo; · {forkModeText(fork.mode, fork.readOnly)}
             </p>
             <Timeline timeline={timeline} running={fork.runState === "running"} footer={footer?.node ?? null} footerKey={footer?.key ?? null} />
             <ForkPendingRequests workbenchId={workbench.id} fork={fork} />

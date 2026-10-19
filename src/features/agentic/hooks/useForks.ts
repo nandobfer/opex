@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import { withBasePath } from "@/lib/base-path"
 import type { ApiResponse } from "@/lib/types/api"
-import { FORK_INTEGRATION_TARGET_LABELS, type ForkIntegrationTarget } from "../constants"
+import { FORK_INTEGRATION_TARGET_LABELS, type ForkIntegrationTarget, type ForkMode } from "../constants"
 import type { ForkAction } from "../fork-logic"
 import type { FormReplyInput, PermissionReplyInput } from "../schemas"
 import type { TimelineState } from "../timeline"
@@ -41,7 +41,8 @@ function useSetFork(workbenchId: string) {
 export function useOpenFork(workbenchId: string) {
     const setFork = useSetFork(workbenchId)
     return useMutation({
-        mutationFn: async ({ text, parentForkId }: { text: string; parentForkId?: string }) => unwrapApi((await api.post<ApiResponse<ForkDto>>(base(workbenchId), parentForkId ? { text, parentForkId } : { text })).data),
+        mutationFn: async ({ text, parentForkId, readOnly }: { text: string; parentForkId?: string; readOnly?: boolean }) =>
+            unwrapApi((await api.post<ApiResponse<ForkDto>>(base(workbenchId), { text, ...(parentForkId ? { parentForkId } : {}), ...(readOnly ? { readOnly } : {}) })).data),
         onSuccess: (fork) => {
             setFork(fork)
             toast.success(`Fork ${fork.number} aberto`)
@@ -50,19 +51,22 @@ export function useOpenFork(workbenchId: string) {
     })
 }
 
-type ForkMutation = { action: Exclude<ForkAction, "discard">; text?: string; target?: ForkIntegrationTarget }
+/** `set-mode`/`lock`: troca do modo (Plan/Build) e trava de somente leitura (sem volta). */
+export type ForkMutationAction = Exclude<ForkAction, "discard"> | "set-mode" | "lock"
+type ForkMutation = { action: ForkMutationAction; text?: string; target?: ForkIntegrationTarget; mode?: ForkMode }
 
-const ACTION_TOASTS: Partial<Record<ForkAction, string>> = {
+const ACTION_TOASTS: Partial<Record<ForkMutationAction, string>> = {
     close: "Conversa pausada: retome, integre ou descarte o fork",
     resume: "Conversa retomada",
     interrupt: "Interrompendo o agente do fork",
     integrate: "Consolidando o resumo do fork",
     "revise-summary": "Ajuste enviado ao agente",
     "cancel-integration": "Integração cancelada",
+    lock: "Fork travado como somente leitura",
 }
 
 /** Otimista: o que o servidor fará na hora (a resposta corrige; a falha reverte). */
-function optimistic(fork: ForkDto, { action }: ForkMutation): ForkDto {
+export function optimistic(fork: ForkDto, { action, mode }: ForkMutation): ForkDto {
     switch (action) {
         case "send":
         case "retry":
@@ -76,6 +80,10 @@ function optimistic(fork: ForkDto, { action }: ForkMutation): ForkDto {
             return { ...fork, status: "active" }
         case "cancel-integration":
             return { ...fork, status: "closed", summary: null }
+        case "set-mode":
+            return mode ? { ...fork, mode } : fork
+        case "lock":
+            return { ...fork, mode: "plan", readOnly: true }
         default:
             return fork
     }
@@ -88,7 +96,7 @@ export function useForkAction(workbenchId: string, fork: ForkDto) {
     return useMutation({
         mutationFn: async (input: ForkMutation) => {
             const path = input.action === "send" ? `${base(workbenchId)}/${fork.id}/messages` : `${base(workbenchId)}/${fork.id}/actions/${input.action}`
-            const body = input.action === "apply" ? { target: input.target } : input.text === undefined ? {} : { text: input.text }
+            const body = input.action === "apply" ? { target: input.target } : input.action === "set-mode" ? { mode: input.mode } : input.text === undefined ? {} : { text: input.text }
             return unwrapApi((await api.post<ApiResponse<ForkDto>>(path, body)).data)
         },
         onMutate: async (input) => {
@@ -108,6 +116,10 @@ export function useForkAction(workbenchId: string, fork: ForkDto) {
             if (input.action === "apply") {
                 void queryClient.invalidateQueries({ queryKey: agenticKey("workbench") })
                 toast.success(`Fork integrado: ${FORK_INTEGRATION_TARGET_LABELS[input.target!].label}`)
+                return
+            }
+            if (input.action === "set-mode") {
+                toast.success(saved.mode === "build" ? "Modo Build: o fork pode alterar arquivos" : "Modo Plan: o fork é somente leitura")
                 return
             }
             const message = ACTION_TOASTS[input.action]

@@ -9,7 +9,7 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, { label: string; description: 
     implementation: { label: "Implementação", description: "Cria o worktree, move a sessão e implementa o plano aprovado" },
     build: { label: "Build e ambiente", description: "Sobe a prévia com docker compose e, no fim, limpa o ambiente" },
     pr: { label: "Pull Request", description: "Valida, faz commit e push e abre o PR com o gh" },
-    fork: { label: "Fork da conversa", description: "Responde nos forks da conversa (somente leitura) e consolida o resumo para integrar" },
+    fork: { label: "Fork da conversa", description: "Responde nos forks da conversa e consolida o resumo para integrar. Com o agente plan, o fork abre em Plan (somente leitura); com outros (ex.: build), em Build (pode alterar arquivos). O modo pode ser trocado na conversa" },
 }
 
 /**
@@ -148,6 +148,15 @@ export const FORK_STATUS_LABELS: Record<ForkStatus, string> = {
 /** Forks ainda em aberto (nem integrados, nem descartados, nem concluídos). */
 export const OPEN_FORK_STATUSES: readonly ForkStatus[] = ["active", "closed", "integrating"]
 
+/** Modo do fork: `plan` (somente leitura) ou `build` (pode alterar arquivos conforme as permissões do agente). */
+export const FORK_MODES = ["plan", "build"] as const
+export type ForkMode = (typeof FORK_MODES)[number]
+
+export const FORK_MODE_LABELS: Record<ForkMode, { label: string; description: string }> = {
+    plan: { label: "Plan", description: "Somente leitura: lê o código e responde, sem alterar arquivos" },
+    build: { label: "Build", description: "Pode alterar arquivos e rodar comandos (na pasta da mesa)" },
+}
+
 /** Destino do resumo ao integrar um fork. */
 export const FORK_INTEGRATION_TARGETS = ["parent", "context", "planner", "reopen"] as const
 export type ForkIntegrationTarget = (typeof FORK_INTEGRATION_TARGETS)[number]
@@ -175,7 +184,7 @@ export const FORK_NOTES_INSTRUCTIONS_KEY = "opex-fork-notes"
 export const FORK_CHILD_NOTES_INSTRUCTIONS_KEY = "opex-fork-child-notes"
 
 /**
- * Permissões da sessão de um fork (somente leitura): nega edição, subagentes e comandos, liberando
+ * Permissões da sessão de um fork em Plan (somente leitura): nega edição, subagentes e comandos, liberando
  * só os comandos de leitura. A última regra que casa vale (as liberações vêm depois do bloqueio geral).
  */
 export const FORK_READ_ONLY_COMMANDS = ["git status*", "git log*", "git diff*", "git show*", "git branch*", "ls*", "cat *", "grep *", "rg *", "find *", "head *", "tail *", "wc *"] as const

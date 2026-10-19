@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   applyForkIntegration: vi.fn(),
   discardFork: vi.fn(),
   resolveForksDonePrompt: vi.fn(),
+  setForkMode: vi.fn(),
+  lockFork: vi.fn(),
 }))
 
 vi.mock('@/features/agentic/server/forks', () => ({
@@ -39,9 +41,9 @@ describe('rotas dos forks da conversa', () => {
     mocks.listForks.mockResolvedValue([])
     expect((await openRoute(request('', 'POST', { text: '  ' }), { params: Promise.resolve({ id: 'w1' }) })).status).toBe(400)
     expect((await openRoute(request('', 'POST', { text: 'Por que X?' }), { params: Promise.resolve({ id: 'w1' }) })).status).toBe(200)
-    expect(mocks.openFork).toHaveBeenCalledWith('w1', 'Por que X?', undefined)
+    expect(mocks.openFork).toHaveBeenCalledWith('w1', 'Por que X?', { parentForkId: undefined, readOnly: undefined, mode: undefined })
     expect((await openRoute(request('', 'POST', { text: 'E o Y?', parentForkId: 'f1' }), { params: Promise.resolve({ id: 'w1' }) })).status).toBe(200)
-    expect(mocks.openFork).toHaveBeenLastCalledWith('w1', 'E o Y?', 'f1')
+    expect(mocks.openFork).toHaveBeenLastCalledWith('w1', 'E o Y?', { parentForkId: 'f1', readOnly: undefined, mode: undefined })
     expect((await listRoute(request('', 'GET'), { params: Promise.resolve({ id: 'w1' }) })).status).toBe(200)
   })
 
@@ -63,6 +65,28 @@ describe('rotas dos forks da conversa', () => {
     expect((await action('apply', { target: 'lixo' })).status).toBe(400)
     expect((await action('apply', { target: 'context' })).status).toBe(200)
     expect(mocks.applyForkIntegration).toHaveBeenCalledWith('w1', 'f1', 'context')
+  })
+
+  it('abrir aceita readOnly e mode; recusa valores inválidos', async () => {
+    mocks.openFork.mockResolvedValue({ id: 'f1' })
+    const open = (body: unknown) => openRoute(request('', 'POST', body), { params: Promise.resolve({ id: 'w1' }) })
+    expect((await open({ text: 'Investigue', readOnly: true })).status).toBe(200)
+    expect(mocks.openFork).toHaveBeenLastCalledWith('w1', 'Investigue', { parentForkId: undefined, readOnly: true, mode: undefined })
+    expect((await open({ text: 'Altere', mode: 'build' })).status).toBe(200)
+    expect(mocks.openFork).toHaveBeenLastCalledWith('w1', 'Altere', { parentForkId: undefined, readOnly: undefined, mode: 'build' })
+    expect((await open({ text: 'x', readOnly: 'sim' })).status).toBe(400)
+    expect((await open({ text: 'x', mode: 'edit' })).status).toBe(400)
+  })
+
+  it('set-mode exige Plan ou Build; lock não tem corpo', async () => {
+    mocks.setForkMode.mockResolvedValue({ id: 'f1', mode: 'build' })
+    mocks.lockFork.mockResolvedValue({ id: 'f1', mode: 'plan', readOnly: true })
+    expect((await action('set-mode', { mode: 'write' })).status).toBe(400)
+    expect((await action('set-mode', {})).status).toBe(400)
+    expect((await action('set-mode', { mode: 'build' })).status).toBe(200)
+    expect(mocks.setForkMode).toHaveBeenCalledWith('w1', 'f1', 'build')
+    expect((await action('lock')).status).toBe(200)
+    expect(mocks.lockFork).toHaveBeenCalledWith('w1', 'f1')
   })
 
   it('descartar e responder à pergunta da mesa concluída', async () => {

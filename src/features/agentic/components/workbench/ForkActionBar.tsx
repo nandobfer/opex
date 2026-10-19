@@ -15,15 +15,17 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { canOpenChildFork, forkActions } from "../../fork-logic"
+import { canOpenChildFork, forkActions, isOpenFork } from "../../fork-logic"
 import { useDiscardFork, useForkAction } from "../../hooks/useForks"
 import type { ForkDto } from "../../types"
 import { ForkComposer } from "./ForkComposer"
+import { ForkModeSelect } from "./ForkModeSelect"
 
 /**
  * Conversa e ciclo de vida do fork: enviar, pausar a conversa, parar, tentar de novo, retomar, integrar,
- * descartar e **Abrir fork** a partir deste fork (fork de fork, com o fork em aberto). `extra` entra
- * na linha de botões depois do Abrir fork (ex.: os botões da integração).
+ * descartar, **Modo** (Plan/Build e trava de somente leitura) e **Abrir fork** a partir deste fork (fork
+ * de fork, com o fork em aberto). `extra` entra na linha de botões depois do Abrir fork (ex.: os botões
+ * da integração).
  */
 export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }: { workbenchId: string; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void; extra?: ReactNode }) {
     const mutation = useForkAction(workbenchId, fork)
@@ -72,7 +74,12 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
                     </motion.p>
                 )}
             </AnimatePresence>
-            <div className="flex flex-wrap justify-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                {isOpenFork(fork.status) && (
+                    <div className="mr-auto">
+                        <ForkModeSelect fork={fork} disabled={pending} onChange={(mode) => mutation.mutate({ action: "set-mode", mode })} onLock={() => mutation.mutate({ action: "lock" })} />
+                    </div>
+                )}
                 {canFork && (
                     <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setForking(true)}>
                         <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork

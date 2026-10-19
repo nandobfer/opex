@@ -76,6 +76,9 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 
 ### C — Fork: modo Plan/Build e somente leitura — 836cb9d, 90bb384
 
+> **Entregue na v2.58.0** (OPE-81) — descrito em `modules/agentic-dev.md`, "Forks da conversa"
+> (ação de trava chamada `lock`).
+
 - Fork guarda `readOnly` e o modo (`plan`/`build`); o modo inicial vem do agente (plan = somente
   leitura; demais = permissões do agente).
 - `ForkModeSelect`: troca com o agente parado, refazendo permissões/protocolo da sessão e avisando

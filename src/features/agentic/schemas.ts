@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, type AgentRole } from "./constants"
 
 /** Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa. */
 export const agentConfigSchema = z.object({
@@ -240,8 +240,15 @@ export type FormReplyInput = z.infer<typeof formReplySchema>
 export const forkMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem") })
 export type ForkMessageInput = z.infer<typeof forkMessageSchema>
 
-/** Abrir fork: primeira mensagem e, num fork de fork, o fork pai. */
-export const openForkSchema = forkMessageSchema.extend({ parentForkId: z.string().trim().min(1).optional() })
+/** Modo do fork: `plan` (somente leitura) ou `build` (pode alterar arquivos). */
+export const forkModeSchema = z.object({ mode: z.enum(FORK_MODES, { error: "Escolha Plan ou Build" }) })
+export type ForkModeInput = z.infer<typeof forkModeSchema>
+
+/**
+ * Abrir fork: primeira mensagem e, num fork de fork, o fork pai. `readOnly` trava o fork como somente
+ * leitura (sem volta); `mode` escolhe o modo inicial (padrão: o do agente do papel Fork).
+ */
+export const openForkSchema = forkMessageSchema.extend({ parentForkId: z.string().trim().min(1).optional(), readOnly: z.boolean().optional(), mode: z.enum(FORK_MODES).optional() })
 export type OpenForkInput = z.infer<typeof openForkSchema>
 
 /** Destino do resumo ao integrar o fork. */

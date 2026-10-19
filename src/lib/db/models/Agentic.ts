@@ -244,6 +244,12 @@ export interface IAgenticFork {
     sessionDirectory: string | null
     /** `fork`: cópia da sessão principal; `fresh`: sessão nova com o contexto da mesa (mesa sem sessão). */
     origin: string
+    /** Modo atual: `plan` (somente leitura) ou `build` (pode alterar arquivos). Ausente (forks antigos) = `plan`. */
+    mode?: string
+    /** Travado como somente leitura (na abertura ou depois, sem volta): o modo fica `plan`. Ausente = `false`. */
+    readOnly?: boolean
+    /** Aviso de troca de modo que vai no início da próxima mensagem ao agente (uma vez). */
+    pendingModeNote?: string | null
     /** Etapa da mesa quando o fork foi aberto. */
     forkedFromStage: string
     /** Resumo proposto para integração (em revisão enquanto `integrating`). */
@@ -277,6 +283,9 @@ const AgenticForkSchema = new Schema<IAgenticFork>(
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
         origin: { type: String, default: "fork" },
+        mode: { type: String, default: "plan" },
+        readOnly: { type: Boolean, default: false },
+        pendingModeNote: { type: String, default: null },
         forkedFromStage: { type: String, required: true },
         summary: { type: String, default: null },
         integration: { type: Schema.Types.Mixed, default: null },

@@ -441,11 +441,26 @@ done → Reabrir mesa (texto ao planejador) → planning
 ## Forks da conversa
 
 - Agente **Fork** configurável globalmente e por central, com instruções próprias. Conversas
-  paralelas somente leitura não ocupam vaga nem alteram a tarefa/descrição. Sessão copiada da mesa;
+  paralelas não ocupam vaga nem alteram a tarefa/descrição. Sessão copiada da mesa;
   sem sessão principal, nova sessão com o contexto preservado. Consumo separado (`agentic-fork`).
 - **Fork de fork** copia a sessão do pai, sem limite de profundidade; seletor em árvore e atalho para
   o pai. Pai descartado é identificado sem perder os filhos. Filhos também integram no pai, além
   dos demais destinos disponíveis na mesa.
+- **Modo Plan/Build** (`mode` no fork): **Plan** = somente leitura (permissões `FORK_READONLY_PERMISSIONS`
+  na sessão, protocolo de leitura e agente `plan` no turno); **Build** = pode alterar arquivos na pasta
+  da mesa (sessão sem restrição própria, valem as permissões do agente; turno com o agente do papel
+  Fork ou `build` quando ele for o `plan`; protocolo proíbe commit/push/merge/troca de branch sem
+  pedido). O modo inicial vem do agente do papel Fork configurado na central (`plan` → Plan; demais →
+  Build). Forks antigos sem o campo são tratados como Plan (eram somente leitura) e sem trava.
+- **`ForkModeSelect`** (barra inferior, só com o fork em aberto): alterna Plan/Build (`OptionTabs`)
+  apenas com o agente parado (`forkModeBlockReason`: travado, fora de aberto ou respondendo). A troca
+  refaz permissões e protocolo da sessão, grava `pendingModeNote` (vai no início da próxima mensagem,
+  uma vez), registra aviso na saída, audita e publica `agentic-updated`. Resposta otimista com
+  reversão e toast (`useForkAction`).
+- **Trava de somente leitura** (`readOnly`): caixa **Somente leitura** no `ForkComposer` ou botão
+  **Travar** com confirmação (AlertDialog). Sem volta: o modo fica Plan e o seletor vira o selo
+  "Somente leitura (travado)". **Fork de fork não herda** a trava nem o modo do pai (a cópia da sessão
+  recebe as permissões do próprio modo). O cabeçalho do fork mostra o modo (`forkModeText`).
 - Ciclo: conversar, parar, tentar novamente, **pausar a conversa**, retomar, descartar ou integrar.
   Integração consolida resumo ajustável; usuário escolhe **Contexto**, **Planejador**, **Reabertura**
   ou **Pai** conforme estado/sessão. Resumo é adicional, nunca substitui o conteúdo original.
@@ -467,10 +482,19 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Na conclusão, política `forks.onWorkbenchDone`: perguntar (padrão), concluir ou manter. Exclusão da
   mesa remove forks e sessões sem dispensar a limpeza do ambiente do Opex. Sessões pendentes são
   retomadas pelos Crons. Excluir uma central também preserva os registros se a limpeza das sessões
-  dos forks falhar, oferecendo nova tentativa. Auditoria `ForkConversa` e eventos `agentic-updated`
+  dos forks falhar, oferecendo nova tentativa. Auditoria `ForkDaMesa` (abertura com `modo`/`somenteLeitura`, trocas de modo e trava) e eventos `agentic-updated`
   em `private-app`.
-- APIs autenticadas em `/api/agentic/workbenches/[id]/forks`: listar/criar (`parentForkId?`), detalhe,
-  excluir, mensagens, ações, permissões, formulários, eventos NDJSON e decisão `done-prompt`.
+- APIs autenticadas em `/api/agentic/workbenches/[id]/forks`: listar/criar (`parentForkId?`,
+  `readOnly?`, `mode?`), detalhe, excluir, mensagens, ações, permissões, formulários, eventos NDJSON e
+  decisão `done-prompt`. O `ForkDto` expõe `mode` e `readOnly`.
+
+| Ação (`POST …/forks/[forkId]/actions/[action]`) | Corpo | Efeito |
+|---|---|---|
+| `close` · `resume` · `interrupt` · `retry` · `integrate` · `cancel-integration` | — | Ciclo de vida do fork |
+| `revise-summary` | `{ text }` | Ajusta o resumo da integração |
+| `apply` | `{ target }` | Integra no destino (`context`, `planner`, `reopen`, `parent`) |
+| `set-mode` | `{ mode: "plan" \| "build" }` | Troca o modo (agente parado; 409 se travado) |
+| `lock` | — | Trava como somente leitura (Plan), sem volta |
 
 ## Filtros avançados e builder Docker
 

@@ -1,6 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
-import type { ForkIntegrationTarget, ForkStatus, PendingTurnAction, RunState, WorkbenchStage } from "./constants"
+import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
 
@@ -164,6 +164,10 @@ export interface ForkDto {
     runState: RunState
     error: string | null
     origin: "fork" | "fresh"
+    /** Modo atual: `plan` (somente leitura) ou `build` (pode alterar arquivos conforme o agente). */
+    mode: ForkMode
+    /** Travado como somente leitura (sem volta): o modo fica `plan`. */
+    readOnly: boolean
     forkedFromStage: WorkbenchStage
     /** Resumo proposto (em revisão enquanto `integrating`). */
     summary: string | null

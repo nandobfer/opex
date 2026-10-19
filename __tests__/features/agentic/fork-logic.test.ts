@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import { FORK_READONLY_PERMISSIONS } from '@/features/agentic/constants'
-import { canOpenChildFork, extractForkSummary, forkActions, forkIntegrationTargets, forkNotesInstructions, forkTree, plannerActionFor } from '@/features/agentic/fork-logic'
+import {
+  asForkMode,
+  canChangeForkMode,
+  canOpenChildFork,
+  effectiveForkMode,
+  extractForkSummary,
+  forkActions,
+  forkInstructions,
+  forkIntegrationTargets,
+  forkModeBlockReason,
+  forkModeNote,
+  forkModeText,
+  forkNotesInstructions,
+  forkTree,
+  forkTurnAgent,
+  initialForkMode,
+  plannerActionFor,
+} from '@/features/agentic/fork-logic'
 import { parseCentralConfig } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, agenticSettingsSchema, withDefaultAgents } from '@/features/agentic/schemas'
 
@@ -134,5 +151,59 @@ describe('configuração dos forks', () => {
     expect(forkNotesInstructions([])).toBe('')
     expect(forkNotesInstructions([{ number: 2, summary: 'usar X' }])).toContain('## Fork 2\nusar X')
     expect(forkNotesInstructions([{ number: 4, summary: 'usar Y' }], 'fork')).toContain('forks deste fork')
+  })
+})
+
+describe('modo do fork (Plan/Build) e trava de somente leitura', () => {
+  it('modo inicial: agente plan = Plan; demais = Build; trava sempre Plan; modo pedido vale sem trava', () => {
+    expect(initialForkMode('plan')).toBe('plan')
+    expect(initialForkMode('build')).toBe('build')
+    expect(initialForkMode('general')).toBe('build')
+    expect(initialForkMode(null)).toBe('build')
+    expect(initialForkMode('build', { readOnly: true })).toBe('plan')
+    expect(initialForkMode('build', { readOnly: true, mode: 'build' })).toBe('plan')
+    expect(initialForkMode('plan', { mode: 'build' })).toBe('build')
+  })
+
+  it('forks antigos sem os campos ficam em Plan (eram somente leitura) e a trava força Plan', () => {
+    expect(asForkMode(undefined)).toBe('plan')
+    expect(asForkMode('lixo')).toBe('plan')
+    expect(asForkMode('build')).toBe('build')
+    expect(effectiveForkMode('build', true)).toBe('plan')
+    expect(effectiveForkMode('build', undefined)).toBe('build')
+  })
+
+  it('agente do turno: Plan usa o plan; Build usa o agente configurado (ou build no lugar do plan)', () => {
+    expect(forkTurnAgent('plan', 'build')).toBe('plan')
+    expect(forkTurnAgent('build', 'general')).toBe('general')
+    expect(forkTurnAgent('build', 'plan')).toBe('build')
+    expect(forkTurnAgent('build', null)).toBe('build')
+  })
+
+  it('trocar o modo: só em aberto, com o agente parado e sem trava', () => {
+    expect(forkModeBlockReason('active', 'idle', false)).toBeNull()
+    expect(forkModeBlockReason('closed', 'failed', false)).toBeNull()
+    expect(forkModeBlockReason('active', 'running', false)).toBe('Aguarde o agente terminar de responder')
+    expect(forkModeBlockReason('integrated', 'idle', false)).toBe('O fork não está mais em aberto')
+    expect(forkModeBlockReason('active', 'idle', true)).toBe('Fork travado como somente leitura')
+    expect(canChangeForkMode('active', 'idle', false)).toBe(true)
+    expect(canChangeForkMode('active', 'idle', true)).toBe(false)
+  })
+
+  it('textos e aviso ao agente pelo modo', () => {
+    expect(forkModeText('plan', false)).toContain('somente leitura')
+    expect(forkModeText('build', false)).toContain('pode alterar arquivos')
+    expect(forkModeText('plan', true)).toBe('somente leitura (travado)')
+    expect(forkModeNote('build', false)).toContain('PODE alterar arquivos')
+    expect(forkModeNote('plan', true)).toContain('Plan (travado)')
+    expect(forkModeNote('plan', false)).toContain('SOMENTE LEITURA')
+  })
+
+  it('protocolo: Plan proíbe alterações; Build libera dentro das permissões do agente', () => {
+    expect(forkInstructions('')).toContain('SOMENTE LEITURA')
+    const build = forkInstructions('Extra da central', false)
+    expect(build).not.toContain('SOMENTE LEITURA')
+    expect(build).toContain('PODE alterar arquivos')
+    expect(build).toContain('Extra da central')
   })
 })

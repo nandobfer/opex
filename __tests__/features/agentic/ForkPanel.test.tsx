@@ -32,6 +32,8 @@ const fork = (patch: Partial<ForkDto> = {}): ForkDto => ({
   runState: 'idle',
   error: null,
   origin: 'fork',
+  mode: 'plan',
+  readOnly: false,
   forkedFromStage: 'plan_review',
   summary: null,
   integration: null,
@@ -97,7 +99,7 @@ describe('ForkActionBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /Abrir fork/ }))
     fireEvent.change(screen.getByLabelText(/O que você quer perguntar ou investigar no fork/), { target: { value: 'E o Y?' } })
     fireEvent.click(screen.getAllByRole('button', { name: /Abrir fork/ }).at(-1)!)
-    expect(mocks.openFork).toHaveBeenCalledWith({ text: 'E o Y?', parentForkId: 'f1' }, expect.anything())
+    expect(mocks.openFork).toHaveBeenCalledWith({ text: 'E o Y?', parentForkId: 'f1', readOnly: false }, expect.anything())
     expect(onForkOpened).toHaveBeenCalledWith({ id: 'f2' })
   })
 })
