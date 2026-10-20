@@ -1,6 +1,5 @@
 import { dynamicTool, type ToolSet } from "ai"
 import { loggerFor } from "@/lib/logger"
-import type { OpexConfirmationPolicy } from "../constants"
 import type { OpexConfirmationDto } from "../types"
 import { toolErrorMessage, type OpexTool, type OpexToolContext } from "./tools/define"
 import { needsConfirmation } from "./tools/registry"
@@ -53,8 +52,11 @@ export interface ToolRuntime {
     durations: Map<string, number>
 }
 
-/** Converte as ferramentas do registro em ferramentas da AI SDK (execução no servidor do app). */
-export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolContext, policy: OpexConfirmationPolicy, hooks: ToolRuntimeHooks): ToolRuntime {
+/**
+ * Converte as ferramentas do registro em ferramentas da AI SDK (execução no servidor do app).
+ * `confirmationOverrides`: ajuste por ferramenta (dono); vazio = só as destrutivas pedem confirmação.
+ */
+export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolContext, confirmationOverrides: Readonly<Record<string, boolean>>, hooks: ToolRuntimeHooks): ToolRuntime {
     const confirmations = new Map<string, OpexConfirmationDto>()
     const durations = new Map<string, number>()
     const tools: ToolSet = {}
@@ -66,7 +68,7 @@ export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolCon
                 const startedAt = Date.now()
                 try {
                     await hooks.authorize?.(def)
-                    if (needsConfirmation(def, policy)) {
+                    if (needsConfirmation(def, confirmationOverrides)) {
                         const confirmation = await hooks.requestConfirmation(def, input, options.toolCallId)
                         confirmations.set(options.toolCallId, confirmation)
                         return {

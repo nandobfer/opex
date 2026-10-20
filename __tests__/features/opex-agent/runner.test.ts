@@ -85,10 +85,15 @@ const settings = {
   title: { provider: null, model: null, variant: null },
   instructions: 'Seja útil',
   titleInstructions: 'Título',
-  toolGroups: {},
+  disabledTools: [],
   files: { maxPerMessage: 5, maxSizeMb: 10 },
-  confirmation: 'destructive',
+  confirmationOverrides: {},
 }
+const MEMORIES: Record<string, string[]> = { 'opex-global': ['Regra global'], 'opex-owner': ['Regra do dono'], 'opex-client': ['Regra do cliente'] }
+vi.mock('@/features/ai/server/agent-memory-service', async (original) => ({
+  ...(await original<object>()),
+  agentMemoryTexts: async (agentIds: string[]) => agentIds.flatMap((id) => MEMORIES[id] ?? []),
+}))
 vi.mock('@/features/opex-agent/server/settings', () => ({
   loadOpexSettings: async () => ({ settings, isDefault: false, updatedAt: null }),
   opexAvailability: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Agente desativado' }),
@@ -190,6 +195,11 @@ describe('runner do Agente Opex', () => {
     expect(options.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Quais tarefas do CRM?' }, { type: 'text', text: '(Contexto do turno: agora é segunda (America/Sao_Paulo; 2026-10-19T12:00:00.000Z).)' }] }])
     expect(options.instructions).toContain('Seja útil')
     expect(options.instructions).not.toContain('America/Sao_Paulo')
+    // Memórias do dono: globais + do dono, nunca as do cliente.
+    expect(options.instructions).toContain('## Memórias e instruções permanentes')
+    expect(options.instructions).toContain('- Regra global')
+    expect(options.instructions).toContain('- Regra do dono')
+    expect(options.instructions).not.toContain('Regra do cliente')
     expect(Object.keys(options.tools)).toEqual(['list_tasks'])
 
     const assistant = messages().docs.find((doc) => doc.role === 'assistant')!
@@ -324,6 +334,10 @@ describe('runner no portal do cliente', () => {
     const options = mocks.streamText.mock.calls[0]![0] as { instructions: string; tools: Record<string, unknown> }
     expect(options.instructions).toContain('portal do cliente')
     expect(options.instructions).toContain('ACME')
+    // Memórias do portal: globais + do cliente, nunca as do dono.
+    expect(options.instructions).toContain('- Regra global')
+    expect(options.instructions).toContain('- Regra do cliente')
+    expect(options.instructions).not.toContain('Regra do dono')
     expect(options.tools).toHaveProperty('list_tasks')
     await vi.waitFor(() => expect(mocks.refreshSessionTitle).toHaveBeenCalled())
     expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-client-agent' }))

@@ -254,33 +254,54 @@ describe('fila de envio (PUT assinado no S3)', () => {
   })
 })
 
-describe('ferramentas do Agente Opex no cliente', () => {
+describe('ferramentas do Agente Opex no cliente (árvore compartilhada)', () => {
   const taskTools = OPEX_CLIENT_TOOLS.filter((tool) => tool.group === 'tasks').map((tool) => tool.name)
+  const openModule = (label: string) => fireEvent.click(screen.getByText(label).closest('[role="button"]')!)
 
   it('marca e desmarca o grupo inteiro, mostrando o total selecionado', () => {
     const onChange = vi.fn()
     render(<ClienteOpexToolsCard value={['list_tasks']} onChange={onChange} />)
-    expect(screen.getByText(`Tarefas (1/${taskTools.length})`)).toBeTruthy()
+    expect(screen.getByText(`1/${taskTools.length}`)).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Tarefas' }).getAttribute('aria-checked')).toBe('mixed')
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Marcar todas as ferramentas de Tarefas' }))
-    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set(taskTools))
-
-    onChange.mockClear()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Marcar todas as ferramentas de Tarefas' }))
-    expect(onChange.mock.calls[0]![0]).toEqual([])
+    // De "mixed" o clique marca tudo.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Tarefas' }))
+    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set([...taskTools, 'get_portal_overview']))
   })
 
-  it('o contexto é sempre ativo e as ferramentas de admin aparecem com o selo', () => {
-    render(<ClienteOpexToolsCard value={[]} onChange={() => undefined} />)
-    expect(screen.getByText('Sempre ativo')).toBeTruthy()
+  it('desmarcar o grupo cheio tira todas as ferramentas dele', () => {
+    const onChange = vi.fn()
+    render(<ClienteOpexToolsCard value={taskTools} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Tarefas' }))
+    expect(onChange.mock.calls[0]![0]).toEqual(['get_portal_overview'])
+  })
+
+  it('o contexto fica sempre ligado e travado; os grupos de admin aparecem com o selo', () => {
+    const onChange = vi.fn()
+    render(<ClienteOpexToolsCard value={[]} onChange={onChange} />)
     expect(screen.getAllByText('Só admin do cliente').length).toBeGreaterThan(0)
-    expect(screen.getByRole('checkbox', { name: 'Contexto sempre ativo' }).hasAttribute('disabled')).toBe(true)
+    openModule('Contexto')
+    const context = screen.getByRole('checkbox', { name: 'Visão geral' })
+    expect(context.getAttribute('aria-checked')).toBe('true')
+    expect(context.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('Sempre ligada')).toBeTruthy()
+    // Desmarcar o módulo não tira o contexto.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Contexto' }))
+    expect(onChange).toHaveBeenCalledWith(['get_portal_overview'])
   })
 
   it('marcar uma ferramenta individual mantém as demais', () => {
     const onChange = vi.fn()
     render(<ClienteOpexToolsCard value={['list_tasks']} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('checkbox', { name: /Comentar tarefa/ }))
-    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set(['list_tasks', 'add_comment']))
+    openModule('Tarefas')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Comentar tarefa' }))
+    expect(new Set(onChange.mock.calls[0]![0] as string[])).toEqual(new Set(['list_tasks', 'add_comment', 'get_portal_overview']))
+  })
+
+  it('a busca abre os módulos e filtra as ferramentas', () => {
+    render(<ClienteOpexToolsCard value={[]} onChange={() => undefined} />)
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar ferramenta' }), { target: { value: 'comentario' } })
+    expect(screen.getByRole('checkbox', { name: 'Comentar tarefa' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: 'Listar tarefas' })).toBeNull()
   })
 })

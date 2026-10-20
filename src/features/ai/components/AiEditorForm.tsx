@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest } from "lucide-react"
+import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, ScrollText } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -23,6 +23,7 @@ import { TaskRefinementTab } from "./task-refinement/TaskRefinementTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
 import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
+import { MemorySummaryTab } from "./memory-summary/MemorySummaryTab"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -46,6 +47,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "revisao-pr", label: "Revisão de PR", icon: GitPullRequest },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
+    { id: "resumo-memorias", label: "Resumo de memórias", icon: ScrollText },
 ]
 
 /**
@@ -93,6 +95,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "revisao-pr" && <PrReviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "resumo-memorias" && <MemorySummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>
     )

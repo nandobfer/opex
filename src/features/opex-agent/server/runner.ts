@@ -18,6 +18,8 @@ import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
+import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
+import { opexMemoryAgentsFor } from "@/features/ai/agents"
 import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
@@ -29,9 +31,9 @@ const log = loggerFor({ module: "opex-agent" })
 const INTERRUPTED = "Interrompido pelo usuário"
 
 /** Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema. */
-function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope): string {
+export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories: readonly string[] = []): string {
     if (scope.kind === "owner") {
-        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`].join("\n")
+        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories)].join("\n")
     }
     const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
     return [
@@ -39,15 +41,17 @@ function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope): s
         "",
         `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${role}).`,
         "A data e a hora de cada turno vêm ao fim da mensagem do usuário.",
+        memoriesSection(memories),
     ].join("\n")
 }
 
 /** Ferramentas e política do turno, conforme o escopo. */
-async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): Promise<{ tools: OpexTool[]; policy: OpexAgentSettings["confirmation"] }> {
-    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.toolGroups), policy: settings.confirmation }
+async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): Promise<{ tools: OpexTool[]; overrides: Record<string, boolean> }> {
+    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.disabledTools), overrides: settings.confirmationOverrides }
     await assertClientOpexEnabled(scope.actor)
     const { names } = await enabledClientToolNamesFor(scope.actor)
-    return { tools: enabledClientOpexServerTools(names, scope.actor.isAdmin), policy: settings.confirmation }
+    // Portal: catálogo próprio (nomes podem coincidir com os do dono), confirmação pelo padrão do risco.
+    return { tools: enabledClientOpexServerTools(names, scope.actor.isAdmin), overrides: {} }
 }
 
 function findTool(scope: OpexServerScope, name: string): OpexTool | undefined {
@@ -196,11 +200,11 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     try {
         const session = await loadSession(sessionId, scope)
         const history = await loadHistory(sessionId, session.summary, main.provider!)
-        const { tools, policy } = await toolsForTurn(scope, settings)
+        const { tools, overrides } = await toolsForTurn(scope, settings)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
-        const runtime = buildToolRuntime(tools, toolContext, policy, {
+        const runtime = buildToolRuntime(tools, toolContext, overrides, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
             ...(scope.kind === "client"
                 ? {
@@ -216,7 +220,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope),
+            instructions: instructionsFor(settings, scope, await agentMemoryTexts(opexMemoryAgentsFor(scope.kind))),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),

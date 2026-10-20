@@ -91,19 +91,34 @@ describe('registro de ferramentas', () => {
     for (const tool of OPEX_TOOLS.filter((item) => item.risk === 'destructive')) expect(typeof tool.summarize).toBe('function')
   })
 
-  it('destrutivas sempre pedem confirmação; escritas só na política "Toda alteração"', () => {
+  it('sem ajuste, só as destrutivas pedem confirmação; o ajuste da ferramenta vence o risco', () => {
     const write = findOpexTool('create_preview')!
     const read = findOpexTool('list_tasks')!
-    expect(needsConfirmation(write, 'destructive')).toBe(false)
-    expect(needsConfirmation(write, 'writes')).toBe(true)
-    expect(needsConfirmation(read, 'writes')).toBe(false)
-    expect(needsConfirmation(findOpexTool('delete_task')!, 'destructive')).toBe(true)
+    const destructive = findOpexTool('delete_task')!
+    expect(needsConfirmation(write)).toBe(false)
+    expect(needsConfirmation(read)).toBe(false)
+    expect(needsConfirmation(destructive)).toBe(true)
+    expect(needsConfirmation(write, { create_preview: true })).toBe(true)
+    expect(needsConfirmation(destructive, { delete_task: false })).toBe(false)
+    expect(needsConfirmation(destructive, { create_preview: true })).toBe(true)
   })
 
-  it('grupos desligados saem; o grupo Contexto fica sempre', () => {
-    const tools = enabledOpexTools({ ...DEFAULT_OPEX_AGENT_SETTINGS.toolGroups, tasks: false, context: false })
-    expect(tools.some((tool) => tool.group === 'tasks')).toBe(false)
+  it('ferramentas desligadas saem; o grupo Contexto fica sempre', () => {
+    const tools = enabledOpexTools(['list_tasks', 'get_app_overview'])
+    expect(tools.some((tool) => tool.name === 'list_tasks')).toBe(false)
+    expect(tools.some((tool) => tool.name === 'get_task')).toBe(true)
     expect(tools.some((tool) => tool.name === 'get_app_overview')).toBe(true)
+    expect(enabledOpexTools(DEFAULT_OPEX_AGENT_SETTINGS.disabledTools)).toHaveLength(OPEX_TOOLS.length)
+  })
+
+  it('as ferramentas de memória entram no grupo memories (excluir é destrutiva)', () => {
+    expect(OPEX_TOOLS.filter((tool) => tool.group === 'memories').map((tool) => [tool.name, tool.risk])).toEqual([
+      ['list_agent_memories', 'read'],
+      ['get_agent_memory', 'read'],
+      ['create_agent_memory', 'write'],
+      ['update_agent_memory', 'write'],
+      ['delete_agent_memory', 'destructive'],
+    ])
   })
 
   it('as instruções padrão citam o fluxo de prévia e a confirmação', () => {
@@ -153,14 +168,14 @@ describe('execução das ferramentas (buildToolRuntime)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('executa a leitura e devolve o resultado', async () => {
-    const runtime = buildToolRuntime([reader], context, 'destructive', { requestConfirmation: vi.fn() })
+    const runtime = buildToolRuntime([reader], context, {}, { requestConfirmation: vi.fn() })
     await expect((runtime.tools.reader as unknown as Executable).execute({ n: 2 }, { toolCallId: 'c1' })).resolves.toEqual({ double: 4 })
     expect(runtime.durations.has('c1')).toBe(true)
   })
 
   it('ação destrutiva não executa: grava a pendência e avisa o modelo para esperar o usuário', async () => {
     const requestConfirmation = vi.fn(async () => ({ actionId: 'a1', summary: 'Excluir x', status: 'pending' as const, error: null }))
-    const runtime = buildToolRuntime([destroyer], context, 'destructive', { requestConfirmation })
+    const runtime = buildToolRuntime([destroyer], context, {}, { requestConfirmation })
     const result = await (runtime.tools.destroyer as unknown as Executable).execute({ id: 'x' }, { toolCallId: 'c2' })
     expect(execute).not.toHaveBeenCalled()
     expect(requestConfirmation).toHaveBeenCalledWith(destroyer, { id: 'x' }, 'c2')
@@ -168,7 +183,7 @@ describe('execução das ferramentas (buildToolRuntime)', () => {
   })
 
   it('erro de regra vira mensagem acionável para o modelo', async () => {
-    const runtime = buildToolRuntime([failing], context, 'destructive', { requestConfirmation: vi.fn() })
+    const runtime = buildToolRuntime([failing], context, {}, { requestConfirmation: vi.fn() })
     await expect((runtime.tools.failing as unknown as Executable).execute({}, { toolCallId: 'c3' })).rejects.toThrow('Tarefa já arquivada [TASK_ARCHIVED]')
   })
 

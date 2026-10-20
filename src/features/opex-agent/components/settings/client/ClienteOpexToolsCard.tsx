@@ -1,45 +1,55 @@
 "use client"
 
-import { AnimatePresence, motion } from "framer-motion"
-import { Ban, ShieldCheck } from "lucide-react"
+import { useMemo } from "react"
+import { ShieldCheck } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ToggleRow } from "@/components/ui/toggle-card"
-import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOL_GROUPS, OPEX_CLIENT_TOOL_GROUP_LABELS, OPEX_CLIENT_TOOLS, type OpexClientToolGroup } from "../../../client-tools"
+import { CheckTree } from "@/components/ui/check-tree/CheckTree"
 import { cn } from "@/lib/utils"
+import { buildOpexClientToolTree, findOpexClientTool, OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOL_GROUP_LABELS, type OpexClientToolGroup, type OpexClientToolRisk } from "../../../client-tools"
 
 interface ClienteOpexToolsCardProps {
     value: readonly string[]
     onChange: (next: string[]) => void
 }
 
-const RISK_LABEL: Record<string, string> = { read: "Leitura", write: "Alteração", destructive: "Destrutiva" }
+const RISK_BADGES: Record<OpexClientToolRisk, { label: string; className: string }> = {
+    read: { label: "Leitura", className: "bg-muted text-muted-foreground" },
+    write: { label: "Altera", className: "bg-primary/10 text-primary" },
+    destructive: { label: "Destrutiva", className: "bg-warning/15 text-warning" },
+}
+
+const LOCKED = new Set([OPEX_CLIENT_CONTEXT_TOOL])
+
+function AdminOnlyBadge() {
+    return (
+        <Badge variant="outline" className="gap-1 text-[10px] font-medium">
+            <ShieldCheck className="h-3 w-3" aria-hidden /> Só admin do cliente
+        </Badge>
+    )
+}
 
 /**
- * Seleção, ferramenta a ferramenta, do que o Agente Opex pode usar no portal. Contexto fica sempre
- * ligado; cada grupo tem a caixa "todas" (estado intermediário quando só parte está marcada). As de
- * admin só chegam ao admin do cliente, mesmo marcadas.
+ * Seleção, ferramenta a ferramenta, do que o Agente Opex pode usar no portal, na mesma árvore da
+ * seleção do dono (`CheckTree`). Contexto fica sempre ligado; as de admin só chegam ao admin do
+ * cliente, mesmo marcadas. Destrutivas sempre pedem confirmação no portal.
  */
 export function ClienteOpexToolsCard({ value, onChange }: ClienteOpexToolsCardProps) {
-    const selected = new Set(value)
-    const groups = OPEX_CLIENT_TOOL_GROUPS.filter((group) => group !== "context")
+    const tree = useMemo(() => buildOpexClientToolTree(), [])
+    const selected = useMemo(() => new Set([...value, OPEX_CLIENT_CONTEXT_TOOL]), [value])
 
-    const toggleTool = (name: string, checked: boolean) => {
-        const next = new Set(selected)
-        if (checked) next.add(name)
-        else next.delete(name)
-        onChange([...next])
-    }
-
-    const toggleGroup = (group: OpexClientToolGroup, checked: boolean) => {
-        const names = OPEX_CLIENT_TOOLS.filter((tool) => tool.group === group && tool.name !== OPEX_CLIENT_CONTEXT_TOOL).map((tool) => tool.name)
-        const next = new Set(selected)
-        for (const name of names) {
-            if (checked) next.add(name)
-            else next.delete(name)
-        }
-        onChange([...next])
+    const renderLeafMeta = (key: string) => {
+        const tool = findOpexClientTool(key)
+        if (!tool) return null
+        const badge = RISK_BADGES[tool.risk]
+        return (
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <code className="text-[10px] text-muted-foreground">{tool.name}</code>
+                <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", badge.className)}>{badge.label}</span>
+                {tool.name === OPEX_CLIENT_CONTEXT_TOOL && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Sempre ligada</span>}
+                {tool.adminOnly && !OPEX_CLIENT_TOOL_GROUP_LABELS[tool.group].adminOnly && <AdminOnlyBadge />}
+            </span>
+        )
     }
 
     return (
@@ -47,91 +57,21 @@ export function ClienteOpexToolsCard({ value, onChange }: ClienteOpexToolsCardPr
             <CardHeader>
                 <CardTitle className="text-base">Ferramentas do cliente</CardTitle>
                 <CardDescription>
-                    Escolha o que o agente pode usar no portal. Toda consulta e ação continua limitada ao cliente e ao papel do usuário no servidor, mesmo com a ferramenta ligada.
+                    Escolha o que o agente pode usar no portal. Toda consulta e ação continua limitada ao cliente e ao papel do usuário no servidor, mesmo com a ferramenta ligada. As destrutivas sempre
+                    pedem Confirmar/Cancelar no chat.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
-                <ToggleRow
-                    id="opex-client-context"
-                    label="Contexto"
-                    description="Visão geral do portal (cliente, usuário, papel e repositórios) — sempre disponível."
-                    disabled
-                    right={
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Sempre ativo</span>
-                            <Checkbox checked disabled aria-label="Contexto sempre ativo" />
-                        </div>
-                    }
+            <CardContent>
+                <CheckTree
+                    tree={tree}
+                    selected={selected}
+                    lockedKeys={LOCKED}
+                    renderLeafMeta={renderLeafMeta}
+                    renderModuleMeta={(id) => (OPEX_CLIENT_TOOL_GROUP_LABELS[id as OpexClientToolGroup]?.adminOnly ? <AdminOnlyBadge /> : null)}
+                    searchPlaceholder="Buscar ferramenta..."
+                    emptyText="Nenhuma ferramenta encontrada."
+                    onChange={(next) => onChange([...next])}
                 />
-
-                {groups.map((group) => {
-                    const meta = OPEX_CLIENT_TOOL_GROUP_LABELS[group]
-                    const tools = OPEX_CLIENT_TOOLS.filter((tool) => tool.group === group)
-                    const selectedCount = tools.filter((tool) => selected.has(tool.name)).length
-                    const all = selectedCount === tools.length
-                    const some = selectedCount > 0 && !all
-                    return (
-                        <section key={group} className="space-y-2">
-                            <ToggleRow
-                                id={`opex-client-group-${group}`}
-                                label={
-                                    <span className="flex flex-wrap items-center gap-1.5">
-                                        {meta.label} ({selectedCount}/{tools.length})
-                                        {meta.adminOnly && (
-                                            <Badge variant="outline" className="gap-1 text-[10px] font-medium">
-                                                <ShieldCheck className="h-3 w-3" aria-hidden /> Só admin do cliente
-                                            </Badge>
-                                        )}
-                                    </span>
-                                }
-                                description={meta.description}
-                                right={<Checkbox checked={all} indeterminate={some} aria-label={`Marcar todas as ferramentas de ${meta.label}`} onCheckedChange={(checked) => toggleGroup(group, checked)} />}
-                            />
-                            <div className="grid gap-1.5 md:grid-cols-2">
-                                {tools.map((tool) => (
-                                    <label
-                                        key={tool.name}
-                                        htmlFor={`opex-client-tool-${tool.name}`}
-                                        className={cn(
-                                            "flex cursor-pointer items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-border hover:bg-muted/40",
-                                            selected.has(tool.name) && "border-border/60",
-                                        )}
-                                    >
-                                        <Checkbox
-                                            id={`opex-client-tool-${tool.name}`}
-                                            className="mt-0.5"
-                                            checked={selected.has(tool.name)}
-                                            onCheckedChange={(checked) => toggleTool(tool.name, checked)}
-                                        />
-                                        <span className="min-w-0 space-y-0.5">
-                                            <span className="flex flex-wrap items-center gap-1.5 text-sm">
-                                                {tool.label}
-                                                <span className={cn("text-[10px] uppercase tracking-wide", tool.risk === "read" ? "text-muted-foreground" : tool.risk === "write" ? "text-warning" : "text-destructive")}>
-                                                    {RISK_LABEL[tool.risk]}
-                                                </span>
-                                            </span>
-                                            <span className="block text-xs text-muted-foreground">{tool.hint}</span>
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-                            <AnimatePresence initial={false}>
-                                {!some && !all && (
-                                    <motion.p
-                                        key={`${group}-off`}
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        exit={{ opacity: 0, height: 0 }}
-                                        transition={{ duration: 0.18 }}
-                                        className="flex items-center gap-1.5 overflow-hidden pl-2 text-xs text-muted-foreground"
-                                    >
-                                        <Ban className="h-3 w-3 shrink-0" aria-hidden /> Nenhuma ferramenta deste grupo fica disponível.
-                                    </motion.p>
-                                )}
-                            </AnimatePresence>
-                        </section>
-                    )
-                })}
             </CardContent>
         </Card>
     )

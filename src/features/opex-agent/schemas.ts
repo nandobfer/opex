@@ -2,7 +2,6 @@ import { z } from "zod"
 import {
     DEFAULT_OPEX_INSTRUCTIONS,
     DEFAULT_OPEX_TITLE_INSTRUCTIONS,
-    OPEX_CONFIRMATION_POLICIES,
     OPEX_FILE_SIZE_MB_DEFAULT,
     OPEX_FILE_SIZE_MB_MAX,
     OPEX_FILES_PER_MESSAGE_DEFAULT,
@@ -10,8 +9,6 @@ import {
     OPEX_MESSAGE_MAX,
     OPEX_PROVIDER_IDS,
     OPEX_TITLE_MAX,
-    OPEX_TOOL_GROUPS,
-    type OpexToolGroup,
 } from "./constants"
 
 const providerFields = {
@@ -44,8 +41,6 @@ export const opexFilesSettingsSchema = z.object({
 })
 export type OpexFilesSettings = z.infer<typeof opexFilesSettingsSchema>
 
-const toolGroupsShape = Object.fromEntries(OPEX_TOOL_GROUPS.map((group) => [group, z.boolean()])) as Record<OpexToolGroup, z.ZodBoolean>
-
 /** Configuração do Agente Opex — mesmo schema na tela e na API. */
 export const opexAgentSettingsSchema = z
     .object({
@@ -54,8 +49,10 @@ export const opexAgentSettingsSchema = z
         title: opexTitleModelSchema,
         instructions: z.string().trim().min(1, "Informe as instruções").max(12_000, "Até 12.000 caracteres"),
         titleInstructions: z.string().trim().min(1, "Informe as instruções").max(4000, "Até 4.000 caracteres"),
-        toolGroups: z.object(toolGroupsShape),
-        confirmation: z.enum(OPEX_CONFIRMATION_POLICIES),
+        /** Ferramentas **desligadas** (a nova nasce ligada); nomes conferidos no catálogo no servidor. */
+        disabledTools: z.array(z.string().trim().min(1).max(64)).max(300),
+        /** Ajuste por ferramenta (pede ou não confirmação); ausente = padrão pelo risco (só destrutivas). */
+        confirmationOverrides: z.record(z.string().trim().min(1).max(64), z.boolean()),
         files: opexFilesSettingsSchema,
     })
     .superRefine((value, ctx) => {
@@ -75,8 +72,8 @@ export const DEFAULT_OPEX_AGENT_SETTINGS: OpexAgentSettings = {
     title: { provider: null, model: null, variant: null },
     instructions: DEFAULT_OPEX_INSTRUCTIONS,
     titleInstructions: DEFAULT_OPEX_TITLE_INSTRUCTIONS,
-    toolGroups: Object.fromEntries(OPEX_TOOL_GROUPS.map((group) => [group, true])) as Record<OpexToolGroup, boolean>,
-    confirmation: "destructive",
+    disabledTools: [],
+    confirmationOverrides: {},
     files: { maxPerMessage: OPEX_FILES_PER_MESSAGE_DEFAULT, maxSizeMb: OPEX_FILE_SIZE_MB_DEFAULT },
 }
 

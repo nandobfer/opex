@@ -1,3 +1,5 @@
+import type { CheckBranch } from "@/lib/check-tree"
+
 /**
  * Catálogo das ferramentas do Agente Opex no **portal do cliente** (módulo PURO: tela e servidor).
  *
@@ -90,3 +92,16 @@ export function opexClientToolCounts(isAdmin: boolean): Record<OpexClientToolGro
 
 /** Nomes válidos (validação da configuração salva pelo dono). */
 export const OPEX_CLIENT_TOOL_NAMES: readonly string[] = OPEX_CLIENT_TOOLS.map((tool) => tool.name)
+
+/**
+ * Árvore da seleção do portal (mesmo componente da seleção do dono): um módulo por grupo, uma folha
+ * por ferramenta; destrutivas aparecem como sensíveis. O Contexto entra travado.
+ */
+export function buildOpexClientToolTree(): CheckBranch[] {
+    return OPEX_CLIENT_TOOL_GROUPS.map((group) => ({
+        id: group,
+        label: OPEX_CLIENT_TOOL_GROUP_LABELS[group].label,
+        description: OPEX_CLIENT_TOOL_GROUP_LABELS[group].description,
+        children: OPEX_CLIENT_TOOLS.filter((tool) => tool.group === group).map((tool) => ({ key: tool.name, label: tool.label, description: tool.hint, ...(tool.risk === "destructive" ? { sensitive: true } : {}) })),
+    })).filter((branch) => branch.children.length > 0)
+}

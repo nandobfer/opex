@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest'
+import { buildSummaryInstructions, fallbackSummary, normalizeText, parseFormattedMemory, truncateAtWord } from '@/features/ai/memory-summary'
+import { memoryInputSchema, memorySummarySettingsSchema, DEFAULT_MEMORY_SUMMARY_SETTINGS } from '@/features/ai/schemas'
+
+describe('Resumo de memórias (puro)', () => {
+  it('interpreta o JSON do modelo, tolerando cercas e texto em volta', () => {
+    expect(parseFormattedMemory('Claro!\n```json\n{"texto": "Use  pt-BR.\\n\\n\\nSempre.", "resumo": "- **Idioma** pt-BR\\nextra"}\n```', 80)).toEqual({ texto: 'Use pt-BR.\n\nSempre.', resumo: 'Idioma pt-BR' })
+    expect(parseFormattedMemory('sem json', 80)).toBeNull()
+    expect(parseFormattedMemory('{"texto": "", "resumo": "x"}', 80)).toBeNull()
+  })
+
+  it('resumo de reserva: primeira frase, cortada em limite de palavra', () => {
+    expect(fallbackSummary('Responda sempre em pt-BR. Seja breve.', 80)).toBe('Responda sempre em pt-BR')
+    expect(truncateAtWord('integração com o provedor externo', 20)).toBe('integração com o…')
+    expect(normalizeText('  a   b \r\n\r\n\r\n c ')).toBe('a b\n\nc')
+  })
+
+  it('as instruções pedem o JSON com o tamanho máximo do resumo', () => {
+    expect(buildSummaryInstructions('Revise.', 60)).toContain('no máximo 60 caracteres')
+  })
+
+  it('schemas: texto de 3 a 2.000 caracteres; ligado exige provedor e modelo', () => {
+    expect(memoryInputSchema.safeParse({ texto: 'ab' }).success).toBe(false)
+    expect(memoryInputSchema.safeParse({ texto: 'x'.repeat(2001) }).success).toBe(false)
+    expect(memoryInputSchema.safeParse({ texto: 'abc' }).success).toBe(true)
+    expect(memorySummarySettingsSchema.safeParse(DEFAULT_MEMORY_SUMMARY_SETTINGS).success).toBe(true)
+    expect(memorySummarySettingsSchema.safeParse({ ...DEFAULT_MEMORY_SUMMARY_SETTINGS, enabled: true }).success).toBe(false)
+    expect(memorySummarySettingsSchema.safeParse({ ...DEFAULT_MEMORY_SUMMARY_SETTINGS, maxLength: 20 }).success).toBe(false)
+  })
+})
