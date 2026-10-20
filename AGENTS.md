@@ -185,7 +185,9 @@ sem pedido explícito.
   com campos públicos/privados, tester e debug, seguindo `aicontext/modules/integrations.md`.
 - **Ferramentas do Agente Opex** (`src/features/opex-agent/server/tools/`) chamam a **função de
   serviço real** do app (nunca HTTP). Ferramenta de exclusão, arquivamento, gravação de integração ou
-  usuário/senha/token de cliente é `destructive` (sempre pede Confirmar/Cancelar no chat); segredos
+  usuário/senha/token de cliente é `destructive` (por padrão pede Confirmar/Cancelar no chat; o dono
+  pode trocar a confirmação ferramenta a ferramenta em Integrações › Provedores de IA › Agente Opex,
+  e a tela avisa a destrutiva sem confirmação); segredos
   nunca vão para o modelo, os cards ou o histórico (`redact`). Ver `aicontext/modules/opex-agent.md`.
 
 ## 4. Fluxo obrigatório: implementar → documentar → testar

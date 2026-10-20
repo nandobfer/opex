@@ -1,60 +1,107 @@
 "use client"
 
-import { Controller, type UseFormReturn } from "react-hook-form"
+import { useMemo } from "react"
+import { useWatch, type UseFormReturn } from "react-hook-form"
+import { AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field } from "@/components/ui/field"
-import { FORM_GRID } from "@/components/ui/form-grid"
-import { OptionTabs } from "@/components/ui/option-tabs"
-import { ToggleCard } from "@/components/ui/toggle-card"
-import { OPEX_CONFIRMATION_POLICIES, OPEX_CONFIRMATION_POLICY_LABELS, OPEX_TOOL_GROUP_LABELS, OPEX_TOOL_GROUPS, type OpexConfirmationPolicy } from "../../constants"
+import { CheckTree } from "@/components/ui/check-tree/CheckTree"
+import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import type { OpexAgentSettings } from "../../schemas"
+import {
+    buildOpexToolTree,
+    defaultToolConfirms,
+    disabledOpexToolNames,
+    enabledOpexToolNames,
+    nextConfirmationOverrides,
+    toolConfirms,
+    type OpexToolMetaDto,
+    type OpexToolRisk,
+} from "../../tool-tree"
 
-/** Grupos de ferramentas liberados ao agente e quando ele pede confirmação. */
-export function OpexToolsCard({ form, toolCounts }: { form: UseFormReturn<OpexAgentSettings>; toolCounts: Record<string, number> }) {
+const RISK_BADGES: Record<OpexToolRisk, { label: string; className: string }> = {
+    read: { label: "Leitura", className: "bg-muted text-muted-foreground" },
+    write: { label: "Altera", className: "bg-primary/10 text-primary" },
+    destructive: { label: "Destrutiva", className: "bg-warning/15 text-warning" },
+}
+
+interface ToolLeafMetaProps {
+    meta: OpexToolMetaDto
+    overrides: Readonly<Record<string, boolean>>
+    onChange: (meta: OpexToolMetaDto, confirms: boolean) => void
+}
+
+/** Risco, "sempre ligada" e se pede confirmação, ao lado do nome de cada ferramenta (copiado do Ciliar). */
+function ToolLeafMeta({ meta, overrides, onChange }: ToolLeafMetaProps) {
+    const badge = RISK_BADGES[meta.risk]
+    const confirms = toolConfirms(meta, overrides)
+    const custom = confirms !== defaultToolConfirms(meta.risk)
+    const id = `opex-confirm-${meta.name}`
+    return (
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <code className="text-[10px] text-muted-foreground">{meta.name}</code>
+            <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", badge.className)}>{badge.label}</span>
+            {meta.alwaysOn && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Sempre ligada</span>}
+            <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <Switch id={id} checked={confirms} onCheckedChange={(value) => onChange(meta, value)} className="scale-75" aria-label={`${meta.label}: pede confirmação`} />
+                <label htmlFor={id} className="cursor-pointer">
+                    Pede confirmação
+                </label>
+                {custom && <span className="font-semibold text-primary">· personalizado</span>}
+            </span>
+            {meta.risk === "destructive" && !confirms && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning" role="note">
+                    <AlertTriangle className="h-3 w-3" aria-hidden /> Ação destrutiva sem confirmação
+                </span>
+            )}
+        </span>
+    )
+}
+
+/**
+ * Ferramentas liberadas ao agente, no mesmo formato das permissões dos perfis do Ciliar: um módulo por
+ * grupo, caixa "todas" por grupo, busca e contador. A configuração guarda as **desligadas** (ferramenta
+ * nova nasce ligada). Cada ferramenta tem o próprio "Pede confirmação" (padrão: só as destrutivas).
+ */
+export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSettings>; tools: readonly OpexToolMetaDto[] }) {
+    const disabledTools = useWatch({ control: form.control, name: "disabledTools" })
+    const overrides = useWatch({ control: form.control, name: "confirmationOverrides" })
+    const tree = useMemo(() => buildOpexToolTree(tools), [tools])
+    const byName = useMemo(() => new Map(tools.map((tool) => [tool.name, tool])), [tools])
+    const locked = useMemo(() => new Set(tools.filter((tool) => tool.alwaysOn).map((tool) => tool.name)), [tools])
+    const selected = useMemo(() => new Set(enabledOpexToolNames(tools, disabledTools ?? [])), [tools, disabledTools])
+
+    const renderLeafMeta = (key: string) => {
+        const meta = byName.get(key)
+        if (!meta) return null
+        return (
+            <ToolLeafMeta
+                meta={meta}
+                overrides={overrides ?? {}}
+                onChange={(tool, confirms) => form.setValue("confirmationOverrides", nextConfirmationOverrides(overrides ?? {}, tool, confirms), { shouldDirty: true, shouldValidate: true })}
+            />
+        )
+    }
+
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Ferramentas</CardTitle>
-                <CardDescription>O agente usa quantas ferramentas precisar, sem limite de chamadas. Desligue os grupos que ele não deve usar.</CardDescription>
+                <CardDescription>
+                    O agente usa quantas ferramentas precisar, sem limite de chamadas. Desmarque as que ele não deve usar. Em cada ferramenta, &quot;Pede confirmação&quot; mostra Confirmar/Cancelar no chat antes de
+                    executar: vem ligado nas destrutivas (excluir, arquivar, parar, gravar integração, usuário/senha/token de cliente…) e desligado nas demais.
+                </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
-                <Field id="opex-confirmation" label="Pedir confirmação antes de executar">
-                    <Controller
-                        control={form.control}
-                        name="confirmation"
-                        render={({ field }) => (
-                            <OptionTabs<OpexConfirmationPolicy>
-                                id="opex-confirmation"
-                                options={OPEX_CONFIRMATION_POLICIES.map((value) => ({ value, label: OPEX_CONFIRMATION_POLICY_LABELS[value] }))}
-                                value={field.value}
-                                onChange={field.onChange}
-                                className="w-full"
-                            />
-                        )}
-                    />
-                    <p className="text-xs text-muted-foreground">Ações destrutivas (excluir, arquivar, parar, gravar integração, usuário/senha/token de cliente…) sempre mostram Confirmar/Cancelar no chat.</p>
-                </Field>
-                <div className={FORM_GRID}>
-                    {OPEX_TOOL_GROUPS.map((group) => (
-                        <Controller
-                            key={group}
-                            control={form.control}
-                            name={`toolGroups.${group}`}
-                            render={({ field }) => (
-                                <ToggleCard
-                                    id={`opex-tools-${group}`}
-                                    checked={group === "context" ? true : Boolean(field.value)}
-                                    onCheckedChange={field.onChange}
-                                    disabled={group === "context"}
-                                    label={`${OPEX_TOOL_GROUP_LABELS[group].label} (${toolCounts[group] ?? 0})`}
-                                    description={OPEX_TOOL_GROUP_LABELS[group].description}
-                                    onLabel="Liberado"
-                                    offLabel="Bloqueado"
-                                />
-                            )}
-                        />
-                    ))}
-                </div>
+            <CardContent>
+                <CheckTree
+                    tree={tree}
+                    selected={selected}
+                    lockedKeys={locked}
+                    renderLeafMeta={renderLeafMeta}
+                    searchPlaceholder="Buscar ferramenta..."
+                    emptyText="Nenhuma ferramenta encontrada."
+                    onChange={(next) => form.setValue("disabledTools", disabledOpexToolNames(tools, next), { shouldDirty: true, shouldValidate: true })}
+                />
             </CardContent>
         </Card>
     )

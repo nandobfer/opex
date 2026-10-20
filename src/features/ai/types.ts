@@ -69,3 +69,28 @@ export type UnderstandTaskEvent =
 
 /** Linha do stream NDJSON de `POST /api/tasks/[id]/summary` (mesma forma de "Entender tarefas"). */
 export type TaskSummaryEvent = UnderstandTaskEvent
+
+/** Memória exibida na lista compacta de um agente. */
+export interface MemoryDto {
+    id: string
+    texto: string
+    resumo: string
+    /** Mantido do Ciliar/crm (lá, memórias do contato); no Opex toda memória é escrita pelo dono ou pelo agente a pedido dele. */
+    origem?: "agente" | "usuario"
+    autor: string | null
+    criadaEm: string
+    atualizadaEm: string
+}
+
+export interface MemoryMutationResult {
+    memoria: MemoryDto
+    /** `false` quando o Resumo de memórias estava indisponível e o texto foi salvo como escrito. */
+    formatadaPorIa: boolean
+}
+
+export interface MemorySummarySettingsDto {
+    settings: import("./schemas").MemorySummarySettings
+    isDefault: boolean
+    availability: AiFeatureAvailability
+    updatedAt: string | null
+}

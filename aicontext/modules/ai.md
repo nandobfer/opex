@@ -114,7 +114,8 @@ e opções na própria aba da página "Provedores de IA".
   (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
   histórico e saída ao vivo — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
   configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
-  DeepSeek) — ver `modules/opex-agent.md`.
+  DeepSeek) — ver `modules/opex-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver
+  abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**
@@ -312,6 +313,41 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   como texto; o refinamento só é marcado como esclarecido quando o turno produz a especificação **e**
   ela é gravada. Ver `modules/refinement.md`.
 
+## Memórias do Agente Opex (OPE-85, copiado do Ciliar)
+
+- **Listas** (catálogo puro `src/features/ai/agents.ts`): `opex-global` (**Memórias globais**, valem
+  no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono) e `opex-client`
+  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes). Uma lista nova entra
+  no catálogo e ganha a API, o card e as ferramentas do agente.
+- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `createdBy`,
+  `updatedBy`, datas; índice `{ agentId, createdAt }`). Até **50** por lista (409 `MEMORY_LIMIT`);
+  texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
+  desconhecida dá 404 `AI_AGENT_NOT_FOUND`.
+- **Serviço** (`server/agent-memory-service.ts`): listar (mais recentes primeiro), ler, criar, editar
+  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias"); auditoria
+  `MemoriaAgente` (criar/atualizar/excluir, com o texto), log Pino e evento
+  `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
+- **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (ver `modules/opex-agent.md`).
+- **Tela** (aba Agente Opex › Memórias): três cards `AgentMemoriesCard` com `MemoryList` — linha com o
+  resumo de uma linha que expande o texto completo, autor e "há X tempo"; **Nova memória**/editar com
+  `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
+  (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
+  confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi
+  salva sem formatação. Tempo real por `useMemoriesRealtime`.
+- **Ferramentas do agente**: grupo "Memórias do agente" (`list/get/create/update/delete_agent_memory`).
+
+## Feature "Resumo de memórias"
+
+- Aba `resumo-memorias` (`MemorySummaryTab`, moldura `FeatureFormShell` copiada do Ciliar): liga/
+  desliga com a disponibilidade, provedor e modelo pelo cartão do Agente Opex (`OpexModelCard`:
+  Gemini, Anthropic, OpenAI ou DeepSeek), instruções e **tamanho máximo do resumo** (40–200, padrão
+  80). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
+- `formatMemory` (`server/memory-summary.ts`) nunca lança: com a feature disponível, pede ao modelo
+  `{"texto","resumo"}` (texto revisado + resumo de uma linha; `parseFormattedMemory` tolera cercas e
+  texto em volta); desligada, indisponível, com erro ou resposta inválida, salva o texto como escrito
+  (normalizado) com o **resumo de reserva** (primeira frase, cortada em limite de palavra) e devolve
+  `formatadaPorIa: false`. Consumo na origem `memory-summary`; timeout de 30 s.
+
 ## APIs
 
 | Rota | Descrição |
@@ -326,6 +362,9 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração de "Refinar tarefa" + disponibilidade |
+| `GET/PUT /api/ai/features/memory-summary` | Configuração do "Resumo de memórias" + disponibilidade |
+| `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista (`opex-global`, `opex-owner`, `opex-client`); criar `{ texto }` → `{ memoria, formatadaPorIa }` |
+| `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto }` (reformata); excluir |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |

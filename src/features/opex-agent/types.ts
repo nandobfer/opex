@@ -3,6 +3,7 @@ import type { OpexAgentSettings, OpexFilesSettings } from "./schemas"
 import type { OpexToolGroup } from "./constants"
 import type { OpexClientToolGroup } from "./client-tools"
 import type { OpexFileKind } from "./files"
+import type { OpexToolMetaDto } from "./tool-tree"
 
 /** Arquivo enviado no chat (o binário fica no Storage S3). */
 export interface OpexFileDto {
@@ -31,8 +32,8 @@ export interface OpexAgentSettingsDto {
     isDefault: boolean
     availability: AiFeatureAvailability
     updatedAt: string | null
-    /** Quantas ferramentas cada grupo tem. */
-    toolCounts: Record<OpexToolGroup, number>
+    /** Ferramentas do dono (metadados para a árvore de seleção e confirmação). */
+    tools: OpexToolMetaDto[]
 }
 
 /** Configuração do Agente Opex de um cliente do portal (tela do dono). */

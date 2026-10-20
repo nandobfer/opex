@@ -1,10 +1,11 @@
-import { BrainCircuit, CalendarClock, Clock, Compass, GitPullRequest, LayoutDashboard, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
+import { Brain, BrainCircuit, CalendarClock, Clock, Compass, GitPullRequest, LayoutDashboard, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
 
 export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     context: Compass,
     files: Paperclip,
+    memories: Brain,
     tasks: ListTodo,
     previews: Sparkles,
     time: Clock,

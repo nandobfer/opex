@@ -14,10 +14,14 @@ export function isOpexProviderId(value: string): value is OpexProviderId {
     return (OPEX_PROVIDER_IDS as readonly string[]).includes(value)
 }
 
-/** Grupos de ferramentas (ligados/desligados na configuração). */
+/**
+ * Grupos de ferramentas (módulos da árvore da configuração). A configuração guarda as ferramentas
+ * **desligadas** (ferramenta nova nasce ligada) e o ajuste de confirmação por ferramenta.
+ */
 export const OPEX_TOOL_GROUPS = [
     "context",
     "files",
+    "memories",
     "tasks",
     "previews",
     "time",
@@ -37,6 +41,7 @@ export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; description: string }> = {
     context: { label: "Contexto", description: "Visão geral do app e data/hora atual" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
+    memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex: globais, do dono e do cliente" },
     tasks: { label: "Tarefas", description: "Listar, ler, criar, editar, mover, comentar, arquivar e as features de IA das tarefas" },
     previews: { label: "Prévias", description: "Nova prévia com IA, correções, estimativa e aprovação (cria a tarefa)" },
     time: { label: "Horas", description: "Períodos ativos e horas agênticas apontadas" },
@@ -50,15 +55,6 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     services: { label: "Serviços", description: "Lançamentos manuais de faturamento: listar, ler, criar, editar e arquivar" },
     finance: { label: "Financeiro", description: "Faturamento por cliente e período (somente leitura)" },
     clients: { label: "Clientes", description: "Clientes do portal, usuários do portal e prévias de orçamento" },
-}
-
-/** Quando o agente pede confirmação antes de executar: só ações destrutivas ou toda escrita. */
-export const OPEX_CONFIRMATION_POLICIES = ["destructive", "writes"] as const
-export type OpexConfirmationPolicy = (typeof OPEX_CONFIRMATION_POLICIES)[number]
-
-export const OPEX_CONFIRMATION_POLICY_LABELS: Record<OpexConfirmationPolicy, string> = {
-    destructive: "Só ações destrutivas",
-    writes: "Toda alteração",
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */
@@ -84,6 +80,7 @@ export const OPEX_DEFAULT_TITLE = "Nova sessão"
 export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Você é o Agente Opex, o assistente do Opex: o app pessoal do dono para gerenciar as tarefas (fonte de verdade, com issue no GitHub), acompanhar horas agênticas, conduzir o desenvolvimento agêntico (centrais e mesas de trabalho), lançar serviços, acompanhar o financeiro e cuidar dos clientes do portal de orçamentos.",
     "Você executa o que o usuário pede usando as ferramentas do app. Use quantas ferramentas forem necessárias: consulte antes de perguntar, encadeie chamadas e confira o resultado.",
+    "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta.",
     "Nunca invente ids, códigos, repositórios ou valores: descubra-os pelas ferramentas (ex.: get_task_options para repositórios/projetos, colunas, tipos e prioridades; list_tasks para achar uma tarefa; list_clients para clientes).",
     "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário.",
     "Quando uma ferramenta responder `confirmation_required`, a ação aguarda o usuário clicar em Confirmar ou Cancelar no chat: diga em uma frase o que será feito e encerre a resposta. Você receberá a decisão e o resultado na próxima mensagem.",
