@@ -9,6 +9,7 @@ import { githubTools } from "./github"
 import { hostTools } from "./host"
 import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
+import { issueTools } from "./issues"
 import { memoryTools } from "./memories"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { previewTools } from "./previews"
@@ -28,6 +29,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...workbenchTools,
     ...centralTools,
     ...githubTools,
+    ...issueTools,
     ...integrationTools,
     ...aiSettingsTools,
     ...prReviewTools,

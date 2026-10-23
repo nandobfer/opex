@@ -180,11 +180,12 @@ risco (os catálogos são distintos).
 |---|---|
 | Contexto (sempre ligado) | `get_app_overview` |
 | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_preview` aceita `chatFileIds` |
-| Tarefas | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
+| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
 | Centrais | `list_centrals`, `get_central`, `create_central`, `update_central`, `test_central`, `delete_central`*, `get_agentic_settings`, `update_agentic_settings` |
+| Issues e dependências | `get_issue`, `list_issues`, `get_issue_dependencies`, `rank_ready_tasks` (qual tarefa começar), `add_issue_dependency`†, `add_sub_issue`†, `remove_issue_dependency`*, `remove_sub_issue`* — detalhes abaixo |
 | Repositórios GitHub | `list_repositories`, `get_repo_tree`, `read_repo_file`, `search_repo_code`, `list_branches`, `list_commits`, `get_commit`, `compare_refs`, `create_branch`†, `write_repo_file`†, `delete_repo_file`*, `delete_branch`* — detalhes abaixo |
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
@@ -229,6 +230,59 @@ token alcance. Só no app do dono (o catálogo do portal não tem o grupo).
   caracteres). **Destrutivas**: `delete_repo_file` e `delete_branch` (recusa a branch padrão e as
   branches base/destino da central). Escritas auditam na entidade `RepositorioGithub` (`entidadeId` =
   repositório). Snapshots só em memória do processo (nada persistido).
+
+### Issues e dependências
+
+Para responder "qual tarefa começo?" com dependências reais. Usam as **relações formais do GitHub**
+(bloqueada por / bloqueia, épico e sub-issues), nunca o título ou o texto da issue. Token da
+integração GitHub (Issues: leitura; escrita para registrar relações). Só no app do dono.
+
+- **Grafo** (`server/issue-graph.ts`, `loadIssueGraph`): GraphQL (`githubGraphql` do cliente
+  nativo) com até 20 issues por consulta (aliases `iN`), seguindo "bloqueada por" e "bloqueia" nível a
+  nível até a profundidade pedida (até 200 issues; `truncated` avisa o corte). Por issue: estado e
+  motivo, responsáveis, labels, tipo, milestone, épico (`parent`), resumo das sub-issues, bloqueios e
+  PRs ligados (os que a fecham + os do mesmo repositório que a citam). Issues só citadas ficam como
+  referência leve (`lite`). Conversão pura em `issue-nodes.ts`.
+- **Tarefa vinculada** (`linkedTasksByIssue` + `loadTaskSituation`): a tarefa do Opex com o vínculo
+  da issue (`github_issue_links`), com a coluna (nome), se está **concluída** (na coluna de conclusão do
+  projeto, `closedColumnKey`) e se tem **mesa de trabalho aberta** (não concluída).
+- **Entrega** (`deliveryOf`, módulo puro `issue-readiness.ts`), nesta ordem:
+  1. issue fechada: `completed` → `done`; `not_planned`/`duplicate` → `cancelled`;
+  2. tarefa vinculada concluída → `done`;
+  3. PR **mesclado** numa branch de entrega (base/destino da central e a padrão do repositório) que
+     **fecha** a issue, tem o **código da tarefa** no título ou contém o **título da issue** → `merged`
+     (o caso comum: código no `dev`, issue aberta e tarefa ainda aberta). Só citar `#N` não conta:
+     PRs citam issues futuras;
+  4. tarefa com mesa de trabalho aberta ou PR forte aberto → `in_progress`;
+  5. senão `pending` (`unknown` = não carregada ou sem acesso).
+  - `deliveredAt`: `merged` (padrão; mesclado já libera quem depende) ou `done`. Cancelada sempre libera.
+- **Veredito** (`verdictOf`): `delivered` (a própria já foi entregue), `epic` (tem sub-issues),
+  `ready` (bloqueadoras resolvidas), `partial` (restam só as em andamento/mescladas sem valer),
+  `unknown`, `blocked` (alguma `pending`).
+- **Ferramentas de leitura**:
+  - `get_issue`: corpo (12 mil caracteres), estado, autor, tipo, labels, milestone, responsáveis,
+    épico, sub-issues, entrega, tarefa vinculada, bloqueadoras e bloqueadas (com entrega), PRs e os
+    últimos 20 comentários. Recusa PR.
+  - `list_issues`: REST sem PRs (estado, responsável/`none`/`*`, labels, milestone por título ou
+    número) com as contagens de dependências e sub-issues; `query` usa a busca do GitHub; `parent`
+    lista as sub-issues do épico (GraphQL, filtros aplicados no app).
+  - `get_issue_dependencies`: árvore de "bloqueada por" (profundidade 1–5, padrão 2; ciclo marcado com
+    `cycle`), "bloqueia", `waitingOn` e veredito.
+  - `rank_ready_tasks`: tarefas abertas (não arquivadas e fora da coluna de conclusão do projeto;
+    filtros projeto, colunas e épico). Grafo com 2 níveis de "bloqueada por" e 3 de "bloqueia". Ordem
+    (`compareRank`): veredito → quantas issues não resolvidas destrava (direta e indiretamente,
+    `unlocksOf`) → prioridade → menor estimativa → número. Cada linha traz `waitingOn`,
+    `resolvedBlockers` e `unlocks`. Também devolve `withoutIssue` e alertas: **gargalos sem
+    responsável** (bloqueadoras sem assignee no GitHub nem tarefa no Opex), **entregues sem fechar**
+    (`merged` com issue aberta → concluir a tarefa), **itens já entregues** e **títulos parecidos**
+    (Jaccard ≥ 0,6 entre tarefas abertas dos mesmos projetos; possíveis duplicadas).
+- **Escritas** (auditoria `RepositorioGithub`): `add_issue_dependency` e `add_sub_issue`
+  (`confirmByDefault`; `replaceParent` troca o épico), `remove_issue_dependency` e `remove_sub_issue`
+  (destrutivas). Usam o `id` numérico da issue (REST `dependencies/blocked_by` e `sub_issues`); recusam
+  PR e bloqueio de si mesma.
+- **Tarefa pela issue**: `resolveTask` aceita `nome#N`/`dono/nome#N` (`findIssueTask`: vínculo issue ↔
+  tarefa); sem vínculo, erro acionável indicando `get_issue`.
+- As instruções padrão orientam o agente a usar `rank_ready_tasks` para "qual tarefa começar".
 
 ### Terminal do host
 
@@ -326,9 +380,9 @@ auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
 
 - Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
-  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host).
+  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`; `server/tools/` (um arquivo por grupo +
+  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`; `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
@@ -351,5 +405,5 @@ ativado, ferramentas desligadas, auditoria/eventos, revalidação), `client-tool
 portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (sessões privadas,
 404 entre escopos e canal do Pusher), `tool-settings` (confirmação por ferramenta, árvore e
 migração da configuração antiga) e `opex-tools-card` (árvore, switch "Pede confirmação" e
-desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

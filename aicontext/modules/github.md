@@ -57,6 +57,12 @@ vence"). Sincroniza **título, descrição, tipo, prioridade e coluna ↔ aberta
   nasce com a marca d'água.
 - O resultado por vínculo é gravado em `Project.lastSync`; `github-updated { scope: "sync" }`.
 
+## Cliente (`client.ts`)
+
+- `githubRequest`/`githubPaginate` (REST) e `githubGraphql` (POST no endpoint GraphQL de
+  `graphqlUrlOf`: `…/graphql` ou `…/api/graphql` no GHES; `errors` sem `data` vira `GithubError`),
+  usado pelas ferramentas de issues e dependências do Agente Opex (`modules/opex-agent.md`).
+
 ## APIs
 
 | Rota | Descrição |

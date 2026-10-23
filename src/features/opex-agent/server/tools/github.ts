@@ -65,7 +65,7 @@ const slimFiles = (files: readonly RawFile[] = []) =>
     clipPatches(files.map((file) => ({ path: file.filename, status: file.status, additions: file.additions, deletions: file.deletions, ...(file.previous_filename ? { previousPath: file.previous_filename } : {}), patch: file.patch ?? null })))
 
 /** Erro do GitHub com o contexto do pedido (404 genérico vira mensagem acionável). */
-async function withContext<T>(what: string, run: () => Promise<T>): Promise<T> {
+export async function withContext<T>(what: string, run: () => Promise<T>): Promise<T> {
     try {
         return await run()
     } catch (error) {

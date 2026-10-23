@@ -115,6 +115,24 @@ export async function githubRequest<T>(path: string, options: GithubRequestOptio
     return (await githubRequestFull<T>(path, options)).data
 }
 
+/** Endpoint GraphQL a partir da URL da API REST (`…/api/v3` do GHES vira `…/api/graphql`). */
+export function graphqlUrlOf(apiUrl: string): string {
+    const base = apiUrl.replace(/\/+$/, "")
+    return /\/api\/v3$/.test(base) ? base.replace(/\/v3$/, "/graphql") : `${base}/graphql`
+}
+
+/** Consulta GraphQL. Erros do GraphQL (resposta 200 com `errors`) viram `GithubError`. */
+export async function githubGraphql<T>(query: string, variables: Record<string, unknown> = {}, options: Pick<GithubRequestOptions, "signal" | "label"> = {}): Promise<T> {
+    const url = graphqlUrlOf(await githubBaseUrl())
+    const body = await githubRequest<{ data?: T | null; errors?: { type?: string; message?: string }[] }>(url, { ...options, method: "POST", body: { query, variables } })
+    const errors = body?.errors ?? []
+    if (errors.length && !body?.data) {
+        const first = errors[0]!
+        throw new GithubError(first.type === "NOT_FOUND" ? "Não encontrado no GitHub (ou o token não tem acesso)" : `O GitHub recusou a consulta: ${first.message ?? "erro no GraphQL"}`, first.type === "NOT_FOUND" ? "NOT_FOUND" : "REJECTED")
+    }
+    return body!.data as T
+}
+
 /** Todas as páginas (até `maxPages`) de uma listagem. */
 export async function githubPaginate<T>(path: string, options: GithubRequestOptions & { maxPages?: number } = {}): Promise<T[]> {
     const items: T[] = []

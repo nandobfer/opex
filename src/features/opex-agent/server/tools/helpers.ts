@@ -7,14 +7,25 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i
 
 export const objectIdSchema = z.string().trim().regex(OBJECT_ID, "Id inválido (24 caracteres hexadecimais)")
 
-export const taskRefSchema = z.string().trim().min(1).max(60).describe("Código da tarefa (ex.: OPX-123) ou id")
+/** Código de issue: `nome#N` ou `dono/nome#N`. */
+const ISSUE_CODE = /^((?:[\w.-]+\/)?[\w.-]+)#(\d+)$/
+
+export const taskRefSchema = z.string().trim().min(1).max(120).describe("Código da tarefa (ex.: OPX-123), issue vinculada (ex.: dono/repo#45) ou id")
 
 export const isObjectId = (value: string) => OBJECT_ID.test(value)
 
-/** Aceita id (ObjectId) ou código (OPX-123, sem diferenciar maiúsculas). */
+/** Aceita id (ObjectId), código (OPX-123, sem diferenciar maiúsculas) ou issue (`repo#N`: a tarefa vinculada a ela). */
 export async function resolveTask(ref: string): Promise<{ id: string; task: TaskDto | null }> {
     const value = ref.trim()
     if (OBJECT_ID.test(value)) return { id: value, task: null }
+    const issue = value.match(ISSUE_CODE)
+    if (issue) {
+        const { findIssueTask } = await import("../issue-graph")
+        const found = await findIssueTask(issue[1]!, Number(issue[2]))
+        if (!found) throw new OpexToolError(`Nenhuma tarefa vinculada à issue "${value}". Use get_issue para ler a issue no GitHub.`)
+        const { tasks } = await listTasks(true)
+        return { id: found.id, task: tasks.find((task) => task.id === found.id) ?? null }
+    }
     const { tasks } = await listTasks(true)
     const found = tasks.find((task) => task.code.toLowerCase() === value.toLowerCase())
     if (!found) throw new OpexToolError(`Tarefa "${value}" não encontrada. Use list_tasks para achar o código certo.`)
