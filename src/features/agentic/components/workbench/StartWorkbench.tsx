@@ -15,7 +15,7 @@ import type { CentralDto } from "../../types"
 
 /**
  * Estado inicial da mesa (tarefa ainda sem mesa): mostra o código, o título e a **descrição** da
- * tarefa, o **fluxo da mesa** (Publicar prévia ou PR automático) e um campo opcional de
+ * tarefa, a chave **Gerar prévia** (desligada = fluxo PR automático) e um campo opcional de
  * **informações adicionais**. Ao abrir a mesa, essas informações são anexadas à tarefa e enviadas
  * ao planejador no primeiro prompt.
  */
@@ -36,9 +36,9 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const flow: TaskAgenticFlow = taskFlow ?? centralFlow
 
     /** Salva o fluxo na tarefa na hora (otimista): a mesa nova nasce com a escolha já persistida. */
-    const setFlow = (autoPr: boolean) => {
+    const setPreview = (enabled: boolean) => {
         if (!task.data) return
-        const agenticFlow: TaskAgenticFlow = autoPr ? "auto_pr" : "preview"
+        const agenticFlow: TaskAgenticFlow = enabled ? "preview" : "auto_pr"
         update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow }, patch: { agenticFlow } })
     }
 
@@ -81,13 +81,13 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <div className="space-y-1.5">
                         <ToggleCard
                             id="workbench-flow"
-                            checked={flow === "auto_pr"}
-                            onCheckedChange={setFlow}
+                            checked={flow !== "auto_pr"}
+                            onCheckedChange={setPreview}
                             disabled={update.isPending}
-                            label="Fluxo da mesa"
+                            label="Gerar prévia"
                             description={flow === "auto_pr" ? "O agente pula a prévia e abre o Pull Request assim que a implementação terminar. A revisão do plano continua obrigatória." : "O agente sobe a prévia depois da implementação e espera a sua aprovação antes de abrir o Pull Request."}
-                            onLabel="PR automático"
-                            offLabel="Publicar prévia"
+                            onLabel="Ligada"
+                            offLabel="Desligada"
                         />
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                             <span>

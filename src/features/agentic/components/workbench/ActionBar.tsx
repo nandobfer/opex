@@ -22,6 +22,7 @@ import { PENDING_TURN_LABELS } from "../../constants"
 import { ForkComposer } from "./ForkComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
+import { PreviewSwitch } from "./PreviewSwitch"
 import { WorkbenchModelPicker } from "./WorkbenchModelPicker"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
@@ -179,9 +180,10 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
 
             {!composer && !forking && (
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* Modelo da etapa atual (à esquerda); os botões ficam à direita. */}
-                    <div className="mr-auto min-w-0 max-w-full">
+                    {/* Modelo da etapa atual e "Gerar prévia" (à esquerda); os botões ficam à direita. */}
+                    <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
                         <WorkbenchModelPicker workbench={workbench} />
+                        <PreviewSwitch workbench={workbench} />
                     </div>
                     <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
                         {/* Abrir prévia é sempre o primeiro da linha. */}

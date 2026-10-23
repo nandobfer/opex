@@ -99,22 +99,23 @@ describe('StartWorkbench', () => {
   })
 })
 
-describe('StartWorkbench · fluxo da mesa', () => {
+describe('StartWorkbench · Gerar prévia', () => {
   const flow = () => screen.getByRole('switch') as HTMLButtonElement
 
-  it('inicia em "Publicar prévia" (desligado)', () => {
+  it('chave "Gerar prévia" começa ligada (Publicar prévia, o padrão)', () => {
     renderStart()
-    expect(flow().getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Publicar prévia')
-  })
-
-  it('reflete o fluxo salvo na tarefa', () => {
-    renderStart({}, { agenticFlow: 'auto_pr' })
+    expect(screen.getByText('Gerar prévia')).toBeTruthy()
     expect(flow().getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('PR automático')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Ligada')
   })
 
-  it('ao alternar salva o fluxo na tarefa otimista e imediatamente', () => {
+  it('tarefa salva com PR automático mostra a chave desligada', () => {
+    renderStart({}, { agenticFlow: 'auto_pr' })
+    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Desligada')
+  })
+
+  it('desligar grava o fluxo PR automático na tarefa, otimista e imediatamente', () => {
     renderStart()
     fireEvent.click(flow())
     expect(mocks.updateTask).toHaveBeenCalledWith({
@@ -124,7 +125,7 @@ describe('StartWorkbench · fluxo da mesa', () => {
     })
   })
 
-  it('voltar para "Publicar prévia" salva o valor padrão', () => {
+  it('religar volta ao padrão Publicar prévia', () => {
     renderStart({}, { agenticFlow: 'auto_pr' })
     fireEvent.click(flow())
     expect(mocks.updateTask).toHaveBeenCalledWith({
@@ -136,8 +137,8 @@ describe('StartWorkbench · fluxo da mesa', () => {
 
   it('tarefa sem escolha segue o padrão da central (Publicar prévia) e oferece personalizar', () => {
     renderStart({}, { agenticFlow: null })
-    expect(flow().getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Publicar prévia')
+    expect(flow().getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Ligada')
     expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Usar padrão da central' })).toBeNull()
   })
@@ -145,15 +146,15 @@ describe('StartWorkbench · fluxo da mesa', () => {
   it('central configurada em PR automático é o padrão herdado pela tarefa', () => {
     const base = defaultCentralConfig('/home/u/app')
     renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: null })
-    expect(flow().getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('PR automático')
+    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Desligada')
     expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
   })
 
   it('a escolha da tarefa vence o padrão da central e pode voltar a herdar', () => {
     const base = defaultCentralConfig('/home/u/app')
     renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: 'preview' })
-    expect(flow().getAttribute('aria-checked')).toBe('false')
+    expect(flow().getAttribute('aria-checked')).toBe('true')
     expect(screen.getByText(/Fluxo escolhido só para esta tarefa/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Usar padrão da central' }))

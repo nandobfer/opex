@@ -141,7 +141,7 @@ describe('fluxo PR automático', () => {
     expect(doc.buildQueuedAt ?? null).toBeNull()
     expect(doc.pr).toMatchObject({ number: 9, url: 'https://github.com/org/app/pull/9', state: 'open' })
     expect(mocks.allocatePort).not.toHaveBeenCalled()
-    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ type: 'notice', message: expect.stringContaining('PR automático') }))
+    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ type: 'notice', message: expect.stringContaining('Geração de prévia desligada') }))
     expect(mocks.runTurn.mock.calls.map(([, request]) => request.stage)).toEqual(['implementing', 'opening_pr'])
   })
 

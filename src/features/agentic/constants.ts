@@ -44,7 +44,7 @@ export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implement
 export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "preview", "pr_open"]
 
 /** O que uma mesa aguardando vaga vai executar quando a vaga chegar. */
-export const PENDING_TURN_ACTIONS = ["revise-plan", "implement", "request-correction", "approve", "submit-pr-feedback", "reopen", "pr-feedback", "pr-conflict", "pr-ci-fix", "pr-auto-merge", "pr-cleanup"] as const
+export const PENDING_TURN_ACTIONS = ["revise-plan", "implement", "request-correction", "approve", "submit-pr-feedback", "reopen", "pr-feedback", "pr-conflict", "pr-ci-fix", "pr-auto-merge", "pr-cleanup", "generate-preview"] as const
 export type PendingTurnAction = (typeof PENDING_TURN_ACTIONS)[number]
 
 export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
@@ -59,6 +59,7 @@ export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
     "pr-ci-fix": "Corrigir o CI do PR",
     "pr-auto-merge": "Mergear o PR",
     "pr-cleanup": "Limpar o ambiente após o merge",
+    "generate-preview": "Gerar a prévia",
 }
 
 export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {

@@ -33,7 +33,7 @@ import {
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
-import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput } from "../schemas"
+import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -264,6 +264,12 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { pendingTurn: null } })
     let reopened = false
     try {
+        // "Gerar a prévia" não é um turno do agente: com a vaga, a mesa entra no build da prévia.
+        if (pending.action === "generate-preview") {
+            await enterBuildQueue(loaded)
+            centralLogger(doc.centralId, doc.taskCode).info("Vaga liberada: Gerar a prévia", { workbenchId: id })
+            return "started"
+        }
         const ready = pending.reopen ? await applyReopen(loaded) : loaded
         reopened = Boolean(pending.reopen)
         await launchTurn(
@@ -337,6 +343,107 @@ export async function setWorkbenchModel(id: string, input: WorkbenchModelInput):
         message: override ? `${title} trocado para ${describeModel(after)}: vale a partir do próximo turno.` : `${title} voltou ao padrão (${describeModel(after)}): vale a partir do próximo turno.`,
     })
     centralLogger(doc.centralId, doc.taskCode).info(`${title}: ${describeModel(after)}${override ? " (trocado na mesa)" : " (padrão)"}`, { workbenchId: id })
+    return getWorkbench(id)
+}
+
+/** A mesa está com "Gerar prévia" desligada (fluxo PR automático)? Lê do banco (a chave muda a qualquer momento). */
+async function skipsPreview(id: string): Promise<boolean> {
+    const fresh = await AgenticWorkbench.findById(id).select({ agenticFlow: 1 }).lean()
+    return asAgenticFlow(fresh?.agenticFlow) === "auto_pr"
+}
+
+/** Turno que publica no PR sem prévia (abre o PR ou, se já existe, atualiza e comenta). */
+function autoPrTurn(loaded: Loaded): TurnPlan {
+    const { doc, config } = loaded
+    const pr = doc.pr && doc.pr.state === "open" ? { number: doc.pr.number, url: doc.pr.url } : null
+    return { stage: "opening_pr", text: prPrompt(config, contextOf(loaded), { code: doc.taskCode, title: doc.taskTitle }, pr, { fromPreview: false }) }
+}
+
+/**
+ * Gera a prévia do código atual: no modo local, a mesa entra na fila global do build; no modo GitHub,
+ * o build remoto começa na hora (sem fila local).
+ */
+async function enterBuildQueue(loaded: Loaded): Promise<void> {
+    const { doc, config } = loaded
+    if (config.environment.previewMethod === "github") {
+        await launchTurn(loaded, await prepareBuildTurn(loaded, "github"))
+        return
+    }
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: { method: "local" } } })
+    await update(doc, { stage: "build_queued", runState: "idle", error: null, buildQueuedAt: new Date() })
+    pumpBuildQueue()
+}
+
+/**
+ * Chave "Gerar prévia" desta mesa (troca o fluxo só da mesa; a tarefa mantém o fluxo salvo):
+ * - desligar: ao fim da implementação pula a prévia e publica no PR; na fila do build, sai dela e já
+ *   publica; com o build rodando, publica ao fim dele; em Prévia pronta, fica como está;
+ * - religar: com a mesa parada em PR aberto, gera a prévia do código atual na hora (fila do build, ou
+ *   aguarda vaga com "Gerar a prévia" se a central estiver no limite); nas outras etapas vale na
+ *   próxima implementação.
+ */
+export async function setWorkbenchPreview(id: string, input: WorkbenchPreviewInput): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    const stage = asStage(doc.stage)
+    if (stage === "finishing" || stage === "done") throw new DomainError(409, "A mesa está concluída ou finalizando: não há prévia para gerar", "WORKBENCH_PREVIEW_LOCKED")
+    if (doc.deletionRequestedAt) throw new DomainError(409, "A mesa está sendo excluída", "WORKBENCH_PREVIEW_LOCKED")
+    const flow = input.enabled ? "preview" : "auto_pr"
+    const before = asAgenticFlow(doc.agenticFlow)
+    if (before === flow) return getWorkbench(id)
+    await update(doc, { agenticFlow: flow })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_WORKBENCH,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: doc.taskCode, gerarPrevia: before === "preview" },
+        depois: { tarefa: doc.taskCode, gerarPrevia: input.enabled },
+    })
+    await prepareHub(id)
+    const notice = (message: string) => publishWorkbenchEvent(id, { type: "notice", level: "info", message })
+    const log = centralLogger(doc.centralId, doc.taskCode)
+    const idle = doc.runState !== "running" && !isWorkbenchActive(id)
+    const current: Loaded = { ...loaded, doc: Object.assign(doc, { agenticFlow: flow }) }
+
+    if (!input.enabled) {
+        if (stage === "build_queued" && idle) {
+            notice("Geração de prévia desligada: a mesa saiu da fila do build e vai publicar no Pull Request.")
+            await launchTurn(current, autoPrTurn(current), { extraSet: { buildQueuedAt: null } })
+        } else if (stage === "building") {
+            notice("Geração de prévia desligada: o build em andamento termina e a mesa publica no Pull Request sem parar na prévia.")
+        } else if (stage === "preview") {
+            notice("Geração de prévia desligada: esta prévia continua para você aprovar ou corrigir; vale a partir da próxima implementação.")
+        } else {
+            notice("Geração de prévia desligada: ao fim da implementação a mesa publica direto no Pull Request.")
+        }
+        log.info("Gerar prévia: desligada", { workbenchId: id, stage })
+        pumpBuildQueue()
+        return getWorkbench(id)
+    }
+
+    if (stage === "pr_open" && idle && !doc.pendingTurn) {
+        await assertAgenticReady(config)
+        const waiting = await runInCentral(doc.centralId, async () => {
+            const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
+            if (!othersWaiting && occupied < config.maxConcurrent) {
+                await enterBuildQueue(current)
+                return false
+            }
+            const pendingTurn: IPendingTurn = { action: "generate-preview", stage: "build_queued", text: "", userText: null, feedback: null, extraSet: null, reopen: false, fromStage: stage, queuedAt: new Date() }
+            await update(doc, { pendingTurn })
+            return true
+        })
+        if (waiting) {
+            const position = await slotQueuePosition(id)
+            notice(`Geração de prévia ligada. Limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central: "Gerar a prévia" aguarda vaga${position ? ` (posição #${position})` : ""} e começa sozinho quando liberar.`)
+        } else {
+            notice(`Geração de prévia ligada: gerando a prévia do código atual (${config.environment.previewMethod === "github" ? "build no GitHub" : "fila do build"}).`)
+        }
+    } else {
+        notice("Geração de prévia ligada: a próxima implementação volta a passar pela prévia.")
+    }
+    log.info("Gerar prévia: ligada", { workbenchId: id, stage })
     return getWorkbench(id)
 }
 
@@ -547,11 +654,11 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            // Fluxo PR automático: pula a prévia e encadeia a abertura do PR na mesma sessão.
-            if (asAgenticFlow(doc.agenticFlow) === "auto_pr") {
-                const pr = doc.pr && doc.pr.state === "open" ? { number: doc.pr.number, url: doc.pr.url } : null
-                notice("info", "Fluxo PR automático: pulando a prévia e abrindo o Pull Request.")
-                return { stage: "opening_pr", text: prPrompt(config, ctx, { code: doc.taskCode, title: doc.taskTitle }, pr, { fromPreview: false }) }
+            // "Gerar prévia" desligada (fluxo PR automático): pula a prévia e encadeia a abertura do PR na
+            // mesma sessão. Relê o fluxo: a chave pode ter sido trocada durante a implementação.
+            if (await skipsPreview(id)) {
+                notice("info", "Geração de prévia desligada: pulando a prévia e publicando no Pull Request.")
+                return autoPrTurn(loaded)
             }
             // Entra na fila global do build (um build por vez); a porta é reservada quando a vez chega.
             if (config.environment.previewMethod === "github") {
@@ -573,13 +680,19 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await assertPreviewBackup(client, doc.previewBackup, config.sessionDirectory)
                 notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
             }
-            const fresh = await AgenticWorkbench.findById(id).select({ port: 1 }).lean()
+            const fresh = await AgenticWorkbench.findById(id).select({ port: 1, agenticFlow: 1 }).lean()
             if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
             const env = config.environment
             const previewUrl = `http://${env.previewHost}:${fresh.port}`
             const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
             if (!healthy && (doc.previewBuild?.method === "github" || !parsed.success)) throw new Error(`A prévia não respondeu em ${previewUrl}`)
             notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O agente concluiu o build, mas ${previewUrl} não respondeu ao app`)
+            // A chave "Gerar prévia" foi desligada durante o build: publica no PR sem parar na prévia.
+            if (asAgenticFlow(fresh.agenticFlow) === "auto_pr") {
+                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewUrl, previewHealthy: healthy } })
+                notice("info", "Geração de prévia desligada: publicando no Pull Request sem parar na prévia.")
+                return autoPrTurn(loaded)
+            }
             await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
             pumpQueue(doc.centralId)
             return null

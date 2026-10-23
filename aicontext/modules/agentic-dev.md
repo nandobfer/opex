@@ -260,7 +260,7 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
   **concluída** não gera warning.
 - Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa, a
-  switch **Fluxo da mesa** (Publicar prévia / PR automático, ver "Fluxo da mesa") — com a indicação
+  chave **Gerar prévia** (ligada = Publicar prévia; desligada = PR automático, ver "Fluxo da mesa") — com a indicação
   de que a tarefa **segue o padrão da central** e a ação **Usar padrão da central** quando há uma
   escolha própria — e um campo
   opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
@@ -314,8 +314,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
   comportamento das informações informadas na abertura da mesa.
-- **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a switch
-  **Fluxo da mesa** — **Publicar prévia** ou **PR automático**. A escolha salva na hora na tarefa
+- **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
+  **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
+  **desligada = PR automático**. A escolha salva na hora na tarefa
   (`DevTask.agenticFlow`, ajustável por `PATCH /api/tasks/[id]`) e é copiada para a mesa ao abrir
   (`agenticFlow`; registros antigos caem em `preview`). **Sem escolha** na tarefa (`agenticFlow`
   `null`) vale o **padrão da central** (`environment.publishPreview`, aba Ambiente; ligado =
@@ -325,6 +326,29 @@ done → Reabrir mesa (texto ao planejador) → planning
   `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a prévia e a aprovação:
   nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
   nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
+- **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
+  canto esquerdo da barra inferior, ao lado do seletor de modelo) troca o fluxo **só desta mesa**
+  (`agenticFlow` da mesa; a tarefa mantém o fluxo salvo) — útil, por exemplo, enquanto o PR é
+  corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
+  (ex.: Mudanças pedidas); disponível com o agente trabalhando. O fluxo é relido no fim de cada
+  implementação e de cada build (`setWorkbenchPreview`, `workflow.ts`):
+
+  | Ao desligar com a mesa em | Efeito |
+  |---|---|
+  | Fila do build | sai da fila e já publica no PR (`opening_pr`: abre, ou atualiza e comenta o PR existente) |
+  | Build rodando (local ou GitHub) | o build termina e a mesa publica no PR sem parar na prévia (a prévia fica no ar) |
+  | Prévia pronta | fica como está (aprovar/corrigir normalmente); vale na próxima implementação |
+  | Outras etapas | vale no próximo fim de implementação |
+
+  Ao **religar** com a mesa **parada em PR aberto**, gera a prévia do código atual na hora: no modo
+  Local entra na fila do build → build → **Prévia pronta**; no modo GitHub o build remoto começa direto
+  (aprovar atualiza o PR e volta a PR aberto). O build ocupa vaga: com a central no limite a mesa
+  **aguarda vaga** com a ação **"Gerar a prévia"** (`pendingTurn.action = "generate-preview"`,
+  cancelável; com a vaga, `startPendingTurn` a coloca no build em vez de lançar um turno). Nas outras
+  etapas, religar vale na próxima implementação. Enquanto a mesa estiver na fila do build, no build ou
+  em Prévia pronta, o **acompanhamento do PR fica pausado** (ele só olha mesas em PR aberto). Cada
+  troca registra auditoria (`gerarPrevia`), publica no Pusher e avisa na saída; resposta otimista com
+  reversão (`useSetWorkbenchPreview`).
 - **Build Local**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
   configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
@@ -654,6 +678,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
+| `PUT /workbenches/[id]/preview` `{enabled}` | chave "Gerar prévia" da mesa (desligada = PR automático só nesta mesa; religada em PR aberto gera a prévia na hora) |
 | `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`); `model: null` volta ao padrão |
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
 
@@ -677,7 +702,7 @@ conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), confli
 aba Ambiente do formulário da central (`environment-section`, com o toggle do backup e o switch de
 **Publicar prévia** e ocultar os campos do ambiente — OPE-79), fila e movimentação globais/por central
 (`columns-section`), fluxo da mesa — Publicar prévia vs PR automático, incluindo o **padrão herdado da
-central** (`workflow-flow-mode`), a migração que preserva o fluxo das tarefas antigas
+central** (`workflow-flow-mode`) e a chave Gerar prévia da mesa (`workflow-preview-switch`), a migração que preserva o fluxo das tarefas antigas
 (`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
 (`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
 `__tests__/deployment/preview-github.test.ts` (prévia remota, com e sem o dump obrigatório),

@@ -196,6 +196,30 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
 }
 
 /** Troca o modelo de um papel da mesa (resposta otimista; reverte e avisa em caso de falha). */
+/** Chave "Gerar prévia" da mesa (resposta otimista; reverte e avisa em caso de falha). */
+export function useSetWorkbenchPreview(workbench: WorkbenchDto) {
+    const queryClient = useQueryClient()
+    const setWorkbench = useSetWorkbench()
+    const key = agenticKey("workbench", workbench.taskId)
+    return useMutation({
+        mutationFn: async (enabled: boolean) => unwrapApi((await api.put<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/preview`, { enabled })).data),
+        onMutate: async (enabled) => {
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<WorkbenchDto | null>(key) ?? workbench
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, agenticFlow: enabled ? "preview" : "auto_pr" } : current))
+            return { previous }
+        },
+        onError: (error, _enabled, context) => {
+            if (context?.previous) queryClient.setQueryData(key, context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível trocar a geração de prévia"))
+        },
+        onSuccess: (saved, enabled) => {
+            setWorkbench(saved)
+            toast.success(enabled ? "Geração de prévia ligada" : "Geração de prévia desligada: a mesa publica direto no PR")
+        },
+    })
+}
+
 export function useSetWorkbenchModel(workbench: WorkbenchDto) {
     const queryClient = useQueryClient()
     const setWorkbench = useSetWorkbench()

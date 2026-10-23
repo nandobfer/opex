@@ -24,6 +24,10 @@ export const workbenchModelSchema = modelOverrideSchema.extend({
 })
 export type WorkbenchModelInput = z.infer<typeof workbenchModelSchema>
 
+/** Chave "Gerar prévia" da mesa (`false` = fluxo PR automático só nesta mesa). */
+export const workbenchPreviewSchema = z.object({ enabled: z.boolean({ message: "Informe se a prévia deve ser gerada" }) })
+export type WorkbenchPreviewInput = z.infer<typeof workbenchPreviewSchema>
+
 const agentsShape = Object.fromEntries(AGENT_ROLES.map((role) => [role, agentConfigSchema])) as Record<AgentRole, typeof agentConfigSchema>
 
 /**

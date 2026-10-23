@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), openFork: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), openFork: vi.fn(), setPreview: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ mutate: mocks.openFork, isPending: false }) }))
@@ -13,6 +13,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }),
   useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
   useSetWorkbenchModel: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetWorkbenchPreview: () => ({ mutate: mocks.setPreview, isPending: false }),
 }))
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
 
@@ -118,6 +119,33 @@ describe('ActionBar', () => {
   it('sem os modelos da central o seletor fica oculto', () => {
     render(<ActionBar workbench={workbench({ stage: 'plan_review', models: null } as never)} />)
     expect(screen.queryByRole('button', { name: /Modelo do Plano/ })).toBeNull()
+  })
+
+  it.each(['planning', 'implementing', 'build_queued', 'preview', 'pr_open'] as const)('chave "Gerar prévia" na etapa %s reflete o fluxo da mesa', (stage) => {
+    const { unmount } = render(<ActionBar workbench={workbench({ stage })} />)
+    expect((screen.getByRole('checkbox', { name: 'Gerar prévia' }) as HTMLInputElement).checked).toBe(true)
+    unmount()
+    render(<ActionBar workbench={workbench({ stage, agenticFlow: 'auto_pr' })} />)
+    expect((screen.getByRole('checkbox', { name: 'Gerar prévia' }) as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('chave "Gerar prévia" liga e desliga (inclusive com o agente trabalhando) e fica à esquerda', () => {
+    const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
+    const toggle = screen.getByRole('checkbox', { name: 'Gerar prévia' }) as HTMLInputElement
+    expect(toggle.disabled).toBe(false)
+    fireEvent.click(toggle)
+    expect(mocks.setPreview).toHaveBeenCalledWith(false)
+    unmount()
+    render(<ActionBar workbench={workbench({ stage: 'pr_open', agenticFlow: 'auto_pr' })} />)
+    const off = screen.getByRole('checkbox', { name: 'Gerar prévia' })
+    fireEvent.click(off)
+    expect(mocks.setPreview).toHaveBeenLastCalledWith(true)
+    expect(off.compareDocumentPosition(screen.getByRole('button', { name: /Abrir fork/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it.each(['finishing', 'done'] as const)('chave "Gerar prévia" fica oculta em %s', (stage) => {
+    render(<ActionBar workbench={workbench({ stage })} />)
+    expect(screen.queryByRole('checkbox', { name: 'Gerar prévia' })).toBeNull()
   })
 
   it('Abrir prévia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
