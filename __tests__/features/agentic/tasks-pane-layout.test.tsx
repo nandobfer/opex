@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CentralDto } from '@/features/agentic/types'
@@ -110,6 +110,7 @@ describe('cabeçalho da coluna de tarefas da Central de desenvolvimento', () => 
   it('mantém a busca por código/título e o filtro de colunas', async () => {
     await renderPane()
     const order = [
+      screen.getByRole('checkbox', { name: /Só mesas ativas/ }),
       screen.getByRole('button', { name: 'Opex' }),
       screen.getByRole('button', { name: /Colunas|Em andamento|selecionados/ }),
       screen.getByRole('button', { name: 'Estado da mesa' }),
@@ -130,6 +131,21 @@ describe('cabeçalho da coluna de tarefas da Central de desenvolvimento', () => 
     window.dispatchEvent(new StorageEvent('storage', { key: DEV_CENTER_FILTERS_KEY }))
     await waitFor(() => expect(screen.queryByText('OPE-41')).toBeNull())
     expect(screen.getByText('Nenhuma tarefa encontrada')).toBeTruthy()
+  })
+
+  it('"Só mesas ativas" começa desligada, esconde a tarefa sem mesa e fica salva no navegador', async () => {
+    await renderPane()
+    const toggle = screen.getByRole('checkbox', { name: /Só mesas ativas/ }) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    expect(screen.getByText('OPE-41')).toBeTruthy()
+
+    fireEvent.click(toggle)
+    await waitFor(() => expect(screen.queryByText('OPE-41')).toBeNull())
+    expect(toggle.checked).toBe(true)
+    expect(JSON.parse(window.localStorage.getItem(DEV_CENTER_FILTERS_KEY)!)).toMatchObject({ activeOnly: true })
+
+    fireEvent.click(toggle)
+    expect(await screen.findByText('OPE-41')).toBeTruthy()
   })
 
   it('em "Todos os projetos" o seletor mostra a opção e a lista usa as tarefas de todas as centrais', async () => {

@@ -27,6 +27,7 @@ import { QueueBadge } from "../QueueBadge"
 import { ForksOpenBadge } from "../workbench/ForkStatusBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 import { WorkbenchWaitingBadge } from "../WorkbenchWaitingBadge"
+import { ActiveWorkbenchSwitch } from "./ActiveWorkbenchSwitch"
 import { CentralPicker } from "./CentralPicker"
 import { TaskFilters } from "./TaskFilters"
 
@@ -86,6 +87,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                 </TooltipProvider>
                 </div>
                 <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+                <ActiveWorkbenchSwitch checked={filters.activeOnly} onChange={(activeOnly) => setFilters((current) => ({ ...current, activeOnly }))} />
                 <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
                 <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
                 <div className="relative">

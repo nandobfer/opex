@@ -33,7 +33,9 @@ export function matchesDevCenterState(state: DevCenterState, { workbench, queued
     return STATE_STAGES[state]?.includes(workbench.stage) ?? false
 }
 
+/** `activeOnly` = "Só mesas ativas" (ausente nos filtros salvos antes da chave = desligada). */
 export const devCenterFiltersSchema = z.object({
+    activeOnly: z.boolean().default(false),
     search: z.string().max(200),
     columns: z.array(z.string().max(60)).max(100),
     allColumns: z.boolean().optional(),
@@ -43,9 +45,18 @@ export type DevCenterFilters = z.infer<typeof devCenterFiltersSchema>
 
 /** Padrão: tudo (nenhuma coluna escolhida). */
 export const DEFAULT_DEV_CENTER_FILTERS: DevCenterFilters = {
+    activeOnly: false,
     search: "",
     columns: [],
     states: [],
+}
+
+/**
+ * Mesa ativa: aberta e não concluída (qualquer etapa de Planejando a Finalizando, inclusive PR
+ * aberto, falha/interrompida e aguardando vaga). Sem mesa ou só na fila da central não conta.
+ */
+export function isActiveWorkbench({ workbench }: TaskWorkbenchState): boolean {
+    return Boolean(workbench) && workbench!.stage !== "done"
 }
 
 const normalize = (value: string) =>
@@ -54,7 +65,10 @@ const normalize = (value: string) =>
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
 
-/** Tarefas do projeto que passam nos filtros, na ordem do quadro. */
+/**
+ * Tarefas do projeto que passam nos filtros, na ordem do quadro. "Só mesas ativas" restringe (E) os
+ * demais filtros; estados da mesa somam entre si (qualquer um vale).
+ */
 export function filterCentralTasks(tasks: readonly TaskDto[], projectId: string | readonly string[], filters: DevCenterFilters, stateOf: (task: TaskDto) => TaskWorkbenchState = () => ({})): TaskDto[] {
     const terms = normalize(filters.search).split(/\s+/).filter(Boolean)
     const columns = new Set(filters.columns)
@@ -62,6 +76,7 @@ export function filterCentralTasks(tasks: readonly TaskDto[], projectId: string 
     return tasks
         .filter((task) => !task.archived && Boolean(task.project && projects.has(task.project.id)))
         .filter((task) => (filters.allColumns ?? columns.size === 0) || columns.has(task.columnId))
+        .filter((task) => !filters.activeOnly || isActiveWorkbench(stateOf(task)))
         .filter((task) => !filters.states.length || filters.states.some((state) => matchesDevCenterState(state, stateOf(task))))
         .filter((task) => {
             if (!terms.length) return true

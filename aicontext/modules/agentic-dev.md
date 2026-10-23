@@ -227,7 +227,8 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
   no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
-- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; o
+- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; a
+  chave **"Só mesas ativas"** (`Switch`, `ActiveWorkbenchSwitch`, linha inteira — o primeiro filtro); o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista
   é buscada por nome/projeto; a **busca por código/título**; e o **filtro de colunas**
@@ -596,7 +597,14 @@ done → Reabrir mesa (texto ao planejador) → planning
 
 - **Todos os projetos** agrega tarefas dos projetos com central. A seleção continua no navegador;
   a mesa usa a central do projeto da tarefa aberta, sem sobrescrever a seleção Todos.
-- Ordem: seletor de central → colunas com **Todos** → estado da mesa → busca (inclui resumo).
+- Ordem: **Só mesas ativas** → seletor de central → colunas com **Todos** → estado da mesa → busca
+  (inclui resumo).
+- **Só mesas ativas** (`activeOnly`, padrão desligada; regra `isActiveWorkbench`): mostra só as
+  tarefas com **mesa aberta e não concluída** — qualquer etapa de Planejando a Finalizando, inclusive
+  PR aberto, falha/interrompida e aguardando vaga. Tarefa sem mesa, só na fila da central e mesa
+  Concluída ficam de fora. **Restringe (E)** os demais filtros: colunas, estado da mesa e busca
+  continuam valendo (com "Sem mesa" marcado a lista fica vazia). Filtros salvos antes da chave
+  continuam válidos, com ela desligada (`z.boolean().default(false)`, sem trocar a chave `v1`).
   Estados combinam por OU: interação, falha/interrupção, agente trabalhando, sem mesa, fila e etapas.
   Filtros combinam entre si por E. Persistência aditiva compatível com `opex:dev-center-filters:v1`;
   registros antigos sem estados continuam válidos. `allColumns` distingue ausência de seleção

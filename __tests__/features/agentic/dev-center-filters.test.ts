@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DEV_CENTER_FILTERS, devCenterFiltersSchema, filterCentralTasks, matchesDevCenterState, type TaskWorkbenchState } from '@/features/agentic/dev-center-filters'
+import { DEFAULT_DEV_CENTER_FILTERS, devCenterFiltersSchema, filterCentralTasks, isActiveWorkbench, matchesDevCenterState, type TaskWorkbenchState } from '@/features/agentic/dev-center-filters'
+import type { WorkbenchStage } from '@/features/agentic/constants'
 import type { TaskDto } from '@/features/tasks/types'
 
 const task = (patch: Partial<TaskDto>): TaskDto =>
@@ -42,6 +43,33 @@ describe('filterCentralTasks', () => {
   it('estados combinam por OU e continuam respeitando as colunas', () => {
     const status = (item: TaskDto): TaskWorkbenchState => item.id === 'a' ? { workbench: { stage: 'implementing', runState: 'running', pendingForms: 0, pendingPermissions: 0 } } : {}
     expect(filterCentralTasks(tasks, 'p1', { ...DEFAULT_DEV_CENTER_FILTERS, columns: ['doing'], states: ['running', 'no_workbench'] }, status).map((item) => item.id)).toEqual(['a'])
+  })
+
+  it('"Só mesas ativas": toda mesa não concluída (inclusive PR aberto, falha e aguardando vaga); sem mesa, fila e Concluída ficam de fora', () => {
+    const wb = (stage: WorkbenchStage, patch: Partial<NonNullable<TaskWorkbenchState['workbench']>> = {}): TaskWorkbenchState => ({ workbench: { stage, runState: 'idle', pendingForms: 0, pendingPermissions: 0, ...patch } })
+    const list = [...tasks, task({ id: 'e', order: 5 }), task({ id: 'f', order: 6 }), task({ id: 'g', order: 7 })]
+    const states: Record<string, TaskWorkbenchState> = {
+      a: wb('pr_open'),
+      b: wb('implementing', { runState: 'failed' }),
+      c: wb('done'),
+      e: { queued: true },
+      f: wb('plan_review', { slotQueue: { position: 1 } }),
+    }
+    const stateOf = (item: TaskDto) => states[item.id] ?? {}
+    const ids = (activeOnly: boolean) => filterCentralTasks(list, 'p1', { ...DEFAULT_DEV_CENTER_FILTERS, activeOnly }, stateOf).map((item) => item.id)
+    expect(ids(false)).toEqual(['b', 'a', 'c', 'e', 'f', 'g'])
+    expect(ids(true)).toEqual(['b', 'a', 'f'])
+    expect(isActiveWorkbench({})).toBe(false)
+  })
+
+  it('"Só mesas ativas" combina (E) com colunas, estado da mesa e busca; filtros salvos antes da chave ficam desligados', () => {
+    const active: TaskWorkbenchState = { workbench: { stage: 'pr_open', runState: 'idle', pendingForms: 0, pendingPermissions: 0 } }
+    const stateOf = (item: TaskDto): TaskWorkbenchState => (item.id === 'd' ? {} : active)
+    const ids = (patch: Partial<typeof DEFAULT_DEV_CENTER_FILTERS>) => filterCentralTasks(tasks, 'p1', { ...DEFAULT_DEV_CENTER_FILTERS, activeOnly: true, ...patch }, stateOf).map((item) => item.id)
+    expect(ids({ columns: ['doing'] })).toEqual(['a'])
+    expect(ids({ search: 'login' })).toEqual(['b'])
+    expect(ids({ states: ['no_workbench'] })).toEqual([])
+    expect(devCenterFiltersSchema.parse({ search: '', columns: [] }).activeOnly).toBe(false)
   })
 
   it('Na fila inclui retomadas aguardando vaga e distingue Sem mesa', () => {
