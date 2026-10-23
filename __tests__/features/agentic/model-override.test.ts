@@ -36,8 +36,8 @@ describe('troca de modelo: regras', () => {
     const doc = { modelOverrides: { pr: { model: 'openai/o3', variant: null }, lixo: { model: 'x' } } }
     expect(workbenchOverrides(doc)).toEqual({ pr: { model: 'openai/o3', variant: null } })
     const config = defaultCentralConfig('/home/u/app')
-    expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'pr')).toEqual({ agent: 'build', model: 'openai/o3', variant: null })
-    expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'planning')).toEqual(DEFAULT_AGENTIC_SETTINGS.agents.planning)
+    expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'pr')).toEqual({ agent: 'build', model: 'openai/o3', variant: null, fallbacks: [] })
+    expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'planning')).toEqual({ ...DEFAULT_AGENTIC_SETTINGS.agents.planning, fallbacks: [] })
   })
 
   it('descrição do modelo', () => {

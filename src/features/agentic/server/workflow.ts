@@ -49,6 +49,7 @@ import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
 import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
+import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { syncWorkbenchTimer } from "./timer-sync"
 import { needsSlotToRun, occupiedSlots, runInCentral, slotQueuePosition, slotQueuePositions } from "./slots"
 import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } from "./remote-preview"
@@ -525,21 +526,37 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
             const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
             log.step(`${WORKBENCH_STAGE_LABELS[turn.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
-            const result = await runAgentTurn(
-                client,
+            const step = turn
+            // Modelo/provedor falhou: segue com os modelos de fallback do papel (só neste turno).
+            const result = await runWithFallback(
+                agent,
+                text,
+                (attempt, prompt) =>
+                    runAgentTurn(
+                        client,
+                        {
+                            workbenchId: id,
+                            sessionId,
+                            stage: step.stage,
+                            title: WORKBENCH_STAGE_LABELS[step.stage],
+                            agent: attempt,
+                            text: prompt,
+                            timeoutMs: step.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
+                            signal: controller.signal,
+                            attach: step.attach,
+                            startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
+                        },
+                        turnHooks(loaded.doc),
+                    ),
                 {
-                    workbenchId: id,
-                    sessionId,
-                    stage: turn.stage,
-                    title: WORKBENCH_STAGE_LABELS[turn.stage],
-                    agent,
-                    text,
-                    timeoutMs: turn.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
                     signal: controller.signal,
-                    attach: turn.attach,
-                    startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
+                    attach: step.attach,
+                    onSwitch: async (change) => {
+                        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: fallbackNotice(change) })
+                        log.warn(`${WORKBENCH_STAGE_LABELS[step.stage]}: modelo de fallback`, { workbenchId: id, from: change.from.model, to: change.to.model, reason: change.reason })
+                        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [], heartbeatAt: new Date() } })
+                    },
                 },
-                turnHooks(loaded.doc),
             )
             await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [] } })
             await flushWorkbenchEvents(id)

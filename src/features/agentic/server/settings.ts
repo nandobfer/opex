@@ -33,7 +33,7 @@ export async function getAgenticSettings(): Promise<AgenticSettingsDto> {
 
 /** Confere no OpenCode os agentes, modelos e variantes informados (ignora quando desconectado). */
 export async function assertAgentConfigs(configs: { label: string; config: AgentConfig | null }[], strict: boolean): Promise<void> {
-    const used = configs.filter((item): item is { label: string; config: AgentConfig } => Boolean(item.config && (item.config.agent || item.config.model)))
+    const used = configs.filter((item): item is { label: string; config: AgentConfig } => Boolean(item.config && (item.config.agent || item.config.model || item.config.fallbacks?.length)))
     if (!used.length) return
     const status = (await getAiProviderStatuses()).find((item) => item.id === "opencode")
     if (!status?.connected) {
@@ -44,10 +44,12 @@ export async function assertAgentConfigs(configs: { label: string; config: Agent
         const [models, agents] = await Promise.all([listAiModels("opencode"), listAiAgents()])
         for (const { label, config } of used) {
             if (config.agent && !agents.some((agent) => agent.id === config.agent)) throw new DomainError(400, `${label}: agente ${config.agent} não existe no OpenCode`, "AI_AGENT_NOT_FOUND")
-            if (!config.model) continue
-            const model = models.find((item) => item.id === config.model)
-            if (!model) throw new DomainError(400, `${label}: modelo ${config.model} não está disponível no OpenCode`, "AI_MODEL_NOT_FOUND")
-            if (config.variant && !model.variants.includes(config.variant)) throw new DomainError(400, `${label}: variante "${config.variant}" não existe no modelo ${model.name}`, "AI_VARIANT_NOT_FOUND")
+            const choices = [...(config.model ? [{ prefix: label, model: config.model, variant: config.variant }] : []), ...(config.fallbacks ?? []).map((item, index) => ({ prefix: `${label} (fallback ${index + 1})`, model: item.model, variant: item.variant }))]
+            for (const choice of choices) {
+                const model = models.find((item) => item.id === choice.model)
+                if (!model) throw new DomainError(400, `${choice.prefix}: modelo ${choice.model} não está disponível no OpenCode`, "AI_MODEL_NOT_FOUND")
+                if (choice.variant && !model.variants.includes(choice.variant)) throw new DomainError(400, `${choice.prefix}: variante "${choice.variant}" não existe no modelo ${model.name}`, "AI_VARIANT_NOT_FOUND")
+            }
         }
     } catch (error) {
         if (error instanceof AiProviderError) throw new DomainError(502, error.message, "AI_PROVIDER_ERROR")
@@ -55,7 +57,13 @@ export async function assertAgentConfigs(configs: { label: string; config: Agent
     }
 }
 
-const normalizeAgent = (config: AgentConfig): AgentConfig => ({ agent: config.agent || null, model: config.model || null, variant: config.model ? config.variant || null : null })
+const normalizeAgent = (config: AgentConfig): AgentConfig => ({
+    agent: config.agent || null,
+    model: config.model || null,
+    variant: config.model ? config.variant || null : null,
+    // Agentes padrão: sem lista = sem fallback.
+    fallbacks: (config.fallbacks ?? []).map((item) => ({ model: item.model, variant: item.variant || null })),
+})
 
 /** Coluna global: texto vazio vira `null` ("nenhuma"/"não mover"). */
 const normalizeColumn = (value: string | null): string | null => (value && value.trim() ? value.trim() : null)

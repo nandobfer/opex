@@ -77,12 +77,12 @@ describe('runAgentTurn', () => {
 
   it('falha da execução vira resultado failed com a mensagem', async () => {
     const client = fakeClient([ev('session.execution.failed', { error: { message: 'cota excedida' } })])
-    expect(await runAgentTurn(client, request())).toMatchObject({ outcome: 'failed', message: 'cota excedida' })
+    expect(await runAgentTurn(client, request())).toMatchObject({ outcome: 'failed', message: 'cota excedida', failure: 'model' })
   })
 
   it('mensagem recusada pelo OpenCode falha o turno', async () => {
     const client = fakeClient([], { promptError: new Error('sessão ocupada') })
-    expect(await runAgentTurn(client, request())).toMatchObject({ outcome: 'failed', message: expect.stringContaining('sessão ocupada') })
+    expect(await runAgentTurn(client, request())).toMatchObject({ outcome: 'failed', message: expect.stringContaining('sessão ocupada'), failure: 'model' })
   })
 
   it('abortar interrompe a sessão', async () => {
@@ -159,7 +159,7 @@ describe('runAgentTurn (reconexão)', () => {
     const client = attachClient({})
     client.session.get.mockResolvedValue(null)
     const result = await runAgentTurn(client, { ...request(), text: '', attach: true, startedAt: 1000 })
-    expect(result).toMatchObject({ outcome: 'failed', message: expect.stringContaining('não existe mais') })
+    expect(result).toMatchObject({ outcome: 'failed', message: expect.stringContaining('não existe mais'), failure: 'other' })
     expect(client.session.prompt).not.toHaveBeenCalled()
   })
 

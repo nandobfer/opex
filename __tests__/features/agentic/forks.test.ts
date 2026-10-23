@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   submitPrFeedback: vi.fn(async () => undefined),
   reopen: vi.fn(async () => undefined),
   forkAgent: { value: 'plan' },
+  forkFallbacks: { value: [] as { model: string; variant: string | null }[] },
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -60,7 +61,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
   flushWorkbenchEvents: vi.fn(async () => undefined),
 }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: mocks.deleteSession }))
-vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null, fallbacks: mocks.forkFallbacks.value } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
 vi.mock('@/features/agentic/server/workflow', () => ({ getWorkbench: mocks.getWorkbench, revisePlan: mocks.revisePlan, requestCorrection: mocks.requestCorrection, submitPrFeedback: mocks.submitPrFeedback, reopen: mocks.reopen }))
 
 import { AgenticFork, AgenticWorkbench } from '@/lib/db/models/Agentic'
@@ -155,6 +156,7 @@ beforeEach(() => {
   forks.docs.length = 0
   mocks.active.clear()
   mocks.forkAgent.value = 'plan'
+  mocks.forkFallbacks.value = []
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
   mocks.client.session.fork.mockResolvedValue({ id: 'fork-sess-1', location: { directory: '/home/u/app/worktrees/ope-1' } })
   mocks.client.session.create.mockResolvedValue({ id: 'fresh-sess-1', location: { directory: '/home/u/app' } })
@@ -162,6 +164,25 @@ beforeEach(() => {
   mocks.client.session.instructions.entry.put.mockResolvedValue(undefined)
   mocks.runTurn.mockResolvedValue({ outcome: 'succeeded', text: 'Resposta', message: null, costUsd: 0, durationMs: 1 })
   mocks.getWorkbench.mockImplementation(async (id: string) => asDto(id))
+})
+
+describe('modelos de fallback no fork', () => {
+  it('modelo falhou: a mensagem segue com o fallback do papel Fork da conversa (agente do Mode) e avisa', async () => {
+    mocks.forkFallbacks.value = [{ model: 'openai/gpt-5', variant: null }]
+    mocks.runTurn
+      .mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'cota excedida', costUsd: 0, durationMs: 1, failure: 'model' })
+      .mockResolvedValueOnce({ outcome: 'succeeded', text: 'Resposta', message: null, costUsd: 0, durationMs: 1 })
+    const id = await workbench()
+    const dto = await openFork(id, 'Por que X?')
+    await settle(dto.id)
+
+    expect(mocks.runTurn).toHaveBeenCalledTimes(2)
+    const second = mocks.runTurn.mock.calls[1]![1] as { text: string; agent: unknown }
+    expect(second.agent).toEqual({ agent: 'plan', model: 'openai/gpt-5', variant: null })
+    expect(second.text).toContain('A resposta anterior não terminou (cota excedida). Retome de onde parou')
+    expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', level: 'warn', message: 'modelo padrão do agente falhou (cota excedida): continuando com openai/gpt-5 — fallback 1 de 1.' }))
+    expect(forks.docs[0]!.runState).toBe('idle')
+  })
 })
 
 describe('abrir fork', () => {

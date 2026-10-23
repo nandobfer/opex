@@ -195,3 +195,42 @@ describe('trocar o modelo na mesa', () => {
     expect((await getWorkbench(wb._id)).models).toBeNull()
   })
 })
+
+describe('modelos de fallback na mesa', () => {
+  const GPT = { model: 'openai/gpt-5', variant: 'high' }
+
+  it('modelo falhou no provedor: o mesmo turno segue com o fallback (mesmo agente) e avisa; o turno seguinte volta ao principal', async () => {
+    mocks.settings.mockResolvedValue({ settings: { ...settings, agents: { ...settings.agents, implementation: { ...settings.agents.implementation, fallbacks: [GPT] } } } })
+    let failed = false
+    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string; agent: { model: string } }) => {
+      if (request.stage === 'implementing' && !failed) {
+        failed = true
+        return { outcome: 'failed', text: '', message: 'limite de uso', costUsd: 0, durationMs: 1, failure: 'model' }
+      }
+      return request.stage === 'opening_pr' ? succeeded('```json\n{"url":"https://github.com/org/app/pull/9","number":9}\n```') : succeeded('ok')
+    })
+    const wb = await workbench()
+    await implement(wb._id)
+    await waitForStage('pr_open')
+
+    const implementing = mocks.runTurn.mock.calls.filter(([, request]) => request.stage === 'implementing').map(([, request]) => request)
+    expect(implementing.map((request) => request.agent)).toEqual([
+      { agent: 'build', model: 'anthropic/sonnet', variant: null },
+      { agent: 'build', model: 'openai/gpt-5', variant: 'high' },
+    ])
+    expect(implementing[1].text).toContain('A execução anterior desta etapa não terminou (limite de uso). Retome de onde parou')
+    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ type: 'notice', level: 'warn', message: 'anthropic/sonnet falhou (limite de uso): continuando com openai/gpt-5 (high) — fallback 1 de 1.' }))
+    expect(agentOf('opening_pr')).toEqual({ agent: 'build', model: 'anthropic/haiku', variant: null })
+  })
+
+  it('erro da etapa (não do modelo) não troca de modelo', async () => {
+    mocks.settings.mockResolvedValue({ settings: { ...settings, agents: { ...settings.agents, implementation: { ...settings.agents.implementation, fallbacks: [GPT] } } } })
+    mocks.runTurn.mockResolvedValue({ outcome: 'failed', text: '', message: 'Conexão com o OpenCode perdida durante a execução', costUsd: 0, durationMs: 1, failure: 'other' })
+    const wb = await workbench()
+    await implement(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]!.runState).toBe('failed'))
+    expect(mocks.runTurn).toHaveBeenCalledTimes(1)
+    expect(model.docs[0]!.error).toBe('Conexão com o OpenCode perdida durante a execução')
+  })
+})
+

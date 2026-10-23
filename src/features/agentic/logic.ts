@@ -14,12 +14,27 @@ export const asAgenticFlow = (value: string | null | undefined): TaskAgenticFlow
 export function resolveAgent(settings: AgenticSettings, central: Pick<CentralConfig, "agents">, role: AgentRole): AgentConfig {
     const base = settings.agents[role]
     const override = central.agents[role]
-    if (!override) return base
+    if (!override) return { ...base, fallbacks: base.fallbacks ?? [] }
     return {
         agent: override.agent || base.agent,
         model: override.model || base.model,
         variant: override.model ? override.variant : base.variant,
+        // Fallback da central: ausente herda o padrão; `[]` = sem fallback; lista substitui o padrão.
+        fallbacks: override.fallbacks ?? base.fallbacks ?? [],
     }
+}
+
+/**
+ * Corrente de modelos de um turno: o principal (modelo do papel ou o trocado na mesa/fork; `null` =
+ * modelo padrão do agente) seguido dos fallbacks, sem repetidos. O agente é o mesmo em todos.
+ */
+export function modelChain(agent: AgentConfig): AgentConfig[] {
+    const chain: AgentConfig[] = [{ agent: agent.agent, model: agent.model, variant: agent.variant }]
+    for (const item of agent.fallbacks ?? []) {
+        if (chain.some((entry) => entry.model === item.model && (entry.variant ?? null) === (item.variant ?? null))) continue
+        chain.push({ agent: agent.agent, model: item.model, variant: item.variant ?? null })
+    }
+    return chain
 }
 
 /** Modelo/variante trocados na mesa ou no fork (o agente continua o da etapa ou do Mode). */

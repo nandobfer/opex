@@ -18,11 +18,11 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 
 - Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
   `agenticSettingsSchema`): **ativa**, o **agente padrão** (agente, modelo `provedor/modelo`,
-  variante) de cada etapa — **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
+  variante, com os **modelos de fallback** — ver "Modelos de fallback") de cada etapa — **Planejamento**, **Implementação**, **Build e ambiente** (também faz a
   limpeza) e **Pull Request** — e as **colunas globais** (`columns`, OPE-79): a coluna da **fila** e
   os destinos da **movimentação** (ao abrir a mesa, ao abrir o PR e ao concluir), todos "nenhuma/não
   mover" por padrão — e a **correção de CI padrão** (`ci`, OPE-81: `fixCi` ligada e `ciFixLimit`
-  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`). Agentes/modelos são conferidos no OpenCode ao salvar (com a feature ativa, exige
+  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
   o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
@@ -68,7 +68,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Aba | Campos |
 |---|---|
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
-| Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`) |
+| Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`); etapa personalizada escolhe os **modelos de fallback**: Usar os do padrão / Personalizar / Sem fallback (ver "Modelos de fallback") |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
 | Colunas e conclusão | **Fila** e **Movimentação** das colunas, cada uma herdando o padrão global da aba ou **personalizada** nesta central (OPE-79); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
@@ -573,6 +573,38 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `set-mode` | `{ mode: "plan" \| "build" }` | Troca o modo (agente parado; 409 se travado) |
 | `lock` | — | Trava como somente leitura (Plan), sem volta |
 
+## Modelos de fallback
+
+- **Configuração**: cada papel (Planejamento, Implementação, Build e ambiente, Pull Request, Fork da
+  conversa) tem a lista **Modelos de fallback** (`FallbackModelsField`, abaixo de agente/modelo/variante):
+  até **5** itens (`MAX_MODEL_FALLBACKS`), cada um com **modelo + variante** (mesma busca do
+  `ModelSearchPicker`); o agente continua o do papel. **Adicionar fallback**, remover e **ordem por
+  arrastar** (dnd-kit) — a ordem é a ordem de tentativa. Item repetido ou igual ao modelo principal é
+  apontado no campo e recusado pelo schema (`agentConfigSchema.fallbacks`, `superRefine`).
+- **Na central** (aba Agentes, etapa personalizada): `OptionTabs` **Usar os do padrão** (padrão; resumo
+  "Fallback do padrão: A → B"), **Personalizar** (a lista da central **substitui** a padrão, não soma;
+  começa com a cópia da padrão) e **Sem fallback**. Etapa que herda o padrão inteiro herda também os
+  fallbacks. Gravado em `agents.<papel>.fallbacks`: ausente/`null` = herda, `[]` = sem fallback, lista
+  = substitui (`resolveAgent`). Nos agentes padrão, ausente = sem fallback (configurações antigas
+  continuam válidas, sem migração).
+- **Quando troca**: só quando o **modelo/provedor falha** — o OpenCode encerra a execução com erro
+  (limite de uso, cota, autenticação, modelo indisponível, sobrecarga), não consegue selecionar o modelo
+  ou recusa a mensagem (`TurnResult.failure = "model"`, `lib/ai/opencode-run.ts`). **Não** troca ao
+  Parar, com a conexão com o OpenCode perdida, na reconexão (que não envia mensagem) nem em erros da
+  etapa (build falhou, plano vazio, PR sem URL).
+- **Como continua** (`runWithFallback`, `server/model-fallback.ts`): reenvia o turno **na mesma
+  sessão** com o próximo modelo da corrente (`modelChain`: principal + fallbacks, sem repetidos),
+  pedindo para retomar ("A execução anterior desta etapa não terminou (motivo). Retome de onde parou…";
+  no fork, "A resposta anterior não terminou…"). A saída avisa: "anthropic/opus falhou (limite de uso):
+  continuando com openai/gpt-5 (high) — fallback 1 de 2." (e o log da central). Se o último também
+  falhar, a mesa (ou o fork) falha como hoje, com o erro do último modelo. O custo das tentativas soma
+  no turno.
+- **Só naquele turno**: cada turno novo (inclusive os encadeados) começa pelo modelo principal.
+- **Com a troca de modelo na mesa/fork**: o modelo trocado vira o principal e a lista do papel continua
+  valendo atrás dele (pulando o que for igual). No fork vale para as mensagens e para a consolidação
+  do resumo (lista do papel Fork da conversa; agente do Mode).
+- Fora do alcance: Refinar tarefa e a revisão automática do PR (configurações próprias).
+
 ## Trocar o modelo na mesa e no fork
 
 - **Seletor de modelo** no canto esquerdo da barra inferior: na mesa, **"Modelo do <etapa>: <nome>
@@ -693,7 +725,8 @@ andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconex
 releitura das pendências no buraco do SSE —, o ciclo automático de reconexão (`reconnect`,
 `auto-reconnect`), acompanhamento do PR (inclusive o relato ao vivo: `pr-watch`, `pr-watch-report`,
 `pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
-`forks-model`, `model-routes`, `ModelOverridePicker`), exclusão de sessão (`session-cleanup`),
+`forks-model`, `model-routes`, `ModelOverridePicker`), modelos de fallback
+(`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), CI falho do PR (`ci`, `workflow-pr-ci`, prioridades e limite em
 `pr-watch`, `ciFixPrompt` em `prompts`, padrão global/central em `logic`, `git-section` e

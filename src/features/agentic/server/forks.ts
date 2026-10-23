@@ -56,6 +56,7 @@ import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
+import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { getWorkbench, reopen, requestCorrection, revisePlan, submitPrFeedback } from "./workflow"
@@ -340,10 +341,25 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         await AgenticFork.updateOne({ _id: fork._id }, { $set: { childNotesSynced: true } })
     }
     log.info({ forkId: id, workbenchId: fork.workbenchId, agent: agent.agent, model: agent.model }, `Fork ${fork.number} ${fork.taskCode}: turno iniciado`)
-    const result = await runAgentTurn(
-        client,
-        { id, sessionId: fork.sessionId, stage: "fork", title: `Fork ${fork.number}`, agent, text, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "agentic", subject: fork.workbenchId } },
-        { ...turnHooks(fork), publish },
+    const sessionId = fork.sessionId
+    // Modelo/provedor falhou: segue com os modelos de fallback do papel Fork da conversa (só nesta mensagem).
+    const result = await runWithFallback(
+        agent,
+        text,
+        (attempt, prompt) =>
+            runAgentTurn(
+                client,
+                { id, sessionId, stage: "fork", title: `Fork ${fork.number}`, agent: attempt, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "agentic", subject: fork.workbenchId } },
+                { ...turnHooks(fork), publish },
+            ),
+        {
+            signal: controller.signal,
+            resumeText: (reason, original) => `A resposta anterior não terminou (${reason}). Retome de onde parou e responda à mensagem abaixo.\n\n${original}`,
+            onSwitch: (change) => {
+                publish({ type: "notice", level: "warn", message: fallbackNotice(change) })
+                log.warn({ forkId: id, from: change.from.model, to: change.to.model, reason: change.reason }, `Fork ${fork.number} ${fork.taskCode}: modelo de fallback`)
+            },
+        },
     )
     await flushWorkbenchEvents(id)
     const current = (await AgenticFork.findById(id).select({ status: 1 }).lean()) as unknown as Pick<IAgenticFork, "status"> | null

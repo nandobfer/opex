@@ -1,17 +1,63 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
-import { agenticSettingsSchema, centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig, withDefaultAgents } from '@/features/agentic/schemas'
+import { defaultSessionDirectory, modelChain, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { agentConfigSchema, agenticSettingsSchema, centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig, withDefaultAgents } from '@/features/agentic/schemas'
 
 describe('resolveAgent', () => {
   const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } } }
 
   it('sem override usa o padrão da aba', () => {
-    expect(resolveAgent(settings, defaultCentralConfig('/x'), 'planning')).toEqual({ agent: 'plan', model: 'anthropic/opus', variant: 'high' })
+    expect(resolveAgent(settings, defaultCentralConfig('/x'), 'planning')).toEqual({ agent: 'plan', model: 'anthropic/opus', variant: 'high', fallbacks: [] })
   })
 
   it('override vale campo a campo (agente vazio herda; modelo próprio leva a variante própria)', () => {
     const central = { agents: { ...defaultCentralConfig('/x').agents, planning: { agent: null, model: 'openai/gpt', variant: null } } }
-    expect(resolveAgent(settings, central, 'planning')).toEqual({ agent: 'plan', model: 'openai/gpt', variant: null })
+    expect(resolveAgent(settings, central, 'planning')).toEqual({ agent: 'plan', model: 'openai/gpt', variant: null, fallbacks: [] })
+  })
+})
+
+describe('modelos de fallback', () => {
+  const GPT = { model: 'openai/gpt-5', variant: 'high' }
+  const DEEP = { model: 'deepseek/v3', variant: null }
+  const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: null, fallbacks: [GPT, DEEP] } } }
+  const central = (planning: Record<string, unknown> | null) => ({ agents: { ...defaultCentralConfig('/x').agents, planning: planning as never } })
+
+  it('papel herdado inteiro (ou personalizado sem lista) usa os fallbacks do padrão', () => {
+    expect(resolveAgent(settings, central(null), 'planning').fallbacks).toEqual([GPT, DEEP])
+    expect(resolveAgent(settings, central({ agent: null, model: 'openai/o3', variant: null, fallbacks: null }), 'planning').fallbacks).toEqual([GPT, DEEP])
+    expect(resolveAgent(settings, central({ agent: null, model: 'openai/o3', variant: null }), 'planning').fallbacks).toEqual([GPT, DEEP])
+  })
+
+  it('lista da central substitui a padrão (não soma) e lista vazia = sem fallback', () => {
+    expect(resolveAgent(settings, central({ agent: null, model: null, variant: null, fallbacks: [DEEP] }), 'planning').fallbacks).toEqual([DEEP])
+    expect(resolveAgent(settings, central({ agent: null, model: null, variant: null, fallbacks: [] }), 'planning').fallbacks).toEqual([])
+  })
+
+  it('agentes padrão salvos antes do campo: sem fallback', () => {
+    expect(resolveAgent(DEFAULT_AGENTIC_SETTINGS, central(null), 'planning').fallbacks).toEqual([])
+  })
+
+  it('corrente: principal + fallbacks em ordem, com o agente do papel, sem repetir o principal', () => {
+    expect(modelChain({ agent: 'plan', model: 'anthropic/opus', variant: null, fallbacks: [GPT, DEEP] })).toEqual([
+      { agent: 'plan', model: 'anthropic/opus', variant: null },
+      { agent: 'plan', ...GPT },
+      { agent: 'plan', ...DEEP },
+    ])
+    // Modelo trocado na mesa igual a um fallback: o fallback repetido é pulado.
+    expect(modelChain({ agent: 'plan', model: 'openai/gpt-5', variant: 'high', fallbacks: [GPT, DEEP] }).map((item) => item.model)).toEqual(['openai/gpt-5', 'deepseek/v3'])
+    expect(modelChain({ agent: 'plan', model: null, variant: null })).toEqual([{ agent: 'plan', model: null, variant: null }])
+  })
+
+  it('schema: até 5, sem repetidos nem igual ao principal; configuração antiga continua válida', () => {
+    expect(agentConfigSchema.safeParse({ agent: 'plan', model: null, variant: null }).success).toBe(true)
+    expect(agentConfigSchema.safeParse({ agent: 'plan', model: 'a/b', variant: null, fallbacks: [GPT, DEEP] }).success).toBe(true)
+    const six = Array.from({ length: 6 }, (_, index) => ({ model: `p/m${index}`, variant: null }))
+    expect(agentConfigSchema.safeParse({ agent: null, model: null, variant: null, fallbacks: six }).success).toBe(false)
+    const repeated = agentConfigSchema.safeParse({ agent: null, model: 'a/b', variant: null, fallbacks: [GPT, GPT] })
+    expect(repeated.success ? null : repeated.error.issues[0]?.message).toBe('Modelo de fallback repetido')
+    const primary = agentConfigSchema.safeParse({ agent: null, model: 'openai/gpt-5', variant: 'high', fallbacks: [GPT] })
+    expect(primary.success ? null : primary.error.issues[0]?.message).toBe('O fallback é igual ao modelo principal')
+    // Mesmo modelo com outra variante é outro item válido.
+    expect(agentConfigSchema.safeParse({ agent: null, model: 'openai/gpt-5', variant: null, fallbacks: [GPT] }).success).toBe(true)
   })
 })
 

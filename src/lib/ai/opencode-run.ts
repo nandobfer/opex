@@ -79,6 +79,12 @@ export interface TurnResult {
     message: string | null
     costUsd: number
     durationMs: number
+    /**
+     * Causa da falha: `model` = o modelo/provedor falhou (execução encerrada com erro pelo OpenCode,
+     * modelo não selecionável ou mensagem recusada) — elegível a modelo de fallback; `other` = conexão,
+     * sessão, tempo limite etc. Ausente quando o turno não falhou.
+     */
+    failure?: "model" | "other"
 }
 
 const HEARTBEAT_MS = 30_000
@@ -149,7 +155,7 @@ export async function probeAttachSession(client: OpencodeClient, sessionId: stri
     return { kind: "idle" }
 }
 
-type End = { outcome: TurnResult["outcome"]; message: string | null }
+type End = { outcome: TurnResult["outcome"]; message: string | null; failure?: "model" }
 
 export async function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks: TurnHooks = {}): Promise<TurnResult> {
     const { sessionId } = request
@@ -230,7 +236,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             if (request.agent.agent) await client.session.switchAgent({ sessionID: sessionId, agent: request.agent.agent })
             if (request.agent.model) await client.session.switchModel({ sessionID: sessionId, model: toOpencodeModelRef(request.agent.model, request.agent.variant) })
         } catch (error) {
-            const result: TurnResult = { outcome: "failed", text: "", message: `Não foi possível selecionar o agente/modelo: ${message(error)}`, costUsd: 0, durationMs: Date.now() - beginAt }
+            const result: TurnResult = { outcome: "failed", text: "", message: `Não foi possível selecionar o agente/modelo: ${message(error)}`, costUsd: 0, durationMs: Date.now() - beginAt, failure: "model" }
             publish({ type: "turn-end", outcome: "failed", message: result.message, durationMs: result.durationMs, costUsd: 0 })
             return result
         }
@@ -321,7 +327,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 await hooks.onMoved?.(event.directory)
                 break
             case "end":
-                finish(event.outcome === "succeeded" ? { outcome: "succeeded", message: null } : event.outcome === "failed" ? { outcome: "failed", message: event.message } : { outcome: "interrupted", message: event.reason === "user" ? "Interrompido" : `Interrompido (${event.reason})` })
+                finish(event.outcome === "succeeded" ? { outcome: "succeeded", message: null } : event.outcome === "failed" ? { outcome: "failed", message: event.message, failure: "model" } : { outcome: "interrupted", message: event.reason === "user" ? "Interrompido" : `Interrompido (${event.reason})` })
                 break
         }
     }
@@ -358,7 +364,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
             if (!finished && info?.outcome && (info.time.idle ?? 0) >= startedAt) {
                 publish({ type: "notice", level: "warn", message: "A conexão com o OpenCode caiu; parte da saída pode não ter sido exibida" })
-                finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null })
+                finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null, ...(info.outcome === "failed" ? { failure: "model" as const } : {}) })
             }
         }
     })()
@@ -405,7 +411,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             try {
                 await client.session.prompt({ sessionID: sessionId, text: request.text })
             } catch (error) {
-                finish({ outcome: "failed", message: `O OpenCode recusou a mensagem: ${message(error)}` })
+                finish({ outcome: "failed", message: `O OpenCode recusou a mensagem: ${message(error)}`, failure: "model" })
             }
         }
         const end = await ended
@@ -416,7 +422,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         }
         const durationMs = Date.now() - beginAt
         publish({ type: "turn-end", outcome: end.outcome, message: end.message, durationMs, costUsd })
-        return { outcome: end.outcome, text, message: end.message, costUsd, durationMs }
+        return { outcome: end.outcome, text, message: end.message, costUsd, durationMs, ...(end.outcome === "failed" ? { failure: attach ? "other" : (end.failure ?? "other") } : {}) }
     } finally {
         clearInterval(heartbeat)
         clearTimeout(timeout)
