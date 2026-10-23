@@ -1,6 +1,4 @@
-import { DevCenterPage } from "@/features/agentic/components/dev-center/DevCenterPage"
-
-/** Central de desenvolvimento: a central selecionada vem do navegador. */
+/** `/desenvolvimento`: a Central de desenvolvimento é renderizada pelo layout (não remonta ao navegar). */
 export default function DesenvolvimentoPage() {
-    return <DevCenterPage taskId={null} />
+    return null
 }

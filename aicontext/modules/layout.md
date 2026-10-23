@@ -21,9 +21,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
 - `src/app/(app)/financeiro/page.tsx`: Financeiro — faturamento das tarefas concluídas por cliente
   (item próprio no menu; ver `modules/finance.md`), envolto no `RepoIndexProvider`.
-- `src/app/(app)/desenvolvimento/page.tsx` e `desenvolvimento/[taskId]/page.tsx` (com `layout.tsx`
-  que distribui o índice de repositórios): Central de desenvolvimento (item próprio no menu; ver
-  `modules/agentic-dev.md`). A central vem do navegador e a tarefa da URL.
+- `src/app/(app)/desenvolvimento/layout.tsx`: Central de desenvolvimento (item próprio no menu; ver
+  `modules/agentic-dev.md`). Distribui o índice de repositórios e renderiza a tela **no layout**
+  (`DevCenterRoute`, tarefa por `useParams`); `desenvolvimento/page.tsx` e
+  `desenvolvimento/[taskId]/page.tsx` retornam `null`. A central vem do navegador e a tarefa da URL.
 - `src/app/(app)/tarefas/layout.tsx`: `TimerProvider` (timers locais) para as três páginas.
 - Item ativo do menu = o de `href` mais específico que casa com o caminho (`activeNavHref`): em
   `/tarefas/horas` fica "Minhas horas"; em `/tarefas/123`, "Tarefas".
@@ -40,7 +41,9 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   **sempre recolhida** (68px): não há botão de recolher/expandir. A chave da transição é
   `pageTransitionKey(pathname, persistentHrefs)`: telas com sub-rotas que são a mesma tela
   (`PERSISTENT_PAGE_HREFS`, hoje `/desenvolvimento`) usam o prefixo, então navegar dentro delas não
-  anima nem remonta a página — a própria tela anima só o trecho que mudou. Não há cabeçalho: cada página
+  anima nem remonta a página — a própria tela anima só o trecho que mudou. A chave da casca não basta
+  quando as sub-rotas são arquivos de página ou valores de segmento dinâmico diferentes (o Next remonta
+  a página): nesse caso a tela mora no layout do prefixo. Não há cabeçalho: cada página
   tem o próprio título. No celular, o botão "Abrir menu" flutua no canto superior esquerdo
   (`fixed`) e o conteúdo ganha `pt-16`.
 - `AppSidebar` + `sidebar/*`: ver `use-para-atualizar-tema-e-componentes-ui.md`, "Menu lateral".

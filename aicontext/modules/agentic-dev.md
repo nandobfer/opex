@@ -237,7 +237,9 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   repositórios do GitHub (`RepoIndexProvider`, montado no layout de `/desenvolvimento`); sem token,
   cai na inicial.
 - Navegar entre tarefas ou centrais **não** anima nem remonta a página inteira (`/desenvolvimento`
-  está em `PERSISTENT_PAGE_HREFS` da casca): as colunas ficam paradas (rolagem e filtros mantidos)
+  está em `PERSISTENT_PAGE_HREFS` da casca e a central é renderizada pelo layout de
+  `/desenvolvimento` — `DevCenterRoute` lê a tarefa por `useParams`; as páginas retornam `null`):
+  as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
 - A coluna **Tarefas** tem **largura fixa de 340 px** a partir de `lg` (a mesa fica ao lado, no
