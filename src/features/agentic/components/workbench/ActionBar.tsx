@@ -184,12 +184,12 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                         <WorkbenchModelPicker workbench={workbench} />
                     </div>
                     <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
-                        {/* Abrir em nova guia (prévia) é sempre o primeiro da linha. */}
+                        {/* Abrir prévia é sempre o primeiro da linha. */}
                         {actions.includes("open-preview") && (
                             <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
-                                <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir em nova guia" title="Abrir em nova guia">
+                                <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir prévia" title="Abrir prévia em nova guia">
                                     <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                                    <span className="max-md:hidden">Abrir em nova guia</span>
+                                    <span className="max-md:hidden">Abrir prévia</span>
                                 </a>
                             </Button>
                         )}

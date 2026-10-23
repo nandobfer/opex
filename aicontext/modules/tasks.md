@@ -239,9 +239,11 @@ compartilhados de `server/drafts.ts`. No cliente: `src/features/tasks/preview/` 
   **Entender tarefa**, **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
   **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
   salvar/cancelar voltam à visão.
-- Acima do card de conteúdo, o **Resumo (IA)** aparece em um **card próprio** (`TaskSummaryCard`,
-ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e **não substitui**
-a descrição.
+- Logo abaixo do título, **em linha inteira** (abaixo também da linha de botões, ocupando a largura da
+página e não só a coluna de conteúdo), o **Resumo (IA)** aparece em um **card próprio**
+(`TaskSummaryCard`, ícone de sparkles + uma linha, fonte discreta, **sem rótulo**) — é **adicional** e
+**não substitui** a descrição — e, em seguida, as **tags** (até 6, `TaskTagsBadge`; a lista completa
+continua na lateral).
 - Abas em uma linha rolável horizontalmente **sem barra de scroll vertical** (`TaskDetailTabs`),
 animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, **sem título próprio**),
   **Especificação técnica** (aba própria: a especificação atual em Markdown e, **abaixo**, o painel do

@@ -95,7 +95,7 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                                 />
                             </div>
                             <p className="mt-4 text-xs text-muted-foreground">
-                                O botão &quot;Abrir em nova guia&quot; usa http://{env.previewHost || "localhost"}:&lt;porta&gt;. Abrindo o app de outra máquina, use o IP do servidor, não localhost.
+                                O botão &quot;Abrir prévia&quot; usa http://{env.previewHost || "localhost"}:&lt;porta&gt;. Abrindo o app de outra máquina, use o IP do servidor, não localhost.
                             </p>
                         </motion.div>
                     ) : (

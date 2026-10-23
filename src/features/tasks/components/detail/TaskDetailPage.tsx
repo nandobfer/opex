@@ -35,6 +35,7 @@ import { WorkbenchButton } from "@/features/agentic/components/WorkbenchButton"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "../TaskBadges"
 import { TaskColumnMenu } from "../TaskColumnMenu"
 import { TaskForm } from "../TaskForm"
+import { TaskTagsBadge } from "../TaskTagsBadge"
 import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
 import { useOwnerAttachmentClient, useTaskDescriptionUploads } from "../../attachments/hooks"
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
@@ -102,7 +103,8 @@ export function TaskDetailPage({ id }: { id: string }) {
                     {view === "error" && <ErrorState title="Não foi possível carregar a tarefa" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />}
                     {view === "ready" && task && (
                         <div className="space-y-4">
-                            <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <header className="space-y-2">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                                 <div className="min-w-0 space-y-1.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-mono text-sm font-semibold text-primary">{task.code}</span>
@@ -127,11 +129,13 @@ export function TaskDetailPage({ id }: { id: string }) {
                                         <Trash2 className="h-4 w-4" aria-hidden />
                                     </Button>
                                 </div>
+                                </div>
+                                {task.summary && <TaskSummaryCard summary={task.summary} />}
+                                {(task.tags?.length ?? 0) > 0 && <TaskTagsBadge tags={task.tags ?? []} max={6} />}
                             </header>
 
                             <div className="grid items-start gap-4 lg:grid-cols-[1fr_320px]">
                                 <div className="min-w-0 space-y-4">
-                                    {task.summary && <TaskSummaryCard summary={task.summary} />}
                                     <Card className="min-w-0">
                                         <CardContent className="space-y-4 pt-4">
                                             {editing ? (

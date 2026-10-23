@@ -83,14 +83,14 @@ describe('ActionBar', () => {
 
   it('prévia pronta: abrir em nova guia, solicitar correção e aprovar', () => {
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
-    expect(screen.getByRole('link', { name: /Abrir em nova guia/ }).getAttribute('href')).toBe('http://localhost:4001')
+    expect(screen.getByRole('link', { name: /Abrir prévia/ }).getAttribute('href')).toBe('http://localhost:4001')
     expect(screen.getByRole('button', { name: /Solicitar correção/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Aprovar e abrir PR/ })).toBeTruthy()
   })
 
   it('prévia pronta: ações numa única linha no celular, com abrir prévia só pelo ícone', () => {
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
-    const link = screen.getByRole('link', { name: /Abrir em nova guia/ })
+    const link = screen.getByRole('link', { name: /Abrir prévia/ })
     // O texto do link some no celular (fica só o ícone), preservando o nome acessível.
     expect(link.querySelector('.max-md\\:hidden')).toBeTruthy()
     const row = link.closest('div')!
@@ -120,14 +120,14 @@ describe('ActionBar', () => {
     expect(screen.queryByRole('button', { name: /Modelo do Plano/ })).toBeNull()
   })
 
-  it('Abrir em nova guia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
+  it('Abrir prévia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
     const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: 'open', mergedAt: null }
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr } as never)} />)
-    const preview = screen.getByRole('link', { name: /Abrir em nova guia/ })
+    const preview = screen.getByRole('link', { name: /Abrir prévia/ })
     const row = preview.parentElement!
     expect(row.firstElementChild).toBe(preview)
     const order = Array.from(row.children).map((element) => element.textContent?.trim())
-    expect(order.slice(0, 3)).toEqual(['Abrir em nova guia', 'Ver PR #12', 'Abrir fork'])
+    expect(order.slice(0, 3)).toEqual(['Abrir prévia', 'Ver PR #12', 'Abrir fork'])
   })
 
   it.each(['pr_open', 'planning', 'implementing', 'preview', 'resolving_conflicts', 'done'] as const)('com PR: Ver PR #N abre o PR em nova guia (etapa %s)', (stage) => {

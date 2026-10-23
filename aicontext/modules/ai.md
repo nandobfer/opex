@@ -194,7 +194,7 @@ e opções na própria aba da página "Provedores de IA".
   e evento `ai-feature-updated` em `private-app`.
 - **Resumo** = 1 linha **adicional**, que **não substitui** a descrição: aparece no card do kanban
   (linha sob o título), na coluna **Título** da tabela e, na página da tarefa, em um **card próprio
-  acima do card de conteúdo** (`TaskSummaryCard`, fonte discreta). A aba **Descrição** segue
+  em linha inteira abaixo do título** (`TaskSummaryCard`, fonte discreta). A aba **Descrição** segue
   mostrando a descrição completa em Markdown.
 - **Entrada** (`src/features/ai/task-summary.ts`, puro): a tarefa vira Markdown (código, tipo,
   prioridade, projeto, título e descrição cortada). `toSummaryLine` normaliza a saída do modelo

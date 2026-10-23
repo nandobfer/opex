@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 
-/** Card do resumo de 1 linha gerado por IA, exibido acima do card de conteúdo da tarefa. */
+/** Card do resumo de 1 linha gerado por IA, em linha inteira abaixo do título da tarefa. */
 export function TaskSummaryCard({ summary }: { summary: string }) {
     return (
         <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
