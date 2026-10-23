@@ -387,6 +387,24 @@ describe('tarefas do portal (cliente)', () => {
     expect((await listTasksForClient('outro', false)).tasks).toHaveLength(0)
   })
 
+  it('comentário de linha: grava citação + marcador oculto e o detalhe devolve corpo e referência', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await addComment(a.id, { content: 'Ajustar', lineRef: { field: 'description', line: 3, text: '- Item três' } }, { id: 'local', type: 'owner', name: 'Fernando' })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ linha: { campo: 'description', comentarioId: null, numero: 3 } }) }))
+    const [comment] = (await getTask(a.id)).comments
+    expect(comment!.content.startsWith('> 💬 Linha 3 da **Descrição**:\n> - Item três\n\nAjustar')).toBe(true)
+    expect(comment!.content).not.toContain('<!--')
+    expect(comment).toMatchObject({ body: 'Ajustar', lineRef: { field: 'description', line: 3, quote: '- Item três' } })
+  })
+
+  it('comentário de linha longo demais → 400 sem gravar', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    await expect(addComment(a.id, { content: 'x'.repeat(5000), lineRef: { field: 'description', line: 1, text: 'a' } }, { id: 'local', type: 'owner', name: 'F' })).rejects.toMatchObject({ status: 400, code: 'COMMENT_TOO_LONG' })
+    expect((await getTask(a.id)).comments).toHaveLength(0)
+  })
+
   it('comentário guarda a origem e o nome do autor', async () => {
     const pid = await seedProject()
     const a = await create(pid)

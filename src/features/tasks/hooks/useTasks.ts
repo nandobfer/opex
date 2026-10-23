@@ -8,8 +8,10 @@ import type { ApiResponse } from "@/lib/types/api"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { TASK_COLUMNS_UPDATED_EVENT, TASKS_UPDATED_EVENT } from "../constants"
-import type { CreateTaskInput, UpdateTaskInput } from "../schemas"
-import type { TaskDetailDto, TaskDto, TaskEstimate, TaskListDto, TaskOptionsDto, TasksUpdatedEvent } from "../types"
+import { clipLine, lineHash } from "@/lib/markdown/lines"
+import { LINE_QUOTE_MAX, OPTIMISTIC_COMMENT_PREFIX } from "../line-comments/format"
+import type { CommentInput, CreateTaskInput, UpdateTaskInput } from "../schemas"
+import type { TaskComment, TaskDetailDto, TaskDto, TaskEstimate, TaskListDto, TaskOptionsDto, TasksUpdatedEvent } from "../types"
 
 /** Tarefas dO Opex: consultas, mutações (otimistas) e atualização em tempo real. */
 
@@ -220,11 +222,38 @@ export function useDeleteTask() {
 }
 
 /** Adiciona um comentário (`POST /api/tasks/[id]/comments`). */
+/**
+ * Comenta na tarefa (texto puro ou `{ content, lineRef }` para comentário de linha). Otimista: o
+ * comentário entra no cache na hora e sai (com toast) se o servidor recusar.
+ */
 export function useAddComment(taskId: string) {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (content: string) => unwrapApi((await api.post<ApiResponse<{ id: string }>>(`/tasks/${taskId}/comments`, { content })).data),
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível comentar")),
-        onSuccess: () => void queryClient.invalidateQueries({ queryKey: taskDetailKey(taskId) }),
+        mutationFn: async (input: string | CommentInput) => unwrapApi((await api.post<ApiResponse<{ id: string }>>(`/tasks/${taskId}/comments`, typeof input === "string" ? { content: input } : input)).data),
+        onMutate: async (input) => {
+            const key = taskDetailKey(taskId)
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<TaskDetailDto>(key)
+            if (previous) queryClient.setQueryData<TaskDetailDto>(key, { ...previous, comments: [...previous.comments, optimisticComment(input)] })
+            return { previous }
+        },
+        onError: (error, _input, context) => {
+            if (context?.previous) queryClient.setQueryData(taskDetailKey(taskId), context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível comentar"))
+        },
+        onSettled: () => void queryClient.invalidateQueries({ queryKey: taskDetailKey(taskId) }),
     })
+}
+
+function optimisticComment(input: string | CommentInput): TaskComment {
+    const { content, lineRef } = typeof input === "string" ? { content: input, lineRef: undefined } : input
+    return {
+        id: `${OPTIMISTIC_COMMENT_PREFIX}${Date.now()}`,
+        content,
+        body: content,
+        lineRef: lineRef ? { field: lineRef.field, commentId: lineRef.commentId ?? null, line: lineRef.line, hash: lineHash(lineRef.text), quote: clipLine(lineRef.text, LINE_QUOTE_MAX) } : null,
+        authorType: "owner",
+        authorName: "Você",
+        createdAt: new Date().toISOString(),
+    }
 }

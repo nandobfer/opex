@@ -67,7 +67,7 @@ describe('TaskDetailTabs', () => {
   })
 
   it('ao abrir Comentários renderiza o formulário sem estourar o número de hooks (regressão React #310)', () => {
-    const commented = task({ description: 'Corpo', comments: [{ id: 'c1', content: 'Primeiro comentário', createdAt: null }] })
+    const commented = task({ description: 'Corpo', comments: [{ id: 'c1', content: 'Primeiro comentário', body: 'Primeiro comentário', lineRef: null, authorType: 'owner', authorName: 'Dono', createdAt: null }] })
     render(<Harness task={commented} />)
     fireEvent.click(screen.getByRole('tab', { name: /Comentários/ }))
     expect(screen.getByLabelText('Novo comentário')).toBeTruthy()

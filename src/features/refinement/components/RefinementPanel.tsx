@@ -14,6 +14,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { Timeline } from "@/features/agentic/components/workbench/Timeline"
 import { ReconnectButton } from "@/features/agentic/components/workbench/ReconnectButton"
 import { useAutoReconnect } from "@/features/agentic/hooks/useAutoReconnect"
@@ -138,12 +139,13 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
             ) : query.isError ? (
                 <p className="p-3 text-sm text-destructive">{apiErrorMessage(query.error, "Não foi possível carregar o refinamento")}</p>
             ) : refinement ? (
-                <>
+                // Linhas da saída citáveis nas respostas das perguntas pendentes (sem pergunta: área de transferência).
+                <ReplyTargetProvider>
                     <div className="flex h-[40vh] max-h-[28rem] min-h-[18rem] flex-col overflow-hidden rounded-md border">
                         <Timeline timeline={timeline} running={Boolean(running)} />
                     </div>
                     <RefinementRequests taskId={taskId} refinement={refinement} />
-                </>
+                </ReplyTargetProvider>
             ) : null}
 
             <AnimatePresence initial={false}>

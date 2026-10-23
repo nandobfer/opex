@@ -316,6 +316,30 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   `border-md-quote` (ciano `#22d3ee`) e tachado em `text-muted-foreground`. Nomes de ferramentas no
   stream dos agentes (mesa de trabalho e Agente Opex) usam `text-agent-tool` (ciano). Ajuste a paleta
   só pelas variáveis `--md-*`/`--agent-tool`, nunca com cor fixa no componente.
+- **Ações por linha do Markdown** (`lineAction`, tipos em `ui/markdown-line-action.tsx`): opcional,
+  põe um botão de ícone no fim de **cada linha renderizada**: linhas unidas por quebra simples (que o
+  Markdown mostra juntas) formam uma só (`line`..`endLine`); `<br>`/quebra forçada separa. O plugin
+  `rehypeLogicalLines` (`src/lib/markdown/rehype-logical-lines.ts`) agrupa parágrafos, títulos,
+  itens de lista (aninhados inclusive), linhas de tabela (botão na última célula) e cada linha de
+  código (sem as cercas) pela posição no fonte. **A renderização não muda**: os marcadores são
+  inline, os separadores originais (`\n`, `<br>`) ficam entre eles e o botão sem badge é uma âncora
+  de largura zero (sobrepõe no hover, não empurra o texto). O `MarkdownLine` mostra o botão no
+  hover/foco e o esconde com atraso de 300 ms, alcançável durante ele (com uma faixa que cobre o vão
+  até o texto; no toque, sempre visível e discreto), e o deixa fixo, ocupando espaço, com badge
+  (`count(line)`, `AnimatedNumber`) e fundo `bg-primary/5` quando há contagem. `renderPopover` abre
+  um popover no botão; senão o clique chama `onSelect({ line, endLine, text, code })` (`text` sem
+  marcadores de bloco, via `quoteOf`). `anchorId` gera `data-md-anchor="{anchorId}:{linha}"` e
+  `flash` destaca a linha (Framer Motion). Sem `lineAction`, o `Markdown` herda do
+  `MarkdownLineActionProvider` mais próximo; `lineAction={null}` desliga. Linhas e hash puros em
+  `src/lib/markdown/lines.ts` (`sourceLines`, `normalizeLine`, `lineHash` FNV-1a).
+- **Citar a linha no campo do agente** (`src/components/agent-reply/`): `ReplyTargetProvider` dá às
+  saídas de IA da subárvore a ação "Citar no campo de resposta", que insere `> linha` + linha em
+  branco no cursor (`insertQuote`, `src/lib/markdown/quote.ts`), sem apagar o texto, e foca o campo.
+  Os campos se registram com `ReplyTextarea` (ou `useReplyTarget`); o destino é o focado por último,
+  senão o de maior `REPLY_PRIORITY` (pergunta do agente > mensagem/feedback > informações extras >
+  chat). Sem campo, o host pode abrir um (`useReplyFallback`); sem nada, a linha vai para a área de
+  transferência com toast. Linha de código vira código inline. Montado na mesa de trabalho (saída e
+  plano; cada fork tem provider próprio), no refinamento e no chat do Agente Opex.
   Use a mesma referência (`attachmentMarkdown` de `src/lib/attachments.ts`) para guardar mídia em
   Markdown; a URL assinada do storage **não** entra em texto persistido (expira).
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista

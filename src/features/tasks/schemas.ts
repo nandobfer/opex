@@ -5,6 +5,22 @@ import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "./constants"
 
 const columnKey = z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida")
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
+
+/** Comentário na tarefa (`POST /api/tasks/[id]/comments`); `lineRef` comenta uma linha. */
+export const commentSchema = z.object({
+    content: z.string().trim().min(1, "Escreva um comentário").max(5000, "Máximo de 5000 caracteres"),
+    /** Comentário de linha: a linha comentada (o servidor monta a citação e o marcador). */
+    lineRef: z
+        .object({
+            field: z.enum(["description", "technicalSpec", "comment"]),
+            commentId: objectId.nullable().optional(),
+            line: z.number().int().positive(),
+            text: z.string().trim().min(1, "Linha vazia").max(20_000),
+        })
+        .refine((ref) => ref.field !== "comment" || Boolean(ref.commentId), { message: "Informe o comentário da linha", path: ["commentId"] })
+        .optional(),
+})
+export type CommentInput = z.infer<typeof commentSchema>
 const markdown = z.string().optional()
 
 /** Tarefa (criar/editar). Mesmo schema no formulário e na API. */

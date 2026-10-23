@@ -11,7 +11,8 @@ import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { clientChannel } from "@/lib/pusher/channel-names"
 import { TASK_AGENTIC_FLOW_INHERIT_LABEL, TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
-import type { BulkTaskResult, BulkTasksInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
+import { formatLineComment, parseLineComment, TASK_COMMENT_MAX } from "../line-comments/format"
+import type { BulkTaskResult, BulkTasksInput, CommentInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
 import { computeClientEstimate } from "@/features/orcamentos/logic"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "@/features/orcamentos/constants"
@@ -216,7 +217,7 @@ export async function getTask(id: string): Promise<TaskDetailDto> {
         technicalSpec: task.technicalSpec ?? null,
         comments: comments.map((comment) => ({
             id: String(comment._id),
-            content: comment.content,
+            ...parseLineComment(comment.content),
             authorType: comment.authorType === "client" ? "client" : "owner",
             authorName: comment.authorName ?? (comment.authorType === "client" ? "Cliente" : getLocalUser().name),
             createdAt: comment.createdAt ? new Date(comment.createdAt).toISOString() : null,
@@ -614,12 +615,31 @@ export interface CommentAuthor {
     name: string
 }
 
-export async function addComment(taskId: string, content: string, author: CommentAuthor): Promise<void> {
+/**
+ * Comentário na tarefa. Com `lineRef` (só o dono), vira comentário de linha: citação visível +
+ * marcador oculto (`line-comments/format`).
+ */
+export async function addComment(taskId: string, input: string | CommentInput, author: CommentAuthor): Promise<void> {
     assertTaskId(taskId)
     await dbConnect()
     if (!(await DevTask.exists({ _id: taskId }))) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
-    await TaskComment.create({ taskId, content: content.trim(), authorType: author.type, authorName: author.name })
-    await recordAudit({ userId: author.id, entidade: TASK_AUDIT_ENTITY, entidadeId: taskId, acao: AcaoAuditoria.ATUALIZAR, depois: { comentario: "adicionado" } })
+    const { content: text, lineRef } = typeof input === "string" ? { content: input, lineRef: undefined } : input
+    let content = text.trim()
+    if (lineRef) {
+        try {
+            content = formatLineComment(content, lineRef)
+        } catch {
+            throw new DomainError(400, `O comentário com a citação da linha passa de ${TASK_COMMENT_MAX} caracteres. Encurte o texto.`, "COMMENT_TOO_LONG")
+        }
+    }
+    await TaskComment.create({ taskId, content, authorType: author.type, authorName: author.name })
+    await recordAudit({
+        userId: author.id,
+        entidade: TASK_AUDIT_ENTITY,
+        entidadeId: taskId,
+        acao: AcaoAuditoria.ATUALIZAR,
+        depois: { comentario: "adicionado", ...(lineRef && { linha: { campo: lineRef.field, comentarioId: lineRef.commentId ?? null, numero: lineRef.line } }) },
+    })
     await publishTasksUpdated([taskId])
 }
 

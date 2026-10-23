@@ -25,6 +25,7 @@ import { AssistantMessage, UserMessage } from '@/features/opex-agent/components/
 import { OpexSessionTabs } from '@/features/opex-agent/components/OpexSessionTabs'
 import { OpexAttachmentChips } from '@/features/opex-agent/components/chat/OpexAttachmentChips'
 import { OpexComposer } from '@/features/opex-agent/components/chat/OpexComposer'
+import { ReplyTargetProvider } from '@/components/agent-reply/ReplyTargetProvider'
 import { OpexUploadsProvider, useOpexUploads, type OpexUploadItem } from '@/features/opex-agent/hooks/useOpexUploads'
 import { ClienteOpexToolsCard } from '@/features/opex-agent/components/settings/client/ClienteOpexToolsCard'
 import { OPEX_CLIENT_TOOLS } from '@/features/opex-agent/client-tools'
@@ -187,6 +188,22 @@ describe('arquivos no chat', () => {
     expect(screen.getByRole('link', { name: /erro\.log/ }).getAttribute('href')).toContain('/api/opex/files/f1?download=1')
     fireEvent.click(screen.getByRole('button', { name: 'Ampliar print.png' }))
     expect(screen.getByRole('dialog').querySelector('img')?.getAttribute('alt')).toBe('print.png')
+  })
+})
+
+describe('citar linha da resposta', () => {
+  it('o botão no fim da linha da resposta insere a citação no campo do chat sem apagar o texto', async () => {
+    render(
+      <ReplyTargetProvider>
+        <AssistantMessage parts={[{ type: 'text', text: 'Passo um\n\nPasso dois' }]} message={message({})} />
+        <OpexComposer onSend={vi.fn()} attachments={{ items: [], onFiles: vi.fn(), onRetry: vi.fn(), onRemove: vi.fn() }} onStop={vi.fn()} running={false} sending={false} stopping={false} initialText="Sobre isto:" />
+      </ReplyTargetProvider>,
+    )
+    const field = screen.getByRole('textbox', { name: 'Mensagem para o Agente Opex' }) as HTMLTextAreaElement
+    field.setSelectionRange(field.value.length, field.value.length)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Citar no campo de resposta' })[1]!)
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    expect(field.value).toBe('Sobre isto:\n\n> Passo dois\n\n')
   })
 })
 

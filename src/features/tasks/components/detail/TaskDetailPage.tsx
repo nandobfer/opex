@@ -41,6 +41,7 @@ import { useOwnerAttachmentClient, useTaskDescriptionUploads } from "../../attac
 import { TaskDetailSidebar } from "./TaskDetailSidebar"
 import { TaskSummaryCard } from "./TaskSummaryCard"
 import { TaskDetailTabs, type TaskDetailTabId } from "./TaskDetailTabs"
+import { TaskLineCommentsProvider } from "./line-comments/LineCommentsContext"
 
 /** Página da tarefa (`/tarefas/[id]`). */
 export function TaskDetailPage({ id }: { id: string }) {
@@ -159,12 +160,14 @@ export function TaskDetailPage({ id }: { id: string }) {
                                                     }}
                                                 />
                                             ) : (
-                                                <TaskDetailTabs
-                                                    task={task}
-                                                    value={tab}
-                                                    onValueChange={setTab}
-                                                    specSlot={<RefinementPanel taskId={task.id} taskCode={task.code} autoStart={startRefinement} onAutoStarted={clearStartRefinement} />}
-                                                />
+                                                <TaskLineCommentsProvider task={task} onTab={setTab}>
+                                                    <TaskDetailTabs
+                                                        task={task}
+                                                        value={tab}
+                                                        onValueChange={setTab}
+                                                        specSlot={<RefinementPanel taskId={task.id} taskCode={task.code} autoStart={startRefinement} onAutoStarted={clearStartRefinement} />}
+                                                    />
+                                                </TaskLineCommentsProvider>
                                             )}
                                         </CardContent>
                                     </Card>

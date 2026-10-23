@@ -7,6 +7,7 @@ import { Settings2, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
+import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { apiErrorMessage } from "@/lib/api"
 import { useOpexView } from "../../hooks/useOpexSettings"
 import { useOpexScope, OWNER_OPEX_SETTINGS_HREF } from "../OpexScopeProvider"
@@ -81,6 +82,8 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
     }
 
     return (
+        // Cada linha das respostas tem "Citar no campo de resposta" (insere `> linha` no campo do chat).
+        <ReplyTargetProvider>
         <OpexDropZone onFiles={attachments.onFiles} disabled={Boolean(disabledReason)}>
             <AnimatePresence initial={false}>
                 {!stream.connected && stream.status !== null && (
@@ -113,5 +116,6 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
                 initialText={initialText}
             />
         </OpexDropZone>
+        </ReplyTargetProvider>
     )
 }

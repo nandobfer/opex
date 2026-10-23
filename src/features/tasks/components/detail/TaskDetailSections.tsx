@@ -9,9 +9,12 @@ import { Button } from "@/components/ui/button"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { formatDateTime, formatMinutes } from "../../format"
 import { formatCostUsd, formatTokens } from "@/features/time/format"
-import type { TaskDetailDto } from "../../types"
+import type { MarkdownLineAction } from "@/components/ui/markdown-line-action"
+import type { TaskComment, TaskDetailDto } from "../../types"
 import { useAddComment } from "../../hooks/useTasks"
 import { useOwnerAttachmentClient, useTaskDescriptionUploads } from "../../attachments/hooks"
+import { LineCommentQuote } from "./line-comments/LineCommentQuote"
+import { useLineCommentAction } from "./line-comments/useLineCommentAction"
 
 function Empty({ icon: Icon, children }: { icon: typeof History; children: ReactNode }) {
     return (
@@ -21,34 +24,37 @@ function Empty({ icon: Icon, children }: { icon: typeof History; children: React
     )
 }
 
-export function TaskDescription({ description }: { description: string | null }) {
+/** `lineAction`: "Comentar a linha" (página da tarefa do dono); ausente = Markdown comum (portal). */
+export function TaskDescription({ description, lineAction }: { description: string | null; lineAction?: MarkdownLineAction | null }) {
     if (!description) return <Empty icon={FileCode2}>Sem descrição.</Empty>
     return (
         <motion.div variants={listContainer} initial="hidden" animate="visible">
             <motion.div variants={listItem}>
-                <Markdown>{description}</Markdown>
+                <Markdown lineAction={lineAction}>{description}</Markdown>
             </motion.div>
         </motion.div>
     )
 }
 
 export function DescriptionSection({ task }: { task: TaskDetailDto }) {
-    return <TaskDescription description={task.description} />
+    const lineAction = useLineCommentAction("description")
+    return <TaskDescription description={task.description} lineAction={lineAction} />
 }
 
-export function TaskTechnicalSpec({ technicalSpec }: { technicalSpec: string | null }) {
+export function TaskTechnicalSpec({ technicalSpec, lineAction }: { technicalSpec: string | null; lineAction?: MarkdownLineAction | null }) {
     if (!technicalSpec) return <Empty icon={FileTerminal}>Sem especificação técnica.</Empty>
     return (
         <motion.div variants={listContainer} initial="hidden" animate="visible">
             <motion.div variants={listItem}>
-                <Markdown>{technicalSpec}</Markdown>
+                <Markdown lineAction={lineAction}>{technicalSpec}</Markdown>
             </motion.div>
         </motion.div>
     )
 }
 
 export function TechnicalSpecSection({ task }: { task: TaskDetailDto }) {
-    return <TaskTechnicalSpec technicalSpec={task.technicalSpec} />
+    const lineAction = useLineCommentAction("technicalSpec")
+    return <TaskTechnicalSpec technicalSpec={task.technicalSpec} lineAction={lineAction} />
 }
 
 export function CommentsSection({ task }: { task: TaskDetailDto }) {
@@ -113,17 +119,26 @@ export function CommentsSection({ task }: { task: TaskDetailDto }) {
             ) : (
                 <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-3">
                     {task.comments.map((comment) => (
-                        <motion.li key={comment.id} variants={listItem} className="rounded-md border bg-card p-3">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                                <span className="truncate text-xs font-medium">{comment.authorName}</span>
-                                <span className="text-xs text-muted-foreground">{formatDateTime(comment.createdAt)}</span>
-                            </div>
-                            <Markdown>{comment.content}</Markdown>
-                        </motion.li>
+                        <CommentItem key={comment.id} comment={comment} />
                     ))}
                 </motion.ul>
             )}
         </div>
+    )
+}
+
+/** Um comentário: citação da linha (comentário de linha), corpo com "Comentar a linha" em cada linha. */
+function CommentItem({ comment }: { comment: TaskComment }) {
+    const lineAction = useLineCommentAction("comment", comment.id)
+    return (
+        <motion.li variants={listItem} className="rounded-md border bg-card p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-medium">{comment.authorName}</span>
+                <span className="text-xs text-muted-foreground">{formatDateTime(comment.createdAt)}</span>
+            </div>
+            <LineCommentQuote comment={comment} />
+            <Markdown lineAction={lineAction}>{comment.body}</Markdown>
+        </motion.li>
     )
 }
 

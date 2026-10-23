@@ -14,7 +14,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { canOpenChildFork, forkActions, isOpenFork } from "../../fork-logic"
 import { useDiscardFork, useForkAction, useSetForkModel } from "../../hooks/useForks"
 import type { ForkDto } from "../../types"
@@ -67,7 +67,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
                         <label htmlFor={`fork-message-${fork.id}`} className="sr-only">
                             Mensagem para o fork
                         </label>
-                        <Textarea id={`fork-message-${fork.id}`} rows={3} value={text} onChange={(event) => setText(event.target.value)} placeholder="Continue a conversa do fork…" />
+                        <ReplyTextarea id={`fork-message-${fork.id}`} rows={3} value={text} onValueChange={setText} placeholder="Continue a conversa do fork…" />
                     </motion.div>
                 )}
                 {fork.status === "closed" && (

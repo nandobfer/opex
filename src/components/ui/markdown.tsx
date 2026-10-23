@@ -1,8 +1,12 @@
 "use client"
 
+import { useMemo, type ComponentProps, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { LINE_CODE_PROP, LINE_END_PROP, LINE_PROP, rehypeLogicalLines } from "@/lib/markdown/rehype-logical-lines"
 import { cn } from "@/lib/utils"
+import { LineRenderContext, MarkdownLine } from "./markdown-line"
+import { useInheritedLineAction, type MarkdownLineAction } from "./markdown-line-action"
 import { MarkdownMedia } from "./markdown-media"
 
 /**
@@ -45,12 +49,56 @@ const components: Components = {
     hr: () => <hr className="my-3 border-border" />,
 }
 
-export function Markdown({ children, className }: { children: string; className?: string }) {
+/** Prop do hast em kebab-case (o react-markdown repassa `data-*` assim). */
+const kebab = (prop: string) => prop.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)
+const LINE_ATTR = kebab(LINE_PROP)
+const LINE_END_ATTR = kebab(LINE_END_PROP)
+const LINE_CODE_ATTR = kebab(LINE_CODE_PROP)
+
+/** Com ação por linha: os grupos marcados pelo plugin viram `MarkdownLine` (botão no fim da linha). */
+const lineComponents: Components = {
+    ...components,
+    span: (props) => {
+        const others = rest(props) as Record<string, unknown> & { children?: ReactNode }
+        const line = Number(others[LINE_ATTR])
+        if (!line) return <span {...(others as ComponentProps<"span">)} />
+        return (
+            <MarkdownLine line={line} endLine={Number(others[LINE_END_ATTR]) || line} code={Boolean(others[LINE_CODE_ATTR])}>
+                {others.children}
+            </MarkdownLine>
+        )
+    },
+}
+
+const REHYPE_LINES = [rehypeLogicalLines]
+
+interface MarkdownProps {
+    children: string
+    className?: string
+    /**
+     * Ação no fim de cada linha lógica (comentar, citar no agente…). Sem a prop, herda do
+     * `MarkdownLineActionProvider` mais próximo; `null` desliga mesmo dentro de um provider.
+     */
+    lineAction?: MarkdownLineAction | null
+}
+
+export function Markdown({ children, className, lineAction }: MarkdownProps) {
+    const inherited = useInheritedLineAction()
+    const action = lineAction === undefined ? inherited : lineAction
+    const render = useMemo(() => (action ? { action, source: children } : null), [action, children])
     return (
         <div className={cn("break-words text-sm text-foreground/90", className)}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-                {children}
-            </ReactMarkdown>
+            {render ? (
+                <LineRenderContext.Provider value={render}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={REHYPE_LINES} components={lineComponents}>
+                        {children}
+                    </ReactMarkdown>
+                </LineRenderContext.Provider>
+            ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                    {children}
+                </ReactMarkdown>
+            )}
         </div>
     )
 }

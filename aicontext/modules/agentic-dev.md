@@ -689,6 +689,13 @@ done → Reabrir mesa (texto ao planejador) → planning
   prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
   IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
   **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+- **Citar uma linha da saída** (`ReplyTargetProvider` no `WorkbenchView`): cada linha do texto da
+  IA e do **Plano** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
+  campo focado por último (resposta de pergunta pendente, correção/feedback da etapa, **Informações
+  adicionais**, mensagem do Abrir fork). Sem campo aberto, abre o primeiro feedback da etapa
+  (`revise-plan` → `request-correction` → `submit-pr-feedback` → `reopen`) já com a citação; sem
+  nenhum, copia a linha (toast). Cada fork tem provider próprio: a linha do fork vai para a mensagem
+  do fork ou o pedido de ajuste do resumo da integração.
 - **Rolagem da saída** (`useStickToBottom`): a aba "Saída da IA" acompanha o fim do stream sozinha
   sempre que o conteúdo cresce — inclusive quando um item do **meio** da lista muda (ex.: o fim de
   um turno) — enquanto o usuário estiver no fim. Ao rolar para cima, o acompanhamento **para** (não

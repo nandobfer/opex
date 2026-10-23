@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
+import { REPLY_PRIORITY } from "@/components/agent-reply/ReplyTargetProvider"
 import type { OpencodeFormDto, OpencodeFormFieldDto } from "@/lib/ai/opencode-events"
 import { AgentQuestionOptions } from "./AgentQuestionOptions"
 
@@ -103,7 +104,7 @@ function FieldInput({ id, field, value, pending, onChange }: { id: string; field
                     onChange={onChange}
                 />
                 {field.custom && !multiple && (
-                    <Textarea id={id} rows={2} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} placeholder={field.placeholder ?? "Outra resposta…"} />
+                    <ReplyTextarea id={id} rows={2} value={typeof value === "string" ? value : ""} onValueChange={onChange} replyPriority={REPLY_PRIORITY.question} placeholder={field.placeholder ?? "Outra resposta…"} />
                 )}
             </div>
         )
@@ -116,7 +117,7 @@ function FieldInput({ id, field, value, pending, onChange }: { id: string; field
             {numeric ? (
                 <Input id={id} type="number" step={field.type === "integer" ? 1 : "any"} value={typeof value === "number" ? value : ""} onChange={(event) => onChange(event.target.value === "" ? "" : Number(event.target.value))} placeholder={field.placeholder ?? undefined} />
             ) : (
-                <Textarea id={id} rows={2} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} placeholder={field.placeholder ?? "Sua resposta"} />
+                <ReplyTextarea id={id} rows={2} value={typeof value === "string" ? value : ""} onValueChange={onChange} replyPriority={REPLY_PRIORITY.question} placeholder={field.placeholder ?? "Sua resposta"} />
             )}
         </div>
     )

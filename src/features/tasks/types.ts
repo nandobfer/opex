@@ -61,9 +61,29 @@ export interface TaskIssueRef {
     notice: string | null
 }
 
+/** Textos da tarefa em que dá para comentar uma linha (`comment` = corpo de outro comentário). */
+export type LineCommentField = "description" | "technicalSpec" | "comment"
+
+/** Linha comentada (marcador oculto no fim do comentário). */
+export interface TaskLineRef {
+    field: LineCommentField
+    /** Comentário comentado (só `field: "comment"`). */
+    commentId: string | null
+    /** Linha no texto-fonte quando o comentário foi feito. */
+    line: number
+    /** `lineHash` do texto da linha. */
+    hash: string
+    /** Citação visível da linha (pode estar cortada). */
+    quote: string
+}
+
 export interface TaskComment {
     id: string
+    /** Texto sem o marcador oculto (com a citação, quando é comentário de linha). */
     content: string
+    /** Só o que foi escrito (sem a citação nem o marcador). */
+    body: string
+    lineRef: TaskLineRef | null
     /** Origem do comentário: o dono (app interno) ou o cliente (portal). */
     authorType: "owner" | "client"
     /** Nome exibido do autor (dono: `APP_OWNER_NAME`; cliente: nome do cliente). */

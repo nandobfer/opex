@@ -95,7 +95,7 @@ semeado na primeira leitura (`ensureBoard`).
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 | `DELETE /api/tasks/[id]` | Exclui a tarefa |
 | `POST /api/tasks/[id]/move` | `moveTaskSchema` (`targetColumn`, `order?`) |
-| `POST /api/tasks/[id]/comments` | `{ content }` |
+| `POST /api/tasks/[id]/comments` | `{ content, lineRef? }`; `lineRef {field, commentId?, line, text}` comenta uma linha (só o dono) |
 | `GET`/`POST` `/api/attachments` | Anexos da tarefa (`?taskId=`; o rascunho usa `?draftId=`) · reserva o envio (URL assinada de PUT) |
 | `POST /api/attachments/uploads/[id]/complete` · `DELETE /api/attachments/uploads/[id]` | Confirma o envio (confere e promove o arquivo) · cancela um envio não confirmado |
 | `DELETE /api/attachments/[id]` · `GET /api/attachments/[id]/content` | Exclui o anexo (dono) · conteúdo autenticado (imagem/áudio/vídeo inline; o restante baixa) |
@@ -254,6 +254,27 @@ animadas com `AnimatePresence`: **Descrição** (só a descrição em Markdown, 
 (auditoria, mais recente primeiro) e Horas (apontamentos; "Em andamento"). Cada seção é um
 componente próprio e a aba ativa é renderizada como **elemento** (não chamada como função), para
 preservar o escopo de hooks de cada aba.
+- **Comentários de linha** (`line-comments/` + `components/detail/line-comments/`, só na página do
+  dono — `TaskLineCommentsProvider` em volta das abas; o portal não tem a ação): na Descrição, na
+  Especificação técnica (leitura) e no corpo de cada comentário, cada linha renderizada (parágrafo com
+  quebras simples conta como uma) tem **Comentar a linha** no fim (hover); a referência guarda a
+  primeira linha do fonte e o hash do texto citado. O popover mostra a conversa da linha (mais antigos
+  primeiro, aviso quando reancorado) e um `MarkdownField` (Ctrl+Enter, colar mídia); o envio é
+  otimista (`useAddComment`, reverte com toast). A linha com comentários fica com badge numérico e
+  fundo destacado.
+  - **Formato** (gravado como comentário comum em `task_comments`, máx. 5000 caracteres, sem edição):
+    `> 💬 Linha N da **Campo**:` + `> citação` (até 300 caracteres) + corpo + comentário HTML oculto
+    `<!-- opex:line {"v":1,"f","c","l","h"} -->` (`formatLineComment`/`parseLineComment`, marcador
+    fixo `LINE_COMMENT_MARKER`). Passou do limite → 400 `COMMENT_TOO_LONG`. A auditoria registra
+    campo, comentário e linha.
+  - **Leitura** (`getTask`): cada comentário traz `content` (sem o marcador; é o que os prompts de IA,
+    o Agente Opex e o portal leem), `body` (só o que foi escrito) e `lineRef {field, commentId, line,
+    hash, quote}`.
+  - **Reancoragem** (`resolveLineAnchors`): hash exato do texto normalizado (entre linhas repetidas,
+    a mais próxima da original); senão a linha mais parecida com a citação (fuse.js, limiar 0,4,
+    "reancorado"); senão **órfão** ("Linha não encontrada").
+  - Na aba Comentários, o comentário de linha mostra a citação com **Ir para a linha**: troca de aba,
+    rola até `data-md-anchor` e destaca a linha com flash (desabilitado quando órfão).
 - Lateral: prioridade editável, tipo, **tags**, repositório (`GithubRepoLabel`), **cliente** (ver
   abaixo), **estimativa** (ver abaixo), horas apontadas, criada e atualizada.
 - **Cliente** (`TaskClientCard`, coluna lateral): **adiciona**, **troca** ou **remove** o cliente da
@@ -391,6 +412,7 @@ coluna de conclusão do vínculo). Mudanças vindas do GitHub entram no Históri
 `task-creation-actions` (os atalhos compartilhados com o Dashboard), `task-form`,
 `task-card`, `task-column-header`,
 `task-board-layout`, `task-table-scroll`, `task-detail-sections`, `task-detail-tabs`,
+`line-comments` e `task-line-comments-ui` (comentários de linha: formato, reancoragem e a tela),
 `task-summary-card`, `task-estimate-card`, `estimate-duration`, `task-estimate-generate`,
 `task-client-card` — a
 estimativa (sempre visível, edição manual em `hh:mm` e geração por IA na tarefa), o cliente da

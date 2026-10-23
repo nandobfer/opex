@@ -5,6 +5,7 @@ import { ptBR } from "date-fns/locale"
 import { AnimatePresence, motion } from "framer-motion"
 import { AgentQuestionsCard } from "@/components/agent-questions/AgentQuestionsCard"
 import { PermissionCard } from "@/components/agent-questions/PermissionCard"
+import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { WORKBENCH_STAGE_LABELS } from "../../constants"
 import { forkModeText, type ForkParentView } from "../../fork-logic"
 import { useForkIntegration, type ForkIntegrationState } from "../../hooks/useForkIntegration"
@@ -72,6 +73,8 @@ export function ForkPanel({ workbench, fork, parent, onSelectFork }: { workbench
     const integration = useForkIntegration(workbench, fork, parent)
     const footer = forkFooter(fork, integration)
     return (
+        // Provider próprio: a citação de uma linha do fork vai para os campos do fork, não para os da mesa.
+        <ReplyTargetProvider>
         <div className="flex min-h-0 flex-1 flex-col" data-ctrl-enter-scope>
             <p className="border-b px-4 py-1.5 text-xs text-muted-foreground">
                 <ForkOrigin fork={fork} parentId={parent?.id ?? null} onSelectFork={onSelectFork} /> · aberto em {when(fork.createdAt)} na etapa &ldquo;{WORKBENCH_STAGE_LABELS[fork.forkedFromStage]}&rdquo; · {forkModeText(fork.mode, fork.readOnly)}
@@ -92,5 +95,6 @@ export function ForkPanel({ workbench, fork, parent, onSelectFork }: { workbench
                 extra={fork.status === "integrating" ? <ForkIntegrationActions fork={fork} state={integration} /> : null}
             />
         </div>
+        </ReplyTargetProvider>
     )
 }

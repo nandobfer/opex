@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import { GitFork, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { useOpenFork } from "../../hooks/useForks"
 import type { ForkDto } from "../../types"
 
@@ -24,7 +24,7 @@ export function ForkComposer({ workbenchId, parent, onCancel, onOpened }: { work
             <label htmlFor={fieldId} className="text-sm font-medium">
                 O que você quer perguntar ou investigar no fork?
             </label>
-            <Textarea id={fieldId} autoFocus rows={4} value={text} onChange={(event) => setText(event.target.value)} placeholder="Ex.: por que o plano usa o serviço X? Investigue como o módulo Y trata Z…" />
+            <ReplyTextarea id={fieldId} autoFocus rows={4} value={text} onValueChange={setText} placeholder="Ex.: por que o plano usa o serviço X? Investigue como o módulo Y trata Z…" />
             <p className="text-xs text-muted-foreground">
                 {parent
                     ? `O fork copia a conversa do Fork ${parent.number} até aqui e responde separado, sem mudar a conversa dele.`

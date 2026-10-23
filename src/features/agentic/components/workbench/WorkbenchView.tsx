@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { usePrWatchSchedule } from "../../hooks/useAgentic"
 import { useWorkbenchForks } from "../../hooks/useForks"
 import { useWorkbenchStream } from "../../hooks/useWorkbenchStream"
@@ -19,7 +20,10 @@ import { WorkbenchHeader } from "./WorkbenchHeader"
 
 type View = "output" | "plan" | "forks"
 
-/** Mesa de trabalho: cabeçalho, etapas, saída ao vivo (ou o plano, ou os forks), pedidos do agente e ações. */
+/**
+ * Mesa de trabalho: cabeçalho, etapas, saída ao vivo (ou o plano, ou os forks), pedidos do agente e
+ * ações. Cada linha da saída e do plano tem "Citar no campo de resposta" (`ReplyTargetProvider`).
+ */
 export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto; central: CentralDto }) {
     const { timeline, connected } = useWorkbenchStream(workbench.id)
     const [selected, setView] = useState<View>("output")
@@ -40,6 +44,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     ]
 
     return (
+        <ReplyTargetProvider>
         <div className="flex min-h-0 flex-1 flex-col">
             <WorkbenchHeader workbench={workbench} central={central} connected={connected} />
             <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} />
@@ -82,5 +87,6 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
                 />
             )}
         </div>
+        </ReplyTargetProvider>
     )
 }

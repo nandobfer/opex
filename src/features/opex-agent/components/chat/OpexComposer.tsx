@@ -6,7 +6,8 @@ import { ArrowUp, Loader2, Paperclip, Square } from "lucide-react"
 import type { OpexUploadItem } from "../../hooks/useOpexUploads"
 import { OpexAttachmentChips } from "./OpexAttachmentChips"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
+import { REPLY_PRIORITY } from "@/components/agent-reply/ReplyTargetProvider"
 import { cn } from "@/lib/utils"
 import { OPEX_MESSAGE_MAX } from "../../constants"
 
@@ -119,14 +120,15 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
                 >
                     <Paperclip className="h-4 w-4" aria-hidden />
                 </Button>
-                <Textarea
+                <ReplyTextarea
                     ref={textareaRef}
                     vim={false}
                     rows={1}
                     value={text}
+                    onValueChange={(value) => setText(value.slice(0, OPEX_MESSAGE_MAX))}
+                    replyPriority={REPLY_PRIORITY.chat}
                     maxLength={OPEX_MESSAGE_MAX}
                     disabled={blocked}
-                    onChange={(event) => setText(event.target.value)}
                     onKeyDown={onKeyDown}
                     onPaste={onPaste}
                     placeholder={blocked ? (disabledReason ?? "") : "Peça algo ao Agente Opex…"}

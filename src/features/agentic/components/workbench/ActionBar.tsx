@@ -14,7 +14,9 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
+import { REPLY_PRIORITY, useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
+import { insertQuote } from "@/lib/markdown/quote"
 import { useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
 import { workbenchActions, type WorkbenchAction } from "../../logic"
 import type { ForkDto, WorkbenchDto } from "../../types"
@@ -90,6 +92,18 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
         )
     // Ao aprovar o plano, o usuário pode anexar informações adicionais ao prompt de implementação.
     const canImplement = actions.includes("implement")
+    // Citação de linha da saída da IA sem campo aberto: abre o primeiro feedback da etapa já com ela.
+    const feedbackAction = actions.find(isFeedback) ?? null
+    useReplyFallback(
+        feedbackAction && !pending
+            ? (quote) => {
+                  setForking(false)
+                  setComposer((current) => current ?? feedbackAction)
+                  setText((current) => insertQuote(current, current.length, quote).value)
+                  return true
+              }
+            : null,
+    )
 
     return (
         <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
@@ -144,7 +158,7 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                         <label htmlFor="workbench-implement-info" className="text-sm font-medium">
                             Informações adicionais (opcional)
                         </label>
-                        <Textarea id="workbench-implement-info" rows={3} value={additional} onChange={(event) => setAdditional(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
+                        <ReplyTextarea id="workbench-implement-info" rows={3} value={additional} onValueChange={setAdditional} replyPriority={REPLY_PRIORITY.extra} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
                         <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto do plano aprovado, no prompt de implementação.</p>
                     </motion.div>
                 )}
@@ -153,7 +167,7 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                         <label htmlFor="workbench-feedback" className="text-sm font-medium">
                             {FEEDBACK[composer].title}
                         </label>
-                        <Textarea id="workbench-feedback" autoFocus rows={4} value={text} onChange={(event) => setText(event.target.value)} placeholder={FEEDBACK[composer].placeholder} />
+                        <ReplyTextarea id="workbench-feedback" autoFocus rows={4} value={text} onValueChange={setText} placeholder={FEEDBACK[composer].placeholder} />
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => setComposer(null)} disabled={pending}>
                                 <X className="h-3.5 w-3.5" aria-hidden /> Cancelar

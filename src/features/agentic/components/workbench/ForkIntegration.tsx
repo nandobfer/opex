@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { Textarea } from "@/components/ui/textarea"
+import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import type { ForkIntegrationState } from "../../hooks/useForkIntegration"
 import type { ForkDto } from "../../types"
 
@@ -68,7 +68,7 @@ export function ForkIntegrationBody({ fork, state }: { fork: ForkDto; state: For
                                     <label htmlFor={`fork-revise-${fork.id}`} className="text-xs font-medium">
                                         O que mudar no resumo?
                                     </label>
-                                    <Textarea id={`fork-revise-${fork.id}`} autoFocus rows={3} value={state.request} onChange={(event) => state.setRequest(event.target.value)} placeholder="Ex.: inclua a decisão sobre X; remova a parte de Y…" />
+                                    <ReplyTextarea id={`fork-revise-${fork.id}`} autoFocus rows={3} value={state.request} onValueChange={state.setRequest} placeholder="Ex.: inclua a decisão sobre X; remova a parte de Y…" />
                                 </motion.div>
                             )}
                         </AnimatePresence>

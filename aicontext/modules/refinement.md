@@ -50,6 +50,8 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
    as perguntas como texto. As perguntas pendentes aparecem no painel, **abaixo da saída do agente**,
    para **Responder** ou **Dispensar**; as **opções** viram uma lista de linhas selecionáveis com a
    **descrição** de cada uma (mesmo card genérico da mesa).
+   Cada linha da saída do agente tem **Citar no campo de resposta** (`ReplyTargetProvider`): insere
+   `> linha` na resposta de texto da pergunta pendente; sem pergunta aberta, copia a linha (toast).
 3. O usuário responde; a resposta vai para a **mesma sessão** (`session.form.reply`) e o agente
    continua.
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título

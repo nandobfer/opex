@@ -18,6 +18,8 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'
+import { ReplyTargetProvider } from '@/components/agent-reply/ReplyTargetProvider'
+import { Markdown } from '@/components/ui/markdown'
 import type { WorkbenchDto } from '@/features/agentic/types'
 
 const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
@@ -57,6 +59,28 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
 beforeEach(() => vi.clearAllMocks())
 
 describe('ActionBar', () => {
+  it('citar uma linha da saída sem campo aberto abre o feedback da etapa já com a citação', () => {
+    render(
+      <ReplyTargetProvider>
+        <Markdown>{'O botão fica no rodapé'}</Markdown>
+        <ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />
+      </ReplyTargetProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Citar no campo de resposta' }))
+    expect((screen.getByLabelText('O que está errado?') as HTMLTextAreaElement).value).toBe('> O botão fica no rodapé\n\n')
+  })
+
+  it('na revisão do plano, a citação vai para "Informações adicionais"', () => {
+    render(
+      <ReplyTargetProvider>
+        <Markdown>{'Passo 1'}</Markdown>
+        <ActionBar workbench={workbench({})} />
+      </ReplyTargetProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Citar no campo de resposta' }))
+    expect((screen.getByLabelText('Informações adicionais (opcional)') as HTMLTextAreaElement).value).toBe('> Passo 1\n\n')
+  })
+
   it('plano pronto: implementar ou pedir correção (texto vai ao planejador)', () => {
     render(<ActionBar workbench={workbench({})} />)
     fireEvent.click(screen.getByRole('button', { name: /Implementar/ }))
