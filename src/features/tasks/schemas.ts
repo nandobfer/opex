@@ -16,6 +16,15 @@ export const commentSchema = z.object({
             commentId: objectId.nullable().optional(),
             line: z.number().int().positive(),
             text: z.string().trim().min(1, "Linha vazia").max(20_000),
+            /** Comentário de trecho: o texto selecionado (a linha é a última coberta). */
+            selection: z
+                .object({
+                    text: z.string().trim().min(1, "Trecho vazio").max(1000, "Trecho com mais de 1.000 caracteres: selecione menos texto"),
+                    lines: z.number().int().min(1).max(500),
+                    occurrence: z.number().int().min(0).max(1000),
+                    startLine: z.number().int().positive(),
+                })
+                .optional(),
         })
         .refine((ref) => ref.field !== "comment" || Boolean(ref.commentId), { message: "Informe o comentário da linha", path: ["commentId"] })
         .optional(),

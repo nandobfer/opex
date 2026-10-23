@@ -638,7 +638,7 @@ export async function addComment(taskId: string, input: string | CommentInput, a
         entidade: TASK_AUDIT_ENTITY,
         entidadeId: taskId,
         acao: AcaoAuditoria.ATUALIZAR,
-        depois: { comentario: "adicionado", ...(lineRef && { linha: { campo: lineRef.field, comentarioId: lineRef.commentId ?? null, numero: lineRef.line } }) },
+        depois: { comentario: "adicionado", ...(lineRef && { linha: { campo: lineRef.field, comentarioId: lineRef.commentId ?? null, numero: lineRef.line, ...(lineRef.selection && { trecho: lineRef.selection.text.slice(0, 200), linhas: lineRef.selection.lines }) } }) },
     })
     await publishTasksUpdated([taskId])
 }

@@ -52,6 +52,7 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
    **descrição** de cada uma (mesmo card genérico da mesa).
    Cada linha da saída do agente tem **Citar no campo de resposta** (`ReplyTargetProvider`): insere
    `> linha` na resposta de texto da pergunta pendente; sem pergunta aberta, copia a linha (toast).
+   Selecionando texto, o botão no fim da seleção cita só o trecho.
 3. O usuário responde; a resposta vai para a **mesma sessão** (`session.form.reply`) e o agente
    continua.
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título

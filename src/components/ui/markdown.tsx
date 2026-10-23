@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, type ComponentProps, type ReactNode } from "react"
+import { useMemo, useRef, type ComponentProps, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { LINE_CODE_PROP, LINE_END_PROP, LINE_PROP, rehypeLogicalLines } from "@/lib/markdown/rehype-logical-lines"
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { LineRenderContext, MarkdownLine } from "./markdown-line"
 import { useInheritedLineAction, type MarkdownLineAction } from "./markdown-line-action"
 import { MarkdownMedia } from "./markdown-media"
+import { MarkdownSelectionLayer } from "./markdown-selection"
 
 /**
  * Markdown (GFM: tabelas, listas de tarefa, tachado) com o estilo do tema. HTML cru é ignorado
@@ -86,13 +87,15 @@ export function Markdown({ children, className, lineAction }: MarkdownProps) {
     const inherited = useInheritedLineAction()
     const action = lineAction === undefined ? inherited : lineAction
     const render = useMemo(() => (action ? { action, source: children } : null), [action, children])
+    const rootRef = useRef<HTMLDivElement>(null)
     return (
-        <div className={cn("break-words text-sm text-foreground/90", className)}>
+        <div ref={rootRef} className={cn("break-words text-sm text-foreground/90", className)}>
             {render ? (
                 <LineRenderContext.Provider value={render}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={REHYPE_LINES} components={lineComponents}>
                         {children}
                     </ReactMarkdown>
+                    <MarkdownSelectionLayer rootRef={rootRef} action={render.action} source={children} />
                 </LineRenderContext.Provider>
             ) : (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>

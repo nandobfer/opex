@@ -274,7 +274,19 @@ preservar o escopo de hooks de cada aba.
     a mais próxima da original); senão a linha mais parecida com a citação (fuse.js, limiar 0,4,
     "reancorado"); senão **órfão** ("Linha não encontrada").
   - Na aba Comentários, o comentário de linha mostra a citação com **Ir para a linha**: troca de aba,
-    rola até `data-md-anchor` e destaca a linha com flash (desabilitado quando órfão).
+    rola até `data-md-anchor` e destaca a linha com flash (desabilitado quando órfão); no comentário
+    de trecho, o flash também marca o trecho.
+- **Comentários de trecho**: selecionar texto nesses mesmos lugares mostra **Comentar o trecho** no
+  fim da seleção; o popover (o mesmo da linha) mostra o trecho, a conversa da linha âncora (a
+  **última** linha selecionada, onde fica o badge) e o campo. Os cards de trecho mostram o trecho
+  citado; os trechos comentados ficam **sublinhados** no texto (clicar abre a conversa).
+  - `lineRef.selection { text (≤ 1.000, como aparece na tela), lines, occurrence, startLine }` no
+    `POST /api/tasks/[id]/comments`. Gravado como `> 💬 Trecho da linha N da **Campo**:` (ou
+    "das linhas S–N") + o trecho citado + corpo + marcador v2 `{"v":2,…,"s":trecho,"u":linhas,"o":ocorrência}`
+    (`<`/`>` escapados no JSON). v1 (linha inteira) continua sendo lido. A auditoria guarda o trecho.
+  - Reancoragem: hash da linha âncora; senão a linha que contém o começo do trecho (texto sem
+    ênfase/links, a âncora `lines - 1` linhas depois); senão fuse.js. Linha achada sem o trecho →
+    `selectionMissing`: fica só na linha, sem sublinhado, com o aviso "O trecho não está mais no texto".
 - Lateral: prioridade editável, tipo, **tags**, repositório (`GithubRepoLabel`), **cliente** (ver
   abaixo), **estimativa** (ver abaixo), horas apontadas, criada e atualizada.
 - **Cliente** (`TaskClientCard`, coluna lateral): **adiciona**, **troca** ou **remove** o cliente da

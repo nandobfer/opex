@@ -92,6 +92,29 @@ describe('TaskDetailTabs — comentários de linha', () => {
     expect((scrollIntoView.mock.contexts[0] as HTMLElement).getAttribute('data-md-anchor')).toBe('description:3')
   })
 
+  it('selecionar um trecho mostra "Comentar o trecho"; o comentário leva o trecho, a linha âncora e a ocorrência', async () => {
+    const { act } = await import('@testing-library/react')
+    render(<LineHarness task={withLine} />)
+    const paragraph = [...document.querySelectorAll('[data-md-line="1"]')].find((node) => node.textContent?.includes('Linha um'))!
+    const text = [...paragraph.childNodes].find((node) => node.nodeType === Node.TEXT_NODE) as Text
+    const range = document.createRange()
+    range.setStart(text, 6)
+    range.setEnd(text, 8)
+    window.getSelection()!.removeAllRanges()
+    window.getSelection()!.addRange(range)
+    fireEvent.pointerUp(document)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
+    fireEvent.click(screen.getByRole('button', { name: 'Comentar o trecho' }))
+    expect(await screen.findByText('Trecho da linha 1')).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comentário no trecho da linha 1' }), { target: { value: 'Só isto' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Comentar$/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      content: 'Só isto',
+      lineRef: { field: 'description', commentId: null, line: 1, text: 'Linha um', selection: { text: 'um', lines: 1, occurrence: 0, startLine: 1 } },
+    })
+    window.getSelection()!.removeAllRanges()
+  })
+
   it('linha removida: o comentário fica órfão, sem "Ir para a linha"', () => {
     render(<LineHarness task={task({ description: 'Outro texto completamente diferente', comments: [lineComment] })} />)
     fireEvent.click(screen.getByRole('tab', { name: /Comentários/ }))

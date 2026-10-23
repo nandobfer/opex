@@ -26,8 +26,11 @@ export function useLineCommentAction(field: LineCommentField, commentId: string 
             icon: LINE_COMMENT_ICON,
             label: "Comentar a linha",
             anchorId: sourceKey,
+            selectionLabel: "Comentar o trecho",
             count: (line) => threads?.get(line)?.length ?? 0,
-            flash: flash ? { line: flash.line, key: flash.key } : null,
+            highlights: (line) =>
+                (threads?.get(line) ?? []).flatMap(({ comment, selectionMissing }) => (comment.lineRef?.selection && !selectionMissing ? [{ key: comment.id, selection: comment.lineRef.selection }] : [])),
+            flash: flash ? { line: flash.line, key: flash.key, selection: flash.selection } : null,
             renderPopover: (context) => <LineCommentPopover taskId={taskId} field={field} commentId={commentId} sourceKey={sourceKey} context={context} />,
         }
     }, [disabled, taskId, sourceKey, threads, flash, field, commentId])

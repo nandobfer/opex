@@ -339,7 +339,22 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   senão o de maior `REPLY_PRIORITY` (pergunta do agente > mensagem/feedback > informações extras >
   chat). Sem campo, o host pode abrir um (`useReplyFallback`); sem nada, a linha vai para a área de
   transferência com toast. Linha de código vira código inline. Montado na mesa de trabalho (saída e
-  plano; cada fork tem provider próprio), no refinamento e no chat do Agente Opex.
+  plano; cada fork tem provider próprio), no refinamento e no chat do Agente Opex. Selecionando
+  texto, **Citar o trecho no campo de resposta** cita só o trecho (cada linha com `> `).
+- **Ação sobre o texto selecionado** (`ui/markdown-selection.tsx`, montado pelo `Markdown` com
+  `lineAction`; puro em `src/lib/markdown/selection.ts`): ao soltar uma seleção (mouse, teclado ou
+  toque; espera de 120 ms) aparece um botão flutuante (Framer Motion) no fim dela, com o nome
+  `selectionLabel` (`false` desliga). O clique abre o mesmo `renderPopover` ancorado na seleção
+  (`PopoverAnchor virtualRef`) ou chama `onSelect`, com `context.selection = { text, lines,
+  occurrence, startLine }`: `text` é o texto como aparece na tela (sem `**` etc.), `lines` as linhas
+  renderizadas cobertas e `line` a **última** delas (âncora). O que estiver fora do Markdown é
+  cortado; seleção vazia, só fora dele ou nos botões não conta; Esc esconde. `highlights(line)`
+  sublinha trechos já comentados pela **CSS Custom Highlight API** (`::highlight(md-line-comment)`,
+  estilo injetado em runtime por `src/lib/markdown/highlights.ts` — o build do Next não aceita
+  `::highlight` no `globals.css`), sem criar elementos: a renderização não muda; sem suporte do
+  navegador, não há sublinhado. Clicar num trecho sublinhado abre a ação com ele. `flash.selection`
+  dá o flash no trecho (`::highlight(md-line-flash)`, 1,6 s; a Highlight API não é animável pelo
+  Framer Motion — o flash da linha continua com ele).
   Use a mesma referência (`attachmentMarkdown` de `src/lib/attachments.ts`) para guardar mídia em
   Markdown; a URL assinada do storage **não** entra em texto persistido (expira).
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista

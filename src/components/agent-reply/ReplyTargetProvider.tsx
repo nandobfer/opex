@@ -43,8 +43,14 @@ export function pickReplyTarget(targets: ReplyTarget[]): ReplyTarget | null {
     return best
 }
 
-/** Texto citado da linha (linha de código vira código inline). */
-export const lineQuoteText = ({ text, code }: Pick<MarkdownLineContext, "text" | "code">) => (code ? `\`${text.trim()}\`` : text)
+/**
+ * Texto citado: o trecho selecionado, quando houver, senão a linha. Linha (ou trecho de uma linha)
+ * de código vira código inline.
+ */
+export const lineQuoteText = ({ text, code, selection }: Pick<MarkdownLineContext, "text" | "code" | "selection">) => {
+    const quoted = selection?.text ?? text
+    return code && !quoted.includes("\n") ? `\`${quoted.trim()}\`` : quoted
+}
 
 async function copyLine(text: string) {
     try {
@@ -79,7 +85,7 @@ export function ReplyTargetProvider({ children }: { children: ReactNode }) {
         for (const fallback of [...fallbacks.current].reverse()) if (fallback(text)) return
         void copyLine(text)
     }, [])
-    const action = useMemo<MarkdownLineAction>(() => ({ icon: TextQuote, label: "Citar no campo de resposta", onSelect: (context) => deliver(lineQuoteText(context)) }), [deliver])
+    const action = useMemo<MarkdownLineAction>(() => ({ icon: TextQuote, label: "Citar no campo de resposta", selectionLabel: "Citar o trecho no campo de resposta", onSelect: (context) => deliver(lineQuoteText(context)) }), [deliver])
     return (
         <RegistryContext.Provider value={registry}>
             <MarkdownLineActionProvider action={action}>{children}</MarkdownLineActionProvider>

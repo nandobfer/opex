@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
 import { useReducedMotion } from "framer-motion"
 import { resolveLineAnchors } from "../../../line-comments/anchors"
-import type { LineCommentField, TaskComment, TaskDetailDto } from "../../../types"
+import type { LineCommentField, TaskComment, TaskDetailDto, TaskLineSelection } from "../../../types"
 
 /**
  * Comentários de linha da página da tarefa: cada comentário com `lineRef` é ligado à linha atual do
@@ -19,12 +19,15 @@ export interface AnchoredComment {
     sourceKey: string
     line: number | null
     relocated: boolean
+    /** Trecho comentado não está mais na linha (o comentário fica só na linha). */
+    selectionMissing: boolean
 }
 
 interface Flash {
     sourceKey: string
     line: number
     key: number
+    selection: TaskLineSelection | null
 }
 
 interface LineCommentsValue {
@@ -60,7 +63,7 @@ export function anchorTaskComments(task: TaskDetailDto): Map<string, AnchoredCom
     for (const [sourceKey, comments] of groups) {
         const ref = comments[0]!.lineRef!
         const anchors = resolveLineAnchors(sourceText(task, ref.field, ref.commentId), comments, (comment) => comment.lineRef!)
-        for (const anchor of anchors) result.set(anchor.item.id, { comment: anchor.item, sourceKey, line: anchor.line, relocated: anchor.relocated })
+        for (const anchor of anchors) result.set(anchor.item.id, { comment: anchor.item, sourceKey, line: anchor.line, relocated: anchor.relocated, selectionMissing: anchor.selectionMissing })
     }
     return result
 }
@@ -97,7 +100,7 @@ export function TaskLineCommentsProvider({ task, onTab, children }: { task: Task
                 const element = document.querySelector<HTMLElement>(selector)
                 if (element) {
                     element.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" })
-                    setFlash({ sourceKey: anchored.sourceKey, line, key: Date.now() })
+                    setFlash({ sourceKey: anchored.sourceKey, line, key: Date.now(), selection: anchored.selectionMissing ? null : ref.selection })
                 } else if (Date.now() < deadline) requestAnimationFrame(tick)
             }
             requestAnimationFrame(tick)

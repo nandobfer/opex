@@ -251,7 +251,16 @@ function optimisticComment(input: string | CommentInput): TaskComment {
         id: `${OPTIMISTIC_COMMENT_PREFIX}${Date.now()}`,
         content,
         body: content,
-        lineRef: lineRef ? { field: lineRef.field, commentId: lineRef.commentId ?? null, line: lineRef.line, hash: lineHash(lineRef.text), quote: clipLine(lineRef.text, LINE_QUOTE_MAX) } : null,
+        lineRef: lineRef
+            ? {
+                  field: lineRef.field,
+                  commentId: lineRef.commentId ?? null,
+                  line: lineRef.line,
+                  hash: lineHash(lineRef.text),
+                  quote: clipLine(lineRef.selection?.text ?? lineRef.text, LINE_QUOTE_MAX),
+                  selection: lineRef.selection ? { text: lineRef.selection.text, lines: lineRef.selection.lines, occurrence: lineRef.selection.occurrence } : null,
+              }
+            : null,
         authorType: "owner",
         authorName: "Você",
         createdAt: new Date().toISOString(),

@@ -30,7 +30,7 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 - Rodapé de cada resposta com modelo, tokens e duração.
 - Cada linha das respostas tem, no hover, **Citar no campo de resposta**: insere `> linha` no cursor
   do campo do chat sem apagar o texto (`ReplyTargetProvider` no `OpexChat`, `ReplyTextarea` no
-  `OpexComposer`).
+  `OpexComposer`); selecionando texto, o botão no fim da seleção cita só o trecho.
 - **Tentar novamente** quando a resposta falha ou é interrompida; **Parar** durante o turno (a
   resposta parcial é mantida); **Ir para o fim**; conversa virtualizada acima de 50 mensagens.
 - Estados: vazio com sugestões, carregando (skeleton), erro (tentar novamente), agente não

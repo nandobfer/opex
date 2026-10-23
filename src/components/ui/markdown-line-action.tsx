@@ -2,6 +2,9 @@
 
 import { createContext, useContext, type ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
+import type { MarkdownSelection } from "@/lib/markdown/selection"
+
+export type { MarkdownSelection }
 
 /** Linha lógica clicada no `Markdown` (números do texto-fonte, 1 = primeira). */
 export interface MarkdownLineContext {
@@ -11,6 +14,14 @@ export interface MarkdownLineContext {
     text: string
     /** A linha é de um bloco de código. */
     code: boolean
+    /** Trecho selecionado (botão da seleção ou clique num trecho sublinhado); `line` é a última linha coberta. */
+    selection?: MarkdownSelection
+}
+
+/** Trecho já comentado de uma linha (sublinhado no texto; clicar abre a ação com ele). */
+export interface MarkdownHighlight {
+    key: string
+    selection: Pick<MarkdownSelection, "text" | "lines" | "occurrence"> & Partial<Pick<MarkdownSelection, "startLine">>
 }
 
 /**
@@ -27,8 +38,12 @@ export interface MarkdownLineAction {
     renderPopover?: (context: MarkdownLineContext & { close: () => void }) => ReactNode
     /** Prefixo do `data-md-anchor` (`{anchorId}:{linha}`), usado para rolar até a linha. */
     anchorId?: string
-    /** Destaca a linha com um flash (troque `key` para repetir). */
-    flash?: { line: number; key: number } | null
+    /** Destaca a linha (e o trecho, quando houver) com um flash (troque `key` para repetir). */
+    flash?: { line: number; key: number; selection?: MarkdownHighlight["selection"] | null } | null
+    /** Nome acessível do botão que aparece ao selecionar texto; `false` desliga a ação na seleção. */
+    selectionLabel?: string | false
+    /** Trechos a sublinhar na linha âncora `line`. */
+    highlights?: (line: number) => MarkdownHighlight[]
 }
 
 /**

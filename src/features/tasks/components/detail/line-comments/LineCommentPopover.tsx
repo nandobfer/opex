@@ -34,16 +34,26 @@ export function LineCommentPopover({ taskId, field, commentId, sourceKey, contex
     const submit = () => {
         const text = content.trim()
         if (!text || busy || add.isPending) return
-        add.mutate({ content: text, lineRef: { field, commentId, line: context.line, text: context.text } })
+        const selection = context.selection
+        add.mutate({
+            content: text,
+            lineRef: {
+                field,
+                commentId,
+                line: context.line,
+                text: context.text,
+                ...(selection && { selection: { text: selection.text.slice(0, 1000), lines: selection.lines, occurrence: selection.occurrence, startLine: selection.startLine } }),
+            },
+        })
         setContent("")
     }
 
     return (
         <div className="space-y-3" data-ctrl-enter-scope>
-            <p className="line-clamp-3 border-l-2 border-primary/60 pl-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Linha {context.line}</span> · {LINE_COMMENT_FIELD_LABELS[field]}
+            <p className="line-clamp-3 whitespace-pre-line border-l-2 border-primary/60 pl-2 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{context.selection ? selectionTitle(context.selection, context.line) : `Linha ${context.line}`}</span> · {LINE_COMMENT_FIELD_LABELS[field]}
                 <br />
-                {context.text}
+                {context.selection ? `“${context.selection.text}”` : context.text}
             </p>
             {thread.length > 0 && (
                 <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
@@ -63,6 +73,9 @@ export function LineCommentPopover({ taskId, field, commentId, sourceKey, contex
                                         <span className="text-muted-foreground">{formatDateTime(comment.createdAt)}</span>
                                     </div>
                                     {relocated && <p className="mb-1 text-[11px] text-warning">A linha mudou desde o comentário (reancorado pela mais parecida).</p>}
+                                    {comment.lineRef?.selection && (
+                                        <p className="mb-1 line-clamp-2 whitespace-pre-line rounded-sm bg-primary/10 px-1.5 py-0.5 text-[11px] text-foreground/80">“{comment.lineRef.selection.text}”</p>
+                                    )}
                                     <Markdown lineAction={null} className="text-xs">
                                         {comment.body}
                                     </Markdown>
@@ -77,8 +90,8 @@ export function LineCommentPopover({ taskId, field, commentId, sourceKey, contex
                 value={content}
                 onChange={setContent}
                 rows={3}
-                placeholder="Comente esta linha (Markdown aceito)"
-                ariaLabel={`Comentário na linha ${context.line}`}
+                placeholder={context.selection ? "Comente este trecho (Markdown aceito)" : "Comente esta linha (Markdown aceito)"}
+                ariaLabel={context.selection ? `Comentário no trecho da linha ${context.line}` : `Comentário na linha ${context.line}`}
                 uploads={uploads.media}
             />
             <div className="flex items-center justify-end gap-2">
@@ -96,3 +109,9 @@ export function LineCommentPopover({ taskId, field, commentId, sourceKey, contex
 }
 
 export const LINE_COMMENT_ICON = MessageSquarePlus
+
+/** "Trecho da linha N" ou "Trecho das linhas S–N". */
+export function selectionTitle(selection: { lines: number; startLine?: number }, line: number): string {
+    const start = selection.startLine ?? line
+    return selection.lines > 1 && start < line ? `Trecho das linhas ${start}–${line}` : `Trecho da linha ${line}`
+}

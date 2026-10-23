@@ -73,8 +73,18 @@ export interface TaskLineRef {
     line: number
     /** `lineHash` do texto da linha. */
     hash: string
-    /** Citação visível da linha (pode estar cortada). */
+    /** Citação visível da linha (pode estar cortada; no comentário de trecho, o trecho). */
     quote: string
+    /** Comentário de trecho: texto selecionado (como aparece na tela), linhas cobertas e ocorrência. */
+    selection: TaskLineSelection | null
+}
+
+export interface TaskLineSelection {
+    text: string
+    /** Linhas renderizadas cobertas, terminando na linha âncora (`line`). */
+    lines: number
+    /** Ocorrência do começo do trecho na primeira linha (0 = primeira). */
+    occurrence: number
 }
 
 export interface TaskComment {

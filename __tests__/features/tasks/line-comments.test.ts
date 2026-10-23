@@ -4,7 +4,7 @@ import { resolveLineAnchors } from "@/features/tasks/line-comments/anchors"
 import { formatLineComment, TASK_COMMENT_MAX, lineMarkerOf, parseLineComment } from "@/features/tasks/line-comments/format"
 import type { TaskLineRef } from "@/features/tasks/types"
 
-const ref = (line: number, quote: string, hash = lineHash(quote)): TaskLineRef => ({ field: "description", commentId: null, line, hash, quote })
+const ref = (line: number, quote: string, hash = lineHash(quote), selection: TaskLineRef["selection"] = null): TaskLineRef => ({ field: "description", commentId: null, line, hash, quote, selection })
 
 describe("comentário de linha — formato do comentário", () => {
     it("ida e volta: citação visível, corpo e marcador oculto", () => {
@@ -14,7 +14,19 @@ describe("comentário de linha — formato do comentário", () => {
         const parsed = parseLineComment(content, "opex:line")
         expect(parsed.body).toBe("Isto precisa mudar")
         expect(parsed.content).not.toContain("<!--")
-        expect(parsed.lineRef).toEqual({ field: "technicalSpec", commentId: null, line: 4, hash: lineHash("- Usar o **serviço X**"), quote: "- Usar o **serviço X**" })
+        expect(parsed.lineRef).toEqual({ field: "technicalSpec", commentId: null, line: 4, hash: lineHash("- Usar o **serviço X**"), quote: "- Usar o **serviço X**", selection: null })
+    })
+
+    it("trecho (v2): cabeçalho com o intervalo, citação do trecho e seleção de volta no parse", () => {
+        const selection = { text: "serviço X -->\ncomo <b>", lines: 2, occurrence: 1, startLine: 3 }
+        const content = formatLineComment("Revisar", { field: "description", line: 4, text: "linha âncora", selection })
+        expect(content.startsWith("> 💬 Trecho das linhas 3–4 da **Descrição**:\n> serviço X -->\n> como <b>\n\nRevisar")).toBe(true)
+        expect(content.match(/-->/g)).toHaveLength(2)
+        const parsed = parseLineComment(content)
+        expect(parsed.body).toBe("Revisar")
+        expect(parsed.lineRef).toMatchObject({ line: 4, hash: lineHash("linha âncora"), selection: { text: "serviço X -->\ncomo <b>", lines: 2, occurrence: 1 } })
+        const single = formatLineComment("ok", { field: "comment", commentId: "b".repeat(24), line: 2, text: "x", selection: { ...selection, lines: 1, startLine: 2 } })
+        expect(single.startsWith("> 💬 Trecho da linha 2 de um **comentário**:")).toBe(true)
     })
 
     it("respeita o marcador configurado; outro marcador não é reconhecido", () => {
@@ -60,5 +72,16 @@ describe("comentário de linha — reancoragem", () => {
         const [anchor] = resolveLineAnchors(md, [ref(3, "Algo que nunca existiu aqui zzz")], (item) => item)
         expect(anchor).toMatchObject({ line: null, relocated: false })
         expect(resolveLineAnchors("", [ref(1, "x")], (item) => item)[0]?.line).toBeNull()
+    })
+
+    it("trecho: presente na linha; sumido fica só na linha; linha mudou mas o trecho existe reancora nele", () => {
+        const text = "Usar o **serviço** de pagamentos"
+        const doc = `${text}\n\nOutra linha com cobrança mensal`
+        const sel = (selected: string) => ({ text: selected, lines: 1, occurrence: 0 })
+        const [present, missing] = resolveLineAnchors(doc, [ref(1, "serviço de", lineHash(text), sel("serviço de")), ref(1, "boleto", lineHash(text), sel("boleto"))], (item) => item)
+        expect(present).toMatchObject({ line: 1, relocated: false, selectionMissing: false })
+        expect(missing).toMatchObject({ line: 1, selectionMissing: true })
+        const [moved] = resolveLineAnchors(doc, [ref(1, "cobrança mensal", lineHash("texto antigo"), sel("cobrança mensal"))], (item) => item)
+        expect(moved).toMatchObject({ line: 3, relocated: true, selectionMissing: false })
     })
 })

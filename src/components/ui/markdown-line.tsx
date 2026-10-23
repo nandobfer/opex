@@ -76,6 +76,9 @@ export function MarkdownLine({ line, endLine, code, children }: MarkdownLineProp
 
     return (
         <span
+            data-md-line={line}
+            data-md-line-end={endLine}
+            data-md-code={code ? "" : undefined}
             data-md-anchor={action.anchorId ? `${action.anchorId}:${line}` : undefined}
             className={cn("group/line relative scroll-mt-24 rounded-sm", count > 0 && "bg-primary/5")}
         >

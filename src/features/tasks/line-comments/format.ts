@@ -32,32 +32,51 @@ export function lineMarkerOf(value: unknown): string {
 
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-const payloadSchema = z.object({
-    v: z.literal(1),
+const basePayload = {
     f: z.enum(["description", "technicalSpec", "comment"]),
     c: z.string().min(1).nullable().optional(),
     l: z.number().int().positive(),
     h: z.string().regex(/^[0-9a-f]{8}$/),
-})
+}
+/** v1 = linha inteira; v2 = trecho (`s` texto, `u` linhas cobertas, `o` ocorrência). */
+const payloadSchema = z.discriminatedUnion("v", [
+    z.object({ v: z.literal(1), ...basePayload }),
+    z.object({ v: z.literal(2), ...basePayload, s: z.string().min(1).max(1000), u: z.number().int().min(1), o: z.number().int().min(0) }),
+])
 
 export interface LineCommentInput {
     field: LineCommentField
     commentId?: string | null
     line: number
-    /** Texto da linha (citação). */
+    /** Texto da linha (citação; no trecho, a linha âncora para o hash). */
     text: string
+    selection?: { text: string; lines: number; occurrence: number; startLine: number }
 }
 
-function header(field: LineCommentField, line: number): string {
-    const label = LINE_COMMENT_FIELD_LABELS[field]
-    return field === "comment" ? `> 💬 Linha ${line} de um **${label}**:` : `> 💬 Linha ${line} da **${label}**:`
+function header(ref: LineCommentInput): string {
+    const label = LINE_COMMENT_FIELD_LABELS[ref.field]
+    const where = ref.field === "comment" ? `de um **${label}**` : `da **${label}**`
+    if (!ref.selection) return `> 💬 Linha ${ref.line} ${where}:`
+    const start = Math.min(ref.selection.startLine, ref.line)
+    const lines = ref.selection.lines > 1 && start < ref.line ? `das linhas ${start}–${ref.line}` : `da linha ${ref.line}`
+    return `> 💬 Trecho ${lines} ${where}:`
 }
+
+/** JSON seguro dentro de comentário HTML (sem `<`/`>` literais, que poderiam fechar o `-->`). */
+const safeJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e")
 
 /** Monta o texto do comentário. Lança `RangeError` quando passa do limite mesmo com a citação cortada. */
 export function formatLineComment(body: string, ref: LineCommentInput, marker: string = LINE_COMMENT_MARKER): string {
-    const quote = clipLine(ref.text.replace(/\s+/g, " ").trim(), LINE_QUOTE_MAX)
-    const payload = JSON.stringify({ v: 1, f: ref.field, c: ref.field === "comment" ? (ref.commentId ?? null) : null, l: ref.line, h: lineHash(ref.text) })
-    const content = `${header(ref.field, ref.line)}\n> ${quote || "…"}\n\n${body.trim()}\n\n<!-- ${lineMarkerOf(marker)} ${payload} -->`
+    const base = { f: ref.field, c: ref.field === "comment" ? (ref.commentId ?? null) : null, l: ref.line, h: lineHash(ref.text) }
+    const selected = ref.selection ? ref.selection.text.trim().slice(0, 1000) : ""
+    const payload = safeJson(ref.selection ? { v: 2, ...base, s: selected, u: ref.selection.lines, o: ref.selection.occurrence } : { v: 1, ...base })
+    const quote = ref.selection
+        ? clipLine(selected, LINE_QUOTE_MAX)
+              .split("\n")
+              .map((line) => `> ${line}`.trimEnd())
+              .join("\n")
+        : `> ${clipLine(ref.text.replace(/\s+/g, " ").trim(), LINE_QUOTE_MAX) || "…"}`
+    const content = `${header(ref)}\n${quote}\n\n${body.trim()}\n\n<!-- ${lineMarkerOf(marker)} ${payload} -->`
     if (content.length > TASK_COMMENT_MAX) throw new RangeError(`Comentário de linha passa de ${TASK_COMMENT_MAX} caracteres`)
     return content
 }
@@ -88,12 +107,13 @@ export function parseLineComment(raw: string, marker: string = LINE_COMMENT_MARK
     const quoted: string[] = []
     while (index < lines.length && lines[index]!.startsWith(">")) quoted.push(lines[index++]!.replace(/^>\s?/, ""))
     const body = lines.slice(index).join("\n").trim()
-    // A primeira linha citada é o cabeçalho ("💬 Linha N da …").
-    const quote = quoted.slice(1).join(" ").trim()
+    // A primeira linha citada é o cabeçalho ("💬 Linha N da …" / "💬 Trecho da linha N da …").
+    const quote = quoted.slice(1).join(payload.v === 2 ? "\n" : " ").trim()
+    const selection = payload.v === 2 ? { text: payload.s, lines: payload.u, occurrence: payload.o } : null
     return {
         content,
         body,
-        lineRef: { field: payload.f, commentId: payload.f === "comment" ? (payload.c ?? null) : null, line: payload.l, hash: payload.h, quote },
+        lineRef: { field: payload.f, commentId: payload.f === "comment" ? (payload.c ?? null) : null, line: payload.l, hash: payload.h, quote, selection },
     }
 }
 
