@@ -27,6 +27,8 @@ export interface OpexToolDef<I = unknown> {
     label: string
     description: string
     risk: OpexToolRisk
+    /** Pede confirmação por padrão mesmo sem ser destrutiva (ajustável na configuração). */
+    confirmByDefault?: boolean
     /** Só o **admin** do cliente recebe a ferramenta (catálogo do portal). */
     adminOnly?: boolean
     input: ZodType<I>

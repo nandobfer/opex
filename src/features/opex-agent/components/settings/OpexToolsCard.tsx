@@ -35,7 +35,7 @@ interface ToolLeafMetaProps {
 function ToolLeafMeta({ meta, overrides, onChange }: ToolLeafMetaProps) {
     const badge = RISK_BADGES[meta.risk]
     const confirms = toolConfirms(meta, overrides)
-    const custom = confirms !== defaultToolConfirms(meta.risk)
+    const custom = confirms !== defaultToolConfirms(meta)
     const id = `opex-confirm-${meta.name}`
     return (
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">

@@ -24,14 +24,23 @@ const TOOLS = [
 
 describe('seleção e confirmação por ferramenta', () => {
   it('padrão: só as destrutivas pedem confirmação; o ajuste vence e some quando volta ao padrão', () => {
-    expect(defaultToolConfirms('destructive')).toBe(true)
-    expect(defaultToolConfirms('write')).toBe(false)
+    expect(defaultToolConfirms({ risk: 'destructive' })).toBe(true)
+    expect(defaultToolConfirms({ risk: 'write' })).toBe(false)
     expect(toolConfirms(TOOLS[3]!, {})).toBe(true)
     expect(toolConfirms(TOOLS[3]!, { delete_task: false })).toBe(false)
     const on = nextConfirmationOverrides({}, TOOLS[2]!, true)
     expect(on).toEqual({ create_task: true })
     expect(nextConfirmationOverrides(on, TOOLS[2]!, false)).toEqual({})
     expect(nextConfirmationOverrides({}, TOOLS[3]!, false)).toEqual({ delete_task: false })
+  })
+
+  it('confirmação: escrita com confirmByDefault pede por padrão e desligar vira ajuste', () => {
+    const gated: OpexToolMetaDto = { name: 'write_repo_file', group: 'github', label: 'Gravar', description: 'grava', risk: 'write', confirmByDefault: true, alwaysOn: false }
+    expect(toolConfirms(gated)).toBe(true)
+    const overrides = nextConfirmationOverrides({}, gated, false)
+    expect(overrides).toEqual({ write_repo_file: false })
+    expect(toolConfirms(gated, overrides)).toBe(false)
+    expect(nextConfirmationOverrides(overrides, gated, true)).toEqual({})
   })
 
   it('ligadas/desligadas: as sempre ligadas nunca saem', () => {

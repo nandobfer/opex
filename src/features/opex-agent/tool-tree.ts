@@ -16,30 +16,34 @@ export interface OpexToolMetaDto {
     /** Descrição enviada ao modelo (e exibida na configuração). */
     description: string
     risk: OpexToolRisk
+    /** Pede confirmação por padrão mesmo sem ser destrutiva (ex.: escrita no GitHub). */
+    confirmByDefault?: boolean
     /** Sempre ligada (o grupo Contexto): não aparece como desligável. */
     alwaysOn: boolean
 }
+
+type ConfirmMeta = { name: string; risk: OpexToolRisk; confirmByDefault?: boolean }
 
 /** O grupo Contexto fica sempre ligado. */
 export function isAlwaysOnGroup(group: string): boolean {
     return group === "context"
 }
 
-/** Confirmação padrão de uma ferramenta: só as destrutivas pedem Confirmar/Cancelar. */
-export function defaultToolConfirms(risk: OpexToolRisk): boolean {
-    return risk === "destructive"
+/** Confirmação padrão de uma ferramenta: as destrutivas e as marcadas com `confirmByDefault`. */
+export function defaultToolConfirms(meta: Omit<ConfirmMeta, "name">): boolean {
+    return meta.risk === "destructive" || meta.confirmByDefault === true
 }
 
 /** A ferramenta pede confirmação? O ajuste da ferramenta vence o padrão do risco. */
-export function toolConfirms(meta: { name: string; risk: OpexToolRisk }, overrides: Readonly<Record<string, boolean>> = {}): boolean {
+export function toolConfirms(meta: ConfirmMeta, overrides: Readonly<Record<string, boolean>> = {}): boolean {
     const override = overrides[meta.name]
-    return typeof override === "boolean" ? override : defaultToolConfirms(meta.risk)
+    return typeof override === "boolean" ? override : defaultToolConfirms(meta)
 }
 
 /** Ajuste de confirmação depois de trocar o switch: igual ao padrão do risco, o ajuste some. */
-export function nextConfirmationOverrides(overrides: Readonly<Record<string, boolean>>, meta: { name: string; risk: OpexToolRisk }, confirms: boolean): Record<string, boolean> {
+export function nextConfirmationOverrides(overrides: Readonly<Record<string, boolean>>, meta: ConfirmMeta, confirms: boolean): Record<string, boolean> {
     const next = { ...overrides }
-    if (confirms === defaultToolConfirms(meta.risk)) delete next[meta.name]
+    if (confirms === defaultToolConfirms(meta)) delete next[meta.name]
     else next[meta.name] = confirms
     return next
 }

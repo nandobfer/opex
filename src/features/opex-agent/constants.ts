@@ -27,6 +27,7 @@ export const OPEX_TOOL_GROUPS = [
     "time",
     "workbenches",
     "centrals",
+    "github",
     "integrations",
     "routines",
     "ai-settings",
@@ -47,6 +48,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     time: { label: "Horas", description: "Períodos ativos e horas agênticas apontadas" },
     workbenches: { label: "Mesas de trabalho", description: "Abrir, planejar, implementar, aprovar, corrigir e excluir mesas" },
     centrals: { label: "Centrais", description: "Centrais de desenvolvimento agêntico e a configuração geral" },
+    github: { label: "Repositórios GitHub", description: "Ler e buscar arquivos, árvore, branches e commits de qualquer branch; criar branches e gravar/excluir arquivos (com confirmação)" },
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações" },
     routines: { label: "Rotinas", description: "Crons do agendador interno" },
     "ai-settings": { label: "Features de IA", description: "Configuração das features de IA do app" },
@@ -62,6 +64,8 @@ export const OPEX_SESSION_UPDATED_EVENT = "opex-session-updated"
 export const OPEX_SESSION_DELETED_EVENT = "opex-session-deleted"
 
 export const OPEX_AUDIT_ENTITY = "AgenteOpex"
+/** Auditoria das escritas do agente nos repositórios do GitHub. */
+export const OPEX_GITHUB_AUDIT_ENTITY = "RepositorioGithub"
 /** Entidade da auditoria da configuração do agente por cliente (o id é o do cliente). */
 export const OPEX_CLIENT_AUDIT_ENTITY = "ClienteOrcamentoOpexAgent"
 /** Configuração do agente no portal, salva no cliente (`opexAgent`); evento em `private-app` e no canal do cliente. */

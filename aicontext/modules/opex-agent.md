@@ -147,7 +147,8 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     `src/components/ui/check-tree`, helpers puros em `src/lib/check-tree.ts`): um módulo por grupo
     com caixa tri-estado, contador `x/y`, busca sem acento e expansão animada. Cada ferramenta mostra
     o nome técnico, o selo de risco (Leitura/Altera/Destrutiva), "Sempre ligada" (grupo Contexto,
-    travado) e o switch **"Pede confirmação"** — ligado por padrão só nas destrutivas, com a marca
+    travado) e o switch **"Pede confirmação"** — ligado por padrão nas destrutivas e nas marcadas com
+    `confirmByDefault` (as escritas no GitHub), com a marca
     "· personalizado" quando difere do padrão e o aviso "Ação destrutiva sem confirmação". Não há
     mais política geral ("Só ações destrutivas"/"Toda alteração").
   - **Memórias** (`OpexMemoriesSection`): três cards do Ciliar (`AgentMemoriesCard`) — **Memórias
@@ -166,7 +167,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
 
 Cada ferramenta chama a **função de serviço real** do Opex (nunca HTTP), herdando validação Zod,
 auditoria e tempo real. Risco: `read`, `write` ou `destructive`. **Confirmação por ferramenta**: sem
-ajuste, só as `destructive` pedem Confirmar/Cancelar; o switch "Pede confirmação" da configuração
+ajuste, as `destructive` e as `confirmByDefault` pedem Confirmar/Cancelar; o switch "Pede confirmação" da configuração
 liga (ex.: numa `write`) ou desliga (inclusive numa `destructive`, com aviso na tela) cada uma
 (`needsConfirmation(tool, confirmationOverrides)`). No portal do cliente vale sempre o padrão pelo
 risco (os catálogos são distintos).
@@ -180,6 +181,7 @@ risco (os catálogos são distintos).
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
 | Centrais | `list_centrals`, `get_central`, `create_central`, `update_central`, `test_central`, `delete_central`*, `get_agentic_settings`, `update_agentic_settings` |
+| Repositórios GitHub | `list_repositories`, `get_repo_tree`, `read_repo_file`, `search_repo_code`, `list_branches`, `list_commits`, `get_commit`, `compare_refs`, `create_branch`†, `write_repo_file`†, `delete_repo_file`*, `delete_branch`* — detalhes abaixo |
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
@@ -191,7 +193,37 @@ risco (os catálogos são distintos).
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
 ou credencial/token/senha de cliente é `destructive`. Tokens, `portalPath` (que carrega o token) e
-senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas).
+senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas). † `write` com
+`confirmByDefault` (pede confirmação por padrão).
+
+### Repositórios GitHub
+
+Usam o token da integração GitHub (`githubRequest`; nada de `gh` CLI). Qualquer repositório que o
+token alcance. Só no app do dono (o catálogo do portal não tem o grupo).
+
+- **Branch de consulta** (`resolveRepoRef`, `server/repo-snapshot.ts`): a pedida (`ref`/`branch`);
+  senão a **branch base da central** do repositório (Git e PR › Branch base, via vínculo projeto ↔
+  repositório); senão a **branch padrão** do repositório (cache de 10 min). Toda resposta traz `ref`,
+  `refSource` (`requested`/`central`/`default`) e, nas leituras de conteúdo, o `sha`.
+- **Snapshot por commit**: a ref vira SHA (`Accept: application/vnd.github.sha`) e o tarball do commit
+  (`/tarball/{sha}`) é baixado uma vez, descompactado em fluxo (`zlib` + leitor de tar próprio,
+  `server/repo-tar.ts`, com PAX) e guardado em memória: texto até 2 MB por arquivo (binários só com
+  caminho), até 400 MB de texto e 150 MB compactados. Cache de até 4 snapshots, 20 min ocioso;
+  downloads simultâneos do mesmo commit são compartilhados. Árvore, leitura e busca usam o snapshot.
+- **Busca** (`search_repo_code`, `searchFiles` em `repo-search.ts`): grep linha a linha em qualquer
+  branch, texto ou regex JS, sem diferenciar maiúsculas por padrão, filtros `path`/`glob`, contexto até
+  5 linhas, 100 ocorrências (até 500). Pula binários, arquivos grandes e `node_modules`, `.git`, `dist`,
+  `build`, `.next`, `coverage`, `vendor`, `out` (salvo com `path` dentro deles). Não usa a busca do
+  GitHub, que só olha a branch padrão.
+- **Leituras**: `list_repositories` (com central e branches dela), `get_repo_tree` (glob `**`/`*`/`?`/`{a,b}`,
+  500 itens, até 3000), `read_repo_file` (linhas numeradas, 400 por janela, até 2000; sugere caminhos
+  parecidos), `list_branches`, `list_commits`, `get_commit` e `compare_refs` (diffs cortados em 6 mil
+  caracteres por arquivo e 60 mil no total).
+- **Escritas** (`risk: "write"` + `confirmByDefault`): `create_branch` e `write_repo_file` (conteúdo
+  completo, até 1 MB, via Contents API com o SHA atual; a entrada guardada corta o conteúdo em 2 mil
+  caracteres). **Destrutivas**: `delete_repo_file` e `delete_branch` (recusa a branch padrão e as
+  branches base/destino da central). Escritas auditam na entidade `RepositorioGithub` (`entidadeId` =
+  repositório). Snapshots só em memória do processo (nada persistido).
 
 ## Regras de execução
 
@@ -265,9 +297,9 @@ auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
 
 - Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
-  confirmação por ferramenta e migração da configuração antiga).
+  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`, `scope`, `client-config`; `server/tools/` (um arquivo por grupo +
+  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`; `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
@@ -290,5 +322,5 @@ ativado, ferramentas desligadas, auditoria/eventos, revalidação), `client-tool
 portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (sessões privadas,
 404 entre escopos e canal do Pusher), `tool-settings` (confirmação por ferramenta, árvore e
 migração da configuração antiga) e `opex-tools-card` (árvore, switch "Pede confirmação" e
-desligadas). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+desligadas) e `github` (snapshot, busca, ref de consulta e escritas). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

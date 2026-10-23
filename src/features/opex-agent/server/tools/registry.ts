@@ -5,6 +5,7 @@ import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
 import { fileTools } from "./files"
+import { githubTools } from "./github"
 import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
 import { memoryTools } from "./memories"
@@ -25,6 +26,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...timeTools,
     ...workbenchTools,
     ...centralTools,
+    ...githubTools,
     ...integrationTools,
     ...aiSettingsTools,
     ...prReviewTools,
@@ -46,6 +48,7 @@ export function opexToolMetas(): OpexToolMetaDto[] {
         label: tool.label,
         description: tool.description,
         risk: tool.risk,
+        ...(tool.confirmByDefault ? { confirmByDefault: true } : {}),
         alwaysOn: isAlwaysOnGroup(tool.group),
     }))
 }
@@ -56,7 +59,7 @@ export function enabledOpexTools(disabledTools: readonly string[]): OpexTool[] {
     return OPEX_TOOLS.filter((tool) => isAlwaysOnGroup(tool.group) || !disabled.has(tool.name))
 }
 
-/** Pede Confirmar/Cancelar? Ajuste da ferramenta; sem ajuste, só as destrutivas. */
+/** Pede Confirmar/Cancelar? Ajuste da ferramenta; sem ajuste, as destrutivas e as `confirmByDefault`. */
 export function needsConfirmation(tool: OpexTool, overrides: Readonly<Record<string, boolean>> = {}): boolean {
     return toolConfirms(tool, overrides)
 }
