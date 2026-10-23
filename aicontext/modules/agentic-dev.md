@@ -607,12 +607,19 @@ done → Reabrir mesa (texto ao planejador) → planning
 
 ## Trocar o modelo na mesa e no fork
 
-- **Seletor de modelo** no canto esquerdo da barra inferior: na mesa, **"Modelo do <etapa>: <nome>
-  (padrão | trocado)"** (`WorkbenchModelPicker`); no fork, **"Modelo: …"** ao lado do Modo
-  (`ForkActionBar`, só com o fork em aberto). Ambos usam `ModelOverridePicker`: busca de modelos do
-  OpenCode (o mesmo `ModelSearchPicker` compartilhado com as configurações dos papéis em
-  `AgentConfigFields`), seletor de **variante** quando o modelo tem variantes e **Voltar ao padrão** (no
-  rodapé da busca, com o modelo trocado).
+- **Seletor de modelo** no canto esquerdo da barra inferior, na mesa (`WorkbenchModelPicker`, modelo do
+  papel da etapa) e no fork (ao lado do Modo, `ForkActionBar`, só com o fork em aberto). Ambos usam
+  `ModelOverridePicker`:
+  - **botão do modelo**: só o ícone e o **nome do modelo** (sem "Modelo do Plano:"); modelo trocado
+    fica destacado na cor primária. O contexto ("Modelo do Plano: X (padrão | trocado)") vai na dica e
+    no rótulo acessível. Abre a busca de modelos do OpenCode (o mesmo `ModelSearchPicker`
+    compartilhado com as configurações dos papéis em `AgentConfigFields`) com **Voltar ao padrão** no
+    rodapé quando trocado;
+  - **botão do esforço de raciocínio** (variante): **só um ícone** (cérebro), exibido quando o modelo
+    tem variantes; destacado quando há variante definida, que aparece na dica. Abre um menu com
+    "Padrão do modelo" e as variantes.
+  - Compacto assim, o seletor, a chave **Gerar prévia** e os botões da etapa cabem numa linha só no
+    desktop.
 - **Troca modelo e variante; o agente não muda** (o da etapa na mesa; no fork, o do modo Plan/Build).
   Conferida no OpenCode como nas configurações (`assertAgentConfigs`; modelo ou variante inexistente →
   400; OpenCode desconectado não bloqueia).

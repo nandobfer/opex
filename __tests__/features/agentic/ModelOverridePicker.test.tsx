@@ -26,20 +26,26 @@ vi.mock('@/features/agentic/components/settings/ModelSearchPicker', () => ({
     </div>
   ),
 }))
-vi.mock('@/components/ui/select', () => ({
-  Select: ({ value, onValueChange, children }: { value: string; onValueChange: (value: string) => void; children: React.ReactNode }) => (
-    <select aria-label="Variante" value={value} onChange={(event) => onValueChange(event.target.value)}>
-      <option value="__default__">Padrão do modelo</option>
-      <option value="low">low</option>
-      <option value="high">high</option>
-      {children}
-    </select>
-  ),
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-  SelectContent: () => null,
-  SelectItem: () => null,
-}))
+/** Menu simplificado: o gatilho e os itens sempre visíveis (o portal do Radix não abre no jsdom). */
+vi.mock('@/components/ui/dropdown-menu', async () => {
+  const React = await import('react')
+  const Ctx = React.createContext<{ value: string; onValueChange: (value: string) => void } | null>(null)
+  return {
+    DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div role="menu">{children}</div>,
+    DropdownMenuLabel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    DropdownMenuRadioGroup: ({ value, onValueChange, children }: { value: string; onValueChange: (value: string) => void; children: React.ReactNode }) => <Ctx.Provider value={{ value, onValueChange }}>{children}</Ctx.Provider>,
+    DropdownMenuRadioItem: ({ value, children }: { value: string; children: React.ReactNode }) => {
+      const ctx = React.useContext(Ctx)!
+      return (
+        <button type="button" role="menuitemradio" aria-checked={ctx.value === value} onClick={() => ctx.onValueChange(value)}>
+          {children}
+        </button>
+      )
+    },
+  }
+})
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useSetWorkbenchModel: () => ({ mutate: mocks.setWorkbenchModel, isPending: false }) }))
 
 import { ModelOverridePicker } from '@/features/agentic/components/workbench/ModelOverridePicker'
@@ -51,28 +57,41 @@ const onChange = vi.fn()
 beforeEach(() => vi.clearAllMocks())
 
 describe('ModelOverridePicker', () => {
-  it('mostra o modelo do papel como padrão e troca pelo escolhido (variante zerada)', () => {
+  it('o botão mostra só o ícone e o nome do modelo; troca pelo escolhido (variante zerada)', () => {
     render(<ModelOverridePicker id="m" label="Modelo do Plano" choice={{ model: 'anthropic/opus', variant: 'high', overridden: false }} onChange={onChange} />)
-    expect(screen.getByRole('button', { name: /Modelo do Plano: Claude Opus \(high\) \(padrão\)/ })).toBeTruthy()
+    const trigger = screen.getByRole('button', { name: /Modelo do Plano: Claude Opus \(padrão\)/ })
+    expect(trigger.textContent).toBe('Claude Opus')
+    expect(trigger.querySelector('svg')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Voltar ao padrão' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'escolher GPT-5' }))
     expect(onChange).toHaveBeenCalledWith({ model: 'openai/gpt-5', variant: null })
   })
 
-  it('trocado: mostra "(trocado)", troca a variante e volta ao padrão', () => {
+  it('esforço de raciocínio é um botão só com ícone; troca a variante', () => {
+    render(<ModelOverridePicker id="m" label="Modelo" choice={{ model: 'anthropic/opus', variant: 'high', overridden: false }} onChange={onChange} />)
+    const effort = screen.getByRole('button', { name: /Esforço de raciocínio: high/ })
+    expect(effort.textContent).toBe('')
+    expect(effort.querySelector('svg')).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'high' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'low' }))
+    expect(onChange).toHaveBeenCalledWith({ model: 'anthropic/opus', variant: 'low' })
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Padrão do modelo' }))
+    expect(onChange).toHaveBeenLastCalledWith({ model: 'anthropic/opus', variant: null })
+  })
+
+  it('trocado: destaca o botão e volta ao padrão', () => {
     render(<ModelOverridePicker id="m" label="Modelo" choice={{ model: 'anthropic/opus', variant: null, overridden: true }} onChange={onChange} />)
-    expect(screen.getByRole('button', { name: /Modelo: Claude Opus \(trocado\)/ })).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Variante'), { target: { value: 'high' } })
-    expect(onChange).toHaveBeenCalledWith({ model: 'anthropic/opus', variant: 'high' })
+    const trigger = screen.getByRole('button', { name: /Modelo: Claude Opus \(trocado\)/ })
+    expect(trigger.classList.contains('text-primary')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Voltar ao padrão' }))
     expect(onChange).toHaveBeenLastCalledWith({ model: null, variant: null })
   })
 
-  it('escolher o mesmo modelo não envia nada; modelo sem variantes não mostra a variante', () => {
+  it('escolher o mesmo modelo não envia nada; modelo sem variantes não mostra o esforço', () => {
     render(<ModelOverridePicker id="m" label="Modelo" choice={{ model: 'openai/gpt-5', variant: null, overridden: true }} onChange={onChange} />)
     fireEvent.click(screen.getByRole('button', { name: 'escolher GPT-5' }))
     expect(onChange).not.toHaveBeenCalled()
-    expect(screen.queryByLabelText('Variante')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Esforço de raciocínio/ })).toBeNull()
   })
 })
 
