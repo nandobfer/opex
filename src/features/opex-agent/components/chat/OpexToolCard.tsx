@@ -45,7 +45,7 @@ export function OpexToolCard({ part, onDecide, deciding }: OpexToolCardProps) {
             >
                 {createElement(toolIcon(part.group), { className: "h-3.5 w-3.5 shrink-0 text-primary", "aria-hidden": true })}
                 <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{part.label}</span>
-                <span className="hidden font-mono text-[10px] text-muted-foreground sm:inline">{part.name}</span>
+                <span className="hidden font-mono text-[10px] text-agent-tool/80 sm:inline">{part.name}</span>
                 {formatDuration(part.durationMs) && <span className="text-[10px] text-muted-foreground">{formatDuration(part.durationMs)}</span>}
                 <ToolState part={part} />
                 {hasDetails && (

@@ -45,6 +45,13 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
 
+  /* Formatação do markdown (saída dos agentes, descrições...), no estilo do OpenCode. */
+  --color-md-heading: var(--md-heading);
+  --color-md-strong: var(--md-strong);
+  --color-md-code: var(--md-code);
+  --color-md-quote: var(--md-quote);
+  --color-agent-tool: var(--agent-tool);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -134,6 +141,12 @@
     --chart-4: #f472b6;
     --chart-5: #34d399;
     --chart-6: #fbbf24;
+    /* Markdown e stream dos agentes: títulos lilás, negrito/marcadores âmbar, código verde, citação e ferramentas ciano. */
+    --md-heading: #b366ff;
+    --md-strong: #fbbf24;
+    --md-code: #34d399;
+    --md-quote: #22d3ee;
+    --agent-tool: #22d3ee;
     color-scheme: dark;
   }
 }

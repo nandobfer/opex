@@ -19,7 +19,7 @@ export function ToolItem({ item }: { item: ToolTimelineItem }) {
             <button type="button" className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left disabled:cursor-default" onClick={() => setOpen((value) => !value)} disabled={!hasDetails} aria-expanded={hasDetails ? open : undefined}>
                 {running ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden /> : item.state === "done" ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden /> : <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />}
                 <Wrench className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="shrink-0 font-medium">{item.name}</span>
+                <span className="shrink-0 font-medium text-agent-tool">{item.name}</span>
                 {item.input && <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{item.input}</span>}
                 {hasDetails && <ChevronRight className={cn("ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden />}
             </button>

@@ -309,6 +309,13 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - **Mídia de anexo no Markdown**: o `Markdown` resolve a referência estável
   (`/api/attachments/{id}/content`, com `#audio`/`#video`) pelo componente
   `ui/markdown-media.tsx` — imagem, `audio`/`video` com controles ou link de download. Nunca HTML cru.
+- **Cores do Markdown** (todo o app, inclusive a saída dos agentes), no estilo do OpenCode, pelos
+  tokens do `globals.css`: títulos `text-md-heading` (lilás `#b366ff`), negrito `text-md-strong` e
+  marcadores de lista/checkbox em âmbar (`#fbbf24`), código inline com a pílula `bg-muted` e texto
+  `text-md-code` (verde `#34d399`), blocos de código em texto neutro, citação com borda
+  `border-md-quote` (ciano `#22d3ee`) e tachado em `text-muted-foreground`. Nomes de ferramentas no
+  stream dos agentes (mesa de trabalho e Agente Opex) usam `text-agent-tool` (ciano). Ajuste a paleta
+  só pelas variáveis `--md-*`/`--agent-tool`, nunca com cor fixa no componente.
   Use a mesma referência (`attachmentMarkdown` de `src/lib/attachments.ts`) para guardar mídia em
   Markdown; a URL assinada do storage **não** entra em texto persistido (expira).
 - Fora da regra: largura do `DialogContent`/`SheetContent`, barras de filtros de lista
