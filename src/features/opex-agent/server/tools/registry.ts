@@ -6,6 +6,7 @@ import { clientTools } from "./clients"
 import { contextTools } from "./context"
 import { fileTools } from "./files"
 import { githubTools } from "./github"
+import { hostTools } from "./host"
 import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
 import { memoryTools } from "./memories"
@@ -34,6 +35,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...serviceTools,
     ...financeTools,
     ...clientTools,
+    ...hostTools,
 ] as readonly OpexTool[]
 
 export function findOpexTool(name: string): OpexTool | undefined {

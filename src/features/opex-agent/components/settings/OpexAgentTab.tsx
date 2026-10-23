@@ -21,6 +21,7 @@ import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema, type OpexAgentSet
 import { useOpexSettings, useSaveOpexSettings } from "../../hooks/useOpexSettings"
 import { OpexModelCard } from "./OpexModelCard"
 import { OpexFilesCard } from "./OpexFilesCard"
+import { OpexHostCard } from "./OpexHostCard"
 import { OpexToolsCard } from "./OpexToolsCard"
 import { OpexMemoriesSection } from "./OpexMemoriesSection"
 
@@ -143,6 +144,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                     {section === "ferramentas" && (
                         <>
                             <OpexToolsCard form={form} tools={data.tools} />
+                            <OpexHostCard form={form} />
                             {footer(go)}
                         </>
                     )}

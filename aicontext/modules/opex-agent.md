@@ -151,6 +151,10 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     `confirmByDefault` (as escritas no GitHub), com a marca
     "· personalizado" quando difere do padrão e o aviso "Ação destrutiva sem confirmação". Não há
     mais política geral ("Só ações destrutivas"/"Toda alteração").
+  - **Terminal do host** (card na seção Ferramentas, `OpexHostCard`; `settings.host`): diretórios
+    permitidos (`allowedDirectories`, caminhos absolutos em `ChipInput`, até 30, normalizados e sem
+    repetição ao salvar; **vazio = qualquer diretório**, com aviso animado) e tempo máximo por comando
+    (`maxTimeoutSeconds`, 5–1800, padrão 300). Configuração antiga sem `host` recebe o padrão.
   - **Memórias** (`OpexMemoriesSection`): três cards do Ciliar (`AgentMemoriesCard`) — **Memórias
     globais**, **Memórias do dono** e **Memórias do cliente**; salvam sozinhos (ver
     `aicontext/modules/ai.md`, "Memórias do Agente Opex").
@@ -189,6 +193,7 @@ risco (os catálogos são distintos).
 | Dashboards | `get_dashboard` |
 | Serviços | `list_services`, `get_service`, `create_service`, `update_service`, `set_service_archived`*, `regenerate_service_ai` |
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
+| Terminal do host | `get_host_terminal`, `run_host_command`* — detalhes abaixo |
 | Clientes | `list_clients`, `get_client` (usuários do portal e prévias de orçamento recentes), `create_client`*, `update_client`, `regenerate_client_token`*, `delete_client`*, `create_client_user`*, `update_client_user`*, `regenerate_client_user_token`*, `delete_client_user`* |
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
@@ -225,6 +230,29 @@ token alcance. Só no app do dono (o catálogo do portal não tem o grupo).
   branches base/destino da central). Escritas auditam na entidade `RepositorioGithub` (`entidadeId` =
   repositório). Snapshots só em memória do processo (nada persistido).
 
+### Terminal do host
+
+O app roda em container; os comandos rodam na **máquina do servidor OpenCode** (o host), pelo `shell`
+do `@opencode/client` (`server/host-shell.ts`, `runHostCommand`), com a conexão da integração
+OpenCode. Sem SSH nem credencial nova. Só no app do dono (o catálogo do portal não tem o grupo).
+
+- `get_host_terminal` (leitura): diretórios permitidos, diretório padrão, tempo padrão/máximo e
+  limite de saída.
+- `run_host_command` (`risk: "destructive"`: **pede confirmação por padrão**, ajustável no switch
+  como as demais): `{ command, directory?, timeoutSeconds? }`.
+  - Diretório (`resolveHostDirectory`, módulo puro `host-terminal.ts`): o pedido (absoluto,
+    normalizado, precisa estar dentro de um permitido — subdiretórios valem, `..` é resolvido antes);
+    sem pedido, o primeiro permitido; sem lista, o diretório das sessões do OpenCode (ou o padrão do
+    servidor). Fora da lista → erro ao modelo, sem executar.
+  - Tempo: padrão 60 s, limitado ao máximo configurado; estourou → `status: "timeout"` e o comando
+    é encerrado. O shell é sempre removido no fim (também ao interromper o turno).
+  - Não interativo e sem estado entre chamadas (sem PTY, prompts ou `sudo` com senha); roda com o
+    usuário do processo do OpenCode.
+  - Resposta: `status`, `exitCode`, `signal`, `cwd`, `durationMs`, `output` (stdout+stderr, até 20 mil
+    caracteres; acima disso só o **fim**, com `truncated`, `outputSize` e `outputNote`).
+  - Auditoria na entidade `TerminalHost` (`entidadeId` = sessão): comando, diretório, situação,
+    código de saída e duração; log Pino `[opex] comando no host`.
+
 ## Regras de execução
 
 - **Confirmação**: a ferramenta não executa; grava uma ação pendente (`opex_pending_actions`, entrada
@@ -246,7 +274,8 @@ token alcance. Só no app do dono (o catálogo do portal não tem o grupo).
 - **Consumo** em `ai_consumption_logs`, origens `opex-agent`/`opex-title` (dono) e
   `opex-client-agent`/`opex-client-title` (portal).
 - **Auditoria** na entidade `AgenteOpex` (criar/renomear/arquivar/excluir sessão; confirmar/cancelar
-  ação). As mutações das ferramentas auditam pelos próprios serviços, como usuário local.
+  ação), `RepositorioGithub` (escritas do agente nos repositórios) e `TerminalHost` (comandos no
+  host). As mutações das ferramentas auditam pelos próprios serviços, como usuário local.
 - **Tempo real**: `opex-session-updated` / `opex-session-deleted` em `private-app` (dono) ou em
   `private-opex-{clientId}-{userId}` (portal), com payload `{ id }`. A resposta ao vivo chega por
   NDJSON em `GET /api/opex/sessions/[id]/stream`.
@@ -297,9 +326,9 @@ auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
 
 - Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
-  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots).
+  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`; `server/tools/` (um arquivo por grupo +
+  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`; `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
@@ -322,5 +351,5 @@ ativado, ferramentas desligadas, auditoria/eventos, revalidação), `client-tool
 portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (sessões privadas,
 404 entre escopos e canal do Pusher), `tool-settings` (confirmação por ferramenta, árvore e
 migração da configuração antiga) e `opex-tools-card` (árvore, switch "Pede confirmação" e
-desligadas) e `github` (snapshot, busca, ref de consulta e escritas). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

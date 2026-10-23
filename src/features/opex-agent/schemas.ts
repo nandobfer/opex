@@ -6,10 +6,14 @@ import {
     OPEX_FILE_SIZE_MB_MAX,
     OPEX_FILES_PER_MESSAGE_DEFAULT,
     OPEX_FILES_PER_MESSAGE_MAX,
+    OPEX_HOST_DIRECTORIES_MAX,
+    OPEX_HOST_MAX_TIMEOUT_DEFAULT_SECONDS,
+    OPEX_HOST_MAX_TIMEOUT_LIMIT_SECONDS,
     OPEX_MESSAGE_MAX,
     OPEX_PROVIDER_IDS,
     OPEX_TITLE_MAX,
 } from "./constants"
+import { isAbsoluteHostPath } from "./host-terminal"
 
 const providerFields = {
     provider: z.enum(OPEX_PROVIDER_IDS).nullable(),
@@ -41,6 +45,26 @@ export const opexFilesSettingsSchema = z.object({
 })
 export type OpexFilesSettings = z.infer<typeof opexFilesSettingsSchema>
 
+/** Terminal do host: diretórios permitidos (vazio = livre) e tempo máximo de um comando. */
+export const opexHostSettingsSchema = z.object({
+    allowedDirectories: z
+        .array(
+            z
+                .string()
+                .trim()
+                .min(1, "Informe o diretório")
+                .max(500, "Caminho muito longo")
+                .refine(isAbsoluteHostPath, "Use um caminho absoluto (começa com /)"),
+        )
+        .max(OPEX_HOST_DIRECTORIES_MAX, `Até ${OPEX_HOST_DIRECTORIES_MAX} diretórios`),
+    maxTimeoutSeconds: z
+        .number({ error: "Informe um número" })
+        .int("Use um número inteiro")
+        .min(5, "Mínimo 5 s")
+        .max(OPEX_HOST_MAX_TIMEOUT_LIMIT_SECONDS, `Máximo ${OPEX_HOST_MAX_TIMEOUT_LIMIT_SECONDS} s`),
+})
+export type OpexHostSettings = z.infer<typeof opexHostSettingsSchema>
+
 /** Configuração do Agente Opex — mesmo schema na tela e na API. */
 export const opexAgentSettingsSchema = z
     .object({
@@ -54,6 +78,7 @@ export const opexAgentSettingsSchema = z
         /** Ajuste por ferramenta (pede ou não confirmação); ausente = padrão pelo risco (só destrutivas). */
         confirmationOverrides: z.record(z.string().trim().min(1).max(64), z.boolean()),
         files: opexFilesSettingsSchema,
+        host: opexHostSettingsSchema,
     })
     .superRefine((value, ctx) => {
         if (value.title.provider && !value.title.model) ctx.addIssue({ code: "custom", path: ["title", "model"], message: "Selecione o modelo" })
@@ -75,6 +100,7 @@ export const DEFAULT_OPEX_AGENT_SETTINGS: OpexAgentSettings = {
     disabledTools: [],
     confirmationOverrides: {},
     files: { maxPerMessage: OPEX_FILES_PER_MESSAGE_DEFAULT, maxSizeMb: OPEX_FILE_SIZE_MB_DEFAULT },
+    host: { allowedDirectories: [], maxTimeoutSeconds: OPEX_HOST_MAX_TIMEOUT_DEFAULT_SECONDS },
 }
 
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Id inválido")

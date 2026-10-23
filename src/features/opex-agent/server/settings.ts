@@ -4,6 +4,7 @@ import type { AiFeatureAvailability } from "@/features/ai/types"
 import { getAiProvider } from "@/lib/ai/providers"
 import { DomainError } from "@/lib/api/route"
 import { OPEX_FEATURE } from "../constants"
+import { normalizeHostDirectories } from "../host-terminal"
 import { migrateLegacyToolSettings, type OpexToolMetaDto } from "../tool-tree"
 import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema, type OpexAgentSettings, type OpexMainModel, type OpexTitleModel } from "../schemas"
 import type { OpexAgentSettingsDto } from "../types"
@@ -31,6 +32,7 @@ export function withDefaults(saved: unknown, metas: readonly OpexToolMetaDto[] =
         ...DEFAULT_OPEX_AGENT_SETTINGS,
         ...value,
         files: { ...DEFAULT_OPEX_AGENT_SETTINGS.files, ...(value.files ?? {}) },
+        host: { ...DEFAULT_OPEX_AGENT_SETTINGS.host, ...(value.host ?? {}) },
     }
 }
 
@@ -68,6 +70,7 @@ export function normalizeOpexSettings(input: OpexAgentSettings, metas: readonly 
         ...input,
         main: normalizeMain(input.main),
         title: normalizeTitle(input.title),
+        host: { ...input.host, allowedDirectories: normalizeHostDirectories(input.host.allowedDirectories) },
         // Sempre ligadas nunca ficam desligadas; sem repetição.
         disabledTools: [...new Set(input.disabledTools)].filter((name) => !known.get(name)?.alwaysOn),
     }

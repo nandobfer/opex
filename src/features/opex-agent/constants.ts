@@ -36,6 +36,7 @@ export const OPEX_TOOL_GROUPS = [
     "services",
     "finance",
     "clients",
+    "host",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
@@ -57,6 +58,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     services: { label: "Serviços", description: "Lançamentos manuais de faturamento: listar, ler, criar, editar e arquivar" },
     finance: { label: "Financeiro", description: "Faturamento por cliente e período (somente leitura)" },
     clients: { label: "Clientes", description: "Clientes do portal, usuários do portal e prévias de orçamento" },
+    host: { label: "Terminal do host", description: "Executar comandos na máquina do OpenCode (fora do container do app)" },
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */
@@ -64,6 +66,17 @@ export const OPEX_SESSION_UPDATED_EVENT = "opex-session-updated"
 export const OPEX_SESSION_DELETED_EVENT = "opex-session-deleted"
 
 export const OPEX_AUDIT_ENTITY = "AgenteOpex"
+/**
+ * Terminal do host: comandos rodam na máquina do OpenCode pelo shell dele. Diretórios permitidos e
+ * tempo máximo são configuráveis; saída devolvida ao modelo cortada no fim.
+ */
+export const OPEX_HOST_DIRECTORIES_MAX = 30
+export const OPEX_HOST_TIMEOUT_DEFAULT_SECONDS = 60
+export const OPEX_HOST_MAX_TIMEOUT_DEFAULT_SECONDS = 300
+export const OPEX_HOST_MAX_TIMEOUT_LIMIT_SECONDS = 1800
+export const OPEX_HOST_COMMAND_MAX = 8000
+export const OPEX_HOST_OUTPUT_MAX = 20_000
+export const OPEX_HOST_AUDIT_ENTITY = "TerminalHost"
 /** Auditoria das escritas do agente nos repositórios do GitHub. */
 export const OPEX_GITHUB_AUDIT_ENTITY = "RepositorioGithub"
 /** Entidade da auditoria da configuração do agente por cliente (o id é o do cliente). */
