@@ -80,6 +80,12 @@ describe('filterCentralTasks', () => {
     expect(matchesDevCenterState('no_workbench', queued)).toBe(false)
   })
 
+  it('Agente Adversário: revisão e bloqueio contam como Implementando; o bloqueio também requer interação', () => {
+    const wb = (stage: 'adversarial_review' | 'adversarial_blocked'): TaskWorkbenchState => ({ workbench: { stage, runState: 'idle', pendingForms: 0, pendingPermissions: 0 } })
+    for (const stage of ['adversarial_review', 'adversarial_blocked'] as const) expect(matchesDevCenterState('implementing', wb(stage))).toBe(true)
+    expect(matchesDevCenterState('needs_interaction', wb('adversarial_blocked'))).toBe(true)
+  })
+
   it('só tarefas do projeto, na ordem do quadro', () => {
     expect(filterCentralTasks(tasks, 'p1', DEFAULT_DEV_CENTER_FILTERS).map((item) => item.id)).toEqual(['b', 'a', 'c'])
   })

@@ -1,4 +1,4 @@
-import type { OpencodeFormDto, OpencodePermissionDto, PrWatchOutcome, PrWatchStep, WorkbenchStreamLine } from "./types"
+import type { AdversarialVerdictFinding, OpencodeFormDto, OpencodePermissionDto, PrWatchOutcome, PrWatchStep, WorkbenchStreamLine } from "./types"
 
 /** Saída da mesa como a tela desenha (módulo puro: o hook só aplica as linhas do stream). */
 
@@ -12,6 +12,8 @@ export type TimelineItem =
     | { kind: "form"; key: string; form: OpencodeFormDto; closed: boolean }
     /** Verificação do PR: `outcome: null` enquanto os passos chegam ao vivo. */
     | { kind: "pr-watch"; key: string; checkId: string; prNumber: number; startedAt: string; steps: PrWatchStep[]; outcome: PrWatchOutcome | null; summary: string | null; nextCheckAt: string | null }
+    /** Veredito do Agente Adversário. */
+    | { kind: "adversarial-verdict"; key: string; reviewId: string; round: number; level: string; summary: string; outcome: string; findings: AdversarialVerdictFinding[] }
 
 export interface TimelineState {
     items: TimelineItem[]
@@ -125,6 +127,8 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
             const index = findLastIndex(kept, (candidate) => candidate.kind === "pr-watch" && candidate.checkId === line.checkId)
             return { ...state, items: index >= 0 ? replaceLast(kept, index, item) : [...kept, item] }
         }
+        case "adversarial-verdict":
+            return { ...state, items: [...items, { kind: "adversarial-verdict", key: `adv-${line.reviewId}`, reviewId: line.reviewId, round: line.round, level: line.level, summary: line.summary, outcome: line.outcome, findings: line.findings }] }
     }
 }
 

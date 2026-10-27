@@ -1,13 +1,14 @@
 /**
  * Listas de memórias dos agentes de IA do Opex (módulo PURO: tela e servidor). Copiado do catálogo de
  * agentes do Ciliar: uma lista nova entra aqui e ganha, sem código novo, a API, as ferramentas do
- * Agente Opex (`agent`) e o card na aba Memórias.
+ * Agente Opex (`agent`) e o card na aba de configuração do agente (`tab`).
  *
  * O Agente Opex tem três listas: as **globais** valem no dono e no portal; as **do dono**, só nos
- * turnos do dono; as **do cliente**, só nos turnos do portal (todos os clientes).
+ * turnos do dono; as **do cliente**, só nos turnos do portal (todos os clientes). O **Agente
+ * Adversário** tem uma lista própria, que entra nas instruções de toda revisão da mesa.
  */
 
-export const AI_AGENT_IDS = ["opex-global", "opex-owner", "opex-client"] as const
+export const AI_AGENT_IDS = ["opex-global", "opex-owner", "opex-client", "adversarial"] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
 export const AI_AGENTS: Record<AiAgentId, { label: string; title: string; description: string; tab: string }> = {
@@ -29,6 +30,17 @@ export const AI_AGENTS: Record<AiAgentId, { label: string; title: string; descri
         description: "Instruções permanentes que o Agente Opex segue só nas conversas do portal do cliente (todos os clientes).",
         tab: "agente-opex",
     },
+    adversarial: {
+        label: "Agente Adversário",
+        title: "Memórias do Agente Adversário",
+        description: "Instruções permanentes que o Agente Adversário segue em toda revisão da mesa (ex.: \"neste repositório, X é intencional\").",
+        tab: "agente-adversario",
+    },
+}
+
+/** Listas exibidas numa aba de `/integracoes/ia` (cada agente mostra só as suas). */
+export function aiAgentsOfTab(tab: string): AiAgentId[] {
+    return AI_AGENT_IDS.filter((id) => AI_AGENTS[id].tab === tab)
 }
 
 export function isAiAgentId(value: string): value is AiAgentId {

@@ -16,6 +16,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useSetWorkbenchPreview: () => ({ mutate: mocks.setPreview, isPending: false }),
   useSendWorkbenchLiveMessage: () => ({ mutate: mocks.sendLive, isPending: false }),
 }))
+vi.mock('@/features/adversarial-agent/components/workbench/AdversarialActions', () => ({ AdversarialActions: () => <p>decisões do adversário</p> }))
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'
@@ -49,6 +50,7 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
   usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 },
   lastStage: null,
   liveChat: false,
+  adversarial: false,
   turnStartedAt: null,
   stoppedByUser: false,
   reconnect: null,
@@ -77,6 +79,18 @@ describe('ActionBar', () => {
     expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
     rerender(<ActionBar workbench={workbench({ liveChat: true })} />)
     expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+  })
+
+  it('Agente Adversário: a revisão não recebe mensagens; o bloqueio mostra as decisões do adversário', () => {
+    const { rerender } = render(<ActionBar workbench={workbench({ stage: 'adversarial_review', runState: 'running', liveChat: true })} />)
+    expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+    expect(screen.queryByText('decisões do adversário')).toBeNull()
+    rerender(<ActionBar workbench={workbench({ stage: 'adversarial_blocked', runState: 'idle' })} />)
+    expect(screen.getByText('decisões do adversário')).toBeTruthy()
+    rerender(<ActionBar workbench={workbench({ stage: 'adversarial_review', runState: 'failed', error: 'tempo esgotado' })} />)
+    expect(screen.getByText('decisões do adversário')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Reconectar/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeTruthy()
   })
 
   it('chat durante a execução: citar uma linha com o agente trabalhando preenche o campo da mensagem', () => {

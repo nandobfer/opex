@@ -112,6 +112,13 @@ describe('workbenchActions', () => {
     expect(workbenchActions('plan_review', 'failed', false, true)).toEqual([])
   })
 
+  it('Agente Adversário: bloqueio oferece corrigir, revisar de novo e seguir; revisão que falhou não reconecta', () => {
+    expect(workbenchActions('adversarial_blocked', 'idle', false)).toEqual(['adversarial-fix', 'adversarial-rerun', 'adversarial-skip'])
+    expect(workbenchActions('adversarial_review', 'running', false)).toEqual(['interrupt'])
+    expect(workbenchActions('adversarial_review', 'failed', false, true)).toEqual(['retry', 'adversarial-skip', 'request-correction'])
+    expect(workbenchUserWaitReason({ stage: 'adversarial_blocked', runState: 'idle', pendingPermissions: 0, pendingForms: 0 })).toBe('O agente adversário bloqueou: decida como seguir')
+  })
+
   it('resolução de conflito é uma etapa de execução: parar, reconectar, tentar de novo e voltar ao plano', () => {
     expect(workbenchActions('resolving_conflicts', 'running', false)).toEqual(['interrupt'])
     expect(workbenchActions('resolving_conflicts', 'failed', false)).toEqual(['reconnect', 'retry', 'request-correction'])

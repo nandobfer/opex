@@ -96,8 +96,9 @@ efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila 
 - **Sem vaga** → a tarefa **aguarda na fila** e a mesa é criada quando uma mesa conclui (ou é
   excluída). A ordem é a **dos cards no kanban** (`order`); a posição (1-based) aparece na lista de
   tarefas e na mesa como "Na fila · #N".
-- O **limite** (`maxConcurrent`, 1–10) conta o trabalho ativo: **Plano pronto**, **Prévia pronta**,
-  **PR aberto** e **Concluída** não ocupam vaga. Uma mesa já ocupando vaga pode encadear os turnos.
+- O **limite** (`maxConcurrent`, 1–10) conta o trabalho ativo: **Plano pronto**, **Revisão bloqueou**
+  (Agente Adversário), **Prévia pronta**, **PR aberto** e **Concluída** não ocupam vaga (a **Revisão
+  adversária** ocupa). Uma mesa já ocupando vaga pode encadear os turnos.
   Retomar uma etapa isenta com a central cheia grava `pendingTurn` (FIFO), mostra posição e oferece
   **Cancelar espera**. Retomadas têm prioridade sobre novas tarefas, inclusive sem coluna de fila.
   Feedback de PR, resolução de conflito, merge e limpeza pós-merge respeitam a espera. Reabrir só
@@ -316,6 +317,13 @@ done → Reabrir mesa (texto ao planejador) → planning
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
   comportamento das informações informadas na abertura da mesa.
+- **Revisão adversária (OPE-87)**: com o **Agente Adversário** ativo e a central no escopo, ao fim de
+  toda implementação (`afterImplementation`) a mesa passa pela etapa `adversarial_review` (sessão nova
+  do OpenCode, só leitura, contexto limpo) antes da prévia ou do PR; bloqueios voltam ao implementador
+  (correção automática) ou param em `adversarial_blocked` (**Revisão bloqueou**: Corrigir, Revisar de
+  novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
+  chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
+  adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
   **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
   **desligada = PR automático**. A escolha salva na hora na tarefa
@@ -642,7 +650,8 @@ done → Reabrir mesa (texto ao planejador) → planning
   | Etapa da mesa | Seletor troca o modelo de |
   |---|---|
   | Planejando, Plano pronto, Mudanças pedidas no PR | Plano (papel Planejamento) |
-  | Implementando | Implementação |
+  | Implementando, Revisão bloqueou | Implementação |
+  | Revisão adversária | seletor oculto (modelo na aba Agente Adversário) |
   | Na fila do build, Subindo a prévia, Prévia pronta | Prévia (papel Build e ambiente) |
   | Abrindo o PR, PR aberto, Resolvendo conflitos, Corrigindo o CI, Mergeando o PR, Excluindo a branch remota | Pull Request |
   | Concluindo, Concluída | seletor oculto |
@@ -678,6 +687,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   continuam valendo (com "Sem mesa" marcado a lista fica vazia). Filtros salvos antes da chave
   continuam válidos, com ela desligada (`z.boolean().default(false)`, sem trocar a chave `v1`).
   Estados combinam por OU: interação, falha/interrupção, agente trabalhando, sem mesa, fila e etapas.
+  "Implementando" inclui Revisão adversária e Revisão bloqueou (esta também em "Requer interação").
   Filtros combinam entre si por E. Persistência aditiva compatível com `opex:dev-center-filters:v1`;
   registros antigos sem estados continuam válidos. `allColumns` distingue ausência de seleção
   explícita (nenhuma coluna) do filtro legado vazio (todas).

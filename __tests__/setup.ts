@@ -15,6 +15,19 @@ vi.mock('@/lib/integrations/store', () => ({
   invalidateStoredIntegrations: vi.fn(),
 }))
 
+// Agente Adversário: o fluxo da mesa consulta a configuração (banco) ao fim de toda implementação e ao
+// montar a mesa. Nos testes ele fica de fora por padrão; os testes do adversário redefinem este mock.
+vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
+  adversaryApplies: vi.fn(async () => false),
+  runAdversaryRound: vi.fn(),
+  prepareUserFix: vi.fn(),
+  recordRerun: vi.fn(),
+  recordSkip: vi.fn(),
+  restoreAwaiting: vi.fn(),
+  failOrphanReviews: vi.fn(async () => undefined),
+  removeWorkbenchReviewSessions: vi.fn(async () => undefined),
+}))
+
 // Silencia console durante os testes — use DEBUG=1 para ver logs
 if (!process.env.DEBUG) {
   vi.spyOn(console, 'error').mockImplementation(() => {})

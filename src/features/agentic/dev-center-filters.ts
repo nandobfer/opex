@@ -15,7 +15,7 @@ export const DEV_CENTER_STATE_LABELS: Record<DevCenterState, string> = {
     implementing: "Implementando", preview: "Prévia pronta (aprovar)", opening_pr: "Abrindo o PR", pr_open: "PR aberto", github_actions: "Ações do GitHub",
 }
 const STATE_STAGES: Partial<Record<DevCenterState, readonly WorkbenchStage[]>> = {
-    planning: ["planning"], plan_review: ["plan_review"], implementing: ["implementing", "build_queued", "building"],
+    planning: ["planning"], plan_review: ["plan_review"], implementing: ["implementing", "adversarial_review", "adversarial_blocked", "build_queued", "building"],
     preview: ["preview"], opening_pr: ["opening_pr"], pr_open: ["pr_open"],
     github_actions: ["changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"],
 }

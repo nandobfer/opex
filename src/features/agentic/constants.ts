@@ -20,6 +20,10 @@ export const WORKBENCH_STAGES = [
     "planning",
     "plan_review",
     "implementing",
+    /** Agente Adversário: revisão do agente adversário depois da implementação. */
+    "adversarial_review",
+    /** Agente Adversário: o adversário bloqueou e a mesa aguarda o usuário. */
+    "adversarial_blocked",
     "build_queued",
     "building",
     "preview",
@@ -35,16 +39,32 @@ export const WORKBENCH_STAGES = [
 ] as const
 export type WorkbenchStage = (typeof WORKBENCH_STAGES)[number]
 
-export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "building", "opening_pr", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"]
+export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "adversarial_review", "building", "opening_pr", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"]
 
 /**
  * Etapas que NÃO ocupam vaga no limite de mesas da central (`maxConcurrent`): a mesa espera o
  * usuário (plano/prévia) ou o PR. Ao sair delas para executar, a mesa aguarda vaga se o limite estiver cheio.
  */
-export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "preview", "pr_open"]
+export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "adversarial_blocked", "preview", "pr_open"]
 
 /** O que uma mesa aguardando vaga vai executar quando a vaga chegar. */
-export const PENDING_TURN_ACTIONS = ["revise-plan", "implement", "request-correction", "approve", "submit-pr-feedback", "reopen", "pr-feedback", "pr-conflict", "pr-ci-fix", "pr-auto-merge", "pr-cleanup", "generate-preview"] as const
+export const PENDING_TURN_ACTIONS = [
+    "revise-plan",
+    "implement",
+    "request-correction",
+    "approve",
+    "submit-pr-feedback",
+    "reopen",
+    "pr-feedback",
+    "pr-conflict",
+    "pr-ci-fix",
+    "pr-auto-merge",
+    "pr-cleanup",
+    "generate-preview",
+    "adversarial-fix",
+    "adversarial-skip",
+    "adversarial-rerun",
+] as const
 export type PendingTurnAction = (typeof PENDING_TURN_ACTIONS)[number]
 
 export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
@@ -60,12 +80,17 @@ export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
     "pr-auto-merge": "Mergear o PR",
     "pr-cleanup": "Limpar o ambiente após o merge",
     "generate-preview": "Gerar a prévia",
+    "adversarial-fix": "Corrigir os bloqueios do agente adversário",
+    "adversarial-skip": "Seguir sem os bloqueios do agente adversário",
+    "adversarial-rerun": "Revisar de novo (agente adversário)",
 }
 
 export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     planning: "Planejando",
     plan_review: "Plano pronto",
     implementing: "Implementando",
+    adversarial_review: "Revisão adversária",
+    adversarial_blocked: "Revisão bloqueou",
     build_queued: "Na fila do build",
     building: "Subindo a prévia",
     preview: "Prévia pronta",
@@ -115,6 +140,8 @@ export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null>
     plan_review: "planning",
     changes_requested: "planning",
     implementing: "implementation",
+    adversarial_review: null,
+    adversarial_blocked: "implementation",
     build_queued: "build",
     building: "build",
     preview: "build",
@@ -131,7 +158,7 @@ export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null>
 /** Passos exibidos no topo da mesa (várias etapas caem no mesmo passo). */
 export const WORKBENCH_STEPS = [
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },
-    { id: "implement", label: "Implementação", stages: ["implementing"] },
+    { id: "implement", label: "Implementação", stages: ["implementing", "adversarial_review", "adversarial_blocked"] },
     { id: "preview", label: "Prévia", stages: ["build_queued", "building", "preview"] },
     { id: "pr", label: "Pull Request", stages: ["opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch"] },
     { id: "done", label: "Concluída", stages: ["finishing", "done"] },

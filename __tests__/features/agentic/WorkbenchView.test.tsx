@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], refetch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], refetch: vi.fn(), rounds: 0 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
@@ -23,6 +23,11 @@ vi.mock('@/features/agentic/components/workbench/ForkView', () => ({ ForkView: (
 vi.mock('@/features/agentic/components/workbench/PendingRequests', () => ({ PendingRequests: () => null }))
 vi.mock('@/features/agentic/components/workbench/ForksDonePrompt', () => ({ ForksDonePrompt: () => null }))
 vi.mock('@/features/agentic/components/workbench/ActionBar', () => ({ ActionBar: () => null }))
+vi.mock('@/features/adversarial-agent/components/workbench/AdversarialRoundsView', () => ({
+  useAdversarialTab: () => ({ visible: mocks.rounds > 0, count: mocks.rounds }),
+  AdversarialTabNavProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  AdversarialRoundsView: () => <p>rodadas do adversário</p>,
+}))
 
 import { WorkbenchView } from '@/features/agentic/components/workbench/WorkbenchView'
 import type { CentralDto, WorkbenchDto } from '@/features/agentic/types'
@@ -46,6 +51,7 @@ const tab = (name: string) => screen.getByRole('tab', { name })
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.forks = []
+  mocks.rounds = 0
   mocks.useTaskDetail.mockReturnValue(taskQuery())
 })
 
@@ -97,5 +103,13 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
     expect(screen.getByText('plano')).toBeTruthy()
     fireEvent.click(tab('Forks (1)'))
     expect(screen.getByText('forks')).toBeTruthy()
+  })
+
+  it('Agente Adversário: a aba "Adversário (N)" aparece com rodadas, depois do plano', () => {
+    mocks.rounds = 2
+    render(<WorkbenchView workbench={workbench()} central={central} />)
+    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano', 'Adversário (2)'])
+    fireEvent.click(tab('Adversário (2)'))
+    expect(screen.getByText('rodadas do adversário')).toBeTruthy()
   })
 })

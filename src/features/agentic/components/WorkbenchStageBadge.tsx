@@ -10,6 +10,8 @@ const STAGE_TONE: Record<WorkbenchStage, ToneName> = {
     planning: "primary",
     plan_review: "sky",
     implementing: "primary",
+    adversarial_review: "primary",
+    adversarial_blocked: "amber",
     build_queued: "sky",
     building: "primary",
     preview: "sky",

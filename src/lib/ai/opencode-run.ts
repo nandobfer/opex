@@ -42,6 +42,8 @@ export interface TurnRequest {
     startedAt?: number
     /** Contexto do painel de consumo: origem (ex.: `agentic`, `refinement`) e referência. */
     consumption?: { origin: string; subject?: string | null }
+    /** Arquivos anexados à mensagem (`uri` pode ser `data:<mime>;base64,…`), enviados junto do texto. */
+    files?: readonly { uri: string; name: string }[]
 }
 
 /** Evento neutro de um turno; quem publica decide o canal (barramento da mesa, etc.). */
@@ -439,7 +441,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         if (request.signal.aborted) finish({ outcome: "interrupted", message: "Interrompido antes de começar" })
         else if (!attach) {
             try {
-                await client.session.prompt({ sessionID: sessionId, text: request.text })
+                const files = request.files?.length ? { files: request.files.map((file) => ({ uri: file.uri, name: file.name })) } : {}
+                await client.session.prompt({ sessionID: sessionId, text: request.text, ...files })
             } catch (error) {
                 finish({ outcome: "failed", message: `O OpenCode recusou a mensagem: ${message(error)}`, failure: "model" })
             }

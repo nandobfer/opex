@@ -59,6 +59,12 @@ describe('applyTimelineLine', () => {
     expect(state.items[0]).toMatchObject({ kind: 'form', form: { id: 'f1', title: 'Pergunta (relida)' }, closed: false })
     expect(state.items[1]).toMatchObject({ kind: 'permission', permission: { id: 'p1', resources: ['x'] }, decision: null })
   })
+
+  it('Agente Adversário: o veredito vira um item próprio da saída', () => {
+    const findings = [{ id: 'F1', severity: 'high' as const, title: 'Erro', file: 'a.ts', line: 1, blocking: true, demotedReason: null }]
+    const state = run([{ type: 'reset' }, { type: 'adversarial-verdict', reviewId: 'r1', round: 1, level: 'Equilibrado', summary: 'Um bug', outcome: 'Bloqueou', findings, seq: 1, ts }])
+    expect(state.items).toEqual([{ kind: 'adversarial-verdict', key: 'adv-r1', reviewId: 'r1', round: 1, level: 'Equilibrado', summary: 'Um bug', outcome: 'Bloqueou', findings }])
+  })
 })
 
 describe('splitNdjson', () => {

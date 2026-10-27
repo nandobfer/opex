@@ -72,11 +72,7 @@ export async function agentMemoryTexts(agentIds: readonly AiAgentId[]): Promise<
     )
 }
 
-/** Seção das memórias para as instruções de sistema (vazia sem memórias). */
-export function memoriesSection(texts: readonly string[]): string {
-    if (!texts.length) return ""
-    return ["", "## Memórias e instruções permanentes", "Siga sempre estas memórias, cadastradas pelo dono do app:", ...texts.map((text) => `- ${text.replace(/\n+/g, " ")}`)].join("\n")
-}
+export { memoriesSection } from "../memories-prompt"
 
 function parseText(texto: string): string {
     const parsed = memoryInputSchema.safeParse({ texto })

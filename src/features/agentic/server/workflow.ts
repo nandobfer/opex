@@ -89,7 +89,12 @@ async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId
 async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     const id = String(doc._id)
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
-    const error = "A execução foi perdida neste app (o app reiniciou durante a etapa). Tente novamente ou reconecte se o agente ainda estiver rodando."
+    const adversarial = asStage(doc.stage) === "adversarial_review"
+    const error = adversarial
+        ? "A revisão adversária foi perdida neste app (o app reiniciou durante a rodada). Tente novamente ou siga mesmo assim."
+        : "A execução foi perdida neste app (o app reiniciou durante a etapa). Tente novamente ou reconecte se o agente ainda estiver rodando."
+    // A rodada do adversário que estava "revisando" vira falha (o "Tentar novamente" repete a mesma rodada).
+    if (adversarial) await (await adversaryModule()).failOrphanReviews(id, error).catch(() => undefined)
     await AgenticWorkbench.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", error, pendingPermissions: [], pendingForms: [] } })
     await syncWorkbenchTimer(String(doc._id))
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
@@ -97,14 +102,14 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId))
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId))
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -191,6 +196,10 @@ function pumpQueue(centralId: string): void {
 
 /** Forks da conversa (import dinâmico: `forks.ts` usa as ações deste módulo para integrar). */
 const forksModule = () => import("./forks")
+
+/** Agente Adversário (import dinâmico: só carrega quando a mesa chega ao fim da implementação; uma vez por processo). */
+let adversaryImport: Promise<typeof import("@/features/adversarial-agent/server/workflow-hook")> | null = null
+const adversaryModule = () => (adversaryImport ??= import("@/features/adversarial-agent/server/workflow-hook"))
 
 // ---------------------------------------------------------------------------
 // Espera por vaga (retomadas de mesas que não ocupam vaga)
@@ -362,6 +371,50 @@ function autoPrTurn(loaded: Loaded): TurnPlan {
 }
 
 /**
+ * Fim da implementação (ou da revisão adversária aprovada): fluxo PR automático encadeia a abertura
+ * do PR na mesma sessão; prévia no GitHub encadeia o build remoto (sem fila local); senão a mesa entra
+ * na fila global do build (a porta é reservada na vez dela). Relê o fluxo: a chave "Gerar prévia" pode
+ * ter sido trocada durante a etapa.
+ */
+async function afterImplementation(loaded: Loaded): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const notice = (message: string) => publishWorkbenchEvent(id, { type: "notice", level: "info", message })
+    if (await skipsPreview(id)) {
+        notice("Geração de prévia desligada: pulando a prévia e publicando no Pull Request.")
+        return autoPrTurn(loaded)
+    }
+    if (config.environment.previewMethod === "github") {
+        notice("Implementação concluída. Iniciando testes e build no GitHub, sem fila local.")
+        return prepareBuildTurn(loaded, "github")
+    }
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: { method: "local" } } })
+    await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
+    notice("Implementação concluída. Aguardando a vez do build — um build por vez.")
+    return null
+}
+
+/**
+ * Gera a prévia de uma mesa parada (sem ocupar vaga): entra no build agora ou, com a central no
+ * limite (ou retomadas esperando antes), aguarda vaga com "Gerar a prévia". `true` = aguardando.
+ */
+async function enterBuildQueueOrWait(loaded: Loaded): Promise<boolean> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    await assertAgenticReady(config)
+    return runInCentral(doc.centralId, async () => {
+        const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
+        if (!othersWaiting && occupied < config.maxConcurrent) {
+            await enterBuildQueue(loaded)
+            return false
+        }
+        const pendingTurn: IPendingTurn = { action: "generate-preview", stage: "build_queued", text: "", userText: null, feedback: null, extraSet: null, reopen: false, fromStage: asStage(doc.stage), queuedAt: new Date() }
+        await update(doc, { pendingTurn })
+        return true
+    })
+}
+
+/**
  * Gera a prévia do código atual: no modo local, a mesa entra na fila global do build; no modo GitHub,
  * o build remoto começa na hora (sem fila local).
  */
@@ -425,17 +478,7 @@ export async function setWorkbenchPreview(id: string, input: WorkbenchPreviewInp
     }
 
     if (stage === "pr_open" && idle && !doc.pendingTurn) {
-        await assertAgenticReady(config)
-        const waiting = await runInCentral(doc.centralId, async () => {
-            const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
-            if (!othersWaiting && occupied < config.maxConcurrent) {
-                await enterBuildQueue(current)
-                return false
-            }
-            const pendingTurn: IPendingTurn = { action: "generate-preview", stage: "build_queued", text: "", userText: null, feedback: null, extraSet: null, reopen: false, fromStage: stage, queuedAt: new Date() }
-            await update(doc, { pendingTurn })
-            return true
-        })
+        const waiting = await enterBuildQueueOrWait(current)
         if (waiting) {
             const position = await slotQueuePosition(id)
             notice(`Geração de prévia ligada. Limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central: "Gerar a prévia" aguarda vaga${position ? ` (posição #${position})` : ""} e começa sozinho quando liberar.`)
@@ -502,8 +545,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
         .finally(() => {
             clearWorkbenchActive(id, controller)
-            // Terminou um build (liberou a vaga) ou uma implementação (entrou na fila): avalia a fila do build.
-            if (turn.stage === "building" || turn.stage === "implementing") pumpBuildQueue()
+            // Terminou um build (liberou a vaga) ou uma implementação/revisão adversária (entrou na fila): avalia a fila do build.
+            if (turn.stage === "building" || turn.stage === "implementing" || turn.stage === "adversarial_review") pumpBuildQueue()
         })
 }
 
@@ -515,6 +558,21 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
         if (turn !== first) await update(loaded.doc, { stage: turn.stage, runState: "running", error: null, lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, heartbeatAt: new Date() })
         let next: TurnPlan | null = null
+        // Agente Adversário: a revisão roda numa sessão própria (contexto limpo), fora da sessão da mesa.
+        if (turn.stage === "adversarial_review") {
+            try {
+                next = await adversarialTurn(loaded, turn, controller)
+            } catch (error) {
+                log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
+                await prepareHub(id)
+                publishWorkbenchEvent(id, { type: "notice", level: "error", message: errorText(error) })
+                await flushWorkbenchEvents(id)
+                await update(loaded.doc, { runState: "failed", error: errorText(error), pendingPermissions: [], pendingForms: [] })
+                return
+            }
+            turn = controller.signal.aborted ? null : next
+            continue
+        }
         try {
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
@@ -647,6 +705,62 @@ async function ensureSession(client: OpencodeClient, { doc, config }: Loaded): P
     return session.id
 }
 
+/**
+ * Agente Adversário: uma rodada de revisão (sessão nova, só leitura) e o que vem depois — seguir para
+ * a prévia/PR, corrigir automaticamente (turno de implementação), aguardar o usuário
+ * (`adversarial_blocked`) ou parar com a falha (Tentar novamente / Seguir mesmo assim).
+ */
+async function adversarialTurn(loaded: Loaded, turn: TurnPlan, controller: AbortController): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const ctx = contextOf(loaded)
+    const log = centralLogger(doc.centralId, doc.taskCode)
+    const hooks = turnHooks(doc)
+    const { runAdversaryRound } = await adversaryModule()
+    log.step(`${WORKBENCH_STAGE_LABELS.adversarial_review}: turno iniciado`, { workbenchId: id })
+    const outcome = await runAdversaryRound({
+        workbenchId: id,
+        centralId: doc.centralId,
+        taskId: doc.taskId,
+        taskCode: doc.taskCode,
+        taskTitle: doc.taskTitle,
+        worktreePath: ctx.worktreePath,
+        branch: ctx.branch,
+        baseBranch: config.git.baseBranch,
+        plans: (doc.plans ?? []).map((plan) => ({ version: plan.version, text: plan.text, feedback: plan.feedback ?? null })),
+        centralInstructions: config.instructions.implementation,
+        implementationText: turn.text,
+        signal: controller.signal,
+        onStep: hooks.onStep,
+        heartbeat: hooks.heartbeat,
+    })
+    await flushWorkbenchEvents(id)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    log[outcome.kind === "failed" ? "warn" : "info"](`${WORKBENCH_STAGE_LABELS.adversarial_review}: ${outcome.kind}`, { workbenchId: id, message: outcome.message })
+    const fresh = await loadAll(id)
+    // Exclusão pedida durante a revisão: não avança — a limpeza da exclusão assume daqui.
+    if (fresh.doc.deletionRequestedAt) return null
+    switch (outcome.kind) {
+        case "proceed":
+            notice(outcome.level, outcome.message)
+            return afterImplementation(fresh)
+        case "fix":
+            notice("warn", outcome.message)
+            return { stage: "implementing", text: outcome.text }
+        case "blocked":
+            notice("warn", outcome.message)
+            await update(doc, { stage: "adversarial_blocked", runState: "idle", error: null })
+            // Aguardando o usuário não ocupa vaga: a próxima mesa da central pode executar.
+            pumpQueue(doc.centralId)
+            return null
+        case "failed":
+        case "interrupted":
+            notice(outcome.kind === "failed" ? "error" : "warn", outcome.message)
+            await update(doc, { runState: outcome.kind, error: outcome.message })
+            return null
+    }
+}
+
 /** Resultado de um turno bem-sucedido → próxima etapa (ou o próximo turno encadeado). */
 async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: WorkbenchStage, result: TurnResult): Promise<TurnPlan | null> {
     const { doc, config } = loaded
@@ -672,21 +786,13 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            // "Gerar prévia" desligada (fluxo PR automático): pula a prévia e encadeia a abertura do PR na
-            // mesma sessão. Relê o fluxo: a chave pode ter sido trocada durante a implementação.
-            if (await skipsPreview(id)) {
-                notice("info", "Geração de prévia desligada: pulando a prévia e publicando no Pull Request.")
-                return autoPrTurn(loaded)
+            // Agente Adversário: revisão com contexto limpo antes da prévia/PR (a resposta do
+            // implementador segue no turno: traz as contestações de uma correção).
+            if (await (await adversaryModule()).adversaryApplies(doc.centralId)) {
+                notice("info", "Implementação concluída. O agente adversário vai revisar o código antes de seguir.")
+                return { stage: "adversarial_review", text: result.text }
             }
-            // Entra na fila global do build (um build por vez); a porta é reservada quando a vez chega.
-            if (config.environment.previewMethod === "github") {
-                notice("info", "Implementação concluída. Iniciando testes e build no GitHub, sem fila local.")
-                return prepareBuildTurn(loaded, "github")
-            }
-            await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: { method: "local" } } })
-            await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
-            notice("info", "Implementação concluída. Aguardando a vez do build — um build por vez.")
-            return null
+            return afterImplementation(loaded)
         }
         case "building": {
             await assertRemotePreview(client, doc, config.sessionDirectory)
@@ -1029,6 +1135,65 @@ export async function approve(id: string): Promise<WorkbenchDto> {
     return getWorkbench(id)
 }
 
+// ---------------------------------------------------------------------------
+// Agente Adversário: decisões do usuário depois de um bloqueio (ou de uma falha)
+// ---------------------------------------------------------------------------
+
+/** "Corrigir": o implementador corrige os achados bloqueantes que ficaram marcados (com a orientação opcional). */
+export async function adversarialFix(id: string, input: { text?: string; excluded?: string[] }): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    assertAction(loaded.doc, "adversarial-fix")
+    const adversary = await adversaryModule()
+    const text = await adversary.prepareUserFix(id, contextOf(loaded).worktreePath, input)
+    const note = input.text?.trim()
+    try {
+        await launchOrQueue(loaded, "adversarial-fix", { stage: "implementing", text }, { userText: note ? `Corrigir os bloqueios do agente adversário\n\n${note}` : "Corrigir os bloqueios do agente adversário" })
+    } catch (error) {
+        await adversary.restoreAwaiting(id)
+        throw error
+    }
+    return getWorkbench(id)
+}
+
+/** "Revisar de novo": nova rodada do adversário sobre o código atual. */
+export async function adversarialRerun(id: string): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    assertAction(loaded.doc, "adversarial-rerun")
+    const adversary = await adversaryModule()
+    await adversary.recordRerun(id)
+    try {
+        await launchOrQueue(loaded, "adversarial-rerun", { stage: "adversarial_review", text: "" }, { userText: "Revisar de novo (agente adversário)" })
+    } catch (error) {
+        await adversary.restoreAwaiting(id)
+        throw error
+    }
+    return getWorkbench(id)
+}
+
+/** "Seguir mesmo assim": ignora os bloqueios (ou a falha do adversário) e segue para a prévia ou o PR. */
+export async function adversarialSkip(id: string): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    const doc = await reconcile(loaded.doc)
+    assertAction(doc, "adversarial-skip")
+    const ready = { ...loaded, doc }
+    await (await adversaryModule()).recordSkip(id)
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "user", text: "Seguir mesmo assim (sem os bloqueios do agente adversário)" })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, agenteAdversario: "seguiu mesmo assim" } })
+    if (asStage(doc.stage) === "adversarial_review") {
+        // Revisão que falhou: a mesa ainda ocupa a vaga e segue direto (fila do build, build no GitHub ou PR).
+        const next = await afterImplementation(ready)
+        if (next) await launchTurn(ready, next)
+        else pumpBuildQueue()
+    } else if (await skipsPreview(id)) {
+        await launchOrQueue(ready, "adversarial-skip", autoPrTurn(ready))
+    } else if (await enterBuildQueueOrWait(ready)) {
+        const position = await slotQueuePosition(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Limite de ${loaded.config.maxConcurrent} mesa(s) ocupando vaga nesta central: "Gerar a prévia" aguarda vaga${position ? ` (posição #${position})` : ""} e começa sozinho quando liberar.` })
+    }
+    return getWorkbench(id)
+}
+
 export async function submitPrFeedback(id: string, feedback: string): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "submit-pr-feedback")
@@ -1114,6 +1279,11 @@ export async function retry(id: string): Promise<WorkbenchDto> {
         pumpBuildQueue()
         return getWorkbench(id)
     }
+    if (stage === "adversarial_review") {
+        // Agente Adversário: refaz a rodada numa sessão nova (o texto guardado é a resposta do implementador).
+        await launchTurn({ ...loaded, doc }, { stage, text: doc.lastPrompt.text }, { userText: "Tentar a revisão adversária novamente" })
+        return getWorkbench(id)
+    }
     const text = `A execução anterior desta etapa não terminou (${doc.error ?? "motivo desconhecido"}). Retome de onde parou e conclua a etapa conforme as instruções abaixo.\n\n${doc.lastPrompt.text}`
     await launchTurn({ ...loaded, doc }, { stage, text }, { userText: "Tentar novamente" })
     return getWorkbench(id)
@@ -1146,6 +1316,7 @@ export async function sendLiveMessage(id: string, text: string): Promise<Workben
     const doc = await loadWorkbench(id)
     if (doc.deletionRequestedAt) throw new DomainError(409, "A mesa está sendo excluída: não é possível enviar mensagens", "WORKBENCH_DELETING")
     if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está trabalhando nesta mesa: use as ações da etapa", "WORKBENCH_NOT_RUNNING")
+    if (asStage(doc.stage) === "adversarial_review") throw new DomainError(409, "O agente adversário revisa sem interferência: aguarde o veredito para orientar a correção", "WORKBENCH_ADVERSARIAL_REVIEW")
     await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text)
     centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)
@@ -1223,6 +1394,8 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await (await forksModule()).deleteWorkbenchForks(id)
     const current = await loadWorkbench(id)
     await removeWorkbenchSessions(current)
+    // Sessões que rodadas do Agente Adversário ainda seguram (melhor esforço; o histórico fica).
+    await (await adversaryModule()).removeWorkbenchReviewSessions(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao excluir sessões do agente adversário", { workbenchId: id, error: errorText(error) }))
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await AgenticWorkbench.deleteOne({ _id: doc._id })

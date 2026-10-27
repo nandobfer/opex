@@ -29,6 +29,7 @@ import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
 import { PreviewSwitch, previewSwitchVisible } from "./PreviewSwitch"
 import { WorkbenchModelPicker } from "./WorkbenchModelPicker"
+import { AdversarialActions } from "@/features/adversarial-agent/components/workbench/AdversarialActions"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
 
@@ -98,7 +99,8 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
     const [liveText, setLiveText] = useState("")
     const liveMessage = useSendWorkbenchLiveMessage(workbench.id)
     // Chat durante a execução: com o agente trabalhando (e a opção ligada), mensagens entram no turno atual.
-    const liveChat = workbench.liveChat && workbench.runState === "running" && !slotQueue && !workbench.deletionRequestedAt
+    // A revisão do agente adversário não recebe mensagens: ele revisa sem interferência.
+    const liveChat = workbench.liveChat && workbench.runState === "running" && !slotQueue && !workbench.deletionRequestedAt && workbench.stage !== "adversarial_review"
     const pending = mutation.isPending
     const run = (action: WorkbenchAction, body?: string) =>
         mutation.mutate(
@@ -220,6 +222,9 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                     />
                 )}
             </AnimatePresence>
+
+            {/* Agente Adversário: decisões depois de um bloqueio ou de uma revisão que falhou. */}
+            {!composer && !forking && actions.some((action) => action.startsWith("adversarial-")) && <AdversarialActions workbench={workbench} />}
 
             {!composer && !forking && (
                 <div className="flex flex-wrap items-center gap-2">

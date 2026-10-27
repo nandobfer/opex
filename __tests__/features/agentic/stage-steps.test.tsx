@@ -22,4 +22,13 @@ describe('StageSteps · fluxo da mesa', () => {
     expect(screen.getByText('Implementação')).toBeTruthy()
     expect(screen.getByText('Pull Request')).toBeTruthy()
   })
+
+  it('Agente Adversário: passo "Revisão adversária" depois da Implementação', () => {
+    const { rerender } = render(<StageSteps stage="adversarial_blocked" runState="idle" flow="preview" adversarial />)
+    const steps = screen.getAllByRole('listitem').map((item) => item.textContent)
+    expect(steps.slice(1, 3)).toEqual(['Implementação', '3Revisão adversária'])
+    expect(screen.getByText('Revisão adversária').closest('li')!.getAttribute('aria-current')).toBe('step')
+    rerender(<StageSteps stage="implementing" runState="running" flow="preview" />)
+    expect(screen.queryByText('Revisão adversária')).toBeNull()
+  })
 })

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
@@ -14,6 +14,9 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   retry: vi.fn(),
   interrupt: vi.fn(),
   cancelWait: mocks.cancelWait,
+  adversarialFix: mocks.adversarialFix,
+  adversarialSkip: mocks.adversarialSkip,
+  adversarialRerun: mocks.adversarialRerun,
 }))
 
 import { POST } from '@/app/api/agentic/workbenches/[id]/actions/[action]/route'
@@ -46,6 +49,19 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     const res = await call('reconnect')
     expect(res.status).toBe(200)
     expect(mocks.reconnect).toHaveBeenCalledWith('w1')
+  })
+
+  it('Agente Adversário: corrigir aceita texto e achados desmarcados; seguir e revisar de novo não têm corpo', async () => {
+    mocks.adversarialFix.mockResolvedValue({ id: 'w1' })
+    mocks.adversarialSkip.mockResolvedValue({ id: 'w1' })
+    mocks.adversarialRerun.mockResolvedValue({ id: 'w1' })
+    expect((await call('adversarial-fix', { text: 'F2 é intencional', excluded: ['F2'] })).status).toBe(200)
+    expect(mocks.adversarialFix).toHaveBeenCalledWith('w1', { text: 'F2 é intencional', excluded: ['F2'] })
+    expect((await call('adversarial-fix', { excluded: 'F2' })).status).toBe(400)
+    expect((await call('adversarial-skip')).status).toBe(200)
+    expect(mocks.adversarialSkip).toHaveBeenCalledWith('w1')
+    expect((await call('adversarial-rerun')).status).toBe(200)
+    expect(mocks.adversarialRerun).toHaveBeenCalledWith('w1')
   })
 
   it('cancelar a espera por vaga não tem corpo e devolve a mesa', async () => {

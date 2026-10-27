@@ -168,8 +168,9 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     repetição ao salvar; **vazio = qualquer diretório**, com aviso animado) e tempo máximo por comando
     (`maxTimeoutSeconds`, 5–1800, padrão 300). Configuração antiga sem `host` recebe o padrão.
   - **Memórias** (`OpexMemoriesSection`): três cards do Ciliar (`AgentMemoriesCard`) — **Memórias
-    globais**, **Memórias do dono** e **Memórias do cliente**; salvam sozinhos (ver
-    `aicontext/modules/ai.md`, "Memórias do Agente Opex").
+    globais**, **Memórias do dono** e **Memórias do cliente** (só as listas com `tab: "agente-opex"`,
+    `aiAgentsOfTab`; a lista do Agente Adversário fica na aba dele); salvam sozinhos (ver
+    `aicontext/modules/ai.md`, "Memórias dos agentes").
 - Configuração salva: `disabledTools` (as **desligadas**; ferramenta nova nasce ligada; Contexto
   nunca fica desligado) e `confirmationOverrides` (`{ [ferramenta]: boolean }`; ausente = padrão pelo
   risco). Nomes fora do registro dão 400 `OPEX_TOOL_NOT_FOUND`. A configuração antiga é convertida
@@ -393,7 +394,12 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   de sistema ou outro modelo. As mensagens do assistente que ficariam vazias saem do histórico.
 - **Memórias no prompt**: ao fim das instruções entra a seção "Memórias e instruções permanentes"
   (`memoriesSection`): no dono, as **globais** e as **do dono**; no portal, as **globais** e as **do
-  cliente** (todos os clientes), nessa ordem. Sem memórias, nada é acrescentado.
+  cliente** (todos os clientes), nessa ordem. Sem memórias, nada é acrescentado. A lista do Agente
+  Adversário (`adversarial`) nunca entra no prompt do Agente Opex.
+- **Ferramentas de memórias** (`tools/memories.ts`, grupo "Memórias do agente"): o enum `agent` cobre
+  todas as listas do catálogo — as três do Agente Opex **e a do Agente Adversário** (`adversarial`) —,
+  então o Agente Opex lista, lê, cria, edita e exclui também as memórias do adversário (excluir é
+  `destructive`). Sem ferramentas para as decisões do bloqueio adversário na mesa.
 - **Prompt de sistema estável**: instruções + dono do app (+ memórias). A data e a hora do turno vão como uma
   parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
   prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.
