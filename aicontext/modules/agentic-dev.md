@@ -693,11 +693,16 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
   `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`.
 - Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
-  prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
-  IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
-  **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+  prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas
+  **Descrição** e **Spec.** (as primeiras da barra: descrição e especificação técnica da tarefa em
+  Markdown, só leitura, lidas por `useTaskDetail`; vazias mostram "Sem descrição."/"Sem
+  especificação técnica." com o atalho **Abrir a tarefa**, onde o texto é editado; falha ao
+  carregar com "Tentar novamente"; componente `TaskTextView`), **Saída da IA** (aba aberta ao
+  entrar na mesa; turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam,
+  avisos), **Plano vN** (versões) e **Forks (N)** (quando houver), pedidos pendentes e barra de
+  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe (celular).
 - **Citar uma linha da saída** (`ReplyTargetProvider` no `WorkbenchView`): cada linha do texto da
-  IA e do **Plano** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
+  IA, do **Plano** e das abas **Descrição** e **Spec.** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
   campo focado por último (resposta de pergunta pendente, correção/feedback da etapa, **Informações
   adicionais**, mensagem do Abrir fork). Sem campo aberto, abre o primeiro feedback da etapa
   (`revise-plan` → `request-correction` → `submit-pr-feedback` → `reopen`) já com a citação; sem
