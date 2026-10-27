@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(),
   statusFindOne: vi.fn(),
   rescheduleJobs: vi.fn(),
+  enableHook: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/integrations/store', () => ({
@@ -38,6 +39,7 @@ vi.mock('@/lib/db/models/IntegrationStatus', () => ({
 vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
 vi.mock('@/lib/db/models/IntegrationLog', () => ({ IntegrationLog: {} }))
 vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({ rescheduleJobs: mocks.rescheduleJobs }))
+vi.mock('@/features/local-docker/server/cleanup', () => ({ onBuilderMachineEnabled: mocks.enableHook }))
 
 import { encryptSecret, isEncryptedSecret } from '@/lib/crypto/secretBox'
 import type { CronJobConfig } from '@/lib/integrations/catalog'
@@ -75,7 +77,8 @@ describe('listIntegrations', () => {
   it('lista todas as integrações do catálogo, sem flags de permissão', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(null)
     const items = await listIntegrations()
-    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3'])
+    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine'])
+    // Builder Machine aparece sempre (mesmo desativada), para poder ser ativada.
     // Provedores de IA são filhos do hub "Provedores de IA" (fora da lista principal na tela).
     expect(items.filter((item) => item.parent === 'ai').map((item) => item.id)).toEqual(['ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev'])
     expect(items.find((item) => item.id === 'ai_gemini')?.configured).toBe(false)
@@ -173,6 +176,33 @@ const job = (over: Partial<CronJobConfig> = {}): CronJobConfig => ({
   schedule: { type: 'daily', time: '17:30' },
   enabled: true,
   ...over,
+})
+
+describe('gancho de ativação (Builder Machine)', () => {
+  const stored = (active: boolean) => ({ integrationId: 'builder_machine', environment: 'interno', debugMode: false, publicValues: { active }, secretValues: {} })
+
+  it('ativar (desligada → ligada) dispara o gancho depois de gravar e auditar', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored(false))
+    await updateIntegration('builder_machine', { publicValues: { active: true } }, actor)
+    expect(mocks.updateOne).toHaveBeenCalled()
+    expect(mocks.recordAudit).toHaveBeenCalled()
+    expect(mocks.enableHook).toHaveBeenCalledWith(actor)
+  })
+
+  it('sem mudança (já ativa) ou desativando: não dispara', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored(true))
+    await updateIntegration('builder_machine', { publicValues: { active: true } }, actor)
+    await updateIntegration('builder_machine', { debugMode: true }, actor)
+    await updateIntegration('builder_machine', { publicValues: { active: false } }, actor)
+    expect(mocks.enableHook).not.toHaveBeenCalled()
+  })
+
+  it('falha no gancho não desfaz a ativação', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored(false))
+    mocks.enableHook.mockRejectedValueOnce(new Error('crons indisponível'))
+    await expect(updateIntegration('builder_machine', { publicValues: { active: true } }, actor)).resolves.toBeTruthy()
+    expect(mocks.updateOne).toHaveBeenCalled()
+  })
 })
 
 describe('jobsToReschedule', () => {

@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
+// Builder Machine desativada: o build e a limpeza seguem no servidor.
+vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
 vi.mock('@/lib/logger', () => {
   const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
   return { logger: log, loggerFor: () => log }

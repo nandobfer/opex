@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   ATTACHMENT_CLEANUP_JOB_ID,
+  BUILDER_MACHINE_CLEANUP_JOB_ID,
   OPEX_FILES_CLEANUP_JOB_ID,
   DEFAULT_CRON_JOBS,
   HEALTH_CHECK_JOB_ID,
@@ -9,6 +10,7 @@ import {
   INTEGRATIONS_BASE_PATH,
   INTEGRATION_IDS,
   TASK_TAGS_CONCLUDED_JOB_ID,
+  cronJobIntegration,
   getInDevelopmentIntegration,
   getIntegrationDef,
   hasCustomIntegrationPath,
@@ -19,11 +21,25 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
     expect(isIntegrationId('whatsapp_orchestrator')).toBe(false)
+  })
+
+  it('Builder Machine: ativada pelo campo "Integração ativa" (nasce desligada), chave privada só pelo card, sem .env', () => {
+    const def = getIntegrationDef('builder_machine')
+    expect(def).toMatchObject({ name: 'Builder Machine', defaultEnvironment: 'interno', streamsDebugOverPusher: true })
+    expect(def.publicFields).toEqual([expect.objectContaining({ key: 'active', kind: 'boolean', defaultValue: false, label: 'Integração ativa' })])
+    expect(def.secretFields).toEqual([{ key: 'sshPrivateKey', label: 'Chave privada do servidor', group: 'card' }])
+    expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
+  })
+
+  it('limpeza da Builder Machine: diária às 03:00, nasce desligada (a ativação liga) e pertence à integração', () => {
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === BUILDER_MACHINE_CLEANUP_JOB_ID)).toMatchObject({ kind: 'internal', enabled: false, schedule: { type: 'daily', time: '03:00' } })
+    expect(cronJobIntegration(BUILDER_MACHINE_CLEANUP_JOB_ID)).toBe('builder_machine')
+    expect(cronJobIntegration(HEALTH_CHECK_JOB_ID)).toBeNull()
   })
 
   it('Google Drive aparece como Em desenvolvimento, sem definição configurável', () => {
@@ -59,7 +75,7 @@ describe('catálogo de integrações', () => {
   })
 
   it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada) e anexos abandonados (30 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID])
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })

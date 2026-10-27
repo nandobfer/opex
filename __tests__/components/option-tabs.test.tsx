@@ -56,6 +56,17 @@ describe('OptionTabs', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('opção com dica (tooltip): mostra o ícone de informação e continua selecionável', async () => {
+    const onChange = vi.fn()
+    render(<OptionTabs aria-label="Modo" value="a" onChange={onChange} options={[{ value: 'a', label: 'A', tooltip: 'Use quando A' }, { value: 'b', label: 'B', tooltip: 'Use quando B' }]} />)
+    const b = screen.getByRole('radio', { name: 'B' })
+    expect(b.querySelector('svg')).not.toBeNull()
+    fireEvent.click(b)
+    expect(onChange).toHaveBeenCalledWith('b')
+    fireEvent.focus(b)
+    expect((await screen.findAllByText('Use quando B')).length).toBeGreaterThan(0)
+  })
+
   it('não quebra o rótulo em duas linhas (whitespace-nowrap)', () => {
     render(<Harness />)
     expect(screen.getByRole('radio', { name: 'Pessoa jurídica' }).classList.contains('whitespace-nowrap')).toBe(true)

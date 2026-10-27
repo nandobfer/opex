@@ -15,6 +15,7 @@ import { AiEditorForm } from "@/features/ai/components/AiEditorForm"
 import { OrcamentosEditorForm } from "@/features/orcamentos/components/OrcamentosEditorForm"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
+import { BuilderMachineEditorForm } from "@/features/local-docker/components/BuilderMachineEditorForm"
 import { CronsEditorForm } from "./CronsEditorForm"
 import { EditorForm } from "./EditorForm"
 import { ExplorerPane } from "./ExplorerPane"
@@ -130,6 +131,19 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                         onSave={save}
                         onUndo={() => setDraft(draftFrom(data))}
                         onExplore={() => setExploring(true)}
+                    />
+                ) : id === "builder_machine" ? (
+                    // Builder Machine: ponto de montagem — ver aicontext/modules/builder-machine.md.
+                    <BuilderMachineEditorForm
+                        key="form"
+                        def={def}
+                        data={data}
+                        draft={draft}
+                        setDraft={setDraft}
+                        dirty={dirty}
+                        pending={mutation.isPending}
+                        onSave={save}
+                        onUndo={() => setDraft(draftFrom(data))}
                     />
                 ) : (
                     <EditorForm

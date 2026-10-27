@@ -155,6 +155,16 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   conforme as opções atuais. CI obrigatório do PR e testes da main permanecem independentes;
   reaproveitamento de resultados por SHA não foi introduzido.
 
+**Builder Machine** (`modules/builder-machine.md`): com a integração ativa, o túnel do PC aberto e a
+central usando o PC (card na aba Ambiente, oculto no método GitHub Action), o build **Local** vai para
+o Docker do PC: `prepareBuildTurn` chama `resolveBuildTarget` (import dinâmico memorizado, só com a
+integração ativa), a porta pula as ocupadas no PC e no servidor, o servidor repassa a porta pelo túnel,
+o aviso ganha "(prévia na máquina local)" e o `buildPrompt` recebe `docker: { prefix }`
+(`DOCKER_CONTEXT=opex-local BUILDX_BUILDER=…` em todo comando docker; o builder da central é ignorado;
+não combina com a seção do GitHub Action). Trocar para o GitHub Action derruba a prévia anterior que
+estava no PC. Na limpeza (merge, exclusão, tentar a limpeza de novo), a prévia que estava no PC é
+derrubada pela Builder Machine e o agente pula o `docker compose down`. Forks não usam a Builder Machine.
+
 A subida da prévia **Local** usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
 centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
 

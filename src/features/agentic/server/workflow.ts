@@ -201,6 +201,14 @@ const forksModule = () => import("./forks")
 let adversaryImport: Promise<typeof import("@/features/adversarial-agent/server/workflow-hook")> | null = null
 const adversaryModule = () => (adversaryImport ??= import("@/features/adversarial-agent/server/workflow-hook"))
 
+/** Builder Machine (import dinâmico, uma vez por processo): só com a integração ativa. Ver aicontext/modules/builder-machine.md. */
+let localDockerImport: Promise<typeof import("@/features/local-docker/server/agentic-hooks")> | null = null
+async function localDockerHooks() {
+    const { isBuilderMachineActive } = await import("@/features/local-docker/server/active")
+    if (!(await isBuilderMachineActive())) return null
+    return (localDockerImport ??= import("@/features/local-docker/server/agentic-hooks"))
+}
+
 // ---------------------------------------------------------------------------
 // Espera por vaga (retomadas de mesas que não ocupam vaga)
 // ---------------------------------------------------------------------------
@@ -1011,7 +1019,14 @@ export async function startBuildTurn(id: string): Promise<boolean> {
 
 async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Promise<TurnPlan> {
     const id = String(loaded.doc._id)
-    const port = await allocatePreviewPort(id, loaded.config.environment.previewHost, { min: loaded.config.environment.previewPortMin, max: loaded.config.environment.previewPortMax })
+    const env = loaded.config.environment
+    const ctx = contextOf(loaded)
+    // Builder Machine: com o túnel aberto o build local vai para o Docker do PC. A prévia no GitHub
+    // Action fica sempre no servidor (derruba a prévia anterior que estava no PC).
+    const local = await localDockerHooks()
+    const target = local ? await local.resolveBuildTarget({ workbenchId: id, centralId: loaded.doc.centralId, composeProject: ctx.composeProject, hadPort: typeof loaded.doc.port === "number", forceServer: method !== "local" }) : null
+    const port = await allocatePreviewPort(id, env.previewHost, { min: env.previewPortMin, max: env.previewPortMax }, target?.portCheck)
+    if (target) await target.attach(port)
     // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
     const dumpRequired = loaded.config.environment.backupDatabase
     // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e é
@@ -1019,7 +1034,7 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     // reserva só acontece no modo remoto, onde a pasta também guarda o estado da tentativa.
     const backup = dumpRequired || method === "github" ? await reservePreviewBackup(loaded.doc, loaded.config) : null
     await prepareHub(id)
-    publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}` })
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}${target ? " (prévia na máquina local)" : ""}` })
     publishWorkbenchEvent(id, {
         type: "notice",
         level: "info",
@@ -1029,13 +1044,20 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
         if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
-        remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, contextOf(loaded))
+        remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
     } else {
         await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired }, buildQueuedAt: null } })
     }
     // O backup só entra no prompt (e na conferência do servidor) quando a central o exige; sem ele a
     // prévia sobe sem dump — projetos sem banco de dados (OPE-72).
-    return { stage: "building", text: buildPrompt(loaded.config, contextOf(loaded), port, dumpRequired ? backup : null, remote) }
+    return { stage: "building", text: buildPrompt(loaded.config, ctx, port, dumpRequired ? backup : null, remote, target ? { prefix: target.dockerPrefix } : undefined) }
+}
+
+/** A prévia da mesa estava no PC e a Builder Machine a derrubou (ou a deixou pendente): o agente pula o `down`. */
+async function localPreviewTornDown(loaded: Loaded): Promise<boolean> {
+    if (!loaded.config.cleanup.teardownEnvironment) return false
+    const local = await localDockerHooks()
+    return local ? local.teardownForCleanup(String(loaded.doc._id)) : false
 }
 
 export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
@@ -1265,7 +1287,8 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
-        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), doc.previewBackup ?? null, { preview: Boolean(doc.previewUrl) }) }, { userText: "Tentar a limpeza novamente" })
+        const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
+        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }, { userText: "Tentar a limpeza novamente" })
         return getWorkbench(id)
     }
     if (stage === "building") {
@@ -1441,7 +1464,8 @@ async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promis
         abortWorkbenchRun(id, "Mesa excluída")
         await waitWorkbenchIdle(id)
     }
-    const targets = cleanupTargets(loaded.config, doc)
+    let targets = cleanupTargets(loaded.config, doc)
+    if (targets.teardownEnvironment && (await localPreviewTornDown({ ...loaded, doc }))) targets = { ...targets, teardownEnvironment: false }
     if (!hasCleanupWork(targets)) {
         await removeWorkbenchSessions(doc)
         await finalizeDeletion(doc)
@@ -1620,7 +1644,8 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
     // O backup da prévia (OPE-54) exige a etapa de limpeza mesmo com toda a limpeza de ambiente desligada.
     if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch || doc.previewBackup) {
         // Sem prévia (fluxo PR automático) não há ambiente a derrubar.
-        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview: Boolean(doc.previewUrl) }) }
+        const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
+        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }
     }
     return null
 }

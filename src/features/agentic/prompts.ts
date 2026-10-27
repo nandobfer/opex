@@ -149,11 +149,19 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     return withInfo + extra(config, "implementation")
 }
 
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }): string {
+/**
+ * Prompt do build da prévia. `docker.prefix` (Builder Machine) manda todo comando docker para outra
+ * máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; não combina com o
+ * build no GitHub Action (`remote`), que ignora o prefixo.
+ */
+export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }, docker?: { prefix: string }): string {
     const env = config.environment
     const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
-    const builder = env.dockerBuilder.trim()
-    const command = `${builder ? `BUILDX_BUILDER=${builder} ` : ""}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
+    const local = remote ? undefined : docker
+    const builder = local ? "" : env.dockerBuilder.trim()
+    const prefix = local ? `${local.prefix} ` : builder ? `BUILDX_BUILDER=${builder} ` : ""
+    const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
+    const logs = `${local ? `${local.prefix} ` : ""}docker compose -p ${ctx.composeProject} logs --tail 100`
     const health = `http://localhost:${port}${env.healthPath || "/"}`
     // Sem backup (OPE-72, projetos sem banco de dados) a seção some por inteiro: o agente não
     // identifica banco, não roda `mongodump` e a prévia não depende de nenhum arquivo de dump.
@@ -186,7 +194,13 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
             "- Não dispare workflow manualmente nem publique container fora do script. Reconectar retoma o run registrado. Em erro de código, informe a falha; uma correção exige nova tentativa/SHA.",
         ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
         ...(!remote && builder ? [`- Construa EXCLUSIVAMENTE com o builder do Docker \`${builder}\` (BUILDX_BUILDER em todo build desta prévia). NÃO troque o builder padrão do host (\`docker buildx use\`) nem crie outro builder.`] : []),
-        `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`docker compose -p ${ctx.composeProject} logs --tail 100\` se falhar).`,
+        ...(local
+            ? [
+                  `- Esta prévia roda no Docker de OUTRA máquina: use o prefixo \`${local.prefix}\` em TODO comando docker e docker compose desta prévia (build, logs, ps, down). NÃO troque o contexto nem o builder padrão do host (\`docker context use\`, \`docker buildx use\`) e não crie outros.`,
+                  "- Nessa máquina os volumes do compose que montam arquivos do worktree (bind mounts) não enxergam o código: a prévia precisa rodar só com a imagem construída.",
+              ]
+            : []),
+        `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`${logs}\` se falhar).`,
         remote ? "- Informe a URL da execução e o diagnóstico quando falhar. Não substitua a porta ou a imagem por outra tentativa." : "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
         backup
             ? `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`

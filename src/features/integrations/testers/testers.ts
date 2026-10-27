@@ -184,6 +184,15 @@ const testStorage: IntegrationTester = async ({ emit }) => {
     return "Storage S3 acessível"
 }
 
+// ---------------------------------------------------------------------------
+// Builder Machine: ponto de montagem — ver aicontext/modules/builder-machine.md
+// ---------------------------------------------------------------------------
+
+const testBuilderMachine: IntegrationTester = async (context) => {
+    const { testBuilderMachine: run } = await import("@/features/local-docker/server/tester")
+    return run(context)
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -199,4 +208,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     orcamentos: testOrcamentos,
     smtp: testSmtp,
     storage_s3: testStorage,
+    builder_machine: testBuilderMachine,
 }

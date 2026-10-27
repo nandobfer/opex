@@ -57,6 +57,8 @@ export interface IntegrationConfigMap {
         accessKey?: string
         secretKey?: string
     }
+    /** Builder Machine: ativação e a chave privada colada pelo usuário (a configuração fica nas coleções `local_docker_*`). */
+    builder_machine: { active: boolean; sshPrivateKey?: string }
 }
 
 export type SecretSource = "db" | "env" | "none"

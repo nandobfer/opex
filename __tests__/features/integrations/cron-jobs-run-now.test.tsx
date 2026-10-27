@@ -131,6 +131,16 @@ describe("rotinas recolhidas e busca", () => {
         expect(screen.queryByText("Rotina B")).toBeNull()
         expect(screen.getByText("Cancelar negociações")).toBeTruthy()
     })
+
+    it("rotinas escondidas (integração desativada) não aparecem nem na busca, e editar preserva todas", () => {
+        const onChange = vi.fn()
+        render(<CronJobsEditor value={jobs} onChange={onChange} savedJobs={jobs} canRun hiddenJobIds={new Set(["rotina-b"])} />)
+        expect(screen.queryByText("Rotina B")).toBeNull()
+        fireEvent.click(screen.getByLabelText("Ativar Cancelar negociações"))
+        expect(onChange.mock.calls[0]![0].map((item: CronJobConfig) => item.id)).toEqual(["cancel", "rotina-b"])
+        fireEvent.change(screen.getByLabelText("Buscar rotina"), { target: { value: "Rotina" } })
+        expect(screen.queryByText("Rotina B")).toBeNull()
+    })
 })
 
 describe("largura dos campos", () => {

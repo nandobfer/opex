@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
 import { withBuiltInJobs } from '@/lib/integrations/config'
 
 describe('rotinas internas nos Crons salvos', () => {
@@ -13,7 +13,7 @@ describe('rotinas internas nos Crons salvos', () => {
     ]
     const jobs = withBuiltInJobs(saved)
     expect(jobs[0]).toEqual(saved[0])
-    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID])
+    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID])
     expect(jobs[1]).toEqual(DEFAULT_CRON_JOBS[0])
     expect(jobs[2]).toEqual(DEFAULT_CRON_JOBS[1])
     expect(jobs[3]).toEqual(DEFAULT_CRON_JOBS[2])
@@ -23,6 +23,8 @@ describe('rotinas internas nos Crons salvos', () => {
     expect(jobs[7]).toEqual(DEFAULT_CRON_JOBS[6])
     expect(jobs[8]).toEqual(DEFAULT_CRON_JOBS[7])
     expect(jobs[9]).toEqual(DEFAULT_CRON_JOBS[8])
+    // Limpeza da Builder Machine entra desligada (a ativação da integração liga).
+    expect(jobs[10]).toEqual({ ...DEFAULT_CRON_JOBS[9], enabled: false })
   })
 
   it('rotina interna já salva mantém a configuração do usuário', () => {
@@ -36,6 +38,7 @@ describe('rotinas internas nos Crons salvos', () => {
       { id: TASK_TAGS_CONCLUDED_JOB_ID, label: 'Tags concluídas', kind: 'internal', schedule: { type: 'interval', minutes: 60 }, enabled: false, scope: 'pending' },
       { id: ATTACHMENT_CLEANUP_JOB_ID, label: 'Anexos', kind: 'internal', schedule: { type: 'interval', minutes: 30 }, enabled: true },
       { id: OPEX_FILES_CLEANUP_JOB_ID, label: 'Arquivos do chat', kind: 'internal', schedule: { type: 'interval', minutes: 60 }, enabled: true },
+      { id: BUILDER_MACHINE_CLEANUP_JOB_ID, label: 'Limpeza do PC', kind: 'internal', schedule: { type: 'daily', time: '04:00' }, enabled: true },
     ]
     expect(withBuiltInJobs(saved)).toBe(saved)
   })

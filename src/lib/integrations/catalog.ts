@@ -3,7 +3,7 @@
  *
  * Integrações ativas: Pusher, API interna, Crons, GitHub, Provedores de IA (hub `ai`
  * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e `ai_jev`, que só aparecem dentro do hub), Clientes,
- * SMTP e Storage S3.
+ * SMTP, Storage S3 e Builder Machine (prévias no Docker do PC; liga pelo campo "Integração ativa").
  * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
  * Fonte única dos metadados: nome, descrição, ambiente padrão e campos. É módulo PURO (sem
@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -188,6 +188,15 @@ export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
 export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
 /** Limpeza dos arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h (S3 + metadados). */
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
+/** Builder Machine: limpeza das imagens órfãs e do cache do builder do PC. */
+export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
+
+/** Rotinas internas de uma integração ativável (id da rotina → id da integração): somem de Crons com ela desativada. */
+export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = { [BUILDER_MACHINE_CLEANUP_JOB_ID]: "builder_machine" }
+
+export function cronJobIntegration(jobId: string): IntegrationId | null {
+    return INTEGRATION_CRON_JOBS[jobId] ?? null
+}
 
 /** Rotinas internas que processam tarefas e deixam escolher o escopo (`scope`). */
 export function jobSupportsScope(jobId: string): boolean {
@@ -265,6 +274,14 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         kind: "internal",
         schedule: { type: "interval", minutes: 60 },
         enabled: true,
+    },
+    {
+        id: BUILDER_MACHINE_CLEANUP_JOB_ID,
+        label: "Limpar imagens órfãs e cache do builder do PC (Builder Machine)",
+        kind: "internal",
+        schedule: { type: "daily", time: "03:00" },
+        // Ligada ao ativar a integração Builder Machine.
+        enabled: false,
     },
 ]
 
@@ -604,6 +621,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             { key: "accessKey", label: "Access key", required: true },
             { key: "secretKey", label: "Secret key", required: true },
         ],
+    },
+    {
+        id: "builder_machine",
+        name: "Builder Machine",
+        description: "Build e containers das prévias no Docker do seu PC (WSL) por túnel SSH; túnel fechado usa o servidor",
+        defaultEnvironment: "interno",
+        streamsDebugOverPusher: true,
+        publicFields: [{ key: "active", label: "Integração ativa", description: "Desativada, as prévias ficam no servidor e as rotas da Builder Machine não respondem", kind: "boolean", defaultValue: false }],
+        // Chave privada colada em "Inserir chave existente" (aba Preparo do PC); gerada pelo app, fica só no host.
+        secretFields: [{ key: "sshPrivateKey", label: "Chave privada do servidor", group: "card" }],
     },
 ]
 
