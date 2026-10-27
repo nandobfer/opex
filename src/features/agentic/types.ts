@@ -130,6 +130,10 @@ export interface WorkbenchDto {
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
+    liveChat: boolean
+    /** O Agente Adversário se aplica a esta mesa (ativo e a central no escopo): passo "Revisão adversária" na trilha. */
+    adversarial: boolean
     startedAt: string
     completedAt: string | null
     updatedAt: string
@@ -180,6 +184,8 @@ export interface ForkDto {
     readOnly: boolean
     /** Modelo efetivo do fork (papel Fork da conversa ou o trocado; `null` quando a central não pôde ser lida). */
     model: ModelChoiceDto | null
+    /** Chat durante a execução (padrão global + ajuste da central). */
+    liveChat: boolean
     forkedFromStage: WorkbenchStage
     /** Resumo proposto (em revisão enquanto `integrating`). */
     summary: string | null
@@ -224,6 +230,17 @@ export interface QueueItemDto {
 /** Linha do stream da mesa (NDJSON). `seq` existe nos eventos gravados; os transitórios não têm. */
 export type PrWatchLevel = "info" | "success" | "warn" | "error"
 
+/** Achado no veredito do Agente Adversário, como aparece na saída da mesa. */
+export interface AdversarialVerdictFinding {
+    id: string
+    severity: "critical" | "high" | "medium" | "low" | "nit"
+    title: string
+    file: string | null
+    line: number | null
+    blocking: boolean
+    demotedReason: string | null
+}
+
 /** Passo de uma verificação do acompanhamento do PR (rotina `agentic-pr-watch`). */
 export interface PrWatchStep {
     ts: string
@@ -260,6 +277,8 @@ export type WorkbenchEventPayload =
     | { type: "pr-watch-step"; checkId: string; prNumber: number; level: PrWatchLevel; text: string }
     /** Verificação do PR concluída (gravada). */
     | { type: "pr-watch"; checkId: string; prNumber: number; startedAt: string; steps: PrWatchStep[]; outcome: PrWatchOutcome; summary: string; nextCheckAt: string | null }
+    /** Veredito de uma rodada do Agente Adversário (gravado). */
+    | { type: "adversarial-verdict"; reviewId: string; round: number; level: string; summary: string; outcome: string; findings: AdversarialVerdictFinding[] }
 
 export type WorkbenchEvent = WorkbenchEventPayload & { seq?: number; ts: string }
 

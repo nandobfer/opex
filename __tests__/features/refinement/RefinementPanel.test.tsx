@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     action: vi.fn(),
     stream: vi.fn(),
     reconnect: vi.fn(),
+    sendLive: vi.fn(),
 }))
 
 vi.mock('@/features/refinement/hooks/useRefinement', () => ({
@@ -21,6 +22,7 @@ vi.mock('@/features/refinement/hooks/useRefinement', () => ({
     useStartRefinement: mocks.start,
     useRefinementAction: mocks.action,
     useRefinementReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
+    useSendRefinementMessage: () => ({ mutate: mocks.sendLive, isPending: false }),
 }))
 vi.mock('@/features/refinement/hooks/useRefinementStream', () => ({ useRefinementStream: mocks.stream }))
 vi.mock('@/features/agentic/components/workbench/Timeline', () => ({ Timeline: () => <div data-testid="timeline" /> }))
@@ -67,6 +69,24 @@ describe('RefinementPanel', () => {
         expect(screen.getByTestId('timeline')).not.toBeNull()
         expect(screen.getByTestId('requests')).not.toBeNull()
         expect(screen.getByRole('button', { name: /Parar/ })).not.toBeNull()
+    })
+
+    it('chat durante a execução ligado: com o agente refinando, envia a mensagem ao turno atual', () => {
+        mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'running', resolved: false, finalizing: false, liveChat: true, sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        fireEvent.change(screen.getByLabelText('Mensagem para o agente em execução'), { target: { value: 'considere o módulo de pagamentos' } })
+        fireEvent.click(screen.getByRole('button', { name: /Enviar ao agente/ }))
+        expect(mocks.sendLive).toHaveBeenCalledWith('considere o módulo de pagamentos', expect.anything())
+    })
+
+    it('chat durante a execução: desligado ou na consolidação da especificação, o campo não aparece', () => {
+        mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'running', resolved: false, finalizing: false, liveChat: false, pendingForms: [], pendingPermissions: [] } }))
+        const { unmount } = render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+        unmount()
+        mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'running', resolved: false, finalizing: true, liveChat: true, pendingForms: [], pendingPermissions: [] } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
     })
 
     it('no turno de consolidação mostra "Consolidando a especificação técnica…"', () => {

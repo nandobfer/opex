@@ -27,6 +27,10 @@ const ready: BuildersQuery = {
 }
 let buildersQuery: BuildersQuery = ready
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useDockerBuilders: () => buildersQuery }))
+// Builder Machine: integração desativada por padrão (o card da central não aparece).
+const builderMachine = vi.hoisted(() => ({ active: false }))
+vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({ useBuilderMachineActive: () => builderMachine.active }))
+vi.mock('@/features/local-docker/components/LocalDockerCentralCard', () => ({ LocalDockerCentralCard: () => <div data-testid="builder-machine-card" /> }))
 
 function Harness({ dockerBuilder = '' }: { dockerBuilder?: string }) {
   const base = defaultCentralConfig('/home/u/app')
@@ -54,7 +58,20 @@ function PublishHarness({ portEnvVar = 'PORT' }: { portEnvVar?: string }) {
     </>
   )
 }
-afterEach(() => { cleanup(); buildersQuery = ready; refetch.mockReset() })
+afterEach(() => { cleanup(); buildersQuery = ready; refetch.mockReset(); builderMachine.active = false })
+describe('card da Builder Machine', () => {
+  it('oculto com a integração desativada', () => {
+    render(<Harness />)
+    expect(screen.queryByTestId('builder-machine-card')).toBeNull()
+  })
+  it('ativa: aparece na prévia Local e some no GitHub Action', () => {
+    builderMachine.active = true
+    render(<Harness />)
+    expect(screen.getByTestId('builder-machine-card')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'GitHub Action' }))
+    expect(screen.queryByTestId('builder-machine-card')).toBeNull()
+  })
+})
 describe('método da prévia por central', () => {
   it('inicia Local e exibe configuração remota somente ao selecionar GitHub Action', () => {
     render(<Harness />)

@@ -112,6 +112,8 @@ Ordem sugerida: **E → D → C → B → A**, com **F** independente (pode corr
 - `ActionBar`: **"Abrir em nova guia"** como primeiro botão e **"Ver PR #N"** (`GitPullRequest`)
   quando há PR.
 - Testes: `ActionBar.test.tsx`.
+- **Substituído na OPE-87** (my-tasks 58465fb): a barra não tem mais esses atalhos; a prévia e o PR
+  abrem pelos links do cabeçalho da mesa (nova guia). Ver `modules/agentic-dev.md`, etapa da prévia.
 
 ### F — Provedores Anthropic, OpenAI e DeepSeek — 3d4ee61
 

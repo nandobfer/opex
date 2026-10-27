@@ -55,6 +55,7 @@ import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
+import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
@@ -111,7 +112,7 @@ async function reconcile(doc: IAgenticFork): Promise<IAgenticFork> {
     return { ...doc, runState: "interrupted", error, pendingForms: [], pendingPermissions: [] }
 }
 
-function toForkDto(doc: IAgenticFork, model: ModelChoiceDto | null = null): ForkDto {
+function toForkDto(doc: IAgenticFork, model: ModelChoiceDto | null = null, liveChat = false): ForkDto {
     const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
     return {
         id: String(doc._id),
@@ -126,6 +127,7 @@ function toForkDto(doc: IAgenticFork, model: ModelChoiceDto | null = null): Fork
         mode: effectiveForkMode(doc.mode, doc.readOnly),
         readOnly: doc.readOnly === true,
         model,
+        liveChat,
         forkedFromStage: asStage(doc.forkedFromStage),
         summary: doc.summary ?? null,
         integration: doc.integration ? { target: doc.integration.target as ForkIntegrationTarget, summary: doc.integration.summary, appliedAt: new Date(doc.integration.appliedAt).toISOString() } : null,
@@ -169,12 +171,13 @@ async function assertForkReady(config: CentralConfig): Promise<void> {
 export async function listForks(workbenchId: string): Promise<ForkDto[]> {
     await loadWorkbenchDoc(workbenchId)
     const docs = (await AgenticFork.find({ workbenchId }).sort({ number: 1 }).lean()) as unknown as IAgenticFork[]
-    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc))))
+    const liveChat = docs.length ? await liveChatEnabled(docs[0]!.centralId) : false
+    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc), liveChat)))
 }
 
 export async function getFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const doc = await loadFork(workbenchId, forkId)
-    return toForkDto(doc, await forkModel(doc))
+    return toForkDto(doc, await forkModel(doc), await liveChatEnabled(doc.centralId))
 }
 
 /** Confere que o fork existe (stream de eventos: 404 antes de abrir). */
@@ -512,9 +515,18 @@ export async function openFork(workbenchId: string, text: string, options: { par
     return getFork(workbenchId, id)
 }
 
-/** Nova mensagem do usuário no fork ativo. */
+/**
+ * Nova mensagem do usuário no fork ativo. Com o agente respondendo (e o chat durante a execução
+ * ligado), entra no turno em andamento; parado, abre um turno novo.
+ */
 export async function sendForkMessage(workbenchId: string, forkId: string, text: string): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
+    if (isWorkbenchActive(String(fork._id))) {
+        // Consolidando o resumo da integração: a mensagem se misturaria ao resumo.
+        if (asForkStatus(fork.status) !== "active") throw new DomainError(409, `O fork ${fork.number} está consolidando o resumo da integração: aguarde terminar`, "FORK_INVALID_STATE")
+        await deliverLiveMessage({ runId: String(fork._id), centralId: fork.centralId, label: `o fork ${fork.number}`, audit: { entidade: AGENTIC_AUDIT_FORK, contexto: { tarefa: fork.taskCode, fork: fork.number } } }, text)
+        return getFork(workbenchId, forkId)
+    }
     assertForkAction(fork, "send")
     await assertForkReady((await loadCentral(fork.centralId)).config)
     await launchForkTurn(fork, text, { userText: text })

@@ -14,10 +14,12 @@ interface CronJobsCardProps {
     setPublic: (key: string, value: PublicFieldValue | "") => void
     readOnly?: boolean
     canRun: boolean
+    /** Rotinas de integrações desativadas: ficam fora da lista (continuam salvas). */
+    hiddenJobIds?: ReadonlySet<string>
 }
 
 /** Card das rotinas agendadas (campo `cron-jobs`). */
-export function CronJobsCard({ field, data, publicValues, setPublic, readOnly, canRun }: CronJobsCardProps) {
+export function CronJobsCard({ field, data, publicValues, setPublic, readOnly, canRun, hiddenJobIds }: CronJobsCardProps) {
     return (
         <motion.div {...cardMotion} transition={{ ...cardMotion.transition, delay: 0.15 }}>
             <Card>
@@ -33,6 +35,7 @@ export function CronJobsCard({ field, data, publicValues, setPublic, readOnly, c
                         disabled={readOnly}
                         savedJobs={(data.publicValues[field.key] as CronJobConfig[] | null) ?? []}
                         canRun={canRun}
+                        hiddenJobIds={hiddenJobIds}
                     />
                 </CardContent>
             </Card>

@@ -43,6 +43,8 @@ export function ColumnsCard({ title, description, idPrefix, fields, inherited }:
     const columnLabel = (value: string | null | undefined, noneLabel: string | undefined) =>
         value ? board.columns.find((column) => column.key === value)?.label ?? value : noneLabel ?? "Não mover"
 
+    const isKnown = (value: string | null) => !value || board.columns.some((column) => column.key === value)
+
     const select = (field: ColumnsCardField) => (
         <Field key={field.id} id={field.id} label={field.label}>
             <Select value={field.value ?? NONE} onValueChange={(value) => field.onChange(value === NONE ? null : value)}>
@@ -51,6 +53,7 @@ export function ColumnsCard({ title, description, idPrefix, fields, inherited }:
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value={NONE}>{field.noneLabel ?? "Não mover"}</SelectItem>
+                    {field.value && !isKnown(field.value) && <SelectItem value={field.value}>{board.isLoading ? "Carregando colunas…" : `Coluna removida (${field.value})`}</SelectItem>}
                     {board.columns.map((column) => (
                         <SelectItem key={column.key} value={column.key}>
                             {column.label}

@@ -22,7 +22,7 @@ export function AgentMemoriesCard({ agentId }: { agentId: AiAgentId }) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <MemoryList source={agentMemoriesSource(agentId)} canEdit emptyTitle="Nenhuma memória" emptyDescription="Adicione instruções e fatos que o Agente Opex deve lembrar." />
+                <MemoryList source={agentMemoriesSource(agentId)} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
             </CardContent>
         </Card>
     )

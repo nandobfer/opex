@@ -6,13 +6,14 @@ import type { CheckBranch } from "@/lib/check-tree"
  * As ferramentas do portal são próprias (não reaproveitam as do dono): cada uma chama a função de
  * serviço do portal, que já filtra tudo pelo cliente em escopo. O dono escolhe, por cliente, quais
  * ficam ligadas; as marcadas `adminOnly` só chegam ao **admin** do cliente (espelham as telas do
- * portal: Financeiro e Usuários).
+ * portal: Financeiro e Usuários). As marcadas `optIn` (Jobs agendados) nascem **desligadas**: só
+ * valem quando o dono as liga para o cliente (`opexAgent.enabledOptInTools`).
  */
 
-export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "finance", "users"] as const
+export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "finance", "users", "jobs"] as const
 export type OpexClientToolGroup = (typeof OPEX_CLIENT_TOOL_GROUPS)[number]
 
-export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label: string; description: string; adminOnly?: boolean }> = {
+export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label: string; description: string; adminOnly?: boolean; optIn?: boolean }> = {
     context: { label: "Contexto", description: "Visão geral do portal: cliente, usuário, papel e repositórios" },
     tasks: { label: "Tarefas", description: "Listar, ler, comentar e alterar a prioridade das tarefas do cliente" },
     previews: { label: "Orçamentos", description: "Pedidos de nova tarefa: criar, gerar com IA, corrigir, estimar e aprovar" },
@@ -20,6 +21,7 @@ export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label:
     dashboard: { label: "Dashboard", description: "Métricas de tarefas e do período" },
     finance: { label: "Financeiro", description: "Faturamento por repositório, horas e serviços no período", adminOnly: true },
     users: { label: "Usuários", description: "Usuários do cliente: listar, editar e remover vínculos", adminOnly: true },
+    jobs: { label: "Jobs agendados", description: "Agendar prompts para o agente executar sozinho mais tarde (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar os do próprio usuário", optIn: true },
 }
 
 export type OpexClientToolRisk = "read" | "write" | "destructive"
@@ -33,6 +35,8 @@ export interface OpexClientToolMeta {
     risk: OpexClientToolRisk
     /** Só o **admin** do cliente recebe a ferramenta, mesmo com ela ligada. */
     adminOnly?: boolean
+    /** Desligada por padrão: só entra quando o dono a liga explicitamente para o cliente. */
+    optIn?: boolean
 }
 
 /** Ferramenta de contexto: sempre disponível (não pode ser desligada). */
@@ -61,6 +65,10 @@ export const OPEX_CLIENT_TOOLS: readonly OpexClientToolMeta[] = [
     { name: "list_users", group: "users", label: "Listar usuários", hint: "Usuários vinculados ao cliente e papéis", risk: "read", adminOnly: true },
     { name: "update_user", group: "users", label: "Editar usuário", hint: "Nome, email, senha e papel no cliente", risk: "write", adminOnly: true },
     { name: "delete_user", group: "users", label: "Remover usuário", hint: "Remove o vínculo do usuário com o cliente", risk: "destructive", adminOnly: true },
+    { name: "list_jobs", group: "jobs", label: "Listar jobs", hint: "Jobs do usuário agendados e dos últimos 30 dias", risk: "read", optIn: true },
+    { name: "schedule_job", group: "jobs", label: "Agendar job", hint: "Agenda um prompt para o agente executar sozinho", risk: "write", optIn: true },
+    { name: "update_job", group: "jobs", label: "Editar job", hint: "Altera um job ainda agendado do usuário", risk: "write", optIn: true },
+    { name: "cancel_job", group: "jobs", label: "Cancelar job", hint: "Cancela um job agendado do usuário", risk: "destructive", optIn: true },
 ]
 
 export function findOpexClientTool(name: string): OpexClientToolMeta | undefined {
@@ -74,12 +82,14 @@ export function opexClientToolsFor(isAdmin: boolean): OpexClientToolMeta[] {
 
 /**
  * Ferramentas efetivamente liberadas: contexto sempre, mais as não desligadas e permitidas ao papel.
- * Ferramenta nova entra ligada (a configuração guarda as **desligadas**).
+ * Ferramenta nova entra ligada (a configuração guarda as **desligadas**), exceto as `optIn`, que só
+ * entram quando estão em `enabledOptInTools`.
  */
-export function enabledOpexClientToolNames(disabledTools: readonly string[], isAdmin: boolean): string[] {
+export function enabledOpexClientToolNames(disabledTools: readonly string[], isAdmin: boolean, enabledOptInTools: readonly string[] = []): string[] {
     const disabled = new Set(disabledTools)
+    const optIn = new Set(enabledOptInTools)
     return opexClientToolsFor(isAdmin)
-        .filter((tool) => tool.group === "context" || !disabled.has(tool.name))
+        .filter((tool) => tool.group === "context" || (tool.optIn ? optIn.has(tool.name) : !disabled.has(tool.name)))
         .map((tool) => tool.name)
 }
 
@@ -92,6 +102,9 @@ export function opexClientToolCounts(isAdmin: boolean): Record<OpexClientToolGro
 
 /** Nomes válidos (validação da configuração salva pelo dono). */
 export const OPEX_CLIENT_TOOL_NAMES: readonly string[] = OPEX_CLIENT_TOOLS.map((tool) => tool.name)
+
+/** Ferramentas desligadas por padrão (o dono liga explicitamente por cliente). */
+export const OPEX_CLIENT_OPT_IN_TOOLS: readonly string[] = OPEX_CLIENT_TOOLS.filter((tool) => tool.optIn).map((tool) => tool.name)
 
 /**
  * Árvore da seleção do portal (mesmo componente da seleção do dono): um módulo por grupo, uma folha

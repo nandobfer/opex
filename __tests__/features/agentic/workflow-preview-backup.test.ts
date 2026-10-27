@@ -23,9 +23,15 @@ const mocks = vi.hoisted(() => ({
   availability: vi.fn(async () => ({ available: true, reason: null })),
   settings: vi.fn(),
   moveTask: vi.fn(async () => undefined),
+  builderMachineActive: vi.fn(async () => false),
+  resolveBuildTarget: vi.fn(),
+  teardownForCleanup: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
+// Builder Machine desativada por padrão: o build e a limpeza seguem no servidor.
+vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: mocks.builderMachineActive }))
+vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ resolveBuildTarget: mocks.resolveBuildTarget, teardownForCleanup: mocks.teardownForCleanup }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/ai/opencode-client', () => ({
@@ -144,6 +150,37 @@ beforeEach(() => {
   mocks.waitPreview.mockResolvedValue(true)
   mocks.runTurn.mockResolvedValue(succeeded('ok\n```json\n{"ok": true}\n```'))
   mocks.runShell.mockResolvedValue(shellOk)
+  mocks.builderMachineActive.mockResolvedValue(false)
+})
+
+describe('build na Builder Machine (integração ativa)', () => {
+  it('túnel aberto: porta checada no PC, prévia anexada e prompt com o prefixo do Docker do PC', async () => {
+    mocks.builderMachineActive.mockResolvedValue(true)
+    const portCheck = vi.fn(async () => false)
+    const attach = vi.fn(async () => undefined)
+    mocks.resolveBuildTarget.mockResolvedValue({ dockerPrefix: 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder', portCheck, attach })
+    const wb = await workbench()
+
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+
+    expect(mocks.resolveBuildTarget).toHaveBeenCalledWith(expect.objectContaining({ workbenchId: String(wb._id), centralId: 'c1', composeProject: 'app-ope-54', hadPort: true, forceServer: false }))
+    expect(mocks.allocatePort).toHaveBeenCalledWith(String(wb._id), expect.any(String), expect.any(Object), portCheck)
+    expect(attach).toHaveBeenCalledWith(4015)
+    expect(doc().lastPrompt!.text).toContain('DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder PORT=4015 docker compose')
+    expect(mocks.publish).toHaveBeenCalledWith(String(wb._id), expect.objectContaining({ message: 'Porta reservada para a prévia: 4015 (prévia na máquina local)' }))
+  })
+
+  it('túnel fechado (sem destino no PC): build no servidor, sem prefixo', async () => {
+    mocks.builderMachineActive.mockResolvedValue(true)
+    mocks.resolveBuildTarget.mockResolvedValue(null)
+    const wb = await workbench()
+
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+
+    expect(doc().lastPrompt!.text).not.toContain('DOCKER_CONTEXT=')
+  })
 })
 
 describe('build com backup (OPE-54)', () => {

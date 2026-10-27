@@ -22,13 +22,15 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   limpeza) e **Pull Request** — e as **colunas globais** (`columns`, OPE-79): a coluna da **fila** e
   os destinos da **movimentação** (ao abrir a mesa, ao abrir o PR e ao concluir), todos "nenhuma/não
   mover" por padrão — e a **correção de CI padrão** (`ci`, OPE-81: `fixCi` ligada e `ciFixLimit`
-  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
+  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`) — e o
+  **chat durante a execução** (`liveChat`, desligado por padrão; ver "Chat durante a execução"). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
   o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
     cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
-    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81), com os botões **Salvar**/**Desfazer** (mesma configuração geral
+    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81) e o card **Chat durante a execução**
+    (`settings.liveChat`), com os botões **Salvar**/**Desfazer** (mesma configuração geral
     acima). Salvar reavalia as filas das centrais que herdam a coluna global.
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
@@ -67,7 +69,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 | Aba | Campos |
 |---|---|
-| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
+| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), **Chat durante a execução** (`liveChat`: **Padrão global** — padrão, inclusive para centrais antigas, com o estado global no rótulo — / Ligado / Desligado; ver "Chat durante a execução"), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`); etapa personalizada escolhe os **modelos de fallback**: Usar os do padrão / Personalizar / Sem fallback (ver "Modelos de fallback") |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
@@ -94,8 +96,9 @@ efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila 
 - **Sem vaga** → a tarefa **aguarda na fila** e a mesa é criada quando uma mesa conclui (ou é
   excluída). A ordem é a **dos cards no kanban** (`order`); a posição (1-based) aparece na lista de
   tarefas e na mesa como "Na fila · #N".
-- O **limite** (`maxConcurrent`, 1–10) conta o trabalho ativo: **Plano pronto**, **Prévia pronta**,
-  **PR aberto** e **Concluída** não ocupam vaga. Uma mesa já ocupando vaga pode encadear os turnos.
+- O **limite** (`maxConcurrent`, 1–10) conta o trabalho ativo: **Plano pronto**, **Revisão bloqueou**
+  (Agente Adversário), **Prévia pronta**, **PR aberto** e **Concluída** não ocupam vaga (a **Revisão
+  adversária** ocupa). Uma mesa já ocupando vaga pode encadear os turnos.
   Retomar uma etapa isenta com a central cheia grava `pendingTurn` (FIFO), mostra posição e oferece
   **Cancelar espera**. Retomadas têm prioridade sobre novas tarefas, inclusive sem coluna de fila.
   Feedback de PR, resolução de conflito, merge e limpeza pós-merge respeitam a espera. Reabrir só
@@ -151,6 +154,16 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - A limpeza remove a pasta do backup (estado, artefatos e override) e derruba Compose/libera porta
   conforme as opções atuais. CI obrigatório do PR e testes da main permanecem independentes;
   reaproveitamento de resultados por SHA não foi introduzido.
+
+**Builder Machine** (`modules/builder-machine.md`): com a integração ativa, o túnel do PC aberto e a
+central usando o PC (card na aba Ambiente, oculto no método GitHub Action), o build **Local** vai para
+o Docker do PC: `prepareBuildTurn` chama `resolveBuildTarget` (import dinâmico memorizado, só com a
+integração ativa), a porta pula as ocupadas no PC e no servidor, o servidor repassa a porta pelo túnel,
+o aviso ganha "(prévia na máquina local)" e o `buildPrompt` recebe `docker: { prefix }`
+(`DOCKER_CONTEXT=opex-local BUILDX_BUILDER=…` em todo comando docker; o builder da central é ignorado;
+não combina com a seção do GitHub Action). Trocar para o GitHub Action derruba a prévia anterior que
+estava no PC. Na limpeza (merge, exclusão, tentar a limpeza de novo), a prévia que estava no PC é
+derrubada pela Builder Machine e o agente pula o `docker compose down`. Forks não usam a Builder Machine.
 
 A subida da prévia **Local** usa o Docker da máquina e roda **uma por vez em todo o Opex** (global, acima das
 centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir direto:
@@ -314,6 +327,13 @@ done → Reabrir mesa (texto ao planejador) → planning
   opcionais (campo mostrado na etapa de revisão do plano): elas são enviadas no prompt de
   implementação (seção própria do prompt) e aparecem como mensagem do usuário na saída — mesmo
   comportamento das informações informadas na abertura da mesa.
+- **Revisão adversária (OPE-87)**: com o **Agente Adversário** ativo e a central no escopo, ao fim de
+  toda implementação (`afterImplementation`) a mesa passa pela etapa `adversarial_review` (sessão nova
+  do OpenCode, só leitura, contexto limpo) antes da prévia ou do PR; bloqueios voltam ao implementador
+  (correção automática) ou param em `adversarial_blocked` (**Revisão bloqueou**: Corrigir, Revisar de
+  novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
+  chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
+  adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
   **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
   **desligada = PR automático**. A escolha salva na hora na tarefa
@@ -327,7 +347,8 @@ done → Reabrir mesa (texto ao planejador) → planning
   nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
   nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
 - **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
-  canto esquerdo da barra inferior, ao lado do seletor de modelo) troca o fluxo **só desta mesa**
+  canto esquerdo da barra inferior, depois do seletor de modelo e de um divisor vertical; rótulo à
+  esquerda da chave, com a explicação na dica do rótulo) troca o fluxo **só desta mesa**
   (`agenticFlow` da mesa; a tarefa mantém o fluxo salvo) — útil, por exemplo, enquanto o PR é
   corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
   (ex.: Mudanças pedidas); disponível com o agente trabalhando. O fluxo é relido no fim de cada
@@ -355,13 +376,17 @@ done → Reabrir mesa (texto ao planejador) → planning
   (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
-  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir prévia** (abre em nova guia; sempre o
-  primeiro botão da linha, antes de Ver PR e Abrir fork), **Solicitar correção**, **Aprovar e abrir
-  PR**. Com PR registrado (qualquer etapa, inclusive executando e concluída), a barra mostra antes do
-  **Abrir fork** o atalho **Ver PR #N** (ícone de PR), que abre o PR em nova guia. No **celular** as ações da etapa ficam na **mesma
-  linha** (sem quebrar): **Abrir prévia** só com o ícone e as demais com rótulo compacto
-  (**Correção**, **Aprovar PR**…), preservando o nome acessível completo; se não couber, a barra rola
-  na horizontal. Assim a saída do agente ganha altura de leitura.
+  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Solicitar correção** e **Aprovar e abrir
+  PR** (com PR aberto — `pr.state === "open"` — o rótulo é só **Aprovar**: o PR existente é
+  atualizado). A prévia e o PR abrem pelos links do cabeçalho da mesa, em nova guia (a barra não tem
+  atalhos para eles). **Abrir fork** (sempre o primeiro da linha; bloqueado com a dica "A mesa está
+  sendo excluída" durante a exclusão), **Solicitar correção** (e a variante **Voltar ao
+  planejamento** da mesa com falha) e **Solicitar correção do plano** são botões de ícone com dica
+  (`TooltipIconButton`, bloqueados com "Aguarde a ação em andamento" durante outra ação), com o nome
+  completo no `aria-label`. No **celular** as ações da etapa ficam na **mesma linha** (sem quebrar)
+  e os botões com texto usam rótulos compactos (**Descrever**, **Reabrir**, **Aprovar PR**,
+  **Tentar**, **Cancelar**), preservando o nome acessível completo; se não couber, a barra rola na
+  horizontal. Assim a saída do agente ganha altura de leitura.
 - **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
@@ -563,7 +588,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   em `private-app`.
 - APIs autenticadas em `/api/agentic/workbenches/[id]/forks`: listar/criar (`parentForkId?`,
   `readOnly?`, `mode?`), detalhe, excluir, mensagens, ações, permissões, formulários, eventos NDJSON e
-  decisão `done-prompt`. O `ForkDto` expõe `mode` e `readOnly`.
+  decisão `done-prompt`. O `ForkDto` expõe `mode`, `readOnly` e `liveChat`. A mensagem no fork
+  ativo parado abre turno novo; executando, com o chat durante a execução ligado, entra no turno
+  atual (ver "Chat durante a execução").
 
 | Ação (`POST …/forks/[forkId]/actions/[action]`) | Corpo | Efeito |
 |---|---|---|
@@ -633,7 +660,8 @@ done → Reabrir mesa (texto ao planejador) → planning
   | Etapa da mesa | Seletor troca o modelo de |
   |---|---|
   | Planejando, Plano pronto, Mudanças pedidas no PR | Plano (papel Planejamento) |
-  | Implementando | Implementação |
+  | Implementando, Revisão bloqueou | Implementação |
+  | Revisão adversária | seletor oculto (modelo na aba Agente Adversário) |
   | Na fila do build, Subindo a prévia, Prévia pronta | Prévia (papel Build e ambiente) |
   | Abrindo o PR, PR aberto, Resolvendo conflitos, Corrigindo o CI, Mergeando o PR, Excluindo a branch remota | Pull Request |
   | Concluindo, Concluída | seletor oculto |
@@ -669,6 +697,7 @@ done → Reabrir mesa (texto ao planejador) → planning
   continuam valendo (com "Sem mesa" marcado a lista fica vazia). Filtros salvos antes da chave
   continuam válidos, com ela desligada (`z.boolean().default(false)`, sem trocar a chave `v1`).
   Estados combinam por OU: interação, falha/interrupção, agente trabalhando, sem mesa, fila e etapas.
+  "Implementando" inclui Revisão adversária e Revisão bloqueou (esta também em "Requer interação").
   Filtros combinam entre si por E. Persistência aditiva compatível com `opex:dev-center-filters:v1`;
   registros antigos sem estados continuam válidos. `allColumns` distingue ausência de seleção
   explícita (nenhuma coluna) do filtro legado vazio (todas).
@@ -693,11 +722,16 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
   `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`.
 - Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
-  prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas **Saída da
-  IA** (turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam, avisos) e
-  **Plano vN** (versões), pedidos pendentes e barra de ações com o campo de correção.
+  prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas
+  **Descrição** e **Spec.** (as primeiras da barra: descrição e especificação técnica da tarefa em
+  Markdown, só leitura, lidas por `useTaskDetail`; vazias mostram "Sem descrição."/"Sem
+  especificação técnica." com o atalho **Abrir a tarefa**, onde o texto é editado; falha ao
+  carregar com "Tentar novamente"; componente `TaskTextView`), **Saída da IA** (aba aberta ao
+  entrar na mesa; turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam,
+  avisos), **Plano vN** (versões) e **Forks (N)** (quando houver), pedidos pendentes e barra de
+  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe (celular).
 - **Citar uma linha da saída** (`ReplyTargetProvider` no `WorkbenchView`): cada linha do texto da
-  IA e do **Plano** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
+  IA, do **Plano** e das abas **Descrição** e **Spec.** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
   campo focado por último (resposta de pergunta pendente, correção/feedback da etapa, **Informações
   adicionais**, mensagem do Abrir fork). Sem campo aberto, abre o primeiro feedback da etapa
   (`revise-plan` → `request-correction` → `submit-pr-feedback` → `reopen`) já com a citação; sem
@@ -711,6 +745,34 @@ done → Reabrir mesa (texto ao planejador) → planning
   botão, o acompanhamento **retoma**. O botão rola suave, desligando o movimento com
   `prefers-reduced-motion`.
 
+## Chat durante a execução
+
+- Com o agente **executando**, a mesa (abas **Saída da IA** e **Plano**), o **fork ativo** e o
+  **refinamento** mostram o campo **Enviar ao agente** (`LiveMessageComposer`, entra/sai animado). A
+  mensagem entra na execução em andamento com `delivery: "steer"` do OpenCode 2.x: **não interrompe**
+  nem abre turno novo (o avanço das etapas não muda); o agente considera e segue. Parada, a mesa
+  continua só com as ações da etapa.
+- Opção efetiva = `resolveLiveChat(settings, central)` (`logic.ts`): a central com **Ligado**/**Desligado**
+  prevalece; **Padrão global** segue `settings.liveChat`. **Divergência intencional** do padrão
+  `inherit*` booleano das outras opções da central no Opex (`inheritQueue`, `inheritMovement`,
+  `git.inheritCi`): aqui o campo é o enum `liveChat: "inherit" | "on" | "off"`
+  (`LIVE_CHAT_POLICIES`, `OptionTabs` de 3 abas), como no my-tasks de origem — a opção é um
+  liga/desliga simples, sem valores próprios a personalizar. Vai pronta na tela como `liveChat` em
+  `WorkbenchDto`, `ForkDto` e no refinamento (`liveChatEnabled`, `server/live-chat.ts`).
+- Entrega (`deliverLiveMessage`): confere a opção (409 `LIVE_CHAT_DISABLED`), envia pelo runner
+  (`steerAgentTurn` de `lib/ai/opencode-run.ts`, que só envia a um turno **vivo e não terminado**
+  com aquele id — registro em memória por execução), mostra a mensagem na saída como mensagem do
+  usuário e audita (`MesaDeTrabalho`/`ForkDaMesa`/`RefinamentoTarefa`, campo
+  `mensagemDuranteExecucao`). Sem turno vivo (terminou ou trocando entre etapas encadeadas, ex.:
+  implementação → build): 409 `TURN_NOT_RUNNING`; recusa do OpenCode: 502 `LIVE_MESSAGE_FAILED`.
+- Recusas específicas: mesa parada (`WORKBENCH_NOT_RUNNING`) ou em exclusão (`WORKBENCH_DELETING`);
+  fork consolidando o resumo da integração (`FORK_INVALID_STATE`); refinamento parado
+  (`REFINEMENT_NOT_RUNNING`) ou consolidando a especificação (`REFINEMENT_FINALIZING`). Nesses casos
+  o campo nem aparece.
+- Fork: a mesma rota `/messages` — parado, abre turno novo (como antes); executando, entra no turno.
+- Citar linha da saída com a mesa executando (sem campo de correção aberto) preenche o campo.
+- Fora do escopo: revisão automática de PR (sem tela de conversa) e o Agente Opex (outro motor).
+
 ## APIs (`src/app/api/agentic/`)
 
 | Rota | Uso |
@@ -722,6 +784,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
+| `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |

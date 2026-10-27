@@ -22,6 +22,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { useRefinementAction, useRefinementRealtime, useRefinementReconnect, useStartRefinement, useTaskRefinement } from "../hooks/useRefinement"
 import { useRefinementStream } from "../hooks/useRefinementStream"
 import { refinementWaitingReason } from "../logic"
+import { RefinementLiveMessage } from "./RefinementLiveMessage"
 import { RefinementRequests } from "./RefinementRequests"
 
 interface RefinementPanelProps {
@@ -145,6 +146,7 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                         <Timeline timeline={timeline} running={Boolean(running)} />
                     </div>
                     <RefinementRequests taskId={taskId} refinement={refinement} />
+                    <RefinementLiveMessage taskId={taskId} refinement={refinement} />
                 </ReplyTargetProvider>
             ) : null}
 

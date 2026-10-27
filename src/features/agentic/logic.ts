@@ -88,6 +88,13 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
     return parsed.success ? parsed.data : base
 }
 
+/** Chat durante a execução efetivo: a central liga/desliga só nela ou segue o padrão global. */
+export function resolveLiveChat(settings: Pick<AgenticSettings, "liveChat">, central: Pick<CentralConfig, "liveChat">): boolean {
+    if (central.liveChat === "on") return true
+    if (central.liveChat === "off") return false
+    return settings.liveChat === true
+}
+
 /** Diretório das sessões sugerido para um projeto (repositório): `<raiz>/<nome-do-repositório>`. */
 export function defaultSessionDirectory(codeRoot: string, projectName: string): string {
     return `${codeRoot.replace(/\/+$/, "")}/${projectName.trim()}`
@@ -173,6 +180,10 @@ export type WorkbenchAction =
     | "interrupt"
     | "open-preview"
     | "cancel-wait"
+    /** Agente Adversário: corrigir os bloqueios, seguir mesmo assim ou revisar de novo. */
+    | "adversarial-fix"
+    | "adversarial-skip"
+    | "adversarial-rerun"
 
 /**
  * Ações disponíveis na mesa (os botões da tela e a guarda das rotas usam a mesma regra).
@@ -184,6 +195,8 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
     if (runState === "running") return ["interrupt"]
     if (runState === "failed" || runState === "interrupted") {
         if (!RUNNING_STAGES.includes(stage)) return []
+        // A revisão adversária roda numa sessão própria (já excluída): sem reconectar; refaz a rodada ou segue sem ela.
+        if (stage === "adversarial_review") return ["retry", "adversarial-skip", "request-correction"]
         const reconnect: WorkbenchAction[] = hasSession ? ["reconnect"] : []
         // Falha depois do plano: reconectar (sem reenviar), tentar de novo ou voltar ao planejamento com uma correção.
         // Merge e exclusão da branch remota não têm "voltar ao planejamento": só reconectar e tentar de novo.
@@ -193,6 +206,8 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
     switch (stage) {
         case "plan_review":
             return ["implement", "revise-plan"]
+        case "adversarial_blocked":
+            return ["adversarial-fix", "adversarial-rerun", "adversarial-skip"]
         case "preview":
             return hasPreview ? ["open-preview", "request-correction", "approve"] : ["request-correction", "approve"]
         case "changes_requested":
@@ -230,6 +245,8 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
     switch (stage) {
         case "plan_review":
             return "Aguardando revisão do plano"
+        case "adversarial_blocked":
+            return "O agente adversário bloqueou: decida como seguir"
         case "preview":
             return "Aguardando aprovação da prévia"
         case "pr_open":

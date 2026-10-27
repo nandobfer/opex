@@ -118,6 +118,11 @@ export function useForkAction(workbenchId: string, fork: ForkDto) {
                 toast.success(`Fork integrado: ${FORK_INTEGRATION_TARGET_LABELS[input.target!].label}`)
                 return
             }
+            // Mensagem com o agente respondendo (chat durante a execução): entrou no turno atual.
+            if (input.action === "send" && fork.runState === "running") {
+                toast.success("Mensagem enviada ao agente")
+                return
+            }
             if (input.action === "set-mode") {
                 toast.success(saved.mode === "build" ? "Modo Build: o fork pode alterar arquivos" : "Modo Plan: o fork é somente leitura")
                 return

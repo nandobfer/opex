@@ -1,8 +1,9 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
+import type { OpexJobStatus, OpexJobUnit, OpexJobWhen } from "@/features/opex-agent/jobs"
 import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
 
 /**
- * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions` e `opex_files`).
+ * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files` e `opex_jobs`).
  * Ver `aicontext/modules/opex-agent.md`. Os índices são garantidos pela migração
  * `ensure-opex-indexes`.
  */
@@ -38,7 +39,9 @@ export interface IOpexMessage {
     sessionId: Types.ObjectId
     seq: number
     role: "user" | "assistant"
-    kind: "message" | "confirmation"
+    kind: "message" | "confirmation" | "job"
+    /** Mensagem disparada por um job agendado. */
+    job?: { id: string; title: string } | null
     text: string
     files: IOpexFileRef[]
     parts: OpexPart[]
@@ -116,7 +119,8 @@ const OpexMessageSchema = new Schema<IOpexMessage>(
         sessionId: { type: Schema.Types.ObjectId, required: true },
         seq: { type: Number, required: true },
         role: { type: String, enum: ["user", "assistant"], required: true },
-        kind: { type: String, enum: ["message", "confirmation"], default: "message" },
+        kind: { type: String, enum: ["message", "confirmation", "job"], default: "message" },
+        job: { type: Schema.Types.Mixed, default: undefined },
         text: { type: String, default: "" },
         files: { type: Schema.Types.Mixed, default: [] },
         parts: { type: Schema.Types.Mixed, default: [] },
@@ -164,7 +168,64 @@ const OpexFileSchema = new Schema<IOpexFile>(
 )
 OpexFileSchema.index({ pending: 1, createdAt: 1 })
 
+/**
+ * Job (prompt agendado do agente) — `opex_jobs`. `clientId`/`userId` seguem a sessão: `null` = job do
+ * dono; preenchidos = job de um usuário do portal. Terminado, sai pelo TTL de `purgeAt`.
+ */
+export interface IOpexJob {
+    _id: Types.ObjectId
+    title: string
+    prompt: string
+    sessionId: Types.ObjectId | null
+    resultSessionId: Types.ObjectId | null
+    schedule: { when: OpexJobWhen; amount: number | null; unit: OpexJobUnit | null; date: string | null; time: string | null }
+    runAt: Date
+    status: OpexJobStatus
+    startedAt: Date | null
+    finishedAt: Date | null
+    delayMs: number | null
+    error: string | null
+    createdBy: "user" | "agent"
+    originSessionId: Types.ObjectId | null
+    sourceJobId: Types.ObjectId | null
+    /** Cliente do portal dono do job; `null` = job do dono. */
+    clientId: string | null
+    /** Usuário dono do job (`local` no app do dono; id do usuário no portal). */
+    userId: string
+    purgeAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const OpexJobSchema = new Schema<IOpexJob>(
+    {
+        title: { type: String, required: true },
+        prompt: { type: String, required: true },
+        sessionId: { type: Schema.Types.ObjectId, default: null },
+        resultSessionId: { type: Schema.Types.ObjectId, default: null },
+        schedule: { type: Schema.Types.Mixed, required: true },
+        runAt: { type: Date, required: true },
+        status: { type: String, enum: ["scheduled", "running", "done", "error", "awaiting_confirmation", "canceled"], default: "scheduled" },
+        startedAt: { type: Date, default: null },
+        finishedAt: { type: Date, default: null },
+        delayMs: { type: Number, default: null },
+        error: { type: String, default: null },
+        createdBy: { type: String, enum: ["user", "agent"], default: "user" },
+        originSessionId: { type: Schema.Types.ObjectId, default: null },
+        sourceJobId: { type: Schema.Types.ObjectId, default: null },
+        clientId: { type: String, default: null },
+        userId: { type: String, default: "" },
+        purgeAt: { type: Date, default: null },
+    },
+    { collection: "opex_jobs", versionKey: false, timestamps: true },
+)
+OpexJobSchema.index({ status: 1, runAt: 1 })
+OpexJobSchema.index({ createdAt: -1 })
+OpexJobSchema.index({ clientId: 1, userId: 1, runAt: -1 })
+OpexJobSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0, name: "purge_ttl" })
+
 if (process.env.NODE_ENV === "development") {
+    delete models.OpexJob
     delete models.OpexFile
     delete models.OpexSession
     delete models.OpexMessage
@@ -174,5 +235,6 @@ if (process.env.NODE_ENV === "development") {
 export const OpexSession: Model<IOpexSession> = (models.OpexSession as Model<IOpexSession>) || model<IOpexSession>("OpexSession", OpexSessionSchema)
 export const OpexMessage: Model<IOpexMessage> = (models.OpexMessage as Model<IOpexMessage>) || model<IOpexMessage>("OpexMessage", OpexMessageSchema)
 export const OpexFile: Model<IOpexFile> = (models.OpexFile as Model<IOpexFile>) || model<IOpexFile>("OpexFile", OpexFileSchema)
+export const OpexJob: Model<IOpexJob> = (models.OpexJob as Model<IOpexJob>) || model<IOpexJob>("OpexJob", OpexJobSchema)
 export const OpexPendingAction: Model<IOpexPendingAction> =
     (models.OpexPendingAction as Model<IOpexPendingAction>) || model<IOpexPendingAction>("OpexPendingAction", OpexPendingActionSchema)

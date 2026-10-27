@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Bot, History, Maximize2, MessageSquarePlus, Minimize2, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -17,10 +17,13 @@ interface OpexPanelProps {
     maximized: boolean
     onToggleMaximize?: () => void
     onClose: () => void
+    /** Sessão a ativar ao abrir (ex.: "Abrir sessão" de um job). */
+    focusSessionId?: string | null
+    onFocused?: () => void
 }
 
 /** Conteúdo do popover: cabeçalho, abas das sessões, lista de sessões e o chat da aba ativa. */
-export function OpexPanel({ maximized, onToggleMaximize, onClose }: OpexPanelProps) {
+export function OpexPanel({ maximized, onToggleMaximize, onClose, focusSessionId, onFocused }: OpexPanelProps) {
     const sessions = useOpexSessions()
     const view = useOpexView()
     const { tabs, ready, open, close, activate, startDraft } = useOpexTabs(sessions.data)
@@ -29,6 +32,12 @@ export function OpexPanel({ maximized, onToggleMaximize, onClose }: OpexPanelPro
     const byId = useMemo(() => new Map((sessions.data ?? []).map((session) => [session.id, session])), [sessions.data])
     const modelLabel = view.data?.modelLabel ?? null
     const active = tabs.active ?? OPEX_DRAFT_TAB
+
+    useEffect(() => {
+        if (!focusSessionId || !ready || !sessions.data) return
+        if (sessions.data.some((session) => session.id === focusSessionId)) open(focusSessionId)
+        onFocused?.()
+    }, [focusSessionId, ready, sessions.data, open, onFocused])
 
     return (
         <div className="flex h-full min-h-0 flex-col">

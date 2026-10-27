@@ -8,7 +8,7 @@ import { opexFileKind, opexFilePath } from "../files"
 import type { OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { forgetSession, isTurnActive } from "./hub"
 import { OWNER_SCOPE, sessionFilterOf, type OpexServerScope } from "./scope"
-import { OpexMessage, OpexPendingAction, OpexSession, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
+import { OpexJob, OpexMessage, OpexPendingAction, OpexSession, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
 
 /** Conecta ao banco (os índices das coleções vêm da migração `ensure-opex-indexes`). */
 export async function opexDb(): Promise<void> {
@@ -42,6 +42,7 @@ export function toMessageDto(doc: MessageDoc): OpexMessageDto {
         id: doc._id.toString(),
         role: doc.role,
         kind: doc.kind ?? "message",
+        job: doc.job ?? null,
         text: doc.text ?? "",
         files: (doc.files ?? []).map(toFileDto),
         parts: doc.parts ?? [],
@@ -148,9 +149,10 @@ export async function updateSession(id: string, input: { title?: string; archive
     return toSessionDto(doc)
 }
 
-/** Cliente excluído: apaga as sessões do agente, mensagens, ações e arquivos (sem escopo de ator). */
+/** Cliente excluído: apaga as sessões do agente, mensagens, ações, arquivos e jobs (sem escopo de ator). */
 export async function deleteClientOpexData(clientId: string): Promise<void> {
     await opexDb()
+    await OpexJob.deleteMany({ clientId })
     const sessions = await OpexSession.find({ clientId }).select({ _id: 1 }).lean<Pick<SessionDoc, "_id">[]>()
     for (const session of sessions) {
         const id = session._id.toString()

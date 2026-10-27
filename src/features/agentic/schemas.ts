@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
 
 /** Máximo de modelos de fallback por papel. */
 export const MAX_MODEL_FALLBACKS = 5
@@ -97,6 +97,8 @@ export const agenticSettingsSchema = z.object({
     agents: z.object(agentsShape),
     columns: agenticColumnsSchema,
     ci: agenticCiSchema,
+    /** Chat durante a execução: mensagens com o agente trabalhando (mesa, forks e refinamento) entram no turno atual. */
+    liveChat: z.boolean(),
 })
 export type AgenticSettings = z.infer<typeof agenticSettingsSchema>
 
@@ -111,6 +113,7 @@ export const DEFAULT_AGENTIC_SETTINGS: AgenticSettings = {
     },
     columns: { ...DEFAULT_AGENTIC_COLUMNS },
     ci: { ...DEFAULT_AGENTIC_CI },
+    liveChat: false,
 }
 
 /**
@@ -225,6 +228,8 @@ export const centralConfigSchema = z.object({
     }),
     include: z.object({ comments: z.boolean(), history: z.boolean() }),
     forks: z.object({ onWorkbenchDone: z.enum(FORK_DONE_POLICIES) }),
+    /** Chat durante a execução nesta central: `inherit` segue o padrão global; `on`/`off` prevalecem. */
+    liveChat: z.enum(LIVE_CHAT_POLICIES),
     instructions: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, optionalText(4000)])) as Record<AgentRole, ReturnType<typeof optionalText>>),
 }).superRefine((value, ctx) => {
     if (value.environment.previewPortMin > value.environment.previewPortMax) {
@@ -267,6 +272,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
         include: { comments: true, history: false },
         forks: { onWorkbenchDone: "ask" },
+        liveChat: "inherit",
         instructions: { planning: "", implementation: "", build: "", pr: "", fork: "" },
     }
 }
@@ -308,6 +314,10 @@ export const formReplySchema = z.object({
     cancel: z.boolean().optional(),
 })
 export type FormReplyInput = z.infer<typeof formReplySchema>
+
+/** Mensagem do usuário com o agente trabalhando (entra no turno em andamento). */
+export const liveMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem").max(20_000, "Até 20.000 caracteres") })
+export type LiveMessageInput = z.infer<typeof liveMessageSchema>
 
 /** Mensagem do usuário num fork da conversa (a primeira abre o fork). */
 export const forkMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem") })

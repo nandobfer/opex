@@ -22,6 +22,7 @@ import { buildResolvedIntegration, getIntegration, isIntegrationConfigured, mana
 import { invalidateStoredIntegrations, loadStoredIntegration } from "@/lib/integrations/store"
 import type { IntegrationLogLine } from "@/lib/integrations/log-format"
 import type { IntegrationUpdateInput } from "../schemas/integration.schema"
+import { runIntegrationEnableHook } from "./enable-hooks"
 import type {
     CronJobStateDto,
     IntegrationDetailDto,
@@ -282,6 +283,9 @@ export async function updateIntegration(
             antes: previousData,
             depois: newData,
         })
+
+        // Integração ativável (campo `active`): a transição desligada → ligada dispara o gancho de ativação.
+        if (beforeValues.active !== true && newData.active === true) await runIntegrationEnableHook(id, actorId)
     }
 
     return getIntegrationDetail(id)

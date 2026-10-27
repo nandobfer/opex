@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => ({
   reopen: vi.fn(async () => undefined),
   forkAgent: { value: 'plan' },
   forkFallbacks: { value: [] as { model: string; variant: string | null }[] },
+  steer: vi.fn(async () => true),
+  liveChat: { value: false },
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -44,7 +46,7 @@ vi.mock('@/lib/logger', () => {
 })
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => mocks.client) }))
-vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn }))
+vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn, steerAgentTurn: mocks.steer }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { AgenticWorkbench: memoryModel(), AgenticFork: memoryModel(), AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
@@ -61,7 +63,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
   flushWorkbenchEvents: vi.fn(async () => undefined),
 }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: mocks.deleteSession }))
-vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null, fallbacks: mocks.forkFallbacks.value } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
+vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, liveChat: mocks.liveChat.value, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null, fallbacks: mocks.forkFallbacks.value } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
 vi.mock('@/features/agentic/server/workflow', () => ({ getWorkbench: mocks.getWorkbench, revisePlan: mocks.revisePlan, requestCorrection: mocks.requestCorrection, submitPrFeedback: mocks.submitPrFeedback, reopen: mocks.reopen }))
 
 import { AgenticFork, AgenticWorkbench } from '@/lib/db/models/Agentic'
@@ -157,6 +159,7 @@ beforeEach(() => {
   mocks.active.clear()
   mocks.forkAgent.value = 'plan'
   mocks.forkFallbacks.value = []
+  mocks.liveChat.value = false
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
   mocks.client.session.fork.mockResolvedValue({ id: 'fork-sess-1', location: { directory: '/home/u/app/worktrees/ope-1' } })
   mocks.client.session.create.mockResolvedValue({ id: 'fresh-sess-1', location: { directory: '/home/u/app' } })
@@ -164,6 +167,67 @@ beforeEach(() => {
   mocks.client.session.instructions.entry.put.mockResolvedValue(undefined)
   mocks.runTurn.mockResolvedValue({ outcome: 'succeeded', text: 'Resposta', message: null, costUsd: 0, durationMs: 1 })
   mocks.getWorkbench.mockImplementation(async (id: string) => asDto(id))
+})
+
+describe('chat durante a execução no fork', () => {
+  /** Abre um fork cujo turno fica rodando até `finish()`. */
+  async function runningFork() {
+    let finish: () => void = () => {}
+    mocks.runTurn.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({ outcome: 'succeeded', text: 'ok', message: null, costUsd: 0, durationMs: 1 }))))
+    const id = await workbench()
+    const dto = await openFork(id, 'Investigue X')
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalledTimes(1))
+    return { id, forkId: dto.id, finish: () => finish() }
+  }
+
+  it('ligado: com o agente respondendo, a mensagem entra no turno atual (sem turno novo), aparece na saída e é auditada', async () => {
+    mocks.liveChat.value = true
+    const { id, forkId, finish } = await runningFork()
+    const dto = await sendForkMessage(id, forkId, 'olhe também o módulo Y')
+    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'olhe também o módulo Y')
+    expect(mocks.runTurn).toHaveBeenCalledTimes(1)
+    expect(mocks.publish).toHaveBeenCalledWith(forkId, { type: 'user', text: 'olhe também o módulo Y' })
+    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ entidade: 'ForkDaMesa', depois: expect.objectContaining({ fork: 1, mensagemDuranteExecucao: 'olhe também o módulo Y' }) }))
+    expect(dto.liveChat).toBe(true)
+    finish()
+    await settle(forkId)
+  })
+
+  it('desligado (padrão): recusa com o agente respondendo; a central pode ligar só nela', async () => {
+    const { id, forkId, finish } = await runningFork()
+    await expect(sendForkMessage(id, forkId, 'x')).rejects.toMatchObject({ status: 409, code: 'LIVE_CHAT_DISABLED' })
+    expect(mocks.steer).not.toHaveBeenCalled()
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: { ...defaultCentralConfig('/home/u/app'), liveChat: 'on' } })
+    await sendForkMessage(id, forkId, 'agora vai')
+    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'agora vai')
+    finish()
+    await settle(forkId)
+  })
+
+  it('turno terminando no instante do envio: 409 sem publicar a mensagem', async () => {
+    mocks.liveChat.value = true
+    mocks.steer.mockResolvedValueOnce(false)
+    const { id, forkId, finish } = await runningFork()
+    await expect(sendForkMessage(id, forkId, 'x')).rejects.toMatchObject({ status: 409, code: 'TURN_NOT_RUNNING' })
+    expect(mocks.publish).not.toHaveBeenCalledWith(forkId, { type: 'user', text: 'x' })
+    finish()
+    await settle(forkId)
+  })
+
+  it('consolidando o resumo da integração: recusa mesmo com a opção ligada', async () => {
+    mocks.liveChat.value = true
+    const id = await workbench()
+    const opened = await openFork(id, 'a')
+    await settle(opened.id)
+    await closeFork(id, opened.id)
+    let finish: () => void = () => {}
+    mocks.runTurn.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({ outcome: 'succeeded', text: '## Resumo para integração\nX', message: null, costUsd: 0, durationMs: 1 }))))
+    await integrateFork(id, opened.id)
+    await expect(sendForkMessage(id, opened.id, 'x')).rejects.toMatchObject({ status: 409, code: 'FORK_INVALID_STATE' })
+    expect(mocks.steer).not.toHaveBeenCalled()
+    finish()
+    await settle(opened.id)
+  })
 })
 
 describe('modelos de fallback no fork', () => {

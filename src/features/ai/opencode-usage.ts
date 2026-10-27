@@ -18,6 +18,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     refinement: "Refinar tarefa",
     agentic: "Desenvolvimento agêntico (mesas)",
     "pr-review": "Revisão de PR",
+    "adversarial-agent": "Agente Adversário",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {

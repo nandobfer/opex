@@ -38,7 +38,7 @@ import {
   normalizeClientOpexConfig,
   saveClientOpexConfig,
 } from '@/features/opex-agent/server/client-config'
-import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOLS, OPEX_CLIENT_TOOL_NAMES } from '@/features/opex-agent/client-tools'
+import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_OPT_IN_TOOLS, OPEX_CLIENT_TOOLS, OPEX_CLIENT_TOOL_NAMES } from '@/features/opex-agent/client-tools'
 import type { ClientActor } from '@/features/auth/server/context'
 import type { MemoryModel } from '../../helpers/memory-model'
 
@@ -64,16 +64,21 @@ beforeEach(() => {
 })
 
 describe('configuração do Agente Opex por cliente', () => {
-  it('sem configuração salva, o agente vem ativado com todas as ferramentas do portal', async () => {
-    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: [] })
+  it('sem configuração salva, o agente vem ativado com todas as ferramentas do portal, menos as desligadas por padrão', async () => {
+    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [] })
     const dto = await getClientOpexConfig(CLIENT_A)
     expect(dto.enabled).toBe(true)
-    expect(dto.enabledTools).toEqual(OPEX_CLIENT_TOOL_NAMES)
+    expect(dto.enabledTools).toEqual(OPEX_CLIENT_TOOL_NAMES.filter((name) => !OPEX_CLIENT_OPT_IN_TOOLS.includes(name)))
+    expect(dto.enabledTools).not.toContain('schedule_job')
   })
 
   it('normaliza valor ausente e ignora nomes fora do catálogo', () => {
-    expect(normalizeClientOpexConfig(undefined)).toEqual({ enabled: true, disabledTools: [] })
-    expect(normalizeClientOpexConfig({ enabled: false, disabledTools: [OPEX_CLIENT_CONTEXT_TOOL, 'nao_existe', 'list_tasks'] })).toEqual({ enabled: false, disabledTools: ['list_tasks'] })
+    expect(normalizeClientOpexConfig(undefined)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [] })
+    expect(normalizeClientOpexConfig({ enabled: false, disabledTools: [OPEX_CLIENT_CONTEXT_TOOL, 'nao_existe', 'list_tasks'], enabledOptInTools: ['list_tasks', 'list_jobs'] })).toEqual({
+      enabled: false,
+      disabledTools: ['list_tasks'],
+      enabledOptInTools: ['list_jobs'],
+    })
   })
 
   it('salvar guarda as ferramentas desligadas e mantém o contexto sempre ligado', async () => {
@@ -82,7 +87,7 @@ describe('configuração do Agente Opex por cliente', () => {
 
     expect(saved.enabledTools).toContain(OPEX_CLIENT_CONTEXT_TOOL)
     expect(saved.enabledTools).not.toContain('delete_user')
-    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: ['delete_user'] })
+    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: ['delete_user'], enabledOptInTools: [...OPEX_CLIENT_OPT_IN_TOOLS] })
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidadeId: CLIENT_A, acao: 'ATUALIZAR' }))
     expect(mocks.publishAppEvent).toHaveBeenCalledWith('opex-client-config-updated', { clientId: CLIENT_A })
     expect(mocks.publishToChannels).toHaveBeenCalledWith([`private-client-${CLIENT_A}`], 'opex-client-config-updated', { clientId: CLIENT_A })
@@ -98,10 +103,27 @@ describe('configuração do Agente Opex por cliente', () => {
     await expect(saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: ['ferramenta_inventada'] }, 'local')).rejects.toMatchObject({ code: 'OPEX_TOOL_UNKNOWN' })
   })
 
-  it('o DTO mostra todas as ferramentas quando estão ligadas (inclusive as de admin)', () => {
-    const dto = clientOpexConfigDto({ enabled: true, disabledTools: [] })
+  it('o DTO mostra todas as ferramentas quando estão ligadas (inclusive as de admin e as ligadas por escolha)', () => {
+    const dto = clientOpexConfigDto({ enabled: true, disabledTools: [], enabledOptInTools: [...OPEX_CLIENT_OPT_IN_TOOLS] })
     expect(dto.enabledTools).toHaveLength(OPEX_CLIENT_TOOLS.length)
     expect(dto.enabledTools).toContain('delete_user')
+  })
+
+  it('jobs são opt-in: cliente existente fica sem eles; ligar grava em enabledOptInTools e desligar remove', async () => {
+    clients().docs.push({ _id: 'e'.repeat(24), name: 'Antigo', opexAgent: { enabled: true, disabledTools: ['delete_user'] } })
+    const legacy = await getClientOpexConfig('e'.repeat(24))
+    expect(legacy.enabledTools).not.toContain('list_jobs')
+
+    const withJobs = await saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: ['list_tasks', 'list_jobs', 'schedule_job'] }, 'local')
+    expect(withJobs.enabledTools).toEqual(expect.arrayContaining(['list_jobs', 'schedule_job']))
+    expect(withJobs.enabledTools).not.toContain('cancel_job')
+    const stored = await loadClientOpexConfig(CLIENT_A)
+    expect(stored.enabledOptInTools).toEqual(['list_jobs', 'schedule_job'])
+    expect(stored.disabledTools).not.toContain('cancel_job')
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ ligadasPorEscolha: ['list_jobs', 'schedule_job'] }) }))
+
+    await saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: ['list_tasks'] }, 'local')
+    expect((await loadClientOpexConfig(CLIENT_A)).enabledOptInTools).toEqual([])
   })
 
   it('agente desativado recusa o uso no portal', async () => {

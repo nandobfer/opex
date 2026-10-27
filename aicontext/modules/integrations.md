@@ -122,7 +122,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   Geral, Vínculos, Mapeamento, Sincronização), Provedores de IA (`AiEditorForm`:
   Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico), página de
   cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
-  Crons (`CronsEditorForm`: Geral e Rotinas) e a página da central de desenvolvimento
+  Crons (`CronsEditorForm`: Geral, Rotinas e Jobs) e a página da central de desenvolvimento
   (`/integracoes/ia/centrais/[id]`). A integração **Clientes** (`/integracoes/clientes`) **não tem
   abas**: a lista de clientes aparece direto, sem card interno. `useLocalTabs` é o irmão **sem URL**
   (mesmo formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não
@@ -173,6 +173,18 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   (`?scope=` na rota de logs; `IntegrationDebugConsole scope=…`, que também aceita um teste próprio
   em `onTest`) — usado pelo terminal de cada central de desenvolvimento. Ordem do Esc: limpa a busca → restaura (formulário) / fecha (modal).
 
+### Integrações ativáveis (campo `active`)
+
+- Uma integração pode declarar o campo público `active` ("Integração ativa", `boolean`). Hoje só a
+  **Builder Machine** (`builder_machine`, padrão desligada — ver `modules/builder-machine.md`).
+- Ela aparece sempre na lista e na página (para poder ser ativada); desativada, o **teste periódico
+  de status a pula** (`runAllIntegrationHealthChecks`) e as rotas da feature respondem 404.
+- **Gancho de ativação**: `updateIntegration` chama `runIntegrationEnableHook` na transição
+  `active` desligado → ligado, depois de gravar e auditar (`INTEGRATION_ENABLE_HOOKS` em
+  `services/enable-hooks.ts`, import dinâmico; falha só é logada e não desfaz a ativação).
+- A Builder Machine tem página própria (`BuilderMachineEditorForm`, ramo `id === "builder_machine"`
+  no `IntegrationEditor`).
+
 ### Crons e agendador interno
 
 - Motor: `src/features/integrations/scheduler/cron-scheduler.ts` (`runSchedulerTick`). O
@@ -193,7 +205,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   remove uploads de anexo abandonados no storage e conclui remoções físicas pendentes; ver
   `modules/tasks.md`, "Anexos da tarefa") e `opex-files-cleanup` (60 min — remove do storage e do banco
   os arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h; ver
-  `modules/opex-agent.md`).
+  `modules/opex-agent.md`) e `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
+  ao ativar a Builder Machine — ver `modules/builder-machine.md`).
+- **Rotinas de integração ativável** (`INTEGRATION_CRON_JOBS`, `cronJobIntegration`): com a
+  integração dona desativada (campo `active`), a rotina some da aba Rotinas (`hiddenJobIds` em
+  `CronJobsCard`/`CronJobsEditor`); continua salva e a edição a preserva.
 - A rotina `ai-task-tags-concluded` permite persistir
   `scope: "pending" | "all"` no card da rotina ("Só pendentes" / "Todas"), para geração de tags
   de concluídas não arquivadas. O escopo salvo vale tanto para "Executar agora" quanto para o
@@ -210,7 +226,12 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   (`runJobNow`), 404 rotina não salva, 409 em execução, falha da rotina → 200 `ok:false`.
   Auditado (`execucaoManual`, `resultado`, `mensagem`, `duracaoMs`).
 - **Página em abas** (`CronsEditorForm`): **Geral** (agendador, URL base interna, cron secret e
-  documentação) e **Rotinas** (lista). Na aba Rotinas há um campo de **busca** (Fuse.js) que filtra
+  documentação), **Rotinas** (lista) e **Jobs** (`OpexJobsTab`: prompts agendados do Agente Opex, do
+  dono e dos usuários do portal — ver `modules/opex-agent.md`, "Jobs"; sempre presente).
+- Depois dos jobs, o tick confere o túnel da **Builder Machine** (`runLocalDockerHealth`, só com a
+  integração ativa, no máximo 1×/min; reabre o túnel caído — ver `modules/builder-machine.md`).
+- **Jobs do Agente Opex** rodam no fim de cada tick (`runDueOpexJobs`, import dinâmico com
+  `try/catch`, sem derrubar o tick); com o agendador desligado, nenhum job roda. Na aba Rotinas há um campo de **busca** (Fuse.js) que filtra
   a exibição sem mexer no rascunho. Cada rotina nasce **recolhida**: cabeçalho com nome, "Executar
   agora" e o switch de status, mais a linha com a próxima e a última execução; ao expandir, aparecem
   os campos de configuração (nome/caminho, agendamento, escopo e remover). Editar/excluir age sobre

@@ -63,6 +63,19 @@ export function useRefinementAction(taskId: string) {
     })
 }
 
+/** Chat durante a execução: mensagem que entra no turno de refinamento em andamento. */
+export function useSendRefinementMessage(taskId: string) {
+    const set = useSetRefinement(taskId)
+    return useMutation({
+        mutationFn: async (text: string) => unwrapApi((await api.post<ApiResponse<TaskRefinementStateDto>>(`/tasks/${taskId}/refinement/messages`, { text })).data),
+        onSuccess: (state) => {
+            set(state)
+            toast.success("Mensagem enviada ao agente")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a mensagem ao agente")),
+    })
+}
+
 /**
  * Reconectar ao turno do refinamento (attach à mesma sessão). Sem toast próprio: as tentativas
  * automáticas do ciclo de reconexão são silenciosas.

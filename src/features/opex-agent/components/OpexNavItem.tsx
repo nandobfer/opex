@@ -11,9 +11,11 @@ import { SidebarTooltip } from "@/features/layout/components/sidebar/SidebarTool
 import { SIDEBAR_FOCUS_RING, sidebarItemVariants } from "@/features/layout/components/sidebar/sidebar-styles"
 import { isOpexShortcut } from "../constants"
 import { useOpexRealtime, useOpexSessions } from "../hooks/useOpexSessions"
+import { useOpexJobNotifications } from "../hooks/useOpexJobs"
 import { useOpexStatus } from "../hooks/useOpexSettings"
 import { useOpexScope } from "./OpexScopeProvider"
 import { OpexUploadsProvider } from "../hooks/useOpexUploads"
+import { onOpenOpexSession } from "../open-session"
 import { OpexPanel } from "./OpexPanel"
 
 const LABEL = "Agente Opex"
@@ -56,12 +58,22 @@ function OpexNavItemContent({ collapsed }: OpexNavItemProps) {
     const enabled = scope.kind === "owner" || status.data?.enabled === true
     const [open, setOpen] = useState(false)
     const [maximized, setMaximized] = useState(false)
+    const [focusSessionId, setFocusSessionId] = useState<string | null>(null)
     const reduceMotion = useReducedMotion() ?? false
     const viewport = useViewport()
     const mobile = viewport.width < MOBILE_MAX
     const sessions = useOpexSessions(enabled)
     useOpexRealtime(enabled)
+    useOpexJobNotifications(enabled)
     const busy = (sessions.data ?? []).some((session) => session.status === "running" || session.status === "awaiting_confirmation")
+
+    useEffect(() => {
+        if (!enabled) return
+        return onOpenOpexSession((sessionId) => {
+            setFocusSessionId(sessionId)
+            setOpen(true)
+        })
+    }, [enabled])
 
     useEffect(() => {
         if (!enabled) return
@@ -122,7 +134,7 @@ function OpexNavItemContent({ collapsed }: OpexNavItemProps) {
                                         <VisuallyHidden>
                                             <DialogPrimitive.Title>{LABEL}</DialogPrimitive.Title>
                                         </VisuallyHidden>
-                                        <OpexPanel maximized onClose={() => setOpen(false)} />
+                                        <OpexPanel maximized onClose={() => setOpen(false)} focusSessionId={focusSessionId} onFocused={() => setFocusSessionId(null)} />
                                     </motion.div>
                                 </DialogPrimitive.Content>
                             </DialogPrimitive.Portal>
@@ -154,7 +166,13 @@ function OpexNavItemContent({ collapsed }: OpexNavItemProps) {
                                     style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
                                     className="z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl shadow-primary/10"
                                 >
-                                    <OpexPanel maximized={maximized} onToggleMaximize={() => setMaximized((value) => !value)} onClose={() => setOpen(false)} />
+                                    <OpexPanel
+                                        maximized={maximized}
+                                        onToggleMaximize={() => setMaximized((value) => !value)}
+                                        onClose={() => setOpen(false)}
+                                        focusSessionId={focusSessionId}
+                                        onFocused={() => setFocusSessionId(null)}
+                                    />
                                 </motion.div>
                             </PopoverPrimitive.Content>
                         </PopoverPrimitive.Portal>

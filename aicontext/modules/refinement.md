@@ -140,6 +140,13 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
   **sem** a especificação, apenas consolida), **restart** (Recomeçar: descarta a conversa e abre uma
   nova sessão; a especificação já salva na tarefa é mantida) e **reconnect** (acompanha a sessão
   existente sem reenviar prompt — ver "Reconectar").
+- **Chat durante a execução** (`POST .../refinement/messages {text}`): com o agente refinando e a
+  opção ligada (padrão global de Desenvolvimento agêntico + ajuste da central do refinamento;
+  `liveChat` no DTO), o painel mostra **Enviar ao agente** abaixo das perguntas
+  (`RefinementLiveMessage`) e a mensagem entra no turno em andamento sem interromper. Recusa (409)
+  com a opção desligada, parado (`REFINEMENT_NOT_RUNNING`) ou durante a consolidação da
+  especificação (`REFINEMENT_FINALIZING`). Regras completas em `modules/agentic-dev.md`, "Chat
+  durante a execução".
 - Um refinamento "executando" sem turno vivo no processo (o app reiniciou) vira `interrupted` ao ser
   lido (`reconcile`), com **Continuar** disponível.
 - Excluir a tarefa apaga o refinamento e a saída gravada (melhor esforço).
@@ -181,9 +188,10 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
 | `POST /api/tasks/[id]/refinement/forms/[formId]` `{answer}` ou `{cancel:true}` | Responde a pergunta |
 | `POST /api/tasks/[id]/refinement/permissions/[requestId]` `{decision, message?}` | Responde permissão |
 | `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart`, `reconnect` |
+| `POST /api/tasks/[id]/refinement/messages` `{text}` | Chat durante a execução: mensagem que entra no turno em andamento |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração da feature + disponibilidade |
 
-Auditoria: `RefinamentoTarefa` (iniciar, recomeçar, excluir). A gravação da especificação usa a
+Auditoria: `RefinamentoTarefa` (iniciar, recomeçar, excluir, mensagem durante a execução). A gravação da especificação usa a
 auditoria normal da tarefa (`updateTask`, entidade `Tarefa`, `especificacao: "alterada"`); como
 `technicalSpec` **não** está entre os campos sincronizados com o GitHub, a gravação **não** empurra
 nada para a issue.

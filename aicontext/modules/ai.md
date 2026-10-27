@@ -114,8 +114,9 @@ e opções na própria aba da página "Provedores de IA".
   (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
   histórico e saída ao vivo — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
   configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
-  DeepSeek) — ver `modules/opex-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver
-  abaixo).
+  DeepSeek) — ver `modules/opex-agent.md` —, a aba **Agente Adversário** (`agente-adversario`,
+  ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
+  `modules/adversarial-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**
@@ -313,12 +314,14 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   como texto; o refinamento só é marcado como esclarecido quando o turno produz a especificação **e**
   ela é gravada. Ver `modules/refinement.md`.
 
-## Memórias do Agente Opex (OPE-85, copiado do Ciliar)
+## Memórias dos agentes (Agente Opex OPE-85, copiado do Ciliar · Agente Adversário OPE-87)
 
 - **Listas** (catálogo puro `src/features/ai/agents.ts`): `opex-global` (**Memórias globais**, valem
-  no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono) e `opex-client`
-  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes). Uma lista nova entra
-  no catálogo e ganha a API, o card e as ferramentas do agente.
+  no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono), `opex-client`
+  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes) e `adversarial`
+  (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa). Cada lista tem a
+  aba onde aparece (`tab`: `agente-opex` ou `agente-adversario`; `aiAgentsOfTab`). Uma lista nova
+  entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
 - **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `createdBy`,
   `updatedBy`, datas; índice `{ agentId, createdAt }`). Até **50** por lista (409 `MEMORY_LIMIT`);
   texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
@@ -327,14 +330,19 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias"); auditoria
   `MemoriaAgente` (criar/atualizar/excluir, com o texto), log Pino e evento
   `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
-- **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (ver `modules/opex-agent.md`).
-- **Tela** (aba Agente Opex › Memórias): três cards `AgentMemoriesCard` com `MemoryList` — linha com o
+- **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (módulo puro
+  `src/features/ai/memories-prompt.ts`, compartilhado; ver `modules/opex-agent.md` e
+  `modules/adversarial-agent.md`). O prompt do Agente Opex nunca recebe a lista `adversarial`.
+- **Tela**: aba Agente Opex › Memórias mostra só as listas da aba (`aiAgentsOfTab("agente-opex")`:
+  três cards); aba Agente Adversário › Memórias mostra o card `adversarial` (sem modelo de resumo
+  próprio: usa o Resumo de memórias global). Cards `AgentMemoriesCard` com `MemoryList` — linha com o
   resumo de uma linha que expande o texto completo, autor e "há X tempo"; **Nova memória**/editar com
   `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
   (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
   confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi
   salva sem formatação. Tempo real por `useMemoriesRealtime`.
-- **Ferramentas do agente**: grupo "Memórias do agente" (`list/get/create/update/delete_agent_memory`).
+- **Ferramentas do agente**: grupo "Memórias do agente" (`list/get/create/update/delete_agent_memory`),
+  com o enum de todas as listas do catálogo — inclusive a do Agente Adversário.
 
 ## Feature "Resumo de memórias"
 
@@ -363,7 +371,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração de "Refinar tarefa" + disponibilidade |
 | `GET/PUT /api/ai/features/memory-summary` | Configuração do "Resumo de memórias" + disponibilidade |
-| `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista (`opex-global`, `opex-owner`, `opex-client`); criar `{ texto }` → `{ memoria, formatadaPorIa }` |
+| `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista (`opex-global`, `opex-owner`, `opex-client`, `adversarial`); criar `{ texto }` → `{ memoria, formatadaPorIa }` |
 | `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto }` (reformata); excluir |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |

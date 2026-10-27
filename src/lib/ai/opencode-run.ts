@@ -42,6 +42,8 @@ export interface TurnRequest {
     startedAt?: number
     /** Contexto do painel de consumo: origem (ex.: `agentic`, `refinement`) e referência. */
     consumption?: { origin: string; subject?: string | null }
+    /** Arquivos anexados à mensagem (`uri` pode ser `data:<mime>;base64,…`), enviados junto do texto. */
+    files?: readonly { uri: string; name: string }[]
 }
 
 /** Evento neutro de um turno; quem publica decide o canal (barramento da mesa, etc.). */
@@ -157,6 +159,33 @@ export async function probeAttachSession(client: OpencodeClient, sessionId: stri
 
 type End = { outcome: TurnResult["outcome"]; message: string | null; failure?: "model" }
 
+/** Turnos acompanhados agora, por `request.id` (mesa, fork ou refinamento): quem pode receber mensagem no meio da execução. */
+interface LiveTurn {
+    client: OpencodeClient
+    sessionId: string
+    finished: () => boolean
+}
+const globalLive = globalThis as unknown as { __opencodeLiveTurns?: Map<string, LiveTurn> }
+const liveTurns = (globalLive.__opencodeLiveTurns ??= new Map())
+
+/** Há um turno em andamento (ainda não terminado) acompanhado com este id? */
+export function isAgentTurnLive(id: string): boolean {
+    const live = liveTurns.get(id)
+    return Boolean(live && !live.finished())
+}
+
+/**
+ * Mensagem do usuário no meio da execução em andamento (`delivery: "steer"`): entra como contexto do
+ * turno atual, sem interromper nem abrir turno novo. `false` = não há turno vivo com esse id (terminou
+ * ou está trocando de etapa) e nada foi enviado.
+ */
+export async function steerAgentTurn(id: string, text: string): Promise<boolean> {
+    const live = liveTurns.get(id)
+    if (!live || live.finished()) return false
+    await live.client.session.prompt({ sessionID: live.sessionId, text, delivery: "steer" })
+    return true
+}
+
 export async function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks: TurnHooks = {}): Promise<TurnResult> {
     const { sessionId } = request
     const attach = request.attach === true
@@ -252,6 +281,9 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         finished = true
         resolveEnd(end)
     }
+
+    const live: LiveTurn = { client, sessionId, finished: () => finished }
+    liveTurns.set(request.id, live)
 
     const subscription = new AbortController()
     let readyResolve: () => void = () => undefined
@@ -409,7 +441,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         if (request.signal.aborted) finish({ outcome: "interrupted", message: "Interrompido antes de começar" })
         else if (!attach) {
             try {
-                await client.session.prompt({ sessionID: sessionId, text: request.text })
+                const files = request.files?.length ? { files: request.files.map((file) => ({ uri: file.uri, name: file.name })) } : {}
+                await client.session.prompt({ sessionID: sessionId, text: request.text, ...files })
             } catch (error) {
                 finish({ outcome: "failed", message: `O OpenCode recusou a mensagem: ${message(error)}`, failure: "model" })
             }
@@ -424,6 +457,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         publish({ type: "turn-end", outcome: end.outcome, message: end.message, durationMs, costUsd })
         return { outcome: end.outcome, text, message: end.message, costUsd, durationMs, ...(end.outcome === "failed" ? { failure: attach ? "other" : (end.failure ?? "other") } : {}) }
     } finally {
+        if (liveTurns.get(request.id) === live) liveTurns.delete(request.id)
         clearInterval(heartbeat)
         clearTimeout(timeout)
         request.signal.removeEventListener("abort", onAbort)

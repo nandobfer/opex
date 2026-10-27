@@ -37,6 +37,7 @@ const fork = (patch: Partial<ForkDto> = {}): ForkDto => ({
   mode: 'plan',
   readOnly: false,
   model: null,
+  liveChat: false,
   forkedFromStage: 'plan_review',
   summary: null,
   integration: null,
@@ -63,6 +64,22 @@ beforeEach(() => {
 })
 
 describe('ForkActionBar', () => {
+  it('chat durante a execução ligado: com o agente respondendo no fork ativo, envia a mensagem ao turno atual', () => {
+    render(<ForkActionBar workbenchId="w1" fork={fork({ runState: 'running', liveChat: true })} />)
+    fireEvent.change(screen.getByLabelText('Mensagem para o agente em execução'), { target: { value: 'olhe o módulo Y' } })
+    fireEvent.click(screen.getByRole('button', { name: /Enviar ao agente/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'send', text: 'olhe o módulo Y' }, expect.anything())
+    expect(screen.getByRole('button', { name: /Parar/ })).toBeTruthy()
+  })
+
+  it('chat durante a execução: desligado ou consolidando o resumo, o campo não aparece com o agente respondendo', () => {
+    const { unmount } = render(<ForkActionBar workbenchId="w1" fork={fork({ runState: 'running' })} />)
+    expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+    unmount()
+    render(<ForkActionBar workbenchId="w1" fork={fork({ runState: 'running', status: 'integrating', liveChat: true })} />)
+    expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+  })
+
   it('mostra o Modelo do fork ao lado do Modo', () => {
     render(<ForkActionBar workbenchId="w1" fork={fork({ model: { model: 'openai/gpt-5', variant: null, overridden: true } })} />)
     const picker = screen.getByRole('button', { name: /Modelo: GPT-5 \(trocado\)/ })

@@ -7,9 +7,10 @@ import { defineTool } from "./define"
 import { objectIdSchema } from "./helpers"
 
 /**
- * Memórias do Agente Opex (copiadas do Ciliar): chamam o serviço real (`agent-memory-service`). A lista
- * é um enum do catálogo `src/features/ai/agents.ts` (globais, do dono e do cliente), então listas
- * futuras entram sozinhas. O Agente Opex pode gerenciar as próprias memórias.
+ * Memórias dos agentes (copiadas do Ciliar): chamam o serviço real (`agent-memory-service`). A lista
+ * é um enum do catálogo `src/features/ai/agents.ts` (globais, do dono e do cliente do Agente Opex e a
+ * do Agente Adversário), então listas futuras entram sozinhas. O Agente Opex pode gerenciar as
+ * próprias memórias e as do Agente Adversário.
  */
 
 const AGENT_LIST = AI_AGENT_IDS.map((id) => `${id} = ${AI_AGENTS[id].title}`).join("; ")
@@ -35,7 +36,7 @@ export const memoryTools = [
         group: "memories",
         label: "Listar memórias",
         risk: "read",
-        description: `Memórias (instruções permanentes) do Agente Opex (${AGENT_LIST}), com id, resumo, texto, autor e datas. Sem agent, lista as de todas as listas.`,
+        description: `Memórias (instruções permanentes) do Agente Opex e do Agente Adversário (${AGENT_LIST}), com id, resumo, texto, autor e datas. Sem agent, lista as de todas as listas.`,
         input: z.object({ agent: agent.optional() }),
         async execute(input) {
             const agents = input.agent ? [input.agent] : [...AI_AGENT_IDS]
@@ -59,7 +60,7 @@ export const memoryTools = [
         group: "memories",
         label: "Criar memória",
         risk: "write",
-        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Até 50 por lista.`,
+        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex ou do Agente Adversário (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Até 50 por lista.`,
         input: z.object({ agent, text }),
         summarize: (input) => `Criar a memória (${AI_AGENTS[input.agent].title}): "${short(input.text)}"`,
         async execute(input, { actorId }) {

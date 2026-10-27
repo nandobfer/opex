@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   updateOne: vi.fn(),
   findOneAndUpdate: vi.fn(),
   concludedTags: vi.fn(),
+  runDueOpexJobs: vi.fn(async () => [] as string[]),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/db/models/CronJobState', () => ({
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/features/ai/server/task-tags', () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
+vi.mock('@/features/opex-agent/server/jobs', () => ({ runDueOpexJobs: mocks.runDueOpexJobs }))
 
 import {
   CronJobRunError,
@@ -64,6 +66,7 @@ describe('runSchedulerTick (issue #604)', () => {
     const result = await runSchedulerTick()
     expect(result).toEqual({ skipped: 'disabled', executed: [] })
     expect(mocks.findOneAndUpdate).not.toHaveBeenCalled()
+    expect(mocks.runDueOpexJobs).not.toHaveBeenCalled()
   })
 
   it('executa a rotina HTTP somente quando vence o lease, com Bearer do cron secret', async () => {
@@ -75,6 +78,7 @@ describe('runSchedulerTick (issue #604)', () => {
     const result = await runSchedulerTick(now)
 
     expect(result.executed).toEqual(['cancel'])
+    expect(mocks.runDueOpexJobs).toHaveBeenCalledWith(now)
     const [claimFilter, claimUpdate] = mocks.findOneAndUpdate.mock.calls[0]
     expect(claimFilter.nextRunAt).toEqual({ $lte: now })
     // Reivindicação já avança o próximo disparo: falha não gera repetição no minuto seguinte.

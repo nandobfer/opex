@@ -62,7 +62,7 @@ vi.mock('@/lib/db/models/AgentMemory', () => {
 import { agentMemoryTexts, createAgentMemory, deleteAgentMemory, listAgentMemories, memoriesSection, updateAgentMemory } from '@/features/ai/server/agent-memory-service'
 import { memoryTools } from '@/features/opex-agent/server/tools/memories'
 import { AGENT_MEMORY_LIMIT } from '@/features/ai/constants'
-import { opexMemoryAgentsFor } from '@/features/ai/agents'
+import { aiAgentsOfTab, opexMemoryAgentsFor } from '@/features/ai/agents'
 
 const run = (name: string, raw: unknown) => {
   const tool = memoryTools.find((item) => item.name === name)!
@@ -113,11 +113,40 @@ describe('memórias do Agente Opex', () => {
     await run('create_agent_memory', { agent: 'opex-global', text: 'Liste antes de alterar.' })
     const all = (await run('list_agent_memories', {})) as { total: number; agents: { agent: string; items: unknown[] }[] }
     expect(all.total).toBe(2)
-    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1]])
+    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1], ['adversarial', 0]])
     const id = created.id as string
     expect(await run('get_agent_memory', { agent: 'opex-client', memoryId: id })).toMatchObject({ text: 'Seja cordial com o cliente.' })
     expect(await run('update_agent_memory', { agent: 'opex-client', memoryId: id, text: 'Seja cordial e objetivo.' })).toMatchObject({ text: 'Seja cordial e objetivo.' })
     expect(await run('delete_agent_memory', { agent: 'opex-client', memoryId: id })).toMatchObject({ ok: true })
     expect(() => memoryTools[0]!.input.parse({ agent: 'opex-agent' })).toThrow()
+  })
+
+  it('o prompt do Agente Opex nunca recebe as memórias do Agente Adversário', async () => {
+    await createAgentMemory('adversarial', 'X é intencional.', 'local')
+    expect(await agentMemoryTexts(opexMemoryAgentsFor('owner'))).toEqual([])
+    expect(await agentMemoryTexts(opexMemoryAgentsFor('client'))).toEqual([])
+  })
+})
+
+describe('memórias do Agente Adversário', () => {
+  it('lista própria (agentId "adversarial"): criar, listar e entrar só no prompt do adversário', async () => {
+    const created = await createAgentMemory('adversarial', 'Validação X é intencional. Não aponte.', 'local')
+    expect(created).toMatchObject({ memoria: { resumo: 'Validação X é intencional' } })
+    expect(mocks.publishToChannels).toHaveBeenCalledWith(['private-integration-ai'], 'ai-memories-updated', { agentId: 'adversarial' })
+    await createAgentMemory('opex-global', 'Regra global.', 'local')
+    expect(await listAgentMemories('adversarial')).toHaveLength(1)
+    expect(await agentMemoryTexts(['adversarial'])).toEqual(['Validação X é intencional. Não aponte.'])
+  })
+
+  it('as ferramentas do Agente Opex também gerenciam a lista do adversário', async () => {
+    const created = await run('create_agent_memory', { agent: 'adversarial', text: 'Rotas sempre conferem permissões.' })
+    expect(created).toMatchObject({ ok: true, agent: 'adversarial', agentLabel: 'Memórias do Agente Adversário' })
+    const listed = (await run('list_agent_memories', { agent: 'adversarial' })) as { total: number }
+    expect(listed.total).toBe(1)
+  })
+
+  it('regressão: a aba do Agente Opex não lista a memória do adversário (cada aba mostra as suas listas)', () => {
+    expect(aiAgentsOfTab('agente-opex')).toEqual(['opex-global', 'opex-owner', 'opex-client'])
+    expect(aiAgentsOfTab('agente-adversario')).toEqual(['adversarial'])
   })
 })

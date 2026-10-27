@@ -1,10 +1,12 @@
 "use client"
 
-import type { Dispatch, SetStateAction } from "react"
+import { useMemo, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, Settings2 } from "lucide-react"
-import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
+import { AlarmClock, CalendarClock, Settings2 } from "lucide-react"
+import { INTEGRATION_CRON_JOBS, type IntegrationDef, type PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
+import { useIntegration } from "@/features/integrations/hooks/useIntegrations"
+import { OpexJobsTab } from "@/features/opex-agent/components/jobs/OpexJobsTab"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
 import { DetailActions } from "./DetailActions"
@@ -28,20 +30,28 @@ interface CronsEditorFormProps {
     onExplore: () => void
 }
 
-const CRONS_TABS = ["geral", "rotinas"] as const
+const CRONS_TABS = ["geral", "rotinas", "jobs"] as const
 type CronsTab = (typeof CRONS_TABS)[number]
 
 const TABS: IntegrationTabDef<CronsTab>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "rotinas", label: "Rotinas", icon: CalendarClock },
+    { id: "jobs", label: "Jobs", icon: AlarmClock },
 ]
 
 /**
  * Página da integração Crons em abas: **Geral** (agendador, URL interna, secret e documentação) e
- * **Rotinas** (lista das rotinas agendadas, com busca). Trocar de aba com alterações pede descarte.
+ * **Rotinas** (lista das rotinas agendadas, com busca) e **Jobs** (prompts agendados do Agente Opex,
+ * do dono e do portal). Trocar de aba com alterações pede descarte.
  */
 export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: CronsEditorFormProps) {
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<CronsTab>(CRONS_TABS, "geral", dirty, onUndo)
+    const builderMachineActive = useIntegration("builder_machine").data?.publicValues.active === true
+    // Rotinas de integrações desativadas (ex.: limpeza da Builder Machine) não aparecem.
+    const hiddenJobIds = useMemo(() => {
+        const active: Record<string, boolean> = { builder_machine: builderMachineActive }
+        return new Set(Object.entries(INTEGRATION_CRON_JOBS).filter(([, integrationId]) => !active[integrationId]).map(([jobId]) => jobId))
+    }, [builderMachineActive])
 
     const setPublic = (key: string, value: PublicFieldValue | "") =>
         setDraft((prev) => ({ ...prev, publicValues: { ...prev.publicValues, [key]: value } }))
@@ -83,11 +93,13 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
                                 publicValues={draft.publicValues}
                                 setPublic={setPublic}
                                 canRun
+                                hiddenJobIds={hiddenJobIds}
                             />
                         )}
                         <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
+                {tab === "jobs" && <OpexJobsTab />}
             </IntegrationTabs>
         </motion.form>
     )

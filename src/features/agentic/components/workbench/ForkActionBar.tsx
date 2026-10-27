@@ -20,6 +20,7 @@ import { useDiscardFork, useForkAction, useSetForkModel } from "../../hooks/useF
 import type { ForkDto } from "../../types"
 import { ForkComposer } from "./ForkComposer"
 import { ForkModeSelect } from "./ForkModeSelect"
+import { LiveMessageComposer } from "./LiveMessageComposer"
 import { ModelOverridePicker } from "./ModelOverridePicker"
 
 /**
@@ -38,8 +39,10 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
     const actions = forkActions(fork.status, fork.runState, Boolean(fork.summary)).filter((action) => !["apply", "revise-summary", "cancel-integration"].includes(action))
     const canFork = canOpenChildFork(fork.status)
     const pending = mutation.isPending || discard.isPending
+    // Chat durante a execução: com o agente respondendo no fork ativo, a mensagem entra no turno atual.
+    const live = fork.liveChat && fork.runState === "running" && fork.status === "active"
     if (!actions.length && !canFork && !extra) return null
-    const send = () => mutation.mutate({ action: "send", text: text.trim() }, { onSuccess: () => setText("") })
+    const send = (value = text.trim()) => mutation.mutate({ action: "send", text: value }, { onSuccess: () => setText("") })
 
     if (forking)
         return (
@@ -62,6 +65,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
     return (
         <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
             <AnimatePresence initial={false}>
+                {live && <LiveMessageComposer key="fork-live-message" id={`fork-live-message-${fork.id}`} value={text} onValueChange={setText} pending={mutation.isPending} onSubmit={send} />}
                 {actions.includes("send") && (
                     <motion.div key="fork-message" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
                         <label htmlFor={`fork-message-${fork.id}`} className="sr-only">
@@ -93,7 +97,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
                     switch (action) {
                         case "send":
                             return (
-                                <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim()} onClick={send}>
+                                <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim()} onClick={() => send()}>
                                     {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />} Enviar
                                 </Button>
                             )

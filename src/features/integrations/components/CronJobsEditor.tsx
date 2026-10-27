@@ -37,6 +37,8 @@ interface CronJobsEditorProps {
     savedJobs?: CronJobConfig[]
     /** `integrations.crons.run`. */
     canRun?: boolean
+    /** Rotinas que não aparecem (integração dona desativada); a edição preserva as escondidas. */
+    hiddenJobIds?: ReadonlySet<string>
 }
 
 /** Motivo para "Executar agora" estar indisponível, ou `null` quando pode executar. */
@@ -145,7 +147,7 @@ function LastRun({ state }: { state: CronJobStateDto }) {
  * da linha com a próxima e a última execução. Ao expandir, aparecem os campos de configuração. A
  * busca filtra a exibição sem mexer no rascunho: editar/excluir agem sobre a rotina original.
  */
-export function CronJobsEditor({ value, onChange, states = [], disabled, savedJobs = [], canRun = false }: CronJobsEditorProps) {
+export function CronJobsEditor({ value, onChange, states = [], disabled, savedJobs = [], canRun = false, hiddenJobIds }: CronJobsEditorProps) {
     const stateById = new Map(states.map((state) => [state.jobId, state]))
     const runJob = useRunCronJob()
     const [confirmJob, setConfirmJob] = useState<CronJobConfig | null>(null)
@@ -153,8 +155,9 @@ export function CronJobsEditor({ value, onChange, states = [], disabled, savedJo
     const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
     const [term, setTerm] = useState("")
 
-    const fuse = useMemo(() => new Fuse(value, { keys: ["label", "id", "path"], threshold: 0.35, ignoreLocation: true }), [value])
-    const visible = term.trim() ? fuse.search(term.trim()).map((result) => result.item) : value
+    const shown = useMemo(() => (hiddenJobIds?.size ? value.filter((job) => !hiddenJobIds.has(job.id)) : value), [hiddenJobIds, value])
+    const fuse = useMemo(() => new Fuse(shown, { keys: ["label", "id", "path"], threshold: 0.35, ignoreLocation: true }), [shown])
+    const visible = term.trim() ? fuse.search(term.trim()).map((result) => result.item) : shown
 
     const executeNow = async (job: CronJobConfig) => {
         setConfirmJob(null)

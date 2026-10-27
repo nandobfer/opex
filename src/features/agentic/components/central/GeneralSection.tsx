@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { integrationPath } from "@/lib/integrations/catalog"
-import { FORK_DONE_POLICIES, FORK_DONE_POLICY_LABELS } from "../../constants"
+import { FORK_DONE_POLICIES, FORK_DONE_POLICY_LABELS, LIVE_CHAT_DESCRIPTION, LIVE_CHAT_POLICIES, LIVE_CHAT_POLICY_LABELS } from "../../constants"
+import { useAgenticSettings } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
 import type { CentralForm } from "./form"
 
@@ -19,6 +20,8 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
     const errors = form.formState.errors
     const directory = useWatch({ control: form.control, name: "sessionDirectory" })
     const forkPolicy = useWatch({ control: form.control, name: "forks.onWorkbenchDone" })
+    const globalLiveChat = useAgenticSettings().data?.settings.liveChat
+    const inheritLabel = globalLiveChat === undefined ? LIVE_CHAT_POLICY_LABELS.inherit : `${LIVE_CHAT_POLICY_LABELS.inherit} (${globalLiveChat ? "ligado" : "desligado"})`
     return (
         <Card>
             <CardHeader>
@@ -60,6 +63,25 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
                         )}
                     />
                     <p className="text-xs text-muted-foreground">{FORK_DONE_POLICY_LABELS[forkPolicy ?? "ask"].description} Forks não ocupam vaga no limite de mesas.</p>
+                </div>
+                <div className="space-y-1.5">
+                    <p id="central-live-chat" className="text-sm font-medium">
+                        Chat durante a execução
+                    </p>
+                    <Controller
+                        control={form.control}
+                        name="liveChat"
+                        render={({ field }) => (
+                            <OptionTabs
+                                aria-labelledby="central-live-chat"
+                                className="w-full"
+                                value={field.value}
+                                onChange={field.onChange}
+                                options={LIVE_CHAT_POLICIES.map((policy) => ({ value: policy, label: policy === "inherit" ? inheritLabel : LIVE_CHAT_POLICY_LABELS[policy] }))}
+                            />
+                        )}
+                    />
+                    <p className="text-xs text-muted-foreground">{LIVE_CHAT_DESCRIPTION} O padrão global fica em Desenvolvimento agêntico › Agentes.</p>
                 </div>
                 {central.repo ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">

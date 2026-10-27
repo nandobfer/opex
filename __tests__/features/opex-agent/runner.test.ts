@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   assertClientEnabled: vi.fn(async () => ({ enabled: true, disabledTools: [] })),
   assertToolAllowed: vi.fn(),
   enabledNames: vi.fn(async () => ({ names: ['list_tasks'], config: { enabled: true, disabledTools: [] } })),
+  finishJobTurn: vi.fn(async () => {}),
+  clientActorFor: vi.fn(),
 }))
 
 vi.mock('ai', () => ({
@@ -76,8 +78,10 @@ vi.mock('@/lib/db/models/Opex', () => {
   store.messages = opexModel()
   store.actions = opexModel()
   store.files = opexModel()
-  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: store.actions, OpexFile: store.files }
+  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: store.actions, OpexFile: store.files, OpexJob: opexModel() }
 })
+vi.mock('@/features/opex-agent/server/jobs', () => ({ finishJobTurn: mocks.finishJobTurn }))
+vi.mock('@/features/auth/server/context', () => ({ clientActorFor: mocks.clientActorFor }))
 
 const settings = {
   enabled: true,
@@ -120,7 +124,7 @@ vi.mock('@/features/opex-agent/server/tools/registry', () => ({
   needsConfirmation: () => false,
 }))
 
-import { sendMessage } from '@/features/opex-agent/server/runner'
+import { instructionsFor, queueFollowUp, sendJobMessage, sendMessage } from '@/features/opex-agent/server/runner'
 import { isTurnActive, subscribeSession } from '@/features/opex-agent/server/hub'
 import type { OpexStreamLine } from '@/features/opex-agent/types'
 
@@ -347,5 +351,28 @@ describe('runner no portal do cliente', () => {
     mocks.assertClientEnabled.mockRejectedValueOnce(Object.assign(new Error('O Agente Opex está desativado para este cliente.'), { code: 'OPEX_CLIENT_DISABLED', status: 403 }))
     const sessionId = await newClientSession()
     await expect(sendMessage(sessionId, { text: 'Oi' }, 'u1', { kind: 'client', actor: clientActor as never })).rejects.toMatchObject({ code: 'OPEX_CLIENT_DISABLED' })
+  })
+
+  it('job do portal: roda no escopo do usuário, grava a mensagem como job e conclui o job no fim do turno', async () => {
+    const sessionId = await newClientSession()
+    mocks.parts = [{ type: 'text-delta', id: 'x', text: 'Feito.' }, { type: 'finish', finishReason: 'stop', totalUsage: {} }]
+    const result = await sendJobMessage(sessionId, { kind: 'job', text: '[Job] Veja', display: 'Veja', job: { id: 'j1', title: 'Lembrete' } }, { kind: 'client', actor: clientActor as never })
+    expect(result).toBe('started')
+    await vi.waitFor(() => expect(mocks.finishJobTurn).toHaveBeenCalledWith('j1', { status: 'complete', error: null, pendingConfirmation: false }))
+    expect(mocks.assertClientEnabled).toHaveBeenCalledWith(clientActor)
+    expect(messages().docs.find((doc) => doc.role === 'user')).toMatchObject({ kind: 'job', text: 'Veja', job: { id: 'j1', title: 'Lembrete' } })
+  })
+
+  it('job na fila cujo usuário perdeu o acesso: o job falha com o motivo (settleJobTurn)', async () => {
+    const sessionId = await newClientSession()
+    mocks.clientActorFor.mockRejectedValueOnce(new Error('Você não tem acesso a este cliente.'))
+    await queueFollowUp(sessionId, { kind: 'job', text: 'x', job: { id: 'j2', title: 'J' } })
+    await vi.waitFor(() => expect(mocks.finishJobTurn).toHaveBeenCalledWith('j2', { status: 'error', error: 'Você não tem acesso a este cliente.', pendingConfirmation: false }))
+  })
+
+  it('a dica de jobs só entra nas instruções do portal com o grupo ligado', () => {
+    const scope = { kind: 'client', actor: clientActor } as never
+    expect(instructionsFor(settings as never, scope)).not.toContain('schedule_job')
+    expect(instructionsFor(settings as never, scope, [], { jobs: true })).toContain('schedule_job')
   })
 })

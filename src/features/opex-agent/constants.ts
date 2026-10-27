@@ -31,6 +31,7 @@ export const OPEX_TOOL_GROUPS = [
     "issues",
     "integrations",
     "routines",
+    "jobs",
     "ai-settings",
     "pr-reviews",
     "dashboard",
@@ -54,6 +55,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     issues: { label: "Issues e dependências", description: "Ler e listar issues do GitHub, dependências formais com a entrega de cada uma, qual tarefa começar; registrar dependências e sub-issues (com confirmação)" },
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações" },
     routines: { label: "Rotinas", description: "Crons do agendador interno" },
+    jobs: { label: "Jobs agendados", description: "Agendar prompts para o próprio agente executar sozinho (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar — inclusive os do portal" },
     "ai-settings": { label: "Features de IA", description: "Configuração das features de IA do app" },
     "pr-reviews": { label: "Revisão de PR", description: "Revisões automáticas de pull requests" },
     dashboard: { label: "Dashboards", description: "Métricas de tarefas, horas, financeiro e IA" },
@@ -106,6 +108,7 @@ export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Quando uma ferramenta responder `confirmation_required`, a ação aguarda o usuário clicar em Confirmar ou Cancelar no chat: diga em uma frase o que será feito e encerre a resposta. Você receberá a decisão e o resultado na próxima mensagem.",
     "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo.",
     "Credenciais de integrações e senhas/tokens de clientes podem ser gravadas, mas nunca são lidas: as ferramentas só informam se um segredo está definido.",
+    'Para fazer algo mais tarde ("me lembre às 18h", "verifique o PR daqui a 2 horas"), agende um job (schedule_job): no horário você recebe o prompt sozinho e executa. Escreva o prompt completo e autossuficiente, pois o usuário pode não estar olhando.',
     "Responda em português do Brasil, em Markdown, de forma objetiva. Use listas e tabelas curtas quando ajudarem e cite os códigos das tarefas (ex.: OPX-123) e dos serviços.",
 ].join("\n")
 
@@ -124,6 +127,10 @@ export const DEFAULT_OPEX_CLIENT_INSTRUCTIONS = [
     "Nunca revele senhas ou tokens: as ferramentas não devolvem segredos e a gestão de usuários nunca mostra credenciais.",
     "Responda em português do Brasil, em Markdown, de forma objetiva. Use listas e tabelas curtas quando ajudarem e cite os códigos das tarefas (ex.: OPX-123).",
 ].join("\n")
+
+/** Dica de jobs do portal: só entra nas instruções quando o grupo "Jobs agendados" está ligado para o cliente. */
+export const OPEX_CLIENT_JOBS_INSTRUCTION =
+    'Para fazer algo mais tarde ("me lembre às 18h", "veja o orçamento daqui a 2 horas"), agende um job (schedule_job): no horário você recebe o prompt sozinho e executa com as mesmas ferramentas e limites do usuário. Escreva o prompt completo e autossuficiente, pois o usuário pode não estar olhando.'
 
 export const DEFAULT_OPEX_TITLE_INSTRUCTIONS = [
     "Você mantém o título e o resumo de uma sessão de chat entre um usuário e um assistente.",

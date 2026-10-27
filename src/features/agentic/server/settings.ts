@@ -81,6 +81,7 @@ export async function saveAgenticSettings(input: AgenticSettings, actorId: strin
         agents: Object.fromEntries(AGENT_ROLES.map((role) => [role, normalizeAgent(input.agents[role])])) as AgenticSettings["agents"],
         columns: normalizeColumns(input.columns),
         ci: { fixCi: input.ci.fixCi, ciFixLimit: input.ci.ciFixLimit },
+        liveChat: input.liveChat === true,
     }
     await assertAgentConfigs(
         AGENT_ROLES.map((role) => ({ label: AGENT_ROLE_LABELS[role].label, config: next.agents[role] })),

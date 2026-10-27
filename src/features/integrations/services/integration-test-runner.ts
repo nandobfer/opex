@@ -6,6 +6,7 @@ import {
   integrationDebugChannel,
   type IntegrationId,
 } from "@/lib/integrations/catalog";
+import { getIntegrationConfig } from "@/lib/integrations/config";
 import { integrationDebug } from "@/lib/integrations/debug";
 import type { IntegrationLogLevel } from "@/lib/integrations/log-format";
 import { logger } from "@/lib/logger";
@@ -164,11 +165,24 @@ async function publishStatus(event: IntegrationStatusEvent) {
   }
 }
 
-/** Health check periódico: todas as integrações, em paralelo limitado. */
+/** Integrações ativáveis (campo público `active`) desativadas ficam fora do teste periódico. */
+async function healthCheckQueue(): Promise<IntegrationId[]> {
+  const ids: IntegrationId[] = [];
+  for (const def of INTEGRATIONS) {
+    if (def.publicFields.some((field) => field.key === "active")) {
+      const values = (await getIntegrationConfig(def.id).catch(() => null)) as Record<string, unknown> | null;
+      if (values?.active !== true) continue;
+    }
+    ids.push(def.id);
+  }
+  return ids;
+}
+
+/** Health check periódico: todas as integrações (menos as desativadas), em paralelo limitado. */
 export async function runAllIntegrationHealthChecks(
   concurrency = 3,
 ): Promise<Record<string, IntegrationTestResult>> {
-  const queue = INTEGRATIONS.map((def) => def.id);
+  const queue = await healthCheckQueue();
   const results: Record<string, IntegrationTestResult> = {};
   async function worker() {
     for (let id = queue.shift(); id; id = queue.shift()) {

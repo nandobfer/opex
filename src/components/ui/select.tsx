@@ -6,7 +6,23 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root
+/**
+ * Dentro de um `<form>`, o Radix espelha o valor num `<select>` nativo oculto e dispara
+ * `onValueChange("")` quando o valor controlado muda antes de a opção existir (ex.: `form.reset`
+ * com o valor salvo), deixando o campo vazio e o formulário "sujo". O Radix proíbe `SelectItem`
+ * com `value=""`, então `""` nunca é escolha do usuário e é ignorado.
+ */
+function Select({ onValueChange, ...props }: React.ComponentProps<typeof SelectPrimitive.Root>) {
+  return (
+    <SelectPrimitive.Root
+      {...props}
+      onValueChange={(value) => {
+        if (value === "") return
+        onValueChange?.(value)
+      }}
+    />
+  )
+}
 
 const SelectGroup = SelectPrimitive.Group
 

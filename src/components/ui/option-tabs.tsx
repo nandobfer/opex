@@ -1,6 +1,8 @@
 "use client"
 
-import { useRef, type KeyboardEvent } from "react"
+import { useRef, type KeyboardEvent, type ReactNode } from "react"
+import { Info } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 /**
@@ -15,6 +17,8 @@ export interface OptionTabsOption<T extends string> {
     label: string
     /** Texto completo (dica e leitor de tela) quando `label` é abreviado. */
     title?: string
+    /** Dica rica (tooltip) explicando quando escolher a opção; mostra um ícone de informação no botão. */
+    tooltip?: ReactNode
     disabled?: boolean
 }
 
@@ -80,7 +84,7 @@ export function OptionTabs<T extends string>({
                 const isDisabled = disabled || option.disabled
                 // Roving tabindex: só a opção marcada (ou a primeira) entra na ordem de tabulação.
                 const focusable = selectedIndex >= 0 ? isActive : index === 0
-                return (
+                const button = (
                     <button
                         key={option.value}
                         ref={(node) => {
@@ -97,12 +101,23 @@ export function OptionTabs<T extends string>({
                         onKeyDown={(event) => onKeyDown(event, index)}
                         className={cn(
                             "flex-1 whitespace-nowrap rounded-md font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+                            option.tooltip && "inline-flex items-center justify-center gap-1.5",
                             size === "xs" ? "px-2 py-1 text-[11px]" : size === "sm" ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm",
                             isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                         )}
                     >
                         {option.label}
+                        {option.tooltip && <Info className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />}
                     </button>
+                )
+                if (!option.tooltip) return button
+                return (
+                    <TooltipProvider key={option.value} delayDuration={200}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>{button}</TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">{option.tooltip}</TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 )
             })}
         </div>

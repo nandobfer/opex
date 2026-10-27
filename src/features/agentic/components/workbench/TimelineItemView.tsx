@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { DECISION_LABELS, type TimelineItem } from "../../timeline"
 import { PrWatchItem } from "./PrWatchItem"
 import { ToolItem } from "./ToolItem"
+import { AdversarialVerdictItem } from "@/features/adversarial-agent/components/workbench/AdversarialVerdictItem"
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", maximumFractionDigits: 3 })
 
@@ -84,5 +85,7 @@ export function TimelineItemView({ item, latestPrWatch = false }: { item: Timeli
             )
         case "pr-watch":
             return <PrWatchItem item={item} latest={latestPrWatch} />
+        case "adversarial-verdict":
+            return <AdversarialVerdictItem reviewId={item.reviewId} round={item.round} level={item.level} summary={item.summary} outcome={item.outcome} findings={item.findings} />
     }
 }

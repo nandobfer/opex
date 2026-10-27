@@ -70,6 +70,29 @@ describe('mensagens das etapas', () => {
     expect(text).toContain('NÃO troque o builder padrão do host')
   })
 
+  it('build na Builder Machine: o prefixo do Docker do PC vence o builder da central', () => {
+    const prefix = 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder'
+    const text = buildPrompt({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015, backup, undefined, { prefix })
+    expect(text).toContain(`\`${prefix} PORT=4015 docker compose -p portal-go-dev-12 up -d --build\``)
+    expect(text).toContain(`${prefix} docker compose -p portal-go-dev-12 logs --tail 100`)
+    expect(text).not.toContain('limit-builder')
+    expect(text).toContain('docker context use')
+    expect(text).toContain('bind mounts')
+  })
+
+  it('build no GitHub Action ignora o prefixo da Builder Machine', () => {
+    const text = buildPrompt(config, ctx, 4015, backup, { attempt: 'a1', statePath: '/tmp/s.json' }, { prefix: 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder' })
+    expect(text).not.toContain('DOCKER_CONTEXT=')
+    expect(text).toContain('docker compose -p portal-go-dev-12 logs --tail 100')
+  })
+
+  it('build no GitHub Action manda rodar o script em primeiro plano até o fim, sem encerrar o turno antes', () => {
+    const text = buildPrompt(config, ctx, 4015, backup, { attempt: 'a1', statePath: '/tmp/s.json' })
+    expect(text).toContain('EM PRIMEIRO PLANO e até o fim')
+    expect(text).toContain('NÃO use background')
+    expect(text).toContain('NÃO encerre o turno')
+  })
+
   it('sem builder configurado, o build usa o padrão do host', () => {
     const text = buildPrompt(config, ctx, 4015, backup)
     expect(text).toContain('`PORT=4015 docker compose -p portal-go-dev-12 up -d --build`')

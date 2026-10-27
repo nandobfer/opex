@@ -47,6 +47,8 @@ export interface TaskRefinementDto {
     stoppedByUser: boolean
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
+    /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
+    liveChat: boolean
     startedAt: string
     updatedAt: string
 }
