@@ -285,6 +285,13 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   listas curtas e simples. Ao fechar, `onCloseAutoFocus` entrega o evento de restauração de foco no
   gatilho: quem escolheu um item e vai devolver o foco a **outro** campo chama `event.preventDefault()`
   (ex.: escolher o repositório na prévia foca a descrição — `modules/tasks.md`).
+- **`Select` dentro de `<form>`**: o Radix espelha o valor num `<select>` nativo oculto e chama
+  `onValueChange("")` quando o valor controlado muda antes de a opção existir (ex.: `form.reset`
+  com o valor salvo). O wrapper `Select` de `ui/select.tsx` **ignora esse `""`**, para o campo
+  não ficar vazio nem o formulário "sujo" sozinho: use sempre ele, nunca `@radix-ui/react-select`
+  direto. Represente "nenhum" com um marcador (ex.: `__none__`/`__default__`), nunca com `""`, e
+  mostre uma opção reserva para o valor desconhecido ("Carregando…"/"removido") em vez de deixar o
+  campo vazio — como o `ColumnsCard` e o `AgentConfigFields`.
 - **Período** (início e fim) num formulário usa um só `DateRangeCalendar`
   (`ui/date-range-calendar.tsx`), nunca dois `DatePicker`; o `PresetDateRangeFilter` é só para
   filtros de lista.
