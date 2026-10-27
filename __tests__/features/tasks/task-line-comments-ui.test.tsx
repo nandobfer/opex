@@ -93,7 +93,6 @@ describe('TaskDetailTabs — comentários de linha', () => {
   })
 
   it('selecionar um trecho mostra "Comentar o trecho"; o comentário leva o trecho, a linha âncora e a ocorrência', async () => {
-    const { act } = await import('@testing-library/react')
     render(<LineHarness task={withLine} />)
     const paragraph = [...document.querySelectorAll('[data-md-line="1"]')].find((node) => node.textContent?.includes('Linha um'))!
     const text = [...paragraph.childNodes].find((node) => node.nodeType === Node.TEXT_NODE) as Text
@@ -103,8 +102,8 @@ describe('TaskDetailTabs — comentários de linha', () => {
     window.getSelection()!.removeAllRanges()
     window.getSelection()!.addRange(range)
     fireEvent.pointerUp(document)
-    await act(() => new Promise((resolve) => setTimeout(resolve, 150)))
-    fireEvent.click(screen.getByRole('button', { name: 'Comentar o trecho' }))
+    // Espera o debounce da seleção sem prazo fixo: sob a suíte completa (CI) 150 ms não bastam.
+    fireEvent.click(await screen.findByRole('button', { name: 'Comentar o trecho' }, { timeout: 3000 }))
     expect(await screen.findByText('Trecho da linha 1')).toBeTruthy()
     fireEvent.change(screen.getByRole('textbox', { name: 'Comentário no trecho da linha 1' }), { target: { value: 'Só isto' } })
     fireEvent.click(screen.getByRole('button', { name: /^Comentar$/ }))
