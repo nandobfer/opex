@@ -19,6 +19,17 @@ const mocks = vi.hoisted(() => ({
   listClientUsers: vi.fn(async () => []),
   updateClientUser: vi.fn(async () => ({ id: 'u1', username: 'ana', email: null, admin: false, active: true })),
   deleteClientUser: vi.fn(async () => {}),
+  listOpexJobs: vi.fn(async () => [] as unknown[]),
+  createOpexJob: vi.fn(),
+  cancelOpexJob: vi.fn(),
+}))
+
+vi.mock('@/features/opex-agent/server/jobs', () => ({
+  listOpexJobs: mocks.listOpexJobs,
+  createOpexJob: mocks.createOpexJob,
+  cancelOpexJob: mocks.cancelOpexJob,
+  getOpexJob: vi.fn(),
+  updateOpexJob: vi.fn(),
 }))
 
 vi.mock('@/features/orcamentos/server/portal', () => ({
@@ -58,7 +69,7 @@ vi.mock('@/features/orcamentos/server/users', () => ({
 }))
 vi.mock('@/features/tasks/attachments/server/service', () => ({ linkAttachmentsToDraft: mocks.linkAttachmentsToDraft }))
 
-import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOLS, OPEX_CLIENT_TOOL_GROUPS, opexClientToolsFor } from '@/features/opex-agent/client-tools'
+import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_OPT_IN_TOOLS, OPEX_CLIENT_TOOLS, OPEX_CLIENT_TOOL_GROUPS, enabledOpexClientToolNames, opexClientToolsFor } from '@/features/opex-agent/client-tools'
 import { OPEX_CLIENT_SERVER_TOOLS, enabledClientOpexServerTools, findOpexClientServerTool } from '@/features/opex-agent/server/client-tools/registry'
 import type { ClientActor } from '@/features/auth/server/context'
 import type { OpexToolContext } from '@/features/opex-agent/server/tools/define'
@@ -158,6 +169,34 @@ describe('catálogo de ferramentas do portal', () => {
   it('respeita a seleção do dono (só as ferramentas ligadas)', () => {
     const tools = enabledClientOpexServerTools(['list_tasks'], false)
     expect(tools.map((tool) => tool.name).sort()).toEqual([OPEX_CLIENT_CONTEXT_TOOL, 'list_tasks'].sort())
+  })
+
+  it('jobs são desligados por padrão: só entram quando o dono os liga (enabledOptInTools)', () => {
+    expect(OPEX_CLIENT_OPT_IN_TOOLS).toEqual(['list_jobs', 'schedule_job', 'update_job', 'cancel_job'])
+    expect(enabledOpexClientToolNames([], false)).not.toContain('schedule_job')
+    expect(enabledOpexClientToolNames([], false, ['schedule_job', 'list_jobs'])).toEqual(expect.arrayContaining(['schedule_job', 'list_jobs']))
+    expect(enabledOpexClientToolNames(['schedule_job'], false, [])).not.toContain('schedule_job')
+    expect(findOpexClientServerTool('cancel_job')?.risk).toBe('destructive')
+  })
+})
+
+describe('jobs do portal', () => {
+  it('listar e agendar usam o escopo do usuário (cliente + usuário) e a sessão atual por padrão', async () => {
+    mocks.createOpexJob.mockResolvedValue({ id: 'j1', title: 'Lembrete', prompt: 'p', status: 'scheduled', runAt: 'x', sessionId: 'a'.repeat(24), resultSessionId: null, createdBy: 'agent', delayMs: null, error: null, finishedAt: null })
+    const ctx: OpexToolContext = { sessionId: 'a'.repeat(24), actorId: 'u1', scope: { kind: 'client', actor: actor(false) } }
+    await run('list_jobs', {}, ctx)
+    expect(mocks.listOpexJobs).toHaveBeenCalledWith({ filter: 'all' }, { kind: 'client', actor: actor(false) })
+
+    const result = await run('schedule_job', { title: 'Lembrete', prompt: 'Veja o orçamento', when: 'in', amount: 2, unit: 'hours' }, ctx)
+    expect(result).toMatchObject({ ok: true, id: 'j1' })
+    const [input, origin, scope] = mocks.createOpexJob.mock.calls[0]!
+    expect(input).toMatchObject({ sessionId: 'a'.repeat(24), when: 'in', amount: 2, unit: 'hours' })
+    expect(origin).toEqual({ actorId: 'u1', createdBy: 'agent', originSessionId: 'a'.repeat(24) })
+    expect(scope).toEqual({ kind: 'client', actor: actor(false) })
+  })
+
+  it('sem escopo do cliente a ferramenta recusa', async () => {
+    await expect(run('list_jobs', {}, { sessionId: 's1', actorId: 'local' })).rejects.toThrow('portal do cliente')
   })
 })
 

@@ -5,7 +5,7 @@ import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
-import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
+import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CLIENT_JOBS_INSTRUCTION, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
 import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from "../history"
 import { closeRunningTools, partsText } from "../live-message"
 import type { OpexAgentSettings } from "../schemas"
@@ -30,14 +30,17 @@ import { enabledOpexTools, findOpexTool } from "./tools/registry"
 const log = loggerFor({ module: "opex-agent" })
 const INTERRUPTED = "Interrompido pelo usuário"
 
-/** Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema. */
-export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories: readonly string[] = []): string {
+/**
+ * Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema.
+ * No portal, a dica de jobs só entra com o grupo "Jobs agendados" ligado para o cliente.
+ */
+export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories: readonly string[] = [], options: { jobs?: boolean } = {}): string {
     if (scope.kind === "owner") {
         return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories)].join("\n")
     }
     const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
     return [
-        DEFAULT_OPEX_CLIENT_INSTRUCTIONS,
+        options.jobs ? `${DEFAULT_OPEX_CLIENT_INSTRUCTIONS}\n${OPEX_CLIENT_JOBS_INSTRUCTION}` : DEFAULT_OPEX_CLIENT_INSTRUCTIONS,
         "",
         `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${role}).`,
         "A data e a hora de cada turno vêm ao fim da mensagem do usuário.",
@@ -112,6 +115,7 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
         seq: claimed.nextSeq,
         role: "user",
         kind: followUp.kind,
+        ...(followUp.job ? { job: followUp.job } : {}),
         text,
         files,
         parts: [],
@@ -120,7 +124,7 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
     })
     await publishSessionUpdated(sessionId)
     const userText = files.length ? `${text}${text ? "\n" : ""}(arquivos: ${files.map((file) => file.name).join(", ")})` : text
-    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, actorId, scope, userText })
+    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, actorId, scope, userText, jobId: followUp.job?.id ?? null })
     return toMessageDto(userDoc.toObject() as IOpexMessage & { _id: Types.ObjectId })
 }
 
@@ -135,18 +139,54 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
         enqueueFollowUp(sessionId, followUp)
         return
     }
+    const failJob = (reason: string) => (followUp.job ? settleJobTurn(followUp.job.id, { status: "error", error: reason, pendingConfirmation: false }) : Promise.resolve())
     // O escopo é reconstruído da sessão gravada (nunca do pedido): o dono continua dono e o usuário
     // do portal tem o vínculo e o papel revalidados antes do turno.
     const session = await loadSessionRaw(sessionId).catch(() => null)
-    if (!session) return
+    if (!session) {
+        await failJob("A sessão escolhida para o job foi excluída")
+        return
+    }
     const scope = await sessionScopeOf(session).catch((error: unknown) => {
         log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] escopo da sessão não resolve")
+        void failJob(error instanceof Error ? error.message : String(error))
         return null
     })
     if (!scope) return
     await startTurn(sessionId, followUp, actorIdOf(scope), scope).catch((error: unknown) => {
         log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] não foi possível continuar após a confirmação")
+        void failJob(error instanceof Error ? error.message : String(error))
     })
+}
+
+/**
+ * Prompt de um job agendado: roda já ou, com a sessão respondendo, entra na fila e roda quando o
+ * turno atual terminar. Erros (agente indisponível, sessão inexistente) sobem para o job.
+ */
+export async function sendJobMessage(sessionId: string, followUp: OpexFollowUp & { job: { id: string; title: string } }, scope: OpexServerScope = OWNER_SCOPE): Promise<"started" | "queued"> {
+    await opexDb()
+    if (isTurnActive(sessionId)) {
+        enqueueFollowUp(sessionId, followUp)
+        return "queued"
+    }
+    try {
+        await startTurn(sessionId, followUp, actorIdOf(scope), scope)
+        return "started"
+    } catch (error) {
+        if (!(error instanceof DomainError) || error.code !== "OPEX_SESSION_BUSY") throw error
+        enqueueFollowUp(sessionId, followUp)
+        return "queued"
+    }
+}
+
+/** Fim do turno de um job: conclui o job (import tardio: o serviço de jobs depende deste runner). */
+async function settleJobTurn(jobId: string, outcome: { status: "complete" | "interrupted" | "error"; error: string | null; pendingConfirmation: boolean }): Promise<void> {
+    try {
+        const { finishJobTurn } = await import("./jobs")
+        await finishJobTurn(jobId, outcome)
+    } catch (error) {
+        log.error({ err: error, jobId }, "[opex] falha ao concluir o job")
+    }
 }
 
 export async function interruptSession(sessionId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
@@ -166,6 +206,8 @@ interface TurnArgs {
     actorId: string
     scope: OpexServerScope
     userText: string
+    /** Job agendado que disparou o turno. */
+    jobId: string | null
 }
 
 async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId): Promise<ModelMessage[]> {
@@ -220,7 +262,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, await agentMemoryTexts(opexMemoryAgentsFor(scope.kind))),
+            instructions: instructionsFor(settings, scope, await agentMemoryTexts(opexMemoryAgentsFor(scope.kind)), { jobs: tools.some((tool) => tool.group === "jobs") }),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),
@@ -315,6 +357,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
     let parts: OpexPart[] = liveMessageOf(sessionId)?.parts ?? []
     if (status !== "complete") parts = closeRunningTools(parts, error ?? "Turno encerrado")
     const text = partsText(parts)
+    let pendingConfirmation = false
     try {
         parts = await refreshConfirmations(parts)
         const fallback = [
@@ -338,6 +381,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             model: settings.main.model ? `${settings.main.provider}/${settings.main.model}` : null,
         })
         const pending = parts.some((part) => part.type === "tool" && part.confirmation?.status === "pending")
+        pendingConfirmation = pending
         const sessionStatus: OpexSessionStatus = status === "error" ? "error" : pending ? "awaiting_confirmation" : "idle"
         await OpexSession.updateOne({ _id: sessionId }, { $set: { status: sessionStatus, lastError: status === "error" ? error : null, lastMessageAt: new Date() } })
     } catch (persistError) {
@@ -346,6 +390,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
     }
     endTurn(sessionId, controller, { type: "turn-end", messageId: assistantId.toString(), status, error })
     await publishSessionUpdated(sessionId)
+    if (args.jobId) await settleJobTurn(args.jobId, { status, error, pendingConfirmation })
 
     if (outcome.usage && settings.main.provider && settings.main.model) {
         await recordAiConsumption({

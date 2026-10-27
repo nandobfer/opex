@@ -2,7 +2,7 @@
 
 import { memo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlertTriangle, Bot, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck } from "lucide-react"
+import { AlarmClock, AlertTriangle, Bot, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
@@ -25,6 +25,12 @@ export function UserMessage({ message }: { message: OpexMessageDto }) {
     }
     return (
         <motion.div {...bubble} className="flex flex-col items-end gap-1.5 pb-3">
+            {message.kind === "job" && (
+                <span className="inline-flex max-w-[85%] items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] text-primary" data-testid="opex-job-badge">
+                    <AlarmClock className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="truncate">Job agendado{message.job?.title ? ` · ${message.job.title}` : ""}</span>
+                </span>
+            )}
             <OpexMessageFiles files={message.files ?? []} />
             {message.text && <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-sm border border-primary/30 bg-primary/15 px-3.5 py-2 text-sm text-foreground">{message.text}</div>}
         </motion.div>

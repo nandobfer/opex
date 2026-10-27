@@ -2,9 +2,10 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { CalendarClock, Settings2 } from "lucide-react"
+import { AlarmClock, CalendarClock, Settings2 } from "lucide-react"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
+import { OpexJobsTab } from "@/features/opex-agent/components/jobs/OpexJobsTab"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
 import { DetailActions } from "./DetailActions"
@@ -28,17 +29,19 @@ interface CronsEditorFormProps {
     onExplore: () => void
 }
 
-const CRONS_TABS = ["geral", "rotinas"] as const
+const CRONS_TABS = ["geral", "rotinas", "jobs"] as const
 type CronsTab = (typeof CRONS_TABS)[number]
 
 const TABS: IntegrationTabDef<CronsTab>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "rotinas", label: "Rotinas", icon: CalendarClock },
+    { id: "jobs", label: "Jobs", icon: AlarmClock },
 ]
 
 /**
  * Página da integração Crons em abas: **Geral** (agendador, URL interna, secret e documentação) e
- * **Rotinas** (lista das rotinas agendadas, com busca). Trocar de aba com alterações pede descarte.
+ * **Rotinas** (lista das rotinas agendadas, com busca) e **Jobs** (prompts agendados do Agente Opex,
+ * do dono e do portal). Trocar de aba com alterações pede descarte.
  */
 export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: CronsEditorFormProps) {
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<CronsTab>(CRONS_TABS, "geral", dirty, onUndo)
@@ -88,6 +91,7 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
                         <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
+                {tab === "jobs" && <OpexJobsTab />}
             </IntegrationTabs>
         </motion.form>
     )

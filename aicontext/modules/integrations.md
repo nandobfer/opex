@@ -122,7 +122,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   Geral, Vínculos, Mapeamento, Sincronização), Provedores de IA (`AiEditorForm`:
   Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico), página de
   cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
-  Crons (`CronsEditorForm`: Geral e Rotinas) e a página da central de desenvolvimento
+  Crons (`CronsEditorForm`: Geral, Rotinas e Jobs) e a página da central de desenvolvimento
   (`/integracoes/ia/centrais/[id]`). A integração **Clientes** (`/integracoes/clientes`) **não tem
   abas**: a lista de clientes aparece direto, sem card interno. `useLocalTabs` é o irmão **sem URL**
   (mesmo formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não
@@ -210,7 +210,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   (`runJobNow`), 404 rotina não salva, 409 em execução, falha da rotina → 200 `ok:false`.
   Auditado (`execucaoManual`, `resultado`, `mensagem`, `duracaoMs`).
 - **Página em abas** (`CronsEditorForm`): **Geral** (agendador, URL base interna, cron secret e
-  documentação) e **Rotinas** (lista). Na aba Rotinas há um campo de **busca** (Fuse.js) que filtra
+  documentação), **Rotinas** (lista) e **Jobs** (`OpexJobsTab`: prompts agendados do Agente Opex, do
+  dono e dos usuários do portal — ver `modules/opex-agent.md`, "Jobs"; sempre presente).
+- **Jobs do Agente Opex** rodam no fim de cada tick (`runDueOpexJobs`, import dinâmico com
+  `try/catch`, sem derrubar o tick); com o agendador desligado, nenhum job roda. Na aba Rotinas há um campo de **busca** (Fuse.js) que filtra
   a exibição sem mexer no rascunho. Cada rotina nasce **recolhida**: cabeçalho com nome, "Executar
   agora" e o switch de status, mais a linha com a próxima e a última execução; ao expandir, aparecem
   os campos de configuração (nome/caminho, agendamento, escopo e remover). Editar/excluir age sobre

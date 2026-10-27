@@ -93,10 +93,17 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
 `client` (portal, com o `ClientActor` revalidado no banco).
 
 - **Configuração por cliente**: aba **"Agente Opex"** em `/integracoes/clientes/[id-cliente]`
-  (`ClienteOpexAgentTab`), salva em `orcamento_clients.opexAgent` (`{ enabled, disabledTools }`).
-  Sem configuração, vale o padrão: **ativado** e com todas as ferramentas do portal. Guardar as
-  **desligadas** faz ferramenta nova entrar ligada; o contexto (`get_portal_overview`) é sempre
-  ativo. A seleção é por ferramenta, na **mesma árvore** da seleção do dono (`CheckTree`: módulo
+  (`ClienteOpexAgentTab`), salva em `orcamento_clients.opexAgent` (`{ enabled, disabledTools,
+  enabledOptInTools }`). Sem configuração, vale o padrão: **ativado** e com todas as ferramentas do
+  portal, exceto as **desligadas por padrão**. Guardar as **desligadas** faz ferramenta nova entrar
+  ligada; o contexto (`get_portal_overview`) é sempre ativo.
+- **Opt-in** ("Desligado por padrão"): ferramentas com `optIn: true` no catálogo puro
+  (`OPEX_CLIENT_OPT_IN_TOOLS`; hoje o grupo **Jobs agendados**) só valem quando estão em
+  `opexAgent.enabledOptInTools` (padrão `[]`). `enabledOpexClientToolNames(disabled, isAdmin,
+  enabledOptIn)` exige a presença na lista para as opt-in; `saveClientOpexConfig` separa as marcadas
+  opt-in em `enabledOptInTools` (as demais seguem em `disabledTools`) e audita `ligadasPorEscolha`.
+  Clientes existentes ficam **sem jobs** até o dono ligá-los. Na árvore, o grupo mostra o selo
+  "Desligado por padrão". A seleção é por ferramenta, na **mesma árvore** da seleção do dono (`CheckTree`: módulo
   por grupo com caixa tri-estado, contador, busca; Contexto travado como "Sempre ligada"), com o
   selo de risco em cada ferramenta e "Só admin do cliente" nos grupos/ferramentas de admin. Salvar é auditado (`ClienteOrcamentoOpexAgent`) e publica
   `opex-client-config-updated` em `private-app` e `private-client-{clientId}`.
@@ -114,11 +121,11 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   | Contexto (sempre) | `get_portal_overview` |
   | Tarefas | `list_tasks`, `get_task`, `add_comment`, `set_task_priority` |
   | Orçamentos | `list_previews`, `get_preview`, `create_preview`, `generate_preview`, `set_preview_correction`, `estimate_preview`, `approve_preview` |
-  | Memórias do agente | `list_agent_memories`, `get_agent_memory`, `create_agent_memory`, `update_agent_memory`, `delete_agent_memory`* (listas `opex-global`, `opex-owner`, `opex-client`; texto revisado pelo "Resumo de memórias") |
-| Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task`, `attach_files_to_preview` |
+  | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task`, `attach_files_to_preview` |
   | Dashboard | `get_dashboard` |
   | Financeiro (**admin**) | `get_finance`, `get_service` |
   | Usuários (**admin**) | `list_users`, `update_user`, `delete_user`* |
+  | Jobs agendados (**opt-in**) | `list_jobs`, `schedule_job`, `update_job`, `cancel_job`* — só os jobs do próprio usuário naquele cliente |
 
   `*` destrutivo. Criar usuário e gerar token ficam **fora**: devolvem segredo que não pode chegar
   ao modelo. `update_user` redige a senha. As de admin só entram no turno quando o usuário é
@@ -128,12 +135,14 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   configuração, e troca o ator pelo atual (papel pode mudar no meio do turno). A confirmação
   (`decideAction`) também resolve a sessão no escopo e revalida antes de executar. Cada ferramenta
   chama o serviço do portal, que filtra de novo pelo cliente — três camadas independentes.
-- **Instruções** próprias (`DEFAULT_OPEX_CLIENT_INSTRUCTIONS`) + cliente, usuário e papel; o
+- **Instruções** próprias (`DEFAULT_OPEX_CLIENT_INSTRUCTIONS`) + cliente, usuário e papel; a dica
+  de jobs (`OPEX_CLIENT_JOBS_INSTRUCTION`) só entra quando o grupo Jobs está ligado no turno; o
   modelo do dono é reaproveitado. Consumo em origens `opex-client-agent` / `opex-client-title`.
 - **Interface**: `OpexScopeProvider` (dono por padrão) fornece `apiBase` (`/opex` ou
   `/cliente/opex`), o axios do portal (`x-client-id`), o canal, a chave do cache e a chave das abas
   (`opex:opex-agent:tabs:v1:{clientId}:{userId}`). Hooks e painel não sabem em qual escopo estão.
-- Excluir o cliente apaga as sessões, mensagens, ações e arquivos do agente daquele cliente.
+- Excluir o cliente apaga as sessões, mensagens, ações, arquivos e **jobs** do agente daquele
+  cliente (`deleteClientOpexData`). Usuário desvinculado: o job só falha na execução.
 
 ## Configuração
 
@@ -192,6 +201,7 @@ risco (os catálogos são distintos).
 | Repositórios GitHub | `list_repositories`, `get_repo_tree`, `read_repo_file`, `search_repo_code`, `list_branches`, `list_commits`, `get_commit`, `compare_refs`, `create_branch`†, `write_repo_file`†, `delete_repo_file`*, `delete_branch`* — detalhes abaixo |
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
+| Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
 | Revisão de PR | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
 | Dashboards | `get_dashboard` |
@@ -310,6 +320,65 @@ OpenCode. Sem SSH nem credencial nova. Só no app do dono (o catálogo do portal
   - Auditoria na entidade `TerminalHost` (`entidadeId` = sessão): comando, diretório, situação,
     código de saída e duração; log Pino `[opex] comando no host`.
 
+## Jobs (prompts agendados)
+
+Um **job** é um prompt que o agente executa sozinho, **uma única vez**: agora, daqui a X
+minutos/horas/dias ou numa data e hora (horário de Brasília), numa sessão nova (com o título do job)
+ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `jobs.ts` (puro: schema
+`opexJobInputSchema`, `resolveRunAt`, rótulos, `jobModelText`), `open-session.ts`, `server/jobs.ts`
+(serviço), `server/tools/jobs.ts` (dono + entradas compartilhadas), `server/client-tools/jobs.ts`
+(portal), `hooks/useOpexJobs.ts` e `components/jobs/` (`OpexJobsTab`, `OpexJobsFilters`,
+`OpexJobRow`, `OpexJobDialog`).
+
+- **Dados** (`opex_jobs`, `OpexJob` em `src/lib/db/models/Opex.ts`): `title`, `prompt`, `sessionId`
+  (escolhida; `null` = nova), `resultSessionId`, `schedule`, `runAt`, `status`
+  (`scheduled|running|done|error|awaiting_confirmation|canceled`), `startedAt`, `finishedAt`,
+  `delayMs`, `error`, `createdBy` (`user`/`agent`), `originSessionId`, `sourceJobId`, `clientId`
+  (`null` = dono) + `userId` (como a sessão) e `purgeAt`. Índices `{status, runAt}`, `{createdAt}`,
+  `{clientId, userId, runAt:-1}` e TTL `purge_ttl` (terminado some 30 dias depois).
+- **Escopo**: o portal só vê e mexe nos jobs do próprio usuário no cliente (outro é 404); a sessão
+  escolhida precisa ser do mesmo escopo (400 `OPEX_JOB_SESSION_NOT_FOUND`). O dono vê todos e filtra
+  por `origin=owner|client`, `clientId` e `userId`; o DTO traz `origin` (`{kind:"owner"}` ou
+  `{kind:"client", clientId, clientName, userId, userName}`). Na pré-visualização do portal, o job
+  criado pelo dono é de origem **cliente** (escopo do cliente pré-visualizado, usuário local).
+- **Dono sobre job do portal**: cancela e reexecuta (ação direta, sem formulário; a reexecução mantém
+  `clientId`, `userId` e a sessão do original e audita o dono); **editar é 403**
+  `OPEX_JOB_CLIENT_READONLY`; "Abrir sessão" fica oculto (a sessão é do usuário).
+- **Regras**: editar e cancelar só em `scheduled` (409 `OPEX_JOB_NOT_SCHEDULED`; edição em `running`
+  bloqueada). Horário passado (tolerância de 1 min) ou além de 1 ano → 400
+  `OPEX_JOB_INVALID_SCHEDULE`. "Agora" (ou horário vencido) começa na hora.
+- **Execução** (`runOpexJob`): reivindica atômico (`scheduled` → `running`), grava `delayMs`, monta o
+  escopo — dono, ou o ator do portal revalidado (`clientActorFor` + `assertClientOpexEnabled` + grupo
+  jobs ligado em `enabledClientToolNamesFor`) — e usa a sessão escolhida (excluída → erro acionável)
+  ou cria uma nova (`createSession` no escopo) com o título do job. O prompt vai por `sendJobMessage`
+  (mensagem `kind: "job"` com `job: { id, title }`, exibida com o selo "Job agendado · título"; o
+  modelo recebe o contexto do agendamento e o atraso). Sessão respondendo → o prompt entra na **fila**
+  da sessão. O fim do turno conclui o job (`settleJobTurn` → `finishJobTurn`): confirmação pendente
+  → `awaiting_confirmation` (só o usuário da sessão decide); erro ou interrupção → `error`. Falha
+  ao continuar da fila (escopo ou turno) também vira `error` com o motivo. O turno do job passa pelo
+  mesmo pipeline dos demais (`redact` nas entradas das ferramentas, histórico e cards).
+- **Motivos do portal** (pt-BR): usuário inativo/removido → "O usuário foi desativado ou removido";
+  sem vínculo → "O usuário não está mais vinculado ao cliente"; cliente inativo/inexistente → "O
+  cliente foi desativado ou excluído"; agente desligado no cliente → "O Agente Opex foi desativado
+  para este cliente"; grupo desligado → "Os jobs foram desativados para este cliente".
+- **Agendamento**: o tick do agendador interno (`runDueOpexJobs`, chamado no fim de
+  `runSchedulerTick`) recupera os perdidos e dispara até 20 vencidos por minuto. Com o **agendador
+  desligado** nada roda; app desligado no horário → o job roda **atrasado** e registra o atraso. Job
+  do **dono** com o agente desligado ou sem modelo **continua agendado** e roda depois (com atraso);
+  job do portal nessas condições falha com o motivo. Job `running` há mais de 2 min sem turno vivo
+  nem fila (reinício do servidor) → `error` "O turno do job foi perdido…".
+- **Tempo real**: `opex-job-updated` (`{ id, status }`) e `opex-job-finished` (`{ id, title, status,
+  sessionId, error, origin }`) sempre em `private-app`; job do portal também em
+  `private-opex-{clientId}-{userId}`. O `OpexNavItem` (app e portal) mostra o toast do job terminado
+  com "Abrir sessão" (o do dono ignora os jobs do portal); a aba Jobs só invalida e relê.
+- **Aba "Jobs"** em `/integracoes/crons?aba=jobs` (sempre presente, só no app do dono): filtros
+  Agendados/Executados/Todos e origem (Todas/Do dono/Do portal, com o cliente), lista ao vivo,
+  "Executar job" (`OpexJobDialog`, react-hook-form + o mesmo schema), editar/cancelar (com
+  confirmação, resposta otimista), reexecutar e "Abrir sessão". O portal não tem tela de jobs: usa
+  as ferramentas do agente.
+- **Auditoria** na entidade `JobAgenteOpex`: criar, editar, cancelar (`ABORTAR`) e executar
+  (`EXECUTAR`, com resultado, sessão, cliente, atraso e duração; ator = dono ou o usuário do job).
+
 ## Regras de execução
 
 - **Confirmação**: a ferramenta não executa; grava uma ação pendente (`opex_pending_actions`, entrada
@@ -351,6 +420,9 @@ OpenCode. Sem SSH nem credencial nova. Só no app do dono (o catálogo do portal
 | `GET /api/opex/sessions/[id]/stream` | NDJSON: `snapshot`, `turn-start`, `text-delta`, `reasoning-delta`, `tool-start`, `tool-input`, `tool-end`, `turn-end`, `ping` |
 | `POST /api/opex/sessions/[id]/interrupt` | Para a resposta |
 | `POST /api/opex/actions/[id]` | `{ decision: "confirm" \| "cancel" }` |
+| `GET /api/opex/jobs?filter=scheduled\|finished\|all&origin=all\|owner\|client&clientId=&userId=` | Jobs do dono e do portal (agendados por horário; demais do mais recente) |
+| `POST /api/opex/jobs` | Cria `{ title, prompt, sessionId, when, amount?, unit?, date?, time?, sourceJobId? }` (reexecução de job do portal mantém o escopo dele) |
+| `GET/PATCH/DELETE /api/opex/jobs/[id]` | Detalhe; edita (agendado, só job do dono; 403 `OPEX_JOB_CLIENT_READONLY`); cancela (agendado) |
 
 ### Portal do cliente
 
@@ -364,7 +436,7 @@ OpenCode. Sem SSH nem credencial nova. Só no app do dono (o catálogo do portal
 | `GET /api/cliente/opex/sessions/[id]/stream` · `POST …/interrupt` · `POST /api/cliente/opex/actions/[id]` | Resposta ao vivo, parar e confirmar/cancelar |
 
 Todas exigem `requireClientActor` + `assertClientOpexEnabled`; o dono só entra com `x-client-id`
-(pré-visualização).
+(pré-visualização). Não há rotas de jobs no portal (só as ferramentas do agente).
 
 ### Configuração do cliente (dono)
 
@@ -374,9 +446,10 @@ auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
 ## Dados
 
 - Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
-  `opex_messages`, `opex_pending_actions` e `opex_files` (só metadados: sessão, nome, mime,
+  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs") e `opex_files` (só metadados: sessão, nome, mime,
   tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
-  `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`.
+  `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`
+  (`enabled`, `disabledTools`, `enabledOptInTools`).
 - `{ feature: "opex-agent" }` em `ai_feature_settings`; objetos em `opex/…` no bucket do Storage S3.
 
 ## Código
@@ -407,6 +480,8 @@ credenciais —, redação de segredos e chamadas aos serviços), `runner`, `con
 ativado, ferramentas desligadas, auditoria/eventos, revalidação), `client-tools` (catálogo do
 portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (sessões privadas,
 404 entre escopos e canal do Pusher), `tool-settings` (confirmação por ferramenta, árvore e
-migração da configuração antiga) e `opex-tools-card` (árvore, switch "Pede confirmação" e
+migração da configuração antiga), `jobs` (serviço: agendamento, atraso, fila, confirmação, perdidos,
+escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agendado com o agente
+indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

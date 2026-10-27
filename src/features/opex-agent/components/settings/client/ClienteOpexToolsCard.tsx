@@ -29,6 +29,14 @@ function AdminOnlyBadge() {
     )
 }
 
+function OptInBadge() {
+    return (
+        <Badge variant="outline" className="text-[10px] font-medium" title="Clientes existentes e novos começam sem estas ferramentas">
+            Desligado por padrão
+        </Badge>
+    )
+}
+
 /**
  * Seleção, ferramenta a ferramenta, do que o Agente Opex pode usar no portal, na mesma árvore da
  * seleção do dono (`CheckTree`). Contexto fica sempre ligado; as de admin só chegam ao admin do
@@ -67,7 +75,12 @@ export function ClienteOpexToolsCard({ value, onChange }: ClienteOpexToolsCardPr
                     selected={selected}
                     lockedKeys={LOCKED}
                     renderLeafMeta={renderLeafMeta}
-                    renderModuleMeta={(id) => (OPEX_CLIENT_TOOL_GROUP_LABELS[id as OpexClientToolGroup]?.adminOnly ? <AdminOnlyBadge /> : null)}
+                    renderModuleMeta={(id) => {
+                        const group = OPEX_CLIENT_TOOL_GROUP_LABELS[id as OpexClientToolGroup]
+                        if (group?.adminOnly) return <AdminOnlyBadge />
+                        if (group?.optIn) return <OptInBadge />
+                        return null
+                    }}
                     searchPlaceholder="Buscar ferramenta..."
                     emptyText="Nenhuma ferramenta encontrada."
                     onChange={(next) => onChange([...next])}

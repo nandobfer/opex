@@ -11,6 +11,7 @@ vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
 vi.mock("@/features/integrations/components/detail/CronJobsCard", () => ({ CronJobsCard: () => <div data-testid="cron-jobs" /> }))
 vi.mock("@/features/integrations/components/detail/ApiDocsCard", () => ({ ApiDocsCard: () => <div data-testid="api-docs" /> }))
+vi.mock("@/features/opex-agent/components/jobs/OpexJobsTab", () => ({ OpexJobsTab: () => <div data-testid="opex-jobs" /> }))
 
 import { CronsEditorForm } from "@/features/integrations/components/detail/CronsEditorForm"
 
@@ -64,5 +65,13 @@ describe("CronsEditorForm", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: "Rotinas" }))
         expect(screen.getByTestId("cron-jobs")).toBeTruthy()
+        expect(screen.queryByTestId("opex-jobs")).toBeNull()
+    })
+
+    it("aba Jobs (sempre presente) com os jobs do Agente Opex", () => {
+        renderForm()
+        fireEvent.click(screen.getByRole("tab", { name: "Jobs" }))
+        expect(screen.getByTestId("opex-jobs")).toBeTruthy()
+        expect(screen.queryByTestId("api-docs")).toBeNull()
     })
 })

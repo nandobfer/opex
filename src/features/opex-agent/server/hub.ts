@@ -13,11 +13,13 @@ type Listener = (line: OpexStreamLine) => void
 export interface OpexFollowUp {
     /** Texto enviado ao modelo. */
     text: string
-    kind: "message" | "confirmation"
+    kind: "message" | "confirmation" | "job"
     /** Texto exibido no chat (padrão: o próprio `text`). */
     display?: string
     /** Arquivos enviados antes (`POST …/files`) que vão nesta mensagem. */
     fileIds?: string[]
+    /** Job agendado que disparou a mensagem (o fim do turno conclui o job). */
+    job?: { id: string; title: string }
 }
 
 interface LiveTurn {
@@ -101,6 +103,12 @@ export function takeFollowUp(sessionId: string): OpexFollowUp | null {
     const next = queue?.shift() ?? null
     if (queue && !queue.length) hub.queues.delete(sessionId)
     return next
+}
+
+/** O job está na fila de alguma sessão (esperando o turno atual terminar)? */
+export function hasQueuedJob(jobId: string): boolean {
+    for (const queue of hub.queues.values()) if (queue.some((item) => item.job?.id === jobId)) return true
+    return false
 }
 
 /** Sessão excluída: interrompe e esquece. */

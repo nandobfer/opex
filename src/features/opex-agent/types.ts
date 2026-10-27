@@ -109,8 +109,10 @@ export type OpexMessageStatus = "complete" | "interrupted" | "error"
 export interface OpexMessageDto {
     id: string
     role: "user" | "assistant"
-    /** `confirmation`: decisão do usuário sobre uma ação pendente (exibida como nota). */
-    kind: "message" | "confirmation"
+    /** `confirmation`: decisão do usuário sobre uma ação pendente (exibida como nota); `job`: prompt de um job agendado. */
+    kind: "message" | "confirmation" | "job"
+    /** Job que disparou a mensagem (`kind: "job"`). */
+    job: { id: string; title: string } | null
     text: string
     /** Arquivos enviados com a mensagem do usuário. */
     files: OpexFileDto[]

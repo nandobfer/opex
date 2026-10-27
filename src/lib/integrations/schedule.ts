@@ -108,7 +108,7 @@ function zoneOffsetMs(date: Date): number {
 }
 
 /** Instante UTC que corresponde à data/hora de parede informada no fuso de Brasília. */
-function zonedWallTimeToDate(year: number, month: number, day: number, hour: number, minute: number): Date {
+export function zonedWallTimeToDate(year: number, month: number, day: number, hour: number, minute: number): Date {
     const guess = Date.UTC(year, month - 1, day, hour, minute)
     const first = guess - zoneOffsetMs(new Date(guess))
     // Segunda passada corrige eventuais transições de horário de verão.

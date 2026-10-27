@@ -54,6 +54,7 @@ const message = (overrides: Partial<OpexMessageDto>): OpexMessageDto => ({
   id: 'm1',
   role: 'assistant',
   kind: 'message',
+  job: null,
   text: '',
   files: [],
   parts: [],
@@ -113,6 +114,12 @@ describe('mensagens', () => {
   it('decisão de confirmação aparece como nota, não como balão', () => {
     render(<UserMessage message={message({ role: 'user', kind: 'confirmation', text: 'Confirmado: Excluir x' })} />)
     expect(screen.getByText('Confirmado: Excluir x')).toBeTruthy()
+  })
+
+  it('prompt de job agendado mostra o selo com o título do job acima do balão', () => {
+    render(<UserMessage message={message({ role: 'user', kind: 'job', job: { id: 'j1', title: 'Resumo dos PRs' }, text: 'Liste os PRs' })} />)
+    expect(screen.getByTestId('opex-job-badge').textContent).toBe('Job agendado · Resumo dos PRs')
+    expect(screen.getByText('Liste os PRs')).toBeTruthy()
   })
 })
 

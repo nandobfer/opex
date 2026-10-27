@@ -261,6 +261,14 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         }
     }
 
+    // Agente Opex: jobs (prompts agendados) vencidos — ver aicontext/modules/opex-agent.md.
+    try {
+        const { runDueOpexJobs } = await import("@/features/opex-agent/server/jobs")
+        await runDueOpexJobs(now)
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha nos jobs do Agente Opex")
+    }
+
     return { executed }
 }
 

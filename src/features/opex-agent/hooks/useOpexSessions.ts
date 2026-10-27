@@ -82,6 +82,7 @@ export function useSendOpexMessage(sessionId: string) {
                 id: `${OPTIMISTIC_PREFIX}${randomId()}`,
                 role: "user",
                 kind: "message",
+                job: null,
                 text,
                 files,
                 parts: [],

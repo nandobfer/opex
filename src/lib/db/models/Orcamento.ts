@@ -15,6 +15,8 @@ export interface IOrcamentoClientOpexAgent {
     enabled: boolean
     /** Nomes das ferramentas desligadas (guardar as desligadas faz ferramenta nova entrar ligada). */
     disabledTools: string[]
+    /** Ferramentas "desligadas por padrão" (ex.: Jobs agendados) que o dono ligou para o cliente. */
+    enabledOptInTools?: string[]
 }
 
 export interface IOrcamentoClient {
@@ -51,6 +53,7 @@ const OrcamentoClientSchema = new Schema<IOrcamentoClient>(
         opexAgent: {
             enabled: { type: Boolean, default: true },
             disabledTools: { type: [String], default: [] },
+            enabledOptInTools: { type: [String], default: [] },
         },
     },
     { collection: "orcamento_clients", versionKey: false, timestamps: true },

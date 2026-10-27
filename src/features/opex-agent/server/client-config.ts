@@ -6,28 +6,31 @@ import { OrcamentoClient, type IOrcamentoClientOpexAgent } from "@/lib/db/models
 import { clientChannel } from "@/lib/pusher/channel-names"
 import { publishAppEvent, publishToChannels } from "@/lib/pusher/channels"
 import { OPEX_CLIENT_AUDIT_ENTITY, OPEX_CLIENT_CONFIG_EVENT } from "../constants"
-import { enabledOpexClientToolNames, OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOL_NAMES } from "../client-tools"
+import { enabledOpexClientToolNames, OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_OPT_IN_TOOLS, OPEX_CLIENT_TOOL_NAMES } from "../client-tools"
 import type { OpexClientAgentConfigDto, OpexClientStatusDto } from "../types"
 import { loadOpexSettings, opexAvailability } from "./settings"
 
 /**
  * Configuração do Agente Opex **por cliente** (SOMENTE servidor), salva em `orcamento_clients.opexAgent`.
  * Sem configuração, vale o padrão: ligado e com todas as ferramentas do portal. A configuração guarda
- * as ferramentas **desligadas** para que uma ferramenta nova já entre ligada.
+ * as ferramentas **desligadas** para que uma ferramenta nova já entre ligada; as "desligadas por
+ * padrão" (`optIn`, ex.: Jobs agendados) ficam em `enabledOptInTools` quando o dono as liga.
  */
 
 export interface ClientOpexConfig {
     enabled: boolean
     disabledTools: string[]
+    enabledOptInTools: string[]
 }
 
-export const DEFAULT_CLIENT_OPEX_CONFIG: ClientOpexConfig = { enabled: true, disabledTools: [] }
+export const DEFAULT_CLIENT_OPEX_CONFIG: ClientOpexConfig = { enabled: true, disabledTools: [], enabledOptInTools: [] }
 
 /** Normaliza o que está gravado: ausente = padrão; nomes fora do catálogo são ignorados. */
 export function normalizeClientOpexConfig(value: IOrcamentoClientOpexAgent | null | undefined): ClientOpexConfig {
     return {
         enabled: value?.enabled !== false,
-        disabledTools: [...new Set((value?.disabledTools ?? []).filter((name) => OPEX_CLIENT_TOOL_NAMES.includes(name) && name !== OPEX_CLIENT_CONTEXT_TOOL))],
+        disabledTools: [...new Set((value?.disabledTools ?? []).filter((name) => OPEX_CLIENT_TOOL_NAMES.includes(name) && name !== OPEX_CLIENT_CONTEXT_TOOL && !OPEX_CLIENT_OPT_IN_TOOLS.includes(name)))],
+        enabledOptInTools: [...new Set((value?.enabledOptInTools ?? []).filter((name) => OPEX_CLIENT_OPT_IN_TOOLS.includes(name)))],
     }
 }
 
@@ -44,7 +47,7 @@ export async function loadClientOpexConfig(clientId: string): Promise<ClientOpex
 
 /** DTO da tela do dono: ativação + todas as ferramentas ligadas (as de admin aparecem com selo). */
 export function clientOpexConfigDto(config: ClientOpexConfig): OpexClientAgentConfigDto {
-    return { enabled: config.enabled, enabledTools: enabledOpexClientToolNames(config.disabledTools, true) }
+    return { enabled: config.enabled, enabledTools: enabledOpexClientToolNames(config.disabledTools, true, config.enabledOptInTools) }
 }
 
 export async function getClientOpexConfig(clientId: string): Promise<OpexClientAgentConfigDto> {
@@ -60,7 +63,8 @@ export async function saveClientOpexConfig(clientId: string, input: OpexClientAg
     enabled.add(OPEX_CLIENT_CONTEXT_TOOL)
     const next: ClientOpexConfig = {
         enabled: input.enabled,
-        disabledTools: OPEX_CLIENT_TOOL_NAMES.filter((name) => name !== OPEX_CLIENT_CONTEXT_TOOL && !enabled.has(name)),
+        disabledTools: OPEX_CLIENT_TOOL_NAMES.filter((name) => name !== OPEX_CLIENT_CONTEXT_TOOL && !OPEX_CLIENT_OPT_IN_TOOLS.includes(name) && !enabled.has(name)),
+        enabledOptInTools: OPEX_CLIENT_OPT_IN_TOOLS.filter((name) => enabled.has(name)),
     }
     await dbConnect()
     await OrcamentoClient.updateOne({ _id: clientId }, { $set: { opexAgent: next } })
@@ -69,8 +73,8 @@ export async function saveClientOpexConfig(clientId: string, input: OpexClientAg
         entidade: OPEX_CLIENT_AUDIT_ENTITY,
         entidadeId: clientId,
         acao: AcaoAuditoria.ATUALIZAR,
-        antes: { ativado: before.enabled, ferramentas: OPEX_CLIENT_TOOL_NAMES.length - before.disabledTools.length },
-        depois: { ativado: next.enabled, ferramentas: OPEX_CLIENT_TOOL_NAMES.length - next.disabledTools.length },
+        antes: { ativado: before.enabled, ferramentas: enabledOpexClientToolNames(before.disabledTools, true, before.enabledOptInTools).length, ligadasPorEscolha: before.enabledOptInTools },
+        depois: { ativado: next.enabled, ferramentas: enabledOpexClientToolNames(next.disabledTools, true, next.enabledOptInTools).length, ligadasPorEscolha: next.enabledOptInTools },
     })
     const payload = { clientId }
     await Promise.all([publishAppEvent(OPEX_CLIENT_CONFIG_EVENT, payload), publishToChannels([clientChannel(clientId)], OPEX_CLIENT_CONFIG_EVENT, payload)])
@@ -80,7 +84,7 @@ export async function saveClientOpexConfig(clientId: string, input: OpexClientAg
 /** Nomes liberados agora para o ator (configuração do cliente + papel). */
 export async function enabledClientToolNamesFor(actor: ClientActor): Promise<{ names: string[]; config: ClientOpexConfig }> {
     const config = await loadClientOpexConfig(String(actor.client._id))
-    return { names: enabledOpexClientToolNames(config.disabledTools, actor.isAdmin), config }
+    return { names: enabledOpexClientToolNames(config.disabledTools, actor.isAdmin, config.enabledOptInTools), config }
 }
 
 /** Situação do agente para o portal: configuração, disponibilidade do modelo e limites de arquivo. */
