@@ -189,7 +189,8 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
         ...(remote ? [
             "## Construção no GitHub Action (sem build local e sem abrir PR)",
             "- Este modo autoriza publicar a branch da tarefa antes da aprovação. Confirme que todas as alterações estão commitadas, seguindo o versionamento do projeto. Nunca envie .env, dump ou credenciais.",
-            `- Execute no worktree: \`npx tsx scripts/preview-github.ts ${shellQuote(remote.statePath)} ${shellQuote(remote.attempt)}\`. O script publica a branch, dispara o workflow, espera testes + build, valida o artefato e publica localmente sem build/pull.`,
+            `- Execute no worktree, EM PRIMEIRO PLANO e até o fim: \`npx tsx scripts/preview-github.ts ${shellQuote(remote.statePath)} ${shellQuote(remote.attempt)}\`. Use na ferramenta de shell um timeout de pelo menos 25 minutos e NÃO use background nem \`&\`. O script publica a branch, dispara o workflow, espera testes + build, valida o artefato e publica localmente sem build/pull.`,
+            "- NÃO encerre o turno (nem escreva a resposta final) enquanto o script estiver rodando. Se o turno acabar antes da publicação, a tentativa é considerada falha e o arquivo de estado é apagado.",
             "- O workflow e o script precisam estar instalados com a skill setup-preview-workflow. Se estiverem ausentes, informe o erro; NÃO faça build local como fallback.",
             "- Não dispare workflow manualmente nem publique container fora do script. Reconectar retoma o run registrado. Em erro de código, informe a falha; uma correção exige nova tentativa/SHA.",
         ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
