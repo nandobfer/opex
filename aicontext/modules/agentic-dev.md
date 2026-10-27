@@ -22,13 +22,15 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   limpeza) e **Pull Request** — e as **colunas globais** (`columns`, OPE-79): a coluna da **fila** e
   os destinos da **movimentação** (ao abrir a mesa, ao abrir o PR e ao concluir), todos "nenhuma/não
   mover" por padrão — e a **correção de CI padrão** (`ci`, OPE-81: `fixCi` ligada e `ciFixLimit`
-  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
+  vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`) — e o
+  **chat durante a execução** (`liveChat`, desligado por padrão; ver "Chat durante a execução"). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
   o OpenCode conectado).
 - Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
     cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
-    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81), com os botões **Salvar**/**Desfazer** (mesma configuração geral
+    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81) e o card **Chat durante a execução**
+    (`settings.liveChat`), com os botões **Salvar**/**Desfazer** (mesma configuração geral
     acima). Salvar reavalia as filas das centrais que herdam a coluna global.
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
@@ -67,7 +69,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 | Aba | Campos |
 |---|---|
-| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), repositório (do vínculo em Integrações › GitHub) |
+| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), **Chat durante a execução** (`liveChat`: **Padrão global** — padrão, inclusive para centrais antigas, com o estado global no rótulo — / Ligado / Desligado; ver "Chat durante a execução"), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`); etapa personalizada escolhe os **modelos de fallback**: Usar os do padrão / Personalizar / Sem fallback (ver "Modelos de fallback") |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
@@ -568,7 +570,9 @@ done → Reabrir mesa (texto ao planejador) → planning
   em `private-app`.
 - APIs autenticadas em `/api/agentic/workbenches/[id]/forks`: listar/criar (`parentForkId?`,
   `readOnly?`, `mode?`), detalhe, excluir, mensagens, ações, permissões, formulários, eventos NDJSON e
-  decisão `done-prompt`. O `ForkDto` expõe `mode` e `readOnly`.
+  decisão `done-prompt`. O `ForkDto` expõe `mode`, `readOnly` e `liveChat`. A mensagem no fork
+  ativo parado abre turno novo; executando, com o chat durante a execução ligado, entra no turno
+  atual (ver "Chat durante a execução").
 
 | Ação (`POST …/forks/[forkId]/actions/[action]`) | Corpo | Efeito |
 |---|---|---|
@@ -721,6 +725,34 @@ done → Reabrir mesa (texto ao planejador) → planning
   botão, o acompanhamento **retoma**. O botão rola suave, desligando o movimento com
   `prefers-reduced-motion`.
 
+## Chat durante a execução
+
+- Com o agente **executando**, a mesa (abas **Saída da IA** e **Plano**), o **fork ativo** e o
+  **refinamento** mostram o campo **Enviar ao agente** (`LiveMessageComposer`, entra/sai animado). A
+  mensagem entra na execução em andamento com `delivery: "steer"` do OpenCode 2.x: **não interrompe**
+  nem abre turno novo (o avanço das etapas não muda); o agente considera e segue. Parada, a mesa
+  continua só com as ações da etapa.
+- Opção efetiva = `resolveLiveChat(settings, central)` (`logic.ts`): a central com **Ligado**/**Desligado**
+  prevalece; **Padrão global** segue `settings.liveChat`. **Divergência intencional** do padrão
+  `inherit*` booleano das outras opções da central no Opex (`inheritQueue`, `inheritMovement`,
+  `git.inheritCi`): aqui o campo é o enum `liveChat: "inherit" | "on" | "off"`
+  (`LIVE_CHAT_POLICIES`, `OptionTabs` de 3 abas), como no my-tasks de origem — a opção é um
+  liga/desliga simples, sem valores próprios a personalizar. Vai pronta na tela como `liveChat` em
+  `WorkbenchDto`, `ForkDto` e no refinamento (`liveChatEnabled`, `server/live-chat.ts`).
+- Entrega (`deliverLiveMessage`): confere a opção (409 `LIVE_CHAT_DISABLED`), envia pelo runner
+  (`steerAgentTurn` de `lib/ai/opencode-run.ts`, que só envia a um turno **vivo e não terminado**
+  com aquele id — registro em memória por execução), mostra a mensagem na saída como mensagem do
+  usuário e audita (`MesaDeTrabalho`/`ForkDaMesa`/`RefinamentoTarefa`, campo
+  `mensagemDuranteExecucao`). Sem turno vivo (terminou ou trocando entre etapas encadeadas, ex.:
+  implementação → build): 409 `TURN_NOT_RUNNING`; recusa do OpenCode: 502 `LIVE_MESSAGE_FAILED`.
+- Recusas específicas: mesa parada (`WORKBENCH_NOT_RUNNING`) ou em exclusão (`WORKBENCH_DELETING`);
+  fork consolidando o resumo da integração (`FORK_INVALID_STATE`); refinamento parado
+  (`REFINEMENT_NOT_RUNNING`) ou consolidando a especificação (`REFINEMENT_FINALIZING`). Nesses casos
+  o campo nem aparece.
+- Fork: a mesma rota `/messages` — parado, abre turno novo (como antes); executando, entra no turno.
+- Citar linha da saída com a mesa executando (sem campo de correção aberto) preenche o campo.
+- Fora do escopo: revisão automática de PR (sem tela de conversa) e o Agente Opex (outro motor).
+
 ## APIs (`src/app/api/agentic/`)
 
 | Rota | Uso |
@@ -732,6 +764,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
 | `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
+| `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |

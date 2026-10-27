@@ -14,6 +14,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "../../hooks/useAgentic"
+import { LIVE_CHAT_DESCRIPTION } from "../../constants"
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
 import { AgentRolesCard } from "./AgentRolesCard"
 import { CentralsCard } from "./CentralsCard"
@@ -89,6 +90,18 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                                     permissões dos agentes no opencode.json.
                                 </span>
                             </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardContent className="pt-6">
+                            <FormToggleCard<AgenticSettings>
+                                control={form.control}
+                                name="liveChat"
+                                id="agentic-live-chat"
+                                label="Chat durante a execução"
+                                description={`${LIVE_CHAT_DESCRIPTION} Cada central pode ligar ou desligar só nela.`}
+                            />
                         </CardContent>
                     </Card>
 

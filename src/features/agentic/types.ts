@@ -130,6 +130,8 @@ export interface WorkbenchDto {
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
+    liveChat: boolean
     startedAt: string
     completedAt: string | null
     updatedAt: string
@@ -180,6 +182,8 @@ export interface ForkDto {
     readOnly: boolean
     /** Modelo efetivo do fork (papel Fork da conversa ou o trocado; `null` quando a central não pôde ser lida). */
     model: ModelChoiceDto | null
+    /** Chat durante a execução (padrão global + ajuste da central). */
+    liveChat: boolean
     forkedFromStage: WorkbenchStage
     /** Resumo proposto (em revisão enquanto `integrating`). */
     summary: string | null

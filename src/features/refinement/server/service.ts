@@ -12,6 +12,7 @@ import { getLocalUser } from "@/lib/local-user"
 import { parseCentralConfig } from "@/features/agentic/logic"
 import { asReconnectOutcome } from "@/features/agentic/reconnect"
 import { probeReconnect } from "@/features/agentic/server/reconnect"
+import { deliverLiveMessage, liveChatEnabled } from "@/features/agentic/server/live-chat"
 import type { FormReplyInput, PermissionReplyInput } from "@/features/agentic/schemas"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import {
@@ -75,7 +76,7 @@ async function reconcile(doc: ITaskRefinement): Promise<ITaskRefinement> {
     return { ...doc, runState: "interrupted", finalizing: false, error, pendingForms: [], pendingPermissions: [] }
 }
 
-function toRefinementDto(doc: ITaskRefinement): TaskRefinementDto {
+function toRefinementDto(doc: ITaskRefinement, liveChat = false): TaskRefinementDto {
     const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
     return {
         id: String(doc._id),
@@ -97,6 +98,7 @@ function toRefinementDto(doc: ITaskRefinement): TaskRefinementDto {
         turnStartedAt: iso(doc.turnStartedAt),
         stoppedByUser: Boolean(doc.stopRequestedAt),
         reconnect: doc.reconnect ? { outcome: asReconnectOutcome(doc.reconnect.outcome) ?? "transient", message: doc.reconnect.message ?? null, at: new Date(doc.reconnect.at).toISOString() } : null,
+        liveChat,
         startedAt: iso(doc.startedAt) ?? new Date().toISOString(),
         updatedAt: iso(doc.updatedAt) ?? new Date().toISOString(),
     }
@@ -142,7 +144,7 @@ export async function getRefinementState(taskId: string): Promise<TaskRefinement
     const task = await getTask(taskId)
     const raw = await findByTask(taskId)
     const doc = raw ? await reconcile(raw) : null
-    return { refinement: doc ? toRefinementDto(doc) : null, availability: await availabilityFor(task) }
+    return { refinement: doc ? toRefinementDto(doc, await liveChatEnabled(doc.centralId)) : null, availability: await availabilityFor(task) }
 }
 
 /**
@@ -433,6 +435,18 @@ export async function replyRefinementPermission(taskId: string, requestId: strin
     publishWorkbenchEvent(id, { type: "permission-replied", id: requestId, decision: input.decision })
     await TaskRefinement.updateOne({ _id: doc._id }, { $pull: { pendingPermissions: { id: requestId } } })
     await publishRefinement(taskId)
+    return getRefinementState(taskId)
+}
+
+/** Chat durante a execução: mensagem do usuário que entra no turno de refinamento em andamento (sem interromper). */
+export async function sendRefinementMessage(taskId: string, text: string): Promise<TaskRefinementStateDto> {
+    const doc = await findByTask(taskId)
+    if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
+    const id = String(doc._id)
+    if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está refinando agora: use Continuar", "REFINEMENT_NOT_RUNNING")
+    // Consolidando a especificação final: a mensagem se misturaria ao resultado.
+    if (doc.finalizing) throw new DomainError(409, "O agente está consolidando a especificação: aguarde terminar", "REFINEMENT_FINALIZING")
+    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "o refinamento", audit: { entidade: REFINEMENT_AUDIT_ENTITY, contexto: { tarefa: doc.taskCode } } }, text)
     return getRefinementState(taskId)
 }
 

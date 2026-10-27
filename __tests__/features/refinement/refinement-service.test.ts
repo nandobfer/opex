@@ -33,6 +33,8 @@ const mocks = vi.hoisted(() => {
         create: vi.fn(),
         updateOne: vi.fn(async () => ({})),
         probe: vi.fn(),
+        liveChat: false,
+        deliverLive: vi.fn(async () => undefined),
     }
 })
 
@@ -84,10 +86,11 @@ vi.mock('@/features/ai/server/settings', () => ({
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
+vi.mock('@/features/agentic/server/live-chat', () => ({ liveChatEnabled: vi.fn(async () => mocks.liveChat), deliverLiveMessage: mocks.deliverLive }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
-import { continueRefinement, getRefinementState, interruptRefinement, reconnectRefinement, replyRefinementForm, startRefinement } from '@/features/refinement/server/service'
+import { continueRefinement, getRefinementState, interruptRefinement, reconnectRefinement, replyRefinementForm, sendRefinementMessage, startRefinement } from '@/features/refinement/server/service'
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -97,6 +100,7 @@ beforeEach(() => {
     mocks.doc = null
     mocks.central = { _id: 'a'.repeat(24), projectId: 'p1', projectName: 'Opex', config: {} }
     mocks.centralEnabled = true
+    mocks.liveChat = false
     mocks.availability = { available: true, reason: null }
     mocks.isActive.mockReturnValue(false)
     mocks.probe.mockResolvedValue({ outcome: 'attached', follow: true, message: null })
@@ -184,6 +188,28 @@ describe('responder e interromper', () => {
         mocks.isActive.mockReturnValue(true)
         await interruptRefinement('t1')
         expect(mocks.abort).toHaveBeenCalledWith('c'.repeat(24), 'Interrompido pelo usuário')
+    })
+})
+
+describe('chat durante a execução', () => {
+    const running = (patch: Record<string, unknown> = {}) => ({ _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'x', projectId: 'p1', centralId: 'a'.repeat(24), sessionId: 'sess-1', runState: 'running', resolved: false, finalizing: false, usage: {}, pendingForms: [], pendingPermissions: [], startedAt: new Date(), updatedAt: new Date(), ...patch })
+
+    it('com o agente refinando, entrega ao turno do refinamento (central do refinamento + auditoria) e o estado traz a opção', async () => {
+        mocks.doc = running()
+        mocks.isActive.mockReturnValue(true)
+        mocks.liveChat = true
+        const state = await sendRefinementMessage('t1', 'considere o módulo X')
+        expect(mocks.deliverLive).toHaveBeenCalledWith({ runId: 'c'.repeat(24), centralId: 'a'.repeat(24), label: 'o refinamento', audit: { entidade: 'RefinamentoTarefa', contexto: { tarefa: 'OPX-1' } } }, 'considere o módulo X')
+        expect(state.refinement?.liveChat).toBe(true)
+    })
+
+    it('parado ou consolidando a especificação: recusa sem entregar', async () => {
+        mocks.doc = running({ runState: 'idle' })
+        await expect(sendRefinementMessage('t1', 'x')).rejects.toMatchObject({ status: 409, code: 'REFINEMENT_NOT_RUNNING' })
+        mocks.doc = running({ finalizing: true })
+        mocks.isActive.mockReturnValue(true)
+        await expect(sendRefinementMessage('t1', 'x')).rejects.toMatchObject({ status: 409, code: 'REFINEMENT_FINALIZING' })
+        expect(mocks.deliverLive).not.toHaveBeenCalled()
     })
 })
 

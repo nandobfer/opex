@@ -5,7 +5,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), openFork: vi.fn(), setPreview: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), openFork: vi.fn(), setPreview: vi.fn(), sendLive: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ mutate: mocks.openFork, isPending: false }) }))
@@ -14,6 +14,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
   useSetWorkbenchModel: () => ({ mutate: vi.fn(), isPending: false }),
   useSetWorkbenchPreview: () => ({ mutate: mocks.setPreview, isPending: false }),
+  useSendWorkbenchLiveMessage: () => ({ mutate: mocks.sendLive, isPending: false }),
 }))
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
 
@@ -47,6 +48,7 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
   pendingForms: [],
   usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 },
   lastStage: null,
+  liveChat: false,
   turnStartedAt: null,
   stoppedByUser: false,
   reconnect: null,
@@ -59,6 +61,35 @@ const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
 beforeEach(() => vi.clearAllMocks())
 
 describe('ActionBar', () => {
+  it('chat durante a execução ligado: com o agente trabalhando, envia a mensagem ao turno atual', () => {
+    render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running', liveChat: true })} />)
+    const field = screen.getByLabelText('Mensagem para o agente em execução')
+    const send = screen.getByRole('button', { name: /Enviar ao agente/ })
+    expect(send.hasAttribute('disabled')).toBe(true)
+    fireEvent.change(field, { target: { value: '  use o componente X  ' } })
+    fireEvent.click(send)
+    expect(mocks.sendLive).toHaveBeenCalledWith('use o componente X', expect.anything())
+    expect(screen.getByRole('button', { name: /Parar/ })).toBeTruthy()
+  })
+
+  it('chat durante a execução: desligado ou com a mesa parada, o campo não aparece', () => {
+    const { rerender } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running', liveChat: false })} />)
+    expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+    rerender(<ActionBar workbench={workbench({ liveChat: true })} />)
+    expect(screen.queryByLabelText('Mensagem para o agente em execução')).toBeNull()
+  })
+
+  it('chat durante a execução: citar uma linha com o agente trabalhando preenche o campo da mensagem', () => {
+    render(
+      <ReplyTargetProvider>
+        <Markdown>{'Arquivo errado'}</Markdown>
+        <ActionBar workbench={workbench({ stage: 'implementing', runState: 'running', liveChat: true })} />
+      </ReplyTargetProvider>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Citar no campo de resposta' }))
+    expect((screen.getByLabelText('Mensagem para o agente em execução') as HTMLTextAreaElement).value).toBe('> Arquivo errado\n\n')
+  })
+
   it('citar uma linha da saída sem campo aberto abre o feedback da etapa já com a citação', () => {
     render(
       <ReplyTargetProvider>

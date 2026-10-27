@@ -41,6 +41,7 @@ import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } fr
 import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { probeReconnect } from "./reconnect"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
+import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
@@ -96,14 +97,14 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc))
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc))
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -1137,6 +1138,16 @@ export async function interrupt(id: string): Promise<WorkbenchDto> {
     }
     abortWorkbenchRun(id, "Interrompido pelo usuário")
     centralLogger(doc.centralId, doc.taskCode).warn("Execução interrompida pelo usuário", { workbenchId: id })
+    return getWorkbench(id)
+}
+
+/** Chat durante a execução: mensagem do usuário que entra no turno em andamento da mesa (sem interromper). */
+export async function sendLiveMessage(id: string, text: string): Promise<WorkbenchDto> {
+    const doc = await loadWorkbench(id)
+    if (doc.deletionRequestedAt) throw new DomainError(409, "A mesa está sendo excluída: não é possível enviar mensagens", "WORKBENCH_DELETING")
+    if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está trabalhando nesta mesa: use as ações da etapa", "WORKBENCH_NOT_RUNNING")
+    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text)
+    centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)
 }
 

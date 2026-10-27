@@ -195,6 +195,19 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
     })
 }
 
+/** Chat durante a execução: mensagem que entra no turno em andamento da mesa (a saída mostra pelo stream). */
+export function useSendWorkbenchLiveMessage(workbenchId: string) {
+    const setWorkbench = useSetWorkbench()
+    return useMutation({
+        mutationFn: async (text: string) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/messages`, { text })).data),
+        onSuccess: (saved) => {
+            setWorkbench(saved)
+            toast.success("Mensagem enviada ao agente")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível enviar a mensagem ao agente")),
+    })
+}
+
 /** Troca o modelo de um papel da mesa (resposta otimista; reverte e avisa em caso de falha). */
 /** Chave "Gerar prévia" da mesa (resposta otimista; reverte e avisa em caso de falha). */
 export function useSetWorkbenchPreview(workbench: WorkbenchDto) {

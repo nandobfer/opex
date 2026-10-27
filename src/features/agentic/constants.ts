@@ -218,6 +218,15 @@ export const FORK_DONE_POLICY_LABELS: Record<ForkDonePolicy, { label: string; de
     ask: { label: "Sempre perguntar", description: "A mesa concluída pergunta se os forks em aberto devem ser concluídos." },
 }
 
+/** Chat durante a execução numa central: segue o padrão global ou liga/desliga só nela. */
+export const LIVE_CHAT_POLICIES = ["inherit", "on", "off"] as const
+export type LiveChatPolicy = (typeof LIVE_CHAT_POLICIES)[number]
+
+export const LIVE_CHAT_POLICY_LABELS: Record<LiveChatPolicy, string> = { inherit: "Padrão global", on: "Ligado", off: "Desligado" }
+
+/** Explicação do chat durante a execução (configuração e campo da mensagem). */
+export const LIVE_CHAT_DESCRIPTION = "Com o agente trabalhando (mesa, forks e refinamento), envie mensagens que entram na execução em andamento, sem interromper: o agente considera e segue."
+
 /** Chaves das entradas duráveis de instrução das sessões do OpenCode. */
 export const FORK_INSTRUCTIONS_KEY = "opex-fork"
 export const FORK_NOTES_INSTRUCTIONS_KEY = "opex-fork-notes"

@@ -88,6 +88,13 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
     return parsed.success ? parsed.data : base
 }
 
+/** Chat durante a execução efetivo: a central liga/desliga só nela ou segue o padrão global. */
+export function resolveLiveChat(settings: Pick<AgenticSettings, "liveChat">, central: Pick<CentralConfig, "liveChat">): boolean {
+    if (central.liveChat === "on") return true
+    if (central.liveChat === "off") return false
+    return settings.liveChat === true
+}
+
 /** Diretório das sessões sugerido para um projeto (repositório): `<raiz>/<nome-do-repositório>`. */
 export function defaultSessionDirectory(codeRoot: string, projectName: string): string {
     return `${codeRoot.replace(/\/+$/, "")}/${projectName.trim()}`

@@ -19,11 +19,12 @@ import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { REPLY_PRIORITY, useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
 import { insertQuote } from "@/lib/markdown/quote"
-import { useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
+import { useSendWorkbenchLiveMessage, useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
 import { workbenchActions, type WorkbenchAction } from "../../logic"
 import type { ForkDto, WorkbenchDto } from "../../types"
 import { PENDING_TURN_LABELS } from "../../constants"
 import { ForkComposer } from "./ForkComposer"
+import { LiveMessageComposer } from "./LiveMessageComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
 import { PreviewSwitch, previewSwitchVisible } from "./PreviewSwitch"
@@ -94,6 +95,10 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
     const [additional, setAdditional] = useState("")
     const [confirm, setConfirm] = useState<"interrupt" | "approve" | "cancel-wait" | null>(null)
     const [forking, setForking] = useState(false)
+    const [liveText, setLiveText] = useState("")
+    const liveMessage = useSendWorkbenchLiveMessage(workbench.id)
+    // Chat durante a execução: com o agente trabalhando (e a opção ligada), mensagens entram no turno atual.
+    const liveChat = workbench.liveChat && workbench.runState === "running" && !slotQueue && !workbench.deletionRequestedAt
     const pending = mutation.isPending
     const run = (action: WorkbenchAction, body?: string) =>
         mutation.mutate(
@@ -118,7 +123,12 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                   setText((current) => insertQuote(current, current.length, quote).value)
                   return true
               }
-            : null,
+            : liveChat && !forking
+              ? (quote) => {
+                    setLiveText((current) => insertQuote(current, current.length, quote).value)
+                    return true
+                }
+              : null,
     )
 
     return (
@@ -194,6 +204,9 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                             </Button>
                         </div>
                     </motion.div>
+                )}
+                {liveChat && !composer && !forking && (
+                    <LiveMessageComposer key="live-message" id="workbench-live-message" value={liveText} onValueChange={setLiveText} pending={liveMessage.isPending} onSubmit={(value) => liveMessage.mutate(value, { onSuccess: () => setLiveText("") })} />
                 )}
                 {forking && !composer && (
                     <ForkComposer
