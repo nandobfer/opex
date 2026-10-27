@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
@@ -106,24 +106,50 @@ describe('ActionBar', () => {
     expect(screen.queryByLabelText('Informações adicionais (opcional)')).toBeNull()
   })
 
-  it('prévia pronta: abrir em nova guia, solicitar correção e aprovar', () => {
+  it('prévia pronta: sem Abrir prévia na barra; solicitar correção (ícone) e aprovar', () => {
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
-    expect(screen.getByRole('link', { name: /Abrir prévia/ }).getAttribute('href')).toBe('http://localhost:4001')
-    expect(screen.getByRole('button', { name: /Solicitar correção/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Aprovar e abrir PR/ })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Abrir prévia/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Aprovar e abrir PR' })).toBeTruthy()
+    const correction = screen.getByRole('button', { name: 'Solicitar correção' })
+    expect(correction.textContent?.trim()).toBe('')
+    fireEvent.click(correction)
+    expect(screen.getByLabelText('O que está errado?')).toBeTruthy()
   })
 
-  it('prévia pronta: ações numa única linha no celular, com abrir prévia só pelo ícone', () => {
-    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
-    const link = screen.getByRole('link', { name: /Abrir prévia/ })
-    // O texto do link some no celular (fica só o ícone), preservando o nome acessível.
-    expect(link.querySelector('.max-md\\:hidden')).toBeTruthy()
-    const row = link.closest('div')!
-    expect(row.className).toContain('max-md:flex-nowrap')
-    expect(row.className).toContain('max-md:overflow-x-auto')
-    // Rótulo completo (acessível) e compacto (celular) para o botão de aprovar o PR.
-    const approve = screen.getByRole('button', { name: /Aprovar e abrir PR/ })
-    expect(approve.textContent).toContain('Aprovar PR')
+  it('sem PR aberto o botão é "Aprovar e abrir PR"; com PR aberto, só "Aprovar"', () => {
+    const pr = { number: 12, url: 'https://github.com/org/app/pull/12', mergedAt: null }
+    const { unmount } = render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    expect(screen.getByRole('button', { name: 'Aprovar e abrir PR' })).toBeTruthy()
+    unmount()
+    const open = render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr: { ...pr, state: 'open' } } as never)} />)
+    expect(screen.getByRole('button', { name: 'Aprovar' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Aprovar e abrir PR/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }))
+    expect(screen.getByText(/atualizar o PR #12/)).toBeTruthy()
+    open.unmount()
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr: { ...pr, state: 'closed' } } as never)} />)
+    expect(screen.getByRole('button', { name: 'Aprovar e abrir PR' })).toBeTruthy()
+  })
+
+  it('divisor vertical entre o seletor de modelo e a chave Gerar prévia (oculto junto com a chave)', () => {
+    const models = {
+      planning: { model: 'anthropic/opus', variant: null, overridden: false },
+      implementation: { model: null, variant: null, overridden: false },
+      build: { model: null, variant: null, overridden: false },
+      pr: { model: null, variant: null, overridden: false },
+    }
+    const { unmount } = render(<ActionBar workbench={workbench({ stage: 'plan_review', models } as never)} />)
+    const divider = screen.getByTestId('workbench-actions-divider')
+    expect(divider.getAttribute('aria-orientation')).toBe('vertical')
+    const picker = screen.getByRole('button', { name: /Modelo do Plano/ })
+    expect(picker.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(divider.compareDocumentPosition(screen.getByText('Gerar prévia')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Rótulo à esquerda da chave.
+    const label = screen.getByText('Gerar prévia')
+    expect(label.compareDocumentPosition(screen.getByRole('checkbox', { name: 'Gerar prévia' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    unmount()
+    render(<ActionBar workbench={workbench({ stage: 'done' })} />)
+    expect(screen.queryByTestId('workbench-actions-divider')).toBeNull()
   })
 
   it('seletor do modelo da etapa fica à esquerda, fora da linha de botões', () => {
@@ -172,35 +198,51 @@ describe('ActionBar', () => {
     expect(screen.queryByRole('checkbox', { name: 'Gerar prévia' })).toBeNull()
   })
 
-  it('Abrir prévia é o primeiro da linha (antes de Ver PR e Abrir fork)', () => {
+  it('sem Abrir prévia e Ver PR na barra: Abrir fork é o primeiro da linha', () => {
     const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: 'open', mergedAt: null }
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', pr } as never)} />)
-    const preview = screen.getByRole('link', { name: /Abrir prévia/ })
-    const row = preview.parentElement!
-    expect(row.firstElementChild).toBe(preview)
-    const order = Array.from(row.children).map((element) => element.textContent?.trim())
-    expect(order.slice(0, 3)).toEqual(['Abrir prévia', 'Ver PR #12', 'Abrir fork'])
+    expect(screen.queryAllByRole('link')).toHaveLength(0)
+    const fork = screen.getByRole('button', { name: 'Abrir fork' })
+    const order = Array.from(fork.parentElement!.children).map((element) => element.getAttribute('aria-label'))
+    expect(order).toEqual(['Abrir fork', 'Solicitar correção', 'Aprovar'])
   })
 
-  it.each(['pr_open', 'planning', 'implementing', 'preview', 'resolving_conflicts', 'done'] as const)('com PR: Ver PR #N abre o PR em nova guia (etapa %s)', (stage) => {
+  it.each(['pr_open', 'planning', 'implementing', 'preview', 'resolving_conflicts', 'done'] as const)('com PR a barra não mostra Ver PR (o link fica no cabeçalho) — etapa %s', (stage) => {
     const pr = { number: 12, url: 'https://github.com/org/app/pull/12', state: stage === 'done' ? 'merged' : 'open', mergedAt: null }
     render(<ActionBar workbench={workbench({ stage, runState: stage === 'planning' || stage === 'resolving_conflicts' ? 'running' : 'idle', pr } as never)} />)
-    const link = screen.getByRole('link', { name: /Ver PR #12/ })
-    expect(link.getAttribute('href')).toBe('https://github.com/org/app/pull/12')
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(link.getAttribute('rel')).toBe('noreferrer noopener')
-    const fork = screen.getByRole('button', { name: /Abrir fork/ })
-    expect(link.compareDocumentPosition(fork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('sem PR não mostra Ver PR', () => {
-    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
     expect(screen.queryByRole('link', { name: /Ver PR/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /#12/ })).toBeNull()
   })
 
-  it('executando: só Parar; falha mostra o erro e Tentar novamente', () => {
+  it('Solicitar correção do plano é ícone com nome acessível e abre o campo', () => {
+    render(<ActionBar workbench={workbench({ stage: 'plan_review' })} />)
+    const button = screen.getByRole('button', { name: 'Solicitar correção do plano' })
+    expect(button.textContent?.trim()).toBe('')
+    fireEvent.click(button)
+    expect(screen.getByLabelText('O que precisa mudar no plano?')).toBeTruthy()
+  })
+
+  it('celular: Abrir fork é ícone (sem texto), rótulos compactos nos demais e linha única com rolagem lateral', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    const fork = screen.getByRole('button', { name: 'Abrir fork' })
+    expect(fork.textContent?.trim()).toBe('')
+    const approve = screen.getByRole('button', { name: 'Aprovar e abrir PR' })
+    expect(within(approve).getByText('Aprovar PR').className).toContain('md:hidden')
+    expect(fork.parentElement!.className).toContain('max-md:flex-nowrap')
+    expect(fork.parentElement!.className).toContain('max-md:overflow-x-auto')
+  })
+
+  it('Abrir fork fica bloqueado (com o motivo na dica) enquanto a mesa é excluída', () => {
+    render(<ActionBar workbench={workbench({ deletionRequestedAt: '2026-10-09T12:00:00.000Z' } as never)} />)
+    const fork = screen.getByRole('button', { name: 'Abrir fork' })
+    expect(fork.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(fork)
+    expect(screen.queryByLabelText(/O que você quer perguntar ou investigar no fork/)).toBeNull()
+  })
+
+  it('executando: só Parar (e Abrir fork); falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
-    expect(screen.getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])
+    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])
     unmount()
     render(<ActionBar workbench={workbench({ stage: 'building', runState: 'failed', error: 'A prévia não respondeu' })} />)
     expect(screen.getByRole('alert').textContent).toContain('A prévia não respondeu')

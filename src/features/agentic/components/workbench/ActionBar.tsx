@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCheck, ExternalLink, GitFork, GitPullRequest, Hammer, Hourglass, ListOrdered, Loader2, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
+import { CheckCheck, GitFork, GitPullRequest, Hammer, Hourglass, ListOrdered, Loader2, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -14,6 +14,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { REPLY_PRIORITY, useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
 import { insertQuote } from "@/lib/markdown/quote"
@@ -24,7 +26,7 @@ import { PENDING_TURN_LABELS } from "../../constants"
 import { ForkComposer } from "./ForkComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
-import { PreviewSwitch } from "./PreviewSwitch"
+import { PreviewSwitch, previewSwitchVisible } from "./PreviewSwitch"
 import { WorkbenchModelPicker } from "./WorkbenchModelPicker"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
@@ -38,13 +40,27 @@ const FEEDBACK: Record<FeedbackAction, { button: string; title: string; placehol
 
 const isFeedback = (action: WorkbenchAction): action is FeedbackAction => action in FEEDBACK
 
-/** Rótulo compacto (celular) de `FeedbackAction`; o nome acessível completo vai no `aria-label`. */
-const COMPACT_LABEL: Record<FeedbackAction, string> = {
-    "revise-plan": "Correção",
-    "request-correction": "Correção",
+/** Correções viram botão de ícone com dica; as demais (`submit-pr-feedback`, `reopen`) mantêm o texto. */
+type CorrectionAction = Extract<FeedbackAction, "revise-plan" | "request-correction">
+
+const isCorrection = (action: FeedbackAction): action is CorrectionAction => action === "revise-plan" || action === "request-correction"
+
+const CORRECTION_TOOLTIP: Record<CorrectionAction, string> = {
+    "revise-plan": "Pedir mudanças no plano ao planejador",
+    "request-correction": "Descrever o que está errado; vai para o planejador",
+}
+
+/** Rótulo compacto (celular) dos feedbacks com texto; o nome acessível completo vai no `aria-label`. */
+const COMPACT_LABEL: Record<Exclude<FeedbackAction, CorrectionAction>, string> = {
     "submit-pr-feedback": "Descrever",
     reopen: "Reabrir",
 }
+
+/** Botão de ícone da barra: mesma altura dos botões `size="sm"`. */
+const ICON_BUTTON = "h-8 min-w-8 px-2 max-md:shrink-0"
+
+/** Bloqueio dos botões de ícone enquanto outra ação da mesa está em andamento. */
+const PENDING_REASON = "Aguarde a ação em andamento"
 
 /** Botões das etapas: no celular não encolhem nem ganham padding grande (cabe tudo na mesma linha). */
 const ACTION_BUTTON = "gap-1.5 max-md:shrink-0 max-md:px-2.5"
@@ -197,32 +213,39 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                     {/* Modelo da etapa atual e "Gerar prévia" (à esquerda); os botões ficam à direita. */}
                     <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
                         <WorkbenchModelPicker workbench={workbench} />
+                        {previewSwitchVisible(workbench.stage) && <Separator orientation="vertical" className="h-5" data-testid="workbench-actions-divider" />}
                         <PreviewSwitch workbench={workbench} />
                     </div>
                     <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
-                        {/* Abrir prévia é sempre o primeiro da linha. */}
-                        {actions.includes("open-preview") && (
-                            <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
-                                <a href={workbench.previewUrl!} target="_blank" rel="noreferrer noopener" aria-label="Abrir prévia" title="Abrir prévia em nova guia">
-                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                                    <span className="max-md:hidden">Abrir prévia</span>
-                                </a>
-                            </Button>
-                        )}
-                        {workbench.pr && (
-                            <Button asChild variant="outline" size="sm" className={ACTION_BUTTON}>
-                                <a href={workbench.pr.url} target="_blank" rel="noreferrer noopener">
-                                    <GitPullRequest className="h-3.5 w-3.5" aria-hidden /> Ver PR #{workbench.pr.number}
-                                </a>
-                            </Button>
-                        )}
-                        <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={Boolean(workbench.deletionRequestedAt)} onClick={() => setForking(true)}>
-                            <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
-                        </Button>
-                        {actions.map((action) => {
+                        {/* A prévia e o PR abrem pelos links do cabeçalho. */}
+                        <TooltipIconButton
+                            label="Abrir fork"
+                            tooltip="Abrir fork da conversa (perguntar ou investigar sem alterar a mesa)"
+                            disabledReason={workbench.deletionRequestedAt ? "A mesa está sendo excluída" : null}
+                            className={ICON_BUTTON}
+                            onClick={() => setForking(true)}
+                        >
+                            <GitFork aria-hidden />
+                        </TooltipIconButton>
+                        {actions.filter((action) => action !== "open-preview").map((action) => {
                             if (isFeedback(action)) {
-                                const label = action === "request-correction" && failed ? "Voltar ao planejamento" : FEEDBACK[action].button
-                                const compact = action === "request-correction" && failed ? "Replanejar" : COMPACT_LABEL[action]
+                                if (isCorrection(action)) {
+                                    const replan = action === "request-correction" && failed
+                                    return (
+                                        <TooltipIconButton
+                                            key={action}
+                                            label={replan ? "Voltar ao planejamento" : FEEDBACK[action].button}
+                                            tooltip={replan ? "Voltar ao planejamento com uma correção" : CORRECTION_TOOLTIP[action]}
+                                            disabledReason={pending ? PENDING_REASON : null}
+                                            className={ICON_BUTTON}
+                                            onClick={() => setComposer(action)}
+                                        >
+                                            <MessageSquareWarning aria-hidden />
+                                        </TooltipIconButton>
+                                    )
+                                }
+                                const label = FEEDBACK[action].button
+                                const compact = COMPACT_LABEL[action]
                                 return (
                                     <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label={label} onClick={() => setComposer(action)}>
                                         {action === "reopen" ? <RotateCcw className="h-3.5 w-3.5" aria-hidden /> : <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden />}
@@ -237,13 +260,17 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                                             <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                         </Button>
                                     )
-                                case "approve":
+                                case "approve": {
+                                    // Com PR aberto, aprovar só atualiza o PR existente.
+                                    const prOpen = workbench.pr?.state === "open"
+                                    const label = prOpen ? "Aprovar" : "Aprovar e abrir PR"
                                     return (
-                                        <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Aprovar e abrir PR" onClick={() => setConfirm("approve")}>
+                                        <Button key={action} type="button" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label={label} onClick={() => setConfirm("approve")}>
                                             <CheckCheck className="h-3.5 w-3.5" aria-hidden />
-                                            <ActionLabel full="Aprovar e abrir PR" compact="Aprovar PR" />
+                                            <ActionLabel full={label} compact={prOpen ? "Aprovar" : "Aprovar PR"} />
                                         </Button>
                                     )
+                                }
                                 case "reconnect":
                                     return <ReconnectButton key={action} reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={autoReconnect.retryNow} />
                                 case "retry":
@@ -255,8 +282,9 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                                     )
                                 case "cancel-wait":
                                     return (
-                                        <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("cancel-wait")}>
-                                            <X className="h-3.5 w-3.5" aria-hidden /> Cancelar espera
+                                        <Button key={action} type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} aria-label="Cancelar espera" onClick={() => setConfirm("cancel-wait")}>
+                                            <X className="h-3.5 w-3.5" aria-hidden />
+                                            <ActionLabel full="Cancelar espera" compact="Cancelar" />
                                         </Button>
                                     )
                                 case "interrupt":

@@ -327,7 +327,8 @@ done → Reabrir mesa (texto ao planejador) → planning
   nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
   nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
 - **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
-  canto esquerdo da barra inferior, ao lado do seletor de modelo) troca o fluxo **só desta mesa**
+  canto esquerdo da barra inferior, depois do seletor de modelo e de um divisor vertical; rótulo à
+  esquerda da chave, com a explicação na dica do rótulo) troca o fluxo **só desta mesa**
   (`agenticFlow` da mesa; a tarefa mantém o fluxo salvo) — útil, por exemplo, enquanto o PR é
   corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
   (ex.: Mudanças pedidas); disponível com o agente trabalhando. O fluxo é relido no fim de cada
@@ -355,13 +356,17 @@ done → Reabrir mesa (texto ao planejador) → planning
   (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder
-  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Abrir prévia** (abre em nova guia; sempre o
-  primeiro botão da linha, antes de Ver PR e Abrir fork), **Solicitar correção**, **Aprovar e abrir
-  PR**. Com PR registrado (qualquer etapa, inclusive executando e concluída), a barra mostra antes do
-  **Abrir fork** o atalho **Ver PR #N** (ícone de PR), que abre o PR em nova guia. No **celular** as ações da etapa ficam na **mesma
-  linha** (sem quebrar): **Abrir prévia** só com o ícone e as demais com rótulo compacto
-  (**Correção**, **Aprovar PR**…), preservando o nome acessível completo; se não couber, a barra rola
-  na horizontal. Assim a saída do agente ganha altura de leitura.
+  (`http://<host>:<porta><saúde>`, até 90 s). Prévia pronta: **Solicitar correção** e **Aprovar e abrir
+  PR** (com PR aberto — `pr.state === "open"` — o rótulo é só **Aprovar**: o PR existente é
+  atualizado). A prévia e o PR abrem pelos links do cabeçalho da mesa, em nova guia (a barra não tem
+  atalhos para eles). **Abrir fork** (sempre o primeiro da linha; bloqueado com a dica "A mesa está
+  sendo excluída" durante a exclusão), **Solicitar correção** (e a variante **Voltar ao
+  planejamento** da mesa com falha) e **Solicitar correção do plano** são botões de ícone com dica
+  (`TooltipIconButton`, bloqueados com "Aguarde a ação em andamento" durante outra ação), com o nome
+  completo no `aria-label`. No **celular** as ações da etapa ficam na **mesma linha** (sem quebrar)
+  e os botões com texto usam rótulos compactos (**Descrever**, **Reabrir**, **Aprovar PR**,
+  **Tentar**, **Cancelar**), preservando o nome acessível completo; se não couber, a barra rola na
+  horizontal. Assim a saída do agente ganha altura de leitura.
 - **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
