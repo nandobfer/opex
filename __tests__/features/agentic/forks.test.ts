@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   requestCorrection: vi.fn(async () => undefined),
   submitPrFeedback: vi.fn(async () => undefined),
   reopen: vi.fn(async () => undefined),
+  rebuildPreview: vi.fn(async () => undefined),
   forkAgent: { value: 'plan' },
   forkFallbacks: { value: [] as { model: string; variant: string | null }[] },
   steer: vi.fn(async () => true),
@@ -64,7 +65,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
 }))
 vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSession: mocks.deleteSession }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: vi.fn(async () => ({ settings: { enabled: true, liveChat: mocks.liveChat.value, agents: { fork: { agent: mocks.forkAgent.value, model: null, variant: null, fallbacks: mocks.forkFallbacks.value } } } })), agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
-vi.mock('@/features/agentic/server/workflow', () => ({ getWorkbench: mocks.getWorkbench, revisePlan: mocks.revisePlan, requestCorrection: mocks.requestCorrection, submitPrFeedback: mocks.submitPrFeedback, reopen: mocks.reopen }))
+vi.mock('@/features/agentic/server/workflow', () => ({ getWorkbench: mocks.getWorkbench, revisePlan: mocks.revisePlan, requestCorrection: mocks.requestCorrection, submitPrFeedback: mocks.submitPrFeedback, reopen: mocks.reopen, rebuildPreview: mocks.rebuildPreview }))
 
 import { AgenticFork, AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
@@ -301,6 +302,36 @@ describe('modo Plan/Build e trava de somente leitura', () => {
     expect(mocks.client.session.instructions.entry.put).toHaveBeenCalledWith(expect.objectContaining({ key: FORK_INSTRUCTIONS_KEY, value: expect.stringContaining('PODE alterar arquivos') }))
     expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ agent: expect.objectContaining({ agent: 'build' }) }), expect.anything())
     expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', message: expect.stringContaining('Build, pode alterar arquivos') }))
+  })
+
+  it('fork Build que termina com o marcador pede a nova prévia à mesa (em vez de rodar docker compose)', async () => {
+    mocks.forkAgent.value = 'build'
+    const id = await workbench({ stage: 'preview' })
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'succeeded', text: 'Ajustei o botão.\n\n[opex:gerar-previa]', message: null, costUsd: 0, durationMs: 1 })
+    const dto = await openFork(id, 'Ajuste o botão e gere uma nova prévia')
+    await settle(dto.id)
+    await vi.waitFor(() => expect(mocks.rebuildPreview).toHaveBeenCalledWith(id, 'Fork 1'))
+    expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', level: 'success', message: expect.stringContaining('Nova prévia pedida à mesa') }))
+    const protocol = mocks.client.session.instructions.entry.put.mock.calls.find((call) => call[0].key === FORK_INSTRUCTIONS_KEY)![0].value as string
+    expect(protocol).toContain('[opex:gerar-previa]')
+  })
+
+  it('mesa fora da prévia pronta recusa o pedido do fork: o fork avisa o motivo', async () => {
+    mocks.forkAgent.value = 'build'
+    mocks.rebuildPreview.mockRejectedValueOnce(new Error('Ação indisponível na etapa "Implementando"'))
+    const id = await workbench({ stage: 'implementing' })
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'succeeded', text: '[opex:gerar-previa]', message: null, costUsd: 0, durationMs: 1 })
+    const dto = await openFork(id, 'Gere a prévia')
+    await settle(dto.id)
+    await vi.waitFor(() => expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ level: 'warn', message: expect.stringContaining('A mesa não pôde gerar a nova prévia: Ação indisponível') })))
+  })
+
+  it('fork somente leitura (Plan) ignora o marcador', async () => {
+    const id = await workbench({ stage: 'preview' })
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'succeeded', text: '[opex:gerar-previa]', message: null, costUsd: 0, durationMs: 1 })
+    const dto = await openFork(id, 'Gere a prévia')
+    await settle(dto.id)
+    expect(mocks.rebuildPreview).not.toHaveBeenCalled()
   })
 
   it('agente build e mesa sem sessão: sessão nova nasce sem as permissões de leitura', async () => {

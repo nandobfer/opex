@@ -449,6 +449,30 @@ async function enterBuildQueue(loaded: Loaded): Promise<void> {
 }
 
 /**
+ * "Gerar nova prévia" (Prévia pronta): reconstrói a prévia com o código atual do worktree pelo fluxo
+ * da mesa (fila global do build ou nova tentativa no GitHub Action, porta reservada, máquina da prévia
+ * e teste de saúde), sem replanejar e sem nova rodada do Agente Adversário (o código não mudou).
+ * `requestedBy` identifica quem pediu (ex.: "Fork 2") no aviso e na auditoria.
+ */
+export async function rebuildPreview(id: string, requestedBy: string | null = null): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    assertAction(doc, "rebuild-preview")
+    const waiting = await enterBuildQueueOrWait(loaded)
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, novaPrevia: true, ...(requestedBy ? { pedidoPor: requestedBy } : {}) } })
+    await prepareHub(id)
+    const who = requestedBy ? ` (pedido pelo ${requestedBy})` : ""
+    if (waiting) {
+        const position = await slotQueuePosition(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Nova prévia${who}: limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central; "Gerar a prévia" aguarda vaga${position ? ` (posição #${position})` : ""}.` })
+    } else {
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Nova prévia${who}: reconstruindo com o código atual (${config.environment.previewMethod === "github" ? "build no GitHub" : "fila do build"}).` })
+    }
+    centralLogger(doc.centralId, doc.taskCode).info("Nova prévia solicitada", { workbenchId: id, requestedBy, waiting })
+    return getWorkbench(id)
+}
+
+/**
  * Chave "Gerar prévia" desta mesa (troca o fluxo só da mesa; a tarefa mantém o fluxo salvo):
  * - desligar: ao fim da implementação pula a prévia e publica no PR; na fila do build, sai dela e já
  *   publica; com o build rodando, publica ao fim dele; em Prévia pronta, fica como está;

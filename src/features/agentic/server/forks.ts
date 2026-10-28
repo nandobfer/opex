@@ -44,6 +44,7 @@ import {
     forkTurnAgent,
     initialForkMode,
     plannerActionFor,
+    wantsPreviewRebuild,
     type ForkAction,
     type ForkParentView,
 } from "../fork-logic"
@@ -60,7 +61,7 @@ import { describeModel, forkModel, toModelChoice, validatedModelOverride } from 
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
-import { getWorkbench, reopen, requestCorrection, revisePlan, submitPrFeedback } from "./workflow"
+import { getWorkbench, rebuildPreview, reopen, requestCorrection, revisePlan, submitPrFeedback } from "./workflow"
 
 /**
  * Forks da conversa (SOMENTE servidor): conversas paralelas de uma mesa, em modo Plan (somente
@@ -375,6 +376,22 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
     // Um fork concluído junto com a mesa no meio do turno continua concluído.
     await AgenticFork.updateOne({ _id: id, status: { $ne: "concluded" } }, { $set: set })
     log.info({ forkId: id, outcome: result.outcome, costUsd: result.costUsd }, `Fork ${fork.number} ${fork.taskCode}: ${result.outcome}`)
+    if (result.outcome === "succeeded" && current?.status !== "integrating" && !forkModeReadOnly(asForkMode(fork.mode)) && wantsPreviewRebuild(result.text)) {
+        await requestForkPreview(fork)
+    }
+}
+
+/** O fork pediu uma nova prévia (marcador na resposta): a mesa reconstrói pelo fluxo dela. */
+async function requestForkPreview(fork: IAgenticFork): Promise<void> {
+    const id = String(fork._id)
+    try {
+        await rebuildPreview(fork.workbenchId, `Fork ${fork.number}`)
+        notice(id, "success", "Nova prévia pedida à mesa: ela reconstrói com o código atual pela fila do build. Acompanhe na conversa principal.")
+    } catch (error) {
+        notice(id, "warn", `A mesa não pôde gerar a nova prévia: ${errorText(error)}`)
+        log.warn({ err: errorText(error), forkId: id, workbenchId: fork.workbenchId }, `Fork ${fork.number} ${fork.taskCode}: nova prévia recusada`)
+    }
+    await flushWorkbenchEvents(id).catch(() => undefined)
 }
 
 /** Dispara um turno do fork em segundo plano (a rota responde na hora; a saída chega pelo stream). */

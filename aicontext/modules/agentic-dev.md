@@ -347,6 +347,7 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 planning → plan_review ─┬─ Solicitar correção do plano → planning
                         ├─ Implementar (prévia Local) → implementing → build_queued → building → preview
                         ├─ Implementar (prévia GitHub Action) → implementing → building → preview
+                        │    └─ Gerar nova prévia → build_queued/building → preview (código atual, sem replanejar)
                         └─ Implementar (fluxo PR automático)   → implementing → opening_pr → pr_open
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
          └─ Aprovar e abrir PR → opening_pr → pr_open
@@ -406,6 +407,14 @@ done → Reabrir mesa (texto ao planejador) → planning
   corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
   (ex.: Mudanças pedidas); disponível com o agente trabalhando. O fluxo é relido no fim de cada
   implementação e de cada build (`setWorkbenchPreview`, `workflow.ts`):
+  À direita da chave fica o botão de ícone **Gerar nova prévia** (`rebuild-preview`): sempre visível,
+  bloqueado com o motivo na dica (`rebuildBlockedReason`) com a chave desligada ou salvando, fora de
+  **Prévia pronta** ou com outra ação em andamento. Em Prévia pronta (com ou sem endereço da prévia)
+  reconstrói a prévia com o código atual do worktree pelo fluxo da mesa (`rebuildPreview`) — fila
+  global do build no Local ou tentativa nova no GitHub Action, porta reservada, máquina da prévia e
+  teste de saúde —, **sem replanejar e sem nova rodada do Agente Adversário** (o código não mudou);
+  com a central no limite aguarda vaga como "Gerar a prévia". Resposta otimista (a mesa vai para a
+  fila do build), auditoria (`novaPrevia`, `pedidoPor`) e aviso na saída.
 
   | Ao desligar com a mesa em | Efeito |
   |---|---|
@@ -605,7 +614,12 @@ done → Reabrir mesa (texto ao planejador) → planning
   na sessão, protocolo de leitura e agente `plan` no turno); **Build** = pode alterar arquivos na pasta
   da mesa (sessão sem restrição própria, valem as permissões do agente; turno com o agente do papel
   Fork ou `build` quando ele for o `plan`; protocolo proíbe commit/push/merge/troca de branch sem
-  pedido). O modo inicial vem do agente do papel Fork configurado na central (`plan` → Plan; demais →
+  pedido). Em Build o protocolo também proíbe subir, reconstruir ou derrubar a prévia com
+  docker/docker compose: para uma nova prévia o agente termina a resposta com a linha exata
+  `[opex:gerar-previa]` (`FORK_PREVIEW_MARKER`); ao fim do turno (não no de integração) o fork detecta
+  o marcador (`wantsPreviewRebuild`) e chama **Gerar nova prévia** da mesa (`pedidoPor: "Fork N"`),
+  avisando o sucesso ou o motivo da recusa (ex.: mesa fora de Prévia pronta). Forks em Plan ignoram o
+  marcador. O modo inicial vem do agente do papel Fork configurado na central (`plan` → Plan; demais →
   Build). Forks antigos sem o campo são tratados como Plan (eram somente leitura) e sem trava.
 - **`ForkModeSelect`** (barra inferior, só com o fork em aberto): alterna Plan/Build (`OptionTabs`)
   apenas com o agente parado (`forkModeBlockReason`: travado, fora de aberto ou respondendo). A troca
@@ -836,7 +850,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia) |
 | `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |

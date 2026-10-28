@@ -161,6 +161,7 @@ const ACTION_TOASTS: Partial<Record<WorkbenchAction, string>> = {
     reconnect: "Reconectando à sessão do agente",
     interrupt: "Interrompendo o agente",
     "cancel-wait": "Espera por vaga cancelada",
+    "rebuild-preview": "Gerando nova prévia (fila do build)",
 }
 
 /** Ações da mesa com resposta otimista (a mesa entra em "executando" na hora). */
@@ -172,11 +173,14 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
             unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, text === undefined ? {} : { text })).data),
         onMutate: async ({ action }) => {
             // Reconectar e interromper não marcam "executando" otimista: quem decide é o estado remoto.
+            // Nova prévia não é turno: a mesa vai otimista para a fila do build.
             if (!workbench || action === "interrupt" || action === "reconnect") return { previous: workbench }
             const key = agenticKey("workbench", workbench.taskId)
             await queryClient.cancelQueries({ queryKey: key })
             // Cancelar a espera só tira o aviso de vaga; as demais ações marcam "executando" (a resposta corrige se a mesa ficar aguardando vaga).
-            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : { ...current, runState: "running", error: null }) : current))
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) =>
+                current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : action === "rebuild-preview" ? { ...current, stage: "build_queued", error: null } : { ...current, runState: "running", error: null }) : current,
+            )
             return { previous: workbench }
         },
         onError: (error, _vars, context) => {

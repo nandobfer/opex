@@ -81,7 +81,9 @@ describe('pickPreviewPort', () => {
 describe('workbenchActions', () => {
   it('cada etapa oferece só as ações dela', () => {
     expect(workbenchActions('plan_review', 'idle', false)).toEqual(['implement', 'revise-plan'])
-    expect(workbenchActions('preview', 'idle', true)).toEqual(['open-preview', 'request-correction', 'approve'])
+    expect(workbenchActions('preview', 'idle', true)).toEqual(['open-preview', 'rebuild-preview', 'request-correction', 'approve'])
+    // Prévia fora do ar (sem endereço): ainda dá para gerar uma nova.
+    expect(workbenchActions('preview', 'idle', false)).toEqual(['rebuild-preview', 'request-correction', 'approve'])
     expect(workbenchActions('changes_requested', 'idle', false)).toEqual(['submit-pr-feedback'])
     expect(workbenchActions('done', 'idle', false)).toEqual(['reopen'])
     expect(workbenchActions('pr_open', 'idle', false)).toEqual([])

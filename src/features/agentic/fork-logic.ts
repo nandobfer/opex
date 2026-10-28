@@ -223,6 +223,17 @@ export function extractForkSummary(text: string): string | null {
 // Prompts
 // ---------------------------------------------------------------------------
 
+/**
+ * Linha exata com que o fork (modo Build) pede à mesa uma nova prévia: a mesa reconstrói pelo fluxo
+ * dela (fila do build, porta reservada, máquina da prévia) em vez de o agente rodar docker compose.
+ */
+export const FORK_PREVIEW_MARKER = "[opex:gerar-previa]"
+
+/** A resposta do fork pede uma nova prévia (o marcador sozinho numa linha)? */
+export function wantsPreviewRebuild(text: string): boolean {
+    return text.split("\n").some((line) => line.trim().replace(/^`+|`+$/g, "") === FORK_PREVIEW_MARKER)
+}
+
 /** Protocolo fixo dos forks (entrada durável da sessão do fork); `readOnly` = modo Plan. */
 export function forkInstructions(extra: string, readOnly = true): string {
     const parts = [
@@ -237,6 +248,7 @@ export function forkInstructions(extra: string, readOnly = true): string {
             : [
                   "Você PODE alterar arquivos e executar comandos, dentro das permissões do seu agente, quando o usuário pedir.",
                   "O fork compartilha a pasta (worktree/branch) da mesa: suas alterações afetam o trabalho principal. NÃO faça commits, push, merges nem mude de branch sem o usuário pedir explicitamente, e diga ao final o que alterou.",
+                  `Prévia da mesa: NÃO suba, reconstrua nem derrube a prévia com docker ou docker compose (a mesa cuida da porta, da fila do build e da máquina em que ela roda). Para gerar uma nova prévia com o código atual (quando o usuário pedir ou depois de alterar o código a pedido dele), termine a resposta com a linha exata ${FORK_PREVIEW_MARKER} — a mesa reconstrói a prévia sozinha e avisa o resultado.`,
               ]),
         "Responda em português do Brasil, de forma direta. Pergunte quando algo estiver ambíguo.",
     ]

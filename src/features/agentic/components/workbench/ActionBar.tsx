@@ -232,10 +232,10 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                     <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
                         <WorkbenchModelPicker workbench={workbench} />
                         {previewSwitchVisible(workbench.stage) && <Separator orientation="vertical" className="h-5" data-testid="workbench-actions-divider" />}
-                        <PreviewSwitch workbench={workbench} />
+                        <PreviewSwitch workbench={workbench} rebuildAvailable={actions.includes("rebuild-preview")} actionPending={pending} onRebuild={() => run("rebuild-preview")} />
                     </div>
                     <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
-                        {/* A prévia e o PR abrem pelos links do cabeçalho. */}
+                        {/* A prévia e o PR abrem pelos links do cabeçalho; "Gerar nova prévia" fica junto da chave. */}
                         <TooltipIconButton
                             label="Abrir fork"
                             tooltip="Abrir fork da conversa (perguntar ou investigar sem alterar a mesa)"
@@ -245,7 +245,7 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                         >
                             <GitFork aria-hidden />
                         </TooltipIconButton>
-                        {actions.filter((action) => action !== "open-preview").map((action) => {
+                        {actions.filter((action) => action !== "open-preview" && action !== "rebuild-preview").map((action) => {
                             if (isFeedback(action)) {
                                 if (isCorrection(action)) {
                                     const replan = action === "request-correction" && failed

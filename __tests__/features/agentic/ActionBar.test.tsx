@@ -216,6 +216,35 @@ describe('ActionBar', () => {
     expect(screen.queryByRole('button', { name: /Modelo do Plano/ })).toBeNull()
   })
 
+  it('prévia pronta: "Gerar nova prévia" (ícone à direita da chave) reconstrói direto, sem campo de texto', () => {
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
+    const button = screen.getByRole('button', { name: 'Gerar nova prévia' })
+    expect(button.textContent?.trim()).toBe('')
+    expect(button.hasAttribute('aria-disabled')).toBe(false)
+    // Ordem: rótulo "Gerar prévia" → chave → Gerar nova prévia.
+    const label = screen.getByText('Gerar prévia')
+    const toggle = screen.getByRole('checkbox', { name: 'Gerar prévia' })
+    expect(label.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(toggle.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(button)
+    expect(mocks.mutate).toHaveBeenCalledWith({ action: 'rebuild-preview', text: undefined }, expect.anything())
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it('"Gerar nova prévia" fica visível e bloqueado fora da prévia pronta ou com a chave desligada', () => {
+    const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
+    const outside = screen.getByRole('button', { name: 'Gerar nova prévia' })
+    expect(outside.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(outside)
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    unmount()
+    render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001', agenticFlow: 'auto_pr' })} />)
+    const off = screen.getByRole('button', { name: 'Gerar nova prévia' })
+    expect(off.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(off)
+    expect(mocks.mutate).not.toHaveBeenCalled()
+  })
+
   it.each(['planning', 'implementing', 'build_queued', 'preview', 'pr_open'] as const)('chave "Gerar prévia" na etapa %s reflete o fluxo da mesa', (stage) => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage })} />)
     expect((screen.getByRole('checkbox', { name: 'Gerar prévia' }) as HTMLInputElement).checked).toBe(true)
@@ -287,7 +316,7 @@ describe('ActionBar', () => {
 
   it('executando: só Parar (e Abrir fork); falha mostra o erro e Tentar novamente', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
-    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())).toEqual(['Abrir fork', 'Parar'])
+    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim())).toEqual(['Gerar nova prévia', 'Abrir fork', 'Parar'])
     unmount()
     render(<ActionBar workbench={workbench({ stage: 'building', runState: 'failed', error: 'A prévia não respondeu' })} />)
     expect(screen.getByRole('alert').textContent).toContain('A prévia não respondeu')

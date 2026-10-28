@@ -179,6 +179,8 @@ export type WorkbenchAction =
     | "retry"
     | "interrupt"
     | "open-preview"
+    /** "Gerar nova prévia" (Prévia pronta): reconstrói com o código atual pelo fluxo da mesa. */
+    | "rebuild-preview"
     | "cancel-wait"
     /** Agente Adversário: corrigir os bloqueios, seguir mesmo assim ou revisar de novo. */
     | "adversarial-fix"
@@ -209,7 +211,7 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
         case "adversarial_blocked":
             return ["adversarial-fix", "adversarial-rerun", "adversarial-skip"]
         case "preview":
-            return hasPreview ? ["open-preview", "request-correction", "approve"] : ["request-correction", "approve"]
+            return hasPreview ? ["open-preview", "rebuild-preview", "request-correction", "approve"] : ["rebuild-preview", "request-correction", "approve"]
         case "changes_requested":
             return ["submit-pr-feedback"]
         case "done":
