@@ -69,6 +69,8 @@ async function renderPane(selected: CentralDto | null = central) {
   )
   await screen.findByText('OPE-41')
   await waitFor(() => expect(client.getQueryData(['agentic', 'workbenches', 'c1'])).toBeDefined())
+  // A área de filtros começa recolhida: estes casos olham os filtros completos.
+  fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros' }))
   return result
 }
 

@@ -106,6 +106,7 @@ describe('lista virtualizada da Central de desenvolvimento', () => {
     expect(mocks.getItemKey?.(0)).toBe(TASK)
     expect(mocks.getItemKey?.(1)).toBe('b'.repeat(24))
     // A busca deixa só a segunda tarefa: a posição 0 passa a ser dela, com a medida dela.
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros' }))
     fireEvent.change(screen.getByLabelText('Buscar tarefas'), { target: { value: 'OPE-34' } })
     await waitFor(() => expect(screen.queryByText('OPE-33')).toBeNull())
     expect(mocks.getItemKey?.(0)).toBe('b'.repeat(24))

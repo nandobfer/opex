@@ -240,7 +240,17 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
   no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
-- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; a
+- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
+  **área de filtros recolhível** (`CollapsibleTaskFilters`, mesmas peças do `ListFilters` de /tarefas
+  em `src/components/list/CollapsibleFilters.tsx`, sem botão de limpar). Ela **começa recolhida** a
+  cada carregamento (o estado não é salvo; trocar de tarefa ou central o mantém) em no máximo duas
+  linhas: "FILTROS" com o chevron e, abaixo, numa linha só, os chips dos filtros fora do padrão
+  (`activeDevCenterFilterChips`, `dev-center-filter-chips.ts`; no máximo 2 + "+N" com o restante na
+  dica) ou "Nenhum filtro ativo · clique para filtrar". Chips: **Projeto** (só com uma central
+  escolhida; o × volta para "Todos os projetos"), **Só mesas ativas**, **Colunas** (só quando restringe;
+  nenhuma marcada = "Colunas: nenhuma"; o × volta para todas), **Estado** e **Busca**; o × remove só
+  aquele filtro sem expandir. Clicar no resumo ou no chevron expande (altura animada com Framer
+  Motion); o chevron ⌃ recolhe. Expandida, mostra os filtros: a
   chave **"Só mesas ativas"** (`Switch`, `ActiveWorkbenchSwitch`, linha inteira — o primeiro filtro); o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista
