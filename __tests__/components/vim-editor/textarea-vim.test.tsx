@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { useForm } from 'react-hook-form'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
@@ -15,7 +15,7 @@ import { EDITOR_MODE_KEY } from '@/features/editor-mode/preference'
 import { LINE_NUMBERS_KEY } from '@/features/editor-mode/line-numbers'
 
 beforeAll(() => {
-  // jsdom não mede layout; o CodeMirror só precisa de retângulos vazios.
+  // O DOM de teste não mede layout; o CodeMirror só precisa de retângulos vazios.
   const rects = () => Object.assign([], { item: () => null }) as unknown as DOMRectList
   Range.prototype.getClientRects = rects
   Range.prototype.getBoundingClientRect = () => new DOMRect()

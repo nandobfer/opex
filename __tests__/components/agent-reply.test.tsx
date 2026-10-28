@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -47,7 +47,8 @@ describe("Citar linha no campo de resposta", () => {
 
     it("sem campo, usa o fallback do host; sem fallback, copia para a área de transferência", async () => {
         const writeText = vi.fn().mockResolvedValue(undefined)
-        Object.assign(navigator, { clipboard: { writeText } })
+        // `navigator.clipboard` é só getter no happy-dom: redefine a propriedade em vez de atribuir.
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } })
         const onQuote = vi.fn(() => true)
         const { rerender } = render(
             <ReplyTargetProvider>

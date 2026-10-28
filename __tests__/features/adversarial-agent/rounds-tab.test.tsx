@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -19,7 +19,7 @@ vi.mock('@/features/adversarial-agent/hooks/useAdversarial', () => ({
   useAdversarialRealtime: vi.fn(),
   useAdversarialReview: () => ({ data: null, isLoading: false, isError: false }),
 }))
-// O Select do Radix não abre no jsdom: um <select> nativo com as mesmas opções.
+// O Select do Radix não abre no DOM de teste: um <select> nativo com as mesmas opções.
 vi.mock('@/components/ui/select', () => {
   const Ctx = React.createContext<{ value: string; onValueChange: (value: string) => void }>({ value: '', onValueChange: () => {} })
   return {

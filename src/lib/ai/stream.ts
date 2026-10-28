@@ -1,11 +1,6 @@
-import { streamText, type LanguageModel } from "ai"
+import type { LanguageModel, streamText } from "ai"
 import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
-import { createAnthropicProvider } from "./anthropic"
-import { createDeepseekProvider } from "./deepseek"
-import { createGeminiProvider } from "./gemini"
-import { createOpenaiProvider } from "./openai"
-import { createOpencodeProvider } from "./opencode"
 import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
 import { recordAiConsumption } from "./consumption"
@@ -65,16 +60,21 @@ export interface PreparedModel {
 
 const noDispose = async () => {}
 
-/** Provedores diretos por API key: a AI SDK traduz o `reasoning` para cada um. */
+/**
+ * Provedores diretos por API key: a AI SDK traduz o `reasoning` para cada um. Os clientes entram
+ * sob demanda: importá-los no topo custa centenas de ms em todo módulo que alcança a geração
+ * (inclusive testes que nunca chamam a IA).
+ */
 const DIRECT_PROVIDERS = {
-    anthropic: createAnthropicProvider,
-    openai: createOpenaiProvider,
-    deepseek: createDeepseekProvider,
+    anthropic: async () => (await import("./anthropic")).createAnthropicProvider(),
+    openai: async () => (await import("./openai")).createOpenaiProvider(),
+    deepseek: async () => (await import("./deepseek")).createDeepseekProvider(),
 } as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
 export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
+        const { createOpencodeProvider } = await import("./opencode")
         const { provider, directory } = await createOpencodeProvider()
         const model = provider(request.model, {
             agent: request.agent || undefined,
@@ -89,6 +89,7 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
         return { model, dispose: () => provider.dispose() }
     }
     if (request.provider === "gemini") {
+        const { createGeminiProvider } = await import("./gemini")
         const google = await createGeminiProvider()
         return {
             model: google(request.model),
@@ -146,6 +147,8 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     // OpenCode informa falhas do modelo só nos metadados do passo (`outcome: failed`), sem parte `error`.
     let stepError: string | null = null
     try {
+        // Mesmo motivo dos provedores: a SDK só entra quando alguém gera de fato.
+        const { streamText } = await import("ai")
         const result = streamText({
             model: prepared.model,
             instructions: request.instructions,

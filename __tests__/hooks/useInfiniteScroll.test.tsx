@@ -1,11 +1,11 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 
-/** Stub de `IntersectionObserver` (jsdom não implementa) com disparo manual da interseção. */
+/** Stub de `IntersectionObserver` (o DOM de teste não implementa) com disparo manual da interseção. */
 class IntersectionObserverStub {
   static instances: IntersectionObserverStub[] = []
   readonly callback: IntersectionObserverCallback

@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -23,7 +23,7 @@ vi.mock('@/features/time/components/TimerIndicator', () => ({
 
 import { TimeLogsPage } from '@/features/time/components/TimeLogsPage'
 
-/** Stub de `IntersectionObserver` (jsdom não implementa) com disparo manual da interseção. */
+/** Stub de `IntersectionObserver` (o DOM de teste não implementa) com disparo manual da interseção. */
 class IntersectionObserverStub {
   static instances: IntersectionObserverStub[] = []
   readonly callback: IntersectionObserverCallback

@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -12,7 +12,7 @@ const MODELS = [
 ]
 
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
-/** Busca simplificada: o gatilho, um botão por modelo e o rodapé (o popover real não roda no jsdom). */
+/** Busca simplificada: o gatilho, um botão por modelo e o rodapé (o popover real não roda no DOM de teste). */
 vi.mock('@/features/agentic/components/settings/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick, footer }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void; footer?: React.ReactNode }) => (
     <div>
@@ -26,7 +26,7 @@ vi.mock('@/features/agentic/components/settings/ModelSearchPicker', () => ({
     </div>
   ),
 }))
-/** Menu simplificado: o gatilho e os itens sempre visíveis (o portal do Radix não abre no jsdom). */
+/** Menu simplificado: o gatilho e os itens sempre visíveis (o portal do Radix não abre no DOM de teste). */
 vi.mock('@/components/ui/dropdown-menu', async () => {
   const React = await import('react')
   const Ctx = React.createContext<{ value: string; onValueChange: (value: string) => void } | null>(null)

@@ -273,7 +273,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai` e `@ai-sdk/deepseek`, sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
   Integrações › Provedores de IA (`aicontext/modules/ai.md`)
-- Testes: Vitest + React Testing Library
+- Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com
+  4 shards paralelos (`.github/workflows/ci-cd.yml`) e `maxWorkers: "100%"`
 - Build e execução: scripts de `package.json`; Docker (`Dockerfile` + `docker-compose.yml`)
 - Agendador interno (Crons): `instrumentation.ts` (`setInterval`); tick sob demanda em
   `/api/routines/scheduler-tick`
@@ -296,6 +297,68 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Para novos fluxos críticos, cubra happy path, falhas esperadas e casos-limite relevantes.
 - Chamadas a serviços externos (GitHub, provedores de IA) são sempre mockadas nos testes (nunca
   rede real).
+- Nenhum teste de UI depende de rede: hooks que chamam a API (`api.get`...) são mockados. O
+  happy-dom faz a requisição de verdade (`ECONNREFUSED`/`socket hang up` no log) onde o jsdom calava.
+
+### Ambiente dos testes de UI
+
+- **Teste de componente/hook declara `@vitest-environment happy-dom`.** O ambiente padrão do
+  projeto é `node` (o `vitest.config.ts` não troca o global); o DOM entra por arquivo. O happy-dom
+  monta em ~metade do tempo do jsdom, e é o que torna a suíte paralela viável.
+- **`jsdom` é exceção, não padrão.** Hoje pedem jsdom, com o motivo no docblock:
+  - `__tests__/components/ctrl-enter-submit.test.tsx`: o `setRangeText` do happy-dom passa pelo
+    setter de `value` (o React não chama o `onChange`) e ignora `selectMode "end"`;
+  - `__tests__/components/vim-editor/media.test.tsx`: o `paste` despachado no conteúdo do
+    CodeMirror não chega ao encaminhamento de arquivos do editor no happy-dom.
+
+  Ao criar um teste de UI, comece com happy-dom e só troque se a semântica faltante for necessária
+  de fato — e registre o motivo no docblock e nesta lista.
+- **Diferenças conhecidas do happy-dom**, contornadas no próprio teste:
+  - `navigator.clipboard` é só getter: use `Object.defineProperty(navigator, 'clipboard', …)`,
+    nunca `Object.assign`;
+  - `:not()` com seletor complexo (`:not(.a b)`) não funciona: filtre em JS (`closest`);
+  - a posição inicial do cursor de um `<textarea>` difere do jsdom: fixe-a com
+    `setSelectionRange` quando o teste depender dela.
+- **Não conte com animação real.** O setup de DOM desliga as animações nativas
+  (`MotionGlobalConfig.skipAnimations` em `__tests__/setup.ts`): com o happy-dom, cancelar uma
+  animação do Framer Motion no desmonte rejeita uma promise fora do teste (`AbortError`) e derruba
+  o run inteiro mesmo com todos os testes verdes. Assertivas olham o estado final, não o meio da
+  transição.
+- **Mock de construtor é `function`, não seta.** No Vitest 5, `vi.fn(() => …)` chamado com `new`
+  lança "is not a constructor": use `vi.fn(function () { return … })`.
+- **Não ligue `isolate: false`.** Foi medido e recusado no CRM (origem deste core): reusa o worker
+  entre arquivos, mas o estado de módulo vaza — mocks de um arquivo chegando no outro, DOM
+  acumulado, singleton do Pusher com ref-count alheio e `process.env` de um arquivo valendo no
+  seguinte. O motivo também está em comentário no `vitest.config.ts`.
+- **Imports pesados entram sob demanda.** `dbConnect` importa o registry de migrações e `streamAi`
+  importa a SDK `ai` e os clientes dos provedores só quando são usados: no topo, eles custam
+  centenas de ms de `collect` em todo arquivo de teste que alcança esses módulos. Mantenha esse
+  padrão ao mexer nesses pontos de entrada (e em módulos pesados novos ligados a fluxos centrais,
+  como o registro de ferramentas do Agente Opex e os ganchos do `workflow.ts`).
+
+### Paralelismo e CI
+
+- `vitest.config.ts` fixa `maxWorkers: "100%"`: o default antigo (`numCPUs - 1`) virava 1 worker
+  no runner de 2 vCPU do GitHub e a suíte rodava em série.
+- O CI roda a suíte em **4 shards paralelos** (`pnpm test --shard=i/4`, matriz em
+  `.github/workflows/ci-cd.yml`); o grupo de `concurrency` inclui o shard para um não cancelar o
+  outro, e o build/deploy (`needs: vitest`) espera todos os shards. Para mudar a quantidade, edite
+  só a lista `matrix.shard`. Os checks aparecem como "Vitest (1/4)"…"Vitest (4/4)": a proteção da
+  `main` deve exigir esses nomes.
+
+### Rodando os testes
+
+- **Nunca rode a suíte completa** (`pnpm test`, `npx vitest run` sem arquivos) sem pedido
+  explícito do usuário: ela é lenta e roda no CI do GitHub em todo pull request e push na `main`.
+- Rode só o que as mudanças afetam:
+  - testes criados ou alterados: `npx vitest run <arquivos de teste>`;
+  - testes que dependem do código alterado: `npx vitest related --run <arquivos de src alterados>`;
+  - pelo grafo de imports dos arquivos modificados no git: `npx vitest run --changed` (ou
+    `--changed origin/main`). O `vitest.config.ts` tira o `package.json` dos `forceRerunTriggers`
+    para que o bump de versão não dispare a suíte inteira; alterar o próprio `vitest.config.ts`
+    ainda dispara, então nesse caso rode os arquivos de teste pelo caminho.
+- Se um teste afetado falhar por causa da mudança, corrija antes de encerrar; falhas do CI em
+  testes não rodados localmente são tratadas quando aparecerem no PR.
 
 ## 7. Ambiente local, Docker e git worktree
 
@@ -330,8 +393,9 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 4. Segredos (tokens, JWT) ficaram só em campo privado de integração, nunca no cliente.
 5. Segui o fluxo obrigatório da seção 4 (implementar → documentar → testar).
 6. Escrevi testes Vitest cobrindo a mudança (ou justifiquei explicitamente por que não).
-   Executei apenas os testes específicos do código afetado; a suíte completa só foi executada
-   se solicitada explicitamente pelo usuário.
+   Executei apenas os testes específicos do código afetado (`vitest run <arquivos>`, `related`
+   ou `--changed`), com testes de UI em happy-dom; a suíte completa só foi executada se
+   solicitada explicitamente pelo usuário.
 7. Se criei, alterei ou removi endpoint público por token, atualizei a especificação OpenAPI no
    mesmo commit.
 8. Usei só tokens do tema escuro (nada de cor hardcoded).

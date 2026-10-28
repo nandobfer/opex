@@ -1,4 +1,9 @@
-/** @vitest-environment jsdom */
+/**
+ * @vitest-environment jsdom
+ *
+ * jsdom de propósito: o `setRangeText` do happy-dom passa pelo setter de `value` (o React não vê a
+ * mudança e não chama o `onChange`) e ignora o `selectMode "end"` (cursor vai ao fim do texto).
+ */
 
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

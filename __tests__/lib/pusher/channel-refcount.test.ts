@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const pusherMock = vi.hoisted(() => {
@@ -9,7 +9,8 @@ const pusherMock = vi.hoisted(() => {
 
 // O client.ts importa `pusher-js` (default) e instancia no browser. Mockamos o
 // módulo inteiro para isolar a lógica de ref-count.
-vi.mock("pusher-js", () => ({ default: vi.fn(() => pusherMock.client) }))
+// `function` (não seta): no Vitest 5 o mock chamado com `new` precisa ser um construtor.
+vi.mock("pusher-js", () => ({ default: vi.fn(function () { return pusherMock.client }) }))
 
 import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 

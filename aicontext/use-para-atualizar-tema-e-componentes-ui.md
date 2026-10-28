@@ -242,7 +242,7 @@ repassar ao elemento DOM.)
   (`ChartDataTable`, linhas com `data-barra`) com os mesmos números — `sr-only` no contêiner e
   nome em `aria-label`, nunca `<caption>` (o navegador desenha o caption fora da tabela oculta e
   ele aparece flutuando); os testes leem essa tabela e
-  o `ChartTooltipContent` direto (jsdom não mede o `ResponsiveContainer`).
+  o `ChartTooltipContent` direto (o DOM de teste não mede o `ResponsiveContainer`).
 - Sem dado é lacuna (`null`), nunca zero.
 
 ## Formulários

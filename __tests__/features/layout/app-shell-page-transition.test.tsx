@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React, { useEffect } from "react"
 import { cleanup, render } from "@testing-library/react"

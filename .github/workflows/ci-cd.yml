@@ -1,6 +1,7 @@
 name: CI/CD
 
-# CI (testes Vitest) roda em todo push na main e em todo pull request.
+# CI (testes Vitest) roda em todo push na main e em todo pull request, com a suíte dividida em shards.
+# Localmente, a IA roda só os testes afetados pela mudança (AGENTS.md, seção 6).
 # CD (build + deploy) roda apenas para a main: constrói a imagem no runner,
 # exporta, transfere por SCP e recria o serviço no servidor de produção.
 on:
@@ -14,12 +15,19 @@ permissions:
 
 jobs:
   vitest:
-    name: Vitest
+    name: Vitest (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # O grupo inclui o shard: sem ele o `cancel-in-progress` cancelaria o shard irmão.
     concurrency:
-      group: ci-${{ github.workflow }}-${{ github.ref }}
+      group: ci-${{ github.workflow }}-${{ github.ref }}-${{ matrix.shard }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Para mudar a quantidade de shards, basta editar esta lista. Cada shard roda com
+        # `maxWorkers: "100%"` (2 workers no runner padrão de 2 vCPU).
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -37,7 +45,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Rodar a suíte Vitest
-        run: pnpm test
+        run: pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   build:
     name: Build image

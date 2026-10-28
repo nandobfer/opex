@@ -28,16 +28,25 @@ vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   removeWorkbenchReviewSessions: vi.fn(async () => undefined),
 }))
 
+// O Framer Motion usa as animações nativas do happy-dom: quando um componente desmonta no meio
+// da animação, o cancelamento rejeita uma promise fora do teste ("AbortError: The animation
+// was canceled.") e o Vitest derruba o run inteiro. `skipAnimations` faz o motion ir direto ao
+// estado final, sem criar `Animation` do DOM — e deixa os testes de UI mais rápidos.
+// O import fica restrito aos ambientes de DOM: testes de node não pagam esse grafo.
+if (typeof window !== 'undefined') {
+  const { MotionGlobalConfig } = await import('framer-motion')
+  MotionGlobalConfig.skipAnimations = true
+}
+
 // Silencia console durante os testes — use DEBUG=1 para ver logs
 if (!process.env.DEBUG) {
   vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 }
 
-// Polyfill de localStorage/sessionStorage para o ambiente jsdom desta versão do
-// vitest, que expõe `window` mas pode não ter `window.localStorage` funcional (exige
-// a flag --localstorage-file do Node). Componentes que usam `window.localStorage`
-// dependem disso em testes com `@vitest-environment jsdom`. Redefine quando ausente
+// Polyfill de localStorage/sessionStorage para os ambientes de DOM (happy-dom/jsdom), que
+// expõem `window` mas podem não ter `window.localStorage` funcional (o jsdom exige a flag
+// --localstorage-file do Node). Componentes que usam `window.localStorage` dependem disso. Redefine quando ausente
 // ou incompleto, preservando uma implementação real e funcional do ambiente.
 const storageUsable = (value: unknown): value is Storage =>
   typeof value === 'object' && value !== null && typeof (value as Storage).getItem === 'function' && typeof (value as Storage).clear === 'function'
@@ -73,7 +82,7 @@ if (typeof window !== 'undefined' && !storageUsable(window.localStorage)) {
   }
 }
 
-// jsdom não tem ResizeObserver; componentes Radix (ex.: Slider) o usam para medir o polegar.
+// O DOM de teste pode não ter ResizeObserver; componentes Radix (ex.: Slider) o usam para medir o polegar.
 if (typeof window !== 'undefined' && !('ResizeObserver' in window)) {
   class ResizeObserverStub {
     observe() {}
