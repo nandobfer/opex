@@ -1024,9 +1024,21 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     // Builder Machine: com o túnel aberto o build local vai para o Docker do PC. A prévia no GitHub
     // Action fica sempre no servidor (derruba a prévia anterior que estava no PC).
     const local = await localDockerHooks()
-    const target = local ? await local.resolveBuildTarget({ workbenchId: id, centralId: loaded.doc.centralId, composeProject: ctx.composeProject, hadPort: typeof loaded.doc.port === "number", forceServer: method !== "local" }) : null
+    const target = local
+        ? await local.resolveBuildTarget({
+              workbenchId: id,
+              centralId: loaded.doc.centralId,
+              composeProject: ctx.composeProject,
+              worktreePath: ctx.worktreePath,
+              composeFile: env.composeFile.trim(),
+              portEnvVar: env.portEnvVar,
+              hadPort: typeof loaded.doc.port === "number",
+              forceServer: method !== "local",
+          })
+        : null
     const port = await allocatePreviewPort(id, env.previewHost, { min: env.previewPortMin, max: env.previewPortMax }, target?.portCheck)
-    if (target) await target.attach(port)
+    // No PC, o override do compose leva as CAs do PC aos containers (redes com inspeção TLS).
+    const attached = target ? await target.attach(port) : null
     // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
     const dumpRequired = loaded.config.environment.backupDatabase
     // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e é
@@ -1035,6 +1047,7 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     const backup = dumpRequired || method === "github" ? await reservePreviewBackup(loaded.doc, loaded.config) : null
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}${target ? " (prévia na máquina local)" : ""}` })
+    if (attached?.notice) publishWorkbenchEvent(id, { type: "notice", level: attached.notice.level, message: attached.notice.message })
     publishWorkbenchEvent(id, {
         type: "notice",
         level: "info",
@@ -1050,7 +1063,7 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     }
     // O backup só entra no prompt (e na conferência do servidor) quando a central o exige; sem ele a
     // prévia sobe sem dump — projetos sem banco de dados (OPE-72).
-    return { stage: "building", text: buildPrompt(loaded.config, ctx, port, dumpRequired ? backup : null, remote, target ? { prefix: target.dockerPrefix } : undefined) }
+    return { stage: "building", text: buildPrompt(loaded.config, ctx, port, dumpRequired ? backup : null, remote, target ? { prefix: target.dockerPrefix, files: attached?.composeFiles ?? undefined } : undefined) }
 }
 
 /** A prévia da mesa estava no PC e a Builder Machine a derrubou (ou a deixou pendente): o agente pula o `down`. */

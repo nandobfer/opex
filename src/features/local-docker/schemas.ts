@@ -4,6 +4,8 @@ import { z } from "zod"
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const HOST = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
 const SSH_HOST = /^[A-Za-z0-9][A-Za-z0-9._@-]*$/
+/** Caminho absoluto de arquivo no PC (entra em comandos e no override do compose). */
+const ABSOLUTE_PATH = /^\/[A-Za-z0-9._/-]+$/
 
 const port = (label: string) =>
     z
@@ -58,6 +60,10 @@ export const localDockerSettingsSchema = z
         /** Prefixo do nome dos containers dos apelidos no PC (ex.: `opex-alias-` → `opex-alias-devteam-mongo`). */
         aliasPrefix: z.string().trim().min(1, "Informe o prefixo").max(40, "Máximo de 40 caracteres").regex(SAFE_NAME, "Use letras, números, ponto, hífen ou sublinhado"),
         aliases: z.array(localDockerAliasSchema).max(20, "Até 20 apelidos"),
+        /** Monta o bundle de CAs do PC nas prévias (redes com inspeção TLS, ex.: FortiGate). */
+        trustPcCertificates: z.boolean(),
+        /** Bundle de CAs no PC (WSL) montado nas prévias. */
+        pcCaBundlePath: z.string().trim().min(1, "Informe o caminho do bundle de CAs").max(300, "Máximo de 300 caracteres").regex(ABSOLUTE_PATH, "Use um caminho absoluto (ex.: /etc/ssl/certs/ca-certificates.crt)"),
     })
     .superRefine((value, ctx) => {
         if (value.mode === "direct" && !value.pcHost) ctx.addIssue({ code: "custom", path: ["pcHost"], message: "Informe o IP do PC para a conexão direta" })
@@ -91,6 +97,8 @@ export const DEFAULT_LOCAL_DOCKER_SETTINGS: LocalDockerSettings = {
         { name: "devteam-mongo", port: 27017 },
         { name: "devteam-soketi", port: 6001 },
     ],
+    trustPcCertificates: true,
+    pcCaBundlePath: "/etc/ssl/certs/ca-certificates.crt",
 }
 
 export const localDockerTunnelActionSchema = z.object({

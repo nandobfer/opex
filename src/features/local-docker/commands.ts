@@ -1,4 +1,4 @@
-import { LOCAL_DOCKER_ALIAS_IMAGE, LOCAL_DOCKER_CONTROL_SERVICE, LOCAL_DOCKER_LABELS, LOCAL_DOCKER_PATHS } from "./constants"
+import { LOCAL_DOCKER_ALIAS_IMAGE, LOCAL_DOCKER_CA_ENV, LOCAL_DOCKER_CA_TARGET, LOCAL_DOCKER_CONTROL_SERVICE, LOCAL_DOCKER_LABELS, LOCAL_DOCKER_PATHS } from "./constants"
 import type { LocalDockerAlias, LocalDockerSettings } from "./schemas"
 import type { LocalDockerMachineInfo } from "./types"
 
@@ -145,6 +145,31 @@ export function forwardPortCommand(port: number): string {
 export function cancelForwardCommand(port: number): string {
     return `ssh -S ${CONTROL} -O cancel -L ${forwardSpec(port)} ${MUX_HOST} 2>/dev/null; true`
 }
+
+/** Comando no PC pela conexão mestra do túnel (exige o túnel aberto). */
+export function muxCommand(command: string): string {
+    return `ssh -S ${CONTROL} ${MUX_HOST} ${quote(command)}`
+}
+
+/**
+ * `rsync -e` pela conexão mestra (o destino é `${MUX_HOST}:<pasta>`). Vai entre aspas duplas no
+ * comando (`-e "…"`): o `$HOME` expande no host antes de o rsync dividir o texto.
+ */
+export function muxRsyncShell(): string {
+    return `ssh -S $HOME/${LOCAL_DOCKER_PATHS.control}`
+}
+
+/** Repasse reverso pela conexão mestra: o `localhost:<porta>` do PC chega ao `localhost:<porta>` do servidor. */
+export function reverseForwardCommand(port: number): string {
+    return `ssh -S ${CONTROL} -O forward -R ${port}:localhost:${port} ${MUX_HOST}`
+}
+
+export function cancelReverseForwardCommand(port: number): string {
+    return `ssh -S ${CONTROL} -O cancel -R ${port}:localhost:${port} ${MUX_HOST} 2>/dev/null; true`
+}
+
+/** Destino simbólico dos comandos pela conexão mestra (`rsync … ${MUX_HOST}:<pasta>`). */
+export const MUX_DESTINATION = MUX_HOST
 
 /** Portas TCP em escuta no PC (pela conexão mestra). */
 export function listeningPortsCommand(): string {
@@ -406,10 +431,115 @@ export function aliasDeleteCommand(settings: LocalDockerSettings, name: string):
 
 /**
  * Recria um serviço da prévia pelo compose do worktree no servidor, mandando para o Docker do PC
- * (sem build: usa a imagem que já está no PC).
+ * (sem build: usa a imagem que já está no PC). `files` = os mesmos arquivos do build (com o override
+ * das CAs do PC); vazio = o padrão do compose.
  */
-export function previewRecreateCommand(settings: LocalDockerSettings, input: { worktreePath: string; composeProject: string; service: string; port: number }): string {
-    return `cd ${quote(input.worktreePath)} && PORT=${input.port} DOCKER_CONTEXT=${settings.contextName} docker compose -p ${quote(input.composeProject)} up -d --force-recreate --no-build ${quote(input.service)}`
+export function previewRecreateCommand(settings: LocalDockerSettings, input: { worktreePath: string; composeProject: string; service: string; port: number; files?: string[] }): string {
+    const files = (input.files ?? []).map((file) => ` -f ${quote(file)}`).join("")
+    return `cd ${quote(input.worktreePath)} && PORT=${input.port} DOCKER_CONTEXT=${settings.contextName} docker compose -p ${quote(input.composeProject)}${files} up -d --force-recreate --no-build ${quote(input.service)}`
+}
+
+// ---------------------------------------------------------------------------
+// Certificados do PC: inspeção TLS da rede e override do compose com as CAs do PC
+// ---------------------------------------------------------------------------
+
+const COMPOSE_PROJECT = /^[a-z0-9][a-z0-9_-]*$/
+const COMPOSE_CANDIDATES = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"]
+
+/** Override da prévia no host (fora do worktree): `"$HOME/.opex-local/compose/<projeto>.ca.yml"`. */
+export function composeOverridePath(composeProject: string): string {
+    if (!COMPOSE_PROJECT.test(composeProject)) throw new Error(`Nome de projeto do compose inválido: ${composeProject}`)
+    return home(`${LOCAL_DOCKER_PATHS.composeOverrides}/${composeProject}.ca.yml`)
+}
+
+/**
+ * Lê no worktree os arquivos-base do compose (o `composeFile` da central ou a descoberta padrão do
+ * compose, com o `*.override.*`) e os serviços ativos. Saída: linhas `FILE:` e `SERVICE:`.
+ */
+export function composeInspectCommand(input: { worktreePath: string; composeFile: string; portEnvVar: string; port: number }): string {
+    const explicit = input.composeFile.trim()
+    const files = explicit
+        ? `echo ${quote(`FILE:${explicit}`)}; set -- -f ${quote(explicit)};`
+        : [
+              `set --; base=; for f in ${COMPOSE_CANDIDATES.join(" ")}; do if [ -f "$f" ]; then base=$f; break; fi; done;`,
+              '[ -n "$base" ] || { echo "Nenhum arquivo do Docker Compose no worktree"; exit 1; };',
+              'echo "FILE:$base"; set -- -f "$base"; stem=${base%.*};',
+              'for o in "$stem.override.yaml" "$stem.override.yml"; do if [ -f "$o" ]; then echo "FILE:$o"; set -- "$@" -f "$o"; break; fi; done;',
+          ].join(" ")
+    const services = `svc=$(${input.portEnvVar}=${input.port} docker compose "$@" config --services) || { echo "$svc"; exit 1; }; printf '%s\\n' "$svc" | sed 's/^/SERVICE:/'`
+    return `cd ${quote(input.worktreePath)} && { ${files} ${services}; }`
+}
+
+export function parseComposeInspect(output: string): { files: string[]; services: string[] } {
+    const files: string[] = []
+    const services: string[] = []
+    for (const raw of output.split("\n")) {
+        const line = raw.trim()
+        if (line.startsWith("FILE:") && line.length > 5) files.push(line.slice(5))
+        else if (line.startsWith("SERVICE:") && line.length > 8) services.push(line.slice(8))
+    }
+    return { files, services }
+}
+
+/**
+ * Override do compose que monta o bundle de CAs do PC (somente leitura) em cada serviço e aponta o
+ * Node/OpenSSL/Python para ele. `create_host_path: false`: sem o arquivo no PC o compose falha em vez
+ * de criar uma pasta no lugar. Strings em JSON (JSON é YAML válido).
+ */
+export function caOverrideYaml(settings: Pick<LocalDockerSettings, "pcCaBundlePath">, services: string[]): string {
+    const target = JSON.stringify(LOCAL_DOCKER_CA_TARGET)
+    const lines = ["# Gerado pelo Opex (Builder Machine): CAs do PC nas prévias. Não edite.", "services:"]
+    for (const service of services) {
+        lines.push(
+            `  ${JSON.stringify(service)}:`,
+            "    volumes:",
+            "      - type: bind",
+            `        source: ${JSON.stringify(settings.pcCaBundlePath)}`,
+            `        target: ${target}`,
+            "        read_only: true",
+            "        bind:",
+            "          create_host_path: false",
+            "    environment:",
+            ...LOCAL_DOCKER_CA_ENV.map((name) => `      ${name}: ${target}`),
+        )
+    }
+    return `${lines.join("\n")}\n`
+}
+
+/** Grava o override da prévia (em base64, sem depender de aspas) e imprime o caminho absoluto (`OVERRIDE:`). */
+export function writeComposeOverrideCommand(composeProject: string, content: string): string {
+    const path = composeOverridePath(composeProject)
+    const encoded = Buffer.from(content, "utf8").toString("base64")
+    return `mkdir -p ${home(LOCAL_DOCKER_PATHS.composeOverrides)} && printf %s ${quote(encoded)} | base64 -d > ${path} && printf 'OVERRIDE:%s\\n' ${path}`
+}
+
+export function parseOverridePath(output: string): string | null {
+    const line = output
+        .split("\n")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith("OVERRIDE:/"))
+    return line ? line.slice("OVERRIDE:".length) : null
+}
+
+export function removeComposeOverrideCommand(composeProject: string): string {
+    return `rm -f ${composeOverridePath(composeProject)}; true`
+}
+
+/** O bundle de CAs existe e é legível no PC? (pela conexão mestra) */
+export function caBundleCheckCommand(settings: Pick<LocalDockerSettings, "pcCaBundlePath">): string {
+    return muxCommand(`test -r ${quote(settings.pcCaBundlePath)}`)
+}
+
+/** Emissor do certificado de `host:443` como esta máquina o vê (`NO_OPENSSL` sem o openssl). */
+export function tlsIssuerCommand(host: string): string {
+    return `command -v openssl >/dev/null 2>&1 || { echo NO_OPENSSL; exit 0; }; echo | timeout 15 openssl s_client -connect ${host}:443 -servername ${host} 2>/dev/null | openssl x509 -noout -issuer 2>/dev/null; true`
+}
+
+/** `issuer=CN = FortiGate SubCA Global` (OpenSSL 1.1) e `issuer=CN=…` (3.x) → `CN=FortiGate SubCA Global`. */
+export function parseIssuer(output: string): string | null {
+    const match = output.match(/^\s*issuer\s*=\s*(.+?)\s*$/m)
+    if (!match) return null
+    return match[1]!.replace(/\s*=\s*/g, "=").replace(/\s*,\s*/g, ", ")
 }
 
 /** Apaga a prévia inteira no PC: containers, volumes, redes e as imagens que eles usavam. */

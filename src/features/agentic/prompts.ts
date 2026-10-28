@@ -151,17 +151,20 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
 
 /**
  * Prompt do build da prévia. `docker.prefix` (Builder Machine) manda todo comando docker para outra
- * máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; não combina com o
- * build no GitHub Action (`remote`), que ignora o prefixo.
+ * máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; `docker.files` são os
+ * arquivos do compose do build (o último é o override com as CAs do PC). Não combina com o build no
+ * GitHub Action (`remote`), que ignora os dois.
  */
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }, docker?: { prefix: string }): string {
+export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }, docker?: { prefix: string; files?: string[] }): string {
     const env = config.environment
-    const file = env.composeFile.trim() ? ` -f ${env.composeFile.trim()}` : ""
     const local = remote ? undefined : docker
+    const composeFile = env.composeFile.trim()
+    const files = local?.files?.length ? local.files : null
+    const file = files ? files.map((item) => ` -f ${item}`).join("") : composeFile ? ` -f ${composeFile}` : ""
     const builder = local ? "" : env.dockerBuilder.trim()
     const prefix = local ? `${local.prefix} ` : builder ? `BUILDX_BUILDER=${builder} ` : ""
     const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
-    const logs = `${local ? `${local.prefix} ` : ""}docker compose -p ${ctx.composeProject} logs --tail 100`
+    const logs = `${local ? `${local.prefix} ` : ""}docker compose -p ${ctx.composeProject}${files ? file : ""} logs --tail 100`
     const health = `http://localhost:${port}${env.healthPath || "/"}`
     // Sem backup (OPE-72, projetos sem banco de dados) a seção some por inteiro: o agente não
     // identifica banco, não roda `mongodump` e a prévia não depende de nenhum arquivo de dump.
@@ -185,7 +188,7 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
         `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
         "",
         ...backupSteps,
-        `- Confira o docker compose do projeto${file ? ` (${env.composeFile.trim()})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada ${env.previewPortMin}–${env.previewPortMax}; nunca outra).`,
+        `- Confira o docker compose do projeto${composeFile ? ` (${composeFile})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada ${env.previewPortMin}–${env.previewPortMax}; nunca outra).`,
         ...(remote ? [
             "## Construção no GitHub Action (sem build local e sem abrir PR)",
             "- Este modo autoriza publicar a branch da tarefa antes da aprovação. Confirme que todas as alterações estão commitadas, seguindo o versionamento do projeto. Nunca envie .env, dump ou credenciais.",
@@ -199,6 +202,11 @@ mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>
             ? [
                   `- Esta prévia roda no Docker de OUTRA máquina: use o prefixo \`${local.prefix}\` em TODO comando docker e docker compose desta prévia (build, logs, ps, down). NÃO troque o contexto nem o builder padrão do host (\`docker context use\`, \`docker buildx use\`) e não crie outros.`,
                   "- Nessa máquina os volumes do compose que montam arquivos do worktree (bind mounts) não enxergam o código: a prévia precisa rodar só com a imagem construída.",
+              ]
+            : []),
+        ...(files
+            ? [
+                  `- Use EXATAMENTE estes arquivos do compose, nesta ordem, em todo comando docker compose desta prévia (build, logs, ps, down):${file}. O último foi gerado pelo Opex e monta as CAs do PC nos containers (a rede do PC inspeciona o TLS; sem ele as chamadas HTTPS do servidor da prévia falham). NÃO edite, mova nem apague esse arquivo.`,
               ]
             : []),
         `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`${logs}\` se falhar).`,

@@ -80,6 +80,15 @@ describe('mensagens das etapas', () => {
     expect(text).toContain('bind mounts')
   })
 
+  it('build na Builder Machine com as CAs do PC: usa exatamente os arquivos do compose (o último é o override)', () => {
+    const prefix = 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder'
+    const files = ['docker-compose.yml', '/home/srv/.opex-local/compose/portal-go-dev-12.ca.yml']
+    const text = buildPrompt(config, ctx, 4015, backup, undefined, { prefix, files })
+    expect(text).toContain(`\`${prefix} PORT=4015 docker compose -p portal-go-dev-12 -f docker-compose.yml -f /home/srv/.opex-local/compose/portal-go-dev-12.ca.yml up -d --build\``)
+    expect(text).toContain(`${prefix} docker compose -p portal-go-dev-12 -f docker-compose.yml -f /home/srv/.opex-local/compose/portal-go-dev-12.ca.yml logs --tail 100`)
+    expect(text).toContain('monta as CAs do PC nos containers')
+  })
+
   it('build no GitHub Action ignora o prefixo da Builder Machine', () => {
     const text = buildPrompt(config, ctx, 4015, backup, { attempt: 'a1', statePath: '/tmp/s.json' }, { prefix: 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder' })
     expect(text).not.toContain('DOCKER_CONTEXT=')

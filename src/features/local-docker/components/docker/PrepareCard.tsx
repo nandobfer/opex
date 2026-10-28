@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLocalDockerMachine, useLocalDockerStatus } from "../../hooks/useLocalDocker"
 import type { LocalDockerPrepareDto } from "../../types"
-import { StepsList } from "./StepsList"
+import { StepsList } from "../setup/StepsList"
 
 const reveal = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 

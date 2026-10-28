@@ -4,13 +4,12 @@ import { useCallback, useEffect, type Dispatch, type SetStateAction } from "reac
 import { motion } from "framer-motion"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Cable, Container, KeyRound, Network } from "lucide-react"
+import { Cable, Container, KeyRound, Network, Settings2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
-import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
 import type { Draft } from "@/features/integrations/components/detail/draft"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
@@ -18,19 +17,20 @@ import { useIntegrationTab } from "@/features/integrations/components/tabs/useIn
 import { BUILDER_MACHINE_TABS, type BuilderMachineTab } from "../constants"
 import { DEFAULT_LOCAL_DOCKER_SETTINGS, localDockerSettingsSchema, type LocalDockerSettings } from "../schemas"
 import { useLocalDockerRealtime, useLocalDockerSettings, useSaveLocalDockerSettings } from "../hooks/useLocalDocker"
-import { ActivationCard } from "./ActivationCard"
 import { BuilderMachineFooter } from "./BuilderMachineFooter"
 import { LockedTabs } from "./LockedTabs"
 import { ConnectionTab } from "./connection/ConnectionTab"
 import { DockerTab } from "./docker/DockerTab"
+import { GeneralTab } from "./general/GeneralTab"
 import { SetupTab } from "./setup/SetupTab"
 import { TunnelTab } from "./tunnel/TunnelTab"
 
 const TABS: IntegrationTabDef<BuilderMachineTab>[] = [
+    { id: "geral", label: "Geral", icon: Settings2 },
     { id: "tunel", label: "Túnel do Docker do PC", icon: Cable },
     { id: "conexao", label: "Conexão com o PC", icon: Network },
-    { id: "docker", label: "Docker do PC", icon: Container },
     { id: "preparo", label: "Preparo do PC", icon: KeyRound },
+    { id: "docker", label: "Docker do PC", icon: Container },
 ]
 
 interface BuilderMachineEditorFormProps {
@@ -46,10 +46,10 @@ interface BuilderMachineEditorFormProps {
 }
 
 /**
- * Página da integração Builder Machine (`local-docker`) em abas: Túnel do Docker do PC, Conexão
- * com o PC, Docker do PC e Preparo do PC. A configuração do PC é um formulário só (Conexão + Docker);
- * Salvar grava também o Geral da integração (ambiente, modo debug e "Integração ativa"). Desativada
- * (como salva), a página mostra só o Geral e a ativação, com as abas bloqueadas.
+ * Página da integração Builder Machine (`local-docker`) em abas: Geral, Túnel do Docker do PC,
+ * Conexão com o PC, Preparo do PC e Docker do PC. A configuração do PC é um formulário só (Conexão +
+ * Docker); Salvar grava também o Geral da integração (ambiente, modo debug e "Integração ativa").
+ * Desativada (como salva), a página mostra só o Geral e a ativação, com as demais abas bloqueadas.
  */
 export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: BuilderMachineEditorFormProps) {
     const active = data.publicValues.active === true
@@ -80,12 +80,7 @@ export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pe
     })
 
     const unsaved = formDirty || Boolean(saved?.isDefault)
-    const general = (
-        <>
-            <GeneralCard draft={draft} setDraft={setDraft} />
-            <ActivationCard draft={draft} setDraft={setDraft} savedActive={active} />
-        </>
-    )
+    const general = <GeneralTab draft={draft} setDraft={setDraft} savedActive={active} />
     const footer = <BuilderMachineFooter dirty={dirty || formDirty} canSave={dirty || unsaved} pending={pending || save.isPending} onUndo={undoAll} />
 
     return (
@@ -110,7 +105,7 @@ export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pe
             {!active ? (
                 <>
                     {general}
-                    <LockedTabs tabs={TABS} />
+                    <LockedTabs tabs={TABS.filter((item) => item.id !== "geral")} />
                     <BuilderMachineFooter dirty={dirty} canSave={dirty} pending={pending} onUndo={onUndo} />
                 </>
             ) : query.isLoading ? (
@@ -119,20 +114,26 @@ export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pe
                 <ErrorState title="Não foi possível carregar a Builder Machine" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : (
                 <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções da integração Builder Machine">
-                    {tab === "tunel" && <TunnelTab saved={saved} unsaved={unsaved} goTo={requestTab} />}
-                    {tab === "conexao" && (
+                    {tab === "geral" && (
                         <>
-                            <ConnectionTab form={form} general={general} />
+                            {general}
                             {footer}
                         </>
                     )}
-                    {tab === "docker" && (
+                    {tab === "tunel" && <TunnelTab saved={saved} unsaved={unsaved} goTo={requestTab} />}
+                    {tab === "conexao" && (
                         <>
-                            <DockerTab form={form} />
+                            <ConnectionTab form={form} />
                             {footer}
                         </>
                     )}
                     {tab === "preparo" && <SetupTab saved={saved} mode={mode} unsaved={unsaved} />}
+                    {tab === "docker" && (
+                        <>
+                            <DockerTab form={form} saved={saved} unsaved={unsaved} />
+                            {footer}
+                        </>
+                    )}
                 </IntegrationTabs>
             )}
         </motion.form>

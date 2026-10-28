@@ -46,6 +46,8 @@ export interface ILocalDockerPreview {
     composeProject: string
     port: number
     pendingTeardown: boolean
+    /** Arquivos do compose usados no build (base + override das CAs do PC); vazio = padrão do compose. */
+    composeFiles?: string[]
     createdAt: Date
 }
 
@@ -83,6 +85,7 @@ const previewSchema = new Schema<ILocalDockerPreview>(
         composeProject: { type: String, required: true },
         port: { type: Number, required: true },
         pendingTeardown: { type: Boolean, default: false },
+        composeFiles: { type: [String], default: [] },
         createdAt: { type: Date, default: () => new Date() },
     },
     { collection: "local_docker_previews", versionKey: false },

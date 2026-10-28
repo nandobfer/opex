@@ -58,7 +58,7 @@ export function TunnelTab({ saved, unsaved, goTo }: { saved: LocalDockerSettings
                 items={containers.data?.environment ?? []}
                 unavailable={unavailable}
                 loading={containers.isLoading}
-                empty={<p className="text-sm text-muted-foreground">Nenhum container de ambiente: rode &quot;Preparar o Docker do PC&quot; na aba Preparo do PC.</p>}
+                empty={<p className="text-sm text-muted-foreground">Nenhum container de ambiente: rode &quot;Preparar o Docker do PC&quot; na aba Docker do PC.</p>}
                 busy={busy}
                 onAction={run}
             />

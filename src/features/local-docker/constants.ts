@@ -11,7 +11,7 @@ export const LOCAL_DOCKER_FEATURE_ID = "local-docker" as const
 export const LOCAL_DOCKER_INTEGRATION_ID = "builder_machine" as const
 
 /** Abas da página da integração, nesta ordem (`?aba=`; a primeira é a padrão). */
-export const BUILDER_MACHINE_TABS = ["tunel", "conexao", "docker", "preparo"] as const
+export const BUILDER_MACHINE_TABS = ["geral", "tunel", "conexao", "preparo", "docker"] as const
 export type BuilderMachineTab = (typeof BUILDER_MACHINE_TABS)[number]
 
 /** Evento em `private-app`: configuração, túnel ou prévias da máquina local mudaram. */
@@ -30,7 +30,18 @@ export const LOCAL_DOCKER_PATHS = {
     control: ".ssh/opex-local.ctl",
     /** O Docker do PC exposto como socket no host. */
     dockerSocket: ".opex-local-docker.sock",
+    /** Overrides do compose gerados por prévia no PC (CAs do PC), fora do worktree. */
+    composeOverrides: ".opex-local/compose",
 } as const
+
+/** Onde o bundle de CAs do PC aparece dentro dos containers da prévia. */
+export const LOCAL_DOCKER_CA_TARGET = "/etc/opex/ca-bundle.pem"
+
+/** Variáveis que apontam o runtime (Node, OpenSSL, Python) para o bundle de CAs do PC. */
+export const LOCAL_DOCKER_CA_ENV = ["NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"] as const
+
+/** Host HTTPS usado para detectar inspeção TLS na rede do PC (emissor do certificado). */
+export const LOCAL_DOCKER_TLS_PROBE_HOST = "api.clerk.com"
 
 /** Imagem dos apelidos de rede (repasse TCP do PC para o servidor). */
 export const LOCAL_DOCKER_ALIAS_IMAGE = "alpine/socat"
