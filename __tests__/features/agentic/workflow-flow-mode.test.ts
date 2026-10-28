@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   pumpQueue: vi.fn(async () => undefined),
   recordAudit: vi.fn(async () => undefined),
   runTurn: vi.fn(),
+  runBuild: vi.fn(async () => ({ exitCode: 0, tail: '' })),
   allocatePort: vi.fn(async () => 4010),
   moveTask: vi.fn(async () => undefined),
   getTask: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   // O schema real aplica `startedAt` por padrão; o dublê em memória precisa do mesmo default.
   const baseCreate = workbench.create
   workbench.create = (doc: Record<string, unknown>) => baseCreate({ startedAt: new Date(), ...doc })
-  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
+  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel(), AgenticBuild: memoryModel() }
 })
 vi.mock('@/features/agentic/server/centrals', () => ({
   loadCentral: mocks.loadCentral,
@@ -73,6 +74,8 @@ vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pump
 vi.mock('@/features/agentic/server/build-queue', () => ({ buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()), pumpBuildQueue: vi.fn() }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
+// O app roda o comando do build no host (aba Build).
+vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 
@@ -220,7 +223,9 @@ describe('prévia GitHub Action', () => {
     expect(model.docs[0]!.previewUrl).toBe('http://localhost:4010')
     expect(model.docs[0]!.pr).toBeNull()
     expect(mocks.runTurn.mock.calls.map(([, r]) => r.stage)).toEqual(['implementing', 'building'])
-    expect(mocks.runTurn.mock.calls[1][1].text).toContain('scripts/preview-github.ts')
+    // O agente só prepara (commit); quem roda o script da prévia remota é o app (aba Build).
+    expect(mocks.runTurn.mock.calls[1][1].text).toContain('Commit para a prévia no GitHub Action')
+    expect(mocks.runBuild).toHaveBeenCalledWith(expect.objectContaining({ run: expect.stringContaining('npx tsx scripts/preview-github.ts') }))
   })
 
   it('PR automático pula também o método remoto', async () => {

@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pumpQueue: vi.fn(async () => undefined),
   recordAudit: vi.fn(async () => undefined),
   runTurn: vi.fn(),
+  runBuild: vi.fn(async () => ({ exitCode: 0, tail: '' })),
   allocatePort: vi.fn(async () => 4010),
   moveTask: vi.fn(async () => undefined),
   getTask: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   // O schema real aplica `startedAt` por padrão; o dublê em memória precisa do mesmo default.
   const baseCreate = workbench.create
   workbench.create = (doc: Record<string, unknown>) => baseCreate({ startedAt: new Date(), ...doc })
-  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
+  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel(), AgenticBuild: memoryModel() }
 })
 vi.mock('@/features/agentic/server/centrals', () => ({
   loadCentral: mocks.loadCentral,
@@ -67,6 +68,8 @@ vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pump
 vi.mock('@/features/agentic/server/build-queue', () => ({ buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()), pumpBuildQueue: mocks.pumpBuild }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
+// O app roda o comando do build no host (aba Build).
+vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 
@@ -172,17 +175,17 @@ describe('desligar "Gerar prévia"', () => {
 
   it('com o build rodando: o build termina e a mesa publica no PR sem parar na prévia', async () => {
     const wb = await workbench({ stage: 'build_queued', buildQueuedAt: new Date() })
-    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) => {
-      if (request.stage === 'building') {
-        await setWorkbenchPreview(wb._id, { enabled: false })
-        return succeeded('```json\n{"ok":true}\n```')
-      }
-      return PR_JSON
+    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) => (request.stage === 'building' ? succeeded('```json\n{"ok":true}\n```') : PR_JSON))
+    // A chave é desligada enquanto o app roda o build da prévia.
+    mocks.runBuild.mockImplementationOnce(async () => {
+      await setWorkbenchPreview(wb._id, { enabled: false })
+      return { exitCode: 0, tail: '' }
     })
     await startBuildTurn(wb._id)
     await waitFor(wb._id, 'pr_open')
 
-    expect(stages()).toEqual(['building', 'opening_pr'])
+    expect(mocks.runBuild).toHaveBeenCalledTimes(1)
+    expect(stages().at(-1)).toBe('opening_pr')
     expect(doc(wb._id).previewUrl).toBe('http://localhost:4010')
   })
 

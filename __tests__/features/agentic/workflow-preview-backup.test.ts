@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Backup do MongoDB da prévia (OPE-54): o agente cria o dump antes de publicar, a retentativa
- * preserva o primeiro arquivo e a conclusão só acontece depois de removê-lo — mesmo com toda a
+ * Backup do MongoDB da prévia (OPE-54): o agente cria o dump num turno curto antes de o app subir a
+ * prévia (OPE-88), a retentativa preserva o primeiro arquivo e a conclusão só acontece depois de removê-lo — mesmo com toda a
  * limpeza de ambiente desligada na central.
  */
 
@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   builderMachineActive: vi.fn(async () => false),
   resolveBuildTarget: vi.fn(),
   teardownForCleanup: vi.fn(async () => false),
+  runBuild: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -45,7 +46,7 @@ vi.mock('@/lib/ai/opencode-client', () => ({
 }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
-  return { AgenticWorkbench: memoryModel(), AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
+  return { AgenticWorkbench: memoryModel(), AgenticCentral: memoryModel(), AgenticEvent: memoryModel(), AgenticBuild: memoryModel() }
 })
 vi.mock('@/features/agentic/server/centrals', () => ({
   loadCentral: mocks.loadCentral,
@@ -73,6 +74,8 @@ vi.mock('@/features/agentic/server/session-cleanup', () => ({ deleteWorkbenchSes
 vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pumpQueue }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
+// O app roda o comando do build no host (aba Build): aqui ele sempre passa.
+vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(), moveTask: mocks.moveTask }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 
@@ -96,6 +99,8 @@ interface State {
 }
 
 const doc = () => model.docs[0] as unknown as State
+/** Texto dos turnos do agente (o preparo do build é o turno com o dump). */
+const agentTexts = () => mocks.runTurn.mock.calls.map((call) => (call[1] as { text: string }).text)
 const backupOf = () => model.docs[0]!.previewBackup as IPreviewBackup
 
 const openPr = { number: 7, url: 'https://github.com/org/app/pull/7', state: 'open', mergedAt: null, mergeCommitSha: null, lastReviewId: 0, lastCommentId: 0, closedNotified: false }
@@ -151,6 +156,7 @@ beforeEach(() => {
   mocks.runTurn.mockResolvedValue(succeeded('ok\n```json\n{"ok": true}\n```'))
   mocks.runShell.mockResolvedValue(shellOk)
   mocks.builderMachineActive.mockResolvedValue(false)
+  mocks.runBuild.mockResolvedValue({ exitCode: 0, tail: '' })
 })
 
 describe('build na Builder Machine (integração ativa)', () => {
@@ -168,6 +174,8 @@ describe('build na Builder Machine (integração ativa)', () => {
     expect(mocks.allocatePort).toHaveBeenCalledWith(String(wb._id), expect.any(String), expect.any(Object), portCheck)
     expect(attach).toHaveBeenCalledWith(4015)
     expect(doc().lastPrompt!.text).toContain('DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder PORT=4015 docker compose')
+    // Quem roda o comando é o app, com o prefixo do Docker do PC.
+    expect(mocks.runBuild).toHaveBeenCalledWith(expect.objectContaining({ run: expect.stringContaining('DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder PORT=4015 docker compose') }))
     expect(mocks.publish).toHaveBeenCalledWith(String(wb._id), expect.objectContaining({ message: 'Porta reservada para a prévia: 4015 (prévia na máquina local)' }))
   })
 
@@ -193,8 +201,12 @@ describe('build com backup (OPE-54)', () => {
     const backup = backupOf()
     expect(backup.dir).toContain('/.opex-backups/OPE-54/')
     expect(backup.path).toBe(`${backup.dir}/opex-preview-backup.archive`)
-    expect(doc().lastPrompt!.text).toContain('mongodump')
-    expect(doc().lastPrompt!.text).toContain(backup.path)
+    // Turno curto do agente só para o dump; o build vem depois, rodado pelo app.
+    expect(agentTexts()).toHaveLength(1)
+    expect(agentTexts()[0]).toContain('mongodump')
+    expect(agentTexts()[0]).toContain(backup.path)
+    expect(agentTexts()[0]).toContain('NÃO rode `docker compose up`')
+    expect(mocks.runBuild).toHaveBeenCalledTimes(1)
     expect(mocks.runShell).toHaveBeenCalledWith(expect.anything(), '/home/u/app', `test -s '${backup.path}'`, { timeoutMs: 15000 })
   })
 
@@ -207,6 +219,8 @@ describe('build com backup (OPE-54)', () => {
 
     expect(doc().stage).toBe('building')
     expect(doc().error).toContain('dump do MongoDB')
+    // Sem o dump, o app nem roda o build.
+    expect(mocks.runBuild).not.toHaveBeenCalled()
   })
 
   it('dump falho reportado pelo agente bloqueia a publicação', async () => {
@@ -218,6 +232,7 @@ describe('build com backup (OPE-54)', () => {
 
     expect(doc().error).toContain('mongodump indisponível')
     expect(mocks.runShell).not.toHaveBeenCalled()
+    expect(mocks.runBuild).not.toHaveBeenCalled()
   })
 
   it('a retentativa preserva o caminho do primeiro dump', async () => {
@@ -312,9 +327,11 @@ describe('build sem backup do banco (OPE-72)', () => {
     await startBuildTurn(String(wb._id))
     await vi.waitFor(() => expect(doc().stage).toBe('preview'))
 
-    expect(doc().previewBuild).toEqual({ method: 'local', dumpRequired: false })
+    expect(doc().previewBuild).toEqual({ method: 'local', dumpRequired: false, port: 4015, docker: null })
     expect(doc().previewBackup).toBeNull()
-    expect(doc().lastPrompt!.text).not.toContain('mongodump')
+    // Nada a preparar: nenhum turno do agente, só o build rodado pelo app.
+    expect(mocks.runTurn).not.toHaveBeenCalled()
+    expect(mocks.runBuild).toHaveBeenCalledTimes(1)
     expect(mocks.runShell).not.toHaveBeenCalled()
   })
 
@@ -332,7 +349,7 @@ describe('build sem backup do banco (OPE-72)', () => {
     await startBuildTurn(String(wb._id))
     await vi.waitFor(() => expect(doc().stage).toBe('preview'))
 
-    expect(doc().lastPrompt!.text).not.toContain('mongodump')
+    expect(agentTexts().filter((text) => text.includes('mongodump'))).toHaveLength(1)
     // Só a conferência da primeira tentativa: a nova política dispensa o arquivo.
     expect(mocks.runShell).toHaveBeenCalledTimes(1)
     expect(doc().previewBackup).not.toBeNull()

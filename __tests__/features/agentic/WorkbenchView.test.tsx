@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], refetch: vi.fn(), rounds: 0 }))
+const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
@@ -14,6 +14,8 @@ vi.mock('@/components/agent-reply/ReplyTargetProvider', () => ({ ReplyTargetProv
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ usePrWatchSchedule: () => ({ data: undefined }) }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useWorkbenchForks: () => ({ data: mocks.forks }) }))
+vi.mock('@/features/agentic/hooks/useBuilds', () => ({ useWorkbenchBuilds: () => ({ data: mocks.builds }) }))
+vi.mock('@/features/agentic/components/workbench/BuildLogView', () => ({ BuildLogView: () => <p>log do build</p> }))
 vi.mock('@/features/agentic/hooks/useWorkbenchStream', () => ({ useWorkbenchStream: () => ({ timeline: { items: [] }, connected: true }) }))
 vi.mock('@/features/agentic/components/workbench/WorkbenchHeader', () => ({ WorkbenchHeader: () => null }))
 vi.mock('@/features/agentic/components/workbench/StageSteps', () => ({ StageSteps: () => null }))
@@ -51,6 +53,7 @@ const tab = (name: string) => screen.getByRole('tab', { name })
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.forks = []
+  mocks.builds = []
   mocks.rounds = 0
   mocks.useTaskDetail.mockReturnValue(taskQuery())
 })
@@ -103,6 +106,14 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
     expect(screen.getByText('plano')).toBeTruthy()
     fireEvent.click(tab('Forks (1)'))
     expect(screen.getByText('forks')).toBeTruthy()
+  })
+
+  it('Build (N): a aba aparece depois do primeiro build da prévia, depois do plano, e abre o log', () => {
+    mocks.builds = [{ id: 'b1' }, { id: 'b2' }]
+    render(<WorkbenchView workbench={workbench({ plans: [{ version: 1, text: 'p', feedback: null, createdAt: '2026-01-01T00:00:00.000Z' }] as WorkbenchDto['plans'] })} central={central} />)
+    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano v1', 'Build (2)'])
+    fireEvent.click(tab('Build (2)'))
+    expect(screen.getByText('log do build')).toBeTruthy()
   })
 
   it('Agente Adversário: a aba "Adversário (N)" aparece com rodadas, depois do plano', () => {

@@ -149,71 +149,129 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     return withInfo + extra(config, "implementation")
 }
 
+/** Docker de outra máquina (Builder Machine): prefixo de todo comando docker e os arquivos do compose do build. */
+export interface PreviewDocker {
+    prefix: string
+    files?: string[]
+}
+
+export interface PreviewBuildCommands {
+    /** Comando de build exibido no log da aba Build. */
+    command: string
+    /** O que o app executa no host: entra no worktree e força a saída do BuildKit linha a linha. */
+    run: string
+    /** Logs dos containers da prévia (para o agente investigar uma falha). */
+    logs: string
+}
+
 /**
- * Prompt do build da prévia. `docker.prefix` (Builder Machine) manda todo comando docker para outra
- * máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; `docker.files` são os
- * arquivos do compose do build (o último é o override com as CAs do PC). Não combina com o build no
- * GitHub Action (`remote`), que ignora os dois.
+ * Comandos do build da prévia Local. `docker.prefix` (Builder Machine) manda todo comando docker para
+ * outra máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; `docker.files`
+ * são os arquivos do compose do build (o último é o override com as CAs do PC).
  */
-export function buildPrompt(config: CentralConfig, ctx: WorkbenchContext, port: number, backup: PreviewBackupPaths | null, remote?: { attempt: string; statePath: string }, docker?: { prefix: string; files?: string[] }): string {
+export function previewBuildCommands(config: CentralConfig, ctx: WorkbenchContext, port: number, docker?: PreviewDocker): PreviewBuildCommands {
     const env = config.environment
-    const local = remote ? undefined : docker
     const composeFile = env.composeFile.trim()
-    const files = local?.files?.length ? local.files : null
+    const files = docker?.files?.length ? docker.files : null
     const file = files ? files.map((item) => ` -f ${item}`).join("") : composeFile ? ` -f ${composeFile}` : ""
-    const builder = local ? "" : env.dockerBuilder.trim()
-    const prefix = local ? `${local.prefix} ` : builder ? `BUILDX_BUILDER=${builder} ` : ""
+    const builder = docker ? "" : env.dockerBuilder.trim()
+    const prefix = docker ? `${docker.prefix} ` : builder ? `BUILDX_BUILDER=${builder} ` : ""
     const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
-    const logs = `${local ? `${local.prefix} ` : ""}docker compose -p ${ctx.composeProject}${files ? file : ""} logs --tail 100`
-    const health = `http://localhost:${port}${env.healthPath || "/"}`
-    // Sem backup (OPE-72, projetos sem banco de dados) a seção some por inteiro: o agente não
-    // identifica banco, não roda `mongodump` e a prévia não depende de nenhum arquivo de dump.
-    const backupSteps = backup
-        ? [
-              "## Backup do MongoDB (obrigatório ANTES de publicar a prévia)",
-              "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
-              `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
-              `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
+    return {
+        command,
+        run: `cd ${shellQuote(ctx.worktreePath)} && BUILDKIT_PROGRESS=plain ${command}`,
+        logs: `${docker ? `${docker.prefix} ` : ""}docker compose -p ${ctx.composeProject}${files ? file : ""} logs --tail 100`,
+    }
+}
+
+/** Comando da prévia no GitHub Action rodado pelo app (o script publica a branch, espera o workflow e publica a imagem). */
+export function remotePreviewCommands(ctx: WorkbenchContext, remote: { attempt: string; statePath: string }): Pick<PreviewBuildCommands, "command" | "run"> {
+    const command = `npx tsx scripts/preview-github.ts ${shellQuote(remote.statePath)} ${shellQuote(remote.attempt)}`
+    return { command, run: `cd ${shellQuote(ctx.worktreePath)} && ${command}` }
+}
+
+/** Passos do dump do MongoDB do projeto (o agente identifica o banco; o servidor confere o arquivo depois). */
+function backupSteps(backup: PreviewBackupPaths): string[] {
+    return [
+        "## Backup do MongoDB",
+        "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
+        `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
+        `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
 \`\`\`sh
 mkdir -p ${shellQuote(backup.dir)} && mongodump --uri="<URI do banco do projeto>" --archive=${shellQuote(backup.path)} --gzip
 \`\`\`
   (se o \`mongodump\` só existir num container, rode-o no container com acesso ao MongoDB).`,
-              `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
-              "- Se não conseguir identificar o banco ou o dump falhar, NÃO suba a prévia e responda com o bloco JSON de falha abaixo.",
-              "",
-          ]
-        : []
+        `- Confirme que o arquivo existe e não está vazio: \`${backupExistsCommand(backup.path)}\`.`,
+        "- Se não conseguir identificar o banco ou o dump falhar, responda com o bloco JSON de falha abaixo.",
+    ]
+}
+
+/**
+ * Turno de preparo da prévia, antes de o app rodar o comando do build. Local: só o dump do MongoDB
+ * (com o backup ligado na central). GitHub Action: o commit de tudo (o script publica a branch) e o
+ * dump, se exigido. O agente NÃO sobe a prévia: quem roda o build é o app (saída na aba Build).
+ */
+export function previewPreparePrompt(config: CentralConfig, ctx: WorkbenchContext, input: { method: "local" | "github"; backup: PreviewBackupPaths | null }): string {
+    const remote = input.method === "github"
     return [
-        "Você agora é o agente de BUILD. Suba a prévia da implementação com Docker Compose, no worktree.",
+        `Você agora é o agente de BUILD. Antes de o Opex subir a prévia${remote ? " pelo GitHub Action" : ""}, prepare o worktree.`,
         `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
         "",
-        ...backupSteps,
-        `- Confira o docker compose do projeto${composeFile ? ` (${composeFile})` : ""} e garanta que a porta publicada vem da variável ${env.portEnvVar}. Use EXCLUSIVAMENTE a porta ${port} (faixa reservada ${env.previewPortMin}–${env.previewPortMax}; nunca outra).`,
-        ...(remote ? [
-            "## Construção no GitHub Action (sem build local e sem abrir PR)",
-            "- Este modo autoriza publicar a branch da tarefa antes da aprovação. Confirme que todas as alterações estão commitadas, seguindo o versionamento do projeto. Nunca envie .env, dump ou credenciais.",
-            `- Execute no worktree, EM PRIMEIRO PLANO e até o fim: \`npx tsx scripts/preview-github.ts ${shellQuote(remote.statePath)} ${shellQuote(remote.attempt)}\`. Use na ferramenta de shell um timeout de pelo menos 25 minutos e NÃO use background nem \`&\`. O script publica a branch, dispara o workflow, espera testes + build, valida o artefato e publica localmente sem build/pull.`,
-            "- NÃO encerre o turno (nem escreva a resposta final) enquanto o script estiver rodando. Se o turno acabar antes da publicação, a tentativa é considerada falha e o arquivo de estado é apagado.",
-            "- O workflow e o script precisam estar instalados com a skill setup-preview-workflow. Se estiverem ausentes, informe o erro; NÃO faça build local como fallback.",
-            "- Não dispare workflow manualmente nem publique container fora do script. Reconectar retoma o run registrado. Em erro de código, informe a falha; uma correção exige nova tentativa/SHA.",
-        ] : [`- Execute: \`${command}\` (se já houver containers deste projeto, o mesmo comando os reconstrói).`]),
-        ...(!remote && builder ? [`- Construa EXCLUSIVAMENTE com o builder do Docker \`${builder}\` (BUILDX_BUILDER em todo build desta prévia). NÃO troque o builder padrão do host (\`docker buildx use\`) nem crie outro builder.`] : []),
-        ...(local
+        ...(input.backup ? [...backupSteps(input.backup), ""] : []),
+        ...(remote
             ? [
-                  `- Esta prévia roda no Docker de OUTRA máquina: use o prefixo \`${local.prefix}\` em TODO comando docker e docker compose desta prévia (build, logs, ps, down). NÃO troque o contexto nem o builder padrão do host (\`docker context use\`, \`docker buildx use\`) e não crie outros.`,
+                  "## Commit para a prévia no GitHub Action (sem abrir PR)",
+                  "- Este modo autoriza publicar a branch da tarefa antes da aprovação. Confirme que TODAS as alterações estão commitadas na branch da mesa, seguindo o versionamento do projeto. Nunca envie .env, dump ou credenciais.",
+                  "- NÃO faça push, NÃO dispare workflow e NÃO rode o script da prévia: o Opex roda o script assim que você responder e mostra a saída na aba Build.",
+                  "",
+              ]
+            : []),
+        "- NÃO rode `docker compose up` nem `docker compose build` (nem em segundo plano): o Opex sobe a prévia e mostra a saída na aba Build.",
+        `- ${JSON_RULE} Formato: {"ok": true} quando ${[input.backup ? "o dump existir" : "", remote ? "tudo estiver commitado" : ""].filter(Boolean).join(" e ") || "o worktree estiver pronto"}, ou {"ok": false, "error": "motivo"}.`,
+    ].join("\n") + extra(config, "build")
+}
+
+/**
+ * Turno de correção do build: o app rodou o comando da prévia e ele falhou. O agente só corrige o
+ * código (quem roda o build de novo é o app, que mostra a saída na aba Build). No GitHub Action, a
+ * correção precisa ser commitada: o app abre uma nova tentativa com o SHA novo.
+ */
+export function buildFixPrompt(
+    config: CentralConfig,
+    ctx: WorkbenchContext,
+    port: number,
+    failure: { exitCode: number; tail: string; round: number; command: string },
+    options: { docker?: PreviewDocker; method?: "local" | "github" } = {},
+): string {
+    const env = config.environment
+    const composeFile = env.composeFile.trim()
+    const remote = options.method === "github"
+    const docker = remote ? undefined : options.docker
+    const { logs } = previewBuildCommands(config, ctx, port, docker)
+    const files = docker?.files?.length ? docker.files : null
+    return [
+        `Você agora é o agente de BUILD. O Opex rodou o build da prévia${remote ? " (GitHub Action)" : ""} no worktree e ele FALHOU (exit ${failure.exitCode}; correção ${failure.round}).`,
+        `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
+        `- Comando executado pelo Opex: \`${failure.command}\``,
+        "- Final da saída do build:",
+        "```text",
+        failure.tail.trim() || "(sem saída)",
+        "```",
+        remote
+            ? "- Descubra a causa. Se for do código ou do docker compose do projeto, corrija o mínimo necessário e COMMITE na branch da mesa (o Opex abre uma nova tentativa com o SHA novo). Se a causa estiver fora do repositório (infraestrutura do runner, credenciais, workflow ou script ausentes), NÃO altere arquivos e responda com o bloco JSON de falha explicando o motivo."
+            : `- Descubra a causa e corrija o mínimo necessário no código ou no docker compose do projeto${composeFile ? ` (${composeFile})` : ""}. A porta publicada vem da variável ${env.portEnvVar}; a prévia usa EXCLUSIVAMENTE a porta ${port}.`,
+        remote
+            ? "- NÃO rode o script da prévia, NÃO faça push e NÃO dispare workflow: o Opex roda o script de novo assim que você responder e mostra a saída na aba Build."
+            : "- NÃO rode `docker compose up` nem `docker compose build` (nem em segundo plano): o Opex roda o build de novo assim que você responder e mostra a saída na aba Build.",
+        ...(remote ? [] : [`- Para investigar, pode usar \`${logs}\` e \`docker compose ps\` com o mesmo prefixo e arquivos.`]),
+        ...(docker
+            ? [
+                  `- Esta prévia roda no Docker de OUTRA máquina: use o prefixo \`${docker.prefix}\` em TODO comando docker desta prévia. NÃO troque o contexto nem o builder padrão do host (\`docker context use\`, \`docker buildx use\`) e não crie outros.`,
                   "- Nessa máquina os volumes do compose que montam arquivos do worktree (bind mounts) não enxergam o código: a prévia precisa rodar só com a imagem construída.",
               ]
             : []),
-        ...(files
-            ? [
-                  `- Use EXATAMENTE estes arquivos do compose, nesta ordem, em todo comando docker compose desta prévia (build, logs, ps, down):${file}. O último foi gerado pelo Opex e monta as CAs do PC nos containers (a rede do PC inspeciona o TLS; sem ele as chamadas HTTPS do servidor da prévia falham). NÃO edite, mova nem apague esse arquivo.`,
-              ]
-            : []),
-        `- Acompanhe o build até o fim e espere a aplicação responder em ${health} (tente por alguns minutos; veja \`${logs}\` se falhar).`,
-        remote ? "- Informe a URL da execução e o diagnóstico quando falhar. Não substitua a porta ou a imagem por outra tentativa." : "- Se o build falhar por causa do código, corrija o mínimo necessário e tente de novo.",
-        backup
-            ? `- ${JSON_RULE} Formato: {"ok": true} quando o dump existir E a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`
-            : `- ${JSON_RULE} Formato: {"ok": true} quando a prévia estiver respondendo, ou {"ok": false, "error": "motivo"}.`,
+        ...(files ? ["- O último arquivo `-f` do comando foi gerado pelo Opex e monta as CAs do PC nos containers. NÃO edite, mova nem apague esse arquivo."] : []),
+        `- ${JSON_RULE} Formato: {"ok": true} quando tiver corrigido (o build roda de novo), ou {"ok": false, "error": "motivo"} quando não for possível corrigir.`,
     ].join("\n") + extra(config, "build")
 }
 

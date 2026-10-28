@@ -13,7 +13,7 @@ import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNIN
 import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
-    buildPrompt,
+    buildFixPrompt,
     cleanupPrompt,
     composeProjectFor,
     deletePrBranchPrompt,
@@ -30,11 +30,20 @@ import {
     worktreePathFor,
     conflictPrompt,
     ciFixPrompt,
+    previewBuildCommands,
+    previewPreparePrompt,
+    remotePreviewCommands,
+    type PreviewDocker,
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import { logger } from "@/lib/logger"
+import { newJobId } from "@/features/local-docker/server/detached"
+import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
+import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
+import { runPreviewBuild } from "./preview-build"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
 import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
@@ -62,6 +71,8 @@ import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } fr
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
+/** O script da prévia no GitHub Action espera testes + build do workflow: nunca menos que isto. */
+const REMOTE_BUILD_MIN_MINUTES = 25
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -509,6 +520,17 @@ interface TurnPlan {
     text: string
     /** Reconexão: acompanha a execução em andamento sem enviar prompt nem trocar agente/modelo. */
     attach?: boolean
+    /** Turno "Subindo a prévia": método, porta, máquina e Docker do build (o app roda o comando). */
+    build?: { method: "local" | "github"; port: number; local: boolean; docker: PreviewDocker | null }
+}
+
+/** Log do build (aba Build): melhor esforço — uma falha no registro nunca derruba o build. */
+async function trackBuild(id: string, action: () => Promise<unknown>): Promise<void> {
+    try {
+        await action()
+    } catch (error) {
+        logger.warn({ err: error, workbenchId: id }, "[agentic] Falha ao registrar o log do build")
+    }
 }
 
 interface LaunchOptions {
@@ -581,59 +603,22 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             turn = controller.signal.aborted ? null : next
             continue
         }
+        const stage = turn.stage
         try {
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
+            if (turn.stage === "building") {
+                // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
+                next = await buildTurn(client, loaded, turn, sessionId, controller)
+                turn = controller.signal.aborted ? null : next
+                continue
+            }
             // Resumos de forks que não puderam virar instrução da sessão vão no prompt (uma vez).
             const notes = turn.attach ? null : await AgenticWorkbench.findById(id).select({ forkNotes: 1, forkNotesSynced: 1 }).lean()
             const text = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
-            const { settings } = await loadAgenticSettings()
-            const role = STAGE_ROLE[turn.stage] ?? "planning"
-            // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
-            const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
-            log.step(`${WORKBENCH_STAGE_LABELS[turn.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
-            const step = turn
-            // Modelo/provedor falhou: segue com os modelos de fallback do papel (só neste turno).
-            const result = await runWithFallback(
-                agent,
-                text,
-                (attempt, prompt) =>
-                    runAgentTurn(
-                        client,
-                        {
-                            workbenchId: id,
-                            sessionId,
-                            stage: step.stage,
-                            title: WORKBENCH_STAGE_LABELS[step.stage],
-                            agent: attempt,
-                            text: prompt,
-                            timeoutMs: step.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
-                            signal: controller.signal,
-                            attach: step.attach,
-                            startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
-                        },
-                        turnHooks(loaded.doc),
-                    ),
-                {
-                    signal: controller.signal,
-                    attach: step.attach,
-                    onSwitch: async (change) => {
-                        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: fallbackNotice(change) })
-                        log.warn(`${WORKBENCH_STAGE_LABELS[step.stage]}: modelo de fallback`, { workbenchId: id, from: change.from.model, to: change.to.model, reason: change.reason })
-                        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [], heartbeatAt: new Date() } })
-                    },
-                },
-            )
-            await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [] } })
-            await flushWorkbenchEvents(id)
-            log[result.outcome === "succeeded" ? "success" : "warn"](`${WORKBENCH_STAGE_LABELS[turn.stage]}: ${result.outcome === "succeeded" ? "concluído" : (result.message ?? result.outcome)}`, {
-                workbenchId: id,
-                durationMs: result.durationMs,
-                costUsd: result.costUsd,
-            })
+            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach }, sessionId, controller)
             if (result.outcome !== "succeeded") {
-                if (turn.stage === "building") await invalidateRemotePreview(client, loaded.doc, loaded.config.sessionDirectory)
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
             }
@@ -642,10 +627,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (fresh.doc.deletionRequestedAt && turn.stage !== "finishing") return
             next = await afterTurn(client, fresh, turn.stage, result)
         } catch (error) {
-            if (turn.stage === "building" && loaded.doc.previewBuild?.method === "github") {
-                await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory).catch(() => undefined)
+            if (stage === "building") {
+                await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
+                const current = await AgenticWorkbench.findById(id).lean()
+                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory).catch(() => undefined)
             }
-            log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
+            log.error(`${WORKBENCH_STAGE_LABELS[stage]}: falhou`, error, { workbenchId: id })
             await prepareHub(id)
             publishWorkbenchEvent(id, { type: "notice", level: "error", message: errorText(error) })
             await flushWorkbenchEvents(id)
@@ -654,6 +641,207 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         }
         turn = controller.signal.aborted ? null : next
     }
+}
+
+/** Turno do agente na sessão da mesa (com os modelos de fallback do papel da etapa). */
+async function runStageAgent(client: OpencodeClient, loaded: Loaded, step: { stage: WorkbenchStage; text: string; attach?: boolean }, sessionId: string, controller: AbortController): Promise<TurnResult> {
+    const id = String(loaded.doc._id)
+    const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
+    const { settings } = await loadAgenticSettings()
+    const role = STAGE_ROLE[step.stage] ?? "planning"
+    // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
+    const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
+    log.step(`${WORKBENCH_STAGE_LABELS[step.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
+    // Modelo/provedor falhou: segue com os modelos de fallback do papel (só neste turno).
+    const result = await runWithFallback(
+        agent,
+        step.text,
+        (attempt, prompt) =>
+            runAgentTurn(
+                client,
+                {
+                    workbenchId: id,
+                    sessionId,
+                    stage: step.stage,
+                    title: WORKBENCH_STAGE_LABELS[step.stage],
+                    agent: attempt,
+                    text: prompt,
+                    timeoutMs: TURN_TIMEOUT_MS,
+                    signal: controller.signal,
+                    attach: step.attach,
+                    startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
+                },
+                turnHooks(loaded.doc),
+            ),
+        {
+            signal: controller.signal,
+            attach: step.attach,
+            onSwitch: async (change) => {
+                publishWorkbenchEvent(id, { type: "notice", level: "warn", message: fallbackNotice(change) })
+                log.warn(`${WORKBENCH_STAGE_LABELS[step.stage]}: modelo de fallback`, { workbenchId: id, from: change.from.model, to: change.to.model, reason: change.reason })
+                await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [], heartbeatAt: new Date() } })
+            },
+        },
+    )
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [] } })
+    await flushWorkbenchEvents(id)
+    log[result.outcome === "succeeded" ? "success" : "warn"](`${WORKBENCH_STAGE_LABELS[step.stage]}: ${result.outcome === "succeeded" ? "concluído" : (result.message ?? result.outcome)}`, {
+        workbenchId: id,
+        durationMs: result.durationMs,
+        costUsd: result.costUsd,
+    })
+    return result
+}
+
+type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
+
+/**
+ * "Subindo a prévia": o app roda o comando do build no host (saída ao vivo na aba Build) — o
+ * `docker compose … up -d --build` (Local) ou o script da prévia no GitHub Action. Antes, quando há o
+ * que preparar (dump do MongoDB com o backup ligado; commit no GitHub Action), um turno curto do agente
+ * prepara o worktree. Se o comando falhar, o agente corrige o código num turno da sessão da mesa e o
+ * app roda de novo, no mesmo build (no GitHub Action, numa tentativa nova com o SHA novo) — sem limite
+ * de correções: só para quando passa, quando o agente desiste (`ok: false`), num tempo esgotado/processo
+ * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
+ * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
+ */
+async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const ctx = contextOf(loaded)
+    const log = centralLogger(doc.centralId, doc.taskCode)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const saved = doc.previewBuild ?? null
+    const method = turn.build?.method ?? saved?.method ?? "local"
+    const port = turn.build?.port ?? saved?.port ?? (typeof doc.port === "number" ? doc.port : null)
+    if (port === null) throw new Error("A mesa ficou sem porta reservada")
+    const docker = method === "local" ? ((turn.build ? turn.build.docker : saved?.docker) ?? undefined) : undefined
+    const remote = method === "github"
+    // O dump só entra quando a central o exige nesta tentativa (OPE-72); o servidor confere o arquivo.
+    const backup = saved?.dumpRequired !== false ? (doc.previewBackup ?? null) : null
+    const hooks = turnHooks(doc)
+    await trackBuild(id, () => (turn.attach ? resumeBuild(id) : startBuild(id, { port, local: turn.build?.local ?? Boolean(docker), method })))
+    await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
+
+    const needsPrepare = remote || Boolean(backup)
+    let resumeJob = turn.attach ? (saved?.job ?? null) : null
+    let step: BuildAgentStep | null = null
+    // Reconexão sem comando no host: o agente estava preparando ou corrigindo (acompanha o turno dele).
+    if (turn.attach && !resumeJob) step = { kind: needsPrepare && !saved?.prepared ? "prepare" : "fix", text: "", attach: true }
+    else if (!turn.attach && needsPrepare && !saved?.prepared) step = { kind: "prepare", text: previewPreparePrompt(config, ctx, { method, backup }), attach: false }
+    let round = 0
+    for (;;) {
+        if (step) {
+            if (step.kind === "prepare" && !step.attach) appendBuildOutput(id, buildPrepareSeparator([backup ? "dump do MongoDB" : "", remote ? "commit" : ""].filter(Boolean).join(" e ")))
+            const result = await runStageAgent(client, loaded, { stage: "building", text: step.text, attach: step.attach }, sessionId, controller)
+            if (result.outcome !== "succeeded") {
+                const status = result.outcome === "interrupted" ? "interrupted" : "failed"
+                await trackBuild(id, () => settleBuild(id, status, result.message ?? null))
+                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory).catch(() => undefined)
+                await update(doc, { runState: status, error: result.message ?? "O agente não concluiu a etapa" })
+                return null
+            }
+            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
+            if (parsed.success && !parsed.data.ok) throw new Error(`${step.kind === "prepare" ? "O agente não conseguiu preparar a prévia" : "O agente não conseguiu corrigir o build"}: ${parsed.data.error ?? "motivo não informado"}`)
+            const fresh = await loadAll(id)
+            // Exclusão pedida durante o turno: a limpeza da exclusão assume daqui.
+            if (fresh.doc.deletionRequestedAt || controller.signal.aborted) return null
+            if (step.kind === "prepare") {
+                if (backup) {
+                    await assertPreviewBackup(client, backup, config.sessionDirectory)
+                    notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
+                }
+                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.prepared": true } })
+            } else if (remote) {
+                // A correção foi commitada: uma tentativa nova (SHA novo) no lugar da que falhou.
+                if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
+                if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
+                await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
+                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, fresh.doc.previewBackup, ctx)
+                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
+            }
+            step = null
+        }
+        const current = (await AgenticWorkbench.findById(id).select({ previewBuild: 1 }).lean())?.previewBuild ?? null
+        let commands: { command: string; run: string }
+        if (remote) {
+            if (!current?.attempt || !current.statePath) throw new Error("Tentativa remota sem reserva")
+            commands = remotePreviewCommands(ctx, { attempt: current.attempt, statePath: current.statePath })
+        } else {
+            commands = previewBuildCommands(config, ctx, port, docker)
+        }
+        const jobId = resumeJob ?? newJobId("build")
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.job": jobId, heartbeatAt: new Date() } })
+        if (resumeJob) {
+            restartBuildSection(id)
+        } else {
+            beginBuildSection(id, commands.command)
+            notice("info", `Rodando o build da prévia${remote ? " no GitHub Action" : ""} (saída ao vivo na aba Build): ${commands.command}`)
+        }
+        resumeJob = null
+        log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
+        const timeoutMinutes = remote ? Math.max(REMOTE_BUILD_MIN_MINUTES, config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
+        const run = await runPreviewBuild({
+            run: commands.run,
+            jobId,
+            timeoutMs: timeoutMinutes * 60_000,
+            signal: controller.signal,
+            onOutput: (chunk) => appendBuildOutput(id, chunk),
+            heartbeat: hooks.heartbeat,
+        })
+        appendBuildOutput(id, buildExitLine(run.exitCode))
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $unset: { "previewBuild.job": 1 } })
+        if (controller.signal.aborted) {
+            const message = errorText(controller.signal.reason ?? "Interrompido")
+            await trackBuild(id, () => settleBuild(id, "interrupted", message))
+            await update(doc, { runState: "interrupted", error: message })
+            return null
+        }
+        if (run.exitCode === 0) {
+            const fresh = await loadAll(id)
+            // Exclusão pedida durante o build: a limpeza da exclusão assume daqui.
+            if (fresh.doc.deletionRequestedAt) return null
+            return afterBuild(client, fresh)
+        }
+        if (run.exitCode === null) throw new Error(`O build da prévia não terminou${run.tail ? `: ${run.tail.split("\n").at(-1)}` : ""}`)
+        // Tempo esgotado ou processo morto pelo sistema: não é algo que o agente corrija no código.
+        const terminal = terminalBuildFailure(run.exitCode, timeoutMinutes)
+        if (terminal) throw new Error(terminal)
+        round += 1
+        log.warn(`${WORKBENCH_STAGE_LABELS.building}: build falhou`, { workbenchId: id, exitCode: run.exitCode, round })
+        notice("warn", `O build da prévia falhou (exit ${run.exitCode}). O agente vai corrigir o código e o build roda de novo (correção ${round}).`)
+        appendBuildOutput(id, buildFixSeparator(round))
+        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: run.tail, round, command: commands.command }, { docker, method }), attach: false }
+    }
+}
+
+/**
+ * Build da prévia passou (exit 0): no GitHub Action confere a publicação confirmada da tentativa;
+ * espera a prévia responder e segue para a prévia (ou o PR automático).
+ */
+async function afterBuild(client: OpencodeClient, loaded: Loaded): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const remote = doc.previewBuild?.method === "github"
+    await assertRemotePreview(client, doc, config.sessionDirectory)
+    const fresh = await AgenticWorkbench.findById(id).select({ port: 1, agenticFlow: 1 }).lean()
+    if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
+    const env = config.environment
+    const previewUrl = `http://${env.previewHost}:${fresh.port}`
+    const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
+    if (!healthy && remote) throw new Error(`A prévia não respondeu em ${previewUrl}`)
+    notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O build terminou, mas ${previewUrl} não respondeu ao app`)
+    await trackBuild(id, () => settleBuild(id, healthy ? "succeeded" : "unhealthy", healthy ? null : `${previewUrl} não respondeu ao app`))
+    // A chave "Gerar prévia" foi desligada durante o build: publica no PR sem parar na prévia.
+    if (asAgenticFlow(fresh.agenticFlow) === "auto_pr") {
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewUrl, previewHealthy: healthy } })
+        notice("info", "Geração de prévia desligada: publicando no Pull Request sem parar na prévia.")
+        return autoPrTurn(loaded)
+    }
+    await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
+    pumpQueue(doc.centralId)
+    return null
 }
 
 function turnHooks(doc: IAgenticWorkbench) {
@@ -802,33 +990,9 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             }
             return afterImplementation(loaded)
         }
-        case "building": {
-            await assertRemotePreview(client, doc, config.sessionDirectory)
-            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
-            if (parsed.success && !parsed.data.ok) throw new Error(`O build falhou: ${parsed.data.error ?? "motivo não informado"}`)
-            // O agente cria o dump antes de publicar (quando a central exige backup); aqui confirmamos que ele existe.
-            const dumpRequired = doc.previewBuild?.dumpRequired !== false
-            if (dumpRequired && doc.previewBackup) {
-                await assertPreviewBackup(client, doc.previewBackup, config.sessionDirectory)
-                notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
-            }
-            const fresh = await AgenticWorkbench.findById(id).select({ port: 1, agenticFlow: 1 }).lean()
-            if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
-            const env = config.environment
-            const previewUrl = `http://${env.previewHost}:${fresh.port}`
-            const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
-            if (!healthy && (doc.previewBuild?.method === "github" || !parsed.success)) throw new Error(`A prévia não respondeu em ${previewUrl}`)
-            notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O agente concluiu o build, mas ${previewUrl} não respondeu ao app`)
-            // A chave "Gerar prévia" foi desligada durante o build: publica no PR sem parar na prévia.
-            if (asAgenticFlow(fresh.agenticFlow) === "auto_pr") {
-                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewUrl, previewHealthy: healthy } })
-                notice("info", "Geração de prévia desligada: publicando no Pull Request sem parar na prévia.")
-                return autoPrTurn(loaded)
-            }
-            await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
-            pumpQueue(doc.centralId)
-            return null
-        }
+        case "building":
+            // O build roda em `buildTurn` (não é um turno comum do agente).
+            return afterBuild(client, loaded)
         case "opening_pr": {
             const parsed = prResultSchema.safeParse(extractJsonBlock(result.text))
             const found = parsed.success ? { url: parsed.data.url, number: parsed.data.number ?? extractPrUrl(parsed.data.url)?.number } : extractPrUrl(result.text)
@@ -1053,17 +1217,18 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
         level: "info",
         message: dumpRequired && backup ? `Backup do MongoDB da prévia em ${backup.dir}` : "Backup do banco de dados desativado nesta central: a prévia sobe sem dump.",
     })
-    let remote: { attempt: string; statePath: string } | undefined
+    const docker = target ? { prefix: target.dockerPrefix, ...(attached?.composeFiles?.length ? { files: attached.composeFiles } : {}) } : null
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
         if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
-        remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
-    } else {
-        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired }, buildQueuedAt: null } })
+        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "previewBuild.port": port } })
+        return { stage: "building", text: remotePreviewCommands(ctx, remote).command, build: { method, port, local: false, docker: null } }
     }
-    // O backup só entra no prompt (e na conferência do servidor) quando a central o exige; sem ele a
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired, port, docker }, buildQueuedAt: null } })
+    // O backup só entra no preparo (e na conferência do servidor) quando a central o exige; sem ele a
     // prévia sobe sem dump — projetos sem banco de dados (OPE-72).
-    return { stage: "building", text: buildPrompt(loaded.config, ctx, port, dumpRequired ? backup : null, remote, target ? { prefix: target.dockerPrefix, files: attached?.composeFiles ?? undefined } : undefined) }
+    return { stage: "building", text: previewBuildCommands(loaded.config, ctx, port, docker ?? undefined).command, build: { method, port, local: Boolean(target), docker } }
 }
 
 /** A prévia da mesa estava no PC e a Builder Machine a derrubou (ou a deixou pendente): o agente pula o `down`. */
@@ -1274,6 +1439,13 @@ export async function reconnect(id: string): Promise<WorkbenchDto> {
     await prepareHub(id)
     // Confere o estado da sessão ANTES de acompanhar: a resposta (200) já diz se há execução para
     // acompanhar (`attached`/`recovered`), se não há (`nothing`) ou se é falha transitória.
+    // Build da prévia com o comando ainda no host: retoma a leitura (não há turno do agente para sondar).
+    if (stage === "building" && doc.previewBuild?.job) {
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: "attached", message: "Retomando a leitura do build da prévia", at: new Date() } } })
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Reconectando ao build da prévia em andamento…" })
+        await launchTurn({ ...loaded, doc }, { stage, text: "", attach: true })
+        return getWorkbench(id)
+    }
     const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
     const probe = await probeReconnect(doc.sessionId, startedAt)
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: probe.outcome, message: probe.message, at: new Date() } } })
@@ -1434,6 +1606,7 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await (await adversaryModule()).removeWorkbenchReviewSessions(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao excluir sessões do agente adversário", { workbenchId: id, error: errorText(error) }))
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
+    await trackBuild(id, () => dropBuilds(id))
     await AgenticWorkbench.deleteOne({ _id: doc._id })
     await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })

@@ -1,8 +1,8 @@
 /**
  * Coleção em memória com o subconjunto de Mongoose usado pelos serviços da integração GitHub
  * (find/findOne/findById/create/updateOne/updateMany/findOneAndUpdate/deleteOne/exists/
- * countDocuments). Filtros: igualdade, `$in`, `$nin`, `$ne`, `$lte` e `$or` (topo); `$set` aceita
- * caminhos com pontos (`pr.lastReviewId`) e `sort` aceita campo com pontos.
+ * countDocuments). Filtros: igualdade, `$in`, `$nin`, `$ne`, `$lte` e `$or` (topo); `$set` e `$unset`
+ * aceitam caminhos com pontos (`pr.lastReviewId`) e `sort` aceita campo com pontos.
  */
 
 export type Doc = Record<string, unknown>
@@ -68,13 +68,25 @@ function setPath(doc: Doc, path: string, value: unknown): void {
     current[parts.at(-1)!] = value
 }
 
+/** Remove um caminho com pontos (`previewBuild.job`); sem o objeto intermediário, não faz nada. */
+function unsetPath(doc: Doc, path: string): void {
+    const parts = path.split(".")
+    let current = doc
+    for (const part of parts.slice(0, -1)) {
+        if (current[part] == null || typeof current[part] !== "object") return
+        current[part] = { ...(current[part] as Doc) }
+        current = current[part] as Doc
+    }
+    delete current[parts.at(-1)!]
+}
+
 function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
     const ops = update as { $set?: Doc; $setOnInsert?: Doc; $addToSet?: Doc; $inc?: Record<string, number>; $unset?: Doc; $pull?: Doc; $push?: Doc }
     if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset && !ops.$pull && !ops.$push) Object.assign(doc, update)
     for (const [key, value] of Object.entries(ops.$set ?? {})) setPath(doc, key, value)
     if (inserting && ops.$setOnInsert) Object.assign(doc, ops.$setOnInsert)
     for (const [key, value] of Object.entries(ops.$inc ?? {})) doc[key] = ((doc[key] as number) ?? 0) + value
-    for (const key of Object.keys(ops.$unset ?? {})) delete doc[key]
+    for (const key of Object.keys(ops.$unset ?? {})) unsetPath(doc, key)
     for (const [key, value] of Object.entries(ops.$push ?? {})) doc[key] = [...(Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []), value]
     for (const [key, value] of Object.entries(ops.$addToSet ?? {})) {
         const list = Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []

@@ -126,9 +126,10 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   rodar em paralelo e não bloqueiam builds locais. PR automático continua pulando os dois métodos.
 - O método é salvo por tentativa em `previewBuild`; trocar configuração não altera o build em
   andamento. Retentativa remota também pula fila, mesmo se a configuração mudou depois.
-- A etapa continua sendo um turno do agente Build na sessão da mesa. O agente cria/reutiliza o
-  backup do banco (quando ligado na aba Ambiente) e executa
-  `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree.
+- Quem roda o script é o **app** (ver "Build rodado pelo app"): um turno curto do agente Build
+  commita tudo na branch da mesa (e cria/reutiliza o dump, quando ligado na aba Ambiente) e o Opex
+  executa `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree, desacoplado no host
+  (tempo limite = `buildTimeoutMinutes`, nunca menos de 25 min), com a saída na aba **Build (N)**.
   O workflow e o runner devem estar instalados no projeto com a skill global
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
@@ -136,8 +137,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
 - A porta permanece reservada no banco, dentro da faixa da central. O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
-  e confirmação de publicação. A URL do run aparece nos logs da sessão; reconexão pode retomar
-  o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+  e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
+  GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
 - O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
   quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
   Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
@@ -159,7 +160,7 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 central usando o PC (card na aba Ambiente, oculto no método GitHub Action), o build **Local** vai para
 o Docker do PC: `prepareBuildTurn` chama `resolveBuildTarget` (import dinâmico memorizado, só com a
 integração ativa), a porta pula as ocupadas no PC e no servidor, o servidor repassa a porta pelo túnel,
-o aviso ganha "(prévia na máquina local)" e o `buildPrompt` recebe `docker: { prefix }`
+o aviso ganha "(prévia na máquina local)" e o comando do build (`previewBuildCommands`) recebe `docker: { prefix }`
 (`DOCKER_CONTEXT=opex-local BUILDX_BUILDER=…` em todo comando docker; o builder da central é ignorado;
 não combina com a seção do GitHub Action). Trocar para o GitHub Action derruba a prévia anterior que
 estava no PC. Na limpeza (merge, exclusão, tentar a limpeza de novo), a prévia que estava no PC é
@@ -181,6 +182,47 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   ações além de excluir a mesa.
 - Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
   turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
+
+### Build rodado pelo app e aba "Build (N)" (OPE-88)
+
+Na etapa **Subindo a prévia** quem roda o comando do build é o **app**, não o agente
+(`buildTurn` em `workflow.ts`, `server/preview-build.ts`): o comando roda **desacoplado** no host do
+OpenCode (executor da Builder Machine: segundo plano + consultas curtas, resistente ao OpenCode
+descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** da mesa.
+
+- **Local:** `cd <worktree> && BUILDKIT_PROGRESS=plain <prefixo> <VAR>=<porta> docker compose -p … up -d --build`
+  (`previewBuildCommands`; prefixo = builder da central ou o Docker do PC da Builder Machine, com os
+  arquivos `-f` do override das CAs). Com o **backup ligado**, antes do comando um **turno curto do
+  agente faz só o dump** (`previewPreparePrompt`) e o servidor confere o arquivo (`test -s`); sem
+  backup não há turno de preparo.
+- **GitHub Action:** um turno curto do agente **commita** tudo (e faz o dump, se ligado); o app roda
+  `scripts/preview-github.ts` da tentativa reservada (`remotePreviewCommands`).
+- **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
+  (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
+  numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é
+  **commitada** e o app **invalida a tentativa antiga e reserva uma nova** (SHA novo) antes de rodar
+  de novo. `{"ok": false}` falha a etapa com o motivo.
+- **Falha terminal** (`terminalBuildFailure`): exit 124 (tempo limite), 137/143 (processo morto pelo
+  sistema) ou comando que não terminou no host falham a etapa sem chamar o agente (no GitHub Action a
+  tentativa é invalidada).
+- exit 0 → `afterBuild`: no GitHub Action confere a publicação (`assertRemotePreview`), espera a
+  prévia responder e segue para `preview` (ou para o PR automático, se a geração de prévia foi
+  desligada durante o build).
+- **Retomada:** o job em execução fica em `previewBuild.job`; **Reconectar** com job retoma a leitura
+  do mesmo job (o mesmo `jobId` reencontra o comando no host) e recomeça o log desde o início da seção
+  atual (`sectionStart`); sem job, acompanha o turno do agente (preparo ou correção, conforme
+  `previewBuild.prepared`).
+- **Registro** (`agentic_builds`, `server/build-logs.ts`): um documento por build com número, status
+  (`running`/`succeeded`/`unhealthy`/`failed`/`interrupted`), método, porta, máquina local, comandos
+  executados e o log (teto de 2 MB guardando o final). O log é gravado em lote (1 s) e é **melhor
+  esforço** (falha no registro nunca derruba o build). Build "em andamento" sem turno vivo no processo
+  aparece como **Interrompido**. Excluir a mesa apaga os builds.
+- **Aba "Build (N)"** (`BuildLogView`/`BuildLogPanel`): aparece depois do primeiro build, entre Plano e
+  Adversário; linha de resumo (status, porta, "GitHub Action"/"Máquina local", fim, mensagem), seletor
+  dos builds no padrão das abas Plano/Adversário (mais recente por padrão), terminal xterm
+  (`IntegrationConsole`, com busca) e aviso quando a conexão do log cai. APIs:
+  `GET /api/agentic/workbenches/[id]/builds` e `GET …/builds/[buildId]/log` (NDJSON: `snapshot`,
+  `append` com `offset`, `status` e `ping` a cada 15 s).
 
 ## Backup do MongoDB da prévia (OPE-54 · opcional pela OPE-72)
 
@@ -207,7 +249,7 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   opção desligada.
 - **Caminho reservado antes do build**: ao iniciar o turno de build (`startBuildTurn`), a mesa
   reserva uma pasta exclusiva do ciclo em `<pasta dos worktrees>/.opex-backups/<código>/<ciclo>/`
-  (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o prompt de build manda criar o dump ali
+  (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o turno de preparo do build manda criar o dump ali
   como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto e **sem
   imprimir credenciais**. A pasta fica **fora do worktree**, então nunca entra em commit nem é
   derrubada pelo `git worktree remove`. Com o backup desligado no modo **local** a reserva é
@@ -215,7 +257,7 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
 - **Primeiro dump preservado**: retentativas do build e correções da prévia **reutilizam** o arquivo
   já criado (o prompt manda reutilizar quando existir; só cria quando não há nenhum). Reabrir a mesa
   zera a reserva, então o próximo build começa um **ciclo novo** (pasta nova).
-- **Conferência no servidor**: ao fim do turno de build, o Opex confere na máquina do OpenCode
+- **Conferência no servidor**: ao fim do turno de preparo (antes de o app rodar o build), o Opex confere na máquina do OpenCode
   (`runOpencodeShell`, `test -s`) que o dump existe e não está vazio; sem ele o build **falha** — a
   prévia não vale sem backup. O bloco JSON do agente não basta.
 - **Remoção na conclusão**: a etapa `finishing` sempre inclui a remoção do backup (mesmo com a
@@ -799,6 +841,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
+| `GET /workbenches/[id]/builds`, `GET /workbenches/[id]/builds/[buildId]/log` | builds da prévia (aba "Build (N)", sem o log) e o log de um build em NDJSON (`snapshot`/`append`/`status`/`ping`) |
 | `PUT /workbenches/[id]/preview` `{enabled}` | chave "Gerar prévia" da mesa (desligada = PR automático só nesta mesa; religada em PR aberto gera a prévia na hora) |
 | `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`); `model: null` volta ao padrão |
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
@@ -827,6 +870,9 @@ aba Ambiente do formulário da central (`environment-section`, com o toggle do b
 central** (`workflow-flow-mode`) e a chave Gerar prévia da mesa (`workflow-preview-switch`), a migração que preserva o fluxo das tarefas antigas
 (`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
 (`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
+build rodado pelo app e aba "Build (N)" — Local e GitHub Action, correções, falhas terminais e
+retomada (`workflow-build-logs`), registro do log (`build-log`, `build-logs`), execução no host
+(`preview-build`) e a tela (`BuildLogView`, `WorkbenchView`),
 `__tests__/deployment/preview-github.test.ts` (prévia remota, com e sem o dump obrigatório),
 `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

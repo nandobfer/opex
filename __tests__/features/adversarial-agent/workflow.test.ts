@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   loadCentral: vi.fn(),
   runTurn: vi.fn(),
+  runBuild: vi.fn(async () => ({ exitCode: 0, tail: '' })),
   getTask: vi.fn(),
   settings: vi.fn(),
   applies: vi.fn(async () => true),
@@ -44,7 +45,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   // O schema real aplica `startedAt` por padrão; o dublê em memória precisa do mesmo default.
   const baseCreate = workbench.create
   workbench.create = (doc: Record<string, unknown>) => baseCreate({ startedAt: new Date(), ...doc })
-  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
+  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel(), AgenticBuild: memoryModel() }
 })
 vi.mock('@/features/agentic/server/centrals', () => ({ loadCentral: mocks.loadCentral, repoForProject: mocks.repoForProject, publishAgentic: vi.fn(async () => undefined), entryColumnForProject: vi.fn(async () => null) }))
 vi.mock('@/features/agentic/server/hub', () => ({
@@ -67,6 +68,8 @@ vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: vi.fn(asyn
 vi.mock('@/features/agentic/server/build-queue', () => ({ buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()), pumpBuildQueue: vi.fn() }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: vi.fn(async () => ({ available: true, reason: null })) }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
+// O app roda o comando do build no host (aba Build).
+vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: vi.fn(async () => undefined) }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
