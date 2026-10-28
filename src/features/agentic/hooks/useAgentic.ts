@@ -11,7 +11,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
 import type { WorkbenchAction } from "../logic"
-import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, WorkbenchModelInput } from "../schemas"
+import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
@@ -272,6 +272,37 @@ export function useReplyPermission(workbench: WorkbenchDto) {
             unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/permissions/${encodeURIComponent(requestId)}`, input)).data),
         onSuccess: setWorkbench,
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível responder ao pedido")),
+    })
+}
+
+/**
+ * Definir a etapa da mesa (ou concluí-la sem PR). Resposta otimista: a mesa vai para a etapa
+ * escolhida e fica parada; a conclusão mostra "Concluindo" até o servidor responder (pode haver limpeza).
+ * Em falha, reverte e avisa.
+ */
+export function useSetWorkbenchStage(workbench: WorkbenchDto) {
+    const queryClient = useQueryClient()
+    const setWorkbench = useSetWorkbench()
+    const key = agenticKey("workbench", workbench.taskId)
+    return useMutation({
+        mutationFn: async (input: SetWorkbenchStageInput) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/actions/set-stage`, input)).data),
+        onMutate: async (input) => {
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<WorkbenchDto | null>(key) ?? workbench
+            const stage = input.stage === "done" ? "finishing" : input.stage
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, stage, runState: "idle", error: null, slotQueue: null, buildQueuePosition: null } : current))
+            return { previous }
+        },
+        onError: (error, _input, context) => {
+            if (context?.previous) queryClient.setQueryData(key, context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível definir a etapa da mesa"))
+        },
+        onSuccess: (saved, input) => {
+            setWorkbench(saved)
+            if (input.stage !== "done") toast.success("Etapa da mesa definida")
+            else if (saved.stage === "done") toast.success("Mesa concluída")
+            else toast.info("Concluindo a mesa: o ambiente registrado está sendo limpo")
+        },
     })
 }
 

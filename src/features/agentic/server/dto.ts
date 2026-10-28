@@ -71,6 +71,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         liveChat,
         adversarial,
         reconnect: doc.reconnect ? { outcome: asReconnectOutcome(doc.reconnect.outcome) ?? "transient", message: doc.reconnect.message ?? null, at: new Date(doc.reconnect.at).toISOString() } : null,
+        manualCompletion: doc.manualCompletion ? { reason: doc.manualCompletion.reason, fromStage: asStage(doc.manualCompletion.fromStage), at: new Date(doc.manualCompletion.at).toISOString() } : null,
         startedAt: new Date(doc.startedAt).toISOString(),
         completedAt: iso(doc.completedAt),
         updatedAt: new Date(doc.updatedAt).toISOString(),

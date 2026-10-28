@@ -20,6 +20,7 @@ import type { CentralDto, WorkbenchDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
 import { WorkbenchStageBadge } from "../WorkbenchStageBadge"
 import { ForksOpenBadge } from "./ForkStatusBadge"
+import { WorkbenchStageMenu } from "./WorkbenchStageMenu"
 
 const usd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD", maximumFractionDigits: 2 })
 const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 })
@@ -61,6 +62,7 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                     <p className="font-mono text-foreground">{usd.format(usage.costUsd)}</p>
                     <p>{compact.format(tokens)} tokens</p>
                 </div>
+                <WorkbenchStageMenu workbench={workbench} />
                 {workbench.deletionRequestedAt ? (
                     <span className="flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive" title="A mesa sai quando a limpeza do ambiente terminar">
                         <Trash2 className="h-3 w-3" aria-hidden /> Excluindo…

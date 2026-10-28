@@ -347,9 +347,9 @@ etapa (`prompts.ts`). Os turnos rodam **em segundo plano no servidor** (`workflo
 planning → plan_review ─┬─ Solicitar correção do plano → planning
                         ├─ Implementar (prévia Local) → implementing → build_queued → building → preview
                         ├─ Implementar (prévia GitHub Action) → implementing → building → preview
-                        │    └─ Gerar nova prévia → build_queued/building → preview (código atual, sem replanejar)
                         └─ Implementar (fluxo PR automático)   → implementing → opening_pr → pr_open
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
+         ├─ Gerar nova prévia → build_queued/building → preview (código atual, sem replanejar)
          └─ Aprovar e abrir PR → opening_pr → pr_open
 pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
          ├─ revisão "pediu mudanças" com texto → planning (automático)
@@ -360,6 +360,7 @@ pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → 
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
 done → Reabrir mesa (texto ao planejador) → planning
+qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_review | preview | pr_open | changes_requested | done (Concluir sem PR)
 ```
 
 - `runState`: `idle` | `running` | `failed` | `interrupted`. Ações por etapa em
@@ -400,6 +401,36 @@ done → Reabrir mesa (texto ao planejador) → planning
   `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a prévia e a aprovação:
   nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
   nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
+- **Definir etapa / Concluir sem PR**: menu "Mais ações" do cabeçalho da mesa
+  (`WorkbenchStageMenu`, oculto em Concluída e em exclusão) com **Concluir mesa…** e **Definir etapa…**,
+  que abrem o `SetStageDialog` (etapa por `OptionTabs` + **motivo** obrigatório, 3–2000 caracteres,
+  schema `setWorkbenchStageSchema`). Rota `POST /workbenches/[id]/actions/set-stage` `{stage, reason}` e
+  ferramentas do Agente Opex `complete_workbench`/`set_workbench_stage` chamam a mesma
+  `setWorkbenchStage` (`workflow.ts`): tela e agente produzem o mesmo resultado.
+  - Etapas definíveis (`MANUAL_STAGES`) e regras (`manualStageBlock`, `logic.ts`; 409
+    `WORKBENCH_INVALID_STAGE` com a mensagem): **Concluída** de qualquer etapa; **Plano pronto** exige
+    plano; **Prévia pronta** exige `previewUrl`; **PR aberto**/**Mudanças pedidas** exigem PR aberto. A
+    mesma etapa é recusada; mesa concluída só sai por **Reabrir**; mesa em exclusão → 409
+    `WORKBENCH_DELETING`. Etapas de execução nunca são aceitas (400 no schema).
+  - Mesa executando ou aguardando vaga: o turno é interrompido (`stopRequestedAt`, sem reconexão
+    automática; espera até 30 s; build no GitHub Action tem a tentativa invalidada), o `pendingTurn` e a
+    fila do build são descartados.
+  - Auditoria `ATUALIZAR` com `etapaAnterior`, `etapaDefinida`, `motivo`, `manual: true` (e
+    `turnoInterrompido`), aviso na saída com o motivo e log da central.
+  - **Concluir** (`done`): grava `manualCompletion {reason, fromStage, at}` e aplica os **mesmos efeitos
+    do merge** na tarefa (`applyDoneEffects`, compartilhado com `afterMerge`: coluna "Ao concluir" da
+    central; falha só avisa). A limpeza remove **só o que a mesa registrou** (`cleanupTargets`, como na
+    exclusão; prompt `cleanupPrompt` com `reason: "manual"`) — **inclusive o backup do MongoDB da
+    prévia**, cuja remoção é conferida (`test ! -e`) antes de concluir; sem nada a limpar (ex.: Plano
+    pronto) conclui na hora, sem turno. Com backup registrado e a limpeza impossível de iniciar (ex.:
+    OpenCode fora do ar), a mesa fica em **Finalizando** com falha e **Tentar novamente** (não conclui
+    com o dump no disco). Depois, a conclusão normal (`completeWorkbench`: sessão excluída, forks,
+    fila). PR ainda aberto fica aberto no GitHub (aviso; o acompanhamento para). **Tentar novamente**
+    numa limpeza manual refaz só os alvos registrados; **Reabrir** zera `manualCompletion`. A mesa, os
+    planos, a saída e a auditoria ficam.
+  - Etapa de espera: `stage` + `runState: idle`, sem efeitos na tarefa.
+  - Tela: resposta otimista (`useSetWorkbenchStage`, "Concluindo" enquanto a conclusão roda) com
+    reversão e toast em falha.
 - **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
   canto esquerdo da barra inferior, depois do seletor de modelo e de um divisor vertical; rótulo à
   esquerda da chave, com a explicação na dica do rótulo) troca o fluxo **só desta mesa**
@@ -850,7 +881,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia) |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
 | `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
@@ -861,7 +892,7 @@ done → Reabrir mesa (texto ao planejador) → planning
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
 
 Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (abrir, PR,
-merge, reabrir, excluir).
+merge, reabrir, definir etapa/concluir manualmente, excluir).
 
 ## Testes
 
@@ -883,7 +914,8 @@ aba Ambiente do formulário da central (`environment-section`, com o toggle do b
 (`columns-section`), fluxo da mesa — Publicar prévia vs PR automático, incluindo o **padrão herdado da
 central** (`workflow-flow-mode`) e a chave Gerar prévia da mesa (`workflow-preview-switch`), a migração que preserva o fluxo das tarefas antigas
 (`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
-(`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
+(`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)), definir etapa/concluir sem PR
+(`workflow-manual-stage`, `SetStageDialog`, `logic` › manualStageBlock, `actions-route`),
 build rodado pelo app e aba "Build (N)" — Local e GitHub Action, correções, falhas terminais e
 retomada (`workflow-build-logs`), registro do log (`build-log`, `build-logs`), execução no host
 (`preview-build`) e a tela (`BuildLogView`, `WorkbenchView`),

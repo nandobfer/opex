@@ -391,7 +391,7 @@ export function cleanupPrompt(
     config: CentralConfig,
     ctx: WorkbenchContext,
     backup: PreviewBackupPaths | null,
-    options: { preview?: boolean; reason?: "merge" | "deletion" } = {},
+    options: { preview?: boolean; reason?: "merge" | "deletion" | "manual" } = {},
 ): string {
     const hasPreview = options.preview !== false
     const steps = [
@@ -405,7 +405,9 @@ export function cleanupPrompt(
     const intro =
         options.reason === "deletion"
             ? `A mesa da tarefa ${ctx.code} foi EXCLUÍDA pelo usuário: faça a LIMPEZA do ambiente dela. A limpeza é idempotente (o que já não existir conta como removido) e NÃO toque no Pull Request nem na branch remota.`
-            : `O PR foi mergeado e a tarefa ${ctx.code} foi concluída. Faça a LIMPEZA:`
+            : options.reason === "manual"
+              ? `A mesa da tarefa ${ctx.code} foi CONCLUÍDA manualmente pelo usuário, sem PR: faça a LIMPEZA do ambiente dela. A limpeza é idempotente (o que já não existir conta como removido) e NÃO toque em Pull Requests nem na branch remota.`
+              : `O PR foi mergeado e a tarefa ${ctx.code} foi concluída. Faça a LIMPEZA:`
     return [intro, ...steps, `- ${JSON_RULE} Formato: {"ok": true} ou {"ok": false, "error": "motivo"}.`].join("\n")
 }
 

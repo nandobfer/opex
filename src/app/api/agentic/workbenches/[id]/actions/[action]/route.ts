@@ -1,7 +1,7 @@
 import { ok } from "@/lib/api/responses"
 import { DomainError, parseBody, withRoute } from "@/lib/api/route"
-import { feedbackSchema, optionalFeedbackSchema } from "@/features/agentic/schemas"
-import { adversarialFix, adversarialRerun, adversarialSkip, approve, cancelWait, implement, interrupt, rebuildPreview, reconnect, reopen, requestCorrection, retry, revisePlan, submitPrFeedback } from "@/features/agentic/server/workflow"
+import { feedbackSchema, optionalFeedbackSchema, setWorkbenchStageSchema } from "@/features/agentic/schemas"
+import { adversarialFix, adversarialRerun, adversarialSkip, approve, cancelWait, implement, interrupt, rebuildPreview, reconnect, reopen, requestCorrection, retry, revisePlan, setWorkbenchStage, submitPrFeedback } from "@/features/agentic/server/workflow"
 import { adversarialFixSchema } from "@/features/adversarial-agent/schemas"
 
 export const runtime = "nodejs"
@@ -20,6 +20,8 @@ const WITHOUT_BODY = { approve, retry, interrupt, reconnect, "cancel-wait": canc
  * Prévia pronta, PR aberto ou de uma mesa concluída deixam a mesa **aguardando vaga** (`slotQueue`); `cancel-wait`
  * desfaz a espera. Agente Adversário: `adversarial-fix` aceita `{ text?, excluded? }` (achados desmarcados);
  * `adversarial-skip` e `adversarial-rerun` não têm corpo.
+ * `set-stage` exige `{ stage, reason }`: define uma etapa de espera ou conclui a mesa sem PR (`stage: "done"`),
+ * interrompendo o turno em andamento; transição inválida responde 409.
  */
 export const POST = withRoute<{ id: string; action: string }>(async ({ req, params }) => {
     if (params.action in WITH_FEEDBACK) {
@@ -36,6 +38,11 @@ export const POST = withRoute<{ id: string; action: string }>(async ({ req, para
         const body = await parseBody(req, adversarialFixSchema)
         if (!body.ok) return body.response
         return ok(await adversarialFix(params.id, body.data))
+    }
+    if (params.action === "set-stage") {
+        const body = await parseBody(req, setWorkbenchStageSchema)
+        if (!body.ok) return body.response
+        return ok(await setWorkbenchStage(params.id, body.data))
     }
     if (params.action in WITHOUT_BODY) return ok(await WITHOUT_BODY[params.action as keyof typeof WITHOUT_BODY](params.id))
     throw new DomainError(404, "Ação desconhecida", "UNKNOWN_ACTION")

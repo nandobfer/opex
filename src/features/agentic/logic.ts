@@ -1,4 +1,4 @@
-import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, type AgentRole, type RunState, type WorkbenchStage } from "./constants"
+import { MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticSettings, type CentralConfig } from "./schemas"
 
@@ -222,6 +222,59 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
 }
 
 export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction, waitingSlot = false) => workbenchActions(stage, runState, true, true, waitingSlot).includes(action)
+
+/** Estado da mesa consultado pelas regras de "Definir etapa". */
+export interface ManualStageState {
+    stage: WorkbenchStage
+    hasPlan: boolean
+    hasPreview: boolean
+    prOpen: boolean
+    deleting: boolean
+}
+
+/**
+ * Motivo (pt-BR) pelo qual a mesa não pode ir para a etapa `target` pela ação "Definir etapa" —
+ * `null` quando a transição é permitida. Mesma regra na tela, nas ferramentas do Opex e no servidor.
+ */
+export function manualStageBlock(target: ManualStage, state: ManualStageState): string | null {
+    if (state.deleting) return "A mesa está sendo excluída: a limpeza do ambiente precisa terminar antes"
+    if (state.stage === "done") return "A mesa já está concluída: use Reabrir mesa para continuar o trabalho"
+    if (state.stage === target) return `A mesa já está em "${WORKBENCH_STAGE_LABELS[target]}"`
+    switch (target) {
+        case "plan_review":
+            return state.hasPlan ? null : "A mesa ainda não tem um plano para revisar"
+        case "preview":
+            return state.hasPreview ? null : "A mesa não tem uma prévia publicada"
+        case "pr_open":
+        case "changes_requested":
+            return state.prOpen ? null : "A mesa não tem um Pull Request aberto"
+        case "done":
+            return null
+    }
+}
+
+export interface ManualStageOption {
+    stage: ManualStage
+    label: string
+    available: boolean
+    /** Motivo da recusa quando indisponível. */
+    reason: string | null
+}
+
+/** Etapas que podem ser definidas na mesa, com a disponibilidade de cada uma (tela e `get_workbench` do Opex). */
+export function manualStageOptions(workbench: { stage: WorkbenchStage; plans: unknown[]; previewUrl: string | null; pr: { state: string } | null; deletionRequestedAt: unknown }): ManualStageOption[] {
+    const state: ManualStageState = {
+        stage: workbench.stage,
+        hasPlan: workbench.plans.length > 0,
+        hasPreview: Boolean(workbench.previewUrl),
+        prOpen: workbench.pr?.state === "open",
+        deleting: Boolean(workbench.deletionRequestedAt),
+    }
+    return MANUAL_STAGES.map((stage) => {
+        const reason = manualStageBlock(stage, state)
+        return { stage, label: WORKBENCH_STAGE_LABELS[stage], available: reason === null, reason }
+    })
+}
 
 /** Tom do destaque de uma mesa em andamento: executando (verde), falhou (destructive) ou espera (warning). */
 export type WorkbenchProgressTone = "running" | "waiting" | "failed"

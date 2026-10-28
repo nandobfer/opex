@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildFixPrompt,
@@ -37,7 +37,7 @@ import {
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
-import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
+import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
 import { newJobId } from "@/features/local-docker/server/detached"
@@ -1444,10 +1444,114 @@ async function applyReopen(loaded: Loaded): Promise<Loaded> {
     const id = String(loaded.doc._id)
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
     // Reabrir dispensa a pergunta sobre os forks em aberto (eles seguem utilizáveis).
-    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null }, ...pastPr })
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null, manualCompletion: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
     return { ...loaded, doc: { ...loaded.doc, pr: null } }
+}
+
+// ---------------------------------------------------------------------------
+// Definir etapa / concluir sem PR (ação da tela e ferramentas do Agente Opex)
+// ---------------------------------------------------------------------------
+
+/**
+ * Leva a mesa a uma etapa de espera (`MANUAL_STAGES`) ou a conclui sem PR, com o motivo registrado na
+ * auditoria e na saída da mesa. As regras de transição são as de `manualStageBlock` (mesma regra na
+ * tela). Um turno em andamento é interrompido e a espera por vaga/fila do build é descartada antes.
+ */
+export async function setWorkbenchStage(id: string, input: SetWorkbenchStageInput): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    let doc = await reconcile(loaded.doc)
+    const from = asStage(doc.stage)
+    const target = input.stage
+    const reason = input.reason.trim()
+    const block = manualStageBlock(target, { stage: from, hasPlan: (doc.plans ?? []).length > 0, hasPreview: Boolean(doc.previewUrl), prOpen: doc.pr?.state === "open", deleting: Boolean(doc.deletionRequestedAt) })
+    if (block) throw new DomainError(409, block, doc.deletionRequestedAt ? "WORKBENCH_DELETING" : "WORKBENCH_INVALID_STAGE")
+    await prepareHub(id)
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+
+    // Libera a mesa: a intenção de parar é gravada antes (sem reconexão automática) e o turno vivo é abortado.
+    const interrupted = isWorkbenchActive(id)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { stopRequestedAt: new Date() } })
+    if (interrupted) {
+        if (doc.previewBuild?.method === "github" && from === "building") await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory).catch(() => undefined)
+        if (doc.sessionId) {
+            try {
+                await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId })
+            } catch {
+                // sem OpenCode, o abort local abaixo já encerra o acompanhamento
+            }
+        }
+        abortWorkbenchRun(id, "Etapa definida manualmente")
+        await waitWorkbenchIdle(id)
+        doc = await loadWorkbench(id)
+    }
+    const droppedWait = Boolean(doc.pendingTurn)
+    const leftBuildQueue = Boolean(doc.buildQueuedAt)
+
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_WORKBENCH,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: doc.taskCode, etapa: from },
+        depois: { tarefa: doc.taskCode, etapaAnterior: from, etapaDefinida: target, motivo: reason, manual: true, ...(interrupted ? { turnoInterrompido: true } : {}) },
+    })
+    notice("info", `Etapa definida manualmente: "${WORKBENCH_STAGE_LABELS[from]}" → "${WORKBENCH_STAGE_LABELS[target]}". Motivo: ${reason}`)
+    if (interrupted) notice("info", "O turno em andamento foi interrompido")
+    if (droppedWait) notice("info", "A espera por vaga na central foi descartada")
+    centralLogger(doc.centralId, doc.taskCode).info(`Etapa definida manualmente: ${from} → ${target}`, { workbenchId: id, reason })
+
+    if (target === "done") await completeManually({ ...loaded, doc }, reason, from)
+    else {
+        await update(doc, { stage: target, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null })
+        pumpQueue(doc.centralId)
+    }
+    if (leftBuildQueue) pumpBuildQueue()
+    return getWorkbench(id)
+}
+
+/** Alvos da limpeza na conclusão manual: só o que a mesa registrou (como na exclusão), inclusive o backup. */
+async function manualCleanupTargets(loaded: Loaded): Promise<CleanupTargets> {
+    const targets = cleanupTargets(loaded.config, loaded.doc)
+    if (targets.teardownEnvironment && (await localPreviewTornDown(loaded))) return { ...targets, teardownEnvironment: false }
+    return targets
+}
+
+function manualCleanupTurn(loaded: Loaded, targets: CleanupTargets): TurnPlan {
+    return { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "manual" }) }
+}
+
+/**
+ * Conclusão sem PR: os mesmos efeitos do merge na tarefa (coluna "Ao concluir"), a limpeza do que a
+ * mesa registrou (inclusive o backup do MongoDB, conferido antes de concluir) e a mesma conclusão
+ * (`completeWorkbench`: sessão excluída, forks, fila). Sem nada a limpar — ou se a limpeza não puder
+ * começar e não houver backup —, conclui na hora.
+ */
+async function completeManually(loaded: Loaded, reason: string, fromStage: WorkbenchStage): Promise<void> {
+    const id = String(loaded.doc._id)
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const manualCompletion = { reason, fromStage, at: new Date() }
+    await update(loaded.doc, { manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null })
+    const ready: Loaded = { ...loaded, doc: { ...loaded.doc, manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null } }
+    const pr = ready.doc.pr
+    await applyDoneEffects(ready)
+    if (pr?.state === "open") notice("warn", `O PR #${pr.number} continua aberto no GitHub: o acompanhamento automático dele foi encerrado.`)
+    const targets = await manualCleanupTargets(ready)
+    if (hasCleanupWork(targets)) {
+        try {
+            await launchTurn(ready, manualCleanupTurn(ready, targets), { userText: "Conclusão manual: limpando o ambiente da mesa", bypassLimit: true })
+            return
+        } catch (error) {
+            notice("warn", `Limpeza não iniciada: ${errorText(error)}`)
+            // O backup da prévia (OPE-54) nunca fica para trás: sem a limpeza, a mesa não conclui.
+            if (ready.doc.previewBackup) {
+                await update(ready.doc, { stage: "finishing", runState: "failed", error: `Limpeza não iniciada: ${errorText(error)}`, lastStage: "finishing", lastPrompt: manualCleanupTurn(ready, targets) })
+                return
+            }
+        }
+    }
+    await completeWorkbench(ready.doc)
 }
 
 export async function reconnect(id: string): Promise<WorkbenchDto> {
@@ -1494,6 +1598,12 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     assertAction(doc, "retry")
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
+    if (stage === "finishing" && doc.manualCompletion) {
+        // Conclusão manual: refaz só a limpeza do que a mesa registrou (nunca caminhos inferidos).
+        const ready = { ...loaded, doc }
+        await launchTurn(ready, manualCleanupTurn(ready, await manualCleanupTargets(ready)), { userText: "Tentar a limpeza novamente", bypassLimit: true })
+        return getWorkbench(id)
+    }
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
         const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
@@ -1833,21 +1943,10 @@ function fetchPullMerge(repo: string, number: number): Promise<GithubPullMerge> 
 async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
-    const log = centralLogger(doc.centralId, doc.taskCode)
-    const notice = (level: "info" | "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
     await update(doc, { pr })
-    notice("success", `PR #${pr.number} mergeado`)
+    publishWorkbenchEvent(id, { type: "notice", level: "success", message: `PR #${pr.number} mergeado` })
 
-    const doneColumn = loaded.columns.onDone
-    if (doneColumn) {
-        try {
-            await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
-            notice("info", "Tarefa movida para a coluna de conclusão")
-        } catch (error) {
-            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
-            log.warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
-        }
-    }
+    await applyDoneEffects(loaded)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, prMergeado: pr.url } })
 
     const cleanup = config.cleanup
@@ -1858,6 +1957,24 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
         return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }
     }
     return null
+}
+
+/**
+ * Efeitos da conclusão na tarefa (merge ou conclusão manual, mesmo resultado): move para a coluna
+ * "Ao concluir" da central. Melhor esforço: falhas viram aviso na mesa.
+ */
+async function applyDoneEffects(loaded: Loaded): Promise<void> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const doneColumn = loaded.columns.onDone
+    if (!doneColumn) return
+    try {
+        await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Tarefa movida para a coluna de conclusão" })
+    } catch (error) {
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Não foi possível mover a tarefa: ${errorText(error)}` })
+        centralLogger(doc.centralId, doc.taskCode).warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
+    }
 }
 
 /** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */

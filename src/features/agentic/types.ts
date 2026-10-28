@@ -127,6 +127,8 @@ export interface WorkbenchDto {
     stoppedByUser: boolean
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
+    /** Conclusão manual (sem PR): motivo e etapa de origem; `null` na conclusão pelo merge ou mesa aberta. */
+    manualCompletion: { reason: string; fromStage: WorkbenchStage; at: string } | null
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: Record<WorkbenchModelRole, ModelChoiceDto> | null

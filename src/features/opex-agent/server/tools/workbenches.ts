@@ -1,5 +1,7 @@
 import { z } from "zod"
-import { formReplySchema, permissionReplySchema, startWorkbenchSchema, workbenchModelSchema } from "@/features/agentic/schemas"
+import { MANUAL_STAGES } from "@/features/agentic/constants"
+import { manualStageOptions } from "@/features/agentic/logic"
+import { formReplySchema, permissionReplySchema, setWorkbenchStageSchema, startWorkbenchSchema, workbenchModelSchema } from "@/features/agentic/schemas"
 import { listWorkbenchEvents } from "@/features/agentic/server/hub"
 import { listWorkbenchesInProgress } from "@/features/agentic/server/in-progress"
 import {
@@ -18,6 +20,7 @@ import {
     requestCorrection,
     retry,
     revisePlan,
+    setWorkbenchStage,
     setWorkbenchModel,
     startWorkbench,
     submitPrFeedback,
@@ -28,6 +31,7 @@ import { defineTool, OpexToolError, type OpexTool } from "./define"
 
 const workbenchId = z.string().describe("Id da mesa (de list_workbenches ou get_workbench)")
 const feedback = z.string().min(3).describe("Texto para o agente da mesa")
+const reason = z.string().min(3).max(2000).describe("Motivo (vai para a auditoria e para a saída da mesa)")
 
 function slimWorkbench(workbench: WorkbenchDto) {
     return {
@@ -53,6 +57,9 @@ function slimWorkbench(workbench: WorkbenchDto) {
         usage: workbench.usage,
         startedAt: workbench.startedAt,
         completedAt: workbench.completedAt,
+        manualCompletion: workbench.manualCompletion,
+        /** Etapas que set_workbench_stage/complete_workbench aceitam agora (e o motivo das indisponíveis). */
+        settableStages: manualStageOptions(workbench),
     }
 }
 
@@ -158,6 +165,29 @@ export const workbenchTools: OpexTool[] = [
     simpleAction("reconnect_workbench", "Reconectar", "Reconecta a mesa à sessão do agente.", reconnect),
     simpleAction("cancel_workbench_wait", "Cancelar espera", "Cancela a espera da mesa na fila de vagas da central.", cancelWait),
     simpleAction("interrupt_workbench", "Parar mesa", "Interrompe o turno em andamento do agente da mesa.", interrupt, "destructive"),
+    defineTool({
+        name: "complete_workbench",
+        group: "workbenches",
+        label: "Concluir mesa",
+        risk: "destructive",
+        description:
+            "Conclui a mesa SEM PR (ex.: o problema já foi resolvido), de qualquer etapa que não seja Concluída: interrompe o turno em andamento, move a tarefa para a coluna 'Ao concluir' (como no merge), limpa o ambiente registrado pela mesa (prévia, backup do MongoDB, worktree e branch local, conforme a central) e exclui a sessão. A mesa continua existindo com histórico, planos e auditoria.",
+        input: z.object({ workbenchId, reason }),
+        summarize: (input) => `Concluir a mesa sem PR (motivo: ${input.reason}). A tarefa vai para "Ao concluir" e o ambiente registrado (prévia, backup, worktree e branch local) é limpo`,
+        execute: async (input) => slimWorkbench(await setWorkbenchStage(input.workbenchId, setWorkbenchStageSchema.parse({ stage: "done", reason: input.reason }))),
+    }),
+    defineTool({
+        name: "set_workbench_stage",
+        group: "workbenches",
+        label: "Definir etapa da mesa",
+        risk: "write",
+        confirmByDefault: true,
+        description:
+            "Define a etapa de espera da mesa sem passar pelo fluxo normal: plan_review (exige plano), preview (exige prévia publicada), pr_open ou changes_requested (exigem PR aberto) ou done (igual a complete_workbench). Interrompe o turno em andamento. Transições inválidas são recusadas; veja settableStages em get_workbench.",
+        input: z.object({ workbenchId, stage: z.enum(MANUAL_STAGES), reason }),
+        summarize: (input) => `Definir a etapa da mesa como "${input.stage}" (motivo: ${input.reason})`,
+        execute: async ({ workbenchId: id, ...input }) => slimWorkbench(await setWorkbenchStage(id, setWorkbenchStageSchema.parse(input))),
+    }),
     defineTool({
         name: "reply_workbench_permission",
         group: "workbenches",

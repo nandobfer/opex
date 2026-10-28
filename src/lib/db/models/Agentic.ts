@@ -185,6 +185,8 @@ export interface IAgenticWorkbench {
     forksDonePrompt: { count: number; at: Date } | null
     pr: IWorkbenchPr | null
     pastPrs: IWorkbenchPr[]
+    /** Conclusão manual (sem PR) pela ação "Definir etapa": motivo e etapa de origem; `null` na conclusão pelo merge. */
+    manualCompletion?: { reason: string; fromStage: string; at: Date } | null
     pendingPermissions: unknown[]
     pendingForms: unknown[]
     usage: { costUsd: number; inputTokens: number; outputTokens: number; reasoningTokens: number }
@@ -233,6 +235,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         forksDonePrompt: { type: Schema.Types.Mixed, default: null },
         pr: { type: Schema.Types.Mixed, default: null },
         pastPrs: { type: [Schema.Types.Mixed] as unknown as IWorkbenchPr[], default: [] },
+        manualCompletion: { type: Schema.Types.Mixed, default: null },
         pendingPermissions: { type: [Schema.Types.Mixed], default: [] },
         pendingForms: { type: [Schema.Types.Mixed], default: [] },
         usage: { type: Schema.Types.Mixed, default: () => ({ costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }) },

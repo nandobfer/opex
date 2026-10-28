@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
 
 /** Máximo de modelos de fallback por papel. */
 export const MAX_MODEL_FALLBACKS = 5
@@ -295,6 +295,13 @@ export type FeedbackInput = z.infer<typeof feedbackSchema>
 /** Texto opcional anexado a uma ação (ex.: informações adicionais ao aprovar o plano de implementação). */
 export const optionalFeedbackSchema = z.object({ text: optionalUserText })
 export type OptionalFeedbackInput = z.infer<typeof optionalFeedbackSchema>
+
+/** Definir a etapa da mesa (ou concluí-la sem PR): etapa de espera e o motivo, registrado na auditoria. */
+export const setWorkbenchStageSchema = z.object({
+    stage: z.enum(MANUAL_STAGES, "Escolha uma etapa de espera (Plano pronto, Prévia pronta, PR aberto, Mudanças pedidas ou Concluída)"),
+    reason: z.string().trim().min(3, "Informe o motivo (mínimo de 3 caracteres)").max(2000, "O motivo pode ter até 2000 caracteres"),
+})
+export type SetWorkbenchStageInput = z.infer<typeof setWorkbenchStageSchema>
 
 export const startWorkbenchSchema = z.object({
     centralId: z.string().regex(/^[a-f0-9]{24}$/i),
