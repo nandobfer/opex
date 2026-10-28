@@ -62,8 +62,9 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
     const tasks = useMemo(() => filterCentralTasks(list.data?.tasks ?? [], scope.map((item) => item.projectId), filters, (task) => ({ workbench: stages.get(task.id), queued: queued.has(task.id) })), [list.data, scope, filters, stages, queued])
     const scopeName = central?.projectName ?? "todos os projetos"
     const scrollRef = useRef<HTMLDivElement>(null)
+    // A altura medida fica presa à tarefa (mesma chave do React), não à posição: filtros e tempo real reordenam a lista.
     // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual devolve funções não memorizáveis (padrão do projeto)
-    const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, overscan: 8 })
+    const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, getItemKey: (index) => tasks[index]?.id ?? index, overscan: 8 })
     const reduceMotion = useReducedMotion()
 
     return (

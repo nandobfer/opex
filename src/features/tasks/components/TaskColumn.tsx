@@ -58,7 +58,7 @@ export function TaskColumn(props: TaskColumnProps) {
     const scrollRef = useRef<HTMLDivElement>(null)
     const virtualize = tasks.length > VIRTUALIZE_ABOVE
     // eslint-disable-next-line react-hooks/incompatible-library -- padrão do TanStack Virtual (mesmo do CRM)
-    const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => CARD_ESTIMATE, overscan: 6 })
+    const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => CARD_ESTIMATE, getItemKey: (index) => tasks[index]?.id ?? index, overscan: 6 })
 
     const ids = tasks.map((task) => task.id)
     const columnState = selection.stateOf(ids)
