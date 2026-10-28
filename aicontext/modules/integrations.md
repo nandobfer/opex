@@ -205,7 +205,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   remove uploads de anexo abandonados no storage e conclui remoções físicas pendentes; ver
   `modules/tasks.md`, "Anexos da tarefa") e `opex-files-cleanup` (60 min — remove do storage e do banco
   os arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h; ver
-  `modules/opex-agent.md`) e `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
+  `modules/opex-agent.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
+  host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`) e
+  `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
   ao ativar a Builder Machine — ver `modules/builder-machine.md`).
 - **Rotinas de integração ativável** (`INTEGRATION_CRON_JOBS`, `cronJobIntegration`): com a
   integração dona desativada (campo `active`), a rotina some da aba Rotinas (`hiddenJobIds` em

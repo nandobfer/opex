@@ -22,6 +22,8 @@ e opções na própria aba da página "Provedores de IA".
   (agentes primários e visíveis). Com diretório configurado, as consultas usam
   `?location[directory]=` — a pasta precisa existir na máquina do OpenCode (senão o servidor
   responde 404, com mensagem acionável). Em Docker, a URL precisa ser o IP do host, não `127.0.0.1`.
+  Campo público opcional **"Arquivo de quota (opencode-quota)"** (`quotaExportPath`): export do plugin
+  `opencode-quota` lido pelo painel de quota de `/desenvolvimento` (`modules/opencode-quota.md`).
 - **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.

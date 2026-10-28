@@ -250,7 +250,8 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   escolhida; o × volta para "Todos os projetos"), **Só mesas ativas**, **Colunas** (só quando restringe;
   nenhuma marcada = "Colunas: nenhuma"; o × volta para todas), **Estado** e **Busca**; o × remove só
   aquele filtro sem expandir. Clicar no resumo ou no chevron expande (altura animada com Framer
-  Motion); o chevron ⌃ recolhe. Expandida, mostra os filtros: a
+  Motion); o chevron ⌃ recolhe. Abaixo dela fica o painel **Quota do OpenCode** (`OpencodeQuotaPanel`,
+  ver `modules/opencode-quota.md`). Expandida, a área mostra os filtros: a
   chave **"Só mesas ativas"** (`Switch`, `ActiveWorkbenchSwitch`, linha inteira — o primeiro filtro); o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista

@@ -15,6 +15,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { OpencodeQuotaPanel } from "@/features/opencode-quota/components/OpencodeQuotaPanel"
 import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { useTaskList } from "@/features/tasks/hooks/useTasks"
 import { useRepoIndex } from "@/features/github/components/RepoIndexProvider"
@@ -50,7 +51,7 @@ interface TasksPaneProps {
  * Tarefas do projeto da central: o título e, abaixo dele, a área de filtros recolhível (começa
  * recolhida: resumo em chips; expandida: "Só mesas ativas", o seletor da central, os filtros de
  * colunas e de estado da mesa e a busca por nome, todos ocupando a linha inteira); por fim a lista
- * com a etapa da mesa. Coluna sempre expandida (largura fixa a partir de `lg`).
+ * com a etapa da mesa, abaixo da quota do OpenCode (`OpencodeQuotaPanel`). Coluna sempre expandida (largura fixa a partir de `lg`).
  */
 export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, className }: TasksPaneProps) {
     const list = useTaskList(false)
@@ -109,6 +110,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                         <Input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
                     </div>
                 </CollapsibleTaskFilters>
+                <OpencodeQuotaPanel />
             </div>
             {/* Trocar de central anima só a lista; trocar de tarefa não (a lista e a rolagem ficam). */}
             <AnimatePresence mode="wait" initial={false}>
