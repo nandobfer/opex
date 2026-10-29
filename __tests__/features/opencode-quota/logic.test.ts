@@ -1,81 +1,109 @@
 import { describe, expect, it } from 'vitest'
-import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaExport, quotaHash, quotaLevel, snapshotFreshAt, summaryLabel, summaryWindows, usedPercent } from '@/features/opencode-quota/logic'
+import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaSnapshot, quotaErrorMessage, quotaHash, quotaLevel, rowValueText, snapshotCheckedAt, summaryLabel, summaryWindows, usedPercent } from '@/features/opencode-quota/logic'
 import type { QuotaProviderDto, QuotaWindowDto } from '@/features/opencode-quota/types'
-import { quotaExportSchema } from '@/features/opencode-quota/schemas'
+import { quotaSnapshotSchema } from '@/features/opencode-quota/schemas'
 
 const CHECKED = new Date('2026-10-28T12:00:00Z')
+const OK_AT = Date.parse('2026-10-28T11:58:00Z')
 
-// Export real do opencode-quota 6.x (formato 3).
-const v3 = quotaExportSchema.parse({
-  version: 3,
-  exportedAt: 1793196889,
-  fromCache: true,
-  cacheAgeSeconds: 0,
-  providers: {
-    anthropic: {
-      status: 'ok',
-      fetchedAt: 1793196889,
-      entries: [
-        { id: 'anthropic.five_hour', name: 'Anthropic (Claude OAuth • 8DE14427) 5h', account: 'Claude OAuth • 8DE14427', resultType: 'quota', window: '5h', resetAt: 1793204400, renderType: 'percent', percentRemaining: 2 },
-        { id: 'anthropic.weekly', name: 'Anthropic (Claude OAuth • 8DE14427) Weekly', account: 'Claude OAuth • 8DE14427', resultType: 'quota', window: 'Weekly', resetAt: 1793707200, renderType: 'percent', percentRemaining: 81 },
-        { id: 'anthropic.weekly_fable', name: 'Anthropic (Claude OAuth • 8DE14427) Fable', account: 'Claude OAuth • 8DE14427', resultType: 'quota', window: 'Weekly', resetAt: 1793707200, renderType: 'percent', percentRemaining: 100 },
+const row = (providerId: string, key: string, extra: Record<string, unknown>) => ({ id: `${providerId}.${key}`, providerId, type: 'quota', method: 'remote_api', authority: 'provider_reported', prominence: 'primary', ...extra })
+
+// Snapshot v6 real do RPC `refresh` do opencode-quota 6.x (resumido).
+const v6 = quotaSnapshotSchema.parse({
+  version: 6,
+  providers: [
+    {
+      providerId: 'anthropic',
+      label: 'Anthropic',
+      refreshing: false,
+      okAtMs: OK_AT - 60_000,
+      checkedAtMs: OK_AT - 60_000,
+      rows: [
+        row('anthropic', 'five_hour', { account: 'pro', label: '5h', window: 'five_hour', percentRemaining: 2, resetsAt: '2026-10-28T14:00:00.115Z' }),
+        row('anthropic', 'weekly', { account: 'pro', label: 'Weekly', window: 'week', percentRemaining: 81, resetsAt: '2026-11-03T00:00:00Z' }),
+        row('anthropic', 'five_hour', { account: 'work', label: '5h', window: 'five_hour', percentRemaining: 50 }),
       ],
     },
-    openai: { status: 'unavailable' },
-    'opencode-go': {
-      status: 'ok',
-      fetchedAt: 1793196889,
-      entries: [
-        { id: 'opencode-go.five_hour', name: 'OpenCode Go 5h', resultType: 'quota', window: '5h', resetAt: 1793211943, renderType: 'percent', percentRemaining: 100 },
-        { id: 'opencode-go.monthly', name: 'OpenCode Go Monthly', resultType: 'quota', window: 'Monthly', renderType: 'percent', percentRemaining: 50 },
-      ],
+    {
+      providerId: 'opencode-go',
+      label: 'OpenCode Go',
+      refreshing: false,
+      okAtMs: OK_AT,
+      checkedAtMs: OK_AT,
+      rows: [row('opencode-go', 'five_hour', { label: '5h', percentRemaining: 100 }), row('opencode-go', 'monthly', { label: 'Monthly', percentRemaining: 50 })],
     },
-    custom: { status: 'partial', entries: [{ id: 'custom.balance', name: 'Gateway X Saldo', renderType: 'value', value: '$12.50 left' }], errors: ['Provider error 503'] },
-    broken: { status: 'error', error: 'Sign in again' },
-  },
+    { providerId: 'gateway', label: 'Gateway X', refreshing: false, okAtMs: OK_AT - 1, rows: [row('gateway', 'balance', { type: 'balance', label: 'Saldo', amount: { decimal: '12.5', unit: { kind: 'currency', code: 'USD' } } })] },
+    { providerId: 'openai', label: 'OpenAI', refreshing: false, rows: [], checkedAtMs: OK_AT - 5, error: { code: 'not_configured' } },
+    { providerId: 'copilot', label: 'Copilot', refreshing: true, rows: [] },
+  ],
 })
 
-describe('normalizeQuotaExport', () => {
-  it('agrupa por provedor, oculta os indisponíveis e traz as janelas que o plugin informou', () => {
-    const dto = normalizeQuotaExport(v3, CHECKED)
+describe('normalizeQuotaSnapshot', () => {
+  it('agrupa por provedor com várias contas, oculta não configurados e nunca consultados', () => {
+    const dto = normalizeQuotaSnapshot(v6, CHECKED)
     expect(dto.state).toBe('ok')
     expect(dto.checkedAt).toBe(CHECKED.toISOString())
-    expect(dto.exportedAt).toBe(new Date(1793196889 * 1000).toISOString())
-    expect(dto.providers.map((provider) => provider.id)).toEqual(['anthropic', 'opencode-go', 'custom', 'broken'])
+    expect(dto.providers.map((provider) => provider.id)).toEqual(['anthropic', 'opencode-go', 'gateway'])
     const anthropic = dto.providers[0]!
-    expect(anthropic.name).toBe('Anthropic')
-    expect(anthropic.windows.map((window) => [window.label, window.usedPercent])).toEqual([['5h', 98], ['Semanal', 19], ['Fable', 0]])
-    expect(anthropic.windows[0]!.resetAt).toBe(new Date(1793204400 * 1000).toISOString())
+    expect(anthropic).toMatchObject({ name: 'Anthropic', status: 'ok', errors: [] })
+    expect(anthropic.windows.map((window) => [window.label, window.account, window.usedPercent])).toEqual([['5h', 'pro', 98], ['Semanal', 'pro', 19], ['5h', 'work', 50]])
+    expect(anthropic.windows.map((window) => window.id)).toEqual(['anthropic.five_hour:pro', 'anthropic.weekly:pro', 'anthropic.five_hour:work'])
+    expect(anthropic.windows[0]!.resetAt).toBe('2026-10-28T14:00:00.115Z')
+    expect(anthropic.windows[2]!.resetAt).toBeNull()
     expect(dto.providers[1]!.windows.map((window) => window.label)).toEqual(['5h', 'Mensal'])
-    expect(dto.providers[1]!.windows[1]!.resetAt).toBeNull()
+    expect(dto.providers[2]).toMatchObject({ name: 'Gateway X', windows: [{ usedPercent: null, value: expect.stringContaining('12,50'), label: 'Saldo' }] })
   })
 
-  it('linhas de valor ficam sem barra e os erros de parcial/falha são mantidos', () => {
-    const dto = normalizeQuotaExport(v3, CHECKED)
-    const custom = dto.providers[2]!
-    expect(custom).toMatchObject({ status: 'partial', errors: ['Provider error 503'] })
-    expect(custom.windows[0]).toMatchObject({ usedPercent: null, value: '$12.50 left', label: 'Gateway X Saldo' })
-    expect(dto.providers[3]).toMatchObject({ status: 'error', errors: ['Sign in again'], windows: [] })
+  it('exportedAt é a consulta mais recente (maior okAtMs/checkedAtMs)', () => {
+    expect(normalizeQuotaSnapshot(v6, CHECKED).exportedAt).toBe(new Date(OK_AT).toISOString())
+    expect(snapshotCheckedAt(quotaSnapshotSchema.parse({ version: 6, providers: [{ providerId: 'x', rows: [] }] }))).toBeNull()
   })
 
-  it('aceita o formato 2 (opencode-quota 5.x) com o grupo entre colchetes', () => {
-    const v2 = quotaExportSchema.parse({ version: 2, exportedAt: 1, providers: { 'opencode-go': { status: 'ok', entries: [{ name: '[OpenCode Go] Weekly', window: 'Weekly', renderType: 'percent', percentRemaining: 98 }] } } })
-    expect(normalizeQuotaExport(v2, CHECKED).providers[0]!.windows[0]).toMatchObject({ label: 'Semanal', usedPercent: 2 })
+  it('com linhas e erro vira parcial; sem linhas e com erro vira falha', () => {
+    const retryAtMs = Date.parse('2026-10-28T15:07:00Z')
+    const snapshot = quotaSnapshotSchema.parse({
+      version: 6,
+      providers: [
+        { ...v6.providers[0]!, error: { code: 'rate_limited', status: 429, retryAtMs } },
+        { providerId: 'broken', label: 'Broken', rows: [], checkedAtMs: OK_AT, error: { code: 'login_expired', status: 401 } },
+      ],
+    })
+    const dto = normalizeQuotaSnapshot(snapshot, CHECKED)
+    expect(dto.providers[0]).toMatchObject({ status: 'partial', errors: ['Limite de consultas atingido; tente após 12:07 (HTTP 429)'] })
+    expect(dto.providers[0]!.windows).toHaveLength(3)
+    expect(dto.providers[1]).toMatchObject({ id: 'broken', name: 'Broken', status: 'error', windows: [], errors: ['Login expirado: entre de novo no provedor pelo OpenCode (HTTP 401)'] })
+  })
+
+  it('recusa um snapshot de outra versão', () => {
+    expect(quotaSnapshotSchema.safeParse({ version: 5, providers: [] }).success).toBe(false)
+  })
+})
+
+describe('rowValueText e quotaErrorMessage', () => {
+  it('texto → flag → amount → remaining, em pt-BR', () => {
+    expect(rowValueText({ text: 'Ilimitado', flag: true })).toBe('Ilimitado')
+    expect(rowValueText({ flag: true })).toBe('Ativo')
+    expect(rowValueText({ flag: false })).toBe('Inativo')
+    expect(rowValueText({ amount: { decimal: '1500', unit: { kind: 'count', unit: 'request' } } })).toBe('1.500 requests')
+    expect(rowValueText({ remaining: { decimal: '3', unit: { kind: 'custom', symbol: '◎' } } })).toBe('◎3 restantes')
+    expect(rowValueText({ label: 'x' })).toBeNull()
+  })
+
+  it('códigos desconhecidos viram erro interno; ferramenta local cita o programa', () => {
+    expect(quotaErrorMessage({ code: 'weird' })).toBe('Erro interno do opencode-quota')
+    expect(quotaErrorMessage({ code: 'local_tool', tool: 'Claude CLI', missing: true })).toBe('Claude CLI não encontrado na máquina do OpenCode')
+    expect(quotaErrorMessage({ code: 'rate_limited' })).toBe('Limite de consultas atingido')
   })
 })
 
 describe('keepLastGoodWindows', () => {
-  const good = normalizeQuotaExport(v3, CHECKED)
-  const rateLimited = normalizeQuotaExport(
-    { ...v3, providers: { ...v3.providers, anthropic: { status: 'error', error: 'Rate limited, retry in 1m' } } },
-    CHECKED,
-  )
+  const good = normalizeQuotaSnapshot(v6, CHECKED)
+  const rateLimited = normalizeQuotaSnapshot({ ...v6, providers: [{ ...v6.providers[0]!, rows: [], error: { code: 'rate_limited' } }, ...v6.providers.slice(1)] }, CHECKED)
 
   it('provedor em erro sem janelas mantém as janelas da última leitura boa como parcial, com o erro atual', () => {
     const merged = keepLastGoodWindows(good, rateLimited)
-    expect(merged.providers[0]).toMatchObject({ id: 'anthropic', status: 'partial', errors: ['Rate limited, retry in 1m'] })
+    expect(merged.providers[0]).toMatchObject({ id: 'anthropic', status: 'partial', errors: ['Limite de consultas atingido'] })
     expect(merged.providers[0]!.windows).toEqual(good.providers[0]!.windows)
-    expect(merged.providers[3]).toMatchObject({ id: 'broken', status: 'error', windows: [] })
   })
 
   it('sem leitura boa anterior o provedor continua só com o erro', () => {
@@ -83,28 +111,17 @@ describe('keepLastGoodWindows', () => {
   })
 
   it('leitura com janelas substitui as antigas e provedor que sumiu não volta', () => {
-    const fresh = normalizeQuotaExport({ ...v3, providers: { 'opencode-go': v3.providers['opencode-go']! } }, CHECKED)
+    const fresh = normalizeQuotaSnapshot({ ...v6, providers: [v6.providers[1]!] }, CHECKED)
     expect(keepLastGoodWindows(good, fresh)).toBe(fresh)
     expect(keepLastGoodWindows(good, fresh).providers.map((provider) => provider.id)).toEqual(['opencode-go'])
   })
 
-  it('arquivo não lido (state diferente de ok) não mescla', () => {
+  it('leitura com falha (state diferente de ok) não mescla', () => {
     const failed = { ...rateLimited, state: 'error' as const, message: 'falhou', providers: [] }
     expect(keepLastGoodWindows(good, failed)).toBe(failed)
   })
 })
 
-describe('snapshotFreshAt', () => {
-  it('usa o fetchedAt mais recente entre os provedores', () => {
-    const data = quotaExportSchema.parse({ version: 3, exportedAt: 1793219999, providers: { anthropic: { status: 'partial', fetchedAt: 1793218240 }, 'opencode-go': { status: 'ok', fetchedAt: 1793218215 }, openai: { status: 'unavailable' } } })
-    expect(snapshotFreshAt(data)).toBe(1793218240)
-  })
-
-  it('sem nenhum provedor verificado devolve null', () => {
-    expect(snapshotFreshAt(quotaExportSchema.parse({ version: 3, exportedAt: 1, providers: { openai: { status: 'unavailable' } } }))).toBeNull()
-    expect(snapshotFreshAt(quotaExportSchema.parse({ version: 3, providers: {} }))).toBeNull()
-  })
-})
 describe('regras de exibição', () => {
   it('usedPercent limita a 0–100 e arredonda', () => {
     expect(usedPercent(2)).toBe(98)
@@ -121,11 +138,12 @@ describe('regras de exibição', () => {
   })
 
   it('summaryWindows pega a primeira janela com % de cada provedor (a de 5h)', () => {
-    const [anthropic, go, custom, broken] = normalizeQuotaExport(v3, CHECKED).providers
-    expect(summaryWindows(anthropic!).map((window) => [window.label, window.usedPercent])).toEqual([['5h', 98]])
+    const [anthropic, go, gateway] = normalizeQuotaSnapshot(v6, CHECKED).providers
+    expect(summaryWindows(anthropic!).map((window) => [window.label, window.account, window.usedPercent])).toEqual([['5h', 'pro', 98], ['5h', 'work', 50]])
     expect(summaryWindows(go!).map((window) => window.label)).toEqual(['5h'])
-    expect(summaryWindows(custom!)).toMatchObject([{ usedPercent: null, value: '$12.50 left' }])
-    expect(summaryWindows(broken!)).toEqual([])
+    expect(summaryWindows(gateway!)).toMatchObject([{ usedPercent: null, value: expect.stringContaining('12,50') }])
+    const broken: QuotaProviderDto = { id: 'broken', name: 'Broken', status: 'error', errors: ['x'], windows: [] }
+    expect(summaryWindows(broken)).toEqual([])
   })
 
   it('summaryWindows prefere a janela com % mesmo depois de uma linha de valor e separa por conta', () => {
@@ -161,8 +179,8 @@ describe('regras de exibição', () => {
   })
 
   it('quotaHash ignora os instantes de leitura e de export', () => {
-    const a = normalizeQuotaExport(v3, CHECKED)
-    const b = normalizeQuotaExport({ ...v3, exportedAt: 2 }, new Date())
+    const a = normalizeQuotaSnapshot(v6, CHECKED)
+    const b = normalizeQuotaSnapshot({ ...v6, providers: v6.providers.map((provider) => ({ ...provider, okAtMs: 1, checkedAtMs: 2 })) }, new Date())
     expect(quotaHash(a)).toBe(quotaHash(b))
   })
 })

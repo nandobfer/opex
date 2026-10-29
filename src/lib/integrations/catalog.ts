@@ -190,7 +190,7 @@ export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
 /** Builder Machine: limpeza das imagens órfãs e do cache do builder do PC. */
 export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
-/** Lê a quota do OpenCode (export do plugin opencode-quota) e avisa a tela quando muda. */
+/** Pede a quota ao plugin opencode-quota (RPC, motivo poll) e avisa a tela quando muda. */
 export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
 /** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
 export const ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID = "environments-registry-cleanup"
@@ -283,7 +283,7 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         id: OPENCODE_QUOTA_JOB_ID,
         label: "Atualizar a quota do OpenCode (opencode-quota)",
         kind: "internal",
-        schedule: { type: "interval", minutes: 5 },
+        schedule: { type: "interval", minutes: 1 },
         enabled: true,
     },
     {
@@ -533,11 +533,15 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
                 placeholder: "/home/usuario/opex-ia",
             },
             {
-                key: "quotaExportPath",
-                label: "Arquivo de quota (opencode-quota)",
-                description: "Export JSON do plugin opencode-quota na máquina do OpenCode, mostrado em /desenvolvimento; vazio usa o padrão do plugin",
-                kind: "text",
-                placeholder: "~/.cache/opencode/quota-export.json",
+                key: "quotaRefreshReason",
+                label: "Botão Atualizar da quota",
+                description: "Manual consulta todos os provedores na hora e ignora o intervalo e o backoff do opencode-quota; Poll respeita o intervalo do plugin",
+                kind: "segmented",
+                options: [
+                    { value: "manual", label: "Manual" },
+                    { value: "poll", label: "Poll" },
+                ],
+                defaultValue: "manual",
             },
         ],
         secretFields: [

@@ -1,10 +1,15 @@
-import { OPENCODE_QUOTA_STALE_MS, QUOTA_CRITICAL_PERCENT, QUOTA_PROVIDER_NAMES, QUOTA_WARNING_PERCENT } from "./constants"
-import type { QuotaExport, QuotaExportEntry, QuotaExportProvider } from "./schemas"
+import { SCHEDULE_TIMEZONE } from "@/lib/integrations/schedule"
+import { OPENCODE_QUOTA_STALE_MS, QUOTA_CRITICAL_PERCENT, QUOTA_ERROR_MESSAGES, QUOTA_PROVIDER_NAMES, QUOTA_WARNING_PERCENT } from "./constants"
+import type { QuotaAmount, QuotaSnapshot, QuotaSnapshotError, QuotaSnapshotProvider, QuotaSnapshotRow } from "./schemas"
 import type { OpencodeQuotaDto, QuotaLevel, QuotaProviderDto, QuotaProviderStatus, QuotaWindowDto } from "./types"
 
-/** Regras puras da quota do OpenCode (normalização do export, cores, contagem do reset). */
+/** Regras puras da quota do OpenCode (normalização do snapshot v6, cores, contagem do reset). */
 
-const toIso = (seconds: number | null | undefined): string | null => (typeof seconds === "number" && Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null)
+const isoOrNull = (value: string | null | undefined): string | null => {
+    if (!value) return null
+    const time = new Date(value).getTime()
+    return Number.isFinite(time) ? new Date(time).toISOString() : null
+}
 
 /** Percentual usado a partir do restante, inteiro entre 0 e 100. */
 export function usedPercent(percentRemaining: number): number {
@@ -17,88 +22,100 @@ export function quotaLevel(used: number): QuotaLevel {
     return "ok"
 }
 
-/** Maior prefixo comum, em palavras inteiras, dos nomes das linhas (o nome do provedor no formato 3). */
-function commonWordPrefix(names: string[]): string {
-    if (names.length < 2) return ""
-    const split = names.map((name) => name.split(" "))
-    const prefix: string[] = []
-    for (let index = 0; index < split[0].length - 1; index++) {
-        const word = split[0][index]
-        if (split.every((words) => words.length - 1 > index && words[index] === word)) prefix.push(word)
-        else break
-    }
-    return prefix.join(" ")
-}
-
-/** Nome do provedor: mapa conhecido → texto antes de "(conta)" → prefixo comum das linhas → id. */
-function providerName(id: string, entries: QuotaExportEntry[]): string {
-    const known = QUOTA_PROVIDER_NAMES[id]
-    if (known) return known
-    for (const entry of entries) {
-        if (entry.account && entry.name) {
-            const at = entry.name.indexOf(` (${entry.account})`)
-            if (at > 0) return entry.name.slice(0, at)
-        }
-    }
-    return commonWordPrefix(entries.map((entry) => entry.name ?? "")) || id
-}
-
 /** Janelas comuns em pt-BR; as demais ficam como o plugin escreve. */
 const WINDOW_LABELS: Readonly<Record<string, string>> = { hourly: "Por hora", daily: "Diária", weekly: "Semanal", monthly: "Mensal", yearly: "Anual", session: "Sessão" }
 
-/**
- * Rótulo da linha: o nome sem o provedor e a conta ("Anthropic (pro) Fable" → "Fable"); no formato 2,
- * sem o grupo entre colchetes ("[OpenCode Go] 5h" → "5h"). Sem nome, a janela ou o fim do id.
- */
-function windowLabel(entry: QuotaExportEntry, provider: string, prefix: string): string {
-    let name = (entry.name ?? "").trim()
-    if (name.startsWith("[")) name = name.replace(/^\[[^\]]*\]\s*/, "")
-    else {
-        if (prefix && name.startsWith(`${prefix} `)) name = name.slice(prefix.length + 1)
-        else if (name.startsWith(`${provider} `)) name = name.slice(provider.length + 1)
-        if (entry.account && name.startsWith(`(${entry.account}) `)) name = name.slice(entry.account.length + 3)
+function windowLabel(row: QuotaSnapshotRow): string {
+    const label = row.label?.trim() || row.id?.split(".").pop() || "Quota"
+    return WINDOW_LABELS[label.toLowerCase()] ?? label
+}
+
+const numberFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 })
+
+/** Valor exato do plugin (`{ decimal, unit }`) em pt-BR: moeda, contagem ("12 requests") ou símbolo próprio. */
+function formatAmount(amount: QuotaAmount): string | null {
+    const value = Number(amount.decimal)
+    if (!Number.isFinite(value)) return null
+    const unit = amount.unit
+    if (unit?.kind === "currency" && unit.code) {
+        try {
+            return new Intl.NumberFormat("pt-BR", { style: "currency", currency: unit.code }).format(value)
+        } catch {
+            return `${numberFormat.format(value)} ${unit.code}`
+        }
     }
-    name = name.replace(/:$/, "").trim() || entry.window?.trim() || entry.id?.split(".").pop() || "Quota"
-    return WINDOW_LABELS[name.toLowerCase()] ?? name
+    if (unit?.kind === "count" && unit.unit) return `${numberFormat.format(value)} ${unit.unit}${value === 1 ? "" : "s"}`
+    if (unit?.kind === "custom" && unit.symbol) return `${unit.symbol}${numberFormat.format(value)}`
+    return numberFormat.format(value)
 }
 
-function providerErrors(provider: QuotaExportProvider): string[] {
-    const errors = (provider.errors ?? []).map((item) => (typeof item === "string" ? item : (item.message ?? ""))).filter(Boolean)
-    if (provider.error) errors.unshift(provider.error)
-    return errors
+/** Texto da linha sem %: `text` → `flag` (Ativo/Inativo) → `amount` → `remaining` ("… restante(s)"). */
+export function rowValueText(row: QuotaSnapshotRow): string | null {
+    const text = row.text?.trim()
+    if (text) return text
+    if (typeof row.flag === "boolean") return row.flag ? "Ativo" : "Inativo"
+    if (row.amount) {
+        const amount = formatAmount(row.amount)
+        if (amount) return amount
+    }
+    if (row.remaining) {
+        const remaining = formatAmount(row.remaining)
+        if (remaining) return `${remaining} ${Number(row.remaining.decimal) === 1 ? "restante" : "restantes"}`
+    }
+    return null
 }
 
-function normalizeProvider(id: string, provider: QuotaExportProvider): QuotaProviderDto | null {
-    const status = provider.status as QuotaProviderStatus
-    if (status !== "ok" && status !== "partial" && status !== "error") return null
-    const entries = provider.entries ?? []
-    const name = providerName(id, entries)
-    const prefix = entries.some((entry) => entry.account) ? "" : commonWordPrefix(entries.map((entry) => entry.name ?? ""))
+const timeFormat = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: SCHEDULE_TIMEZONE })
+
+/** Erro do provedor em pt-BR pelo código do plugin; `rate_limited` com "tente após HH:mm"; status HTTP no fim. */
+export function quotaErrorMessage(error: QuotaSnapshotError): string {
+    let message = QUOTA_ERROR_MESSAGES[error.code] ?? QUOTA_ERROR_MESSAGES.internal
+    if (error.code === "local_tool" && error.tool) message = error.missing ? `${error.tool} não encontrado na máquina do OpenCode` : `Falha no ${error.tool}`
+    if (error.code === "rate_limited" && typeof error.retryAtMs === "number" && Number.isFinite(error.retryAtMs)) message = `${message}; tente após ${timeFormat.format(new Date(error.retryAtMs))}`
+    if (typeof error.status === "number") message = `${message} (HTTP ${error.status})`
+    return message
+}
+
+function normalizeProvider(provider: QuotaSnapshotProvider): QuotaProviderDto | null {
+    const rows = provider.rows ?? []
+    const error = provider.error ?? null
+    // Provedor não configurado (sem linhas) ou que nunca respondeu não aparece.
+    if (!rows.length && (!error || error.code === "not_configured")) return null
     const windows: QuotaWindowDto[] = []
-    entries.forEach((entry, index) => {
-        const percent = entry.renderType !== "value" && typeof entry.percentRemaining === "number" ? usedPercent(entry.percentRemaining) : null
-        const value = percent === null ? entry.value?.trim() || null : null
+    rows.forEach((row, index) => {
+        const percent = typeof row.percentRemaining === "number" && Number.isFinite(row.percentRemaining) ? usedPercent(row.percentRemaining) : null
+        const value = percent === null ? rowValueText(row) : null
         if (percent === null && value === null) return
         windows.push({
-            id: `${entry.id ?? index}${entry.account ? `:${entry.account}` : ""}`,
-            label: windowLabel(entry, name, prefix),
-            account: entry.account ?? null,
+            id: `${row.id ?? `${provider.providerId}.${index}`}${row.account ? `:${row.account}` : ""}`,
+            label: windowLabel(row),
+            account: row.account ?? null,
             usedPercent: percent,
             value,
-            resetAt: toIso(entry.resetAt),
+            resetAt: isoOrNull(row.resetsAt),
         })
     })
-    const errors = providerErrors(provider)
-    if (!windows.length && !errors.length) return null
-    return { id, name, status, errors, windows }
+    if (!windows.length && !error) return null
+    const status: QuotaProviderStatus = !error ? "ok" : windows.length ? "partial" : "error"
+    const name = QUOTA_PROVIDER_NAMES[provider.providerId] ?? (provider.label?.trim() || provider.providerId)
+    return { id: provider.providerId, name, status, errors: error ? [quotaErrorMessage(error)] : [], windows }
 }
 
-/** Export do plugin → DTO da UI: provedores `unavailable` (ou sem nada a mostrar) somem. */
-export function normalizeQuotaExport(data: QuotaExport, checkedAt: Date): OpencodeQuotaDto {
-    const providers = Object.entries(data.providers)
-        .map(([id, provider]) => normalizeProvider(id, provider))
-        .filter((provider): provider is QuotaProviderDto => provider !== null)
-    return { state: "ok", message: null, exportedAt: toIso(data.exportedAt), checkedAt: checkedAt.toISOString(), providers }
+/**
+ * Instante (ISO) da consulta mais recente a algum provedor (`okAtMs`/`checkedAtMs`): o "Desatualizado"
+ * aparece quando o OpenCode não consulta nenhum provedor há mais de 30 min.
+ */
+export function snapshotCheckedAt(snapshot: QuotaSnapshot): string | null {
+    const times = snapshot.providers
+        .flatMap((provider) => [provider.okAtMs, provider.checkedAtMs])
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    return times.length ? new Date(Math.max(...times)).toISOString() : null
+}
+
+/** Snapshot v6 do plugin → DTO da UI, na ordem do snapshot; provedores sem nada a mostrar somem. */
+export function normalizeQuotaSnapshot(snapshot: QuotaSnapshot, checkedAt: Date): OpencodeQuotaDto {
+    const providers = snapshot.providers.map(normalizeProvider).filter((provider): provider is QuotaProviderDto => provider !== null)
+    return { state: "ok", message: null, exportedAt: snapshotCheckedAt(snapshot), checkedAt: checkedAt.toISOString(), providers }
 }
 
 /**
@@ -133,10 +150,10 @@ export function summaryLabel(provider: QuotaProviderDto, window: QuotaWindowDto,
 }
 
 /**
- * O export do plugin grava só a verificação atual: um provedor que falhou sem linhas (ex.: 429 da
- * Anthropic) vem só com o erro. Como o TUI, mantém as janelas da última leitura boa desse provedor
- * como `partial`, com o erro atual de aviso. Só mescla com o arquivo lido (`state: "ok"`); provedor
- * que sumiu não volta e leitura com janelas substitui as antigas.
+ * O snapshot v6 já guarda as últimas linhas boas de cada provedor; quando ainda assim um provedor
+ * vem só com o erro (ex.: o plugin reiniciou sem o arquivo de estado), mantém as janelas da última
+ * leitura boa desse provedor como `partial`, com o erro atual de aviso. Só mescla com uma leitura
+ * `ok`; provedor que sumiu não volta e leitura com janelas substitui as antigas.
  */
 export function keepLastGoodWindows(lastGood: OpencodeQuotaDto | null, next: OpencodeQuotaDto): OpencodeQuotaDto {
     if (next.state !== "ok" || !lastGood || lastGood.state !== "ok") return next
@@ -164,18 +181,7 @@ export function formatResetIn(resetAt: string, now: number): string {
     return `${rest} min`
 }
 
-/**
- * Instante (s) da verificação mais recente do snapshot: o `show --json` data o documento com a hora
- * da leitura, então o "Desatualizado" passa a olhar o `fetchedAt` mais novo entre os provedores.
- */
-export function snapshotFreshAt(data: QuotaExport): number | null {
-    const times = Object.values(data.providers)
-        .map((provider) => provider.fetchedAt)
-        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
-    return times.length ? Math.max(...times) : null
-}
-
-/** O plugin não regrava o export (ou não verifica nenhum provedor) há mais de 30 min. */
+/** O plugin não consulta nenhum provedor há mais de 30 min. */
 export function isQuotaStale(exportedAt: string | null, now: number): boolean {
     if (!exportedAt) return false
     return now - new Date(exportedAt).getTime() > OPENCODE_QUOTA_STALE_MS

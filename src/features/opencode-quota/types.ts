@@ -1,9 +1,9 @@
 /**
  * Quota do OpenCode normalizada para a UI (independente do formato do plugin).
- * - `ok`: export lido (pode não ter provedores com dados);
- * - `missing`: o arquivo de export não existe (export desligado no plugin);
+ * - `ok`: snapshot recebido do RPC do plugin (pode não ter provedores com dados);
+ * - `missing`: o plugin `opencode-quota` não respondeu ao RPC (`rpc.unavailable`);
  * - `unconfigured`: integração OpenCode sem URL do servidor;
- * - `error`: falha ao ler ou interpretar o export.
+ * - `error`: senha recusada, rede, timeout, erro interno do plugin ou snapshot não reconhecido.
  */
 export type OpencodeQuotaState = "ok" | "missing" | "unconfigured" | "error"
 
@@ -32,9 +32,9 @@ export interface QuotaProviderDto {
 export interface OpencodeQuotaDto {
     state: OpencodeQuotaState
     message: string | null
-    /** Quando o plugin gravou o export (ISO). */
+    /** Consulta mais recente do plugin a algum provedor (ISO). */
     exportedAt: string | null
-    /** Quando o Opex leu o export (ISO). */
+    /** Quando o Opex recebeu a quota (ISO). */
     checkedAt: string
     providers: QuotaProviderDto[]
 }

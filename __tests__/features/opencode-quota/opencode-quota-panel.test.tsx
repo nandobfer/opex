@@ -130,12 +130,12 @@ describe('OpencodeQuotaPanel', () => {
     expect(screen.getByTestId('quota-compact')).toBeTruthy()
   })
 
-  it('export desligado explica como ligar', async () => {
+  it('plugin sem resposta explica o que fazer', async () => {
     renderPanel(quota({ state: 'missing', message: 'x', providers: [], exportedAt: null }))
-    expect(await screen.findByText('Export do opencode-quota desligado')).toBeTruthy()
+    expect(await screen.findByText('Plugin opencode-quota não respondeu')).toBeTruthy()
   })
 
-  it('erro ao carregar oferece tentar novamente (relê o export)', async () => {
+  it('erro ao carregar oferece tentar novamente (pede a quota de novo)', async () => {
     mocks.post.mockResolvedValue(ok(quota()))
     renderPanel(new Error('falhou'))
     fireEvent.click(await screen.findByRole('button', { name: 'Tentar novamente' }))
