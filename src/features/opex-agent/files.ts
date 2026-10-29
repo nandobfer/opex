@@ -1,36 +1,19 @@
+import { CHAT_FILE_KIND_LABELS, CHAT_FILE_KINDS, chatFileKind, megabytesToBytes, type ChatFileKind } from "@/lib/chat-files/kind"
 import { formatAttachmentSize } from "@/lib/attachments"
 import { OPEX_FILE_CONTENT_MAX_BYTES, OPEX_FILE_TEXT_MAX_BYTES, type OpexProviderId } from "./constants"
 
 /**
  * Arquivos do chat (módulo puro: tela e servidor). O tipo decide como o arquivo chega ao modelo:
  * conteúdo (imagem/PDF/áudio/vídeo como parte do pedido, texto inline) ou só a referência — o
- * agente ainda pode anexá-lo a tarefas e prévias pelo `fileId`.
+ * agente ainda pode anexá-lo a tarefas e prévias pelo `fileId`. Tipo, rótulos e limites vêm do
+ * módulo compartilhado `@/lib/chat-files` (também usado pela mesa de trabalho).
  */
 
-export const OPEX_FILE_KINDS = ["image", "pdf", "text", "audio", "video", "other"] as const
-export type OpexFileKind = (typeof OPEX_FILE_KINDS)[number]
-
-const TEXT_EXTENSIONS = new Set([
-    "txt", "md", "markdown", "csv", "tsv", "json", "jsonl", "log", "xml", "yml", "yaml", "toml", "ini", "env", "sql", "html", "htm", "css", "scss",
-    "js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "rb", "go", "rs", "java", "kt", "cs", "php", "sh", "bash", "zsh", "ps1", "vue", "svelte", "graphql", "gql", "diff", "patch",
-])
-const TEXT_MIMES = new Set(["application/json", "application/xml", "application/x-yaml", "application/yaml", "application/sql", "application/x-sh", "application/javascript", "application/typescript", "application/x-ndjson"])
-/** Imagens que os provedores leem (SVG é conteúdo ativo e não entra). */
-const MODEL_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"])
-
-const extensionOf = (name: string) => /\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase() ?? ""
+export const OPEX_FILE_KINDS = CHAT_FILE_KINDS
+export type OpexFileKind = ChatFileKind
 
 /** Tipo do arquivo pelo MIME, com a extensão como reserva (o navegador nem sempre informa o MIME). */
-export function opexFileKind(mediaType: string | null | undefined, name: string): OpexFileKind {
-    const mime = (mediaType ?? "").split(";")[0]!.trim().toLowerCase()
-    const extension = extensionOf(name)
-    if (MODEL_IMAGE_MIMES.has(mime) || ((!mime || mime === "application/octet-stream") && ["png", "jpg", "jpeg", "webp", "gif"].includes(extension))) return "image"
-    if (mime === "application/pdf" || extension === "pdf") return "pdf"
-    if (mime.startsWith("audio/")) return "audio"
-    if (mime.startsWith("video/")) return "video"
-    if (mime.startsWith("text/") || TEXT_MIMES.has(mime) || TEXT_EXTENSIONS.has(extension)) return "text"
-    return "other"
-}
+export const opexFileKind = chatFileKind
 
 /** Como cada provedor recebe cada tipo: parte de arquivo (`content`), texto inline ou só referência. */
 export type OpexFileDelivery = "content" | "inline-text" | "reference"
@@ -64,14 +47,7 @@ export function opexFileWeight(kind: OpexFileKind, size: number): number {
 /** Rota do app que serve o arquivo (sem `basePath`). */
 export const opexFilePath = (id: string, download = false) => `/api/opex/files/${id}${download ? "?download=1" : ""}`
 
-export const OPEX_FILE_KIND_LABELS: Record<OpexFileKind, string> = {
-    image: "imagem",
-    pdf: "PDF",
-    text: "texto",
-    audio: "áudio",
-    video: "vídeo",
-    other: "arquivo",
-}
+export const OPEX_FILE_KIND_LABELS = CHAT_FILE_KIND_LABELS
 
 /** Linha de referência enviada ao modelo junto (ou no lugar) do conteúdo. */
 export function opexFileReference(file: { id: string; name: string; mediaType: string; size: number; kind: OpexFileKind }, delivery: OpexFileDelivery): string {
@@ -81,4 +57,4 @@ export function opexFileReference(file: { id: string; name: string; mediaType: s
 }
 
 /** Limite de tamanho configurado, em bytes. */
-export const opexMaxBytes = (maxSizeMb: number) => Math.round(maxSizeMb * 1024 * 1024)
+export const opexMaxBytes = megabytesToBytes

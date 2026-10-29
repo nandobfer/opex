@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -26,7 +26,7 @@ const turn = (key: string, ended: boolean): TimelineItem => ({
 const state = (items: TimelineItem[], patch: Partial<TimelineState> = {}): TimelineState => ({ items, reasoning: false, loaded: true, ...patch })
 
 /**
- * jsdom não faz layout: define as métricas de rolagem no container e devolve um medidor. O
+ * O DOM de teste não faz layout: define as métricas de rolagem no container e devolve um medidor. O
  * `scrollHeight` é mutável para simular o conteúdo crescendo durante o stream.
  */
 function stubLayout(element: HTMLElement, initial: { scrollHeight: number; clientHeight: number }) {

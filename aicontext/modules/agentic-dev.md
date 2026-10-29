@@ -115,6 +115,10 @@ efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila 
 
 ## Fila do build (um build por vez)
 
+Builds de fora das mesas (deploy de **Ambientes**, `modules/environments.md`) entram na mesma vez por
+`runExclusiveBuild` (`build-queue.ts`): um externo por vez, só depois de nenhum build de mesa vivo; enquanto
+ele roda a fila das mesas não inicia, e ao terminar a fila é acionada.
+
 ### Método da prévia: Local ou GitHub Action
 
 Na central → Ambiente, `environment.previewMethod` seleciona **Local** (padrão, inclusive
@@ -126,9 +130,10 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   rodar em paralelo e não bloqueiam builds locais. PR automático continua pulando os dois métodos.
 - O método é salvo por tentativa em `previewBuild`; trocar configuração não altera o build em
   andamento. Retentativa remota também pula fila, mesmo se a configuração mudou depois.
-- A etapa continua sendo um turno do agente Build na sessão da mesa. O agente cria/reutiliza o
-  backup do banco (quando ligado na aba Ambiente) e executa
-  `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree.
+- Quem roda o script é o **app** (ver "Build rodado pelo app"): um turno curto do agente Build
+  commita tudo na branch da mesa (e cria/reutiliza o dump, quando ligado na aba Ambiente) e o Opex
+  executa `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree, desacoplado no host
+  (tempo limite = `buildTimeoutMinutes`, nunca menos de 25 min), com a saída na aba **Build (N)**.
   O workflow e o runner devem estar instalados no projeto com a skill global
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
@@ -136,8 +141,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
 - A porta permanece reservada no banco, dentro da faixa da central. O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
-  e confirmação de publicação. A URL do run aparece nos logs da sessão; reconexão pode retomar
-  o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+  e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
+  GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
 - O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
   quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
   Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
@@ -159,7 +164,7 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 central usando o PC (card na aba Ambiente, oculto no método GitHub Action), o build **Local** vai para
 o Docker do PC: `prepareBuildTurn` chama `resolveBuildTarget` (import dinâmico memorizado, só com a
 integração ativa), a porta pula as ocupadas no PC e no servidor, o servidor repassa a porta pelo túnel,
-o aviso ganha "(prévia na máquina local)" e o `buildPrompt` recebe `docker: { prefix }`
+o aviso ganha "(prévia na máquina local)" e o comando do build (`previewBuildCommands`) recebe `docker: { prefix }`
 (`DOCKER_CONTEXT=opex-local BUILDX_BUILDER=…` em todo comando docker; o builder da central é ignorado;
 não combina com a seção do GitHub Action). Trocar para o GitHub Action derruba a prévia anterior que
 estava no PC. Na limpeza (merge, exclusão, tentar a limpeza de novo), a prévia que estava no PC é
@@ -181,6 +186,47 @@ centrais). Ao concluir a implementação, a mesa entra na fila em vez de subir d
   ações além de excluir a mesa.
 - Um build órfão (o app reiniciou no meio) não trava a fila: só conta como build em andamento o
   turno vivo neste processo; ao ser lida, a mesa órfã vira `interrupted`.
+
+### Build rodado pelo app e aba "Build (N)" (OPE-88)
+
+Na etapa **Subindo a prévia** quem roda o comando do build é o **app**, não o agente
+(`buildTurn` em `workflow.ts`, `server/preview-build.ts`): o comando roda **desacoplado** no host do
+OpenCode (executor da Builder Machine: segundo plano + consultas curtas, resistente ao OpenCode
+descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** da mesa.
+
+- **Local:** `cd <worktree> && BUILDKIT_PROGRESS=plain <prefixo> <VAR>=<porta> docker compose -p … up -d --build`
+  (`previewBuildCommands`; prefixo = builder da central ou o Docker do PC da Builder Machine, com os
+  arquivos `-f` do override das CAs). Com o **backup ligado**, antes do comando um **turno curto do
+  agente faz só o dump** (`previewPreparePrompt`) e o servidor confere o arquivo (`test -s`); sem
+  backup não há turno de preparo.
+- **GitHub Action:** um turno curto do agente **commita** tudo (e faz o dump, se ligado); o app roda
+  `scripts/preview-github.ts` da tentativa reservada (`remotePreviewCommands`).
+- **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
+  (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
+  numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é
+  **commitada** e o app **invalida a tentativa antiga e reserva uma nova** (SHA novo) antes de rodar
+  de novo. `{"ok": false}` falha a etapa com o motivo.
+- **Falha terminal** (`terminalBuildFailure`): exit 124 (tempo limite), 137/143 (processo morto pelo
+  sistema) ou comando que não terminou no host falham a etapa sem chamar o agente (no GitHub Action a
+  tentativa é invalidada).
+- exit 0 → `afterBuild`: no GitHub Action confere a publicação (`assertRemotePreview`), espera a
+  prévia responder e segue para `preview` (ou para o PR automático, se a geração de prévia foi
+  desligada durante o build).
+- **Retomada:** o job em execução fica em `previewBuild.job`; **Reconectar** com job retoma a leitura
+  do mesmo job (o mesmo `jobId` reencontra o comando no host) e recomeça o log desde o início da seção
+  atual (`sectionStart`); sem job, acompanha o turno do agente (preparo ou correção, conforme
+  `previewBuild.prepared`).
+- **Registro** (`agentic_builds`, `server/build-logs.ts`): um documento por build com número, status
+  (`running`/`succeeded`/`unhealthy`/`failed`/`interrupted`), método, porta, máquina local, comandos
+  executados e o log (teto de 2 MB guardando o final). O log é gravado em lote (1 s) e é **melhor
+  esforço** (falha no registro nunca derruba o build). Build "em andamento" sem turno vivo no processo
+  aparece como **Interrompido**. Excluir a mesa apaga os builds.
+- **Aba "Build (N)"** (`BuildLogView`/`BuildLogPanel`): aparece depois do primeiro build, entre Plano e
+  Adversário; linha de resumo (status, porta, "GitHub Action"/"Máquina local", fim, mensagem), seletor
+  dos builds no padrão das abas Plano/Adversário (mais recente por padrão), terminal xterm
+  (`IntegrationConsole`, com busca) e aviso quando a conexão do log cai. APIs:
+  `GET /api/agentic/workbenches/[id]/builds` e `GET …/builds/[buildId]/log` (NDJSON: `snapshot`,
+  `append` com `offset`, `status` e `ping` a cada 15 s).
 
 ## Backup do MongoDB da prévia (OPE-54 · opcional pela OPE-72)
 
@@ -207,7 +253,7 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   opção desligada.
 - **Caminho reservado antes do build**: ao iniciar o turno de build (`startBuildTurn`), a mesa
   reserva uma pasta exclusiva do ciclo em `<pasta dos worktrees>/.opex-backups/<código>/<ciclo>/`
-  (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o prompt de build manda criar o dump ali
+  (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o turno de preparo do build manda criar o dump ali
   como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto e **sem
   imprimir credenciais**. A pasta fica **fora do worktree**, então nunca entra em commit nem é
   derrubada pelo `git worktree remove`. Com o backup desligado no modo **local** a reserva é
@@ -215,7 +261,7 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
 - **Primeiro dump preservado**: retentativas do build e correções da prévia **reutilizam** o arquivo
   já criado (o prompt manda reutilizar quando existir; só cria quando não há nenhum). Reabrir a mesa
   zera a reserva, então o próximo build começa um **ciclo novo** (pasta nova).
-- **Conferência no servidor**: ao fim do turno de build, o Opex confere na máquina do OpenCode
+- **Conferência no servidor**: ao fim do turno de preparo (antes de o app rodar o build), o Opex confere na máquina do OpenCode
   (`runOpencodeShell`, `test -s`) que o dump existe e não está vazio; sem ele o build **falha** — a
   prévia não vale sem backup. O bloco JSON do agente não basta.
 - **Remoção na conclusão**: a etapa `finishing` sempre inclui a remoção do backup (mesmo com a
@@ -240,7 +286,18 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
   no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
-- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem; a
+- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
+  **área de filtros recolhível** (`CollapsibleTaskFilters`, mesmas peças do `ListFilters` de /tarefas
+  em `src/components/list/CollapsibleFilters.tsx`, sem botão de limpar). Ela **começa recolhida** a
+  cada carregamento (o estado não é salvo; trocar de tarefa ou central o mantém) em no máximo duas
+  linhas: "FILTROS" com o chevron e, abaixo, numa linha só, os chips dos filtros fora do padrão
+  (`activeDevCenterFilterChips`, `dev-center-filter-chips.ts`; no máximo 2 + "+N" com o restante na
+  dica) ou "Nenhum filtro ativo · clique para filtrar". Chips: **Projeto** (só com uma central
+  escolhida; o × volta para "Todos os projetos"), **Só mesas ativas**, **Colunas** (só quando restringe;
+  nenhuma marcada = "Colunas: nenhuma"; o × volta para todas), **Estado** e **Busca**; o × remove só
+  aquele filtro sem expandir. Clicar no resumo ou no chevron expande (altura animada com Framer
+  Motion); o chevron ⌃ recolhe. Abaixo dela fica o painel **Quota do OpenCode** (`OpencodeQuotaPanel`,
+  ver `modules/opencode-quota.md`). Expandida, a área mostra os filtros: a
   chave **"Só mesas ativas"** (`Switch`, `ActiveWorkbenchSwitch`, linha inteira — o primeiro filtro); o
   **seletor da central** (`SearchPicker`/`CentralPicker`) ocupando a **linha inteira** — o gatilho
   mostra o **repositório do GitHub** (`GithubRepoLabel` — avatar + `owner/repo` + cadeado) e a lista
@@ -296,6 +353,7 @@ planning → plan_review ─┬─ Solicitar correção do plano → planning
                         ├─ Implementar (prévia GitHub Action) → implementing → building → preview
                         └─ Implementar (fluxo PR automático)   → implementing → opening_pr → pr_open
 preview ─┬─ Solicitar correção → planning (texto vai ao planejador)
+         ├─ Gerar nova prévia → build_queued/building → preview (código atual, sem replanejar)
          └─ Aprovar e abrir PR → opening_pr → pr_open
 pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → planning (automático)
          ├─ revisão "pediu mudanças" com texto → planning (automático)
@@ -306,6 +364,7 @@ pr_open ─┬─ comentário novo (conversa/linha) ou revisão com "@opex" → 
          ├─ merge → finishing (limpeza) → done
          └─ fechado sem merge → aviso (uma vez)
 done → Reabrir mesa (texto ao planejador) → planning
+qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_review | preview | pr_open | changes_requested | done (Concluir sem PR)
 ```
 
 - `runState`: `idle` | `running` | `failed` | `interrupted`. Ações por etapa em
@@ -346,6 +405,36 @@ done → Reabrir mesa (texto ao planejador) → planning
   `opening_pr`, turno encadeado na mesma sessão), pulando a fila do build, a prévia e a aprovação:
   nenhuma porta é reservada e a limpeza não derruba ambiente. A revisão do plano continua obrigatória
   nos dois fluxos e a trilha da mesa esconde o passo "Prévia" no PR automático.
+- **Definir etapa / Concluir sem PR**: menu "Mais ações" do cabeçalho da mesa
+  (`WorkbenchStageMenu`, oculto em Concluída e em exclusão) com **Concluir mesa…** e **Definir etapa…**,
+  que abrem o `SetStageDialog` (etapa por `OptionTabs` + **motivo** obrigatório, 3–2000 caracteres,
+  schema `setWorkbenchStageSchema`). Rota `POST /workbenches/[id]/actions/set-stage` `{stage, reason}` e
+  ferramentas do Agente Opex `complete_workbench`/`set_workbench_stage` chamam a mesma
+  `setWorkbenchStage` (`workflow.ts`): tela e agente produzem o mesmo resultado.
+  - Etapas definíveis (`MANUAL_STAGES`) e regras (`manualStageBlock`, `logic.ts`; 409
+    `WORKBENCH_INVALID_STAGE` com a mensagem): **Concluída** de qualquer etapa; **Plano pronto** exige
+    plano; **Prévia pronta** exige `previewUrl`; **PR aberto**/**Mudanças pedidas** exigem PR aberto. A
+    mesma etapa é recusada; mesa concluída só sai por **Reabrir**; mesa em exclusão → 409
+    `WORKBENCH_DELETING`. Etapas de execução nunca são aceitas (400 no schema).
+  - Mesa executando ou aguardando vaga: o turno é interrompido (`stopRequestedAt`, sem reconexão
+    automática; espera até 30 s; build no GitHub Action tem a tentativa invalidada), o `pendingTurn` e a
+    fila do build são descartados.
+  - Auditoria `ATUALIZAR` com `etapaAnterior`, `etapaDefinida`, `motivo`, `manual: true` (e
+    `turnoInterrompido`), aviso na saída com o motivo e log da central.
+  - **Concluir** (`done`): grava `manualCompletion {reason, fromStage, at}` e aplica os **mesmos efeitos
+    do merge** na tarefa (`applyDoneEffects`, compartilhado com `afterMerge`: coluna "Ao concluir" da
+    central; falha só avisa). A limpeza remove **só o que a mesa registrou** (`cleanupTargets`, como na
+    exclusão; prompt `cleanupPrompt` com `reason: "manual"`) — **inclusive o backup do MongoDB da
+    prévia**, cuja remoção é conferida (`test ! -e`) antes de concluir; sem nada a limpar (ex.: Plano
+    pronto) conclui na hora, sem turno. Com backup registrado e a limpeza impossível de iniciar (ex.:
+    OpenCode fora do ar), a mesa fica em **Finalizando** com falha e **Tentar novamente** (não conclui
+    com o dump no disco). Depois, a conclusão normal (`completeWorkbench`: sessão excluída, forks,
+    fila). PR ainda aberto fica aberto no GitHub (aviso; o acompanhamento para). **Tentar novamente**
+    numa limpeza manual refaz só os alvos registrados; **Reabrir** zera `manualCompletion`. A mesa, os
+    planos, a saída e a auditoria ficam.
+  - Etapa de espera: `stage` + `runState: idle`, sem efeitos na tarefa.
+  - Tela: resposta otimista (`useSetWorkbenchStage`, "Concluindo" enquanto a conclusão roda) com
+    reversão e toast em falha.
 - **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
   canto esquerdo da barra inferior, depois do seletor de modelo e de um divisor vertical; rótulo à
   esquerda da chave, com a explicação na dica do rótulo) troca o fluxo **só desta mesa**
@@ -353,6 +442,14 @@ done → Reabrir mesa (texto ao planejador) → planning
   corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
   (ex.: Mudanças pedidas); disponível com o agente trabalhando. O fluxo é relido no fim de cada
   implementação e de cada build (`setWorkbenchPreview`, `workflow.ts`):
+  À direita da chave fica o botão de ícone **Gerar nova prévia** (`rebuild-preview`): sempre visível,
+  bloqueado com o motivo na dica (`rebuildBlockedReason`) com a chave desligada ou salvando, fora de
+  **Prévia pronta** ou com outra ação em andamento. Em Prévia pronta (com ou sem endereço da prévia)
+  reconstrói a prévia com o código atual do worktree pelo fluxo da mesa (`rebuildPreview`) — fila
+  global do build no Local ou tentativa nova no GitHub Action, porta reservada, máquina da prévia e
+  teste de saúde —, **sem replanejar e sem nova rodada do Agente Adversário** (o código não mudou);
+  com a central no limite aguarda vaga como "Gerar a prévia". Resposta otimista (a mesa vai para a
+  fila do build), auditoria (`novaPrevia`, `pedidoPor`) e aviso na saída.
 
   | Ao desligar com a mesa em | Efeito |
   |---|---|
@@ -552,7 +649,12 @@ done → Reabrir mesa (texto ao planejador) → planning
   na sessão, protocolo de leitura e agente `plan` no turno); **Build** = pode alterar arquivos na pasta
   da mesa (sessão sem restrição própria, valem as permissões do agente; turno com o agente do papel
   Fork ou `build` quando ele for o `plan`; protocolo proíbe commit/push/merge/troca de branch sem
-  pedido). O modo inicial vem do agente do papel Fork configurado na central (`plan` → Plan; demais →
+  pedido). Em Build o protocolo também proíbe subir, reconstruir ou derrubar a prévia com
+  docker/docker compose: para uma nova prévia o agente termina a resposta com a linha exata
+  `[opex:gerar-previa]` (`FORK_PREVIEW_MARKER`); ao fim do turno (não no de integração) o fork detecta
+  o marcador (`wantsPreviewRebuild`) e chama **Gerar nova prévia** da mesa (`pedidoPor: "Fork N"`),
+  avisando o sucesso ou o motivo da recusa (ex.: mesa fora de Prévia pronta). Forks em Plan ignoram o
+  marcador. O modo inicial vem do agente do papel Fork configurado na central (`plan` → Plan; demais →
   Build). Forks antigos sem o campo são tratados como Plan (eram somente leitura) e sem trava.
 - **`ForkModeSelect`** (barra inferior, só com o fork em aberto): alterna Plan/Build (`OptionTabs`)
   apenas com o agente parado (`forkModeBlockReason`: travado, fora de aberto ou respondendo). A troca
@@ -773,27 +875,71 @@ done → Reabrir mesa (texto ao planejador) → planning
 - Citar linha da saída com a mesa executando (sem campo de correção aberto) preenche o campo.
 - Fora do escopo: revisão automática de PR (sem tela de conversa) e o Agente Opex (outro motor).
 
+## Anexos nos campos da mesa
+
+- **Onde**: todos os campos de texto que mandam instruções ao agente da mesa aceitam arquivos, como
+  no chat do Agente Opex: **Informações adicionais** (abrir a mesa e Implementar), os campos de
+  feedback (**Solicitar correção** do plano/da prévia, **Descrever as mudanças** do PR, **Reabrir
+  mesa**), o **chat durante a execução** e os **forks** (abrir fork/fork de fork, mensagem e chat ao
+  vivo do fork). A orientação do Agente Adversário continua só texto.
+- **Na tela** (`AttachableTextarea`): clipe no canto do campo, colar (Ctrl+V de print; capturado no
+  contêiner, vale no modo Vim) ou arrastar (área de soltar animada). Os chips (kit compartilhado
+  `src/components/chat-attachments`) mostram miniatura/ícone, progresso, erro com "Tentar novamente"
+  e X (apaga a reserva). O botão de envio fica desabilitado com envio em andamento ou com erro
+  (dica no `title`). O texto continua obrigatório onde já era (correções, reabrir, fork); nas
+  Informações adicionais dá para mandar só arquivos. Cancelar o campo mantém os anexos na fila.
+- **Fila**: `WorkbenchUploadsProvider` (`hooks/useWorkbenchFiles.ts`, sobre a fila genérica
+  `src/hooks/useChatUploads.tsx`) fica no `WorkbenchPane`, separada por campo (`scope`: `start:<tarefa>`,
+  `implement:/feedback:/live:<mesa>`, `fork-new:<mesa|fork pai>`, `fork:<fork>`); trocar de aba, fork
+  ou etapa não perde envios. Os enviados saem da fila no sucesso da ação.
+- **Limites** (`features/agentic/files.ts`, iguais aos padrões do Opex): 10 arquivos por mensagem e
+  100 MB por arquivo.
+- **Envio** (duas fases, `src/lib/storage/staged-upload.ts`, compartilhado com o Opex):
+  `POST /api/agentic/files` reserva (`agentic_files`, sem dono) e assina o PUT para
+  `agentic/tmp/{id}/{nome}`; o navegador envia direto ao Storage S3; `POST /api/agentic/files/[id]/complete`
+  confere (HeadObject), promove para `agentic/files/{id}/{nome}` e marca pronto.
+- **Ações**: os corpos aceitam `fileIds` (até 10). O servidor confere (`loadClaimableFiles`: prontos,
+  sem dono ou já desta mesa) **antes** do turno e vincula (`claimAgenticFiles`: `workbenchId`, `forkId`)
+  quando a ação é aceita. Os ids vão no `TurnPlan`, em `pendingTurn.fileIds` (espera por vaga) e em
+  `lastPrompt.fileIds` (o **Tentar novamente** reenvia). Turnos encadeados (build) e a reconexão não
+  reenviam.
+- **Agente** (`promptFilesFor`, a cada turno que recebe a mensagem): imagens, PDFs e textos até
+  20 MB (soma até 50 MB) vão como anexo do prompt do OpenCode (`data:` URI em `files`, inclusive no
+  `delivery: "steer"` do chat ao vivo); **todos** entram numa seção "Arquivos anexados pelo
+  usuário" ao fim do prompt com link assinado do S3 (24 h, gerado a cada turno) e a instrução de
+  baixar com `curl` **fora do worktree** (`/tmp/opex-anexos/<tarefa>[/fork-N]`) e nunca commitar.
+  Melhor esforço: o que não baixa fica só com o link. O link exige o S3 acessível pela máquina do
+  OpenCode.
+- **Saída**: o evento `user` leva `files` (metadados + rota `/api/agentic/files/[id]`, nunca a URL
+  assinada); a mensagem mostra as miniaturas (ampliam) e os demais para baixar. A auditoria do chat
+  ao vivo registra `anexos` (nomes).
+- **Limpeza**: excluir a mesa (ou a central) apaga os anexos dela; descartar o fork apaga os do fork;
+  sem uso, a limpeza oportunista (`cleanupPendingAgenticFilesThrottled`, no máximo 1×/hora, disparada
+  pelas reservas) remove os sem dono há mais de 24 h (objeto primeiro, depois o registro).
+
 ## APIs (`src/app/api/agentic/`)
 
 | Rota | Uso |
 |---|---|
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
-| `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `POST /workbenches` `{centralId, taskId, text?, fileIds?}` | abre a mesa e inicia o plano; `text`/`fileIds` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `POST /files` `{name, size, mediaType?}`, `POST /files/[id]/complete`, `GET/DELETE /files/[id]` | anexos dos campos da mesa: reserva + URL do PUT no S3, confirmação, conteúdo (`?download=1`) e remoção de um anexo ainda não enviado (409 se já foi) |
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect` |
-| `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text, fileIds?}`); `implement` (`{text?, fileIds?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
+| `POST /workbenches/[id]/messages` `{text, fileIds?}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
+| `GET /workbenches/[id]/builds`, `GET /workbenches/[id]/builds/[buildId]/log` | builds da prévia (aba "Build (N)", sem o log) e o log de um build em NDJSON (`snapshot`/`append`/`status`/`ping`) |
 | `PUT /workbenches/[id]/preview` `{enabled}` | chave "Gerar prévia" da mesa (desligada = PR automático só nesta mesa; religada em PR aberto gera a prévia na hora) |
 | `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`); `model: null` volta ao padrão |
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
 
 Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (abrir, PR,
-merge, reabrir, excluir).
+merge, reabrir, definir etapa/concluir manualmente, excluir).
 
 ## Testes
 
@@ -815,7 +961,12 @@ aba Ambiente do formulário da central (`environment-section`, com o toggle do b
 (`columns-section`), fluxo da mesa — Publicar prévia vs PR automático, incluindo o **padrão herdado da
 central** (`workflow-flow-mode`) e a chave Gerar prévia da mesa (`workflow-preview-switch`), a migração que preserva o fluxo das tarefas antigas
 (`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
-(`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)),
+(`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)), definir etapa/concluir sem PR
+(`workflow-manual-stage`, `SetStageDialog`, `logic` › manualStageBlock, `actions-route`), os **anexos dos campos**
+(`files`, `files-server`, `workflow-attachments`, `workbench-attachments-ui`),
+build rodado pelo app e aba "Build (N)" — Local e GitHub Action, correções, falhas terminais e
+retomada (`workflow-build-logs`), registro do log (`build-log`, `build-logs`), execução no host
+(`preview-build`) e a tela (`BuildLogView`, `WorkbenchView`),
 `__tests__/deployment/preview-github.test.ts` (prévia remota, com e sem o dump obrigatório),
 `__tests__/components/agent-questions.test.tsx` (perguntas com descrição
 das opções) e `__tests__/lib/ai/opencode-events.test.ts`. O OpenCode e o GitHub são sempre mockados.

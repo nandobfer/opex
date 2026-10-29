@@ -1,4 +1,10 @@
-/** @vitest-environment jsdom */
+/**
+ * @vitest-environment jsdom
+ *
+ * jsdom de propósito: no happy-dom o `paste` despachado no conteúdo do CodeMirror não chega ao
+ * encaminhamento de arquivos do editor (o handler de colar do CodeMirror não roda), então o arquivo
+ * nunca é enfileirado.
+ */
 
 import { useState } from 'react'
 import { act, cleanup, render, waitFor } from '@testing-library/react'

@@ -13,7 +13,7 @@ type Listener = (line: OpexStreamLine) => void
 export interface OpexFollowUp {
     /** Texto enviado ao modelo. */
     text: string
-    kind: "message" | "confirmation" | "job"
+    kind: "message" | "confirmation" | "job" | "notice"
     /** Texto exibido no chat (padrão: o próprio `text`). */
     display?: string
     /** Arquivos enviados antes (`POST …/files`) que vão nesta mensagem. */

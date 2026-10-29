@@ -1,5 +1,6 @@
 import { isPortInUse } from "@/features/agentic/server/ports"
 import { dockerPrefix, listeningPortsCommand, parseListeningPorts, teardownCommand } from "../commands"
+import { prepareCaOverride, type PreviewOverride } from "./certificates"
 import { LocalDockerPreview, localDockerDb } from "./models"
 import { centralUsesLocal, getCentralOverride } from "./overrides"
 import { loadState, localDockerLog, publishLocalDocker, settingsOf } from "./settings"
@@ -16,14 +17,21 @@ export interface LocalBuildTarget {
     dockerPrefix: string
     /** Porta ocupada no PC ou no servidor (onde o repasse vai escutar)? */
     portCheck: (host: string, port: number) => Promise<boolean>
-    /** Registra a prévia no PC e repassa a porta reservada para o servidor. */
-    attach: (port: number) => Promise<void>
+    /**
+     * Registra a prévia no PC, gera o override do compose com as CAs do PC e repassa a porta
+     * reservada para o servidor. Devolve os arquivos do compose do build e um aviso para a mesa.
+     */
+    attach: (port: number) => Promise<PreviewOverride>
 }
 
 export interface ResolveBuildInput {
     workbenchId: string
     centralId: string
     composeProject: string
+    worktreePath: string
+    /** `composeFile` da central (vazio = descoberta padrão do compose). */
+    composeFile: string
+    portEnvVar: string
     /** A mesa já tinha uma porta (uma prévia anterior pode estar no ar). */
     hadPort: boolean
     /** Build fora do PC por decisão da central (ex.: prévia no GitHub Action): só derruba a prévia anterior no PC. */
@@ -64,15 +72,18 @@ export async function resolveBuildTarget(input: ResolveBuildInput, run: HostRunn
         dockerPrefix: dockerPrefix(settings),
         portCheck: async (host, port) => busy.has(port) || (await isPortInUse(host, port)),
         attach: async (port) => {
+            const override = await prepareCaOverride(settings, { composeProject: input.composeProject, worktreePath: input.worktreePath, composeFile: input.composeFile, portEnvVar: input.portEnvVar, port }, run)
+            if (override.notice?.level === "warn") localDockerLog.warn({ workbenchId: input.workbenchId, notice: override.notice.message }, "[local-docker] Prévia no PC sem as CAs do PC")
             await LocalDockerPreview.updateOne(
                 { workbenchId: input.workbenchId },
-                { $set: { centralId: input.centralId, composeProject: input.composeProject, port, pendingTeardown: false }, $setOnInsert: { createdAt: new Date() } },
+                { $set: { centralId: input.centralId, composeProject: input.composeProject, port, pendingTeardown: false, composeFiles: override.composeFiles ?? [] }, $setOnInsert: { createdAt: new Date() } },
                 { upsert: true },
             )
             await cancelForward(port, run)
             await forwardPort(port, run)
             localDockerLog.info({ workbenchId: input.workbenchId, port }, "[local-docker] Prévia no PC; porta repassada para o servidor")
             await publishLocalDocker("previews")
+            return override
         },
     }
 }

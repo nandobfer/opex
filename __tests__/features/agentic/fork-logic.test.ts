@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FORK_READONLY_PERMISSIONS } from '@/features/agentic/constants'
 import {
+  FORK_PREVIEW_MARKER,
   asForkMode,
   canChangeForkMode,
   canOpenChildFork,
@@ -17,6 +18,7 @@ import {
   forkTurnAgent,
   initialForkMode,
   plannerActionFor,
+  wantsPreviewRebuild,
 } from '@/features/agentic/fork-logic'
 import { parseCentralConfig } from '@/features/agentic/logic'
 import { DEFAULT_AGENTIC_SETTINGS, agenticSettingsSchema, withDefaultAgents } from '@/features/agentic/schemas'
@@ -197,6 +199,21 @@ describe('modo do fork (Plan/Build) e trava de somente leitura', () => {
     expect(forkModeNote('build', false)).toContain('PODE alterar arquivos')
     expect(forkModeNote('plan', true)).toContain('Plan (travado)')
     expect(forkModeNote('plan', false)).toContain('SOMENTE LEITURA')
+  })
+
+  it('fork Build não sobe a prévia por conta própria: pede à mesa com o marcador', () => {
+    const editable = forkInstructions('', false)
+    expect(editable).toContain('NÃO suba, reconstrua nem derrube a prévia com docker ou docker compose')
+    expect(editable).toContain(`termine a resposta com a linha exata ${FORK_PREVIEW_MARKER}`)
+    expect(FORK_PREVIEW_MARKER).toBe('[opex:gerar-previa]')
+    expect(forkInstructions('', true)).not.toContain(FORK_PREVIEW_MARKER)
+  })
+
+  it('detecta o pedido de nova prévia só com o marcador sozinho numa linha', () => {
+    expect(wantsPreviewRebuild(`Alterei o botão.\n\n${FORK_PREVIEW_MARKER}`)).toBe(true)
+    expect(wantsPreviewRebuild(`Pronto.\n  \`${FORK_PREVIEW_MARKER}\`  `)).toBe(true)
+    expect(wantsPreviewRebuild(`Para pedir, use ${FORK_PREVIEW_MARKER} no fim.`)).toBe(false)
+    expect(wantsPreviewRebuild('Sem pedido.')).toBe(false)
   })
 
   it('protocolo: Plan proíbe alterações; Build libera dentro das permissões do agente', () => {

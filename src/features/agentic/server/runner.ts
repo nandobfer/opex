@@ -26,6 +26,8 @@ export interface TurnRequest {
     attach?: boolean
     /** Instante (epoch ms) do início do turno; delimita a execução acompanhada na reconexão. */
     startedAt?: number
+    /** Anexos da mensagem do usuário (`data:` URI), enviados junto do texto. */
+    files?: readonly { uri: string; name: string }[]
 }
 
 export interface TurnHooks {
@@ -55,6 +57,7 @@ export function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks
             signal: request.signal,
             attach: request.attach,
             startedAt: request.startedAt,
+            ...(request.files?.length ? { files: request.files } : {}),
             consumption: { origin: "agentic", subject: request.workbenchId },
         },
         { ...hooks, publish },

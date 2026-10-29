@@ -3,6 +3,7 @@ import {
   ATTACHMENT_CLEANUP_JOB_ID,
   BUILDER_MACHINE_CLEANUP_JOB_ID,
   OPEX_FILES_CLEANUP_JOB_ID,
+  OPENCODE_QUOTA_JOB_ID,
   DEFAULT_CRON_JOBS,
   HEALTH_CHECK_JOB_ID,
   IN_DEVELOPMENT_INTEGRATIONS,
@@ -74,8 +75,8 @@ describe('catálogo de integrações', () => {
     expect(INTEGRATIONS.filter((def) => !def.streamsDebugOverPusher).map((def) => def.id)).toEqual(['pusher'])
   })
 
-  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada) e anexos abandonados (30 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID])
+  it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada), anexos abandonados (30 min) e quota do OpenCode (5 min)', () => {
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup'])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
@@ -84,6 +85,8 @@ describe('catálogo de integrações', () => {
     expect(DEFAULT_CRON_JOBS[6]).toMatchObject({ kind: 'internal', enabled: false, scope: 'pending', schedule: { type: 'interval', minutes: 60 } })
     expect(DEFAULT_CRON_JOBS[7]).toMatchObject({ id: ATTACHMENT_CLEANUP_JOB_ID, kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 30 } })
     expect(DEFAULT_CRON_JOBS[8]).toMatchObject({ id: OPEX_FILES_CLEANUP_JOB_ID, kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 60 } })
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === OPENCODE_QUOTA_JOB_ID)).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 5 } })
+    expect(cronJobIntegration(OPENCODE_QUOTA_JOB_ID)).toBeNull()
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue
     expect(jobs).toEqual(DEFAULT_CRON_JOBS)
   })

@@ -89,7 +89,7 @@ describe('chat durante a execução na mesa', () => {
     const id = await workbench()
     mocks.active.add(id)
     const dto = await sendLiveMessage(id, 'use o componente X')
-    expect(mocks.steer).toHaveBeenCalledWith(id, 'use o componente X')
+    expect(mocks.steer).toHaveBeenCalledWith(id, 'use o componente X', [])
     expect(mocks.runTurn).not.toHaveBeenCalled()
     expect(mocks.publish).toHaveBeenCalledWith(id, { type: 'user', text: 'use o componente X' })
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'MesaDeTrabalho', entidadeId: id, depois: { tarefa: 'OPE-90', etapa: 'implementing', mensagemDuranteExecucao: 'use o componente X' } }))

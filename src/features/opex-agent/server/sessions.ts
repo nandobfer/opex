@@ -5,6 +5,7 @@ import { publishAppEvent, publishToChannels } from "@/lib/pusher/channels"
 import { opexChannel } from "@/lib/pusher/channel-names"
 import { OPEX_AUDIT_ENTITY, OPEX_DEFAULT_TITLE, OPEX_SESSION_DELETED_EVENT, OPEX_SESSION_UPDATED_EVENT } from "../constants"
 import { opexFileKind, opexFilePath } from "../files"
+import { normalizeOpexParts } from "../live-message"
 import type { OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { forgetSession, isTurnActive } from "./hub"
 import { OWNER_SCOPE, sessionFilterOf, type OpexServerScope } from "./scope"
@@ -45,7 +46,7 @@ export function toMessageDto(doc: MessageDoc): OpexMessageDto {
         job: doc.job ?? null,
         text: doc.text ?? "",
         files: (doc.files ?? []).map(toFileDto),
-        parts: doc.parts ?? [],
+        parts: normalizeOpexParts(doc.parts ?? []),
         status: doc.status ?? "complete",
         error: doc.error ?? null,
         usage: doc.usage ?? null,

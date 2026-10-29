@@ -7,7 +7,9 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
  * - `agentic_workbenches`: uma mesa de trabalho por tarefa (etapa, sessão do OpenCode, worktree,
  *   porta da prévia, versões do plano e PR);
  * - `agentic_forks`: forks da conversa de uma mesa (sessão paralela somente leitura, resumo e integração);
- * - `agentic_events`: a saída da IA de cada mesa (e de cada fork), em ordem (`seq`), para reproduzir a tela.
+ * - `agentic_builds`: um documento por build da prévia (etapa "Subindo a prévia"), com o log do comando;
+ * - `agentic_events`: a saída da IA de cada mesa (e de cada fork), em ordem (`seq`), para reproduzir a tela;
+ * - `agentic_builds`: um documento por build da prévia (etapa "Subindo a prévia"), com o log do comando.
  */
 
 export interface IAgenticCentral {
@@ -89,6 +91,8 @@ export interface IPendingTurn {
     /** Etapa da mesa ao entrar na espera; se mudar até a vaga chegar, a espera é descartada. */
     fromStage: string
     queuedAt: Date
+    /** Anexos da mensagem do usuário (`agentic_files`), entregues quando o turno começar. */
+    fileIds?: string[]
 }
 
 /** Resumo de um fork integrado ao contexto da conversa principal (instrução durável da sessão da mesa). */
@@ -115,7 +119,8 @@ export interface IAgenticWorkbench {
     runState: string
     error: string | null
     lastStage: string | null
-    lastPrompt: { stage: string; text: string } | null
+    /** Prompt do último turno (o "Tentar novamente" reenvia o texto e os anexos). */
+    lastPrompt: { stage: string; text: string; fileIds?: string[] } | null
     /** Instante em que o último turno começou (delimita a execução acompanhada ao reconectar). */
     turnStartedAt: Date | null
     /**
@@ -140,7 +145,22 @@ export interface IAgenticWorkbench {
      * política efetiva de backup desta tentativa (false = prévia sem dump, OPE-72); ausente em
      * mesas antigas conta como exigido.
      */
-    previewBuild?: { method: "local" | "github"; attempt?: string; statePath?: string; dumpRequired?: boolean } | null
+    /**
+     * Build da prévia em curso. `attempt`/`statePath` = tentativa do GitHub Action; `job` = comando
+     * rodando no host pelo app (`docker compose … up -d --build` ou o script da prévia remota; a
+     * reconexão retoma a leitura); `port`/`docker` = como o build foi montado (refazer o comando depois
+     * de uma correção); `prepared` = o turno de preparo do agente (dump/commit) já concluiu.
+     */
+    previewBuild?: {
+        method: "local" | "github"
+        attempt?: string
+        statePath?: string
+        dumpRequired?: boolean
+        job?: string
+        port?: number
+        docker?: { prefix: string; files?: string[] } | null
+        prepared?: boolean
+    } | null
     previewUrl: string | null
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
@@ -168,6 +188,8 @@ export interface IAgenticWorkbench {
     forksDonePrompt: { count: number; at: Date } | null
     pr: IWorkbenchPr | null
     pastPrs: IWorkbenchPr[]
+    /** Conclusão manual (sem PR) pela ação "Definir etapa": motivo e etapa de origem; `null` na conclusão pelo merge. */
+    manualCompletion?: { reason: string; fromStage: string; at: Date } | null
     pendingPermissions: unknown[]
     pendingForms: unknown[]
     usage: { costUsd: number; inputTokens: number; outputTokens: number; reasoningTokens: number }
@@ -216,6 +238,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         forksDonePrompt: { type: Schema.Types.Mixed, default: null },
         pr: { type: Schema.Types.Mixed, default: null },
         pastPrs: { type: [Schema.Types.Mixed] as unknown as IWorkbenchPr[], default: [] },
+        manualCompletion: { type: Schema.Types.Mixed, default: null },
         pendingPermissions: { type: [Schema.Types.Mixed], default: [] },
         pendingForms: { type: [Schema.Types.Mixed], default: [] },
         usage: { type: Schema.Types.Mixed, default: () => ({ costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }) },
@@ -274,7 +297,7 @@ export interface IAgenticFork {
     /** Resumo proposto para integração (em revisão enquanto `integrating`). */
     summary: string | null
     integration: IForkIntegration | null
-    lastPrompt: { text: string } | null
+    lastPrompt: { text: string; fileIds?: string[] } | null
     turnStartedAt: Date | null
     pendingPermissions: unknown[]
     pendingForms: unknown[]
@@ -339,11 +362,98 @@ const AgenticEventSchema = new Schema<IAgenticEvent>(
 )
 AgenticEventSchema.index({ workbenchId: 1, seq: 1 }, { unique: true })
 
+export type AgenticBuildStatus = "running" | "succeeded" | "unhealthy" | "failed" | "interrupted"
+
+export interface IAgenticBuild {
+    _id: Types.ObjectId
+    workbenchId: string
+    /** 1, 2, 3… por mesa. */
+    number: number
+    status: AgenticBuildStatus
+    /** Método da prévia: comando local (`docker compose`) ou o script do GitHub Action. */
+    method: "local" | "github"
+    startedAt: Date
+    endedAt: Date | null
+    port: number | null
+    /** Prévia no PC (Builder Machine). */
+    local: boolean
+    /** Comandos de build executados (na ordem: o primeiro e um por correção do agente). */
+    commands: string[]
+    /** Posição absoluta onde começa a saída da execução atual (retomar a leitura após reiniciar o app). */
+    sectionStart: number
+    /** Log (com teto: guarda o final; `droppedChars` conta o início descartado). */
+    log: string
+    /** Tamanho total recebido (posição absoluta do fim do log). */
+    logChars: number
+    droppedChars: number
+    message: string | null
+}
+
+const AgenticBuildSchema = new Schema<IAgenticBuild>(
+    {
+        workbenchId: { type: String, required: true },
+        number: { type: Number, required: true },
+        status: { type: String, required: true, default: "running" },
+        method: { type: String, default: "local" },
+        startedAt: { type: Date, required: true, default: () => new Date() },
+        endedAt: { type: Date, default: null },
+        port: { type: Number, default: null },
+        local: { type: Boolean, default: false },
+        commands: { type: [String], default: [] },
+        sectionStart: { type: Number, default: 0 },
+        log: { type: String, default: "" },
+        logChars: { type: Number, default: 0 },
+        droppedChars: { type: Number, default: 0 },
+        message: { type: String, default: null },
+    },
+    { collection: "agentic_builds", versionKey: false, minimize: false },
+)
+AgenticBuildSchema.index({ workbenchId: 1, number: 1 }, { unique: true })
+
+/**
+ * Arquivo anexado a uma mensagem da mesa de trabalho (ou de um fork). O binário fica no Storage S3
+ * (`uploadKey` temporária até a confirmação, `key` definitiva); sem `workbenchId`, ainda não foi numa
+ * mensagem (a limpeza oportunista remove depois de 24 h).
+ */
+export interface IAgenticFile {
+    _id: Types.ObjectId
+    workbenchId: string | null
+    forkId: string | null
+    name: string
+    mediaType: string
+    size: number
+    key: string
+    uploadKey: string | null
+    ready: boolean
+    claimedAt: Date | null
+    createdAt: Date
+}
+
+const AgenticFileSchema = new Schema<IAgenticFile>(
+    {
+        workbenchId: { type: String, default: null },
+        forkId: { type: String, default: null },
+        name: { type: String, required: true },
+        mediaType: { type: String, required: true },
+        size: { type: Number, required: true },
+        key: { type: String, required: true },
+        uploadKey: { type: String, default: null },
+        ready: { type: Boolean, default: false },
+        claimedAt: { type: Date, default: null },
+    },
+    { collection: "agentic_files", versionKey: false, timestamps: { createdAt: true, updatedAt: false } },
+)
+AgenticFileSchema.index({ workbenchId: 1 })
+AgenticFileSchema.index({ forkId: 1 })
+AgenticFileSchema.index({ workbenchId: 1, createdAt: 1 })
+
 if (process.env.NODE_ENV === "development") {
+    delete models.AgenticFile
     delete models.AgenticCentral
     delete models.AgenticWorkbench
     delete models.AgenticFork
     delete models.AgenticEvent
+    delete models.AgenticBuild
 }
 
 export const AgenticCentral: Model<IAgenticCentral> = (models.AgenticCentral as Model<IAgenticCentral>) || model<IAgenticCentral>("AgenticCentral", AgenticCentralSchema)
@@ -351,3 +461,5 @@ export const AgenticWorkbench: Model<IAgenticWorkbench> =
     (models.AgenticWorkbench as Model<IAgenticWorkbench>) || model<IAgenticWorkbench>("AgenticWorkbench", AgenticWorkbenchSchema)
 export const AgenticFork: Model<IAgenticFork> = (models.AgenticFork as Model<IAgenticFork>) || model<IAgenticFork>("AgenticFork", AgenticForkSchema)
 export const AgenticEvent: Model<IAgenticEvent> = (models.AgenticEvent as Model<IAgenticEvent>) || model<IAgenticEvent>("AgenticEvent", AgenticEventSchema)
+export const AgenticBuild: Model<IAgenticBuild> = (models.AgenticBuild as Model<IAgenticBuild>) || model<IAgenticBuild>("AgenticBuild", AgenticBuildSchema)
+export const AgenticFile: Model<IAgenticFile> = (models.AgenticFile as Model<IAgenticFile>) || model<IAgenticFile>("AgenticFile", AgenticFileSchema)

@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
-import { cancelForwardCommand, checkTunnelCommand, closeTunnelCommand, connectionProblem, forwardPortCommand, machineInfoCommand, openTunnelCommand, parseMachineInfo, remoteCommand, teardownCommand } from "../commands"
+import { cancelForwardCommand, checkTunnelCommand, closeTunnelCommand, connectionProblem, forwardPortCommand, machineInfoCommand, openTunnelCommand, parseMachineInfo, remoteCommand, removeComposeOverrideCommand, teardownCommand } from "../commands"
 import { LOCAL_DOCKER_AUDIT_ENTITY } from "../constants"
 import type { LocalDockerSettings } from "../schemas"
 import type { LocalDockerMachineInfo, LocalDockerPreviewDto, LocalDockerStatusDto } from "../types"
@@ -78,6 +78,7 @@ async function teardownNow(settings: LocalDockerSettings, preview: Pick<ILocalDo
     const result = await run(teardownCommand(settings.contextName, preview.composeProject), 120_000)
     if (result.exitCode !== 0) throw new Error(`Não foi possível derrubar a prévia ${preview.composeProject} no PC${lastLine(result.output) ? `: ${lastLine(result.output)}` : ""}`)
     await cancelForward(preview.port, run)
+    await run(removeComposeOverrideCommand(preview.composeProject), 15_000)
     await LocalDockerPreview.deleteOne({ workbenchId: preview.workbenchId })
 }
 

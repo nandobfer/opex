@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React, { createRef } from "react"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"

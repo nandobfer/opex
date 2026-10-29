@@ -1,9 +1,10 @@
-import { AlarmClock, Brain, BrainCircuit, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
+import { AlarmClock, BookOpen, Boxes, Brain, BrainCircuit, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
 
 export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     context: Compass,
+    docs: BookOpen,
     files: Paperclip,
     memories: Brain,
     tasks: ListTodo,
@@ -23,6 +24,7 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     host: SquareTerminal,
     finance: Wallet,
     clients: Users,
+    environments: Boxes,
 }
 
 const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
@@ -31,6 +33,7 @@ const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
     previews: Sparkles,
     files: Paperclip,
     dashboard: LayoutDashboard,
+    environments: Boxes,
     finance: Wallet,
     users: Users,
     jobs: AlarmClock,

@@ -56,12 +56,15 @@ const PREVIEW = row(['gosipal-GO-DEV-717', 'running', 'Up 5m', 'sipal/painel:GO-
 const OTHER = row(['outro-app', 'running', 'Up', 'nginx', 'outro', 'web', '', '', '', '', ''])
 
 /** Host falso: túnel aberto/fechado, lista de containers do PC e o registro de cada comando. */
-function fakeHost(options: { open?: boolean; containers?: string[]; keyPresent?: boolean; fail?: (command: string) => boolean } = {}) {
+function fakeHost(options: { open?: boolean; containers?: string[]; keyPresent?: boolean; fail?: (command: string) => boolean; issuers?: { server: string; pc: string }; bundle?: boolean } = {}) {
   const calls: string[] = []
   const run = vi.fn(async (command: string): Promise<HostResult> => {
     calls.push(command)
     const done = (output = ''): HostResult => ({ exitCode: 0, output })
     if (options.fail?.(command)) return { exitCode: 1, output: 'falhou de propósito' }
+    if (command.startsWith('command -v openssl')) return done(options.issuers?.server ?? 'NO_OPENSSL')
+    if (command.startsWith('ssh -S') && command.includes('openssl s_client')) return done(options.issuers?.pc ?? 'NO_OPENSSL')
+    if (command.includes('test -r')) return options.bundle === false ? { exitCode: 1, output: '' } : done()
     if (command.includes('-O check')) return options.open === false ? { exitCode: 255, output: 'No such file' } : done('Master running')
     if (command.includes(' ps -a --format')) return done((options.containers ?? [ALIAS_MONGO, ALIAS_SOKETI, BUILDER]).join('\n'))
     if (command.includes(' info --format')) return done('29.5.1|pc|12|8000000000')
@@ -98,6 +101,7 @@ describe('preparo do Docker do PC por diferença', () => {
       ['Apelido devteam-soketi → 192.168.0.64:6001', 'Sem mudança'],
       ['Apelido devteam-minio → 192.168.0.64:9000', 'Criado'],
       ['Builder opex-local-builder', 'Pronto'],
+      ['Certificados (inspeção TLS)', 'Não verificado (sem openssl ou sem acesso a api.clerk.com)'],
     ])
     expect(host.calls.filter((command) => command.includes(' run -d '))).toHaveLength(1)
     expect(host.calls.some((command) => command.includes('gosipal-GO-DEV-717') || command.includes('go-sipal-go-dev-717'))).toBe(false)
@@ -107,7 +111,7 @@ describe('preparo do Docker do PC por diferença', () => {
     await configured()
     const host = fakeHost()
     const steps = await reconcileEnvironment({ ...settings, builderMemoryGb: 4, builderCpus: 2 }, host.run)
-    expect(steps.at(-1)).toMatchObject({ label: 'Builder opex-local-builder (recriado, cache mantido)', ok: true })
+    expect(steps.at(-2)).toMatchObject({ label: 'Builder opex-local-builder (recriado, cache mantido)', ok: true })
     expect(host.calls.some((command) => command.includes('docker buildx rm --keep-state opex-local-builder') && command.includes('memory=4096m'))).toBe(true)
     expect(state().docs[0]!.builderApplied).toEqual({ memoryGb: 4, cpus: 2 })
   })
@@ -118,6 +122,28 @@ describe('preparo do Docker do PC por diferença', () => {
     const result = await runMachineAction('prepare', 'local', fakeHost().run)
     expect(result.ok).toBe(true)
     expect((await getLocalDockerSettings()).lastPrepare).toMatchObject({ ok: true, trigger: 'manual' })
+  })
+})
+
+describe('preparo: certificados do PC (inspeção TLS)', () => {
+  const GOOGLE = 'issuer=C=US, O=Google Trust Services, CN=WE1'
+  const FORTI = 'issuer=CN = FortiGate SubCA Global'
+  const certificates = async (options: Parameters<typeof fakeHost>[0], extra: Partial<typeof settings> = {}) => (await reconcileEnvironment({ ...settings, ...extra }, fakeHost(options).run)).at(-1)!
+
+  it('mesmo emissor no servidor e no PC: sem inspeção', async () => {
+    await configured()
+    expect(await certificates({ issuers: { server: GOOGLE, pc: 'issuer=C = US, O = Google Trust Services, CN = WE1' } })).toEqual({ label: 'Certificados (inspeção TLS)', ok: true, detail: 'Sem inspeção TLS (emissor C=US, O=Google Trust Services, CN=WE1)' })
+  })
+
+  it('inspeção TLS com o bundle no PC: ok, as prévias recebem as CAs', async () => {
+    await configured()
+    expect(await certificates({ issuers: { server: GOOGLE, pc: FORTI } })).toMatchObject({ ok: true, detail: expect.stringContaining('emissor no PC: CN=FortiGate SubCA Global') })
+  })
+
+  it('inspeção TLS sem o bundle ou com a injeção desligada: o preparo falha com o motivo', async () => {
+    await configured()
+    expect(await certificates({ issuers: { server: GOOGLE, pc: FORTI }, bundle: false })).toMatchObject({ ok: false, detail: expect.stringContaining('/etc/ssl/certs/ca-certificates.crt não existe no PC') })
+    expect(await certificates({ issuers: { server: GOOGLE, pc: FORTI } }, { trustPcCertificates: false })).toMatchObject({ ok: false, detail: expect.stringContaining('injeção das CAs do PC está desligada') })
   })
 })
 
@@ -164,6 +190,13 @@ describe('containers do PC', () => {
     const host = fakeHost({ containers: [PREVIEW] })
     await runContainerAction('gosipal-GO-DEV-717', 'recreate', false, 'local', host.run)
     expect(host.calls).toContain("cd '/w/go-dev-717' && PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' up -d --force-recreate --no-build 'app'")
+  })
+
+  it('recriar a prévia usa os mesmos arquivos do compose do build (com o override das CAs)', async () => {
+    previews().docs[0]!.composeFiles = ['docker-compose.yml', '/home/srv/.opex-local/compose/go-sipal-go-dev-717.ca.yml']
+    const host = fakeHost({ containers: [PREVIEW] })
+    await runContainerAction('gosipal-GO-DEV-717', 'recreate', false, 'local', host.run)
+    expect(host.calls).toContain("cd '/w/go-dev-717' && PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' -f 'docker-compose.yml' -f '/home/srv/.opex-local/compose/go-sipal-go-dev-717.ca.yml' up -d --force-recreate --no-build 'app'")
   })
 
   it('derrubar o builder usa o buildx; apagar o builder esquece os limites aplicados', async () => {

@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -20,6 +20,9 @@ vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({
   useLocalDockerTunnel: () => ({ mutate: mocks.tunnel, isPending: false }),
   useLocalDockerMachine: () => ({ mutate: mocks.machine, isPending: false }),
   useLocalDockerKey: () => ({ mutate: mocks.key, isPending: false }),
+  useLocalDockerStatus: () => ({ data: undefined }),
+  useLocalDockerBootstrap: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
+  useLocalDockerManual: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
   useLocalDockerOverride: () => ({ isLoading: false, isError: false, data: { centralId: 'c1', mode: mocks.mode } }),
   useSetLocalDockerOverride: () => ({ mutate: mocks.override }),
   useLocalDockerRealtime: () => {},
@@ -27,7 +30,11 @@ vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({
 vi.mock('@/features/integrations/components/detail/GeneralCard', () => ({ GeneralCard: () => <div>Geral</div> }))
 
 import { TunnelStatusCard } from '@/features/local-docker/components/tunnel/TunnelStatusCard'
-import { SetupChecklist, setupChecklist } from '@/features/local-docker/components/tunnel/SetupChecklist'
+import { SetupChecklist, checklistSummary, setupChecklist } from '@/features/local-docker/components/tunnel/SetupChecklist'
+import { BUILDER_MACHINE_TABS } from '@/features/local-docker/constants'
+import { GeneralTab } from '@/features/local-docker/components/general/GeneralTab'
+import { SetupTab } from '@/features/local-docker/components/setup/SetupTab'
+import { DockerTab } from '@/features/local-docker/components/docker/DockerTab'
 import { ContainerRow, deleteDescription } from '@/features/local-docker/components/tunnel/ContainerRow'
 import { CONNECTION_MODES, ConnectionTab } from '@/features/local-docker/components/connection/ConnectionTab'
 import { KeyCard, importKeyError } from '@/features/local-docker/components/setup/KeyCard'
@@ -132,9 +139,88 @@ describe('aba Túnel: passos pendentes', () => {
     expect(screen.getByRole('button', { name: /Preparar o PC/ }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('tudo feito: avisa que está pronta', () => {
+  it('tudo feito: avisa que está pronta (com o card recolhido, só aparece ao abrir)', () => {
     render(<SetupChecklist saved={saved()} status={status()} unsaved={false} goTo={vi.fn()} />)
+    expect(screen.queryByText('Builder Machine pronta')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Configuração/ }))
     expect(screen.getByText('Builder Machine pronta')).toBeTruthy()
+  })
+})
+
+describe('aba Túnel: card Configuração recolhível', () => {
+  const pendingProps = { saved: saved({ key: { configured: false, source: null, fingerprint: null } }), status: status({ tunnelOpen: false }), unsaved: false, goTo: vi.fn() }
+
+  it('abre sozinho com pendência e fecha sozinho quando tudo está pronto', () => {
+    const { unmount } = render(<SetupChecklist {...pendingProps} />)
+    expect(screen.getByRole('button', { name: /Configuração/ }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('Chave do servidor')).toBeTruthy()
+    unmount()
+    render(<SetupChecklist saved={saved()} status={status()} unsaved={false} goTo={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Configuração/ }).getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('Chave do servidor')).toBeNull()
+  })
+
+  it('o status geral no canto: Pronta, N pendentes ou Verificando', () => {
+    const { unmount } = render(<SetupChecklist saved={saved()} status={status()} unsaved={false} goTo={vi.fn()} />)
+    expect(screen.getByText('Pronta')).toBeTruthy()
+    unmount()
+    const pending = render(<SetupChecklist {...pendingProps} />)
+    expect(screen.getByText('2 pendentes')).toBeTruthy()
+    pending.unmount()
+    render(<SetupChecklist saved={saved()} status={undefined} unsaved={false} goTo={vi.fn()} />)
+    expect(screen.getByText('Verificando…')).toBeTruthy()
+  })
+
+  it('o usuário manda: recolher e expandir não depende mais do status', () => {
+    render(<SetupChecklist {...pendingProps} />)
+    const toggle = screen.getByRole('button', { name: /Configuração/ })
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('Chave do servidor')).toBeNull()
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('Chave do servidor')).toBeTruthy()
+  })
+
+  it('resumo: conta os passos que faltam', () => {
+    expect(checklistSummary(setupChecklist(saved(), status(), false))).toEqual({ pending: 0, ready: true })
+    expect(checklistSummary(setupChecklist(saved({ lastPrepare: null }), status(), true))).toEqual({ pending: 2, ready: false })
+  })
+})
+
+describe('abas: ordem e onde cada seção fica', () => {
+  it('Geral é a primeira aba de configuração; Docker do PC é a última', () => {
+    expect(BUILDER_MACHINE_TABS).toEqual(['geral', 'tunel', 'conexao', 'preparo', 'docker'])
+  })
+
+  it('aba Geral mostra o Geral da integração e a ativação', () => {
+    render(<GeneralTab draft={{ environment: 'interno', debugMode: false, publicValues: { active: true }, secrets: {}, swaggerUrl: '' } as never} setDraft={vi.fn()} savedActive />)
+    expect(screen.getByText('Geral')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /Integração ativa/ })).toBeTruthy()
+  })
+
+  it('Preparo do PC: só chave e script; o Docker do PC fica na aba Docker', () => {
+    const { unmount } = render(<SetupTab saved={saved()} mode="reverse" unsaved={false} />)
+    expect(screen.queryByRole('button', { name: /Preparar o Docker do PC/ })).toBeNull()
+    unmount()
+    render(<DockerHarness />)
+    expect(screen.getByRole('button', { name: /Preparar o Docker do PC/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Testar conexão/ })).toBeTruthy()
+  })
+
+  it('aba Docker: certificados do PC vêm ligados; desligar bloqueia o caminho do bundle', () => {
+    render(<DockerHarness />)
+    const bundle = screen.getByLabelText('Bundle de CAs no PC') as HTMLInputElement
+    expect(bundle.value).toBe('/etc/ssl/certs/ca-certificates.crt')
+    expect(bundle.disabled).toBe(false)
+    fireEvent.click(screen.getByRole('switch', { name: /Confiar nas CAs do PC/ }))
+    expect((screen.getByLabelText('Bundle de CAs no PC') as HTMLInputElement).disabled).toBe(true)
+  })
+
+  it('preparo na aba Docker é bloqueado com alterações não salvas', () => {
+    render(<DockerHarness unsaved />)
+    expect(screen.getByRole('button', { name: /Preparar o Docker do PC/ }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('Salve a configuração antes de preparar o PC.')).toBeTruthy()
   })
 })
 
@@ -164,7 +250,12 @@ describe('aba Túnel: containers', () => {
 
 function ConnectionHarness({ mode }: { mode: LocalDockerSettings['mode'] }) {
   const form = useForm<LocalDockerSettings>({ defaultValues: { ...DEFAULT_LOCAL_DOCKER_SETTINGS, mode } })
-  return <ConnectionTab form={form} general={<div>Geral</div>} />
+  return <ConnectionTab form={form} />
+}
+
+function DockerHarness({ unsaved = false }: { unsaved?: boolean }) {
+  const form = useForm<LocalDockerSettings>({ defaultValues: DEFAULT_LOCAL_DOCKER_SETTINGS })
+  return <DockerTab form={form} saved={saved()} unsaved={unsaved} />
 }
 
 describe('aba Conexão com o PC', () => {

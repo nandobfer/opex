@@ -7,11 +7,14 @@ import { Field } from "@/components/ui/field"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import type { LocalDockerSettings } from "../../schemas"
+import type { LocalDockerSettingsDto } from "../../types"
 import { NumberField } from "../NumberField"
 import { AliasesCard } from "./AliasesCard"
+import { CertificatesCard } from "./CertificatesCard"
+import { PrepareCard } from "./PrepareCard"
 
-/** Aba "Docker do PC": builder dedicado (com limites), rede e apelidos de rede. */
-export function DockerTab({ form }: { form: UseFormReturn<LocalDockerSettings> }) {
+/** Aba "Docker do PC": builder dedicado (com limites), rede, apelidos, certificados e o preparo do Docker do PC. */
+export function DockerTab({ form, saved, unsaved }: { form: UseFormReturn<LocalDockerSettings>; saved: LocalDockerSettingsDto; unsaved: boolean }) {
     const errors = form.formState.errors
     const builderName = useWatch({ control: form.control, name: "builderName" })
     return (
@@ -67,6 +70,8 @@ export function DockerTab({ form }: { form: UseFormReturn<LocalDockerSettings> }
                 </CardContent>
             </Card>
             <AliasesCard form={form} />
+            <CertificatesCard form={form} />
+            <PrepareCard lastPrepare={saved.lastPrepare} blocked={unsaved ? "Salve a configuração antes de preparar o PC" : !saved.key.configured ? "Gere ou insira a chave do servidor primeiro" : null} />
         </>
     )
 }

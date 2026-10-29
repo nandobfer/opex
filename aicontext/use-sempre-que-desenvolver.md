@@ -123,6 +123,11 @@ Testes Vitest em `__tests__/` para serviços, APIs, hooks, componentes complexos
 negócio. O setup não carrega `@testing-library/jest-dom`; use APIs nativas do DOM. Componentes
 animados usam o mock de `framer-motion` (`__tests__/helpers/framer-motion.tsx`).
 
+Teste de componente/hook declara `@vitest-environment happy-dom` (o padrão do projeto é `node`);
+`jsdom` só como exceção justificada no docblock. O setup de DOM desliga as animações nativas
+(`MotionGlobalConfig.skipAnimations`), então asserte o estado final. Não ligue `isolate: false`.
+Detalhes, exceções e como rodar só os testes afetados: `AGENTS.md`, seção 6.
+
 ## Commits
 
 Mensagens claras, com bump de versão no `package.json`:

@@ -10,7 +10,7 @@ import type { CheckBranch } from "@/lib/check-tree"
  * valem quando o dono as liga para o cliente (`opexAgent.enabledOptInTools`).
  */
 
-export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "finance", "users", "jobs"] as const
+export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "environments", "finance", "users", "jobs"] as const
 export type OpexClientToolGroup = (typeof OPEX_CLIENT_TOOL_GROUPS)[number]
 
 export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label: string; description: string; adminOnly?: boolean; optIn?: boolean }> = {
@@ -19,6 +19,7 @@ export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label:
     previews: { label: "Orçamentos", description: "Pedidos de nova tarefa: criar, gerar com IA, corrigir, estimar e aprovar" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
     dashboard: { label: "Dashboard", description: "Métricas de tarefas e do período" },
+    environments: { label: "Ambientes", description: "Estado dos ambientes dos repositórios do cliente; implantar, levantar e reiniciar (admin)" },
     finance: { label: "Financeiro", description: "Faturamento por repositório, horas e serviços no período", adminOnly: true },
     users: { label: "Usuários", description: "Usuários do cliente: listar, editar e remover vínculos", adminOnly: true },
     jobs: { label: "Jobs agendados", description: "Agendar prompts para o agente executar sozinho mais tarde (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar os do próprio usuário", optIn: true },
@@ -60,6 +61,10 @@ export const OPEX_CLIENT_TOOLS: readonly OpexClientToolMeta[] = [
     { name: "attach_files_to_task", group: "files", label: "Anexar à tarefa", hint: "Copia arquivos do chat para uma tarefa", risk: "write" },
     { name: "attach_files_to_preview", group: "files", label: "Anexar ao orçamento", hint: "Copia arquivos do chat para um pedido", risk: "write" },
     { name: "get_dashboard", group: "dashboard", label: "Dashboard", hint: "Tarefas por coluna, repositório, tags e período", risk: "read" },
+    { name: "list_environments", group: "environments", label: "Listar ambientes", hint: "Estado, ref, versão e último deploy dos ambientes do cliente", risk: "read" },
+    { name: "deploy_environment", group: "environments", label: "Implantar ambiente", hint: "Implanta a ref salva do ambiente", risk: "destructive", adminOnly: true },
+    { name: "start_environment", group: "environments", label: "Levantar ambiente", hint: "Sobe os serviços de um ambiente parado", risk: "write", adminOnly: true },
+    { name: "restart_environment", group: "environments", label: "Reiniciar ambiente", hint: "Reinicia os serviços do ambiente", risk: "destructive", adminOnly: true },
     { name: "get_finance", group: "finance", label: "Financeiro", hint: "Faturamento e horas por repositório no período", risk: "read", adminOnly: true },
     { name: "get_service", group: "finance", label: "Ler serviço", hint: "Detalhe de um serviço faturado", risk: "read", adminOnly: true },
     { name: "list_users", group: "users", label: "Listar usuários", hint: "Usuários vinculados ao cliente e papéis", risk: "read", adminOnly: true },

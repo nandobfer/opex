@@ -104,6 +104,8 @@ export async function deleteCentral(id: string, actorId: string): Promise<void> 
     await (await import("./forks")).deleteCentralForks(id)
     const finished = await AgenticWorkbench.find({ centralId: id }).select({ _id: 1 }).lean()
     await AgenticEvent.deleteMany({ workbenchId: { $in: finished.map((item) => String(item._id)) } })
+    const { deleteWorkbenchFiles } = await import("./files")
+    for (const item of finished) await deleteWorkbenchFiles(String(item._id)).catch(() => undefined)
     await AgenticWorkbench.deleteMany({ centralId: id })
     await AgenticCentral.deleteOne({ _id: doc._id })
     await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName } })

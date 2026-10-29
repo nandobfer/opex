@@ -39,7 +39,7 @@ export interface IOpexMessage {
     sessionId: Types.ObjectId
     seq: number
     role: "user" | "assistant"
-    kind: "message" | "confirmation" | "job"
+    kind: "message" | "confirmation" | "job" | "notice"
     /** Mensagem disparada por um job agendado. */
     job?: { id: string; title: string } | null
     text: string
@@ -119,7 +119,7 @@ const OpexMessageSchema = new Schema<IOpexMessage>(
         sessionId: { type: Schema.Types.ObjectId, required: true },
         seq: { type: Number, required: true },
         role: { type: String, enum: ["user", "assistant"], required: true },
-        kind: { type: String, enum: ["message", "confirmation", "job"], default: "message" },
+        kind: { type: String, enum: ["message", "confirmation", "job", "notice"], default: "message" },
         job: { type: Schema.Types.Mixed, default: undefined },
         text: { type: String, default: "" },
         files: { type: Schema.Types.Mixed, default: [] },

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
 import {
   branchNameFor,
-  buildPrompt,
+  buildFixPrompt,
   cleanupPrompt,
   composeProjectFor,
   ciFixPrompt,
@@ -12,7 +12,10 @@ import {
   formatPrFeedback,
   implementPrompt,
   planPrompt,
+  previewBuildCommands,
+  previewPreparePrompt,
   prPrompt,
+  remotePreviewCommands,
   reopenPrompt,
   slugify,
   worktreePathFor,
@@ -59,63 +62,82 @@ describe('mensagens das etapas', () => {
   })
 
   it('build usa a variável e a porta reservada', () => {
-    const text = buildPrompt({ ...config, environment: { ...config.environment, portEnvVar: 'APP_PORT', composeFile: 'docker/compose.yml' } }, ctx, 4015, backup)
-    expect(text).toContain('APP_PORT=4015 docker compose -p portal-go-dev-12 -f docker/compose.yml up -d --build')
-    expect(text).toContain('4001–4098')
+    const cmd = previewBuildCommands({ ...config, environment: { ...config.environment, portEnvVar: 'APP_PORT', composeFile: 'docker/compose.yml' } }, ctx, 4015)
+    expect(cmd.command).toBe('APP_PORT=4015 docker compose -p portal-go-dev-12 -f docker/compose.yml up -d --build')
+    // O app roda no worktree e força a saída do BuildKit linha a linha (log da aba Build).
+    expect(cmd.run).toBe(`cd '/home/u/app/worktrees/go-dev-12' && BUILDKIT_PROGRESS=plain ${cmd.command}`)
   })
 
   it('build usa o builder do Docker da central quando configurado', () => {
-    const text = buildPrompt({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015, backup)
-    expect(text).toContain('BUILDX_BUILDER=limit-builder PORT=4015 docker compose -p portal-go-dev-12 up -d --build')
-    expect(text).toContain('NÃO troque o builder padrão do host')
+    const cmd = previewBuildCommands({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015)
+    expect(cmd.command).toBe('BUILDX_BUILDER=limit-builder PORT=4015 docker compose -p portal-go-dev-12 up -d --build')
   })
 
   it('build na Builder Machine: o prefixo do Docker do PC vence o builder da central', () => {
     const prefix = 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder'
-    const text = buildPrompt({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015, backup, undefined, { prefix })
-    expect(text).toContain(`\`${prefix} PORT=4015 docker compose -p portal-go-dev-12 up -d --build\``)
-    expect(text).toContain(`${prefix} docker compose -p portal-go-dev-12 logs --tail 100`)
-    expect(text).not.toContain('limit-builder')
-    expect(text).toContain('docker context use')
-    expect(text).toContain('bind mounts')
+    const cmd = previewBuildCommands({ ...config, environment: { ...config.environment, dockerBuilder: 'limit-builder' } }, ctx, 4015, { prefix })
+    expect(cmd.command).toBe(`${prefix} PORT=4015 docker compose -p portal-go-dev-12 up -d --build`)
+    expect(cmd.logs).toBe(`${prefix} docker compose -p portal-go-dev-12 logs --tail 100`)
+    const fix = buildFixPrompt(config, ctx, 4015, { exitCode: 1, tail: 'erro', round: 1, command: cmd.command }, { docker: { prefix } })
+    expect(fix).toContain('docker context use')
+    expect(fix).toContain('bind mounts')
   })
 
-  it('build no GitHub Action ignora o prefixo da Builder Machine', () => {
-    const text = buildPrompt(config, ctx, 4015, backup, { attempt: 'a1', statePath: '/tmp/s.json' }, { prefix: 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder' })
-    expect(text).not.toContain('DOCKER_CONTEXT=')
-    expect(text).toContain('docker compose -p portal-go-dev-12 logs --tail 100')
-  })
-
-  it('build no GitHub Action manda rodar o script em primeiro plano até o fim, sem encerrar o turno antes', () => {
-    const text = buildPrompt(config, ctx, 4015, backup, { attempt: 'a1', statePath: '/tmp/s.json' })
-    expect(text).toContain('EM PRIMEIRO PLANO e até o fim')
-    expect(text).toContain('NÃO use background')
-    expect(text).toContain('NÃO encerre o turno')
+  it('build na Builder Machine com as CAs do PC: usa exatamente os arquivos do compose (o último é o override)', () => {
+    const prefix = 'DOCKER_CONTEXT=opex-local BUILDX_BUILDER=opex-local-builder'
+    const files = ['docker-compose.yml', '/home/srv/.opex-local/compose/portal-go-dev-12.ca.yml']
+    const cmd = previewBuildCommands(config, ctx, 4015, { prefix, files })
+    expect(cmd.command).toBe(`${prefix} PORT=4015 docker compose -p portal-go-dev-12 -f docker-compose.yml -f /home/srv/.opex-local/compose/portal-go-dev-12.ca.yml up -d --build`)
+    expect(cmd.logs).toBe(`${prefix} docker compose -p portal-go-dev-12 -f docker-compose.yml -f /home/srv/.opex-local/compose/portal-go-dev-12.ca.yml logs --tail 100`)
+    expect(buildFixPrompt(config, ctx, 4015, { exitCode: 1, tail: '', round: 1, command: cmd.command }, { docker: { prefix, files } })).toContain('monta as CAs do PC nos containers')
   })
 
   it('sem builder configurado, o build usa o padrão do host', () => {
-    const text = buildPrompt(config, ctx, 4015, backup)
-    expect(text).toContain('`PORT=4015 docker compose -p portal-go-dev-12 up -d --build`')
-    expect(text).not.toContain('BUILDX_BUILDER')
+    const cmd = previewBuildCommands(config, ctx, 4015)
+    expect(cmd.command).toBe('PORT=4015 docker compose -p portal-go-dev-12 up -d --build')
+    expect(cmd.command).not.toContain('BUILDX_BUILDER')
   })
 
-  it('build manda criar o dump do MongoDB antes de publicar a prévia (OPE-54)', () => {
-    const text = buildPrompt(config, ctx, 4015, backup)
-    expect(text).toContain('## Backup do MongoDB (obrigatório ANTES de publicar a prévia)')
+  it('prévia no GitHub Action: o app roda o script da tentativa no worktree', () => {
+    const cmd = remotePreviewCommands(ctx, { attempt: 'a1', statePath: '/tmp/s.json' })
+    expect(cmd.command).toBe("npx tsx scripts/preview-github.ts '/tmp/s.json' 'a1'")
+    expect(cmd.run).toBe(`cd '/home/u/app/worktrees/go-dev-12' && ${cmd.command}`)
+  })
+
+  it('preparo Local com backup: só o dump do MongoDB, sem subir a prévia (OPE-54)', () => {
+    const text = previewPreparePrompt(config, ctx, { method: 'local', backup })
+    expect(text).toContain('## Backup do MongoDB')
     expect(text).toContain('mongodump')
     expect(text).toContain(backup.dir)
-    expect(text).toContain(backup.path)
     expect(text).toContain('REUTILIZE-O')
     expect(text).toContain(`test -s '${backup.path}'`)
+    expect(text).toContain('NÃO rode `docker compose up`')
     expect(text).toContain('{"ok": true} quando o dump existir')
+    expect(text).not.toContain('Commit para a prévia')
   })
 
-  it('build sem backup (OPE-72) não pede dump nem condiciona a prévia a ele', () => {
-    const text = buildPrompt(config, ctx, 4015, null)
+  it('preparo no GitHub Action sem backup (OPE-72): só o commit, sem dump nem push', () => {
+    const text = previewPreparePrompt(config, ctx, { method: 'github', backup: null })
     expect(text).not.toContain('mongodump')
-    expect(text).not.toContain('Backup do MongoDB')
-    expect(text).toContain('quando a prévia estiver respondendo')
-    expect(text).toContain('Use EXCLUSIVAMENTE a porta 4015')
+    expect(text).toContain('Commit para a prévia no GitHub Action')
+    expect(text).toContain('NÃO faça push')
+    expect(text).toContain('{"ok": true} quando tudo estiver commitado')
+  })
+
+  it('correção do build: traz o fim da saída e proíbe subir o build (o app roda de novo)', () => {
+    const text = buildFixPrompt(config, ctx, 4015, { exitCode: 17, tail: 'npm ERR! missing script', round: 2, command: 'PORT=4015 docker compose up' })
+    expect(text).toContain('FALHOU (exit 17; correção 2)')
+    expect(text).toContain('npm ERR! missing script')
+    expect(text).toContain('NÃO rode `docker compose up`')
+    expect(text).toContain('EXCLUSIVAMENTE a porta 4015')
+  })
+
+  it('correção do build no GitHub Action: commitar a correção e não rodar o script', () => {
+    const text = buildFixPrompt(config, ctx, 4015, { exitCode: 1, tail: 'Testes falharam', round: 1, command: 'npx tsx scripts/preview-github.ts' }, { method: 'github', docker: { prefix: 'DOCKER_CONTEXT=x' } })
+    expect(text).toContain('(GitHub Action)')
+    expect(text).toContain('COMMITE na branch da mesa')
+    expect(text).toContain('NÃO rode o script da prévia')
+    expect(text).not.toContain('DOCKER_CONTEXT=')
   })
 
   it('PR novo usa gh pr create; PR existente só atualiza', () => {

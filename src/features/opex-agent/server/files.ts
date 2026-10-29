@@ -4,7 +4,8 @@ import { DomainError } from "@/lib/api/route"
 import { fallbackAttachmentName, formatAttachmentSize, isInlineAttachmentMime, safeAttachmentName } from "@/lib/attachments"
 import { OpexFile, type IOpexFile, type IOpexFileRef } from "@/lib/db/models/Opex"
 import { loggerFor } from "@/lib/logger"
-import { copyFile, deleteFile, getFileObject, getUploadUrl, headFile, storageErrorInfo } from "@/lib/storage/s3"
+import { getFileObject, getUploadUrl, storageErrorInfo } from "@/lib/storage/s3"
+import { promoteStagedUpload, removeStoredObjectQuietly, StagedUploadError } from "@/lib/storage/staged-upload"
 import { OPEX_FILE_PENDING_TTL_MS, OPEX_FILE_TEXT_INLINE_MAX, OPEX_FILE_UPLOAD_URL_TTL_SECONDS, type OpexProviderId } from "../constants"
 import { opexFileDelivery, opexFileKind, opexFileReference, opexFileWeight, opexMaxBytes } from "../files"
 import type { OpexFilesSettings, ReserveOpexFileInput } from "../schemas"
@@ -52,16 +53,7 @@ async function findFile(id: string, scope: OpexServerScope = OWNER_SCOPE): Promi
     return doc
 }
 
-async function removeObjectQuietly(key: string | null | undefined): Promise<boolean> {
-    if (!key) return true
-    try {
-        await deleteFile(key)
-        return true
-    } catch (error) {
-        log.warn({ err: error, key }, "[opex] falha ao remover o objeto no storage")
-        return false
-    }
-}
+const removeObjectQuietly = removeStoredObjectQuietly
 
 function tooLarge(size: number, limits: OpexFilesSettings): DomainError {
     return new DomainError(413, `O arquivo tem ${formatAttachmentSize(size)}: o limite é ${formatAttachmentSize(opexMaxBytes(limits.maxSizeMb))}`, "OPEX_FILE_TOO_LARGE")
@@ -96,33 +88,27 @@ async function discard(doc: OpexFileDoc): Promise<void> {
 export async function completeOpexFile(id: string, limits: OpexFilesSettings, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexFileDto> {
     const doc = await findFile(id, scope)
     if (doc.ready) return toFileDto(refOf(doc))
-    let head: { contentLength: number | undefined; contentType: string | undefined }
+    let promoted: { size: number; contentType: string | undefined }
     try {
-        head = await headFile(doc.uploadKey)
+        promoted = await promoteStagedUpload({ uploadKey: doc.uploadKey, key: doc.key, maxBytes: opexMaxBytes(limits.maxSizeMb) })
     } catch (error) {
-        const info = storageErrorInfo(error)
-        log.warn({ err: error, fileId: id, httpStatus: info.httpStatus, code: info.code, kind: info.kind }, "[opex] falha ao conferir o arquivo na confirmação")
-        if (info.kind !== "not_found") throw new DomainError(502, "Não foi possível confirmar o arquivo no storage. Tente novamente em instantes.", "OPEX_FILE_STORAGE_UNAVAILABLE")
-        await discard(doc)
-        throw new DomainError(400, "O arquivo não chegou ao storage. Envie de novo.", "OPEX_FILE_NOT_UPLOADED")
+        if (!(error instanceof StagedUploadError)) throw error
+        if (error.discard) await discard(doc)
+        switch (error.failure) {
+            case "not_uploaded":
+                throw new DomainError(400, "O arquivo não chegou ao storage. Envie de novo.", "OPEX_FILE_NOT_UPLOADED")
+            case "empty":
+                throw new DomainError(400, "O arquivo enviado está vazio.", "OPEX_FILE_EMPTY")
+            case "too_large":
+                throw tooLarge(error.size ?? 0, limits)
+            case "promote_failed":
+                throw new DomainError(502, "Não foi possível finalizar o arquivo no storage. Tente novamente em instantes.", "OPEX_FILE_STORAGE_UNAVAILABLE")
+            default:
+                throw new DomainError(502, "Não foi possível confirmar o arquivo no storage. Tente novamente em instantes.", "OPEX_FILE_STORAGE_UNAVAILABLE")
+        }
     }
-    const size = head.contentLength ?? 0
-    if (size <= 0) {
-        await discard(doc)
-        throw new DomainError(400, "O arquivo enviado está vazio.", "OPEX_FILE_EMPTY")
-    }
-    if (size > opexMaxBytes(limits.maxSizeMb)) {
-        await discard(doc)
-        throw tooLarge(size, limits)
-    }
-    try {
-        await copyFile(doc.uploadKey, doc.key)
-    } catch (error) {
-        log.warn({ err: error, fileId: id }, "[opex] falha ao promover o arquivo para a chave definitiva")
-        throw new DomainError(502, "Não foi possível finalizar o arquivo no storage. Tente novamente em instantes.", "OPEX_FILE_STORAGE_UNAVAILABLE")
-    }
-    await removeObjectQuietly(doc.uploadKey)
-    const mediaType = (doc.mediaType === FALLBACK_MIME && head.contentType?.trim() ? head.contentType.trim() : doc.mediaType).toLowerCase()
+    const size = promoted.size
+    const mediaType = (doc.mediaType === FALLBACK_MIME && promoted.contentType ? promoted.contentType : doc.mediaType).toLowerCase()
     await OpexFile.updateOne({ _id: doc._id }, { $set: { ready: true, size, mediaType } })
     return toFileDto(refOf({ ...doc, size, mediaType }))
 }

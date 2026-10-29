@@ -10,10 +10,10 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
-    buildPrompt,
+    buildFixPrompt,
     cleanupPrompt,
     composeProjectFor,
     deletePrBranchPrompt,
@@ -30,11 +30,20 @@ import {
     worktreePathFor,
     conflictPrompt,
     ciFixPrompt,
+    previewBuildCommands,
+    previewPreparePrompt,
+    remotePreviewCommands,
+    type PreviewDocker,
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
-import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
+import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import { logger } from "@/lib/logger"
+import { newJobId } from "@/features/local-docker/server/detached"
+import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
+import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
+import { runPreviewBuild } from "./preview-build"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
 import { entryColumnForProject, loadCentral, publishAgentic, repoForProject } from "./centrals"
@@ -42,6 +51,8 @@ import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { probeReconnect } from "./reconnect"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
+import { claimAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
+import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
@@ -62,6 +73,8 @@ import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } fr
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
+/** O script da prévia no GitHub Action espera testes + build do workflow: nunca menos que isto. */
+const REMOTE_BUILD_MIN_MINUTES = 25
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -250,6 +263,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
             reopen: Boolean(flags.reopen),
             fromStage: stage,
             queuedAt: new Date(),
+            ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}),
         }
         await update(doc, { pendingTurn })
         const position = await slotQueuePosition(id)
@@ -293,7 +307,7 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
         reopened = Boolean(pending.reopen)
         await launchTurn(
             ready,
-            { stage: asStage(pending.stage), text: pending.text },
+            { stage: asStage(pending.stage), text: pending.text, ...(pending.fileIds?.length ? { fileIds: pending.fileIds } : {}) },
             {
                 ...(pending.userText ? { userText: pending.userText } : {}),
                 ...(pending.feedback !== null ? { feedback: pending.feedback } : {}),
@@ -438,6 +452,30 @@ async function enterBuildQueue(loaded: Loaded): Promise<void> {
 }
 
 /**
+ * "Gerar nova prévia" (Prévia pronta): reconstrói a prévia com o código atual do worktree pelo fluxo
+ * da mesa (fila global do build ou nova tentativa no GitHub Action, porta reservada, máquina da prévia
+ * e teste de saúde), sem replanejar e sem nova rodada do Agente Adversário (o código não mudou).
+ * `requestedBy` identifica quem pediu (ex.: "Fork 2") no aviso e na auditoria.
+ */
+export async function rebuildPreview(id: string, requestedBy: string | null = null): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    const { doc, config } = loaded
+    assertAction(doc, "rebuild-preview")
+    const waiting = await enterBuildQueueOrWait(loaded)
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, novaPrevia: true, ...(requestedBy ? { pedidoPor: requestedBy } : {}) } })
+    await prepareHub(id)
+    const who = requestedBy ? ` (pedido pelo ${requestedBy})` : ""
+    if (waiting) {
+        const position = await slotQueuePosition(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Nova prévia${who}: limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central; "Gerar a prévia" aguarda vaga${position ? ` (posição #${position})` : ""}.` })
+    } else {
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Nova prévia${who}: reconstruindo com o código atual (${config.environment.previewMethod === "github" ? "build no GitHub" : "fila do build"}).` })
+    }
+    centralLogger(doc.centralId, doc.taskCode).info("Nova prévia solicitada", { workbenchId: id, requestedBy, waiting })
+    return getWorkbench(id)
+}
+
+/**
  * Chave "Gerar prévia" desta mesa (troca o fluxo só da mesa; a tarefa mantém o fluxo salvo):
  * - desligar: ao fim da implementação pula a prévia e publica no PR; na fila do build, sai dela e já
  *   publica; com o build rodando, publica ao fim dele; em Prévia pronta, fica como está;
@@ -509,6 +547,19 @@ interface TurnPlan {
     text: string
     /** Reconexão: acompanha a execução em andamento sem enviar prompt nem trocar agente/modelo. */
     attach?: boolean
+    /** Turno "Subindo a prévia": método, porta, máquina e Docker do build (o app roda o comando). */
+    build?: { method: "local" | "github"; port: number; local: boolean; docker: PreviewDocker | null }
+    /** Anexos da mensagem do usuário (`agentic_files`): vão no prompt deste turno (os encadeados não reenviam). */
+    fileIds?: string[]
+}
+
+/** Log do build (aba Build): melhor esforço — uma falha no registro nunca derruba o build. */
+async function trackBuild(id: string, action: () => Promise<unknown>): Promise<void> {
+    try {
+        await action()
+    } catch (error) {
+        logger.warn({ err: error, workbenchId: id }, "[agentic] Falha ao registrar o log do build")
+    }
 }
 
 interface LaunchOptions {
@@ -530,7 +581,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     if (turn.attach || options.bypassLimit) await assertAgenticReady(loaded.config)
     else await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
-    if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
+    const shown = turn.attach ? [] : await fileDtosFor(turn.fileIds)
+    if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
     try {
@@ -541,7 +593,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             heartbeatAt: new Date(),
             // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam
             // válidos) e a causa da parada; um turno novo começa um episódio novo (limpa o desfecho).
-            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -581,59 +633,25 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             turn = controller.signal.aborted ? null : next
             continue
         }
+        const stage = turn.stage
         try {
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
+            if (turn.stage === "building") {
+                // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
+                next = await buildTurn(client, loaded, turn, sessionId, controller)
+                turn = controller.signal.aborted ? null : next
+                continue
+            }
             // Resumos de forks que não puderam virar instrução da sessão vão no prompt (uma vez).
             const notes = turn.attach ? null : await AgenticWorkbench.findById(id).select({ forkNotes: 1, forkNotesSynced: 1 }).lean()
-            const text = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
-            const { settings } = await loadAgenticSettings()
-            const role = STAGE_ROLE[turn.stage] ?? "planning"
-            // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
-            const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
-            log.step(`${WORKBENCH_STAGE_LABELS[turn.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
-            const step = turn
-            // Modelo/provedor falhou: segue com os modelos de fallback do papel (só neste turno).
-            const result = await runWithFallback(
-                agent,
-                text,
-                (attempt, prompt) =>
-                    runAgentTurn(
-                        client,
-                        {
-                            workbenchId: id,
-                            sessionId,
-                            stage: step.stage,
-                            title: WORKBENCH_STAGE_LABELS[step.stage],
-                            agent: attempt,
-                            text: prompt,
-                            timeoutMs: step.stage === "building" ? loaded.config.environment.buildTimeoutMinutes * 60_000 : TURN_TIMEOUT_MS,
-                            signal: controller.signal,
-                            attach: step.attach,
-                            startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
-                        },
-                        turnHooks(loaded.doc),
-                    ),
-                {
-                    signal: controller.signal,
-                    attach: step.attach,
-                    onSwitch: async (change) => {
-                        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: fallbackNotice(change) })
-                        log.warn(`${WORKBENCH_STAGE_LABELS[step.stage]}: modelo de fallback`, { workbenchId: id, from: change.from.model, to: change.to.model, reason: change.reason })
-                        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [], heartbeatAt: new Date() } })
-                    },
-                },
-            )
-            await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [] } })
-            await flushWorkbenchEvents(id)
-            log[result.outcome === "succeeded" ? "success" : "warn"](`${WORKBENCH_STAGE_LABELS[turn.stage]}: ${result.outcome === "succeeded" ? "concluído" : (result.message ?? result.outcome)}`, {
-                workbenchId: id,
-                durationMs: result.durationMs,
-                costUsd: result.costUsd,
-            })
+            const withNotes = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
+            // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
+            const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
+            const text = withAttachmentsSection(withNotes, attachments.section)
+            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
             if (result.outcome !== "succeeded") {
-                if (turn.stage === "building") await invalidateRemotePreview(client, loaded.doc, loaded.config.sessionDirectory)
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
             }
@@ -642,10 +660,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (fresh.doc.deletionRequestedAt && turn.stage !== "finishing") return
             next = await afterTurn(client, fresh, turn.stage, result)
         } catch (error) {
-            if (turn.stage === "building" && loaded.doc.previewBuild?.method === "github") {
-                await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory).catch(() => undefined)
+            if (stage === "building") {
+                await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
+                const current = await AgenticWorkbench.findById(id).lean()
+                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory).catch(() => undefined)
             }
-            log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
+            log.error(`${WORKBENCH_STAGE_LABELS[stage]}: falhou`, error, { workbenchId: id })
             await prepareHub(id)
             publishWorkbenchEvent(id, { type: "notice", level: "error", message: errorText(error) })
             await flushWorkbenchEvents(id)
@@ -654,6 +674,214 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         }
         turn = controller.signal.aborted ? null : next
     }
+}
+
+/** Turno do agente na sessão da mesa (com os modelos de fallback do papel da etapa). */
+async function runStageAgent(
+    client: OpencodeClient,
+    loaded: Loaded,
+    step: { stage: WorkbenchStage; text: string; attach?: boolean; files?: Awaited<ReturnType<typeof promptFilesFor>>["files"] },
+    sessionId: string,
+    controller: AbortController,
+): Promise<TurnResult> {
+    const id = String(loaded.doc._id)
+    const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
+    const { settings } = await loadAgenticSettings()
+    const role = STAGE_ROLE[step.stage] ?? "planning"
+    // Modelo trocado na mesa para o papel da etapa, relido a cada turno (o agente continua o configurado).
+    const agent = workbenchTurnAgent(settings, loaded.config, loaded.doc, role)
+    log.step(`${WORKBENCH_STAGE_LABELS[step.stage]}: turno iniciado`, { workbenchId: id, agent: agent.agent, model: agent.model })
+    // Modelo/provedor falhou: segue com os modelos de fallback do papel (só neste turno).
+    const result = await runWithFallback(
+        agent,
+        step.text,
+        (attempt, prompt) =>
+            runAgentTurn(
+                client,
+                {
+                    workbenchId: id,
+                    sessionId,
+                    stage: step.stage,
+                    title: WORKBENCH_STAGE_LABELS[step.stage],
+                    agent: attempt,
+                    text: prompt,
+                    timeoutMs: TURN_TIMEOUT_MS,
+                    signal: controller.signal,
+                    attach: step.attach,
+                    startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
+                    files: step.files,
+                },
+                turnHooks(loaded.doc),
+            ),
+        {
+            signal: controller.signal,
+            attach: step.attach,
+            onSwitch: async (change) => {
+                publishWorkbenchEvent(id, { type: "notice", level: "warn", message: fallbackNotice(change) })
+                log.warn(`${WORKBENCH_STAGE_LABELS[step.stage]}: modelo de fallback`, { workbenchId: id, from: change.from.model, to: change.to.model, reason: change.reason })
+                await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [], heartbeatAt: new Date() } })
+            },
+        },
+    )
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pendingPermissions: [], pendingForms: [] } })
+    await flushWorkbenchEvents(id)
+    log[result.outcome === "succeeded" ? "success" : "warn"](`${WORKBENCH_STAGE_LABELS[step.stage]}: ${result.outcome === "succeeded" ? "concluído" : (result.message ?? result.outcome)}`, {
+        workbenchId: id,
+        durationMs: result.durationMs,
+        costUsd: result.costUsd,
+    })
+    return result
+}
+
+type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
+
+/**
+ * "Subindo a prévia": o app roda o comando do build no host (saída ao vivo na aba Build) — o
+ * `docker compose … up -d --build` (Local) ou o script da prévia no GitHub Action. Antes, quando há o
+ * que preparar (dump do MongoDB com o backup ligado; commit no GitHub Action), um turno curto do agente
+ * prepara o worktree. Se o comando falhar, o agente corrige o código num turno da sessão da mesa e o
+ * app roda de novo, no mesmo build (no GitHub Action, numa tentativa nova com o SHA novo) — sem limite
+ * de correções: só para quando passa, quando o agente desiste (`ok: false`), num tempo esgotado/processo
+ * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
+ * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
+ */
+async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const ctx = contextOf(loaded)
+    const log = centralLogger(doc.centralId, doc.taskCode)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const saved = doc.previewBuild ?? null
+    const method = turn.build?.method ?? saved?.method ?? "local"
+    const port = turn.build?.port ?? saved?.port ?? (typeof doc.port === "number" ? doc.port : null)
+    if (port === null) throw new Error("A mesa ficou sem porta reservada")
+    const docker = method === "local" ? ((turn.build ? turn.build.docker : saved?.docker) ?? undefined) : undefined
+    const remote = method === "github"
+    // O dump só entra quando a central o exige nesta tentativa (OPE-72); o servidor confere o arquivo.
+    const backup = saved?.dumpRequired !== false ? (doc.previewBackup ?? null) : null
+    const hooks = turnHooks(doc)
+    await trackBuild(id, () => (turn.attach ? resumeBuild(id) : startBuild(id, { port, local: turn.build?.local ?? Boolean(docker), method })))
+    await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
+
+    const needsPrepare = remote || Boolean(backup)
+    let resumeJob = turn.attach ? (saved?.job ?? null) : null
+    let step: BuildAgentStep | null = null
+    // Reconexão sem comando no host: o agente estava preparando ou corrigindo (acompanha o turno dele).
+    if (turn.attach && !resumeJob) step = { kind: needsPrepare && !saved?.prepared ? "prepare" : "fix", text: "", attach: true }
+    else if (!turn.attach && needsPrepare && !saved?.prepared) step = { kind: "prepare", text: previewPreparePrompt(config, ctx, { method, backup }), attach: false }
+    let round = 0
+    for (;;) {
+        if (step) {
+            if (step.kind === "prepare" && !step.attach) appendBuildOutput(id, buildPrepareSeparator([backup ? "dump do MongoDB" : "", remote ? "commit" : ""].filter(Boolean).join(" e ")))
+            const result = await runStageAgent(client, loaded, { stage: "building", text: step.text, attach: step.attach }, sessionId, controller)
+            if (result.outcome !== "succeeded") {
+                const status = result.outcome === "interrupted" ? "interrupted" : "failed"
+                await trackBuild(id, () => settleBuild(id, status, result.message ?? null))
+                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory).catch(() => undefined)
+                await update(doc, { runState: status, error: result.message ?? "O agente não concluiu a etapa" })
+                return null
+            }
+            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
+            if (parsed.success && !parsed.data.ok) throw new Error(`${step.kind === "prepare" ? "O agente não conseguiu preparar a prévia" : "O agente não conseguiu corrigir o build"}: ${parsed.data.error ?? "motivo não informado"}`)
+            const fresh = await loadAll(id)
+            // Exclusão pedida durante o turno: a limpeza da exclusão assume daqui.
+            if (fresh.doc.deletionRequestedAt || controller.signal.aborted) return null
+            if (step.kind === "prepare") {
+                if (backup) {
+                    await assertPreviewBackup(client, backup, config.sessionDirectory)
+                    notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
+                }
+                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.prepared": true } })
+            } else if (remote) {
+                // A correção foi commitada: uma tentativa nova (SHA novo) no lugar da que falhou.
+                if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
+                if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
+                await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
+                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, fresh.doc.previewBackup, ctx)
+                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
+            }
+            step = null
+        }
+        const current = (await AgenticWorkbench.findById(id).select({ previewBuild: 1 }).lean())?.previewBuild ?? null
+        let commands: { command: string; run: string }
+        if (remote) {
+            if (!current?.attempt || !current.statePath) throw new Error("Tentativa remota sem reserva")
+            commands = remotePreviewCommands(ctx, { attempt: current.attempt, statePath: current.statePath })
+        } else {
+            commands = previewBuildCommands(config, ctx, port, docker)
+        }
+        const jobId = resumeJob ?? newJobId("build")
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.job": jobId, heartbeatAt: new Date() } })
+        if (resumeJob) {
+            restartBuildSection(id)
+        } else {
+            beginBuildSection(id, commands.command)
+            notice("info", `Rodando o build da prévia${remote ? " no GitHub Action" : ""} (saída ao vivo na aba Build): ${commands.command}`)
+        }
+        resumeJob = null
+        log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
+        const timeoutMinutes = remote ? Math.max(REMOTE_BUILD_MIN_MINUTES, config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
+        const run = await runPreviewBuild({
+            run: commands.run,
+            jobId,
+            timeoutMs: timeoutMinutes * 60_000,
+            signal: controller.signal,
+            onOutput: (chunk) => appendBuildOutput(id, chunk),
+            heartbeat: hooks.heartbeat,
+        })
+        appendBuildOutput(id, buildExitLine(run.exitCode))
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $unset: { "previewBuild.job": 1 } })
+        if (controller.signal.aborted) {
+            const message = errorText(controller.signal.reason ?? "Interrompido")
+            await trackBuild(id, () => settleBuild(id, "interrupted", message))
+            await update(doc, { runState: "interrupted", error: message })
+            return null
+        }
+        if (run.exitCode === 0) {
+            const fresh = await loadAll(id)
+            // Exclusão pedida durante o build: a limpeza da exclusão assume daqui.
+            if (fresh.doc.deletionRequestedAt) return null
+            return afterBuild(client, fresh)
+        }
+        if (run.exitCode === null) throw new Error(`O build da prévia não terminou${run.tail ? `: ${run.tail.split("\n").at(-1)}` : ""}`)
+        // Tempo esgotado ou processo morto pelo sistema: não é algo que o agente corrija no código.
+        const terminal = terminalBuildFailure(run.exitCode, timeoutMinutes)
+        if (terminal) throw new Error(terminal)
+        round += 1
+        log.warn(`${WORKBENCH_STAGE_LABELS.building}: build falhou`, { workbenchId: id, exitCode: run.exitCode, round })
+        notice("warn", `O build da prévia falhou (exit ${run.exitCode}). O agente vai corrigir o código e o build roda de novo (correção ${round}).`)
+        appendBuildOutput(id, buildFixSeparator(round))
+        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: run.tail, round, command: commands.command }, { docker, method }), attach: false }
+    }
+}
+
+/**
+ * Build da prévia passou (exit 0): no GitHub Action confere a publicação confirmada da tentativa;
+ * espera a prévia responder e segue para a prévia (ou o PR automático).
+ */
+async function afterBuild(client: OpencodeClient, loaded: Loaded): Promise<TurnPlan | null> {
+    const { doc, config } = loaded
+    const id = String(doc._id)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const remote = doc.previewBuild?.method === "github"
+    await assertRemotePreview(client, doc, config.sessionDirectory)
+    const fresh = await AgenticWorkbench.findById(id).select({ port: 1, agenticFlow: 1 }).lean()
+    if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
+    const env = config.environment
+    const previewUrl = `http://${env.previewHost}:${fresh.port}`
+    const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
+    if (!healthy && remote) throw new Error(`A prévia não respondeu em ${previewUrl}`)
+    notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O build terminou, mas ${previewUrl} não respondeu ao app`)
+    await trackBuild(id, () => settleBuild(id, healthy ? "succeeded" : "unhealthy", healthy ? null : `${previewUrl} não respondeu ao app`))
+    // A chave "Gerar prévia" foi desligada durante o build: publica no PR sem parar na prévia.
+    if (asAgenticFlow(fresh.agenticFlow) === "auto_pr") {
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewUrl, previewHealthy: healthy } })
+        notice("info", "Geração de prévia desligada: publicando no Pull Request sem parar na prévia.")
+        return autoPrTurn(loaded)
+    }
+    await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
+    pumpQueue(doc.centralId)
+    return null
 }
 
 function turnHooks(doc: IAgenticWorkbench) {
@@ -802,33 +1030,9 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             }
             return afterImplementation(loaded)
         }
-        case "building": {
-            await assertRemotePreview(client, doc, config.sessionDirectory)
-            const parsed = buildResultSchema.safeParse(extractJsonBlock(result.text))
-            if (parsed.success && !parsed.data.ok) throw new Error(`O build falhou: ${parsed.data.error ?? "motivo não informado"}`)
-            // O agente cria o dump antes de publicar (quando a central exige backup); aqui confirmamos que ele existe.
-            const dumpRequired = doc.previewBuild?.dumpRequired !== false
-            if (dumpRequired && doc.previewBackup) {
-                await assertPreviewBackup(client, doc.previewBackup, config.sessionDirectory)
-                notice("info", "Backup do MongoDB confirmado antes da publicação da prévia.")
-            }
-            const fresh = await AgenticWorkbench.findById(id).select({ port: 1, agenticFlow: 1 }).lean()
-            if (typeof fresh?.port !== "number") throw new Error("A mesa ficou sem porta reservada")
-            const env = config.environment
-            const previewUrl = `http://${env.previewHost}:${fresh.port}`
-            const healthy = await waitForPreview(`${previewUrl}${env.healthPath || "/"}`)
-            if (!healthy && (doc.previewBuild?.method === "github" || !parsed.success)) throw new Error(`A prévia não respondeu em ${previewUrl}`)
-            notice(healthy ? "success" : "warn", healthy ? `Prévia no ar em ${previewUrl}` : `O agente concluiu o build, mas ${previewUrl} não respondeu ao app`)
-            // A chave "Gerar prévia" foi desligada durante o build: publica no PR sem parar na prévia.
-            if (asAgenticFlow(fresh.agenticFlow) === "auto_pr") {
-                await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewUrl, previewHealthy: healthy } })
-                notice("info", "Geração de prévia desligada: publicando no Pull Request sem parar na prévia.")
-                return autoPrTurn(loaded)
-            }
-            await update(doc, { stage: "preview", runState: "idle", previewUrl, previewHealthy: healthy })
-            pumpQueue(doc.centralId)
-            return null
-        }
+        case "building":
+            // O build roda em `buildTurn` (não é um turno comum do agente).
+            return afterBuild(client, loaded)
         case "opening_pr": {
             const parsed = prResultSchema.safeParse(extractJsonBlock(result.text))
             const found = parsed.success ? { url: parsed.data.url, number: parsed.data.number ?? extractPrUrl(parsed.data.url)?.number } : extractPrUrl(result.text)
@@ -1024,9 +1228,21 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     // Builder Machine: com o túnel aberto o build local vai para o Docker do PC. A prévia no GitHub
     // Action fica sempre no servidor (derruba a prévia anterior que estava no PC).
     const local = await localDockerHooks()
-    const target = local ? await local.resolveBuildTarget({ workbenchId: id, centralId: loaded.doc.centralId, composeProject: ctx.composeProject, hadPort: typeof loaded.doc.port === "number", forceServer: method !== "local" }) : null
+    const target = local
+        ? await local.resolveBuildTarget({
+              workbenchId: id,
+              centralId: loaded.doc.centralId,
+              composeProject: ctx.composeProject,
+              worktreePath: ctx.worktreePath,
+              composeFile: env.composeFile.trim(),
+              portEnvVar: env.portEnvVar,
+              hadPort: typeof loaded.doc.port === "number",
+              forceServer: method !== "local",
+          })
+        : null
     const port = await allocatePreviewPort(id, env.previewHost, { min: env.previewPortMin, max: env.previewPortMax }, target?.portCheck)
-    if (target) await target.attach(port)
+    // No PC, o override do compose leva as CAs do PC aos containers (redes com inspeção TLS).
+    const attached = target ? await target.attach(port) : null
     // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
     const dumpRequired = loaded.config.environment.backupDatabase
     // O caminho do backup é reservado ANTES do turno (o agente cria o dump ali antes de publicar) e é
@@ -1035,22 +1251,24 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     const backup = dumpRequired || method === "github" ? await reservePreviewBackup(loaded.doc, loaded.config) : null
     await prepareHub(id)
     publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Porta reservada para a prévia: ${port}${target ? " (prévia na máquina local)" : ""}` })
+    if (attached?.notice) publishWorkbenchEvent(id, { type: "notice", level: attached.notice.level, message: attached.notice.message })
     publishWorkbenchEvent(id, {
         type: "notice",
         level: "info",
         message: dumpRequired && backup ? `Backup do MongoDB da prévia em ${backup.dir}` : "Backup do banco de dados desativado nesta central: a prévia sobe sem dump.",
     })
-    let remote: { attempt: string; statePath: string } | undefined
+    const docker = target ? { prefix: target.dockerPrefix, ...(attached?.composeFiles?.length ? { files: attached.composeFiles } : {}) } : null
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
         if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
-        remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
-    } else {
-        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired }, buildQueuedAt: null } })
+        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "previewBuild.port": port } })
+        return { stage: "building", text: remotePreviewCommands(ctx, remote).command, build: { method, port, local: false, docker: null } }
     }
-    // O backup só entra no prompt (e na conferência do servidor) quando a central o exige; sem ele a
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { previewBuild: { method: "local", dumpRequired, port, docker }, buildQueuedAt: null } })
+    // O backup só entra no preparo (e na conferência do servidor) quando a central o exige; sem ele a
     // prévia sobe sem dump — projetos sem banco de dados (OPE-72).
-    return { stage: "building", text: buildPrompt(loaded.config, ctx, port, dumpRequired ? backup : null, remote, target ? { prefix: target.dockerPrefix } : undefined) }
+    return { stage: "building", text: previewBuildCommands(loaded.config, ctx, port, docker ?? undefined).command, build: { method, port, local: Boolean(target), docker } }
 }
 
 /** A prévia da mesa estava no PC e a Builder Machine a derrubou (ou a deixou pendente): o agente pula o `down`. */
@@ -1060,14 +1278,15 @@ async function localPreviewTornDown(loaded: Loaded): Promise<boolean> {
     return local ? local.teardownForCleanup(String(loaded.doc._id)) : false
 }
 
-export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
-    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text))
+export async function startWorkbench(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
+    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text, fileIds))
 }
 
 /** Chamado pelo motor já dentro da decisão serializada de vagas da central. */
-export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
+export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
     await dbConnect()
+    const files = await loadClaimableFiles(fileIds, null)
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
     if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
     const task = await getTask(taskId)
@@ -1110,22 +1329,26 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     const additionalInfo = text?.trim() || null
     await launchTurn(
         loaded,
-        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo) },
-        { ...(additionalInfo ? { userText: additionalInfo } : {}) },
+        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo), ...fileIdsOf(files) },
+        { ...(additionalInfo ? { userText: additionalInfo } : files.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}) },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function revisePlan(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function revisePlan(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "revise-plan")
-    await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    const files = await loadClaimableFiles(fileIds, id)
+    await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function implement(id: string, additionalInfo?: string): Promise<WorkbenchDto> {
+export async function implement(id: string, additionalInfo?: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "implement")
+    const files = await loadClaimableFiles(fileIds, id)
     const ctx = contextOf(loaded)
     // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
     const info = additionalInfo?.trim() || null
@@ -1133,18 +1356,21 @@ export async function implement(id: string, additionalInfo?: string): Promise<Wo
     await launchOrQueue(
         loaded,
         "implement",
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info) },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info), ...fileIdsOf(files) },
         { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
 /** Correção pedida na prévia (ou após falha na implementação/build): volta ao planejamento. */
-export async function requestCorrection(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function requestCorrection(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "request-correction")
+    const files = await loadClaimableFiles(fileIds, id)
     await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
-    await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
@@ -1216,24 +1442,28 @@ export async function adversarialSkip(id: string): Promise<WorkbenchDto> {
     return getWorkbench(id)
 }
 
-export async function submitPrFeedback(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function submitPrFeedback(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "submit-pr-feedback")
-    await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: feedback, feedback })
+    const files = await loadClaimableFiles(fileIds, id)
+    await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function reopen(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function reopen(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "reopen")
+    const files = await loadClaimableFiles(fileIds, id)
     // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.
     await launchOrQueue(
         loaded,
         "reopen",
-        { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) },
+        { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null), ...fileIdsOf(files) },
         { userText: `Mesa reaberta: ${feedback}`, feedback },
         { reopen: true },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
@@ -1242,10 +1472,114 @@ async function applyReopen(loaded: Loaded): Promise<Loaded> {
     const id = String(loaded.doc._id)
     const pastPr = loaded.doc.pr ? { $push: { pastPrs: loaded.doc.pr } } : {}
     // Reabrir dispensa a pergunta sobre os forks em aberto (eles seguem utilizáveis).
-    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null }, ...pastPr })
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null, manualCompletion: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
     await applyReopenEffects(id, loaded)
     return { ...loaded, doc: { ...loaded.doc, pr: null } }
+}
+
+// ---------------------------------------------------------------------------
+// Definir etapa / concluir sem PR (ação da tela e ferramentas do Agente Opex)
+// ---------------------------------------------------------------------------
+
+/**
+ * Leva a mesa a uma etapa de espera (`MANUAL_STAGES`) ou a conclui sem PR, com o motivo registrado na
+ * auditoria e na saída da mesa. As regras de transição são as de `manualStageBlock` (mesma regra na
+ * tela). Um turno em andamento é interrompido e a espera por vaga/fila do build é descartada antes.
+ */
+export async function setWorkbenchStage(id: string, input: SetWorkbenchStageInput): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    let doc = await reconcile(loaded.doc)
+    const from = asStage(doc.stage)
+    const target = input.stage
+    const reason = input.reason.trim()
+    const block = manualStageBlock(target, { stage: from, hasPlan: (doc.plans ?? []).length > 0, hasPreview: Boolean(doc.previewUrl), prOpen: doc.pr?.state === "open", deleting: Boolean(doc.deletionRequestedAt) })
+    if (block) throw new DomainError(409, block, doc.deletionRequestedAt ? "WORKBENCH_DELETING" : "WORKBENCH_INVALID_STAGE")
+    await prepareHub(id)
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+
+    // Libera a mesa: a intenção de parar é gravada antes (sem reconexão automática) e o turno vivo é abortado.
+    const interrupted = isWorkbenchActive(id)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { stopRequestedAt: new Date() } })
+    if (interrupted) {
+        if (doc.previewBuild?.method === "github" && from === "building") await invalidateRemotePreview(await getOpencodeClient(), doc, loaded.config.sessionDirectory).catch(() => undefined)
+        if (doc.sessionId) {
+            try {
+                await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId })
+            } catch {
+                // sem OpenCode, o abort local abaixo já encerra o acompanhamento
+            }
+        }
+        abortWorkbenchRun(id, "Etapa definida manualmente")
+        await waitWorkbenchIdle(id)
+        doc = await loadWorkbench(id)
+    }
+    const droppedWait = Boolean(doc.pendingTurn)
+    const leftBuildQueue = Boolean(doc.buildQueuedAt)
+
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_WORKBENCH,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { tarefa: doc.taskCode, etapa: from },
+        depois: { tarefa: doc.taskCode, etapaAnterior: from, etapaDefinida: target, motivo: reason, manual: true, ...(interrupted ? { turnoInterrompido: true } : {}) },
+    })
+    notice("info", `Etapa definida manualmente: "${WORKBENCH_STAGE_LABELS[from]}" → "${WORKBENCH_STAGE_LABELS[target]}". Motivo: ${reason}`)
+    if (interrupted) notice("info", "O turno em andamento foi interrompido")
+    if (droppedWait) notice("info", "A espera por vaga na central foi descartada")
+    centralLogger(doc.centralId, doc.taskCode).info(`Etapa definida manualmente: ${from} → ${target}`, { workbenchId: id, reason })
+
+    if (target === "done") await completeManually({ ...loaded, doc }, reason, from)
+    else {
+        await update(doc, { stage: target, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null })
+        pumpQueue(doc.centralId)
+    }
+    if (leftBuildQueue) pumpBuildQueue()
+    return getWorkbench(id)
+}
+
+/** Alvos da limpeza na conclusão manual: só o que a mesa registrou (como na exclusão), inclusive o backup. */
+async function manualCleanupTargets(loaded: Loaded): Promise<CleanupTargets> {
+    const targets = cleanupTargets(loaded.config, loaded.doc)
+    if (targets.teardownEnvironment && (await localPreviewTornDown(loaded))) return { ...targets, teardownEnvironment: false }
+    return targets
+}
+
+function manualCleanupTurn(loaded: Loaded, targets: CleanupTargets): TurnPlan {
+    return { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "manual" }) }
+}
+
+/**
+ * Conclusão sem PR: os mesmos efeitos do merge na tarefa (coluna "Ao concluir"), a limpeza do que a
+ * mesa registrou (inclusive o backup do MongoDB, conferido antes de concluir) e a mesma conclusão
+ * (`completeWorkbench`: sessão excluída, forks, fila). Sem nada a limpar — ou se a limpeza não puder
+ * começar e não houver backup —, conclui na hora.
+ */
+async function completeManually(loaded: Loaded, reason: string, fromStage: WorkbenchStage): Promise<void> {
+    const id = String(loaded.doc._id)
+    const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const manualCompletion = { reason, fromStage, at: new Date() }
+    await update(loaded.doc, { manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null })
+    const ready: Loaded = { ...loaded, doc: { ...loaded.doc, manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null } }
+    const pr = ready.doc.pr
+    await applyDoneEffects(ready)
+    if (pr?.state === "open") notice("warn", `O PR #${pr.number} continua aberto no GitHub: o acompanhamento automático dele foi encerrado.`)
+    const targets = await manualCleanupTargets(ready)
+    if (hasCleanupWork(targets)) {
+        try {
+            await launchTurn(ready, manualCleanupTurn(ready, targets), { userText: "Conclusão manual: limpando o ambiente da mesa", bypassLimit: true })
+            return
+        } catch (error) {
+            notice("warn", `Limpeza não iniciada: ${errorText(error)}`)
+            // O backup da prévia (OPE-54) nunca fica para trás: sem a limpeza, a mesa não conclui.
+            if (ready.doc.previewBackup) {
+                await update(ready.doc, { stage: "finishing", runState: "failed", error: `Limpeza não iniciada: ${errorText(error)}`, lastStage: "finishing", lastPrompt: manualCleanupTurn(ready, targets) })
+                return
+            }
+        }
+    }
+    await completeWorkbench(ready.doc)
 }
 
 export async function reconnect(id: string): Promise<WorkbenchDto> {
@@ -1261,6 +1595,13 @@ export async function reconnect(id: string): Promise<WorkbenchDto> {
     await prepareHub(id)
     // Confere o estado da sessão ANTES de acompanhar: a resposta (200) já diz se há execução para
     // acompanhar (`attached`/`recovered`), se não há (`nothing`) ou se é falha transitória.
+    // Build da prévia com o comando ainda no host: retoma a leitura (não há turno do agente para sondar).
+    if (stage === "building" && doc.previewBuild?.job) {
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: "attached", message: "Retomando a leitura do build da prévia", at: new Date() } } })
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Reconectando ao build da prévia em andamento…" })
+        await launchTurn({ ...loaded, doc }, { stage, text: "", attach: true })
+        return getWorkbench(id)
+    }
     const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
     const probe = await probeReconnect(doc.sessionId, startedAt)
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: probe.outcome, message: probe.message, at: new Date() } } })
@@ -1285,6 +1626,12 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     assertAction(doc, "retry")
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
+    if (stage === "finishing" && doc.manualCompletion) {
+        // Conclusão manual: refaz só a limpeza do que a mesa registrou (nunca caminhos inferidos).
+        const ready = { ...loaded, doc }
+        await launchTurn(ready, manualCleanupTurn(ready, await manualCleanupTargets(ready)), { userText: "Tentar a limpeza novamente", bypassLimit: true })
+        return getWorkbench(id)
+    }
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
         const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
@@ -1308,7 +1655,8 @@ export async function retry(id: string): Promise<WorkbenchDto> {
         return getWorkbench(id)
     }
     const text = `A execução anterior desta etapa não terminou (${doc.error ?? "motivo desconhecido"}). Retome de onde parou e conclua a etapa conforme as instruções abaixo.\n\n${doc.lastPrompt.text}`
-    await launchTurn({ ...loaded, doc }, { stage, text }, { userText: "Tentar novamente" })
+    // Os anexos da mensagem original voltam junto (o turno não terminou: o agente pode não tê-los lido).
+    await launchTurn({ ...loaded, doc }, { stage, text, ...(doc.lastPrompt.fileIds?.length ? { fileIds: doc.lastPrompt.fileIds } : {}) }, { userText: "Tentar novamente" })
     return getWorkbench(id)
 }
 
@@ -1335,12 +1683,15 @@ export async function interrupt(id: string): Promise<WorkbenchDto> {
 }
 
 /** Chat durante a execução: mensagem do usuário que entra no turno em andamento da mesa (sem interromper). */
-export async function sendLiveMessage(id: string, text: string): Promise<WorkbenchDto> {
+export async function sendLiveMessage(id: string, text: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const doc = await loadWorkbench(id)
     if (doc.deletionRequestedAt) throw new DomainError(409, "A mesa está sendo excluída: não é possível enviar mensagens", "WORKBENCH_DELETING")
     if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está trabalhando nesta mesa: use as ações da etapa", "WORKBENCH_NOT_RUNNING")
     if (asStage(doc.stage) === "adversarial_review") throw new DomainError(409, "O agente adversário revisa sem interferência: aguarde o veredito para orientar a correção", "WORKBENCH_ADVERSARIAL_REVIEW")
-    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text)
+    const files = await loadClaimableFiles(fileIds, id)
+    const attachments = files.length ? await liveAttachments(files, agenticDownloadDir(doc.taskCode)) : undefined
+    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text, attachments)
+    await claimAgenticFiles(files, { workbenchId: id })
     centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)
 }
@@ -1421,6 +1772,9 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await (await adversaryModule()).removeWorkbenchReviewSessions(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao excluir sessões do agente adversário", { workbenchId: id, error: errorText(error) }))
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
+    await trackBuild(id, () => dropBuilds(id))
+    // Anexos das mensagens da mesa e dos forks (melhor esforço: falha no storage não segura a exclusão).
+    await deleteWorkbenchFiles(id).catch((error) => logger.warn({ err: error, workbenchId: id }, "[agentic] Falha ao remover os anexos da mesa"))
     await AgenticWorkbench.deleteOne({ _id: doc._id })
     await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })
@@ -1623,21 +1977,10 @@ function fetchPullMerge(repo: string, number: number): Promise<GithubPullMerge> 
 async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
-    const log = centralLogger(doc.centralId, doc.taskCode)
-    const notice = (level: "info" | "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
     await update(doc, { pr })
-    notice("success", `PR #${pr.number} mergeado`)
+    publishWorkbenchEvent(id, { type: "notice", level: "success", message: `PR #${pr.number} mergeado` })
 
-    const doneColumn = loaded.columns.onDone
-    if (doneColumn) {
-        try {
-            await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
-            notice("info", "Tarefa movida para a coluna de conclusão")
-        } catch (error) {
-            notice("warn", `Não foi possível mover a tarefa: ${errorText(error)}`)
-            log.warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
-        }
-    }
+    await applyDoneEffects(loaded)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, prMergeado: pr.url } })
 
     const cleanup = config.cleanup
@@ -1648,6 +1991,24 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
         return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }
     }
     return null
+}
+
+/**
+ * Efeitos da conclusão na tarefa (merge ou conclusão manual, mesmo resultado): move para a coluna
+ * "Ao concluir" da central. Melhor esforço: falhas viram aviso na mesa.
+ */
+async function applyDoneEffects(loaded: Loaded): Promise<void> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const doneColumn = loaded.columns.onDone
+    if (!doneColumn) return
+    try {
+        await moveTask(doc.taskId, { targetColumn: doneColumn }, actorId())
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Tarefa movida para a coluna de conclusão" })
+    } catch (error) {
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Não foi possível mover a tarefa: ${errorText(error)}` })
+        centralLogger(doc.centralId, doc.taskCode).warn("Falha ao mover a tarefa na conclusão", { workbenchId: id, error: errorText(error) })
+    }
 }
 
 /** PR mergeado: tarefa para Validação, timer parado e limpeza (conforme a central). */

@@ -31,7 +31,7 @@ prévia; o `docker` do servidor lê o worktree e envia o contexto ao BuildKit do
   teste periódico de status **pula** a integração e o "Testar conexão" devolve aviso "Integração
   desativada".
 - A integração **aparece sempre** na lista e em `/integracoes/builder_machine` (para poder ativá-la).
-  Desativada, a página mostra só **Geral** + card **Ativação** ("Integração ativa") e as abas
+  Desativada, a página mostra só **Geral** + card **Ativação** ("Integração ativa") e as demais abas
   bloqueadas ("Ative a integração e salve…"); a configuração do PC nem é carregada.
 - **Ativar** (transição desligada → ligada, `updateIntegration`) roda o gancho de ativação
   (`src/features/integrations/services/enable-hooks.ts`, `INTEGRATION_ENABLE_HOOKS`, depois de gravar
@@ -94,6 +94,32 @@ prévia; o `docker` do servidor lê o worktree e envia o contexto ao BuildKit do
   <builder> -f --max-used-space <teto>gb` (teto padrão 20 GB). Integração desativada ou túnel fechado:
   não faz nada. Com a integração desativada a rotina some da aba Rotinas (`INTEGRATION_CRON_JOBS` +
   `hiddenJobIds`; continua salva).
+- **Certificados do PC** (redes com inspeção TLS, ex.: FortiGate): a rede troca o certificado dos sites
+  pelo da CA corporativa; o WSL confia nela, os containers da prévia não, e as chamadas HTTPS do servidor
+  da prévia falham ("unable to get local issuer certificate"). Com **"Confiar nas CAs do PC nas
+  prévias"** (`trustPcCertificates`, padrão ligado) e o **bundle de CAs no PC** (`pcCaBundlePath`,
+  caminho absoluto, padrão `/etc/ssl/certs/ca-certificates.crt`), ao anexar a prévia ao PC
+  (`prepareCaOverride`, `server/certificates.ts`) o app lê no worktree os arquivos-base do compose (o
+  `composeFile` da central ou a descoberta padrão, com o `*.override.*`) e os serviços
+  (`composeInspectCommand`), grava no host um override `~/.opex-local/compose/<projeto>.ca.yml` que
+  monta o bundle somente leitura (`create_host_path: false`) em `/etc/opex/ca-bundle.pem` em cada
+  serviço e define `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE` e `REQUESTS_CA_BUNDLE`. Os arquivos do build
+  (base + override) ficam em `local_docker_previews.composeFiles`; o build, os logs e o **Recriar**
+  usam os mesmos `-f`. Nunca derruba o build: sem o bundle no PC, sem ler o compose ou falha ao gravar,
+  a prévia sobe sem as CAs e a mesa recebe um aviso. Desligado, o override antigo é apagado; derrubar
+  ou apagar a prévia também o apaga. O **Preparar o Docker do PC** termina com o passo
+  "Certificados (inspeção TLS)": compara o emissor do certificado de `api.clerk.com` visto pelo
+  servidor e pelo PC (`openssl s_client`) e falha quando há inspeção e a injeção está desligada ou o
+  bundle não existe (sem `openssl` ou sem acesso = "Não verificado").
+- **Executor desacoplado** (`server/detached.ts` + `detached-commands.ts`, opção `detached` do
+  `runOnHost`/`createHostRunner`): comandos longos rodam em segundo plano no host (`setsid nohup` sob
+  `timeout`, saída e código em `~/.cache/opex/jobs/<id>/`) e o app acompanha por consultas curtas, cada
+  uma num shell próprio do OpenCode. O OpenCode descartar um shell no meio ("Shell command not found",
+  `HostShellLostError`/`isShellNotFound`) só faz a consulta ser repetida — o processo segue vivo. O
+  mesmo `jobId` reencontra o job já iniciado (início idempotente), o `signal` cancela (TERM no grupo do
+  processo) e a pasta do job é apagada no fim. `onOutput` entrega a saída aos pedaços; `retryOnLost`
+  repete uma leitura sem efeito colateral; `quiet` não escreve no debug. `createHostRunner(debug)` cria
+  um executor que escreve no debug de outra integração.
 - **Fila do build** continua única (um build local por vez em todo o app).
 - **Forks não usam a Builder Machine**: só o build **da mesa** passa por ela (o marcador de nova
   prévia do fork do My Tasks não foi portado); um `docker compose` rodado por um fork vai para o
@@ -103,16 +129,21 @@ prévia; o `docker` do servidor lê o worktree e envia o contexto ao BuildKit do
 
 - **`/integracoes/builder_machine`**: status, **Testar conexão** (SSH do PC, túnel e Docker do PC) e
   **Debug** (cada comando no host com o resultado). Ativa, página em abas (`?aba=`):
-  1. **Túnel do Docker do PC** (`tunel`, padrão): situação (abrir/fechar, conferir), passos pendentes
-     com atalho, **Containers de prévia** e **Containers de ambiente** com as ações acima.
-  2. **Conexão com o PC** (`conexao`): Geral (ambiente, debug), **Ativação**, a chave global "Usar o PC
-     quando o túnel estiver aberto" e o modo (`OptionTabs` com tooltip por opção: Túnel de controle /
-     Direto pelo IP); só os campos do modo aparecem.
-  3. **Docker do PC** (`docker`): builder dedicado (contexto, nome, memória, CPUs, teto do cache), rede
-     e apelidos.
-  4. **Preparo do PC** (`preparo`): chave (gerar nova / inserir existente), preparo do WSL (passo a
+  1. **Geral** (`geral`): Geral da integração (ambiente, debug) e **Ativação**.
+  2. **Túnel do Docker do PC** (`tunel`, padrão): situação (abrir/fechar, conferir), card
+     **Configuração** recolhível com os passos pendentes e o atalho de cada um (status geral no canto:
+     "Pronta", "N pendentes" ou "Verificando…"; abre sozinho com pendência e fecha sozinho com tudo
+     pronto, decidido uma vez quando o status chega — depois o usuário manda), **Containers de prévia**
+     e **Containers de ambiente** com as ações acima.
+  3. **Conexão com o PC** (`conexao`): a chave global "Usar o PC quando o túnel estiver aberto" e o
+     modo (`OptionTabs` com tooltip por opção: Túnel de controle / Direto pelo IP); só os campos do modo
+     aparecem.
+  4. **Preparo do PC** (`preparo`): chave (gerar nova / inserir existente) e preparo do WSL (passo a
      passo recolhido ou **Gerar o script** com **Copiar**/**Baixar** `opex-pc.sh`; rede espelhada só
-     no modo Direto) e Docker do PC (testar, preparar, último preparo).
+     no modo Direto).
+  5. **Docker do PC** (`docker`, última): builder dedicado (contexto, nome, memória, CPUs, teto do
+     cache), rede, apelidos, **Certificados do PC** e o preparo do Docker do PC (testar, preparar,
+     último preparo; bloqueado com alterações não salvas ou sem a chave).
   Salvar grava a configuração do PC e o Geral da integração. Obrigatórios: usuário do WSL; no modo
   túnel, como o PC acessa o servidor; no direto, o IP; com apelidos, o endereço do servidor.
 - Central › aba **Ambiente**: card **Builder Machine** (`OptionTabs` Padrão global / Sempre que aberto
@@ -142,11 +173,12 @@ Tempo real: `local-docker-updated` (`{ kind }`) em `private-app`. Auditoria: ent
   `keyFingerprint`, `builderApplied`, `lastPrepare`, `wantOpen`, `lastSeenOpen`, `lastCheckAt`,
   `updatedAt`, `updatedBy`); `local_docker_central_overrides` (`centralId`, `mode`);
   `local_docker_previews` (`workbenchId`, `centralId`, `composeProject`, `port`, `pendingTeardown`,
-  `createdAt`). Índices garantidos no primeiro uso (`localDockerDb`).
+  `composeFiles`, `createdAt`). Índices garantidos no primeiro uso (`localDockerDb`).
 - Integração `builder_machine` (`active`, segredo `sshPrivateKey`) e a rotina `builder-machine-cleanup`.
 - Host do OpenCode: `~/.ssh/opex_local_ed25519` (+ `.pub`), `~/.ssh/opex_local_known_hosts`,
   `~/.ssh/opex-local.ctl`, `~/.opex-local-docker.sock`, contexto `opex-local`, builder
-  `opex-local-builder` (nomes padrão).
+  `opex-local-builder` (nomes padrão), overrides das CAs em `~/.opex-local/compose/` e as pastas dos
+  jobs desacoplados em `~/.cache/opex/jobs/` (apagadas no fim de cada comando).
 - PC (WSL): `openssh-server`/`autossh`, a chave em `~/.ssh/authorized_keys`,
   `/etc/systemd/system/opex-control-tunnel.service`, `systemd=true` em `/etc/wsl.conf`,
   `vmIdleTimeout=-1` (e `networkingMode=mirrored`) no `%USERPROFILE%\.wslconfig`, a rede, os apelidos,
@@ -161,6 +193,6 @@ Tempo real: `local-docker-updated` (`{ kind }`) em `private-app`. Auditoria: ent
 
 ## Testes
 
-`__tests__/features/local-docker/{commands,tunnel,builder-machine,local-docker-ui}.test.ts(x)`;
+`__tests__/features/local-docker/{commands,tunnel,builder-machine,local-docker-ui,detached,shell}.test.ts(x)`;
 ativação e health em `__tests__/features/integrations/{integration-service,health-check-queue}.test.ts`;
 build na Builder Machine em `__tests__/features/agentic/{workflow-preview-backup,prompts,environment-section}.test.ts(x)`.

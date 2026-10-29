@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pumpQueue: vi.fn(async () => undefined),
   recordAudit: vi.fn(async () => undefined),
   runTurn: vi.fn(),
+  runBuild: vi.fn(async () => ({ exitCode: 0, tail: '' })),
   allocatePort: vi.fn(async () => 4010),
   moveTask: vi.fn(async () => undefined),
   getTask: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   // O schema real aplica `startedAt` por padrão; o dublê em memória precisa do mesmo default.
   const baseCreate = workbench.create
   workbench.create = (doc: Record<string, unknown>) => baseCreate({ startedAt: new Date(), ...doc })
-  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
+  return { AgenticWorkbench: workbench, AgenticCentral: memoryModel(), AgenticEvent: memoryModel(), AgenticBuild: memoryModel() }
 })
 vi.mock('@/features/agentic/server/centrals', () => ({
   loadCentral: mocks.loadCentral,
@@ -67,12 +68,14 @@ vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: mocks.pump
 vi.mock('@/features/agentic/server/build-queue', () => ({ buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()), pumpBuildQueue: mocks.pumpBuild }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
+// O app roda o comando do build no host (aba Build).
+vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
-import { implement, setWorkbenchPreview, startBuildTurn, startPendingTurn } from '@/features/agentic/server/workflow'
+import { implement, rebuildPreview, setWorkbenchPreview, startBuildTurn, startPendingTurn } from '@/features/agentic/server/workflow'
 
 /**
  * Chave "Gerar prévia" da mesa: desligada, a mesa pula a prévia e publica direto no PR (fluxo PR
@@ -172,17 +175,17 @@ describe('desligar "Gerar prévia"', () => {
 
   it('com o build rodando: o build termina e a mesa publica no PR sem parar na prévia', async () => {
     const wb = await workbench({ stage: 'build_queued', buildQueuedAt: new Date() })
-    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) => {
-      if (request.stage === 'building') {
-        await setWorkbenchPreview(wb._id, { enabled: false })
-        return succeeded('```json\n{"ok":true}\n```')
-      }
-      return PR_JSON
+    mocks.runTurn.mockImplementation(async (_client: unknown, request: { stage: string }) => (request.stage === 'building' ? succeeded('```json\n{"ok":true}\n```') : PR_JSON))
+    // A chave é desligada enquanto o app roda o build da prévia.
+    mocks.runBuild.mockImplementationOnce(async () => {
+      await setWorkbenchPreview(wb._id, { enabled: false })
+      return { exitCode: 0, tail: '' }
     })
     await startBuildTurn(wb._id)
     await waitFor(wb._id, 'pr_open')
 
-    expect(stages()).toEqual(['building', 'opening_pr'])
+    expect(mocks.runBuild).toHaveBeenCalledTimes(1)
+    expect(stages().at(-1)).toBe('opening_pr')
     expect(doc(wb._id).previewUrl).toBe('http://localhost:4010')
   })
 
@@ -245,5 +248,37 @@ describe('"Gerar prévia": bordas', () => {
     await setWorkbenchPreview(wb._id, { enabled: true })
     expect(doc(wb._id).stage).toBe('pr_open')
     expect(mocks.recordAudit).not.toHaveBeenCalled()
+  })
+})
+
+describe('"Gerar nova prévia"', () => {
+  it('na prévia pronta: volta à fila do build sem replanejar nem revisar de novo, audita e avisa quem pediu', async () => {
+    const wb = await workbench({ stage: 'preview', previewUrl: 'http://localhost:4010', previewHealthy: true })
+    await rebuildPreview(wb._id, 'Fork 2')
+
+    expect(doc(wb._id).stage).toBe('build_queued')
+    expect(doc(wb._id).buildQueuedAt).toBeInstanceOf(Date)
+    expect(mocks.pumpBuild).toHaveBeenCalled()
+    expect(mocks.runTurn).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ novaPrevia: true, pedidoPor: 'Fork 2' }) }))
+    expect(noticeOf(wb._id)).toContain('Nova prévia (pedido pelo Fork 2): reconstruindo com o código atual (fila do build).')
+  })
+
+  it('central no limite: aguarda vaga e entra na fila do build quando a vaga chega', async () => {
+    mocks.loadCentral.mockResolvedValue(centralWith({ maxConcurrent: 1 }))
+    await workbench({ stage: 'implementing', runState: 'running' })
+    const wb = await workbench({ stage: 'preview', previewUrl: 'http://localhost:4010' })
+    const dto = await rebuildPreview(wb._id)
+
+    expect(doc(wb._id).stage).toBe('preview')
+    expect(dto.slotQueue).toMatchObject({ action: 'generate-preview' })
+    expect(await startPendingTurn(wb._id)).toBe('started')
+    expect(doc(wb._id).stage).toBe('build_queued')
+  })
+
+  it.each(['plan_review', 'pr_open', 'implementing'])('fora da prévia pronta (%s) é recusada (409)', async (stage) => {
+    const wb = await workbench({ stage, pr: stage === 'pr_open' ? OPEN_PR : null })
+    await expect(rebuildPreview(wb._id)).rejects.toMatchObject({ status: 409 })
+    expect(doc(wb._id).stage).toBe(stage)
   })
 })

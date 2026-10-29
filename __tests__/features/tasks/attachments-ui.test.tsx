@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -28,7 +28,7 @@ const attachment = (overrides: Partial<TaskAttachmentDto> = {}): TaskAttachmentD
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // O jsdom desta versão não implementa createObjectURL.
+  // O DOM de teste não implementa createObjectURL.
   URL.createObjectURL = vi.fn(() => 'blob:previa')
   URL.revokeObjectURL = vi.fn()
 })
@@ -130,6 +130,8 @@ describe('colar mídia na descrição', () => {
     const { rerender } = render(<MarkdownField value="texto inicial" onChange={onChange} uploads={uploads} />)
 
     const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Markdown aceito')
+    // Cursor explícito no início: a posição inicial do cursor muda entre os DOMs de teste.
+    textarea.setSelectionRange(0, 0)
     fireEvent.paste(textarea, { clipboardData: { files: [pastedFile()] } })
 
     await waitFor(() => expect(enqueue).toHaveBeenCalledTimes(1))

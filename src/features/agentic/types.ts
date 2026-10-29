@@ -1,5 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import type { ChatFileDto } from "@/lib/chat-files/kind"
 import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchModelRole, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
@@ -127,6 +128,8 @@ export interface WorkbenchDto {
     stoppedByUser: boolean
     /** Desfecho da última tentativa de reconexão (estado estável do ciclo automático). */
     reconnect: ReconnectInfoDto | null
+    /** Conclusão manual (sem PR): motivo e etapa de origem; `null` na conclusão pelo merge ou mesa aberta. */
+    manualCompletion: { reason: string; fromStage: WorkbenchStage; at: string } | null
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: Record<WorkbenchModelRole, ModelChoiceDto> | null
@@ -262,7 +265,8 @@ export interface PrWatchScheduleDto {
 
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
-    | { type: "user"; text: string }
+    /** Mensagem do usuário; `files`: anexos enviados com ela (metadados e rota do app, nunca a URL assinada). */
+    | { type: "user"; text: string; files?: ChatFileDto[] }
     | { type: "text"; text: string }
     | { type: "reasoning" }
     | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }

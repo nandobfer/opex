@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn(), setWorkbenchStage: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
@@ -17,6 +17,7 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   adversarialFix: mocks.adversarialFix,
   adversarialSkip: mocks.adversarialSkip,
   adversarialRerun: mocks.adversarialRerun,
+  setWorkbenchStage: mocks.setWorkbenchStage,
 }))
 
 import { POST } from '@/app/api/agentic/workbenches/[id]/actions/[action]/route'
@@ -32,15 +33,15 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect((await call('revise-plan', { text: 'x' })).status).toBe(400)
     const res = await call('revise-plan', { text: 'Use o componente X' })
     expect(res.status).toBe(200)
-    expect(mocks.revisePlan).toHaveBeenCalledWith('w1', 'Use o componente X')
+    expect(mocks.revisePlan).toHaveBeenCalledWith('w1', 'Use o componente X', undefined)
   })
 
   it('implementar aceita texto opcional; ações sem corpo e ação desconhecida', async () => {
     mocks.implement.mockResolvedValue({ id: 'w1' })
     expect((await call('implement', {})).status).toBe(200)
-    expect(mocks.implement).toHaveBeenCalledWith('w1', undefined)
+    expect(mocks.implement).toHaveBeenCalledWith('w1', undefined, undefined)
     expect((await call('implement', { text: 'Use o componente X' })).status).toBe(200)
-    expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X')
+    expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X', undefined)
     expect((await call('apagar-tudo')).status).toBe(404)
   })
 
@@ -62,6 +63,16 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect(mocks.adversarialSkip).toHaveBeenCalledWith('w1')
     expect((await call('adversarial-rerun')).status).toBe(200)
     expect(mocks.adversarialRerun).toHaveBeenCalledWith('w1')
+  })
+
+  it('definir etapa exige uma etapa de espera e o motivo', async () => {
+    mocks.setWorkbenchStage.mockResolvedValue({ id: 'w1', stage: 'done' })
+    expect((await call('set-stage', { stage: 'done' })).status).toBe(400)
+    expect((await call('set-stage', { stage: 'implementing', reason: 'Implementar' })).status).toBe(400)
+    expect(mocks.setWorkbenchStage).not.toHaveBeenCalled()
+    const res = await call('set-stage', { stage: 'done', reason: ' Já resolvido ' })
+    expect(res.status).toBe(200)
+    expect(mocks.setWorkbenchStage).toHaveBeenCalledWith('w1', { stage: 'done', reason: 'Já resolvido' })
   })
 
   it('cancelar a espera por vaga não tem corpo e devolve a mesa', async () => {

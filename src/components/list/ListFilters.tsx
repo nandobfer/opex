@@ -1,14 +1,15 @@
 "use client"
 
 import { useEffect, useId, useState, type ReactNode } from "react"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ChevronDown, ChevronUp, Filter, Search, X } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import { Filter, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { ActiveFilterChips, type ActiveFilterChip } from "./ActiveFilterChips"
+import type { ActiveFilterChip } from "./ActiveFilterChips"
+import { CollapseToggle, CollapsedChips, CollapsibleBody } from "./CollapsibleFilters"
 import { CadastroFilterCard } from "./CadastroFilterCard"
 import { FilterGroup } from "./FilterGroup"
 
@@ -59,7 +60,6 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
     const externalSearch = search?.value ?? ""
     const onSearchChange = search?.onChange
     const [collapsed, setCollapsed] = useState(collapsible && defaultCollapsed)
-    const reduceMotion = useReducedMotion()
     const contentId = useId()
 
     // Acompanha mudanças externas (ex.: voltar no navegador, Limpar, remover chip).
@@ -143,13 +143,7 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
                             <h2 className="whitespace-nowrap text-sm font-semibold uppercase tracking-wider text-muted-foreground">Filtros</h2>
                         </div>
                         <div className="col-start-1 col-end-3 row-start-2 min-w-0 md:col-start-2 md:col-end-3 md:row-start-1" data-testid="list-filters-summary">
-                            <AnimatePresence initial={false}>
-                                {collapsed && (
-                                    <motion.div key="chips" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                                        <ActiveFilterChips chips={chips} />
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                            <CollapsedChips collapsed={collapsed} chips={chips} />
                         </div>
                         <div className="col-start-2 col-end-3 row-start-1 flex shrink-0 items-center justify-end gap-1.5 md:col-start-3 md:col-end-4" data-testid="list-filters-controls">
                             {total !== undefined && total > 0 && (
@@ -175,41 +169,14 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
                                     </motion.span>
                                 )}
                             </AnimatePresence>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    setCollapsed((value) => !value)
-                                }}
-                                aria-expanded={!collapsed}
-                                aria-controls={contentId}
-                                aria-label={collapsed ? "Expandir filtros" : "Recolher filtros"}
-                                title={collapsed ? "Expandir filtros" : "Recolher filtros"}
-                            >
-                                {collapsed ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronUp className="h-4 w-4" aria-hidden />}
-                            </Button>
+                            <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} controls={contentId} />
                         </div>
                     </div>
                 </CardHeader>
-                <AnimatePresence initial={false}>
-                    {!collapsed && (
-                        <motion.div
-                            key="content"
-                            id={contentId}
-                            initial={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                            animate={reduceMotion ? { opacity: 1 } : { height: "auto", opacity: 1 }}
-                            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            // Popovers dos campos abrem em portal: o overflow não os corta.
-                            className="overflow-hidden"
-                        >
-                            <CardContent>{fields}</CardContent>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                {/* Popovers dos campos abrem em portal: o overflow não os corta. */}
+                <CollapsibleBody collapsed={collapsed} id={contentId}>
+                    <CardContent>{fields}</CardContent>
+                </CollapsibleBody>
             </Card>
         </TooltipProvider>
     )

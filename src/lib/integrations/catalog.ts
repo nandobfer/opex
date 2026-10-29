@@ -190,6 +190,10 @@ export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
 /** Builder Machine: limpeza das imagens órfãs e do cache do builder do PC. */
 export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
+/** Lê a quota do OpenCode (export do plugin opencode-quota) e avisa a tela quando muda. */
+export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
+/** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
+export const ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID = "environments-registry-cleanup"
 
 /** Rotinas internas de uma integração ativável (id da rotina → id da integração): somem de Crons com ela desativada. */
 export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = { [BUILDER_MACHINE_CLEANUP_JOB_ID]: "builder_machine" }
@@ -276,11 +280,25 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         enabled: true,
     },
     {
+        id: OPENCODE_QUOTA_JOB_ID,
+        label: "Atualizar a quota do OpenCode (opencode-quota)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 5 },
+        enabled: true,
+    },
+    {
         id: BUILDER_MACHINE_CLEANUP_JOB_ID,
         label: "Limpar imagens órfãs e cache do builder do PC (Builder Machine)",
         kind: "internal",
         schedule: { type: "daily", time: "03:00" },
         // Ligada ao ativar a integração Builder Machine.
+        enabled: false,
+    },
+    {
+        id: ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID,
+        label: "Limpar tags antigas do registry dos ambientes (Ambientes)",
+        kind: "internal",
+        schedule: { type: "daily", time: "04:00" },
         enabled: false,
     },
 ]
@@ -513,6 +531,13 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
                 description: "Pasta (na máquina do OpenCode, precisa existir) em que as sessões do app são criadas; vazio usa a do servidor",
                 kind: "text",
                 placeholder: "/home/usuario/opex-ia",
+            },
+            {
+                key: "quotaExportPath",
+                label: "Arquivo de quota (opencode-quota)",
+                description: "Export JSON do plugin opencode-quota na máquina do OpenCode, mostrado em /desenvolvimento; vazio usa o padrão do plugin",
+                kind: "text",
+                placeholder: "~/.cache/opencode/quota-export.json",
             },
         ],
         secretFields: [

@@ -97,7 +97,7 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                                         name="enabled"
                                         id="opex-enabled"
                                         label="Agente Opex"
-                                        description="Assistente por chat (item da barra lateral, Ctrl+Shift+O) que executa as funcionalidades do app com ferramentas: tarefas, prévias, horas, mesas, centrais, integrações, rotinas, serviços, financeiro e clientes"
+                                        description="Assistente por chat (item da barra lateral, Ctrl+Shift+O) que executa as funcionalidades do app com ferramentas: tarefas, prévias, horas, mesas, centrais, integrações, rotinas, serviços, financeiro, clientes e a documentação do app"
                                     />
                                     <AnimatePresence initial={false}>
                                         {!dirty && !availability.available && availability.reason && (

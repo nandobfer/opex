@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from "react"
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react"

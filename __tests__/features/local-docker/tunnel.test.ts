@@ -33,7 +33,7 @@ const overrides = () => store.overrides as Model
 const previews = () => store.previews as Model
 
 /** Host falso: o túnel abre/fecha de verdade no estado e cada comando é registrado. */
-function fakeHost(options: { reachable?: boolean; openFails?: boolean; pcPorts?: number[] } = {}) {
+function fakeHost(options: { reachable?: boolean; openFails?: boolean; pcPorts?: number[]; compose?: string; bundle?: boolean } = {}) {
   const calls: string[] = []
   let open = false
   const run = vi.fn(async (command: string): Promise<HostResult> => {
@@ -50,6 +50,9 @@ function fakeHost(options: { reachable?: boolean; openFails?: boolean; pcPorts?:
       open = false
       return done()
     }
+    if (command.includes('test -r')) return options.bundle === false ? fail('') : done()
+    if (command.includes('config --services')) return options.compose === undefined ? fail('no configuration file provided: not found') : done(options.compose)
+    if (command.includes('base64 -d >')) return done('OVERRIDE:/home/srv/.opex-local/compose/portal-go-dev-1.ca.yml')
     if (command.includes("'ss -Htln'")) return done((options.pcPorts ?? []).map((port) => `LISTEN 0 128 0.0.0.0:${port} 0.0.0.0:*`).join('\n'))
     if (command.includes(' info --format')) return open ? done('29.5.1|pc|12|8000000000') : fail()
     if (command.startsWith('ssh -i')) return options.reachable === false ? fail('Connection timed out') : done()
@@ -146,7 +149,11 @@ describe('túnel da máquina local', () => {
 })
 
 describe('destino do build da prévia', () => {
-  const input = { workbenchId: 'w1', centralId: 'c1', composeProject: 'portal-go-dev-1', hadPort: false }
+  const input = { workbenchId: 'w1', centralId: 'c1', composeProject: 'portal-go-dev-1', worktreePath: '/w/portal-go-dev-1', composeFile: '', portEnvVar: 'PORT', hadPort: false }
+  const decodedOverride = (calls: string[]) => {
+    const write = calls.find((call) => call.includes('base64 -d >'))
+    return write ? Buffer.from(write.match(/printf %s '([^']+)'/)![1]!, 'base64').toString('utf8') : null
+  }
 
   it('túnel fechado: servidor (null)', async () => {
     await configured()
@@ -191,6 +198,59 @@ describe('destino do build da prévia', () => {
     expect(await resolveBuildTarget({ ...input, hadPort: true }, host.run)).toBeNull()
     expect(host.calls.some((call) => call.startsWith('ids=$(docker --context opex-local ps -aq'))).toBe(true)
     expect(previews().docs).toHaveLength(0)
+  })
+
+  it('rede com inspeção TLS: anexar gera o override com as CAs do PC para cada serviço e guarda os arquivos do build', async () => {
+    await configured()
+    const host = fakeHost({ compose: 'FILE:docker-compose.yml\nFILE:docker-compose.override.yml\nSERVICE:app\nSERVICE:worker' })
+    await openTunnel('local', host.run)
+    const target = await resolveBuildTarget(input, host.run)
+    const attached = await target!.attach(4002)
+    const files = ['docker-compose.yml', 'docker-compose.override.yml', '/home/srv/.opex-local/compose/portal-go-dev-1.ca.yml']
+    expect(attached.composeFiles).toEqual(files)
+    expect(attached.notice).toMatchObject({ level: 'info' })
+    expect(previews().docs[0]).toMatchObject({ workbenchId: 'w1', composeFiles: files })
+    expect(host.calls.some((call) => call.startsWith("cd '/w/portal-go-dev-1' && ") && call.includes('PORT=4002 docker compose "$@" config --services'))).toBe(true)
+    const yaml = decodedOverride(host.calls)!
+    expect(yaml).toContain('"app":')
+    expect(yaml).toContain('"worker":')
+    expect(yaml).toContain('source: "/etc/ssl/certs/ca-certificates.crt"')
+    expect(yaml).toContain('NODE_EXTRA_CA_CERTS: "/etc/opex/ca-bundle.pem"')
+    expect(host.calls.at(-1)).toContain('-O forward -L 0.0.0.0:4002:localhost:4002')
+  })
+
+  it('sem o bundle no PC ou sem ler o compose: o build segue sem override, com aviso', async () => {
+    await configured()
+    const host = fakeHost({ bundle: false, compose: 'FILE:compose.yaml\nSERVICE:app' })
+    await openTunnel('local', host.run)
+    const missing = await (await resolveBuildTarget(input, host.run))!.attach(4002)
+    expect(missing).toMatchObject({ composeFiles: null, notice: { level: 'warn', message: expect.stringContaining('/etc/ssl/certs/ca-certificates.crt não existe no PC') } })
+    expect(decodedOverride(host.calls)).toBeNull()
+
+    const noCompose = fakeHost()
+    await openTunnel('local', noCompose.run)
+    const failed = await (await resolveBuildTarget(input, noCompose.run))!.attach(4002)
+    expect(failed).toMatchObject({ composeFiles: null, notice: { level: 'warn', message: expect.stringContaining('no configuration file provided') } })
+    expect(previews().docs[0]).toMatchObject({ composeFiles: [] })
+  })
+
+  it('injeção das CAs desligada: sem override (e o antigo é apagado)', async () => {
+    await state().create({ key: 'default', settings: { ...DEFAULT_LOCAL_DOCKER_SETTINGS, pcUser: 'alfredopetri', serverAddress: '192.168.0.64', trustPcCertificates: false }, publicKey: 'ssh-ed25519 AAAA', wantOpen: false, lastSeenOpen: null })
+    const host = fakeHost({ compose: 'FILE:compose.yaml\nSERVICE:app' })
+    await openTunnel('local', host.run)
+    const attached = await (await resolveBuildTarget(input, host.run))!.attach(4002)
+    expect(attached).toEqual({ composeFiles: null, notice: null })
+    expect(host.calls.some((call) => call.includes('config --services'))).toBe(false)
+    expect(host.calls).toContain('rm -f "$HOME/.opex-local/compose/portal-go-dev-1.ca.yml"; true')
+  })
+
+  it('derrubar a prévia do PC apaga o override dela', async () => {
+    await configured()
+    const host = fakeHost()
+    await openTunnel('local', host.run)
+    await previews().create({ workbenchId: 'w1', centralId: 'c1', composeProject: 'portal-go-dev-1', port: 4001, pendingTeardown: false })
+    expect(await teardownLocalPreview('w1', host.run)).toBe('done')
+    expect(host.calls).toContain('rm -f "$HOME/.opex-local/compose/portal-go-dev-1.ca.yml"; true')
   })
 
   it('prévia no GitHub Action (forceServer): fica no servidor mesmo com o túnel aberto e derruba a prévia anterior no PC', async () => {

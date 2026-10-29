@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest'
-import { defaultSessionDirectory, modelChain, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
+import { defaultSessionDirectory, manualStageBlock, manualStageOptions, modelChain, parseCentralConfig, pickPreviewPort, prMergeReady, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, workbenchActions, workbenchProgressTone, workbenchUserWaitReason, workbenchWaitingReason } from '@/features/agentic/logic'
 import { agentConfigSchema, agenticSettingsSchema, centralConfigSchema, DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig, withDefaultAgents } from '@/features/agentic/schemas'
+
+
+describe('definir etapa da mesa (manualStageBlock)', () => {
+  const state = (overrides: Partial<Parameters<typeof manualStageBlock>[1]> = {}) => ({ stage: 'plan_review' as const, hasPlan: true, hasPreview: false, prOpen: false, deleting: false, ...overrides })
+
+  it('concluir vale de qualquer etapa que não seja Concluída, inclusive em execução', () => {
+    for (const stage of ['planning', 'plan_review', 'implementing', 'preview', 'pr_open', 'finishing'] as const) expect(manualStageBlock('done', state({ stage }))).toBeNull()
+    expect(manualStageBlock('done', state({ stage: 'done' }))).toContain('Reabrir')
+  })
+
+  it('etapas de espera exigem o que elas mostram (plano, prévia, PR aberto)', () => {
+    expect(manualStageBlock('plan_review', state({ stage: 'preview', hasPlan: false }))).toBe('A mesa ainda não tem um plano para revisar')
+    expect(manualStageBlock('plan_review', state({ stage: 'preview' }))).toBeNull()
+    expect(manualStageBlock('preview', state())).toBe('A mesa não tem uma prévia publicada')
+    expect(manualStageBlock('preview', state({ hasPreview: true }))).toBeNull()
+    expect(manualStageBlock('pr_open', state())).toBe('A mesa não tem um Pull Request aberto')
+    expect(manualStageBlock('changes_requested', state({ prOpen: true }))).toBeNull()
+  })
+
+  it('recusa a mesma etapa e a mesa em exclusão', () => {
+    expect(manualStageBlock('plan_review', state())).toBe('A mesa já está em "Plano pronto"')
+    expect(manualStageBlock('done', state({ deleting: true }))).toContain('excluída')
+  })
+
+  it('opções da tela marcam disponibilidade e motivo', () => {
+    const options = manualStageOptions({ stage: 'preview', plans: [{}], previewUrl: 'http://h:4010', pr: { state: 'merged' }, deletionRequestedAt: null })
+    expect(options.map((option) => [option.stage, option.available])).toEqual([
+      ['plan_review', true],
+      ['preview', false],
+      ['pr_open', false],
+      ['changes_requested', false],
+      ['done', true],
+    ])
+    expect(options.find((option) => option.stage === 'pr_open')?.reason).toBe('A mesa não tem um Pull Request aberto')
+  })
+})
 
 describe('resolveAgent', () => {
   const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } } }
@@ -81,7 +117,9 @@ describe('pickPreviewPort', () => {
 describe('workbenchActions', () => {
   it('cada etapa oferece só as ações dela', () => {
     expect(workbenchActions('plan_review', 'idle', false)).toEqual(['implement', 'revise-plan'])
-    expect(workbenchActions('preview', 'idle', true)).toEqual(['open-preview', 'request-correction', 'approve'])
+    expect(workbenchActions('preview', 'idle', true)).toEqual(['open-preview', 'rebuild-preview', 'request-correction', 'approve'])
+    // Prévia fora do ar (sem endereço): ainda dá para gerar uma nova.
+    expect(workbenchActions('preview', 'idle', false)).toEqual(['rebuild-preview', 'request-correction', 'approve'])
     expect(workbenchActions('changes_requested', 'idle', false)).toEqual(['submit-pr-feedback'])
     expect(workbenchActions('done', 'idle', false)).toEqual(['reopen'])
     expect(workbenchActions('pr_open', 'idle', false)).toEqual([])

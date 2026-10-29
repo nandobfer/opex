@@ -22,6 +22,7 @@ interface ActiveFilterChipsProps {
     /** Chips visíveis antes do "+N". */
     maxVisible?: number
     emptyLabel?: string
+    className?: string
 }
 
 function Chip({ chip }: { chip: ActiveFilterChip }) {
@@ -34,7 +35,7 @@ function Chip({ chip }: { chip: ActiveFilterChip }) {
             transition={{ duration: 0.15 }}
             title={chip.title ?? chip.label}
             className={cn(
-                "inline-flex max-w-[260px] items-center gap-1 rounded-full border py-0.5 pl-2.5 text-xs",
+                "inline-flex min-w-0 max-w-[260px] items-center gap-1 rounded-full border py-0.5 pl-2.5 text-xs",
                 chip.onRemove ? "pr-1" : "pr-2.5",
                 chip.subtle ? "border-border bg-muted/50 text-muted-foreground" : "border-primary/30 bg-primary/10 text-foreground",
             )}
@@ -59,12 +60,12 @@ function Chip({ chip }: { chip: ActiveFilterChip }) {
 }
 
 /** Resumo dos filtros ativos (chips removíveis, "+N" com o restante na dica). */
-export function ActiveFilterChips({ chips, maxVisible = 4, emptyLabel = "Nenhum filtro ativo · clique para filtrar" }: ActiveFilterChipsProps) {
+export function ActiveFilterChips({ chips, maxVisible = 4, emptyLabel = "Nenhum filtro ativo · clique para filtrar", className }: ActiveFilterChipsProps) {
     const visible = chips.slice(0, maxVisible)
     const hidden = chips.slice(maxVisible)
 
     return (
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}>
             <AnimatePresence initial={false} mode="popLayout">
                 {chips.length === 0 ? (
                     <motion.span key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs italic text-muted-foreground">
@@ -77,7 +78,7 @@ export function ActiveFilterChips({ chips, maxVisible = 4, emptyLabel = "Nenhum 
             {hidden.length > 0 && (
                 <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                        <span className="inline-flex cursor-default items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground" onClick={(event) => event.stopPropagation()}>
+                        <span className="inline-flex shrink-0 cursor-default items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground" onClick={(event) => event.stopPropagation()}>
                             +{hidden.length}
                         </span>
                     </TooltipTrigger>

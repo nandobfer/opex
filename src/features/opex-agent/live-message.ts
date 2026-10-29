@@ -1,3 +1,5 @@
+import { OPEX_CLIENT_TOOL_GROUPS } from "./client-tools"
+import { isOpexToolGroup } from "./constants"
 import type { OpexLiveMessage, OpexPart, OpexStreamLine } from "./types"
 
 /**
@@ -57,6 +59,15 @@ export function applyLiveLine(live: OpexLiveMessage | null, line: OpexStreamLine
 /** Ferramentas ainda rodando viram erro (turno interrompido ou falho). */
 export function closeRunningTools(parts: OpexPart[], reason: string): OpexPart[] {
     return parts.map((part) => (part.type === "tool" && part.state === "running" ? { ...part, state: "error", error: reason } : part))
+}
+
+/**
+ * Partes salvas no histórico: ferramenta de grupo removido ou desconhecido (nem do dono nem do portal)
+ * fica com `group: null`, para a interface usar o ícone genérico. O resto da parte é mantido.
+ */
+export function normalizeOpexParts(parts: readonly OpexPart[]): OpexPart[] {
+    const known = (group: string) => isOpexToolGroup(group) || (OPEX_CLIENT_TOOL_GROUPS as readonly string[]).includes(group)
+    return parts.map((part) => (part.type === "tool" && part.group !== null && !known(part.group) ? { ...part, group: null } : part))
 }
 
 /** Texto final da resposta (para o subagente de título e para o histórico em caso de interrupção). */

@@ -195,6 +195,8 @@ partir dos schemas Zod da rota.
 - Mock apenas de serviços externos e do necessário.
 - Foco em comportamento e regra de negócio.
 - Sem `@testing-library/jest-dom`: usar APIs nativas do DOM.
+- DOM por arquivo com `@vitest-environment happy-dom` (jsdom só como exceção justificada); CI em
+  4 shards paralelos com `maxWorkers: "100%"` (`AGENTS.md`, seção 6).
 
 ## Documentação
 

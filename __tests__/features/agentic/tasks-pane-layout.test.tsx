@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), d
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post, patch: mocks.patch, delete: mocks.delete } }))
-// O jsdom mede o contêiner de rolagem como 0px; a virtualização devolveria nenhuma linha.
+// O DOM de teste mede o contêiner de rolagem como 0px; a virtualização devolveria nenhuma linha.
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -69,6 +69,8 @@ async function renderPane(selected: CentralDto | null = central) {
   )
   await screen.findByText('OPE-41')
   await waitFor(() => expect(client.getQueryData(['agentic', 'workbenches', 'c1'])).toBeDefined())
+  // A área de filtros começa recolhida: estes casos olham os filtros completos.
+  fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros' }))
   return result
 }
 

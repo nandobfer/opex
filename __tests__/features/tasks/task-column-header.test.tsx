@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
@@ -7,6 +7,17 @@ import { SortableContext } from '@dnd-kit/sortable'
 import type { TaskDto } from '@/features/tasks/types'
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+
+// Repassa ao virtualizador real e guarda a getItemKey da última chamada.
+const virtual = vi.hoisted(() => ({ getItemKey: null as null | ((index: number) => unknown) }))
+vi.mock('@tanstack/react-virtual', async (original) => {
+  const actual: typeof import('@tanstack/react-virtual') = await original()
+  function useVirtualizer(options: Parameters<typeof actual.useVirtualizer>[0]) {
+    virtual.getItemKey = options.getItemKey ?? null
+    return actual.useVirtualizer(options)
+  }
+  return { ...actual, useVirtualizer }
+})
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { TaskColumn, columnSortableId } from '@/features/tasks/components/TaskColumn'
@@ -102,5 +113,17 @@ describe('cabeçalho da coluna (2 linhas)', () => {
   it('sem descrição: nenhuma faixa de descrição', () => {
     render(<Column columns={[column({ description: null })]} tasks={[task(1)]} />)
     expect(within(screen.getByTestId('column-meta-col-1')).queryByTestId('column-description')).toBeNull()
+  })
+})
+
+describe('cards virtualizados', () => {
+  it('a altura medida fica presa ao id do card, não à posição (reordenar não sobrepõe cards)', () => {
+    const tasks = Array.from({ length: 60 }, (_, index) => task(index + 1))
+    const { rerender } = render(<Column columns={[column()]} tasks={tasks} />)
+    expect(virtual.getItemKey?.(0)).toBe(tasks[0]!.id)
+    const reordered = [...tasks].reverse()
+    rerender(<Column columns={[column()]} tasks={reordered} />)
+    expect(virtual.getItemKey?.(0)).toBe(tasks[59]!.id)
+    expect(virtual.getItemKey?.(59)).toBe(tasks[0]!.id)
   })
 })

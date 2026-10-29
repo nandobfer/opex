@@ -47,6 +47,13 @@ export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implement
  */
 export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "adversarial_blocked", "preview", "pr_open"]
 
+/**
+ * Etapas que o usuário (ou o Agente Opex) pode definir diretamente na mesa ("Definir etapa"), com
+ * os pré-requisitos validados no servidor (`manualStageBlock`). As de execução sempre exigem o fluxo normal.
+ */
+export const MANUAL_STAGES = ["plan_review", "preview", "pr_open", "changes_requested", "done"] as const satisfies readonly WorkbenchStage[]
+export type ManualStage = (typeof MANUAL_STAGES)[number]
+
 /** O que uma mesa aguardando vaga vai executar quando a vaga chegar. */
 export const PENDING_TURN_ACTIONS = [
     "revise-plan",

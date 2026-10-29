@@ -20,6 +20,7 @@ export function isOpexProviderId(value: string): value is OpexProviderId {
  */
 export const OPEX_TOOL_GROUPS = [
     "context",
+    "docs",
     "files",
     "memories",
     "tasks",
@@ -39,11 +40,18 @@ export const OPEX_TOOL_GROUPS = [
     "finance",
     "clients",
     "host",
+    "environments",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
+/** Grupo ainda existente no agente do dono (mensagens antigas podem guardar grupos já removidos). */
+export function isOpexToolGroup(value: unknown): value is OpexToolGroup {
+    return typeof value === "string" && (OPEX_TOOL_GROUPS as readonly string[]).includes(value)
+}
+
 export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; description: string }> = {
     context: { label: "Contexto", description: "Visão geral do app e data/hora atual" },
+    docs: { label: "Documentação do app", description: "Listar, ler e buscar a documentação do app (aicontext/) para explicar como usar, regras e funcionalidades" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
     memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex: globais, do dono e do cliente" },
     tasks: { label: "Tarefas", description: "Listar, ler, criar, editar, mover, comentar, arquivar e as features de IA das tarefas" },
@@ -63,6 +71,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     finance: { label: "Financeiro", description: "Faturamento por cliente e período (somente leitura)" },
     clients: { label: "Clientes", description: "Clientes do portal, usuários do portal e prévias de orçamento" },
     host: { label: "Terminal do host", description: "Executar comandos na máquina do OpenCode (fora do container do app)" },
+    environments: { label: "Ambientes", description: "Listar, implantar, levantar/derrubar, mover, logs e histórico dos ambientes Docker Compose (/ambientes)" },
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */
@@ -98,13 +107,22 @@ export const OPEX_SUMMARY_MAX = 280
 export const OPEX_MESSAGE_MAX = 20_000
 export const OPEX_DEFAULT_TITLE = "Nova sessão"
 
+/** Regra de criação de tarefa (prévia com IA, aprovada com o ok do usuário). */
+export const OPEX_CREATE_TASK_INSTRUCTION =
+    "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário."
+
+/** Regra de documentação do app (só no agente do dono: a documentação traz regras internas). */
+export const OPEX_DOCS_INSTRUCTION =
+    "Para perguntas sobre como usar o app, suas regras ou funcionalidades, consulte a documentação do app antes de responder (search_app_docs e depois read_app_doc; list_app_docs mostra o índice). Ela é escrita para desenvolvedores: responda com passos do ponto de vista do usuário (telas, menus, botões), cite o arquivo consultado e não invente o que não estiver na documentação nem no estado real do app."
+
 export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Você é o Agente Opex, o assistente do Opex: o app pessoal do dono para gerenciar as tarefas (fonte de verdade, com issue no GitHub), acompanhar horas agênticas, conduzir o desenvolvimento agêntico (centrais e mesas de trabalho), lançar serviços, acompanhar o financeiro e cuidar dos clientes do portal de orçamentos.",
     "Você executa o que o usuário pede usando as ferramentas do app. Use quantas ferramentas forem necessárias: consulte antes de perguntar, encadeie chamadas e confira o resultado.",
     "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta.",
     "Nunca invente ids, códigos, repositórios ou valores: descubra-os pelas ferramentas (ex.: get_task_options para repositórios/projetos, colunas, tipos e prioridades; list_tasks para achar uma tarefa; list_clients para clientes).",
     "Para decidir qual tarefa começar ou se algo está bloqueado, use rank_ready_tasks (e get_issue_dependencies/get_issue para detalhar). Dependências são as relações formais do GitHub (bloqueada por / bloqueia) com a entrega real de cada uma (issue fechada, tarefa concluída ou PR mesclado), nunca deduzidas pelo título. Uma tarefa também pode ser referida pela issue vinculada (`dono/repo#N`).",
-    "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário.",
+    OPEX_CREATE_TASK_INSTRUCTION,
+    OPEX_DOCS_INSTRUCTION,
     "Quando uma ferramenta responder `confirmation_required`, a ação aguarda o usuário clicar em Confirmar ou Cancelar no chat: diga em uma frase o que será feito e encerre a resposta. Você receberá a decisão e o resultado na próxima mensagem.",
     "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo.",
     "Credenciais de integrações e senhas/tokens de clientes podem ser gravadas, mas nunca são lidas: as ferramentas só informam se um segredo está definido.",

@@ -13,7 +13,7 @@ export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => 
     const description =
         kind === "client"
             ? `Ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos de nova tarefa, estimar orçamentos e (para administradores) consultar o financeiro. Peça em linguagem natural.`
-            : "Crio tarefas e prévias, conduzo as mesas de trabalho, lanço serviços, consulto o financeiro e configuro centrais e integrações. Peça em linguagem natural."
+            : "Crio tarefas e prévias, explico como usar o app, conduzo as mesas de trabalho, lanço serviços, consulto o financeiro e configuro centrais e integrações. Peça em linguagem natural."
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-8 text-center">
             <motion.span

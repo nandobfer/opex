@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
@@ -93,6 +93,12 @@ describe('card de ferramenta', () => {
     fireEvent.click(toggle)
     expect(screen.getByText('{"task":"OPX-1"}')).toBeTruthy()
   })
+
+  it('grupo removido (de sessões antigas) usa o ícone genérico sem quebrar (MT-19)', () => {
+    const part = toolPart({ name: 'list_betas', label: 'Listar betas', group: 'beta' as never, state: 'error', error: 'Falhou' })
+    render(<OpexToolCard part={part} />)
+    expect(screen.getByText('Listar betas')).toBeTruthy()
+  })
 })
 
 describe('mensagens', () => {
@@ -125,7 +131,7 @@ describe('mensagens', () => {
 
 const upload = (overrides: Partial<OpexUploadItem>): OpexUploadItem => ({
   localId: 'u1',
-  sessionId: 's1',
+  scope: 's1',
   file: new File(['x'], 'erro.log'),
   name: 'erro.log',
   size: 2048,

@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   aliasRunCommand,
@@ -20,6 +24,16 @@ import {
   planAliasReconcile,
   previewDeleteCommand,
   previewRecreateCommand,
+  writeComposeOverrideCommand,
+  tlsIssuerCommand,
+  removeComposeOverrideCommand,
+  parseOverridePath,
+  parseIssuer,
+  parseComposeInspect,
+  composeOverridePath,
+  composeInspectCommand,
+  caOverrideYaml,
+  caBundleCheckCommand,
   publicKeyOf,
   quote,
   remoteCommand,
@@ -247,5 +261,74 @@ describe('validação da configuração', () => {
     expect(issues({ serverSshHost: '' })).toEqual(['serverSshHost'])
     expect(issues({ mode: 'direct', pcHost: '10.0.0.2', serverSshHost: '' })).toEqual([])
     expect(issues({ builderMemoryGb: null, builderCpus: null })).toEqual([])
+  })
+})
+
+describe('certificados do PC: override do compose', () => {
+  const sh = (command: string, env: Record<string, string> = {}) => execFileSync('bash', ['-c', command], { encoding: 'utf8', env: { ...process.env, ...env } })
+
+  /** Worktree temporário com arquivos do compose e um `docker` falso que imprime os argumentos como serviços. */
+  function worktree(files: string[]) {
+    const dir = mkdtempSync(join(tmpdir(), 'mt-compose-'))
+    for (const file of files) writeFileSync(join(dir, file), 'services: {}\n')
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\necho "port=$PORT"\nfor a in "$@"; do echo "$a"; done\n', { mode: 0o755 })
+    return { dir, env: { PATH: `${bin}:${process.env.PATH}` } }
+  }
+
+  it('descobre o arquivo-base e o override padr\u00e3o do compose e lista os servi\u00e7os', () => {
+    const wt = worktree(['docker-compose.yml', 'docker-compose.override.yml'])
+    const output = sh(composeInspectCommand({ worktreePath: wt.dir, composeFile: '', portEnvVar: 'PORT', port: 4003 }), wt.env)
+    const parsed = parseComposeInspect(output)
+    expect(parsed.files).toEqual(['docker-compose.yml', 'docker-compose.override.yml'])
+    expect(parsed.services).toEqual(['port=4003', 'compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml', 'config', '--services'])
+  })
+
+  it('compose.yaml tem prioridade; o composeFile da central substitui a descoberta', () => {
+    const wt = worktree(['compose.yaml', 'docker-compose.yml'])
+    expect(parseComposeInspect(sh(composeInspectCommand({ worktreePath: wt.dir, composeFile: '', portEnvVar: 'PORT', port: 4003 }), wt.env)).files).toEqual(['compose.yaml'])
+    expect(parseComposeInspect(sh(composeInspectCommand({ worktreePath: wt.dir, composeFile: 'docker/prod.yml', portEnvVar: 'APP_PORT', port: 4010 }), wt.env)).files).toEqual(['docker/prod.yml'])
+  })
+
+  it('sem arquivo do compose no worktree: falha com mensagem', () => {
+    const wt = worktree([])
+    expect(() => sh(composeInspectCommand({ worktreePath: wt.dir, composeFile: '', portEnvVar: 'PORT', port: 4003 }), wt.env)).toThrow()
+  })
+
+  it('override monta o bundle s\u00f3 leitura, sem criar pasta no PC, e aponta Node/OpenSSL/Python para ele', () => {
+    const yaml = caOverrideYaml({ pcCaBundlePath: '/usr/local/share/ca.pem' }, ['app', 'worker'])
+    expect(yaml).toContain('  "app":\n    volumes:\n      - type: bind\n        source: "/usr/local/share/ca.pem"\n        target: "/etc/opex/ca-bundle.pem"\n        read_only: true\n        bind:\n          create_host_path: false')
+    expect(yaml).toContain('  "worker":')
+    for (const name of ['NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE']) expect(yaml).toContain(`      ${name}: "/etc/opex/ca-bundle.pem"`)
+  })
+
+  it('grava o override no $HOME do host e imprime o caminho absoluto; remover apaga o arquivo', () => {
+    const home = mkdtempSync(join(tmpdir(), 'mt-home-'))
+    const output = sh(writeComposeOverrideCommand('portal-mt-18', 'services:\n  "app": {}\n'), { HOME: home })
+    const path = parseOverridePath(output)
+    expect(path).toBe(join(home, '.opex-local/compose/portal-mt-18.ca.yml'))
+    expect(readFileSync(path!, 'utf8')).toBe('services:\n  "app": {}\n')
+    sh(removeComposeOverrideCommand('portal-mt-18'), { HOME: home })
+    expect(existsSync(path!)).toBe(false)
+    expect(() => composeOverridePath('x"; rm -rf /')).toThrow()
+  })
+
+  it('recriar com os arquivos do build repete os -f; sem a lista, o comando antigo', () => {
+    expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, files: ['compose.yaml', '/h/p.ca.yml'] })).toBe("cd '/w' && PORT=4001 DOCKER_CONTEXT=opex-local docker compose -p 'p' -f 'compose.yaml' -f '/h/p.ca.yml' up -d --force-recreate --no-build 'app'")
+    expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, files: [] })).not.toContain(' -f ')
+  })
+
+  it('emissor do certificado: OpenSSL 1.1 e 3.x normalizados; sem openssl = n\u00e3o verificado', () => {
+    expect(parseIssuer('issuer=CN = FortiGate SubCA Global\n')).toBe('CN=FortiGate SubCA Global')
+    expect(parseIssuer('issuer=C=US, O=Google Trust Services, CN=WE1')).toBe('C=US, O=Google Trust Services, CN=WE1')
+    expect(parseIssuer('NO_OPENSSL')).toBeNull()
+    expect(caBundleCheckCommand({ pcCaBundlePath: '/etc/ssl/certs/ca-certificates.crt' })).toContain("test -r '\\''/etc/ssl/certs/ca-certificates.crt'\\''")
+    expect(tlsIssuerCommand('api.clerk.com')).toContain('-connect api.clerk.com:443 -servername api.clerk.com')
+  })
+
+  it('schema: caminho do bundle precisa ser absoluto', () => {
+    expect(localDockerSettingsSchema.safeParse({ ...settings, pcCaBundlePath: 'certs/ca.pem' }).success).toBe(false)
+    expect(localDockerSettingsSchema.safeParse({ ...settings, pcCaBundlePath: '/etc/ssl/cert.pem' }).success).toBe(true)
   })
 })

@@ -77,6 +77,15 @@ Kit de listagem copiado dos "cadastros" do CRM: `CadastroHeader` (título + desc
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 
+### Anexos em campos de mensagem (`src/components/chat-attachments/`)
+
+Kit compartilhado pelo chat do Agente Opex e pelos campos da mesa de trabalho: `AttachButton` (clipe +
+seletor de arquivos) e `pasteFiles` (colar), `FileDropZone` (área de soltar animada; `compact` para
+um campo de texto), `AttachmentChips` (miniatura/ícone, progresso, erro com nova tentativa, remover) e
+`MessageFiles` (anexos numa mensagem: miniaturas que ampliam e download). A fila de envio (reserva →
+PUT no S3 → confirmação) é `createChatUploads` (`src/hooks/useChatUploads.tsx`): cada feature cria a
+sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`).
+
 ## Layout das páginas
 
 - Toda página renderiza **dentro do shell** (`AppShell`: sidebar + cabeçalho), montado no layout
@@ -242,7 +251,7 @@ repassar ao elemento DOM.)
   (`ChartDataTable`, linhas com `data-barra`) com os mesmos números — `sr-only` no contêiner e
   nome em `aria-label`, nunca `<caption>` (o navegador desenha o caption fora da tabela oculta e
   ele aparece flutuando); os testes leem essa tabela e
-  o `ChartTooltipContent` direto (jsdom não mede o `ResponsiveContainer`).
+  o `ChartTooltipContent` direto (o DOM de teste não mede o `ResponsiveContainer`).
 - Sem dado é lacuna (`null`), nunca zero.
 
 ## Formulários

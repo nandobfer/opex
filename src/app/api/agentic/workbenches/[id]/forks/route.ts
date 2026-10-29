@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic"
 export const GET = withRoute<{ id: string }>(async ({ params }) => ok(await listForks(params.id)))
 
 /**
- * POST /api/agentic/workbenches/[id]/forks `{ text, parentForkId?, readOnly?, mode? }` — abre um fork
+ * POST /api/agentic/workbenches/[id]/forks `{ text, parentForkId?, readOnly?, mode?, fileIds? }` — abre um fork
  * da conversa com a primeira mensagem; o modo inicial vem do agente do papel Fork (ou de `mode`) e
  * `readOnly` trava o fork em Plan (somente leitura, sem volta). Com `parentForkId`, um fork de fork
  * (copia a conversa do fork pai, sem herdar a trava). Responde na hora; a saída chega pelo stream.
@@ -18,6 +18,6 @@ export const GET = withRoute<{ id: string }>(async ({ params }) => ok(await list
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, openForkSchema)
     if (!body.ok) return body.response
-    const { text, parentForkId, readOnly, mode } = body.data
-    return ok(await openFork(params.id, text, { parentForkId, readOnly, mode }))
+    const { text, parentForkId, readOnly, mode, fileIds } = body.data
+    return ok(await openFork(params.id, text, { parentForkId, readOnly, mode, fileIds }))
 })

@@ -16,7 +16,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
 vi.mock('@/features/agentic/server/hub', () => ({ isWorkbenchActive: mocks.isActive }))
 vi.mock('@/features/agentic/server/workflow', () => ({ startBuildTurn: mocks.startBuildTurn }))
 
-import { buildQueuePosition, buildQueuePositions, pumpBuildQueue, waitingBuilds } from '@/features/agentic/server/build-queue'
+import { buildQueuePosition, buildQueuePositions, pumpBuildQueue, runExclusiveBuild, waitingBuilds } from '@/features/agentic/server/build-queue'
 
 /** Mesa na fila global do build, com a hora de chegada (define a ordem FIFO). */
 const queued = async (at: Date, overrides: Record<string, unknown> = {}) =>
@@ -93,5 +93,44 @@ describe('pumpBuildQueue — um build por vez', () => {
     mocks.startBuildTurn.mockResolvedValue(true)
     await pumpBuildQueue()
     expect(mocks.startBuildTurn).not.toHaveBeenCalled()
+  })
+})
+
+describe('runExclusiveBuild — build de fora das mesas (Ambientes) na vez da fila global', () => {
+  it('espera o build vivo da mesa terminar, ocupa a vez (a fila das mesas não inicia) e aciona a fila no fim', async () => {
+    const building = (await mocks.models.workbench.create({ stage: 'building', runState: 'running' }))._id as string
+    const next = await queued(new Date('2026-01-01T10:00:00Z'))
+    mocks.isActive.mockImplementation((id: string) => id === building)
+    mocks.startBuildTurn.mockResolvedValue(true)
+    const order: string[] = []
+    let release!: () => void
+    const job = runExclusiveBuild(
+      async () => {
+        order.push('externo')
+        await pumpBuildQueue()
+        expect(mocks.startBuildTurn).not.toHaveBeenCalled()
+        await new Promise<void>((resolve) => (release = resolve))
+        return 'ok'
+      },
+      { pollMs: 5 },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(order).toEqual([])
+    mocks.isActive.mockReturnValue(false)
+    await vi.waitFor(() => expect(order).toEqual(['externo']))
+    release()
+    expect(await job).toBe('ok')
+    await vi.waitFor(() => expect(mocks.startBuildTurn).toHaveBeenCalledWith(next))
+  })
+
+  it('dois builds externos rodam um de cada vez', async () => {
+    const order: string[] = []
+    const slow = (name: string) => async () => {
+      order.push(`${name}:início`)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      order.push(`${name}:fim`)
+    }
+    await Promise.all([runExclusiveBuild(slow('a'), { pollMs: 5 }), runExclusiveBuild(slow('b'), { pollMs: 5 })])
+    expect(order).toEqual(['a:início', 'a:fim', 'b:início', 'b:fim'])
   })
 })

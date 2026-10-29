@@ -4,6 +4,7 @@ import { builderEnsureCommand, builderLimitsOf, connectionProblem, listContainer
 import { LOCAL_DOCKER_AUDIT_ENTITY } from "../constants"
 import type { LocalDockerMachineAction, LocalDockerSettings } from "../schemas"
 import type { LocalDockerMachineResultDto, LocalDockerStepDto } from "../types"
+import { CERTIFICATES_STEP_LABEL, certificatesStep } from "./certificates"
 import { ensureKeyOnHost } from "./key"
 import { LocalDockerState, localDockerDb } from "./models"
 import { loadState, localDockerLog, publishLocalDocker, settingsOf } from "./settings"
@@ -42,8 +43,9 @@ async function runStep(label: string, command: string, run: HostRunner, timeoutM
 
 /**
  * Reconcilia a infra do PC por diferença — só os containers de ambiente (labels do preparo) são
- * tocados; as prévias nunca. Rede, apelidos novos/alterados/removidos e o builder (recriado mantendo o
- * cache só quando os limites mudaram; `forceBuilder` recria de qualquer jeito).
+ * tocados; as prévias nunca. Rede, apelidos novos/alterados/removidos, o builder (recriado mantendo o
+ * cache só quando os limites mudaram; `forceBuilder` recria de qualquer jeito) e, por último, o
+ * diagnóstico de inspeção TLS (certificados do PC).
  */
 export async function reconcileEnvironment(settings: LocalDockerSettings, run: HostRunner = runOnHost, options: { forceBuilder?: boolean } = {}): Promise<LocalDockerStepDto[]> {
     const steps: LocalDockerStepDto[] = []
@@ -70,6 +72,7 @@ export async function reconcileEnvironment(settings: LocalDockerSettings, run: H
     const builder = await runStep(`Builder ${settings.builderName}${recreate ? " (recriado, cache mantido)" : ""}`, builderEnsureCommand(settings, recreate), run)
     steps.push(builder.ok ? { ...builder, detail: recreate ? "Recriado com os limites atuais" : "Pronto" } : builder)
     if (builder.ok) await LocalDockerState.updateOne({ key: "default" }, { $set: { builderApplied: limits } }, { upsert: true })
+    steps.push(await certificatesStep(settings, run))
     return steps
 }
 
@@ -114,7 +117,8 @@ export async function reconcileAfterSave(actorId: string, run: HostRunner = runO
     if (!(await isTunnelOpen(run))) return
     const steps = await reconcileEnvironment(settings, run)
     const ok = await savePrepare(steps, "save")
-    const changed = steps.filter((step) => step.detail !== "Sem mudança" && step.detail !== "Pronto")
+    // O diagnóstico dos certificados só mede (não muda nada no PC): entra na auditoria só quando falha.
+    const changed = steps.filter((step) => step.detail !== "Sem mudança" && step.detail !== "Pronto" && !(step.label === CERTIFICATES_STEP_LABEL && step.ok))
     if (changed.length > 0) {
         await recordAudit({ userId: actorId, entidade: LOCAL_DOCKER_AUDIT_ENTITY, entidadeId: "preparo", acao: AcaoAuditoria.ATUALIZAR, depois: { automatico: true, ok, passos: changed.map((step) => `${step.ok ? "ok" : "falhou"}: ${step.label}`) } })
     }

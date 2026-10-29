@@ -1,6 +1,5 @@
 "use client"
 
-import type { ReactNode } from "react"
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { AnimatePresence, motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,13 +26,12 @@ export const CONNECTION_MODES: OptionTabsOption<LocalDockerMode>[] = [
 
 const fieldMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
-/** Aba "Conexão com o PC": Geral e ativação da integração (`general`) e como o servidor chega ao PC. */
-export function ConnectionTab({ form, general }: { form: UseFormReturn<LocalDockerSettings>; general: ReactNode }) {
+/** Aba "Conexão com o PC": como o servidor chega ao PC. */
+export function ConnectionTab({ form }: { form: UseFormReturn<LocalDockerSettings> }) {
     const errors = form.formState.errors
     const mode = useWatch({ control: form.control, name: "mode" })
     return (
         <>
-            {general}
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Conexão com o PC</CardTitle>

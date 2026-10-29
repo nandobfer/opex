@@ -1,6 +1,7 @@
 import type { OpexTool } from "../tools/define"
 import { clientContextTools } from "./context"
 import { clientDashboardTools, clientFinanceTools } from "./dashboard"
+import { clientEnvironmentTools } from "./environments"
 import { clientFileTools, clientPreviewTools } from "./previews"
 import { clientJobTools } from "./jobs"
 import { clientTaskTools } from "./tasks"
@@ -17,6 +18,7 @@ export const OPEX_CLIENT_SERVER_TOOLS: readonly OpexTool[] = [
     ...clientPreviewTools,
     ...clientFileTools,
     ...clientDashboardTools,
+    ...clientEnvironmentTools,
     ...clientFinanceTools,
     ...clientUserTools,
     ...clientJobTools,

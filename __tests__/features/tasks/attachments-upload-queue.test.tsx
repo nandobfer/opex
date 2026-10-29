@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,7 +52,7 @@ function fakeClient(overrides: Partial<AttachmentClient> = {}): AttachmentClient
 
 beforeEach(() => {
   vi.clearAllMocks()
-  // O jsdom desta versão não implementa createObjectURL (prévia local das imagens).
+  // O DOM de teste não implementa createObjectURL (prévia local das imagens).
   URL.createObjectURL = vi.fn(() => 'blob:previa')
   URL.revokeObjectURL = vi.fn()
 })

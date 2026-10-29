@@ -7,11 +7,13 @@ import { cn } from "@/lib/utils"
 import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
 import { usePrWatchSchedule } from "../../hooks/useAgentic"
+import { useWorkbenchBuilds } from "../../hooks/useBuilds"
 import { useWorkbenchForks } from "../../hooks/useForks"
 import { useWorkbenchStream } from "../../hooks/useWorkbenchStream"
 import { latestPrWatch, nextPrWatchAt } from "../../timeline"
 import type { CentralDto, WorkbenchDto } from "../../types"
 import { ActionBar } from "./ActionBar"
+import { BuildLogView } from "./BuildLogView"
 import { ForksDonePrompt } from "./ForksDonePrompt"
 import { ForkView } from "./ForkView"
 import { PendingRequests } from "./PendingRequests"
@@ -22,7 +24,7 @@ import { Timeline } from "./Timeline"
 import { WorkbenchHeader } from "./WorkbenchHeader"
 import { AdversarialRoundsView, AdversarialTabNavProvider, useAdversarialTab } from "@/features/adversarial-agent/components/workbench/AdversarialRoundsView"
 
-type View = "description" | "spec" | "output" | "plan" | "adversarial" | "forks"
+type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial" | "forks"
 
 /**
  * Mesa de trabalho: cabeçalho, etapas, descrição e spec. da tarefa (só leitura), saída ao vivo (ou o
@@ -34,6 +36,9 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     const [selected, setView] = useState<View>("output")
     const [forkId, setForkId] = useState<string | null>(null)
     const forks = useWorkbenchForks(workbench.id).data ?? []
+    // Builds da prévia (etapa "Subindo a prévia"): a aba só aparece depois do primeiro (`null` = o mais recente).
+    const buildCount = useWorkbenchBuilds(workbench.id).data?.length ?? 0
+    const [buildId, setBuildId] = useState<string | null>(null)
     // Agente Adversário: aba com a saída final de cada rodada (`null` = a mais recente).
     const adversarialTab = useAdversarialTab(workbench)
     const [adversarialRound, setAdversarialRound] = useState<string | null>(null)
@@ -48,12 +53,13 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     const lastCheck = latestPrWatch(timeline.items)
     const prWatch = watchingPr && schedule ? { enabled: schedule.enabled, nextCheckAt: nextPrWatchAt(schedule.nextCheckAt, lastCheck?.nextCheckAt), checking: lastCheck?.outcome === null } : null
     // Sem forks (todos descartados) ou sem rodadas do adversário, a aba some e a visão volta para a saída.
-    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) ? "output" : selected
+    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "build" && !buildCount) ? "output" : selected
     const tabs: { id: View; label: string; disabled?: boolean; hidden?: boolean }[] = [
         { id: "description", label: "Descrição" },
         { id: "spec", label: "Spec." },
         { id: "output", label: "Saída da IA" },
         { id: "plan", label: plans.length ? `Plano v${plans.length}` : "Plano", disabled: !plans.length },
+        { id: "build", label: `Build (${buildCount})`, hidden: !buildCount },
         { id: "adversarial", label: `Adversário (${adversarialTab.count})`, hidden: !adversarialTab.visible },
         { id: "forks", label: `Forks (${forks.length})`, hidden: !forks.length },
     ]
@@ -90,6 +96,8 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
                         <Timeline timeline={timeline} running={workbench.runState === "running"} prWatch={prWatch} />
                     ) : view === "plan" ? (
                         <PlanView plans={plans} />
+                    ) : view === "build" ? (
+                        <BuildLogView workbenchId={workbench.id} selectedId={buildId} onSelect={setBuildId} />
                     ) : view === "adversarial" ? (
                         <AdversarialRoundsView workbenchId={workbench.id} selectedId={adversarialRound} onSelect={setAdversarialRound} />
                     ) : (

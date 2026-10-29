@@ -16,6 +16,7 @@ import {
     parseStats,
     previewDeleteCommand,
     previewRecreateCommand,
+    removeComposeOverrideCommand,
     startContainerCommand,
     statsCommand,
     stopContainerCommand,
@@ -125,7 +126,7 @@ async function commandFor(settings: LocalDockerSettings, item: Classified, actio
     if (action === "delete") return previewDeleteCommand(settings, preview!.composeProject)
     const workbench = await AgenticWorkbench.findById(preview!.workbenchId, { worktreePath: 1, port: 1 }).lean<{ worktreePath: string | null; port: number | null }>()
     if (!workbench?.worktreePath || !container.composeService) throw new DomainError(409, "Não foi possível recriar: a mesa da prévia não tem mais o worktree", "LOCAL_DOCKER_PREVIEW_UNKNOWN")
-    return previewRecreateCommand(settings, { worktreePath: workbench.worktreePath, composeProject: preview!.composeProject, service: container.composeService, port: workbench.port ?? preview!.port })
+    return previewRecreateCommand(settings, { worktreePath: workbench.worktreePath, composeProject: preview!.composeProject, service: container.composeService, port: workbench.port ?? preview!.port, files: preview!.composeFiles })
 }
 
 /** Ação num container do PC. Apagar (com o ambiente) exige `confirm`. */
@@ -141,6 +142,7 @@ export async function runContainerAction(name: string, action: LocalDockerContai
     if (item.kind === "preview" && action === "delete") {
         // A mesa fica com a prévia fora do ar: sem repasse nem registro no PC (o próximo build da prévia reconstrói).
         await cancelForward(item.preview!.port, run)
+        await run(removeComposeOverrideCommand(item.preview!.composeProject), 15_000)
         await LocalDockerPreview.deleteOne({ workbenchId: item.preview!.workbenchId })
         await publishLocalDocker("previews")
     }

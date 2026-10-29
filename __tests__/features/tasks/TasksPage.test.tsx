@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 
 import React from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -45,6 +45,12 @@ vi.mock('@/features/tasks/hooks/useTaskBoard', async () => {
     useColumnMutations: () => ({ create: { isPending: false }, update: { isPending: false }, remove: { mutate: vi.fn() }, reorder: { mutate: vi.fn() } }),
   }
 })
+
+// Sem servidor nos testes: o filtro de repositório não busca os usados recentemente pela API.
+vi.mock('@/features/repository-recency/hooks', async (original) => ({
+  ...(await original<typeof import('@/features/repository-recency/hooks')>()),
+  useOwnerRepoRecents: () => ({ recents: [], record: vi.fn() }),
+}))
 
 vi.mock('@/features/time/components/TimerIndicator', () => ({
   TimerIndicator: ({ fullWidth }: { fullWidth?: boolean }) => {

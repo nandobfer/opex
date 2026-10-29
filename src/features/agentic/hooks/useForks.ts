@@ -41,8 +41,8 @@ function useSetFork(workbenchId: string) {
 export function useOpenFork(workbenchId: string) {
     const setFork = useSetFork(workbenchId)
     return useMutation({
-        mutationFn: async ({ text, parentForkId, readOnly }: { text: string; parentForkId?: string; readOnly?: boolean }) =>
-            unwrapApi((await api.post<ApiResponse<ForkDto>>(base(workbenchId), { text, ...(parentForkId ? { parentForkId } : {}), ...(readOnly ? { readOnly } : {}) })).data),
+        mutationFn: async ({ text, parentForkId, readOnly, fileIds }: { text: string; parentForkId?: string; readOnly?: boolean; fileIds?: string[] }) =>
+            unwrapApi((await api.post<ApiResponse<ForkDto>>(base(workbenchId), { text, ...(parentForkId ? { parentForkId } : {}), ...(readOnly ? { readOnly } : {}), ...(fileIds?.length ? { fileIds } : {}) })).data),
         onSuccess: (fork) => {
             setFork(fork)
             toast.success(`Fork ${fork.number} aberto`)
@@ -53,7 +53,7 @@ export function useOpenFork(workbenchId: string) {
 
 /** `set-mode`/`lock`: troca do modo (Plan/Build) e trava de somente leitura (sem volta). */
 export type ForkMutationAction = Exclude<ForkAction, "discard"> | "set-mode" | "lock"
-type ForkMutation = { action: ForkMutationAction; text?: string; target?: ForkIntegrationTarget; mode?: ForkMode }
+type ForkMutation = { action: ForkMutationAction; text?: string; target?: ForkIntegrationTarget; mode?: ForkMode; fileIds?: string[] }
 
 const ACTION_TOASTS: Partial<Record<ForkMutationAction, string>> = {
     close: "Conversa pausada: retome, integre ou descarte o fork",
@@ -96,7 +96,8 @@ export function useForkAction(workbenchId: string, fork: ForkDto) {
     return useMutation({
         mutationFn: async (input: ForkMutation) => {
             const path = input.action === "send" ? `${base(workbenchId)}/${fork.id}/messages` : `${base(workbenchId)}/${fork.id}/actions/${input.action}`
-            const body = input.action === "apply" ? { target: input.target } : input.action === "set-mode" ? { mode: input.mode } : input.text === undefined ? {} : { text: input.text }
+            const body =
+                input.action === "apply" ? { target: input.target } : input.action === "set-mode" ? { mode: input.mode } : { ...(input.text === undefined ? {} : { text: input.text }), ...(input.action === "send" && input.fileIds?.length ? { fileIds: input.fileIds } : {}) }
             return unwrapApi((await api.post<ApiResponse<ForkDto>>(path, body)).data)
         },
         onMutate: async (input) => {

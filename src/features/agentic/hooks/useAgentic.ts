@@ -11,7 +11,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
 import type { WorkbenchAction } from "../logic"
-import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, WorkbenchModelInput } from "../schemas"
+import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
@@ -142,7 +142,7 @@ function useSetWorkbench() {
 export function useStartWorkbench() {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (input: { centralId: string; taskId: string; text?: string }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
+        mutationFn: async (input: { centralId: string; taskId: string; text?: string; fileIds?: string[] }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
         onSuccess: (workbench) => {
             setWorkbench(workbench)
             toast.success("Mesa aberta: o planejamento começou")
@@ -161,6 +161,7 @@ const ACTION_TOASTS: Partial<Record<WorkbenchAction, string>> = {
     reconnect: "Reconectando à sessão do agente",
     interrupt: "Interrompendo o agente",
     "cancel-wait": "Espera por vaga cancelada",
+    "rebuild-preview": "Gerando nova prévia (fila do build)",
 }
 
 /** Ações da mesa com resposta otimista (a mesa entra em "executando" na hora). */
@@ -168,15 +169,18 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
     const queryClient = useQueryClient()
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async ({ action, text }: { action: WorkbenchAction; text?: string }) =>
-            unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, text === undefined ? {} : { text })).data),
+        mutationFn: async ({ action, text, fileIds }: { action: WorkbenchAction; text?: string; fileIds?: string[] }) =>
+            unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, { ...(text === undefined ? {} : { text }), ...(fileIds?.length ? { fileIds } : {}) })).data),
         onMutate: async ({ action }) => {
             // Reconectar e interromper não marcam "executando" otimista: quem decide é o estado remoto.
+            // Nova prévia não é turno: a mesa vai otimista para a fila do build.
             if (!workbench || action === "interrupt" || action === "reconnect") return { previous: workbench }
             const key = agenticKey("workbench", workbench.taskId)
             await queryClient.cancelQueries({ queryKey: key })
             // Cancelar a espera só tira o aviso de vaga; as demais ações marcam "executando" (a resposta corrige se a mesa ficar aguardando vaga).
-            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : { ...current, runState: "running", error: null }) : current))
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) =>
+                current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : action === "rebuild-preview" ? { ...current, stage: "build_queued", error: null } : { ...current, runState: "running", error: null }) : current,
+            )
             return { previous: workbench }
         },
         onError: (error, _vars, context) => {
@@ -199,7 +203,7 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
 export function useSendWorkbenchLiveMessage(workbenchId: string) {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (text: string) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/messages`, { text })).data),
+        mutationFn: async ({ text, fileIds }: { text: string; fileIds?: string[] }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/messages`, { text, ...(fileIds?.length ? { fileIds } : {}) })).data),
         onSuccess: (saved) => {
             setWorkbench(saved)
             toast.success("Mensagem enviada ao agente")
@@ -268,6 +272,37 @@ export function useReplyPermission(workbench: WorkbenchDto) {
             unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/permissions/${encodeURIComponent(requestId)}`, input)).data),
         onSuccess: setWorkbench,
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível responder ao pedido")),
+    })
+}
+
+/**
+ * Definir a etapa da mesa (ou concluí-la sem PR). Resposta otimista: a mesa vai para a etapa
+ * escolhida e fica parada; a conclusão mostra "Concluindo" até o servidor responder (pode haver limpeza).
+ * Em falha, reverte e avisa.
+ */
+export function useSetWorkbenchStage(workbench: WorkbenchDto) {
+    const queryClient = useQueryClient()
+    const setWorkbench = useSetWorkbench()
+    const key = agenticKey("workbench", workbench.taskId)
+    return useMutation({
+        mutationFn: async (input: SetWorkbenchStageInput) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/actions/set-stage`, input)).data),
+        onMutate: async (input) => {
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<WorkbenchDto | null>(key) ?? workbench
+            const stage = input.stage === "done" ? "finishing" : input.stage
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, stage, runState: "idle", error: null, slotQueue: null, buildQueuePosition: null } : current))
+            return { previous }
+        },
+        onError: (error, _input, context) => {
+            if (context?.previous) queryClient.setQueryData(key, context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível definir a etapa da mesa"))
+        },
+        onSuccess: (saved, input) => {
+            setWorkbench(saved)
+            if (input.stage !== "done") toast.success("Etapa da mesa definida")
+            else if (saved.stage === "done") toast.success("Mesa concluída")
+            else toast.info("Concluindo a mesa: o ambiente registrado está sendo limpo")
+        },
     })
 }
 

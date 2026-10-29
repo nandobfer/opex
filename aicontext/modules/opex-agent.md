@@ -26,7 +26,10 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 ## Chat
 
 - Streaming de texto com cursor e raciocínio recolhível ("Pensando…").
-- Cards de ferramenta com estado animado, duração e entrada/saída recolhíveis.
+- Cards de ferramenta com estado animado, duração e entrada/saída recolhíveis. O ícone vem do grupo da
+  ferramenta; chamadas antigas de um grupo já removido aparecem com o ícone genérico e o histórico é
+  mantido: `toMessageDto` troca o grupo desconhecido (nem do dono nem do portal) por `null`
+  (`normalizeOpexParts`) e `toolIcon`/`fileIcon` usam ícones de reserva.
 - Rodapé de cada resposta com modelo, tokens e duração.
 - Cada linha das respostas tem, no hover, **Citar no campo de resposta**: insere `> linha` no cursor
   do campo do chat sem apagar o texto (`ReplyTargetProvider` no `OpexChat`, `ReplyTextarea` no
@@ -40,6 +43,12 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 
 ## Arquivos no chat (Storage S3 com upload assinado)
 
+- O kit é compartilhado com os campos da mesa de trabalho (ver `agentic-dev.md`, "Anexos nos campos
+  da mesa"): tipo/rótulos/contratos em `src/lib/chat-files/kind.ts`, conferência e promoção no S3 em
+  `src/lib/storage/staged-upload.ts`, fila genérica `src/hooks/useChatUploads.tsx` (`useOpexUploads` é
+  um wrapper que passa as rotas do escopo — dono ou portal — ao provider) e componentes em
+  `src/components/chat-attachments/` (`AttachmentChips`, `FileDropZone`, `MessageFiles` com `fileHref`
+  para a rota do escopo, `AttachButton`; os `Opex*` reexportam ou envolvem).
 - O usuário anexa pelo clipe, colando (Ctrl+V de print) ou arrastando (área de soltar animada). Cada
   arquivo vira um chip com miniatura/ícone, **progresso real do PUT** (axios `onUploadProgress`),
   "Confirmando…", erro com **Tentar novamente** e X para remover. Enviar só libera com todos os
@@ -123,6 +132,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   | Orçamentos | `list_previews`, `get_preview`, `create_preview`, `generate_preview`, `set_preview_correction`, `estimate_preview`, `approve_preview` |
   | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task`, `attach_files_to_preview` |
   | Dashboard | `get_dashboard` |
+  | Ambientes | `list_environments` (todos); `deploy_environment`*, `start_environment`, `restart_environment`* (**admin**) — só os ambientes de central dos repositórios do cliente (ver `modules/environments.md`) |
   | Financeiro (**admin**) | `get_finance`, `get_service` |
   | Usuários (**admin**) | `list_users`, `update_user`, `delete_user`* |
   | Jobs agendados (**opt-in**) | `list_jobs`, `schedule_job`, `update_job`, `cancel_job`* — só os jobs do próprio usuário naquele cliente |
@@ -192,11 +202,12 @@ risco (os catálogos são distintos).
 | Grupo | Ferramentas |
 |---|---|
 | Contexto (sempre ligado) | `get_app_overview` |
+| Documentação do app | `list_app_docs`, `read_app_doc`, `search_app_docs` — os `.md` de `aicontext/` para explicar como usar o app, regras e funcionalidades. Só no agente do **dono** (detalhes abaixo) |
 | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_preview` aceita `chatFileIds` |
 | Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
-| Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
+| Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `complete_workbench`* (concluir sem PR, com motivo) e `set_workbench_stage` (definir etapa de espera, confirmação por padrão; ambas pela mesma `setWorkbenchStage` da tela — `get_workbench` traz `settableStages`), `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
 | Centrais | `list_centrals`, `get_central`, `create_central`, `update_central`, `test_central`, `delete_central`*, `get_agentic_settings`, `update_agentic_settings` |
 | Issues e dependências | `get_issue`, `list_issues`, `get_issue_dependencies`, `rank_ready_tasks` (qual tarefa começar), `add_issue_dependency`†, `add_sub_issue`†, `remove_issue_dependency`*, `remove_sub_issue`* — detalhes abaixo |
 | Repositórios GitHub | `list_repositories`, `get_repo_tree`, `read_repo_file`, `search_repo_code`, `list_branches`, `list_commits`, `get_commit`, `compare_refs`, `create_branch`†, `write_repo_file`†, `delete_repo_file`*, `delete_branch`* — detalhes abaixo |
@@ -209,12 +220,38 @@ risco (os catálogos são distintos).
 | Serviços | `list_services`, `get_service`, `create_service`, `update_service`, `set_service_archived`*, `regenerate_service_ai` |
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
 | Terminal do host | `get_host_terminal`, `run_host_command`* — detalhes abaixo |
+| Ambientes | `list_environments`, `get_environment`, `get_environment_logs`, `list_environment_deploys`, `get_environment_deploy`, criar/editar/adotar/apagar, `deploy_environment`*, `move_environment`*, levantar/derrubar*/reiniciar, configuração e limpeza do registry — os mesmos serviços de `/ambientes`; o fim de um deploy pedido pelo agente chega à sessão como aviso (`kind: "notice"`). Detalhes em `modules/environments.md` |
 | Clientes | `list_clients`, `get_client` (usuários do portal e prévias de orçamento recentes), `create_client`*, `update_client`, `regenerate_client_token`*, `delete_client`*, `create_client_user`*, `update_client_user`*, `regenerate_client_user_token`*, `delete_client_user`* |
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
 ou credencial/token/senha de cliente é `destructive`. Tokens, `portalPath` (que carrega o token) e
 senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas). † `write` com
 `confirmByDefault` (pede confirmação por padrão).
+
+### Documentação do app
+
+Grupo `docs` (todas de leitura, ligadas por padrão e desligáveis), **só no agente do dono**: o portal
+do cliente não recebe o grupo, porque a documentação interna traz regras do dono (ex.: fator de lucro
+e estimativa interna). O agente consulta a documentação para responder "como faço X", regras e
+funcionalidades. As instruções padrão (`OPEX_DOCS_INSTRUCTION`) mandam buscar antes de responder,
+traduzir para passos do usuário (telas, menus, botões), citar o arquivo e não inventar; instruções
+já salvas com a frase padrão exata de criação de tarefa ganham a regra logo depois
+(`migrateOpexInstructions`, idempotente; texto editado à mão fica como está).
+
+- `list_app_docs` (`dir?`): os `.md` de `aicontext/**` (guias da raiz primeiro), com título (primeiro
+  `#`), número de linhas e seções `##`.
+- `read_app_doc` (`path` relativo a `aicontext/`, `section?`, `startLine?`, `maxLines?` até 600, padrão
+  200): linhas numeradas; com `section`, só a seção (até o próximo título de nível igual ou acima;
+  título sem acento/caixa, exato antes de "contém"). Teto de 24 mil caracteres; devolve
+  `totalLines` e `truncated` para continuar. Seção inexistente lista as seções do arquivo.
+- `search_app_docs` (`query`, `limit?` até 30, padrão 10): busca por palavras sem acento/caixa, linha
+  a linha (título vale o dobro; frase inteira e nome do arquivo dão bônus), com arquivo, linha, seção e
+  trecho.
+- Segurança: só `.md` dentro de `aicontext/` (`normalizeDocPath` recusa `..`, absoluto, byte nulo e
+  outras extensões; o caminho real é conferido com `realpath`, então symlink para fora é recusado).
+  Sem a pasta: erro "Documentação do app indisponível nesta instalação".
+- A raiz é `process.cwd()/aicontext`. Na imagem Docker a pasta é copiada para `/app/aicontext`
+  (`Dockerfile`, estágio runner; `aicontext` saiu do `.dockerignore`).
 
 ### Repositórios GitHub
 

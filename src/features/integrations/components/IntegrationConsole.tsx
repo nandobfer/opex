@@ -18,6 +18,8 @@ export interface ConsoleSearchResults {
 export interface IntegrationConsoleHandle {
     /** Anexa linhas já formatadas (podem conter cores ANSI). */
     writeLines(lines: string[]): void
+    /** Anexa texto cru (sem quebra de linha no fim): trechos de um log que chega aos poucos. */
+    write(text: string): void
     clear(): void
     /** Busca `term` (sem diferenciar maiúsculas) e rola até a ocorrência. `false` = nada encontrado. */
     search(term: string, direction: SearchDirection): boolean
@@ -31,6 +33,10 @@ interface IntegrationConsoleProps {
     placeholder?: string
     /** Contagem/posição da busca, sempre que mudar. */
     onSearchResults?: (results: ConsoleSearchResults) => void
+    /** Linhas mantidas no buffer (padrão 5000). */
+    scrollback?: number
+    /** Rótulo acessível (padrão "Console da integração"). */
+    ariaLabel?: string
 }
 
 const THEME = {
@@ -75,13 +81,14 @@ export const SEARCH_OPTIONS: ISearchOptions = {
  * recalculam destaques e contagem mantendo a ocorrência atual (`incremental`).
  */
 export const IntegrationConsole = forwardRef<IntegrationConsoleHandle, IntegrationConsoleProps>(
-    function IntegrationConsole({ className, placeholder, onSearchResults }, ref) {
+    function IntegrationConsole({ className, placeholder, onSearchResults, scrollback = 5000, ariaLabel = "Console da integração" }, ref) {
         const containerRef = useRef<HTMLDivElement>(null)
         const termRef = useRef<Terminal | null>(null)
         const fitRef = useRef<FitAddon | null>(null)
         const searchRef = useRef<SearchAddon | null>(null)
         const activeTerm = useRef<string | null>(null)
-        const pending = useRef<string[]>([])
+        /** Escritas feitas antes de o terminal abrir (`line` = com quebra no fim). */
+        const pending = useRef<{ text: string; line: boolean }[]>([])
         const hasContent = useRef(false)
         const onResultsRef = useRef(onSearchResults)
         useEffect(() => {
@@ -95,24 +102,38 @@ export const IntegrationConsole = forwardRef<IntegrationConsoleHandle, Integrati
             searchRef.current.findNext(term, { ...SEARCH_OPTIONS, incremental: true })
         }
 
+        /** Primeira escrita: apaga o placeholder. */
+        const startContent = (term: Terminal) => {
+            if (hasContent.current) return
+            term.clear()
+            term.write("\x1b[2K\r")
+            hasContent.current = true
+        }
+
         useImperativeHandle(ref, () => ({
             writeLines(lines) {
                 if (lines.length === 0) return
                 const term = termRef.current
                 if (!term) {
-                    pending.current.push(...lines)
+                    pending.current.push(...lines.map((text) => ({ text, line: true })))
                     return
                 }
-                if (!hasContent.current) {
-                    term.clear()
-                    term.write("\x1b[2K\r")
-                    hasContent.current = true
-                }
+                startContent(term)
                 lines.forEach((line, i) => {
                     // A escrita do xterm é assíncrona: recalcula a busca depois da última linha.
                     if (i === lines.length - 1 && activeTerm.current) term.writeln(line, refreshSearch)
                     else term.writeln(line)
                 })
+            },
+            write(text) {
+                if (!text) return
+                const term = termRef.current
+                if (!term) {
+                    pending.current.push({ text, line: false })
+                    return
+                }
+                startContent(term)
+                term.write(text, activeTerm.current ? refreshSearch : undefined)
             },
             clear() {
                 pending.current = []
@@ -155,7 +176,7 @@ export const IntegrationConsole = forwardRef<IntegrationConsoleHandle, Integrati
                     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
                     fontSize: 12,
                     lineHeight: 1.25,
-                    scrollback: 5000,
+                    scrollback,
                     theme: THEME,
                     // Destaques da busca usam a API de decorações.
                     allowProposedApi: true,
@@ -175,7 +196,10 @@ export const IntegrationConsole = forwardRef<IntegrationConsoleHandle, Integrati
 
                 if (pending.current.length > 0) {
                     hasContent.current = true
-                    for (const line of pending.current) term.writeln(line)
+                    for (const item of pending.current) {
+                        if (item.line) term.writeln(item.text)
+                        else term.write(item.text)
+                    }
                     pending.current = []
                 } else if (placeholder) {
                     term.write(`\x1b[90m${placeholder}\x1b[0m`)
@@ -207,7 +231,7 @@ export const IntegrationConsole = forwardRef<IntegrationConsoleHandle, Integrati
                 className={cn("overflow-hidden rounded-lg border border-slate-800 bg-[#0b1020] p-2 shadow-inner", className)}
                 role="log"
                 aria-live="polite"
-                aria-label="Console da integração"
+                aria-label={ariaLabel}
             >
                 <div ref={containerRef} className="h-full w-full" />
             </div>
