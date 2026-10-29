@@ -309,8 +309,8 @@ export function registerBuiltInJobs(): void {
         const { watchPullRequests } = await import("@/features/agentic/server/pr-watch")
         const { scanPullRequestsForReview } = await import("@/features/pr-review/server/queue")
         const { pumpPrReviews } = await import("@/features/pr-review/server/service")
-        // Revisão de PR: enfileira antes de acompanhar as mesas (o merge automático espera a revisão do commit atual).
-        const review = await scanPullRequestsForReview().catch((error: unknown) => `Revisão de PR com falha: ${error instanceof Error ? error.message : String(error)}`)
+        // Agente Revisor: enfileira antes de acompanhar as mesas (o merge automático espera a revisão do commit atual).
+        const review = await scanPullRequestsForReview().catch((error: unknown) => `Agente Revisor com falha: ${error instanceof Error ? error.message : String(error)}`)
         const summary = await watchPullRequests()
         const started = await pumpPrReviews().catch(() => 0)
         return `${summary}. ${review}${started ? `; ${started} iniciada(s)` : ""}`

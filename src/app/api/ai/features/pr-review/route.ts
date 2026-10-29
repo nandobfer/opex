@@ -7,7 +7,7 @@ import { getPrReviewSettings, savePrReviewSettings } from "@/features/ai/server/
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** GET /api/ai/features/pr-review — configuração da "Revisão de PR" e se pode ser usada. */
+/** GET /api/ai/features/pr-review — configuração do "Agente Revisor" e se pode ser usada. */
 export const GET = withRoute(async () => ok(await getPrReviewSettings()))
 
 /** PUT /api/ai/features/pr-review — salva (confere modelo, agente e variante no OpenCode). */

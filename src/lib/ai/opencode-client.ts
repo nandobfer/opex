@@ -1,6 +1,6 @@
 import { OpenCode } from "@opencode/client"
 import { AiProviderError } from "./errors"
-import { getOpencodeConnection } from "./opencode"
+import { getOpencodeConnection, type OpencodeConnection } from "./opencode"
 
 /**
  * Cliente oficial do OpenCode 2.x (`@opencode/client`) — SOMENTE servidor. Usado pelas sessões
@@ -11,8 +11,8 @@ import { getOpencodeConnection } from "./opencode"
 
 export type OpencodeClient = ReturnType<typeof OpenCode.make>
 
-export async function getOpencodeClient(): Promise<OpencodeClient> {
-    const conn = await getOpencodeConnection()
+export async function getOpencodeClient(connection?: OpencodeConnection): Promise<OpencodeClient> {
+    const conn = connection ?? (await getOpencodeConnection())
     const { Accept: _accept, ...headers } = conn.headers
     void _accept
     return OpenCode.make({ baseUrl: conn.baseUrl, headers })

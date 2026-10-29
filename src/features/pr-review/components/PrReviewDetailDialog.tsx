@@ -46,7 +46,7 @@ export function PrReviewDetailDialog({ id, onClose }: { id: string | null; onClo
                                 <PrReviewVerdictBadge verdict={review.verdict} />
                             </>
                         ) : (
-                            "Revisão de PR"
+                            "Revisão do Agente Revisor"
                         )}
                     </DialogTitle>
                     <DialogDescription>{review ? `${review.title} · commit ${review.headSha.slice(0, 7)} · ${formatCost(review.costUsd)} · ${formatDuration(review.durationMs)}` : "Carregando…"}</DialogDescription>

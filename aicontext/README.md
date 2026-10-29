@@ -61,7 +61,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | `modules/opencode-quota.md` | Quota do OpenCode | Painel na coluna Tarefas de `/desenvolvimento` com a quota do plugin `opencode-quota` (snapshot/export lidos no host), visão compacta, recolher por provedor, rotina de 5 min e tempo real |
 | `modules/opex-agent.md` | Agente Opex | Assistente por chat (item da barra lateral, Ctrl+Shift+O) com ferramentas que chamam os serviços reais, confirmação de ações destrutivas, arquivos no chat via S3 assinado, sessões, streaming NDJSON e aba de configuração em `/integracoes/ia` |
 | `modules/adversarial-agent.md` | Agente Adversário | Revisão da implementação da mesa com contexto limpo (OpenCode só leitura) antes da prévia ou do PR: criticidade em 5 níveis, correção automática ou com confirmação, rodadas, contexto configurável, memórias e histórico (aba `agente-adversario` de `/integracoes/ia`) |
-| `modules/pr-review.md` | Revisão de PR por IA | Critérios, agente/skill, revisão por commit, histórico e integração com replanejamento e merge automático |
+| `modules/pr-review.md` | Agente Revisor | Critérios, agente/skill, revisão por commit, página `/agente-revisor` com filtros e integração com replanejamento e merge automático |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
 | `modules/deployment.md` | Deploy (CI/CD) | GitHub Actions (testes, build da imagem no runner, transferência por SCP e recriação via Compose), configuração de secrets/variables e rollback |
 

@@ -203,8 +203,8 @@ risco (os catálogos são distintos).
 |---|---|
 | Contexto (sempre ligado) | `get_app_overview` |
 | Documentação do app | `list_app_docs`, `read_app_doc`, `search_app_docs` — os `.md` de `aicontext/` para explicar como usar o app, regras e funcionalidades. Só no agente do **dono** (detalhes abaixo) |
-| Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_preview` aceita `chatFileIds` |
-| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
+| Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_task` e `create_preview` aceitam `chatFileIds` |
+| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue; ver "Criar tarefa"), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `complete_workbench`* (concluir sem PR, com motivo) e `set_workbench_stage` (definir etapa de espera, confirmação por padrão; ambas pela mesma `setWorkbenchStage` da tela — `get_workbench` traz `settableStages`), `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
@@ -215,7 +215,7 @@ risco (os catálogos são distintos).
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
-| Revisão de PR | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
+| Agente Revisor | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
 | Dashboards | `get_dashboard` |
 | Serviços | `list_services`, `get_service`, `create_service`, `update_service`, `set_service_archived`*, `regenerate_service_ai` |
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
@@ -227,6 +227,28 @@ risco (os catálogos são distintos).
 ou credencial/token/senha de cliente é `destructive`. Tokens, `portalPath` (que carrega o token) e
 senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas). † `write` com
 `confirmByDefault` (pede confirmação por padrão).
+
+### Criar tarefa (`create_task`)
+
+`create_task` é o caminho principal do agente do dono para criar tarefas (cria no Opex com a issue no
+GitHub, por `createTaskWithIssue`); as prévias (`create_preview` e afins) ficam para quando o usuário
+pedir uma prévia ou orçamento.
+
+- Entrada: `projectId` (de `get_task_options`), `title`, `description` (Markdown, com o contexto que o
+  usuário deu), `technicalSpec` opcional (ex.: Critérios de aceite e Localização com o que o usuário
+  disse, sem inventar), `taskType`, `priority`, `columnId` **opcional** — sem ele, a tarefa entra na
+  **primeira coluna do quadro**, na ordem do layout (`firstBoardColumnKey` em
+  `tasks/server/columns.ts`) — e `chatFileIds` (até 50 arquivos do chat).
+- Regra do pedido mínimo (descrição da ferramenta e `OPEX_CREATE_TASK_INSTRUCTION`): antes de criar, o
+  agente avalia se dá para entender o que fazer, onde (tela, rota ou módulo) e quando estará pronto; se
+  algo essencial faltar claramente, pergunta **uma vez**. Se o usuário responder ou mandar seguir,
+  cria assim mesmo: a ferramenta nunca recusa por critério vago.
+- `chatFileIds`: depois de criada a tarefa, os arquivos são copiados no servidor para os anexos dela
+  (`chatFilesToAttachments`, como em `attach_files_to_task`); a resposta traz
+  `attachments: { attached, failed }` e uma falha de arquivo não desfaz a tarefa.
+- Instruções já salvas com as frases padrão antigas (criação pela prévia e arquivos do chat) são
+  trocadas pelas novas (`LEGACY_OPEX_INSTRUCTION_LINES` em `migrateOpexInstructions`); texto editado à
+  mão fica como está.
 
 ### Documentação do app
 
@@ -526,5 +548,5 @@ portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (se
 migração da configuração antiga), `jobs` (serviço: agendamento, atraso, fila, confirmação, perdidos,
 escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agendado com o agente
 indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
-desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

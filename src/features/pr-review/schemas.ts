@@ -1,8 +1,19 @@
 import { z } from "zod"
-import { PR_REVIEW_CONCURRENCY_MAX, PR_REVIEW_REPLAN_LIMIT_MAX, PR_REVIEW_SCOPES, PR_REVIEW_TIMEOUT_MAX, PR_REVIEW_TIMEOUT_MIN } from "./constants"
+import {
+    PR_REVIEW_CONCURRENCY_MAX,
+    PR_REVIEW_PAGE_LIMIT,
+    PR_REVIEW_PAGE_LIMIT_MAX,
+    PR_REVIEW_REPLAN_LIMIT_MAX,
+    PR_REVIEW_SCOPES,
+    PR_REVIEW_STATES,
+    PR_REVIEW_TIMEOUT_MAX,
+    PR_REVIEW_TIMEOUT_MIN,
+    PR_REVIEW_TRIGGERS,
+    PR_REVIEW_VERDICTS,
+} from "./constants"
 
 /**
- * Configuração da "Revisão de PR" — agente do OpenCode que executa a skill de code review nos PRs
+ * Configuração do "Agente Revisor" — agente do OpenCode que executa a skill de code review nos PRs
  * dos repositórios das centrais. Exclusiva do OpenCode (sessão com ferramentas, `gh` e skills).
  * Mesmo schema na tela e na API.
  */
@@ -63,3 +74,25 @@ export const requestPrReviewSchema = z.object({
         .regex(/^https:\/\/[^/\s]+\/[\w.-]+\/[\w.-]+\/pull\/\d+\/?(?:[?#].*)?$/, "Informe a URL do PR (ex.: https://github.com/org/repo/pull/12)"),
 })
 export type RequestPrReviewInput = z.infer<typeof requestPrReviewSchema>
+
+/** Lista CSV da query (`a,b`) → itens; vazio = sem recorte. */
+const csvList = z
+    .string()
+    .optional()
+    .transform((value) => (value ? value.split(",").map((part) => part.trim()).filter(Boolean) : []))
+
+const isoDate = z.string().refine((value) => !Number.isNaN(new Date(value).getTime()), "Data inválida")
+
+/** `GET /api/pr-reviews` — filtros e página da lista do Agente Revisor (listas em CSV, datas ISO). */
+export const prReviewListQuerySchema = z.object({
+    q: z.string().trim().max(200).optional().transform((value) => value ?? ""),
+    states: csvList.pipe(z.array(z.enum(PR_REVIEW_STATES)).max(PR_REVIEW_STATES.length)),
+    verdicts: csvList.pipe(z.array(z.enum(PR_REVIEW_VERDICTS)).max(PR_REVIEW_VERDICTS.length)),
+    repos: csvList.pipe(z.array(z.string().regex(/^[\w.-]+\/[\w.-]+$/, "Repositório inválido")).max(100)),
+    triggers: csvList.pipe(z.array(z.enum(PR_REVIEW_TRIGGERS)).max(PR_REVIEW_TRIGGERS.length)),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    page: z.coerce.number().int().min(1).max(1000).default(1),
+    limit: z.coerce.number().int().min(1).max(PR_REVIEW_PAGE_LIMIT_MAX).default(PR_REVIEW_PAGE_LIMIT),
+})
+export type PrReviewListQuery = z.infer<typeof prReviewListQuerySchema>

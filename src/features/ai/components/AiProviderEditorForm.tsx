@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BarChart3, Cpu, Settings2 } from "lucide-react"
+import { BarChart3, Cpu, KeyRound, Settings2 } from "lucide-react"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
@@ -14,6 +14,7 @@ import { PublicFieldsCard } from "@/features/integrations/components/detail/Publ
 import { SecretFieldsCard } from "@/features/integrations/components/detail/SecretFieldsCard"
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { OpencodeAccountsCard } from "@/features/opencode-accounts/components/OpencodeAccountsCard"
 import { AI_PROVIDER_TAB_IDS, type AiProviderTab } from "../constants"
 import { AiModelsCard } from "./AiModelsCard"
 import { JevUsageCard } from "./JevUsageCard"
@@ -33,12 +34,13 @@ interface AiProviderEditorFormProps {
 const TAB_DEFS: Record<AiProviderTab, IntegrationTabDef<AiProviderTab>> = {
     configuracao: { id: "configuracao", label: "Configuração", icon: Settings2 },
     modelos: { id: "modelos", label: "Modelos", icon: Cpu },
+    contas: { id: "contas", label: "Contas", icon: KeyRound },
     consumo: { id: "consumo", label: "Consumo", icon: BarChart3 },
 }
 
 /**
- * Página de um provedor de IA em abas: Configuração (campos e ações), Modelos (lista do provedor) e
- * Consumo (uso medido). O Gemini não tem a aba Consumo. Trocar de aba com alterações pede descarte.
+ * Página de um provedor de IA em abas: Configuração (campos e ações), Modelos (lista do provedor),
+ * Contas (só OpenCode: contas dos providers do servidor) e Consumo (uso medido). O Gemini não tem a aba Consumo. Trocar de aba com alterações pede descarte.
  */
 export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiProviderEditorFormProps) {
     const provider = aiProviderOfIntegration(def.id)
@@ -76,6 +78,7 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                     </>
                 )}
                 {tab === "modelos" && provider && <AiModelsCard provider={provider.id} dirty={dirty} />}
+                {tab === "contas" && provider?.id === "opencode" && <OpencodeAccountsCard dirty={dirty} />}
                 {tab === "consumo" && provider?.id === "jev" && <JevUsageCard />}
                 {tab === "consumo" && provider?.id === "opencode" && <OpencodeUsageCard />}
             </IntegrationTabs>

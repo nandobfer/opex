@@ -305,7 +305,7 @@ export async function saveTaskRefinementSettings(input: TaskRefinementSettings, 
     return getTaskRefinementSettings()
 }
 
-// ── Revisão de PR (agente OpenCode que executa a skill de code review) ──────
+// ── Agente Revisor (agente OpenCode que executa a skill de code review) ──────
 
 export async function loadPrReviewSettings(): Promise<{ settings: PrReviewSettings; isDefault: boolean; updatedAt: Date | null }> {
     return loadFeature(PR_REVIEW_FEATURE, prReviewSettingsSchema, DEFAULT_PR_REVIEW_SETTINGS)
@@ -313,7 +313,7 @@ export async function loadPrReviewSettings(): Promise<{ settings: PrReviewSettin
 
 /** Exclusiva do OpenCode (sessão com ferramentas, `gh` e skills). */
 export async function availabilityOfPrReview(settings: PrReviewSettings): Promise<AiFeatureAvailability> {
-    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Revisão de PR"')
+    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Agente Revisor"')
 }
 
 export async function getPrReviewSettings(): Promise<PrReviewSettingsDto> {

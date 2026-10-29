@@ -27,7 +27,7 @@ vi.mock('@/features/pr-review/server/queue', () => ({ enqueueReview: vi.fn() }))
 import { PrReview } from '@/lib/db/models/PrReview'
 import { DEFAULT_PR_REVIEW_SETTINGS } from '@/features/pr-review/schemas'
 import { reviewMarker } from '@/features/pr-review/logic'
-import { getPrReview, pumpPrReviews, stopPrReview } from '@/features/pr-review/server/service'
+import { getPrReview, listPrReviews, pumpPrReviews, stopPrReview } from '@/features/pr-review/server/service'
 
 const model = PrReview as unknown as { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
 const create = async (patch: Record<string, unknown> = {}) => String((await model.create({ repo: 'org/app', number: 7, url: 'https://github.com/org/app/pull/7', title: 'Melhoria', headSha: 'sha1', state: 'queued', usage: {}, ...patch }))._id)
@@ -89,5 +89,36 @@ describe('execução da revisão de PR', () => {
   it('parar uma revisão concluída é recusado', async () => {
     const id = await create({ state: 'done' })
     await expect(stopPrReview(id)).rejects.toMatchObject({ code: 'PR_REVIEW_NOT_RUNNING' })
+  })
+})
+
+describe('lista paginada das revisões', () => {
+  const seed = async (count: number, patch: Record<string, unknown> = {}) => {
+    for (let i = 0; i < count; i++) await create({ number: i + 1, state: 'done', createdAt: new Date(Date.UTC(2026, 9, 1, 0, i)), ...patch })
+  }
+
+  it('página 2 com limite 20 pula as 20 mais recentes e calcula total e páginas', async () => {
+    await seed(45)
+    const list = await listPrReviews({ page: 2, limit: 20 })
+    expect(list).toMatchObject({ page: 2, limit: 20, total: 45, totalPages: 3 })
+    expect(list.items.map((item) => item.number)).toEqual(Array.from({ length: 20 }, (_, i) => 25 - i))
+    expect((await listPrReviews({ page: 3, limit: 20 })).items).toHaveLength(5)
+  })
+
+  it('sem revisões, total zero e uma página', async () => {
+    expect(await listPrReviews()).toMatchObject({ items: [], page: 1, total: 0, totalPages: 1 })
+  })
+
+  it('o filtro vale para a página e para o total', async () => {
+    await seed(3)
+    await seed(2, { state: 'failed' })
+    const find = vi.spyOn(PrReview, 'find')
+    const count = vi.spyOn(PrReview, 'countDocuments')
+    const list = await listPrReviews({ states: ['failed'], limit: 20 })
+    expect(list).toMatchObject({ total: 2, totalPages: 1 })
+    expect(list.items.every((item) => item.state === 'failed')).toBe(true)
+    const filter = find.mock.calls.at(-1)?.[0]
+    expect(filter).toMatchObject({ state: { $in: ['failed'] } })
+    expect(count).toHaveBeenCalledWith(filter)
   })
 })

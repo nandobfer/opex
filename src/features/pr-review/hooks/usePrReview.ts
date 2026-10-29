@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
@@ -12,10 +12,11 @@ import { useEventStream } from "@/features/agentic/hooks/useEventStream"
 import type { TimelineState } from "@/features/agentic/timeline"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
 import { PR_REVIEW_UPDATED_EVENT, type PrReviewAction } from "../constants"
+import type { PrReviewListParams } from "../filters"
 import type { PrReviewSettings } from "../schemas"
 import type { PrReviewDetailDto, PrReviewListDto, PrReviewSettingsDto } from "../types"
 
-/** Consultas e mutações da "Revisão de PR". */
+/** Consultas e mutações do "Agente Revisor". */
 
 const SETTINGS_KEY = [AI_QUERY_KEY, "feature", "pr-review"] as const
 export const PR_REVIEWS_QUERY_KEY = "pr-reviews"
@@ -29,13 +30,26 @@ export function useSavePrReviewSettings() {
         mutationFn: async (input: PrReviewSettings) => unwrapApi((await api.put<ApiResponse<PrReviewSettingsDto>>("/ai/features/pr-review", input)).data),
         onSuccess: (saved) => {
             queryClient.setQueryData(SETTINGS_KEY, saved)
-            toast.success('Configuração de "Revisão de PR" salva')
+            toast.success('Configuração do "Agente Revisor" salva')
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })
 }
 
-export const usePrReviews = () => useQuery({ queryKey: [PR_REVIEWS_QUERY_KEY, "list"], queryFn: () => get<PrReviewListDto>("/pr-reviews"), staleTime: 10_000 })
+/** Resumo da lista (usuário do GitHub e repositórios), sem itens relevantes: aba de configuração. */
+export const usePrReviewsSummary = () =>
+    useQuery({ queryKey: [PR_REVIEWS_QUERY_KEY, "summary"], queryFn: () => get<PrReviewListDto>("/pr-reviews?limit=1"), staleTime: 60_000 })
+
+/** Lista paginada da página `/agente-revisor` (os filtros fazem parte da chave: trocar recomeça na 1ª página). */
+export function usePrReviewPages(params: PrReviewListParams) {
+    return useInfiniteQuery({
+        queryKey: [PR_REVIEWS_QUERY_KEY, "pages", params],
+        queryFn: async ({ pageParam }) => unwrapApi((await api.get<ApiResponse<PrReviewListDto>>("/pr-reviews", { params: { ...params, page: pageParam } })).data),
+        initialPageParam: 1,
+        getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+        staleTime: 10_000,
+    })
+}
 
 export const usePrReview = (id: string | null) =>
     useQuery({ queryKey: [PR_REVIEWS_QUERY_KEY, "detail", id], queryFn: () => get<PrReviewDetailDto>(`/pr-reviews/${id}`), enabled: Boolean(id) })

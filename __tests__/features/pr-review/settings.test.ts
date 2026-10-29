@@ -34,7 +34,7 @@ beforeEach(() => {
     mocks.agents.mockResolvedValue([{ id: "build", name: "Build", description: null }])
 })
 
-describe('configuração da "Revisão de PR"', () => {
+describe('configuração do "Agente Revisor"', () => {
     it("sem nada salvo: desativada, critério Todos, replaneja sem limite e skill code-review", async () => {
         const dto = await getPrReviewSettings()
         expect(dto).toMatchObject({ isDefault: true, availability: { available: false } })

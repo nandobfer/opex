@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect } from "react"
+import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Info, Loader2, Save, Undo2 } from "lucide-react"
+import { ArrowRight, Info, Loader2, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -14,21 +15,22 @@ import { apiErrorMessage } from "@/lib/api"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
 import { ProviderModelCard } from "@/features/ai/components/understand-task/ProviderModelCard"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "../schemas"
-import { usePrReviews, usePrReviewSettings, useSavePrReviewSettings } from "../hooks/usePrReview"
+import { PR_REVIEWS_HREF } from "../constants"
+import { usePrReviewsSummary, usePrReviewSettings, useSavePrReviewSettings } from "../hooks/usePrReview"
 import { PrReviewScopeCard } from "./PrReviewScopeCard"
 import { PrReviewExecutionCard } from "./PrReviewExecutionCard"
-import { PrReviewHistoryCard } from "./PrReviewHistoryCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
 /**
- * Aba "Revisão de PR": agente do OpenCode que executa a skill de code review nos PRs dos repositórios
- * das centrais, a cada execução da rotina de PRs. Configuração + histórico das revisões.
+ * Aba "Agente Revisor": agente do OpenCode que executa a skill de code review nos PRs dos repositórios
+ * das centrais, a cada execução da rotina de PRs. Só a configuração; as revisões ficam na página
+ * `/agente-revisor` (barra lateral).
  */
 export function PrReviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const query = usePrReviewSettings()
     const save = useSavePrReviewSettings()
-    const reviews = usePrReviews()
+    const reviews = usePrReviewsSummary()
     const { providers } = useAiProviderStatuses()
     const form = useForm<PrReviewSettings>({ resolver: zodResolver(prReviewSettingsSchema), mode: "onChange", defaultValues: DEFAULT_PR_REVIEW_SETTINGS })
     const dirty = form.formState.isDirty
@@ -58,7 +60,7 @@ export function PrReviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                         control={form.control}
                         name="enabled"
                         id="pr-review-enabled"
-                        label="Revisão de PR"
+                        label="Agente Revisor"
                         description="Um agente do OpenCode revisa os PRs com a skill de code review sempre que a rotina de PRs roda, e publica a revisão no GitHub"
                     />
                     <AnimatePresence initial={false}>
@@ -68,6 +70,11 @@ export function PrReviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                             </motion.p>
                         )}
                     </AnimatePresence>
+                    <Button asChild variant="link" size="sm" className="h-auto gap-1 p-0 text-xs">
+                        <Link href={PR_REVIEWS_HREF}>
+                            Ver revisões <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                        </Link>
+                    </Button>
                 </CardContent>
             </Card>
 
@@ -84,8 +91,6 @@ export function PrReviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                     Salvar
                 </Button>
             </div>
-
-            <PrReviewHistoryCard query={reviews} available={availability.available} />
         </>
     )
 }

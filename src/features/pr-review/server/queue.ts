@@ -83,9 +83,9 @@ export async function enqueueReview({ target, pull, workbenchId }: ReviewCandida
  */
 export async function scanPullRequestsForReview(): Promise<string> {
     const { settings } = await loadPrReviewSettings()
-    if (!settings.enabled) return "Revisão de PR desativada"
+    if (!settings.enabled) return "Agente Revisor desativado"
     const availability = await availabilityOfPrReview(settings)
-    if (!availability.available) return `Revisão de PR indisponível: ${availability.reason ?? "verifique a configuração"}`
+    if (!availability.available) return `Agente Revisor indisponível: ${availability.reason ?? "verifique a configuração"}`
     const [targets, myLogin, workbenches] = await Promise.all([listReviewTargets(), githubLogin(), workbenchPrIndex()])
     let queued = 0
     let failures = 0
@@ -104,5 +104,5 @@ export async function scanPullRequestsForReview(): Promise<string> {
             log.warn({ err: error, repo: target.repo }, "[pr-review] Falha ao listar os PRs do repositório")
         }
     }
-    return `Revisão de PR: ${targets.length} repositório(s); ${queued} revisão(ões) na fila${failures ? `; ${failures} com falha` : ""}`
+    return `Agente Revisor: ${targets.length} repositório(s); ${queued} revisão(ões) na fila${failures ? `; ${failures} com falha` : ""}`
 }

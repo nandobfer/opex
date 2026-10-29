@@ -58,6 +58,14 @@ export async function getBoard(): Promise<TaskBoardDto> {
     return { columns: dtos, layout: normalizeLayout(layout?.order ?? [], dtos.map((column) => column.key)) }
 }
 
+/** Primeira coluna do quadro, na ordem do layout (coluna padrão de quem cria sem informar a coluna). */
+export async function firstBoardColumnKey(): Promise<string> {
+    const board = await getBoard()
+    const key = board.layout[0] ?? board.columns[0]?.key
+    if (!key) throw new DomainError(409, "O quadro não tem colunas: crie uma coluna antes de criar tarefas", "BOARD_WITHOUT_COLUMNS")
+    return key
+}
+
 /** Colunas existentes (key → nome). Usado para validar entrada e rotular. */
 export async function columnNames(): Promise<Map<string, string>> {
     await dbConnect()

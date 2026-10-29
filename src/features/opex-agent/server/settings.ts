@@ -3,7 +3,7 @@ import { assertCatalog, availability, loadFeature, persistFeature } from "@/feat
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { getAiProvider } from "@/lib/ai/providers"
 import { DomainError } from "@/lib/api/route"
-import { OPEX_CREATE_TASK_INSTRUCTION, OPEX_DOCS_INSTRUCTION, OPEX_FEATURE } from "../constants"
+import { LEGACY_OPEX_INSTRUCTION_LINES, OPEX_CREATE_TASK_INSTRUCTION, OPEX_DOCS_INSTRUCTION, OPEX_FEATURE } from "../constants"
 import { normalizeHostDirectories } from "../host-terminal"
 import { migrateLegacyToolSettings, type OpexToolMetaDto } from "../tool-tree"
 import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema, type OpexAgentSettings, type OpexMainModel, type OpexTitleModel } from "../schemas"
@@ -38,13 +38,16 @@ export function withDefaults(saved: unknown, metas: readonly OpexToolMetaDto[] =
 }
 
 /**
- * Atualiza instruções já salvas: quando o texto ainda traz a frase padrão exata de criação de tarefa e
- * não tem a regra da documentação do app, acrescenta a regra logo depois. Texto editado à mão fica
- * como está; aplicar de novo não muda nada.
+ * Atualiza instruções já salvas: troca as frases padrão antigas exatas (criação pela prévia e arquivos
+ * do chat) pelas novas e, quando o texto traz a frase padrão de criação de tarefa sem a regra da
+ * documentação do app, acrescenta a regra logo depois. Texto editado à mão fica como está; aplicar de
+ * novo não muda nada.
  */
 export function migrateOpexInstructions(text: string): string {
-    if (!text.includes(OPEX_CREATE_TASK_INSTRUCTION) || text.includes(OPEX_DOCS_INSTRUCTION)) return text
-    return text.replace(OPEX_CREATE_TASK_INSTRUCTION, `${OPEX_CREATE_TASK_INSTRUCTION}\n${OPEX_DOCS_INSTRUCTION}`)
+    let next = text
+    for (const { legacy, next: replacement } of LEGACY_OPEX_INSTRUCTION_LINES) next = next.split(legacy).join(replacement)
+    if (!next.includes(OPEX_CREATE_TASK_INSTRUCTION) || next.includes(OPEX_DOCS_INSTRUCTION)) return next
+    return next.replace(OPEX_CREATE_TASK_INSTRUCTION, `${OPEX_CREATE_TASK_INSTRUCTION}\n${OPEX_DOCS_INSTRUCTION}`)
 }
 
 export async function opexAvailability(settings: OpexAgentSettings): Promise<AiFeatureAvailability> {

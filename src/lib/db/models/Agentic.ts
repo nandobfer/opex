@@ -66,7 +66,7 @@ export interface IWorkbenchPr {
     conflictBaseSha: string | null
     /** SHA da branch do PR na última resolução de conflito iniciada; muda a cada push. */
     conflictHeadSha: string | null
-    /** Replanejamentos causados pela revisão automática (aba "Revisão de PR"; limite opcional). */
+    /** Replanejamentos causados pela revisão automática (aba "Agente Revisor"; limite opcional). */
     autoReviewReplans?: number
     /** SHA da branch do PR na última correção de CI iniciada (no mesmo commit, só a primeira pode reexecutar). */
     ciFixHeadSha?: string | null
