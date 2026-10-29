@@ -71,6 +71,16 @@ export type UnderstandTaskEvent =
 export type TaskSummaryEvent = UnderstandTaskEvent
 
 /** Memória exibida na lista compacta de um agente. */
+/**
+ * Quem gerou a memória quando não foi o usuário direto (ex.: o Agente Mentor a partir de uma mesa).
+ * Fica fora do texto: só identifica a origem na lista e na auditoria.
+ */
+export interface AgentMemoryOrigin {
+    source: string
+    /** Rótulo curto exibido na lista (ex.: "Mentor · OPE-12"). */
+    label: string
+}
+
 export interface MemoryDto {
     id: string
     texto: string
@@ -78,6 +88,8 @@ export interface MemoryDto {
     /** Mantido do Ciliar/crm (lá, memórias do contato); no Opex toda memória é escrita pelo dono ou pelo agente a pedido dele. */
     origem?: "agente" | "usuario"
     autor: string | null
+    /** Origem da memória (ex.: gravada pelo Agente Mentor); `null` quando escrita pelo dono. */
+    origin?: AgentMemoryOrigin | null
     criadaEm: string
     atualizadaEm: string
 }

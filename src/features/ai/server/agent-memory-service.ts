@@ -7,15 +7,16 @@ import { loggerFor } from "@/lib/logger"
 import { integrationChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
 import { AI_AGENTS, isAiAgentId, type AiAgentId } from "../agents"
-import { AGENT_MEMORY_LIMIT, AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
+import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
 import { memoryInputSchema } from "../schemas"
-import type { MemoryDto, MemoryMutationResult } from "../types"
+import type { AgentMemoryOrigin, MemoryDto, MemoryMutationResult } from "../types"
 import { formatMemory } from "./memory-summary"
 
 /**
  * Memórias (instruções permanentes) dos agentes de IA, uma lista por item do catálogo `agents.ts`.
  * Criar e editar passam pelo uso "Resumo de memórias" (texto formatado + resumo de uma linha).
- * Excluir remove (a auditoria guarda o texto). Até 50 por lista. Copiado do Ciliar, sem permissões:
+ * Excluir remove (a auditoria guarda o texto). Sem limite de quantidade (o antigo limite de 50 saiu na
+ * OPE-92, como na MT-27 do my-tasks). Copiado do Ciliar, sem permissões:
  * toda ação é do dono (usuário local), pela tela ou pelas ferramentas do Agente Opex.
  */
 
@@ -29,12 +30,21 @@ function authorName(userId: string): string | null {
     return userId === LOCAL_USER_ID ? getLocalUser().name : null
 }
 
-export function toMemoryDto(memory: Pick<IAgentMemory, "_id" | "texto" | "resumo" | "createdAt" | "updatedAt" | "updatedBy">): MemoryDto {
+/** Opções de quem grava a memória em nome do dono (ex.: o Agente Mentor). */
+export interface AgentMemoryWriteOptions {
+    /** Origem gravada no documento e no DTO (nunca no texto). */
+    origin?: AgentMemoryOrigin | null
+    /** Contexto extra da auditoria (vai para o `depois`). */
+    auditContext?: Record<string, unknown>
+}
+
+export function toMemoryDto(memory: Pick<IAgentMemory, "_id" | "texto" | "resumo" | "createdAt" | "updatedAt" | "updatedBy"> & { origin?: IAgentMemory["origin"] }): MemoryDto {
     return {
         id: String(memory._id),
         texto: memory.texto,
         resumo: memory.resumo,
         autor: authorName(memory.updatedBy),
+        origin: memory.origin ? { source: memory.origin.source, label: memory.origin.label } : null,
         criadaEm: new Date(memory.createdAt).toISOString(),
         atualizadaEm: new Date(memory.updatedAt).toISOString(),
     }
@@ -47,7 +57,7 @@ async function publish(agentId: AiAgentId) {
 export async function listAgentMemories(agentId: string): Promise<MemoryDto[]> {
     const agent = assertAgentId(agentId)
     await dbConnect()
-    const rows = (await AgentMemory.find({ agentId: agent }).sort({ createdAt: -1 }).limit(AGENT_MEMORY_LIMIT).lean()) as IAgentMemory[]
+    const rows = (await AgentMemory.find({ agentId: agent }).sort({ createdAt: -1 }).lean()) as IAgentMemory[]
     return rows.map(toMemoryDto)
 }
 
@@ -63,13 +73,8 @@ export async function agentMemoryTexts(agentIds: readonly AiAgentId[]): Promise<
         .sort({ createdAt: 1 })
         .select("agentId texto")
         .lean()
-    // Uma lista depois da outra, na ordem pedida (ex.: globais antes das do dono), até o limite de cada.
-    return agentIds.flatMap((agentId) =>
-        rows
-            .filter((row) => row.agentId === agentId)
-            .slice(0, AGENT_MEMORY_LIMIT)
-            .map((row) => row.texto),
-    )
+    // Uma lista depois da outra, na ordem pedida (ex.: globais antes das do dono).
+    return agentIds.flatMap((agentId) => rows.filter((row) => row.agentId === agentId).map((row) => row.texto))
 }
 
 export { memoriesSection } from "../memories-prompt"
@@ -80,17 +85,15 @@ function parseText(texto: string): string {
     return parsed.data.texto
 }
 
-export async function createAgentMemory(agentId: string, texto: string, actorId: string): Promise<MemoryMutationResult> {
+export async function createAgentMemory(agentId: string, texto: string, actorId: string, options: AgentMemoryWriteOptions = {}): Promise<MemoryMutationResult> {
     const agent = assertAgentId(agentId)
     const input = parseText(texto)
     await dbConnect()
-    if ((await AgentMemory.countDocuments({ agentId: agent })) >= AGENT_MEMORY_LIMIT) {
-        throw new DomainError(409, `Limite de ${AGENT_MEMORY_LIMIT} memórias atingido. Exclua uma antes de adicionar outra.`, "MEMORY_LIMIT")
-    }
     const formatted = await formatMemory(input)
     const now = new Date()
-    const memory = (await AgentMemory.create({ agentId: agent, texto: formatted.texto, resumo: formatted.resumo, createdBy: actorId, updatedBy: actorId, createdAt: now, updatedAt: now })).toObject() as IAgentMemory
-    await recordAudit({ userId: actorId, entidade: AI_MEMORY_AUDIT_ENTITY, entidadeId: String(memory._id), acao: AcaoAuditoria.CRIAR, depois: { agente: agent, texto: memory.texto } })
+    const origin = options.origin ?? null
+    const memory = (await AgentMemory.create({ agentId: agent, texto: formatted.texto, resumo: formatted.resumo, origin, createdBy: actorId, updatedBy: actorId, createdAt: now, updatedAt: now })).toObject() as IAgentMemory
+    await recordAudit({ userId: actorId, entidade: AI_MEMORY_AUDIT_ENTITY, entidadeId: String(memory._id), acao: AcaoAuditoria.CRIAR, depois: { agente: agent, texto: memory.texto, ...(origin ? { origem: origin.label } : {}), ...options.auditContext } })
     loggerFor({ userId: actorId }).info({ agentId: agent, formatadaPorIa: formatted.formatadaPorIa }, `[ai] Memória (${AI_AGENTS[agent].title}) criada`)
     await publish(agent)
     return { memoria: toMemoryDto(memory), formatadaPorIa: formatted.formatadaPorIa }
@@ -104,17 +107,17 @@ async function findMemory(agentId: AiAgentId, id: string): Promise<IAgentMemory>
     return memory
 }
 
-export async function updateAgentMemory(agentId: string, id: string, texto: string, actorId: string): Promise<MemoryMutationResult> {
+export async function updateAgentMemory(agentId: string, id: string, texto: string, actorId: string, options: AgentMemoryWriteOptions = {}): Promise<MemoryMutationResult> {
     const agent = assertAgentId(agentId)
     const input = parseText(texto)
     const current = await findMemory(agent, id)
     const formatted = await formatMemory(input)
     const updated = (await AgentMemory.findOneAndUpdate(
         { _id: current._id },
-        { $set: { texto: formatted.texto, resumo: formatted.resumo, updatedBy: actorId, updatedAt: new Date() } },
+        { $set: { texto: formatted.texto, resumo: formatted.resumo, updatedBy: actorId, updatedAt: new Date(), ...(options.origin !== undefined ? { origin: options.origin } : {}) } },
         { returnDocument: "after" },
     ).lean()) as IAgentMemory
-    await recordAudit({ userId: actorId, entidade: AI_MEMORY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { agente: agent, texto: current.texto }, depois: { agente: agent, texto: updated.texto } })
+    await recordAudit({ userId: actorId, entidade: AI_MEMORY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { agente: agent, texto: current.texto }, depois: { agente: agent, texto: updated.texto, ...(options.origin ? { origem: options.origin.label } : {}), ...options.auditContext } })
     await publish(agent)
     return { memoria: toMemoryDto(updated), formatadaPorIa: formatted.formatadaPorIa }
 }

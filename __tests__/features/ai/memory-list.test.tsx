@@ -43,6 +43,21 @@ describe('lista de memórias', () => {
     expect(net.get).toHaveBeenCalledWith('/ai/agents/opex-global/memories')
   })
 
+  it('sem limite: mostra o total de memórias e o botão Nova memória sempre habilitado', async () => {
+    const many = Array.from({ length: 60 }, (_, index) => ({ ...memory, id: index.toString(16).padStart(24, '0'), resumo: `Regra ${index}` }))
+    net.get.mockResolvedValue({ data: { data: many } })
+    mount(true)
+    expect((await screen.findByTestId('memory-count')).textContent).toBe('60 memórias')
+    expect((screen.getByRole('button', { name: /Nova memória/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('memória gravada por outro agente mostra o selo da origem', async () => {
+    net.get.mockResolvedValue({ data: { data: [{ ...memory, origin: { source: 'mentor', label: 'Mentor · OPE-7' } }] } })
+    mount(true)
+    expect((await screen.findByTitle('Gravada por Mentor · OPE-7')).textContent).toContain('Mentor · OPE-7')
+    expect(screen.getByTestId('memory-count').textContent).toBe('1 memória')
+  })
+
   it('criar entra na hora (otimista) e avisa quando o Resumo de memórias está indisponível', async () => {
     let resolve: (value: unknown) => void = () => undefined
     net.post.mockReturnValue(new Promise((done) => (resolve = done)))

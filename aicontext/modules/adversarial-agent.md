@@ -113,7 +113,8 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
   **Centrais** (todas ou escolhidas).
 - **Contexto**: as chaves acima e a lista "Seções enviadas" (`plannedSectionTitles`).
 - **Memórias**: a lista `adversarial` do módulo de memórias dos agentes (`AgentMemoriesCard`,
-  coleção `agent_memories`, até 50; ver `ai.md`, "Memórias"). O texto passa pelo **Resumo de
+  coleção `agent_memories`, sem limite de quantidade; as gravadas pelo Agente Mentor mostram o selo
+  "Mentor · <tarefa>", campo `origin`; ver `ai.md`, "Memórias"). O texto passa pelo **Resumo de
   memórias** global (sem modelo próprio). O Agente Opex também lê e edita esta lista pelas
   ferramentas de memórias.
 - **Revisões**: as 50 rodadas mais recentes (tarefa, ciclo, rodada, nível, achados por severidade,

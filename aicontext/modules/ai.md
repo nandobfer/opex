@@ -371,13 +371,17 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa). Cada lista tem a
   aba onde aparece (`tab`: `agente-opex` ou `agente-adversario`; `aiAgentsOfTab`). Uma lista nova
   entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
-- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `createdBy`,
-  `updatedBy`, datas; índice `{ agentId, createdAt }`). Até **50** por lista (409 `MEMORY_LIMIT`);
-  texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
+- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `origin`
+  opcional, `createdBy`, `updatedBy`, datas; índice `{ agentId, createdAt }`). **Sem limite de
+  quantidade** por lista (o antigo limite de 50 e o 409 `MEMORY_LIMIT` saíram na OPE-92, como na
+  MT-27 do my-tasks); texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
   desconhecida dá 404 `AI_AGENT_NOT_FOUND`.
 - **Serviço** (`server/agent-memory-service.ts`): listar (mais recentes primeiro), ler, criar, editar
-  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias"); auditoria
-  `MemoriaAgente` (criar/atualizar/excluir, com o texto), log Pino e evento
+  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias") e aceitam
+  `{ origin, auditContext }` opcionais (`AgentMemoryWriteOptions`): a origem (`{ source, label }`, ex.:
+  `Mentor · OPE-12`, gravada pelo Agente Mentor) fica no documento e no DTO (`origin`), nunca no
+  texto, e o contexto vai para o `depois` da auditoria; auditoria
+  `MemoriaAgente` (criar/atualizar/excluir, com o texto e a origem), log Pino e evento
   `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
 - **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (módulo puro
   `src/features/ai/memories-prompt.ts`, compartilhado; ver `modules/opex-agent.md` e
@@ -385,7 +389,9 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 - **Tela**: aba Agente Opex › Memórias mostra só as listas da aba (`aiAgentsOfTab("agente-opex")`:
   três cards); aba Agente Adversário › Memórias mostra o card `adversarial` (sem modelo de resumo
   próprio: usa o Resumo de memórias global). Cards `AgentMemoriesCard` com `MemoryList` — linha com o
-  resumo de uma linha que expande o texto completo, autor e "há X tempo"; **Nova memória**/editar com
+  resumo de uma linha que expande o texto completo, autor e "há X tempo", o **selo da origem**
+  (`GraduationCap` + rótulo) quando houver e o **total de memórias** ao lado de **Nova memória**
+  (sempre habilitado); **Nova memória**/editar com
   `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
   (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
   confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi

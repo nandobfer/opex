@@ -61,7 +61,6 @@ vi.mock('@/lib/db/models/AgentMemory', () => {
 
 import { agentMemoryTexts, createAgentMemory, deleteAgentMemory, listAgentMemories, memoriesSection, updateAgentMemory } from '@/features/ai/server/agent-memory-service'
 import { memoryTools } from '@/features/opex-agent/server/tools/memories'
-import { AGENT_MEMORY_LIMIT } from '@/features/ai/constants'
 import { aiAgentsOfTab, opexMemoryAgentsFor } from '@/features/ai/agents'
 
 const run = (name: string, raw: unknown) => {
@@ -88,13 +87,28 @@ describe('memórias do Agente Opex', () => {
     expect(mocks.recordAudit.mock.calls.map((call) => (call as unknown as [{ acao: string }])[0].acao)).toEqual(['CRIAR', 'ATUALIZAR', 'EXCLUIR'])
   })
 
-  it('lista desconhecida, texto inválido, memória de outra lista e limite', async () => {
+  it('lista desconhecida, texto inválido e memória de outra lista', async () => {
     await expect(listAgentMemories('sales-agent')).rejects.toMatchObject({ status: 404, code: 'AI_AGENT_NOT_FOUND' })
     await expect(createAgentMemory('opex-owner', 'x', 'local')).rejects.toMatchObject({ status: 400 })
     const owner = await createAgentMemory('opex-owner', 'Só do dono.', 'local')
     await expect(updateAgentMemory('opex-client', owner.memoria.id, 'Outra lista', 'local')).rejects.toMatchObject({ status: 404 })
-    for (let index = 1; index < AGENT_MEMORY_LIMIT; index += 1) await createAgentMemory('opex-owner', `Memória ${index}`, 'local')
-    await expect(createAgentMemory('opex-owner', 'Uma a mais', 'local')).rejects.toMatchObject({ status: 409, code: 'MEMORY_LIMIT' })
+  })
+
+  it('sem limite de quantidade: cria além das antigas 50 por lista e todas entram no prompt', async () => {
+    for (let index = 1; index <= 51; index += 1) await createAgentMemory('opex-owner', `Memória ${index}`, 'local')
+    expect(await listAgentMemories('opex-owner')).toHaveLength(51)
+    expect(await agentMemoryTexts(['opex-owner'])).toHaveLength(51)
+  })
+
+  it('origem opcional: fica no documento e no DTO, nunca no texto, e vai para a auditoria com o contexto', async () => {
+    const created = await createAgentMemory('adversarial', 'Confira testes de tela.', 'local', { origin: { source: 'mentor', label: 'Mentor · OPE-1' }, auditContext: { mesa: 'w1' } })
+    expect(created.memoria.origin).toEqual({ source: 'mentor', label: 'Mentor · OPE-1' })
+    expect(created.memoria.texto).not.toContain('Mentor')
+    expect(mocks.recordAudit.mock.calls.at(-1)?.[0]).toMatchObject({ acao: 'CRIAR', depois: { agente: 'adversarial', origem: 'Mentor · OPE-1', mesa: 'w1' } })
+    const plain = await createAgentMemory('adversarial', 'Sem origem.', 'local')
+    expect(plain.memoria.origin).toBeNull()
+    const updated = await updateAgentMemory('adversarial', plain.memoria.id, 'Fundida pelo Mentor.', 'local', { origin: { source: 'mentor', label: 'Mentor · OPE-2' } })
+    expect(updated.memoria.origin).toEqual({ source: 'mentor', label: 'Mentor · OPE-2' })
   })
 
   it('prompt: dono recebe globais + do dono; portal recebe globais + do cliente, em ordem', async () => {

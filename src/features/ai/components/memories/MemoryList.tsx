@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Bot, Brain, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react"
+import { Bot, Brain, ChevronDown, GraduationCap, Pencil, Plus, Trash2 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { IconAction } from "@/components/ui/icon-action"
@@ -61,10 +62,13 @@ export function MemoryList({ source, canEdit, canCreate = true, emptyTitle, empt
                             />
                         </motion.div>
                     ) : (
-                        <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                        <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center justify-between gap-2">
                             <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
                                 <Plus className="h-4 w-4" aria-hidden /> Nova memória
                             </Button>
+                            <span data-testid="memory-count" className="text-xs text-muted-foreground">
+                                {memories.length === 1 ? "1 memória" : `${memories.length} memórias`}
+                            </span>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -96,6 +100,11 @@ export function MemoryList({ source, canEdit, canCreate = true, emptyTitle, empt
                                                     {memory.resumo}
                                                 </span>
                                             )}
+                                            {memory.origin ? (
+                                                <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title={`Gravada por ${memory.origin.label}`}>
+                                                    <GraduationCap className="h-3 w-3" aria-hidden /> {memory.origin.label}
+                                                </Badge>
+                                            ) : null}
                                             <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0 text-muted-foreground">
                                                 <ChevronDown className="h-4 w-4" aria-hidden />
                                             </motion.span>
