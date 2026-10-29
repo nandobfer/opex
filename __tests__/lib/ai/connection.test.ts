@@ -56,7 +56,7 @@ describe('confirmAiProviderConnection', () => {
   it('indisponível de fato: devolve o motivo real', async () => {
     mocks.statuses.mockResolvedValue(statuses({ connected: false }))
     mocks.info.mockRejectedValue(new AiProviderError('OpenCode inacessível em http://pc:4096 (ECONNREFUSED)'))
-    expect(await confirmAiProviderConnection('opencode')).toEqual({ configured: true, connected: false, detail: 'OpenCode inacessível em http://pc:4096 (ECONNREFUSED)' })
+    expect(await confirmAiProviderConnection('opencode')).toMatchObject({ configured: true, connected: false, detail: 'OpenCode inacessível em http://pc:4096 (ECONNREFUSED)' })
     await flush()
     expect(mocks.runTest).not.toHaveBeenCalled()
   })
@@ -74,22 +74,90 @@ describe('confirmAiProviderConnection', () => {
     expect(mocks.info).not.toHaveBeenCalled()
   })
 
-  it('chamadas simultâneas e seguidas reusam o mesmo teste por alguns segundos', async () => {
+  it('chamadas simultâneas compartilham o teste em andamento', async () => {
     mocks.statuses.mockResolvedValue(statuses({ connected: false }))
     mocks.info.mockRejectedValue(new AiProviderError('fora'))
     await Promise.all([confirmAiProviderConnection('opencode'), confirmAiProviderConnection('opencode')])
-    await confirmAiProviderConnection('opencode')
     expect(mocks.info).toHaveBeenCalledTimes(1)
   })
 
-  it('o resultado guardado expira e a conexão restabelecida volta a valer', async () => {
+  it('falha não segura a conexão que voltou: nova tentativa logo depois testa de novo', async () => {
     vi.useFakeTimers()
     try {
       mocks.statuses.mockResolvedValue(statuses({ connected: false }))
       mocks.info.mockRejectedValueOnce(new AiProviderError('fora'))
       expect((await confirmAiProviderConnection('opencode')).connected).toBe(false)
-      vi.advanceTimersByTime(16_000)
+      vi.advanceTimersByTime(2_000)
       expect((await confirmAiProviderConnection('opencode')).connected).toBe(true)
+      expect(mocks.info).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sucesso vale por alguns segundos sem novo teste', async () => {
+    mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+    await confirmAiProviderConnection('opencode')
+    await confirmAiProviderConnection('opencode')
+    expect(mocks.info).toHaveBeenCalledTimes(1)
+  })
+
+  it('limite curto (telas de leitura) é repassado ao teste', async () => {
+    mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+    const timeout = vi.spyOn(AbortSignal, 'timeout')
+    await confirmAiProviderConnection('opencode', { timeoutMs: 2_000 })
+    expect(timeout).toHaveBeenCalledWith(2_000)
+    timeout.mockRestore()
+  })
+
+  it('falha reabre após ~1,5 s; sucesso continua guardado até 15 s', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+      mocks.info.mockRejectedValueOnce(new AiProviderError('fora'))
+      await confirmAiProviderConnection('opencode')
+      vi.advanceTimersByTime(1_000)
+      expect((await confirmAiProviderConnection('opencode')).connected).toBe(false)
+      expect(mocks.info).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(600)
+      expect((await confirmAiProviderConnection('opencode')).connected).toBe(true)
+      expect(mocks.info).toHaveBeenCalledTimes(2)
+      vi.advanceTimersByTime(14_000)
+      expect((await confirmAiProviderConnection('opencode')).connected).toBe(true)
+      expect(mocks.info).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('limites diferentes não compartilham o mesmo teste', async () => {
+    mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+    await confirmAiProviderConnection('opencode', { timeoutMs: 2_000 })
+    await confirmAiProviderConnection('opencode')
+    expect(mocks.info).toHaveBeenCalledTimes(2)
+  })
+
+  it('estourar o limite é marcado como timedOut (mesmo embrulhado em AiProviderError)', async () => {
+    mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+    mocks.info.mockImplementation((signal: AbortSignal) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new AiProviderError('Não foi possível conectar ao OpenCode: aborted')))))
+    const result = await confirmAiProviderConnection('opencode', { timeoutMs: 10 })
+    expect(result).toMatchObject({ connected: false, timedOut: true })
+  })
+
+  it('recusa de conexão não é timedOut', async () => {
+    mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+    mocks.info.mockRejectedValue(new AiProviderError('ECONNREFUSED'))
+    expect((await confirmAiProviderConnection('opencode')).timedOut).toBe(false)
+  })
+
+  it('o sucesso guardado expira', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.statuses.mockResolvedValue(statuses({ connected: false }))
+      expect((await confirmAiProviderConnection('opencode')).connected).toBe(true)
+      vi.advanceTimersByTime(16_000)
+      mocks.info.mockRejectedValueOnce(new AiProviderError('fora'))
+      expect((await confirmAiProviderConnection('opencode')).connected).toBe(false)
       expect(mocks.info).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()

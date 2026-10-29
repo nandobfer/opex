@@ -16,12 +16,19 @@ export interface AiProviderConnection {
     connected: boolean
     /** Motivo real da falha (sem segredos) quando o teste na hora falhou. */
     detail: string | null
+    /** O teste na hora estourou o limite (o provedor pode estar só lento). */
+    timedOut?: boolean
 }
 
 export const CONNECTION_PROBE_TIMEOUT_MS = 8_000
+/** Teste curto para telas de leitura (não seguram o carregamento). */
+export const CONNECTION_READ_PROBE_TIMEOUT_MS = 2_000
+/** Quanto vale um teste que passou; o que falhou vale bem menos, para a conexão que voltou valer logo. */
 export const CONNECTION_PROBE_CACHE_MS = 15_000
+export const CONNECTION_PROBE_FAILURE_CACHE_MS = 1_500
 
-const probes = new Map<AiProviderId, { at: number; result: Promise<AiProviderConnection> }>()
+/** Por provedor + limite: chamadas simultâneas compartilham o teste em andamento. */
+const probes = new Map<string, { settledAt: number | null; ok: boolean; result: Promise<AiProviderConnection> }>()
 const refreshing = new Set<AiProviderId>()
 
 export function resetAiConnectionProbes(): void {
@@ -29,8 +36,7 @@ export function resetAiConnectionProbes(): void {
     refreshing.clear()
 }
 
-async function probe(providerId: AiProviderId): Promise<void> {
-    const signal = AbortSignal.timeout(CONNECTION_PROBE_TIMEOUT_MS)
+async function probe(providerId: AiProviderId, signal: AbortSignal): Promise<void> {
     if (providerId === "opencode") {
         const { getOpencodeInfo } = await import("./opencode")
         await getOpencodeInfo(signal)
@@ -50,25 +56,36 @@ function refreshStatus(providerId: AiProviderId): void {
         .finally(() => refreshing.delete(providerId))
 }
 
-async function probeNow(providerId: AiProviderId): Promise<AiProviderConnection> {
+async function probeNow(providerId: AiProviderId, timeoutMs: number): Promise<AiProviderConnection> {
+    const signal = AbortSignal.timeout(timeoutMs)
     try {
-        await probe(providerId)
+        await probe(providerId, signal)
         logger.warn({ providerId }, "[ai] Status gravado dizia desconectado, mas o provedor respondeu: status desatualizado")
         refreshStatus(providerId)
         return { configured: true, connected: true, detail: null }
     } catch (error) {
         const detail = error instanceof AiProviderError ? error.message : describeFetchError(error)
-        return { configured: true, connected: false, detail: detail.slice(0, 300) }
+        // O cliente do OpenCode embrulha o aborto em AiProviderError: o sinal é quem diz se estourou.
+        const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError")
+        return { configured: true, connected: false, detail: detail.slice(0, 300), timedOut }
     }
 }
 
-export async function confirmAiProviderConnection(providerId: AiProviderId): Promise<AiProviderConnection> {
+export async function confirmAiProviderConnection(providerId: AiProviderId, options: { timeoutMs?: number } = {}): Promise<AiProviderConnection> {
     const status = (await getAiProviderStatuses()).find((item) => item.id === providerId)
     if (!status?.configured) return { configured: false, connected: false, detail: null }
     if (status.connected) return { configured: true, connected: true, detail: null }
-    const hit = probes.get(providerId)
-    if (hit && Date.now() - hit.at < CONNECTION_PROBE_CACHE_MS) return hit.result
-    const result = probeNow(providerId)
-    probes.set(providerId, { at: Date.now(), result })
+    const timeoutMs = options.timeoutMs ?? CONNECTION_PROBE_TIMEOUT_MS
+    const key = `${providerId}:${timeoutMs}`
+    const hit = probes.get(key)
+    if (hit) {
+        if (hit.settledAt === null) return hit.result
+        if (Date.now() - hit.settledAt < (hit.ok ? CONNECTION_PROBE_CACHE_MS : CONNECTION_PROBE_FAILURE_CACHE_MS)) return hit.result
+    }
+    const entry: { settledAt: number | null; ok: boolean; result: Promise<AiProviderConnection> } = { settledAt: null, ok: false, result: probeNow(providerId, timeoutMs) }
+    probes.set(key, entry)
+    const result = await entry.result
+    entry.settledAt = Date.now()
+    entry.ok = result.connected
     return result
 }

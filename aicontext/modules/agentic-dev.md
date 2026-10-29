@@ -30,7 +30,9 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   confirmada na hora"): Implementar, enviar mensagem, abrir mesa e forks não são bloqueados por uma
   verificação periódica que falhou de passagem. Indisponível de fato, o 409 `AGENTIC_UNAVAILABLE`
   traz a falha real: "O OpenCode não está conectado (motivo): confira se o opencode serve está no ar
-  e acessível; …".
+  e acessível; …". A leitura das configurações (`getAgenticSettings`, que desabilita o botão de
+  abrir a mesa) usa um teste curto de 2 s e, se ele só estourar o tempo, não bloqueia: quem decide é a
+  ação, com o limite cheio de 8 s.
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
     cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e

@@ -66,8 +66,8 @@ e opções na própria aba da página "Provedores de IA".
   falhou de passagem) = testa o provedor agora (OpenCode: `GET /api/info`; demais: lista de modelos
   sem cache), com limite de 8 s. Respondeu: a ação segue e o teste completo regrava o status em
   segundo plano (um por vez por provedor). Falhou: o motivo traz a falha real (`… não está conectado
-  (ECONNREFUSED): …`). O resultado do teste na hora vale 15 s por provedor (chamadas simultâneas
-  compartilham o mesmo teste).
+  (ECONNREFUSED): …`). Chamadas simultâneas compartilham o teste em andamento (por provedor e
+  limite); depois, o sucesso vale 15 s e a falha só 1,5 s (a conexão que voltou vale logo).
 - Testes de conexão (`src/features/ai/server/testers.ts`): OpenCode = info + modelos + agentes
   (amarelo sem modelos); Gemini, Anthropic, OpenAI e DeepSeek = lista de modelos (amarelo sem
   modelos de texto); hub `ai` = testa cada provedor configurado

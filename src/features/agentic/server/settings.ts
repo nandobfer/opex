@@ -2,7 +2,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AiFeatureSetting } from "@/lib/db/models/Ai"
 import { DomainError } from "@/lib/api/route"
 import { listAiAgents, listAiModels } from "@/lib/ai/catalog"
-import { confirmAiProviderConnection } from "@/lib/ai/connection"
+import { CONNECTION_READ_PROBE_TIMEOUT_MS, confirmAiProviderConnection } from "@/lib/ai/connection"
 import { AiProviderError } from "@/lib/ai/errors"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_ROLE_LABELS, AGENT_ROLES, AGENTIC_FEATURE, AGENTIC_UPDATED_EVENT } from "../constants"
@@ -24,18 +24,21 @@ export function opencodeDisconnectedReason(detail: string | null): string {
     return `O OpenCode não está conectado${detail ? ` (${detail})` : ""}: confira se o opencode serve está no ar e acessível; o resultado fica em Integrações › Provedores de IA › OpenCode`
 }
 
-export async function agenticAvailability(settings: AgenticSettings): Promise<AgenticAvailability> {
+/** `probeTimeoutMs`: limite do teste na hora (as telas de leitura usam um curto, e o tempo esgotado nele não bloqueia). */
+export async function agenticAvailability(settings: AgenticSettings, options: { probeTimeoutMs?: number } = {}): Promise<AgenticAvailability> {
     if (!settings.enabled) return { available: false, reason: "O desenvolvimento agêntico está desativado em Integrações › Provedores de IA" }
     // Confirma na hora: o status gravado pode ser de uma verificação periódica que falhou de passagem.
-    const status = await confirmAiProviderConnection("opencode")
+    const status = await confirmAiProviderConnection("opencode", { timeoutMs: options.probeTimeoutMs })
     if (!status.configured) return { available: false, reason: "O OpenCode não está configurado em Integrações › Provedores de IA" }
+    // Leitura (teste curto): estourar o limite não prova queda; a ação confere com o limite cheio.
+    if (!status.connected && status.timedOut && options.probeTimeoutMs !== undefined) return { available: true, reason: null }
     if (!status.connected) return { available: false, reason: opencodeDisconnectedReason(status.detail) }
     return { available: true, reason: null }
 }
 
 export async function getAgenticSettings(): Promise<AgenticSettingsDto> {
     const { settings, isDefault, updatedAt } = await loadAgenticSettings()
-    return { settings, isDefault, availability: await agenticAvailability(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+    return { settings, isDefault, availability: await agenticAvailability(settings, { probeTimeoutMs: CONNECTION_READ_PROBE_TIMEOUT_MS }), updatedAt: updatedAt ? updatedAt.toISOString() : null }
 }
 
 /** Confere no OpenCode os agentes, modelos e variantes informados (ignora quando desconectado). */
