@@ -1,4 +1,4 @@
-/** Constantes da "Revisão de PR" (módulo puro: tela e servidor). */
+/** Constantes do "Agente Revisor" (módulo puro: tela e servidor). */
 
 export const PR_REVIEW_FEATURE = "pr-review"
 
@@ -32,6 +32,14 @@ export const PR_REVIEW_VERDICT_LABELS: Record<PrReviewVerdict, string> = {
     commented: "Comentado",
 }
 
+export const PR_REVIEW_TRIGGERS = ["auto", "manual"] as const
+export type PrReviewTrigger = (typeof PR_REVIEW_TRIGGERS)[number]
+
+export const PR_REVIEW_TRIGGER_LABELS: Record<PrReviewTrigger, string> = {
+    auto: "Automática",
+    manual: "Manual",
+}
+
 export const PR_REVIEW_ACTIONS = ["rerun", "stop"] as const
 export type PrReviewAction = (typeof PR_REVIEW_ACTIONS)[number]
 
@@ -44,10 +52,15 @@ export const PR_REVIEW_MARKER = "<!-- opex:pr-review"
 export const PR_REVIEW_AUDIT_ENTITY = "RevisaoPR"
 /** Evento em `private-app` quando uma revisão muda. Payload: `{ id }`. */
 export const PR_REVIEW_UPDATED_EVENT = "pr-review-updated"
-export const PR_REVIEW_STAGE_LABEL = "Revisão de PR"
+export const PR_REVIEW_STAGE_LABEL = "Agente Revisor"
 export const PR_REVIEW_INSTRUCTIONS_KEY = "opex-pr-review"
-/** Histórico listado na aba. */
-export const PR_REVIEW_HISTORY_LIMIT = 50
+/** Página `/agente-revisor` (lista das revisões, item da barra lateral). */
+export const PR_REVIEWS_HREF = "/agente-revisor"
+/** Aba de configuração em Integrações › Provedores de IA (id mantido para não quebrar links). */
+export const PR_REVIEW_SETTINGS_HREF = "/integracoes/ia?aba=revisao-pr"
+/** Revisões por página na lista (padrão e máximo aceitos pela API). */
+export const PR_REVIEW_PAGE_LIMIT = 20
+export const PR_REVIEW_PAGE_LIMIT_MAX = 50
 
 export const PR_REVIEW_CONCURRENCY_MAX = 5
 export const PR_REVIEW_TIMEOUT_MIN = 5

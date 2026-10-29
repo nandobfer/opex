@@ -3,7 +3,7 @@ import { extractJsonBlock } from "@/features/agentic/prompts"
 import { PR_REVIEW_MARKER, PR_REVIEW_VERDICTS, type PrReviewVerdict } from "./constants"
 import type { PrReviewSettings } from "./schemas"
 
-/** Regras puras da "Revisão de PR" (critério, URL do PR, marcador, veredito e limite de replanejamento). */
+/** Regras puras do "Agente Revisor" (critério, URL do PR, marcador, veredito e limite de replanejamento). */
 
 /** Dados do PR que o critério usa (vindos de `GET /repos/{repo}/pulls`). */
 export interface PrCandidate {
@@ -51,7 +51,7 @@ export function reviewMarker(headSha: string): string {
  * replanejamentos a revisão automática já causou neste PR.
  */
 export function replanDecision(settings: Pick<PrReviewSettings, "replanOnChanges" | "replanLimit">, count: number): { allowed: boolean; reason: string | null } {
-    if (!settings.replanOnChanges) return { allowed: false, reason: "a revisão automática não replaneja a mesa (desligado em Revisão de PR)" }
+    if (!settings.replanOnChanges) return { allowed: false, reason: "a revisão automática não replaneja a mesa (desligado no Agente Revisor)" }
     if (settings.replanLimit.enabled && count >= settings.replanLimit.max) return { allowed: false, reason: `limite de ${settings.replanLimit.max} replanejamento(s) pela revisão automática atingido` }
     return { allowed: true, reason: null }
 }

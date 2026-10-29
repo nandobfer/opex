@@ -88,7 +88,7 @@ describe("scanPullRequestsForReview", () => {
 
     it("desativada ou indisponível não consulta o GitHub", async () => {
         mocks.settings = { ...mocks.settings, enabled: false }
-        expect(await scanPullRequestsForReview()).toBe("Revisão de PR desativada")
+        expect(await scanPullRequestsForReview()).toBe("Agente Revisor desativado")
         mocks.settings = { ...mocks.settings, enabled: true }
         mocks.available = false
         expect(await scanPullRequestsForReview()).toContain("indisponível")

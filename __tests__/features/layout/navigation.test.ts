@@ -8,7 +8,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Ambientes) e Sistema (Integrações)", () => {
+    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Agente Revisor, Ambientes) e Sistema (Integrações)", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
             ["inicio", undefined],
             ["sistema", "Sistema"],
@@ -19,6 +19,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             ["Horas agênticas", "/tarefas/horas"],
             ["Financeiro", "/financeiro"],
             ["Central de desenvolvimento", "/desenvolvimento"],
+            ["Agente Revisor", "/agente-revisor"],
             ["Ambientes", "/ambientes"],
             ["Integrações", "/integracoes"],
         ])

@@ -40,6 +40,11 @@ export interface PrReviewDetailDto extends PrReviewDto {
 
 export interface PrReviewListDto {
     items: PrReviewDto[]
+    /** Página atual (1+), tamanho e total no recorte dos filtros. */
+    page: number
+    limit: number
+    total: number
+    totalPages: number
     /** Login do usuário do token do GitHub (critérios "Exceto os meus" / "Revisor solicitado"). */
     githubLogin: string | null
     /** Repositórios das centrais acompanhados. */

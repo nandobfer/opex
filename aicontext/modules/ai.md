@@ -113,8 +113,8 @@ e opções na própria aba da página "Provedores de IA".
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** (agentes padrão e as **colunas
   globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
-  (subaba endereçável por `abaAgentic`). Há também a aba **Revisão de PR**, com configuração,
-  histórico e saída ao vivo — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
+  (subaba endereçável por `abaAgentic`). Há também a aba **Agente Revisor** (id `revisao-pr`), só com a
+  configuração (as revisões ficam na página `/agente-revisor`) — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
   configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
   DeepSeek) — ver `modules/opex-agent.md` —, a aba **Agente Adversário** (`agente-adversario`,
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
@@ -126,7 +126,7 @@ e opções na própria aba da página "Provedores de IA".
   têm essa aba). Trocar de aba com alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
-  conectados podem ser escolhidos. Refinar tarefa, Revisão de PR e Desenvolvimento agêntico são
+  conectados podem ser escolhidos. Refinar tarefa, Agente Revisor e Desenvolvimento agêntico são
   exclusivos do OpenCode.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Abaixo dos cards há uma

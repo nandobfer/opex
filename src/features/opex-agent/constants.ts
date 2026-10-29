@@ -65,7 +65,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     routines: { label: "Rotinas", description: "Crons do agendador interno" },
     jobs: { label: "Jobs agendados", description: "Agendar prompts para o próprio agente executar sozinho (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar — inclusive os do portal" },
     "ai-settings": { label: "Features de IA", description: "Configuração das features de IA do app" },
-    "pr-reviews": { label: "Revisão de PR", description: "Revisões automáticas de pull requests" },
+    "pr-reviews": { label: "Agente Revisor", description: "Revisões automáticas de pull requests" },
     dashboard: { label: "Dashboards", description: "Métricas de tarefas, horas, financeiro e IA" },
     services: { label: "Serviços", description: "Lançamentos manuais de faturamento: listar, ler, criar, editar e arquivar" },
     finance: { label: "Financeiro", description: "Faturamento por cliente e período (somente leitura)" },

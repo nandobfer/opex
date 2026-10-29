@@ -2,7 +2,7 @@
 
 ## O que é
 
-Página **Ambientes** (`/ambientes`, item do menu logo abaixo de "Central de desenvolvimento") para gerenciar ambientes **Docker Compose** no **servidor** e no **PC** (pela conexão
+Página **Ambientes** (`/ambientes`, item do menu logo abaixo de "Agente Revisor") para gerenciar ambientes **Docker Compose** no **servidor** e no **PC** (pela conexão
 do Builder Machine, nativo), com build e execução em máquinas diferentes por um **registry local**.
 
 ### Tela

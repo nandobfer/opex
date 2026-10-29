@@ -26,6 +26,7 @@ import {
 } from "@/features/ai/server/settings"
 import { dashboardQuerySchema } from "@/features/dashboard/schemas"
 import { buildDashboard } from "@/features/dashboard/server/service"
+import { PR_REVIEW_PAGE_LIMIT_MAX } from "@/features/pr-review/constants"
 import { prReviewSettingsSchema, requestPrReviewSchema } from "@/features/pr-review/schemas"
 import { getPrReview, listPrReviews, requestPrReview, rerunPrReview, stopPrReview } from "@/features/pr-review/server/service"
 import { defineTool } from "./define"
@@ -81,11 +82,11 @@ export const prReviewTools = [
     defineTool({
         name: "list_pr_reviews",
         group: "pr-reviews",
-        label: "Revisões de PR",
+        label: "Revisões do Agente Revisor",
         risk: "read",
-        description: "Histórico das revisões automáticas de PR (estado e veredito) e repositórios observados.",
+        description: "Histórico das revisões de PR do Agente Revisor (as 50 mais recentes, com estado e veredito) e repositórios observados.",
         input: z.object({}),
-        execute: async () => listPrReviews(),
+        execute: async () => listPrReviews({ limit: PR_REVIEW_PAGE_LIMIT_MAX }),
     }),
     defineTool({
         name: "get_pr_review",

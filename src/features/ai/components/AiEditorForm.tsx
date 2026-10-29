@@ -45,7 +45,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "orcamentos", label: "Orçamentos", icon: Calculator },
     { id: "estimar-prazos", label: "Estimar prazos", icon: Timer },
     { id: "refinar-tarefa", label: "Refinar tarefa", icon: Wand2 },
-    { id: "revisao-pr", label: "Revisão de PR", icon: GitPullRequest },
+    { id: "revisao-pr", label: "Agente Revisor", icon: GitPullRequest },
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-adversario", label: "Agente Adversário", icon: Swords },

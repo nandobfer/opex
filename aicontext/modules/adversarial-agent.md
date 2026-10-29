@@ -22,7 +22,7 @@ adversarial_blocked ─┬─ Corrigir (texto opcional, achados desmarcáveis) �
 
 - **Aplicação** (`adversaryApplies`, `server/settings.ts`): "Agente Adversário" ativo + central no
   escopo (`scope.all` ou `scope.centralIds`). Sem isso o fluxo é idêntico ao de sempre. Nunca lança
-  (na dúvida, segue sem revisão). Não entra em `resolving_conflicts` nem `fixing_ci` (a Revisão de PR
+  (na dúvida, segue sem revisão). Não entra em `resolving_conflicts` nem `fixing_ci` (o Agente Revisor
   cobre o PR aberto).
 - **Fim da implementação** (`afterImplementation` em `agentic/server/workflow.ts`): a sessão é movida
   para o worktree; com o adversário aplicado, o turno encadeado é `adversarial_review` (o texto é a

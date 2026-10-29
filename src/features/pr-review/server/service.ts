@@ -13,16 +13,18 @@ import { toGithubDomainError } from "@/features/github/server/errors"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { availabilityOfPrReview, loadPrReviewSettings } from "@/features/ai/server/settings"
-import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_HISTORY_LIMIT, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
+import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
 import { parsePrUrl, parseReviewResult, reviewMarker, reviewWorktreePath, verdictFromGithubState } from "../logic"
 import { buildPrReviewInstructions, buildPrReviewPrompt } from "../prompt"
+import type { PrReviewListQuery } from "../schemas"
 import type { PrReviewDetailDto, PrReviewDto, PrReviewListDto } from "../types"
+import { buildPrReviewListFilter } from "./list-query"
 import { enqueueReview, type GithubPullItem } from "./queue"
 import { finishReviewSession } from "./session-cleanup"
 import { findReviewTarget, githubLogin, listReviewTargets, workbenchPrIndex } from "./targets"
 
 /**
- * Revisão de PR (SOMENTE servidor): cada revisão é um turno do agente numa sessão NOVA do OpenCode,
+ * Agente Revisor (SOMENTE servidor): cada revisão é um turno do agente numa sessão NOVA do OpenCode,
  * no diretório da central do repositório, que executa a skill de code review e publica o resultado
  * no GitHub. Permissões são aprovadas automaticamente e perguntas são canceladas (não há ninguém para
  * responder). A saída usa o mesmo barramento das mesas (`agentic_events`, chaveado pelo id da revisão).
@@ -247,12 +249,25 @@ export function pumpPrReviews(): Promise<number> {
 
 // ── Consultas e ações (tela) ─────────────────────────────────────────────────
 
-export async function listPrReviews(): Promise<PrReviewListDto> {
+/** Lista paginada (mais recentes primeiro) no recorte dos filtros; sem argumentos, a 1ª página sem filtros. */
+export async function listPrReviews(query: Partial<PrReviewListQuery> = {}): Promise<PrReviewListDto> {
     await dbConnect()
     await reconcileRunning()
-    const [docs, githubLoginValue, targets] = await Promise.all([PrReview.find().sort({ createdAt: -1 }).limit(PR_REVIEW_HISTORY_LIMIT).lean(), githubLogin(), listReviewTargets({ all: true })])
+    const page = query.page ?? 1
+    const limit = query.limit ?? PR_REVIEW_PAGE_LIMIT
+    const filter = buildPrReviewListFilter({ q: query.q ?? "", states: query.states ?? [], verdicts: query.verdicts ?? [], repos: query.repos ?? [], triggers: query.triggers ?? [], from: query.from, to: query.to })
+    const [docs, total, githubLoginValue, targets] = await Promise.all([
+        PrReview.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+        PrReview.countDocuments(filter),
+        githubLogin(),
+        listReviewTargets({ all: true }),
+    ])
     return {
         items: (docs as unknown as IPrReview[]).map(toDto),
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
         githubLogin: githubLoginValue,
         repos: targets.map((target) => ({ repo: target.repo, projectName: target.projectName, enabled: target.config.enabled })),
     }
@@ -266,7 +281,7 @@ export async function getPrReview(id: string): Promise<PrReviewDetailDto> {
 async function assertAvailable(): Promise<void> {
     const { settings } = await loadPrReviewSettings()
     const availability = await availabilityOfPrReview(settings)
-    if (!availability.available) throw new DomainError(409, availability.reason ?? "Revisão de PR indisponível", "PR_REVIEW_UNAVAILABLE")
+    if (!availability.available) throw new DomainError(409, availability.reason ?? "Agente Revisor indisponível", "PR_REVIEW_UNAVAILABLE")
 }
 
 async function fetchPull(repo: string, number: number): Promise<GithubPullItem & { state: string }> {

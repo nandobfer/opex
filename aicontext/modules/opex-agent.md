@@ -215,7 +215,7 @@ risco (os catálogos são distintos).
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
-| Revisão de PR | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
+| Agente Revisor | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
 | Dashboards | `get_dashboard` |
 | Serviços | `list_services`, `get_service`, `create_service`, `update_service`, `set_service_archived`*, `regenerate_service_ai` |
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |

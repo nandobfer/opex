@@ -290,7 +290,7 @@ describe('merge automático', () => {
   })
 })
 
-describe('revisão automática (Revisão de PR)', () => {
+describe('revisão automática (Agente Revisor)', () => {
   const autoReview = (id: number, state = 'CHANGES_REQUESTED', body = '**Bloqueio** em a.ts\n<!-- opex:pr-review sha=h1 -->') => ({ id, state, body, user: { login: 'eu' } })
 
   it('pedido de mudanças da revisão automática replaneja e conta o replanejamento', async () => {
