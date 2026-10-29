@@ -58,7 +58,7 @@ Item **Agente Revisor** da barra lateral (seção Início, logo após Central de
   (`server/list-query.ts`): **Busca** (`q`: repositório, título, autor; `12`/`#12` também casa o
   número do PR), **Situação**, **Veredito**, **Repositório**, **Origem** (automática/manual; revisões
   sem origem contam como automáticas) e **Período** (criação da revisão, dia inteiro no fuso do
-  navegador). Padrão: sem recorte (todo o histórico).
+  navegador; `from`/`to` fora de `yyyy-MM-dd` válido são ignorados). Padrão: sem recorte (todo o histórico).
 - Lista mais recentes primeiro, 20 por página com rolagem infinita (ou "Carregar mais"): situação,
   veredito, commit, origem, custo, duração, erro; **Ver** (diálogo com a **saída do agente ao vivo** e
   o **relatório** em Markdown), **Revisar de novo** (commit atual do PR) e **Parar** (confirmação).

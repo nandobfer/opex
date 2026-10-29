@@ -33,4 +33,12 @@ describe("filtros da página Agente Revisor (URL)", () => {
         })
         expect(toPrReviewListParams(DEFAULT_PR_REVIEW_FILTERS)).toEqual({})
     })
+
+    it("data inválida em from/to é descartada e não quebra a conversão para a API", () => {
+        const filters = parseUrlFilters("?from=abc&to=2026-13-45", DEFAULT_PR_REVIEW_FILTERS, PR_REVIEW_FILTER_SCHEMA)
+        expect(filters).toMatchObject({ from: "", to: "" })
+        expect(parseUrlFilters("?from=2026-10-0", DEFAULT_PR_REVIEW_FILTERS, PR_REVIEW_FILTER_SCHEMA).from).toBe("")
+        expect(() => toPrReviewListParams({ ...DEFAULT_PR_REVIEW_FILTERS, from: "abc", to: "2026-10" })).not.toThrow()
+        expect(toPrReviewListParams({ ...DEFAULT_PR_REVIEW_FILTERS, from: "abc", to: "2026-10" })).toEqual({})
+    })
 })
