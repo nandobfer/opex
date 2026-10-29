@@ -5,6 +5,7 @@ import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
 import { docTools } from "./docs"
+import { environmentTools } from "./environments"
 import { fileTools } from "./files"
 import { githubTools } from "./github"
 import { hostTools } from "./host"
@@ -42,6 +43,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...financeTools,
     ...clientTools,
     ...hostTools,
+    ...environmentTools,
 ] as readonly OpexTool[]
 
 export function findOpexTool(name: string): OpexTool | undefined {

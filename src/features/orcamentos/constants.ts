@@ -31,6 +31,7 @@ export const clienteRevisaoPath = (draftId: string) => `${ORCAMENTOS_BASE_PATH}/
 export const clienteTarefaPath = (taskId: string) => `${ORCAMENTOS_BASE_PATH}/tarefa/${taskId}`
 export const clienteFinanceiroPath = () => `${ORCAMENTOS_BASE_PATH}/financeiro`
 export const clienteUsuariosPath = () => `${ORCAMENTOS_BASE_PATH}/usuarios`
+export const clienteAmbientesPath = () => `${ORCAMENTOS_BASE_PATH}/ambientes`
 
 /** Evento em `private-app` quando clientes de orçamento mudam. Payload: `{ scope }`. */
 export const ORCAMENTOS_UPDATED_EVENT = "orcamentos-updated"

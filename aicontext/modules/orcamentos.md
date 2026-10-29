@@ -2,7 +2,7 @@
 
 Integração **Clientes** (`orcamentos`, rota `/integracoes/clientes`): o dono cadastra **clientes** e
 cada cliente ganha um **usuário padrão** e uma **URL** para um **portal próprio**, agora **autenticado
-por sessão** (`/cliente`) com **sidebar** (Dashboard, Tarefas e, para o **admin** do cliente,
+por sessão** (`/cliente`) com **sidebar** (Dashboard, Tarefas, Ambientes e, para o **admin** do cliente,
 Financeiro e Usuários). O cliente acompanha as tarefas que solicitou (quase todo somente leitura — a
 edição do cliente é a **prioridade**), pode **enviar uma nova tarefa** (a IA gera prévia, tags e
 estimativa, que ele aprova ou corrige) e, sendo admin, vê o **custo** e gere **usuários**.
@@ -88,7 +88,7 @@ Logins e sessões: `aicontext/modules/auth.md`.
   sessão de cliente e cliente selecionado vai direto ao dashboard; com vários clientes (ou sem
   seleção) ou como **dono** mostra a **escolha de cliente**.
 - **Layout autenticado** (`src/app/cliente/(portal)/`): reusa o `AppShell` com a navegação do portal
-  (`clienteNav`) — **Dashboard, Tarefas** e, para o admin, **Financeiro e Usuários** — e a **barra de
+  (`clienteNav`) — **Dashboard, Tarefas, Ambientes** (estado dos ambientes dos repositórios do cliente; implantar/levantar/reiniciar só do admin — ver `modules/environments.md`) e, para o admin, **Financeiro e Usuários** — e a **barra de
   contexto** (`ClienteContextBar`): seletor de cliente (troca sem novo login), aviso de
   pré-visualização e atalho de volta ao Opex. Sem itens internos do dono. No rodapé, o **Agente
   Opex** aparece quando o dono o ativou para o cliente (sessões e ferramentas privadas por usuário;

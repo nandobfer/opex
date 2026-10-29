@@ -208,7 +208,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   `modules/opex-agent.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
   host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`) e
   `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
-  ao ativar a Builder Machine — ver `modules/builder-machine.md`).
+  ao ativar a Builder Machine — ver `modules/builder-machine.md`) e `environments-registry-cleanup`
+  (diária às 04:00, **nasce desligada** — mantém as últimas tags de cada ambiente no registry; ver
+  `modules/environments.md`). O tick do agendador também chama `runEnvironmentsTick` (retoma deploys
+  interrompidos e reabre os repasses das portas dos ambientes no PC).
 - **Rotinas de integração ativável** (`INTEGRATION_CRON_JOBS`, `cronJobIntegration`): com a
   integração dona desativada (campo `active`), a rotina some da aba Rotinas (`hiddenJobIds` em
   `CronJobsCard`/`CronJobsEditor`); continua salva e a edição a preserva.

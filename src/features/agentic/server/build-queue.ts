@@ -15,8 +15,42 @@ import { isWorkbenchActive } from "./hub"
  * importa este módulo estaticamente).
  */
 
-/** Um build está em andamento? Só conta a mesa `building`/`running` com turno vivo neste processo. */
+/** Builds de fora das mesas (ex.: deploy de Ambientes): em andamento neste processo e a vez entre eles. */
+const EXTERNAL_KEY = Symbol.for("opex.build-queue.external")
+const externalStore = globalThis as unknown as Record<symbol, { active: number; turn: Promise<void> } | undefined>
+const external = () => (externalStore[EXTERNAL_KEY] ??= { active: 0, turn: Promise.resolve() })
+
+/**
+ * Roda um build de fora das mesas na vez da fila global: um externo por vez, depois de nenhum build de
+ * mesa estar em andamento; ocupa a vez durante `run` e, ao terminar, aciona a fila das mesas.
+ */
+export async function runExclusiveBuild<T>(run: () => Promise<T>, options: { pollMs?: number; signal?: AbortSignal } = {}): Promise<T> {
+    const pollMs = options.pollMs ?? 5_000
+    const state = external()
+    const previous = state.turn
+    let done!: () => void
+    state.turn = new Promise<void>((resolve) => (done = resolve))
+    try {
+        await previous
+        while (await hasActiveBuild()) {
+            if (options.signal?.aborted) throw new Error("Build cancelado na fila")
+            await new Promise((resolve) => setTimeout(resolve, pollMs))
+        }
+        state.active += 1
+        try {
+            return await run()
+        } finally {
+            state.active -= 1
+            void pumpBuildQueue()
+        }
+    } finally {
+        done()
+    }
+}
+
+/** Um build está em andamento? Conta a mesa `building`/`running` com turno vivo neste processo e os builds externos. */
 async function hasActiveBuild(): Promise<boolean> {
+    if (external().active > 0) return true
     const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1 }).lean()
     return building.some((item) => item.previewBuild?.method !== "github" && isWorkbenchActive(String(item._id)))
 }

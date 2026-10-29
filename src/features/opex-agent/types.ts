@@ -94,7 +94,7 @@ export interface OpexMessageDto {
     id: string
     role: "user" | "assistant"
     /** `confirmation`: decisão do usuário sobre uma ação pendente (exibida como nota); `job`: prompt de um job agendado. */
-    kind: "message" | "confirmation" | "job"
+    kind: "message" | "confirmation" | "job" | "notice"
     /** Job que disparou a mensagem (`kind: "job"`). */
     job: { id: string; title: string } | null
     text: string

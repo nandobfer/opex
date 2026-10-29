@@ -40,6 +40,7 @@ export const OPEX_TOOL_GROUPS = [
     "finance",
     "clients",
     "host",
+    "environments",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
@@ -70,6 +71,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     finance: { label: "Financeiro", description: "Faturamento por cliente e período (somente leitura)" },
     clients: { label: "Clientes", description: "Clientes do portal, usuários do portal e prévias de orçamento" },
     host: { label: "Terminal do host", description: "Executar comandos na máquina do OpenCode (fora do container do app)" },
+    environments: { label: "Ambientes", description: "Listar, implantar, levantar/derrubar, mover, logs e histórico dos ambientes Docker Compose (/ambientes)" },
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */

@@ -115,6 +115,10 @@ efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila 
 
 ## Fila do build (um build por vez)
 
+Builds de fora das mesas (deploy de **Ambientes**, `modules/environments.md`) entram na mesma vez por
+`runExclusiveBuild` (`build-queue.ts`): um externo por vez, só depois de nenhum build de mesa vivo; enquanto
+ele roda a fila das mesas não inicia, e ao terminar a fila é acionada.
+
 ### Método da prévia: Local ou GitHub Action
 
 Na central → Ambiente, `environment.previewMethod` seleciona **Local** (padrão, inclusive

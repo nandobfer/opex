@@ -1,16 +1,17 @@
-import { Banknote, LayoutDashboard, ListTodo, Users } from "lucide-react"
+import { Banknote, LayoutDashboard, ListTodo, Server, Users } from "lucide-react"
 import type { NavSectionDef } from "@/features/layout/types"
-import { clienteDashboardPath, clienteFinanceiroPath, clienteTarefasPath, clienteUsuariosPath } from "../constants"
+import { clienteAmbientesPath, clienteDashboardPath, clienteFinanceiroPath, clienteTarefasPath, clienteUsuariosPath } from "../constants"
 
 /**
- * Navegação do **portal do cliente**: Dashboard, Tarefas e — só para o **admin** do cliente —
- * Financeiro e Usuários. Sem itens internos do dono (Horas agênticas, Central de desenvolvimento,
+ * Navegação do **portal do cliente**: Dashboard, Tarefas, Ambientes (estado para todos; ações do
+ * admin) e — só para o **admin** do cliente — Financeiro e Usuários. Sem itens internos do dono (Horas agênticas, Central de desenvolvimento,
  * Integrações).
  */
 export function clienteNav(isAdmin: boolean): readonly NavSectionDef[] {
     const items = [
         { href: clienteDashboardPath(), label: "Dashboard", title: "Dashboard", icon: LayoutDashboard },
         { href: clienteTarefasPath(), label: "Tarefas", title: "Tarefas", icon: ListTodo },
+        { href: clienteAmbientesPath(), label: "Ambientes", title: "Ambientes", icon: Server },
     ]
     if (isAdmin) {
         items.push({ href: clienteFinanceiroPath(), label: "Financeiro", title: "Financeiro", icon: Banknote })

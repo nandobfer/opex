@@ -22,6 +22,15 @@ const mocks = vi.hoisted(() => ({
   listOpexJobs: vi.fn(async () => [] as unknown[]),
   createOpexJob: vi.fn(),
   cancelOpexJob: vi.fn(),
+  listPortalEnvironments: vi.fn(async () => [{ id: 'e1', slug: 'loja' }]),
+  resolvePortalEnvironment: vi.fn(async () => ({ _id: 'e1', slug: 'loja' })),
+  runPortalEnvironmentAction: vi.fn(async () => ({ started: true })),
+}))
+
+vi.mock('@/features/environments/server/portal', () => ({
+  listPortalEnvironments: mocks.listPortalEnvironments,
+  resolvePortalEnvironment: mocks.resolvePortalEnvironment,
+  runPortalEnvironmentAction: mocks.runPortalEnvironmentAction,
 }))
 
 vi.mock('@/features/opex-agent/server/jobs', () => ({
@@ -251,6 +260,17 @@ describe('ferramentas do portal respeitam o escopo do usuário', () => {
     const users = (await run('list_users', {}, context(true))) as unknown as unknown[]
     expect(JSON.stringify(users)).not.toContain('cli_segredo')
     expect(users[0]).toMatchObject({ id: 'u1', username: 'ana', admin: true })
+  })
+
+  it('ambientes: todos listam pelo cliente do ator; implantar/levantar/reiniciar são do admin e passam pelo serviço do portal', async () => {
+    expect(await run('list_environments', {}, context(false))).toEqual([{ id: 'e1', slug: 'loja' }])
+    expect(mocks.listPortalEnvironments).toHaveBeenCalledWith(expect.objectContaining({ _id: 'c1' }))
+    for (const name of ['deploy_environment', 'start_environment', 'restart_environment']) expect(findOpexClientServerTool(name)?.adminOnly).toBe(true)
+    expect(enabledClientOpexServerTools(OPEX_CLIENT_TOOLS.map((tool) => tool.name), false).some((tool) => tool.name === 'deploy_environment')).toBe(false)
+    expect(findOpexClientServerTool('deploy_environment')?.risk).toBe('destructive')
+    const out = await run('deploy_environment', { environment: 'loja' }, context(true))
+    expect(mocks.runPortalEnvironmentAction).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }), 'e1', 'deploy')
+    expect(out).toMatchObject({ id: 'e1', slug: 'loja', action: 'deploy', status: 'running' })
   })
 
   it('remover usuário é destrutivo e avisa o que será feito', () => {

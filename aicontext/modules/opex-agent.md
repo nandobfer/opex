@@ -132,6 +132,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   | Orçamentos | `list_previews`, `get_preview`, `create_preview`, `generate_preview`, `set_preview_correction`, `estimate_preview`, `approve_preview` |
   | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task`, `attach_files_to_preview` |
   | Dashboard | `get_dashboard` |
+  | Ambientes | `list_environments` (todos); `deploy_environment`*, `start_environment`, `restart_environment`* (**admin**) — só os ambientes de central dos repositórios do cliente (ver `modules/environments.md`) |
   | Financeiro (**admin**) | `get_finance`, `get_service` |
   | Usuários (**admin**) | `list_users`, `update_user`, `delete_user`* |
   | Jobs agendados (**opt-in**) | `list_jobs`, `schedule_job`, `update_job`, `cancel_job`* — só os jobs do próprio usuário naquele cliente |
@@ -219,6 +220,7 @@ risco (os catálogos são distintos).
 | Serviços | `list_services`, `get_service`, `create_service`, `update_service`, `set_service_archived`*, `regenerate_service_ai` |
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
 | Terminal do host | `get_host_terminal`, `run_host_command`* — detalhes abaixo |
+| Ambientes | `list_environments`, `get_environment`, `get_environment_logs`, `list_environment_deploys`, `get_environment_deploy`, criar/editar/adotar/apagar, `deploy_environment`*, `move_environment`*, levantar/derrubar*/reiniciar, configuração e limpeza do registry — os mesmos serviços de `/ambientes`; o fim de um deploy pedido pelo agente chega à sessão como aviso (`kind: "notice"`). Detalhes em `modules/environments.md` |
 | Clientes | `list_clients`, `get_client` (usuários do portal e prévias de orçamento recentes), `create_client`*, `update_client`, `regenerate_client_token`*, `delete_client`*, `create_client_user`*, `update_client_user`*, `regenerate_client_user_token`*, `delete_client_user`* |
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
