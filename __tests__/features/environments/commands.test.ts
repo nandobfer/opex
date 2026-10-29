@@ -201,6 +201,10 @@ describe('regras', () => {
 
   it('registry mantém as N últimas tags; repasses só dos ambientes no PC', () => {
     expect(tagsToDelete(['a', 'b', 'c', 'd'], ['d', 'c', 'b'], 2)).toEqual(['a', 'b'])
+    // Regressão: a imagem implantada e a do deploy em andamento nunca saem; sem deploy de sucesso conhecido, nada sai.
+    expect(tagsToDelete(['a', 'b', 'c', 'd'], ['d', 'c'], 1, ['a', 'b'])).toEqual(['c'])
+    expect(tagsToDelete(['a', 'b'], [], 5)).toEqual([])
+    expect(tagsToDelete(['a', 'b'], [], 5, ['a'])).toEqual([])
     // Regressão: slugs com prefixo comum (`crm` e `crm-hml`) — a limpeza de um não apaga as tags do outro.
     expect(repositoryOwner('opex-env/crm-app', ['crm', 'crm-hml'])).toBe('crm')
     expect(repositoryOwner('opex-env/crm-hml-web', ['crm', 'crm-hml'])).toBeNull()

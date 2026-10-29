@@ -16,8 +16,10 @@ const parseJson = <T>(output: string): T | null => {
 }
 
 /** Tags a apagar: as que não estão entre as `keep` mais recentes dos deploys com sucesso (puro). */
-export function tagsToDelete(tags: string[], recent: string[], keep: number): string[] {
-    const kept = new Set(recent.slice(0, keep))
+export function tagsToDelete(tags: string[], recent: string[], keep: number, protectedTags: readonly string[] = []): string[] {
+    // Sem deploy de sucesso conhecido (expirados pelo TTL), não há como saber o que está em uso: nada sai.
+    if (!recent.length) return []
+    const kept = new Set([...recent.slice(0, keep), ...protectedTags.filter(Boolean)])
     return tags.filter((tag) => !kept.has(tag))
 }
 
@@ -57,7 +59,7 @@ export async function runRegistryCleanup(run: HostRunner = runEnvHost): Promise<
     const catalog = parseJson<{ repositories?: string[] }>((await run(registryCatalogCommand(settings), 30_000)).output)
     const repositories = (catalog?.repositories ?? []).filter((repo) => repo.startsWith(`${REGISTRY_NAMESPACE}/`))
     await environmentsDb()
-    const envs = await Environment.find().select({ slug: 1 }).lean<IEnvironment[]>()
+    const envs = await Environment.find().select({ slug: 1, deployedCommit: 1, lastDeployId: 1 }).lean<IEnvironment[]>()
     const slugs = envs.map((env) => env.slug)
     const slugOf = new Map(envs.map((env) => [String(env._id), env.slug]))
     const recorded = new Map<string, string>()
@@ -70,9 +72,13 @@ export async function runRegistryCleanup(run: HostRunner = runEnvHost): Promise<
     for (const env of envs) {
         const deploys = await EnvironmentDeploy.find({ environmentId: String(env._id), status: "success", imageTag: { $ne: null } }).sort({ startedAt: -1 }).select({ imageTag: 1 }).lean<IEnvironmentDeploy[]>()
         const recent = [...new Set(deploys.map((item) => item.imageTag!).filter(Boolean))]
+        // Sempre protegidas: a imagem implantada (tag = commit do deploy) e as dos deploys em andamento.
+        const running = await EnvironmentDeploy.find({ environmentId: String(env._id), status: "running", imageTag: { $ne: null } }).select({ imageTag: 1 }).lean<IEnvironmentDeploy[]>()
+        const last = env.lastDeployId ? await EnvironmentDeploy.findById(env.lastDeployId).select({ imageTag: 1 }).lean<IEnvironmentDeploy>() : null
+        const protectedTags = [env.deployedCommit, last?.imageTag, ...running.map((item) => item.imageTag)].filter((tag): tag is string => Boolean(tag))
         for (const repo of repositories.filter((name) => repositoryOwner(name, slugs, recorded) === env.slug)) {
             const tags = parseJson<{ tags?: string[] | null }>((await run(registryTagsCommand(settings, repo), 30_000)).output)?.tags ?? []
-            for (const tag of tagsToDelete(tags, recent, settings.keepTags)) {
+            for (const tag of tagsToDelete(tags, recent, settings.keepTags, protectedTags)) {
                 if ((await run(deleteTagCommand(settings, repo, tag), 30_000)).exitCode === 0) removed += 1
             }
         }

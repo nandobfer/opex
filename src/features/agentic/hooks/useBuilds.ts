@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
+import { withBasePath } from "@/lib/base-path"
 import { applyBuildLogLine, INITIAL_BUILD_LOG_VIEW, splitBuildLogChunk, type BuildLogViewState, type WorkbenchBuildDto } from "../build-log"
 import { agenticKey } from "./useAgentic"
 
@@ -45,7 +46,7 @@ export function useBuildLogStream(workbenchId: string, buildId: string | null, s
 
     useEffect(() => {
         if (!buildId || !key) return
-        const url = `/api${base(workbenchId)}/${buildId}/log`
+        const url = withBasePath(`/api${base(workbenchId)}/${buildId}/log`)
         let disposed = false
         let controller: AbortController | null = null
         let retry: ReturnType<typeof setTimeout> | null = null

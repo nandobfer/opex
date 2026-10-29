@@ -1,3 +1,4 @@
+import { withBasePath } from "@/lib/base-path"
 
 /** Evento genérico de stream NDJSON (cada rota define o próprio formato; `type` é comum a todos). */
 export type NdjsonEvent = { type: string } & Record<string, unknown>
@@ -7,7 +8,7 @@ export type NdjsonEvent = { type: string } & Record<string, unknown>
  * erro antes do stream (JSON) vira `Error` com a mensagem do servidor.
  */
 export async function readNdjson<T extends { type: string } = NdjsonEvent>(path: string, onEvent: (event: T) => void, options: { body?: unknown; signal?: AbortSignal } = {}): Promise<void> {
-    const res = await fetch(path, {
+    const res = await fetch(withBasePath(path), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options.body ?? {}),

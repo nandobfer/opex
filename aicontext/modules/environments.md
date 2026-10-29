@@ -147,7 +147,9 @@ mesma validação, auditoria, Pusher e erros.
 - **Tick do agendador** (`runEnvironmentsTick`): com o túnel de volta (fechado → aberto, ou o 1º tick
   do processo), reabre os repasses das portas dos ambientes no PC.
 - **Rotina** `environments-registry-cleanup` (diária às 04:00, nasce desligada): mantém as N últimas tags por ambiente (pelos deploys com sucesso) e roda o
-  `garbage-collect` do registry. O dono de cada repositório vem do registro exato dos deploys
+  `garbage-collect` do registry. A tag da imagem implantada (`deployedCommit` e a do último deploy) e as
+  dos deploys em andamento nunca são apagadas, e um ambiente sem nenhum deploy de sucesso conhecido
+  (ex.: expirados pelo TTL de 90 dias) não perde nenhuma tag. O dono de cada repositório vem do registro exato dos deploys
   (`environment_deploys.repositories`, gravado nos deploys entre máquinas); sem registro, pelo
   prefixo `<slug>-` só quando um único slug casa (`repositoryOwner`) — com slugs de prefixo comum
   (`crm`/`crm-hml`) o repositório ambíguo fica de fora, nunca apaga tags de outro ambiente.
