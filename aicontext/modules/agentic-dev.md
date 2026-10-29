@@ -409,6 +409,12 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
   chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
   adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
+- **Agente Mentor (OPE-92)**: com o Mentor ativo, o pedido de planejamento e de implementação pode
+  ganhar a instrução do bloco ` ```opex-lesson ` (`mentorPrepareTurn`); o bloco é retirado da resposta
+  antes de a mesa interpretar o turno (`mentorTakeLesson`), e o fim de cada cadeia de turnos (com a ação
+  que a originou e o texto do usuário) e o chat ao vivo vão ao Mentor
+  (`mentorAfterTurns`/`mentorRecordLiveMessage`), que avalia em segundo plano: a mesa nunca espera e uma
+  falha dele não muda a etapa. Comportamento em `modules/adversarial-agent.md`, "Agente Mentor".
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
   **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
   **desligada = PR automático**. A escolha salva na hora na tarefa

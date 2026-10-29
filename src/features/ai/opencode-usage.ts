@@ -19,6 +19,8 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     agentic: "Desenvolvimento agêntico (mesas)",
     "pr-review": "Agente Revisor",
     "adversarial-agent": "Agente Adversário",
+    "adversarial-mentor-decision": "Agente Mentor (decisor)",
+    "adversarial-mentor-writer": "Agente Mentor (redator)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {

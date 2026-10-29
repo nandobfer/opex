@@ -24,6 +24,7 @@ import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
 import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
 import { AdversarialAgentTab } from "@/features/adversarial-agent/components/settings/AdversarialAgentTab"
+import { MENTOR_AI_TAB_DEF, MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
 import { MemorySummaryTab } from "./memory-summary/MemorySummaryTab"
 
 interface AiEditorFormProps {
@@ -49,6 +50,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-adversario", label: "Agente Adversário", icon: Swords },
+    MENTOR_AI_TAB_DEF,
     { id: "resumo-memorias", label: "Resumo de memórias", icon: ScrollText },
 ]
 
@@ -98,6 +100,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-adversario" && <AdversarialAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "agente-mentor" && <MentorAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "resumo-memorias" && <MemorySummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>

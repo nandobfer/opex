@@ -127,7 +127,9 @@ e opções na própria aba da página "Provedores de IA".
   configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
   DeepSeek) — ver `modules/opex-agent.md` —, a aba **Agente Adversário** (`agente-adversario`,
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
-  `modules/adversarial-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
+  `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
+  transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
+  "Agente Mentor" — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
