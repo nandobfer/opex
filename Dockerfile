@@ -68,6 +68,8 @@ RUN chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Documentação do app lida pelo Agente Opex do dono (list_app_docs/read_app_doc/search_app_docs).
+COPY --from=builder --chown=nextjs:nodejs /app/aicontext ./aicontext
 
 USER nextjs
 

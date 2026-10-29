@@ -18,7 +18,6 @@ docker-compose.deploy.yml
 .vscode
 .idea
 docs
-aicontext
 __tests__
 .opencode
 .cortexkit

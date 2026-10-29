@@ -26,7 +26,10 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 ## Chat
 
 - Streaming de texto com cursor e raciocínio recolhível ("Pensando…").
-- Cards de ferramenta com estado animado, duração e entrada/saída recolhíveis.
+- Cards de ferramenta com estado animado, duração e entrada/saída recolhíveis. O ícone vem do grupo da
+  ferramenta; chamadas antigas de um grupo já removido aparecem com o ícone genérico e o histórico é
+  mantido: `toMessageDto` troca o grupo desconhecido (nem do dono nem do portal) por `null`
+  (`normalizeOpexParts`) e `toolIcon`/`fileIcon` usam ícones de reserva.
 - Rodapé de cada resposta com modelo, tokens e duração.
 - Cada linha das respostas tem, no hover, **Citar no campo de resposta**: insere `> linha` no cursor
   do campo do chat sem apagar o texto (`ReplyTargetProvider` no `OpexChat`, `ReplyTextarea` no
@@ -198,6 +201,7 @@ risco (os catálogos são distintos).
 | Grupo | Ferramentas |
 |---|---|
 | Contexto (sempre ligado) | `get_app_overview` |
+| Documentação do app | `list_app_docs`, `read_app_doc`, `search_app_docs` — os `.md` de `aicontext/` para explicar como usar o app, regras e funcionalidades. Só no agente do **dono** (detalhes abaixo) |
 | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_preview` aceita `chatFileIds` |
 | Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
@@ -221,6 +225,31 @@ risco (os catálogos são distintos).
 ou credencial/token/senha de cliente é `destructive`. Tokens, `portalPath` (que carrega o token) e
 senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas). † `write` com
 `confirmByDefault` (pede confirmação por padrão).
+
+### Documentação do app
+
+Grupo `docs` (todas de leitura, ligadas por padrão e desligáveis), **só no agente do dono**: o portal
+do cliente não recebe o grupo, porque a documentação interna traz regras do dono (ex.: fator de lucro
+e estimativa interna). O agente consulta a documentação para responder "como faço X", regras e
+funcionalidades. As instruções padrão (`OPEX_DOCS_INSTRUCTION`) mandam buscar antes de responder,
+traduzir para passos do usuário (telas, menus, botões), citar o arquivo e não inventar; instruções
+já salvas com a frase padrão exata de criação de tarefa ganham a regra logo depois
+(`migrateOpexInstructions`, idempotente; texto editado à mão fica como está).
+
+- `list_app_docs` (`dir?`): os `.md` de `aicontext/**` (guias da raiz primeiro), com título (primeiro
+  `#`), número de linhas e seções `##`.
+- `read_app_doc` (`path` relativo a `aicontext/`, `section?`, `startLine?`, `maxLines?` até 600, padrão
+  200): linhas numeradas; com `section`, só a seção (até o próximo título de nível igual ou acima;
+  título sem acento/caixa, exato antes de "contém"). Teto de 24 mil caracteres; devolve
+  `totalLines` e `truncated` para continuar. Seção inexistente lista as seções do arquivo.
+- `search_app_docs` (`query`, `limit?` até 30, padrão 10): busca por palavras sem acento/caixa, linha
+  a linha (título vale o dobro; frase inteira e nome do arquivo dão bônus), com arquivo, linha, seção e
+  trecho.
+- Segurança: só `.md` dentro de `aicontext/` (`normalizeDocPath` recusa `..`, absoluto, byte nulo e
+  outras extensões; o caminho real é conferido com `realpath`, então symlink para fora é recusado).
+  Sem a pasta: erro "Documentação do app indisponível nesta instalação".
+- A raiz é `process.cwd()/aicontext`. Na imagem Docker a pasta é copiada para `/app/aicontext`
+  (`Dockerfile`, estágio runner; `aicontext` saiu do `.dockerignore`).
 
 ### Repositórios GitHub
 

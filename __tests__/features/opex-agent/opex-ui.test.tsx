@@ -93,6 +93,12 @@ describe('card de ferramenta', () => {
     fireEvent.click(toggle)
     expect(screen.getByText('{"task":"OPX-1"}')).toBeTruthy()
   })
+
+  it('grupo removido (de sessões antigas) usa o ícone genérico sem quebrar (MT-19)', () => {
+    const part = toolPart({ name: 'list_betas', label: 'Listar betas', group: 'beta' as never, state: 'error', error: 'Falhou' })
+    render(<OpexToolCard part={part} />)
+    expect(screen.getByText('Listar betas')).toBeTruthy()
+  })
 })
 
 describe('mensagens', () => {

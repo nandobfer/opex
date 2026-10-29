@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { applyLiveLine, closeRunningTools, partsText } from '@/features/opex-agent/live-message'
+import { applyLiveLine, closeRunningTools, normalizeOpexParts, partsText } from '@/features/opex-agent/live-message'
+import { toolIcon } from '@/features/opex-agent/components/tool-icons'
+import { fileIcon } from '@/features/opex-agent/components/chat/file-icons'
+import { File, FileImage, ListTodo, Wrench } from 'lucide-react'
 import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from '@/features/opex-agent/history'
 import { clampWords, fallbackTitle, parseTitleOutput } from '@/features/opex-agent/title'
 import { closeTab, openTab, pruneTabs, OPEX_DRAFT_TAB } from '@/features/opex-agent/hooks/useOpexTabs'
@@ -179,5 +182,24 @@ describe('schema da configuração', () => {
 
   it('o OpenCode não é aceito (não executa as ferramentas do app)', () => {
     expect(opexAgentSettingsSchema.safeParse({ ...DEFAULT_OPEX_AGENT_SETTINGS, main: { ...DEFAULT_OPEX_AGENT_SETTINGS.main, provider: 'opencode' } }).success).toBe(false)
+  })
+})
+
+describe('grupos de ferramenta removidos (MT-19)', () => {
+  const removed = { type: 'tool' as const, id: 't1', name: 'list_betas', group: 'beta' as never, label: 'Listar betas', state: 'error' as const, input: '{}', output: null, error: 'Falhou', confirmation: null, durationMs: 40 }
+
+  it('normalizeOpexParts zera só o grupo desconhecido e preserva o resto (dono e portal)', () => {
+    const valid = { ...removed, id: 't2', name: 'list_tasks', group: 'tasks' as const }
+    const portal = { ...removed, id: 't3', name: 'list_users', group: 'users' as const }
+    const text = { type: 'text' as const, text: 'ok' }
+    expect(normalizeOpexParts([removed, valid, portal, text])).toEqual([{ ...removed, group: null }, valid, portal, text])
+  })
+
+  it('toolIcon e fileIcon usam o ícone genérico para valores desconhecidos', () => {
+    expect(toolIcon('beta' as never)).toBe(Wrench)
+    expect(toolIcon(null)).toBe(Wrench)
+    expect(toolIcon('tasks')).toBe(ListTodo)
+    expect(fileIcon('legado' as never)).toBe(File)
+    expect(fileIcon('image')).toBe(FileImage)
   })
 })

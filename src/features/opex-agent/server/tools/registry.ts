@@ -4,6 +4,7 @@ import type { OpexTool } from "./define"
 import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
+import { docTools } from "./docs"
 import { fileTools } from "./files"
 import { githubTools } from "./github"
 import { hostTools } from "./host"
@@ -22,6 +23,7 @@ import { workbenchTools } from "./workbenches"
 /** Todas as ferramentas do Agente Opex (nomes únicos; o modelo as vê pelo nome). */
 export const OPEX_TOOLS: readonly OpexTool[] = [
     ...contextTools,
+    ...docTools,
     ...fileTools,
     ...memoryTools,
     ...taskTools,
