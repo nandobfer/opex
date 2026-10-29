@@ -5,10 +5,11 @@ import { loadTaskTagsSettings } from "@/features/ai/server/settings"
 import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
 import { applyTaskFilters, DEFAULT_TASK_FILTERS } from "@/features/tasks/filters"
 import { createTaskSchema, moveTaskSchema, updateTaskEstimateSchema, updateTaskSchema } from "@/features/tasks/schemas"
-import { getBoard } from "@/features/tasks/server/columns"
+import { firstBoardColumnKey, getBoard } from "@/features/tasks/server/columns"
 import { addComment, deleteTask, getTask, getTaskOptions, listTasks, moveTask, setTaskArchived, updateTask, updateTaskEstimate } from "@/features/tasks/server/service"
 import { runAfterResponse } from "@/lib/after-response"
 import { getLocalUser } from "@/lib/local-user"
+import { chatFilesToAttachments } from "./files"
 import { clipText, collectFeatureStream, resolveTask, slimTask, taskRefSchema } from "./helpers"
 import { defineTool, OpexToolError } from "./define"
 
@@ -33,7 +34,7 @@ export const taskTools = [
         label: "Opções de tarefas",
         risk: "read",
         description:
-            "Repositórios (projetos, com id, sigla e repo do GitHub), colunas do quadro (chave, nome e descrição, na ordem), tipos, prioridades, fluxos da mesa e a taxonomia de tags. Use para descobrir o projeto e a coluna certos antes de criar tarefas ou prévias.",
+            "Repositórios (projetos, com id, sigla e repo do GitHub), colunas do quadro (chave, nome e descrição, na ordem), tipos, prioridades, fluxos da mesa e a taxonomia de tags. Use para descobrir o projeto e a coluna certos antes de criar tarefas.",
         input: z.object({}),
         execute: async () => {
             const [options, board, tags] = await Promise.all([getTaskOptions(), getBoard(), loadTaskTagsSettings().catch(() => null)])
@@ -112,17 +113,25 @@ export const taskTools = [
         label: "Criar tarefa",
         risk: "write",
         description:
-            "Cria a tarefa diretamente no Opex, com a issue no GitHub do repositório. Prefira o fluxo de prévia (create_preview) quando o usuário descrever o pedido em linguagem natural.",
+            "Cria a tarefa diretamente no Opex, com a issue no GitHub do repositório: é o caminho para criar tarefas. Antes de chamar, confira se o pedido está minimamente aceitável (o que fazer, onde — tela, rota ou módulo — e quando estará pronto); se algo essencial faltar claramente, pergunte ao usuário uma vez. Se ele responder ou mandar seguir, crie assim mesmo: esta ferramenta nunca recusa por critério vago. Arquivos do chat em chatFileIds viram anexos da tarefa.",
         input: z.object({
             projectId: z.string().describe("Id do projeto (de get_task_options)"),
-            columnId: z.string().describe("Chave da coluna (de get_task_options)"),
+            columnId: z.string().optional().describe("Chave da coluna (de get_task_options; padrão: a primeira coluna do quadro)"),
             title: z.string(),
-            description: z.string().optional().describe("Markdown"),
+            description: z.string().optional().describe("Markdown, com o contexto que o usuário deu"),
+            technicalSpec: z.string().optional().describe("Especificação técnica em Markdown (ex.: seções Critérios de aceite e Localização com o que o usuário disse, sem inventar)"),
             taskType: z.enum(TASK_TYPES).nullable().optional(),
             priority: z.enum(TASK_PRIORITIES).optional(),
+            chatFileIds: z.array(z.string()).max(50).optional().describe("fileIds de arquivos do chat a anexar (ex.: prints do problema)"),
         }),
-        summarize: (input) => `Criar a tarefa "${input.title}" (com issue no GitHub)`,
-        execute: async (input, context) => slimTask(await createTaskWithIssue(createTaskSchema.parse(input), context.actorId)),
+        summarize: (input) => `Criar a tarefa "${input.title}" (com issue no GitHub)${input.chatFileIds?.length ? ` com ${input.chatFileIds.length} anexo(s)` : ""}`,
+        execute: async ({ chatFileIds, ...input }, context) => {
+            const columnId = input.columnId ?? (await firstBoardColumnKey())
+            const task = slimTask(await createTaskWithIssue(createTaskSchema.parse({ ...input, columnId }), context.actorId))
+            if (!chatFileIds?.length) return task
+            const { attached, failed } = await chatFilesToAttachments(context.sessionId, chatFileIds, { taskId: task.id })
+            return { ...task, attachments: { attached: attached.map((item) => ({ id: item.id, name: item.name })), failed } }
+        },
     }),
     defineTool({
         name: "update_task",

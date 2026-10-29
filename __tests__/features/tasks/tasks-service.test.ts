@@ -71,7 +71,7 @@ vi.mock('@/lib/db/models/Orcamento', async () => {
   return { OrcamentoClient: mocks.models.orcamentoClient, OrcamentoDraft: mocks.models.orcamentoDraft }
 })
 
-import { createColumn, deleteColumn, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
+import { createColumn, deleteColumn, firstBoardColumnKey, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
 import { updateTaskSchema } from '@/features/tasks/schemas'
 import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, setTaskClient, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
@@ -250,6 +250,12 @@ describe('colunas do quadro', () => {
     const order = ['done', 'todo', created.key, 'doing']
     expect((await reorderColumns(order, 'local')).layout).toEqual(order)
     await expect(reorderColumns(['done'], 'local')).rejects.toMatchObject({ status: 409, code: 'COLUMNS_CHANGED' })
+  })
+
+  it('a primeira coluna do quadro segue a ordem do layout', async () => {
+    expect(await firstBoardColumnKey()).toBe('todo')
+    await reorderColumns(['doing', 'todo', 'done'], 'local')
+    expect(await firstBoardColumnKey()).toBe('doing')
   })
 
   it('não exclui coluna com tarefas nem a coluna de entrada de um projeto', async () => {

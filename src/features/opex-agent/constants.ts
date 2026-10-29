@@ -107,9 +107,28 @@ export const OPEX_SUMMARY_MAX = 280
 export const OPEX_MESSAGE_MAX = 20_000
 export const OPEX_DEFAULT_TITLE = "Nova sessão"
 
-/** Regra de criação de tarefa (prévia com IA, aprovada com o ok do usuário). */
+/** Regra de criação de tarefa (direta pelo create_task; checa o mínimo e nunca bloqueia). */
 export const OPEX_CREATE_TASK_INSTRUCTION =
-    "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário."
+    "Para criar uma tarefa: identifique o repositório (projeto) pelas opções e monte título, tipo, prioridade, descrição e, quando ajudar, a especificação técnica com o que o usuário disse (sem inventar). Antes de criar, avalie se o pedido está minimamente aceitável: dá para entender o que fazer, onde (tela, rota ou módulo) e quando estará pronto. Se algo essencial estiver claramente faltando, pergunte ao usuário esses pontos uma vez; se ele responder ou mandar seguir, crie com create_task (cria a tarefa no Opex com a issue no GitHub). Nunca deixe de criar só porque critérios de aceite ou localização ficaram vagos. As prévias (create_preview e afins) ficam para quando o usuário pedir uma prévia ou orçamento."
+
+/** Regra de arquivos do chat (agente do dono). */
+export const OPEX_FILES_INSTRUCTION =
+    "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (chatFileIds no create_task, attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo."
+
+/**
+ * Frases das instruções padrão antigas trocadas pelas novas em instruções já salvas
+ * (`migrateOpexInstructions`): só a frase exata é trocada; texto editado à mão fica como está.
+ */
+export const LEGACY_OPEX_INSTRUCTION_LINES: readonly { legacy: string; next: string }[] = [
+    {
+        legacy: "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário.",
+        next: OPEX_CREATE_TASK_INSTRUCTION,
+    },
+    {
+        legacy: "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo.",
+        next: OPEX_FILES_INSTRUCTION,
+    },
+]
 
 /** Regra de documentação do app (só no agente do dono: a documentação traz regras internas). */
 export const OPEX_DOCS_INSTRUCTION =
@@ -124,7 +143,7 @@ export const DEFAULT_OPEX_INSTRUCTIONS = [
     OPEX_CREATE_TASK_INSTRUCTION,
     OPEX_DOCS_INSTRUCTION,
     "Quando uma ferramenta responder `confirmation_required`, a ação aguarda o usuário clicar em Confirmar ou Cancelar no chat: diga em uma frase o que será feito e encerre a resposta. Você receberá a decisão e o resultado na próxima mensagem.",
-    "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo.",
+    OPEX_FILES_INSTRUCTION,
     "Credenciais de integrações e senhas/tokens de clientes podem ser gravadas, mas nunca são lidas: as ferramentas só informam se um segredo está definido.",
     'Para fazer algo mais tarde ("me lembre às 18h", "verifique o PR daqui a 2 horas"), agende um job (schedule_job): no horário você recebe o prompt sozinho e executa. Escreva o prompt completo e autossuficiente, pois o usuário pode não estar olhando.',
     "Responda em português do Brasil, em Markdown, de forma objetiva. Use listas e tabelas curtas quando ajudarem e cite os códigos das tarefas (ex.: OPX-123) e dos serviços.",
