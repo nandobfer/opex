@@ -234,12 +234,32 @@ async function suggestedRun(id: string): Promise<IMentorRun> {
     return run
 }
 
+/**
+ * Reivindica a sugestão antes de decidir (`suggested` → `running`, numa operação só): duas decisões
+ * simultâneas (duplo clique, duas abas) não gravam a memória duas vezes — a segunda recebe 409.
+ */
+async function claimSuggestion(id: string): Promise<IMentorRun> {
+    const run = await suggestedRun(id)
+    const claimed = (await MentorRun.findOneAndUpdate({ _id: run._id, status: "suggested" }, { $set: { status: "running" } }).lean()) as IMentorRun | null
+    if (!claimed) throw new DomainError(409, "Esta execução não tem uma sugestão aguardando decisão", "MENTOR_RUN_NOT_SUGGESTED")
+    return run
+}
+
+/** Falha depois de reivindicar: a sugestão volta a aguardar decisão. */
+const releaseSuggestion = (run: IMentorRun) => MentorRun.updateOne({ _id: run._id, status: "running" }, { $set: { status: "suggested" } }).catch(() => undefined)
+
 /** Aprovar a sugestão (texto opcionalmente editado): grava a memória do adversário. */
 export async function approveMentorRun(id: string, text: string | undefined, actorId: string): Promise<MentorRunDto> {
-    const run = await suggestedRun(id)
+    const run = await claimSuggestion(id)
     const proposal = { ...run.proposal!, text: text?.trim() || run.proposal!.text }
-    const exists = proposal.action === "update" && proposal.memoryId ? (await listAdversarialMemories()).some((memory) => memory.id === proposal.memoryId) : false
-    const applied = await applyProposal(run, exists ? proposal : { ...proposal, action: "create", memoryId: null }, actorId)
+    let applied: Awaited<ReturnType<typeof applyProposal>>
+    try {
+        const exists = proposal.action === "update" && proposal.memoryId ? (await listAdversarialMemories()).some((memory) => memory.id === proposal.memoryId) : false
+        applied = await applyProposal(run, exists ? proposal : { ...proposal, action: "create", memoryId: null }, actorId)
+    } catch (error) {
+        await releaseSuggestion(run)
+        throw error
+    }
     await MentorRun.updateOne({ _id: run._id }, { $set: { status: applied.status, memoryId: applied.memoryId, proposal } })
     await recordAudit({ userId: actorId, entidade: MENTOR_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { status: applied.status, memoria: applied.memoryId, tarefa: run.taskCode } })
     await publish(id)
@@ -248,7 +268,7 @@ export async function approveMentorRun(id: string, text: string | undefined, act
 
 /** Descartar a sugestão: nada é gravado. */
 export async function discardMentorRun(id: string, actorId: string): Promise<MentorRunDto> {
-    const run = await suggestedRun(id)
+    const run = await claimSuggestion(id)
     const reason = "Descartada pelo usuário"
     await MentorRun.updateOne({ _id: run._id }, { $set: { status: "discarded", sanitizerReason: reason } })
     await recordAudit({ userId: actorId, entidade: MENTOR_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.DEVOLVER, depois: { status: "discarded", tarefa: run.taskCode } })

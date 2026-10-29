@@ -185,7 +185,8 @@ na tela e na API; `withMentorDefaults`).
   `update` com id inexistente vira `create`.
 - **Sanitizador** (`sanitizeMemoryText`, determinístico): recusa código de tarefa, `#N`, URL, rota
   (`/api/…`, `/app/…`), nome do projeto, do repositório e o título da tarefa (termos de 4+ caracteres),
-  e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
+  a regra acima do tamanho máximo de uma memória (`MEMORY_TEXT_MAX`, 2.000 caracteres: "reescreva em
+  até 2.000"), e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
   pontuação, `copiedExcerpt`) à mensagem do usuário, às respostas do agente ou aos pedidos do
   desenvolvedor. Recusa → nova tentativa do redator com o motivo; recusada de novo → `discarded`.
 - **Gravação**: **Gravar direto** (padrão) ou **Sugerir e aguardar aprovação**. Gravar usa o serviço
@@ -210,7 +211,13 @@ na tela e na API; `withMentorDefaults`).
   `description` e `listLabel`), **Contexto** (mensagem do usuário, resposta do agente, pedido do
   desenvolvedor, dados básicos da tarefa e último veredito do adversário ligados; plano aprovado
   desligado) e **Execuções** (100 mais recentes; **Ver/Decidir** abre o detalhe e, numa sugestão,
-  Aprovar com texto editável ou Descartar com confirmação).
+  Aprovar com texto editável ou Descartar com confirmação). Provedor/modelo/variante usam os campos
+  compartilhados `ModelPickerField`/`VariantSelectField` (`src/features/ai/components/ModelFields.tsx`).
+- **Decisão da sugestão** atômica: aprovar/descartar reivindica a execução (`suggested` → `running`
+  num `findOneAndUpdate` filtrado pelo status); a decisão concorrente (duplo clique, outra aba) recebe
+  409 `MENTOR_RUN_NOT_SUGGESTED`, e uma falha ao gravar devolve a execução a `suggested`.
+- **Chat ao vivo** de uma cadeia que não vai ao Mentor (reconexão, limpeza) é descartado
+  (`mentorDiscardLiveMessages`), para não entrar na avaliação da próxima cadeia.
 
 ## APIs (só o dono; sem OpenAPI)
 

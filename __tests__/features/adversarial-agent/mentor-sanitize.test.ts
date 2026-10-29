@@ -23,6 +23,12 @@ describe('sanitizador do Agente Mentor', () => {
     expect(sanitizeMemoryText(text, context)).toContain(reason)
   })
 
+  it('recusa a regra acima do tamanho máximo de uma memória (2.000 caracteres)', () => {
+    const rule = 'Confira se componentes que exigem provider são renderizados abaixo dele. '
+    expect(sanitizeMemoryText(rule.repeat(40).slice(0, 2000), context)).toBeNull()
+    expect(sanitizeMemoryText(rule.repeat(40).slice(0, 2001), context)).toBe('A regra tem 2.001 caracteres: reescreva em até 2.000')
+  })
+
   it('não confunde termos curtos do caso com palavras comuns', () => {
     expect(sanitizeMemoryText('Confira o app inteiro por providers ausentes.', { projectName: 'App' })).toBeNull()
   })

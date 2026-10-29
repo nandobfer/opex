@@ -7,7 +7,7 @@ vi.mock('@/features/adversarial-agent/server/mentor/settings', () => ({ mentorSe
 vi.mock('@/features/adversarial-agent/server/mentor/queue', () => ({ enqueueMentorRun: mocks.enqueue, recordFailedMentorRun: mocks.recordFailed }))
 
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
-import { mentorAfterTurns, mentorPrepareTurn, mentorRecordLiveMessage, mentorTriggerOf, type MentorAfterTurnsInput } from '@/features/adversarial-agent/server/mentor/hooks'
+import { mentorAfterTurns, mentorDiscardLiveMessages, mentorPrepareTurn, mentorRecordLiveMessage, mentorTriggerOf, type MentorAfterTurnsInput } from '@/features/adversarial-agent/server/mentor/hooks'
 
 const enabled = (): MentorSettings => structuredClone({ ...DEFAULT_MENTOR_SETTINGS, enabled: true })
 const lesson = { problem: 'Crash', shouldHaveCaught: 'Provider', why: 'Genérico' }
@@ -75,6 +75,13 @@ describe('gatilhos do Agente Mentor', () => {
     mentorRecordLiveMessage('w1', 'O botão sumiu')
     await mentorAfterTurns(base({ origin: { action: null, userText: null, feedback: null } }))
     expect(enqueued().case).toMatchObject({ sources: ['user'], trigger: 'live_chat', userMessage: 'O botão sumiu' })
+  })
+
+  it('cadeia sem avaliação (reconexão/limpeza) descarta o chat ao vivo: não contamina a próxima cadeia', async () => {
+    mentorRecordLiveMessage('w1', 'Mensagem da reconexão')
+    mentorDiscardLiveMessages('w1')
+    await mentorAfterTurns(base({ origin: { action: null, userText: null, feedback: null }, turns: [{ stage: 'implementing', text: 'Outra cadeia', lesson: null, lessonError: null }] }))
+    expect(mocks.enqueue).not.toHaveBeenCalled()
   })
 
   it('bloco de lição inválido sem outro gatilho: execução falha visível', async () => {

@@ -3,17 +3,12 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Field } from "@/components/ui/field"
-import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { SearchPicker } from "@/components/ui/search-picker"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { apiErrorMessage } from "@/lib/api"
-import { getAiProvider, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import type { MentorSettings } from "../../mentor/schemas"
-
-const DEFAULT_OPTION = "__default__"
 
 type Part = "decider" | "writer"
 
@@ -56,50 +51,13 @@ export function MentorModelFields({ form, part, providerIds, providers }: { form
                 {provider && (
                     <motion.div key="model" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                         <div className={FORM_GRID_WIDE}>
-                            <Field id={`${id}-model`} label="Modelo" error={errors?.model?.message ?? (models.isError ? apiErrorMessage(models.error, "Não foi possível listar os modelos") : undefined)}>
-                                <SearchPicker<AiModelDto>
-                                    trigger={<FieldTrigger id={`${id}-model`} placeholder="Escolha o modelo" invalid={Boolean(errors?.model)} value={model ? model.name : modelId || undefined} />}
-                                    items={models.data ?? []}
-                                    getKey={(item) => item.id}
-                                    searchKeys={["name", "id", "group"]}
-                                    renderItem={(item) => (
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate font-medium">{item.name}</span>
-                                            <span className="block truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>
-                                        </span>
-                                    )}
-                                    onPick={(item) => setModel(item.id)}
-                                    loading={models.isLoading}
-                                    matchTriggerWidth
-                                    placeholder="Buscar modelo"
-                                    searchLabel="Buscar modelo"
-                                    listLabel="Modelos"
-                                    emptyText={models.isError ? "Não foi possível listar os modelos" : "Nenhum modelo disponível"}
-                                    emptySearchText="Nenhum modelo encontrado"
-                                />
-                            </Field>
+                            <ModelPickerField id={`${id}-model`} models={models} modelId={modelId} error={errors?.model?.message} onPick={(item) => setModel(item.id)} />
                             {model && model.variants.length > 0 && (
-                                <Field id={`${id}-variant`} label={getAiProvider(provider).variantLabel}>
-                                    <Controller
-                                        control={form.control}
-                                        name={names.variant}
-                                        render={({ field }) => (
-                                            <Select value={(field.value as string | null) ?? DEFAULT_OPTION} onValueChange={(value) => field.onChange(value === DEFAULT_OPTION ? null : value)}>
-                                                <SelectTrigger id={`${id}-variant`} className="w-full">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value={DEFAULT_OPTION}>Padrão do modelo</SelectItem>
-                                                    {model.variants.map((variant) => (
-                                                        <SelectItem key={variant} value={variant}>
-                                                            {variant}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
-                                    />
-                                </Field>
+                                <Controller
+                                    control={form.control}
+                                    name={names.variant}
+                                    render={({ field }) => <VariantSelectField id={`${id}-variant`} label={getAiProvider(provider).variantLabel} variants={model.variants} value={(field.value as string | null) ?? null} onChange={field.onChange} />}
+                                />
                             )}
                         </div>
                     </motion.div>

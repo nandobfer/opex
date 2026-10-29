@@ -30,6 +30,7 @@ vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   mentorPrepareTurn: vi.fn(async (input: { text: string }) => input.text),
   mentorTakeLesson: vi.fn((text: string) => ({ text, lesson: null, error: null })),
   mentorRecordLiveMessage: vi.fn(),
+  mentorDiscardLiveMessages: vi.fn(),
   mentorAfterTurns: vi.fn(async () => null),
 }))
 

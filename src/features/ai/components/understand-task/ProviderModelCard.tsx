@@ -3,14 +3,13 @@
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
-import { FieldTrigger } from "@/components/ui/field-trigger"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { SearchPicker } from "@/components/ui/search-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiErrorMessage } from "@/lib/api"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
-import { getAiProvider, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiAgents, useAiModels } from "../../hooks/useAi"
+import { ModelPickerField, VariantSelectField } from "../ModelFields"
 
 const DEFAULT_OPTION = "__default__"
 
@@ -68,50 +67,25 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
                 )}
 
                 <div className={FORM_GRID_WIDE}>
-                    <Field id="ai-model" label="Modelo" error={errors.model?.message ?? (models.isError ? apiErrorMessage(models.error, "Não foi possível listar os modelos") : undefined)}>
-                        <SearchPicker<AiModelDto>
-                            trigger={<FieldTrigger id="ai-model" placeholder={provider ? "Escolha o modelo" : "Escolha o provedor primeiro"} invalid={Boolean(errors.model)} value={model ? model.name : modelId || undefined} disabled={!provider} />}
-                            items={models.data ?? []}
-                            getKey={(item) => item.id}
-                            searchKeys={["name", "id", "group"]}
-                            renderItem={(item) => <ModelOption model={item} />}
-                            onPick={(item) => {
-                                cardForm.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
-                                cardForm.setValue("variant", null, { shouldDirty: true })
-                            }}
-                            loading={models.isLoading}
-                            disabled={!provider}
-                            matchTriggerWidth
-                            placeholder="Buscar modelo"
-                            searchLabel="Buscar modelo"
-                            listLabel="Modelos"
-                            emptyText={models.isError ? "Não foi possível listar os modelos" : "Nenhum modelo disponível"}
-                            emptySearchText="Nenhum modelo encontrado"
-                        />
-                    </Field>
+                    <ModelPickerField
+                        id="ai-model"
+                        models={models}
+                        modelId={modelId}
+                        error={errors.model?.message}
+                        disabled={!provider}
+                        placeholder={provider ? "Escolha o modelo" : "Escolha o provedor primeiro"}
+                        onPick={(item) => {
+                            cardForm.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
+                            cardForm.setValue("variant", null, { shouldDirty: true })
+                        }}
+                    />
 
                     {def && model && model.variants.length > 0 && (
-                        <Field id="ai-variant" label={def.variantLabel}>
-                            <Controller
-                                control={cardForm.control}
-                                name="variant"
-                                render={({ field }) => (
-                                    <Select value={field.value ?? DEFAULT_OPTION} onValueChange={(value) => field.onChange(value === DEFAULT_OPTION ? null : value)}>
-                                        <SelectTrigger id="ai-variant" className="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value={DEFAULT_OPTION}>Padrão do modelo</SelectItem>
-                                            {model.variants.map((variant) => (
-                                                <SelectItem key={variant} value={variant}>
-                                                    {variant}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                            />
-                        </Field>
+                        <Controller
+                            control={cardForm.control}
+                            name="variant"
+                            render={({ field }) => <VariantSelectField id="ai-variant" label={def.variantLabel} variants={model.variants} value={field.value ?? null} onChange={field.onChange} />}
+                        />
                     )}
 
                     {def?.supportsAgent && (
@@ -140,17 +114,5 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
                 </div>
             </CardContent>
         </Card>
-    )
-}
-
-function ModelOption({ model }: { model: AiModelDto }) {
-    return (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{model.name}</span>
-                <span className="block truncate font-mono text-[11px] text-muted-foreground">{model.id}</span>
-            </span>
-            {model.free && <span className="shrink-0 rounded bg-primary/15 px-1.5 text-[10px] font-medium text-primary">grátis</span>}
-        </span>
     )
 }

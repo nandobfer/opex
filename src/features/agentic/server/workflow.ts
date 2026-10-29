@@ -587,7 +587,12 @@ type MentorTurns = Parameters<Awaited<ReturnType<typeof adversaryModule>>["mento
 
 /** Agente Mentor: fim da cadeia de turnos → avalia em segundo plano (nunca bloqueia a mesa). */
 async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns): Promise<void> {
-    if (turn.attach || turn.stage === "finishing") return
+    if (turn.attach || turn.stage === "finishing") {
+        // Sem avaliação nesta cadeia: as mensagens ao vivo dela não podem ficar para a próxima.
+        const adversary = await adversaryModule()
+        adversary.mentorDiscardLiveMessages(id)
+        return
+    }
     const loaded = await loadAll(id)
     const { doc } = loaded
     await (

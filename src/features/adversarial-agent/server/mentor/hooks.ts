@@ -47,6 +47,14 @@ export function mentorRecordLiveMessage(workbenchId: string, text: string): void
     liveMessages.set(workbenchId, [...(liveMessages.get(workbenchId) ?? []), trimmed])
 }
 
+/**
+ * Cadeia que não vai ao Mentor (reconexão ou limpeza): descarta as mensagens ao vivo guardadas, para
+ * que não sejam avaliadas junto de outra cadeia da mesa.
+ */
+export function mentorDiscardLiveMessages(workbenchId: string): void {
+    liveMessages.delete(workbenchId)
+}
+
 /** Ação da mesa (que originou a cadeia de turnos) → tipo de mensagem do usuário e o texto dela. */
 export function mentorTriggerOf(origin: { action: string | null; userText: string | null; feedback: string | null }): { trigger: MentorUserTrigger; text: string } | null {
     const afterTitle = origin.userText?.includes("\n\n") ? origin.userText.slice(origin.userText.indexOf("\n\n") + 2).trim() : ""

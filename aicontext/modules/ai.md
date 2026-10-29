@@ -139,6 +139,11 @@ e opções na própria aba da página "Provedores de IA".
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Refinar tarefa, Agente Revisor e Desenvolvimento agêntico são
   exclusivos do OpenCode.
+- **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
+  `ModelPickerField` (busca do modelo com `ModelOption` — nome, id e selo "grátis" —, modelo salvo
+  mostrado mesmo fora da lista e erro ao listar) e `VariantSelectField` ("Padrão do modelo" ou uma
+  variante). Usados por `ProviderModelCard`, `OpexModelCard` (Agente Opex) e `MentorModelFields`
+  (Agente Mentor): mudança no seletor de modelo se faz só ali.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Abaixo dos cards há uma
   **tabela por recurso** (feature de IA que consumiu o JEV: "Tags de tarefas", "Estimar prazos"…)

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   mentorPrepare: vi.fn(async (input: { text: string }) => input.text),
   mentorAfterTurns: vi.fn<(input: unknown) => Promise<null>>(async () => null),
   mentorRecordLive: vi.fn(),
+  mentorDiscardLive: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -90,6 +91,7 @@ vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
     return match ? { text: text.replace(match[0], '').trim(), lesson: JSON.parse(match[1]!), error: null } : { text, lesson: null, error: null }
   },
   mentorRecordLiveMessage: mocks.mentorRecordLive,
+  mentorDiscardLiveMessages: mocks.mentorDiscardLive,
   mentorAfterTurns: mocks.mentorAfterTurns,
 }))
 

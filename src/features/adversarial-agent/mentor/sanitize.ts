@@ -1,10 +1,14 @@
 /**
  * Sanitizador do Agente Mentor (módulo puro, determinístico): a memória do adversário precisa ser uma
  * regra genérica, sem nada que identifique o projeto ou o caso — código de tarefa, issue, URL, rota,
- * nome do produto, do repositório ou o título da tarefa — e que não copie trechos do caso (mensagem
+ * nome do projeto, do repositório ou o título da tarefa — e que não copie trechos do caso (mensagem
  * do usuário, respostas do agente, pedidos do desenvolvedor): o texto do caso nunca entra literal nas
- * instruções do revisor, o que também barra uma instrução injetada repassada pelo redator.
+ * instruções do revisor, o que também barra uma instrução injetada repassada pelo redator. Também
+ * recusa a regra acima do tamanho máximo de uma memória (`MEMORY_TEXT_MAX`), que o serviço de
+ * memórias recusaria ao gravar.
  */
+
+import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
 
 export interface SanitizeContext {
     taskCode?: string | null
@@ -71,6 +75,7 @@ export function copiedExcerpt(text: string, sources: readonly (string | null | u
 export function sanitizeMemoryText(text: string, context: SanitizeContext = {}): string | null {
     const value = text.trim()
     if (value.length < 3) return "A regra está vazia"
+    if (value.length > MEMORY_TEXT_MAX) return `A regra tem ${value.length.toLocaleString("pt-BR")} caracteres: reescreva em até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")}`
     if (TASK_CODE.test(value)) return "A regra cita um código de tarefa"
     if (ISSUE.test(value)) return "A regra cita uma issue ou PR (#N)"
     if (URL.test(value)) return "A regra cita uma URL"
