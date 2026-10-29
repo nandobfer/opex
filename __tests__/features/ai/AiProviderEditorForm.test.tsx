@@ -12,6 +12,7 @@ vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: Reac
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
+vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
 
@@ -55,7 +56,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AiProviderEditorForm", () => {
-    it("OpenCode tem as abas Configuração, Modelos e Consumo", () => {
+    it("OpenCode tem as abas Configuração, Modelos, Contas e Consumo", () => {
         renderForm("ai_opencode")
         expect(screen.getByRole("tab", { name: "Configuração" })).toBeTruthy()
         expect(screen.getByRole("tab", { name: "Modelos" })).toBeTruthy()
@@ -63,6 +64,9 @@ describe("AiProviderEditorForm", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: "Modelos" }))
         expect(screen.getByTestId("models")).toBeTruthy()
+
+        fireEvent.click(screen.getByRole("tab", { name: "Contas" }))
+        expect(screen.getByTestId("opencode-accounts")).toBeTruthy()
 
         fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
         expect(screen.getByTestId("opencode-usage")).toBeTruthy()
@@ -80,5 +84,6 @@ describe("AiProviderEditorForm", () => {
         renderForm("ai_gemini")
         expect(screen.getByRole("tab", { name: "Modelos" })).toBeTruthy()
         expect(screen.queryByRole("tab", { name: "Consumo" })).toBeNull()
+        expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
     })
 })

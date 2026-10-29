@@ -121,8 +121,9 @@ e opções na própria aba da página "Provedores de IA".
   `modules/adversarial-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
-  virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar) e **Consumo**
-  (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não têm essa aba). Trocar de aba com alterações pede descarte.
+  virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
+  (só OpenCode; seção abaixo) e **Consumo** (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não
+  têm essa aba). Trocar de aba com alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Refinar tarefa, Revisão de PR e Desenvolvimento agêntico são
@@ -155,6 +156,43 @@ e opções na própria aba da página "Provedores de IA".
   temporais são **aproximados** e podem absorver chamadas antigas não logadas. Backup dos documentos
   originais em `ai_usage_log_reconciliations`, auditoria `UsoIA/IMPORTAR`; atualização condicionada
   a métricas/lote ausentes permite retomada sem sobrescrever métricas reais nem repetir o rateio.
+
+## Contas dos providers do OpenCode (aba Contas, OPE-90)
+
+Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@opencode/client` 2.x
+(`integration.*` e `credential.*`). Código em `src/features/opencode-accounts/`.
+
+- **Lista** (`OpencodeAccountsCard`): uma linha por integração do OpenCode (`integration.list` no
+  diretório configurado + `credential.list` + `provider.list`, juntados por `mergeAuthProviders`):
+  conectados primeiro e depois por nome; a conta em uso aparece no resumo da linha. "Só conectados"
+  vem ligado; a busca (fuse.js) procura em **todos** os providers (é assim que se conecta um novo).
+  Acima de 50 linhas, lista virtualizada. Recarrega ao focar a janela, por **Atualizar** e pelo evento
+  `opencode-accounts-updated` (`private-app`, payload `{ integrationId }`); mudanças feitas direto no
+  TUI não geram evento. Com alterações não salvas na Configuração, pede para salvar antes.
+- **Linha expandida**: contas com **Em uso**, **Usar esta conta** (otimista, reversão com toast),
+  **Renomear** (em linha; Enter salva, Esc cancela) e **Remover** (confirmação; remover a conta em uso
+  avisa que o provider fica sem conta). Conexões por variável de ambiente aparecem só como informação;
+  `needs_auth` do OpenCode aparece como alerta. Métodos de tipo desconhecido (ex.: `external` do
+  Bedrock/Vertex) são ignorados.
+- **Adicionar conta** (`AddAccountDialog`): método (pulado quando há só um) → nome opcional, campos
+  que o OpenCode pede para o método (`form`: condições `when`, ocultos com o padrão, validação pelo
+  mesmo schema na tela e no servidor) e, para chave, o campo mascarado → login:
+  - **chave**: `integration.connect.key`;
+  - **OAuth modo `code`**: abre a página, o usuário cola o código (`oauth.complete`);
+  - **OAuth modo `auto`** (código de dispositivo, ex.: GitHub Copilot): mostra as instruções e consulta
+    o status a cada 1,5 s. Se a URL retorna em `localhost` (navegador da máquina do OpenCode), o
+    servidor cancela a tentativa e responde 409 `OPENCODE_OAUTH_LOCAL_CALLBACK` ("use o TUI");
+  - **comando** (`integration.command.*`): roda na máquina do OpenCode, com status e Cancelar.
+  Fechar o diálogo cancela o login pendente. Ao concluir, a conta nova vira a **selecionada** quando o
+  OpenCode não a ativou sozinho.
+- **Segredos**: o valor das credenciais (`key`, `refresh`, `access`) nunca sai do servidor (DTO
+  próprio); a chave digitada só vai no corpo do `POST` e não volta na resposta, em log ou auditoria.
+- **Efeitos de cada mudança**: auditoria `ContaOpenCode` (CRIAR, ATUALIZAR para selecionar/renomear,
+  EXCLUIR) com provider, nome da conta e método; cache de modelos limpo (`clearAiCatalogCache`); evento
+  Pusher. Erros do OpenCode viram mensagens em pt-BR (`toDomainError`: senha recusada 502, provider,
+  método ou login inexistente 404, sem conexão 502).
+- Trocar a conta vale para as próximas chamadas do OpenCode (sessões já em andamento podem seguir com a
+  anterior).
 
 ## Feature "Entender tarefas"
 
@@ -365,6 +403,14 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
+| `GET /api/ai/providers/opencode/accounts` | Providers do OpenCode com as contas (sem segredos) |
+| `POST /api/ai/providers/opencode/accounts/[integrationId]/key` | Adiciona conta por chave `{ key, label?, answer? }` |
+| `POST /api/ai/providers/opencode/accounts/[integrationId]/oauth` | Inicia login OAuth `{ methodId, label?, answer? }` |
+| `GET/POST/DELETE .../accounts/[integrationId]/oauth/[attemptId]` | Status / conclui com `{ code }` / cancela |
+| `POST /api/ai/providers/opencode/accounts/[integrationId]/command` | Inicia login por comando `{ methodId, label? }` |
+| `GET/DELETE .../accounts/[integrationId]/command/[attemptId]` | Status / cancela |
+| `PATCH/DELETE .../accounts/credentials/[credentialId]` | Renomeia `{ label }` / remove a conta |
+| `POST .../accounts/credentials/[credentialId]/activate` | Seleciona a conta em uso |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
@@ -392,7 +438,8 @@ hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o r
 `task-tags-settings`, `task-tags-job`; estimativa por tarefas semelhantes: `orcamentos-estimate` e
 `orcamentos-similar`; `task-refinement-settings` cobre a configuração de "Refinar tarefa"). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o
-refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`).
+refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`). As contas dos providers do OpenCode em `__tests__/features/opencode-accounts/` (junção sem
+segredos, formulários dos métodos, detecção de retorno em localhost, serviço, rotas, aba e diálogo).
 
 Uso JEV: `__tests__/lib/ai/jev-usage.test.ts` (normalização/custo/rateio),
 `jev-request-usage.test.ts` (persistência/auditoria/evento por requisição e falhas),
