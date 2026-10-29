@@ -33,18 +33,26 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   e acessível; …". A leitura das configurações (`getAgenticSettings`, que desabilita o botão de
   abrir a mesa) usa um teste curto de 2 s e, se ele só estourar o tempo, não bloqueia: quem decide é a
   ação, com o limite cheio de 8 s.
-- A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
-  - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
-    cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
-    **Movimentação das colunas** — e o card **Corrigir CI falho** (padrão global, OPE-81) e o card **Chat durante a execução**
-    (`settings.liveChat`), com os botões **Salvar**/**Desfazer** (mesma configuração geral
-    acima). Salvar reavalia as filas das centrais que herdam a coluna global.
+- A aba tem três **abas internas**, nesta ordem (`?abaAgentic=padrao|agentes|centrais`; padrão
+  **Configurações Padrão**; OPE-92, portado da MT-23 do my-tasks):
+  - **Configurações Padrão** (`DefaultSettingsSection`): padrões globais que cada central herda ou
+    personaliza — card **Chat durante a execução** (`settings.liveChat`), **Fila padrão** (OPE-79) e
+    **Movimentação padrão das colunas** (`settings.columns`), **Corrigir CI falho** (padrão global,
+    OPE-81) e **Portas da prévia** (`settings.ports`: `previewPortMin`/`previewPortMax`,
+    `agenticPortsSchema`, inteiros 1024–65535 com inicial ≤ final; padrão **5002–5998**, também para
+    configurações salvas antes das portas — `withDefaultAgents`). Alterar a faixa padrão não muda as
+    centrais personalizadas nem as mesas que já têm porta reservada.
+  - **Agentes** (`AgentsSettingsSection`): card que liga a feature (ativa) + os **agentes padrão** de
+    cada etapa.
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
-    mantém a confirmação de descarte. A subaba padrão continua Agentes.
-  Trocar de aba com alterações não salvas pede *"Descartar alterações?"* e restaura os valores
-  salvos (mesmo efeito do Desfazer). `AGENTIC_SETTINGS_HREF` (voltar da central, após excluir e
-  atalho do `/desenvolvimento`) leva a esta aba na aba interna padrão (Agentes).
+    mantém a confirmação de descarte.
+  As duas primeiras editam a mesma configuração geral, com os botões **Salvar**/**Desfazer**
+  (`SettingsActions`) em cada uma; Salvar grava tudo, audita e reavalia as filas das centrais que
+  herdam a coluna global. Trocar de aba com alterações não salvas pede *"Descartar alterações?"* e
+  restaura os valores salvos (mesmo efeito do Desfazer). `AGENTIC_SETTINGS_HREF` (voltar da central,
+  após excluir e atalho do `/desenvolvimento`) leva a esta aba na aba interna padrão (Configurações
+  Padrão).
 - Card **Centrais de desenvolvimento**: **busca** + lista (projeto, diretório, repositório, mesas,
   bolinha do último teste) e **Nova central** (projeto — repositório vinculado, um por central — e
   diretório das sessões, caminho absoluto, já sugerido como `<raiz dos repositórios>/<repositório>`).
@@ -79,7 +87,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), **Chat durante a execução** (`liveChat`: **Padrão global** — padrão, inclusive para centrais antigas, com o estado global no rótulo — / Ligado / Desligado; ver "Chat durante a execução"), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`); etapa personalizada escolhe os **modelos de fallback**: Usar os do padrão / Personalizar / Sem fallback (ver "Modelos de fallback") |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
-| Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), faixa de portas da prévia (porta inicial/final, padrão 4001–4098), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
+| Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), **faixa de portas da prévia** (`PreviewPortsField`): switch **Personalizar portas** (`environment.inheritPorts` invertido; padrão **desligado**). Desligado, a porta inicial/final aparecem **desabilitadas** com a faixa de Configurações Padrão (o switch espera a configuração geral carregar); ligado, os campos ficam editáveis começando com essa faixa padrão (os números não mudam ao ligar) e a faixa própria prevalece sobre o padrão. A faixa própria só é validada (inicial ≤ final) quando personalizada; desligar troca uma porta própria inválida pela salva ou pelo padrão (`keepValidPort`) para não travar o Salvar. Central nova herda; centrais salvas antes do padrão global continuam **personalizadas** com a faixa que já tinham, e as salvas sem faixa ficam com a antiga 4001–4098. A faixa efetiva vem de `resolveCentralPorts` (texto do card, exemplo do comando e reserva da porta no build Local e no GitHub Action — `effectivePorts` no `workflow.ts`, que só lê a configuração geral quando a central herda), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
 | Colunas e conclusão | **Fila** e **Movimentação** das colunas, cada uma herdando o padrão global da aba ou **personalizada** nesta central (OPE-79); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
@@ -146,7 +154,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
   branch da mesa e SHA imutável. Dispara `workflow_dispatch` na branch padrão; nenhum push/PR
   dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
-- A porta permanece reservada no banco, dentro da faixa da central. O GitHub não escolhe portas.
+- A porta permanece reservada no banco, dentro da faixa efetiva da central (`resolveCentralPorts`, também
+  gravada em `min`/`max` do estado da tentativa). O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
   e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
   GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
@@ -476,7 +485,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   reversão (`useSetWorkbenchPreview`).
 - **Build Local**: ao fim da implementação a mesa entra na **fila global do build** (`build_queued`, ver
   acima) e só sobe quando não há outro build. A porta é reservada no banco (índice único) na faixa
-  configurada na central (padrão **4001–4098**), pulando portas ocupadas no host
+  efetiva da central (a padrão global de Configurações Padrão, **5002–5998** por padrão, ou a própria,
+  quando personalizada — `resolveCentralPorts`), pulando portas ocupadas no host
   (`allocatePreviewPort`); a IA roda
   `<VAR>=<porta> docker compose -p <projeto-código> [-f arquivo] up -d --build` no worktree e
   termina com um bloco JSON `{"ok": true|false, "error"?}`. O app espera a prévia responder

@@ -175,9 +175,16 @@ export const WORKBENCH_STEPS = [
 export const RUN_STATES = ["idle", "running", "failed", "interrupted"] as const
 export type RunState = (typeof RUN_STATES)[number]
 
-/** Faixa padrão de portas das prévias (docker compose); cada central pode configurar a sua. */
-export const PREVIEW_PORT_MIN = 4001
-export const PREVIEW_PORT_MAX = 4098
+/**
+ * Faixa padrão global de portas das prévias (docker compose), editada em "Configurações Padrão";
+ * cada central herda ou personaliza (`environment.inheritPorts`).
+ */
+export const PREVIEW_PORT_MIN = 5002
+export const PREVIEW_PORT_MAX = 5998
+
+/** Faixa antiga: vale para centrais salvas sem faixa própria (antes da faixa configurável). */
+export const LEGACY_PREVIEW_PORT_MIN = 4001
+export const LEGACY_PREVIEW_PORT_MAX = 4098
 
 /** Raiz dos repositórios na máquina (usada para sugerir o diretório das sessões ao criar uma central). */
 export const AGENTIC_CODE_ROOT = "/home/burgos/code"

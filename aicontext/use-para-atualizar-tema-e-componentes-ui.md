@@ -308,7 +308,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   `formatNumberBR`/`parseBankingInputBR` de `src/lib/format.ts`); nunca `type="number"` para dinheiro.
 - **Liga/desliga** em formulário usa `ToggleCard`/`FormToggleCard` (`ui/toggle-card.tsx`): rótulo + descrição à esquerda;
   situação ("Ativo"/"Inativo", configurável por `onLabel`/`offLabel`) + `Switch` à direita. Nunca
-  checkbox para liga/desliga.
+  checkbox para liga/desliga. Quando o interruptor é o conteúdo de um `Card` (ex.: o card só tem a
+  chave, ou a chave vem logo abaixo do cabeçalho), use `bare` (sem borda/fundo/espaçamento): nunca
+  card dentro de card.
 - **Texto longo em Markdown** usa `MarkdownField` (`ui/markdown-field.tsx`): barra de formatação
   (negrito, itálico, cabeçalho, link, imagem, lista, citação e código), abas **Escrever /
   Visualizar** animadas (Framer Motion) e prévia com o componente `Markdown`. Nunca um `Textarea`

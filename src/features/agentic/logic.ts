@@ -1,6 +1,6 @@
-import { MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchStage } from "./constants"
+import { LEGACY_PREVIEW_PORT_MAX, LEGACY_PREVIEW_PORT_MIN, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
-import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticSettings, type CentralConfig } from "./schemas"
+import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
@@ -56,6 +56,21 @@ export function applyModelOverride(agent: AgentConfig, override: ModelOverride |
     return override?.model ? { ...agent, model: override.model, variant: override.variant } : agent
 }
 
+/**
+ * Faixa de portas de uma central **salva**: sem `inheritPorts` (salva antes do padrão global) fica
+ * personalizada com a própria faixa, e sem faixa salva (antes da faixa configurável) mantém a antiga
+ * 4001–4098. Só a central salva como herdada (as novas nascem assim) segue o padrão global.
+ */
+function savedPorts(raw: unknown): Partial<CentralConfig["environment"]> {
+    if (typeof raw !== "object" || raw === null) return {}
+    const env = ((raw as Partial<CentralConfig>).environment ?? {}) as Partial<CentralConfig["environment"]>
+    return {
+        inheritPorts: env.inheritPorts === true,
+        previewPortMin: typeof env.previewPortMin === "number" ? env.previewPortMin : LEGACY_PREVIEW_PORT_MIN,
+        previewPortMax: typeof env.previewPortMax === "number" ? env.previewPortMax : LEGACY_PREVIEW_PORT_MAX,
+    }
+}
+
 /** Configuração salva → validada; campos ausentes (versões antigas) caem nos padrões. */
 export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): CentralConfig {
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<CentralConfig>) : {}
@@ -68,7 +83,7 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         agents: { ...base.agents, ...value.agents },
         // Correção de CI: central sem valor próprio (anterior à OPE-81) herda o padrão global.
         git: { ...base.git, ...value.git, inheritCi: typeof value.git?.inheritCi === "boolean" ? value.git.inheritCi : value.git?.fixCi === undefined },
-        environment: { ...base.environment, ...value.environment },
+        environment: { ...base.environment, ...value.environment, ...savedPorts(raw) },
         // Colunas: valores salvos são preservados como personalização (centrais antigas continuam como
         // estão); só o que foi explicitamente salvo herda o padrão global (`inheritQueue`/`inheritMovement`).
         columns: {
@@ -125,6 +140,26 @@ export function resolveCentralColumns(global: AgenticColumns | undefined, column
         onDone: columns.inheritMovement ? fallback.onDone : columns.onDone,
     }
 }
+
+/** Faixa efetiva de portas das prévias: a padrão global (`inheritPorts`) ou a própria da central. */
+export function resolveCentralPorts(global: AgenticPorts | undefined, env: Pick<CentralConfig["environment"], "inheritPorts" | "previewPortMin" | "previewPortMax">): { min: number; max: number } {
+    if (env.inheritPorts) return { min: global?.previewPortMin ?? PREVIEW_PORT_MIN, max: global?.previewPortMax ?? PREVIEW_PORT_MAX }
+    return { min: env.previewPortMin, max: env.previewPortMax }
+}
+
+const isValidPort = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 1024 && value <= 65535
+
+/**
+ * Porta própria mantida ao voltar a herdar a faixa padrão: a atual quando válida; senão a salva e, por
+ * fim, o padrão (campo oculto nunca deixa o formulário inválido).
+ */
+export function keepValidPort(current: unknown, saved: unknown, fallback: number): number {
+    if (isValidPort(current)) return current
+    return isValidPort(saved) ? saved : fallback
+}
+
+/** A central herda a faixa de portas do padrão global (precisa ler a configuração geral)? */
+export const inheritsGlobalPorts = (env: Pick<CentralConfig["environment"], "inheritPorts">): boolean => env.inheritPorts === true
 
 /** Correção de CI efetiva da central: herdada do padrão global da aba (`inheritCi`) ou personalizada. */
 export function resolveCentralCi(global: AgenticCi | undefined, git: Pick<CentralConfig["git"], "inheritCi" | "fixCi" | "ciFixLimit">): AgenticCi {

@@ -186,6 +186,24 @@ describe('workflow — build da prévia rodado pelo app', () => {
     expect(mocks.publishAgentic).toHaveBeenCalled()
   })
 
+  it('central que herda as portas reserva a porta na faixa padrão global (Configurações Padrão)', async () => {
+    mocks.settings.mockResolvedValue({ settings: { ...DEFAULT_AGENTIC_SETTINGS, ports: { previewPortMin: 6000, previewPortMax: 6010 } } })
+    const wb = await workbench({ port: null })
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(mocks.allocatePort).toHaveBeenCalled())
+    expect(mocks.allocatePort.mock.calls[0]).toEqual([String(wb._id), 'localhost', { min: 6000, max: 6010 }, undefined])
+  })
+
+  it('central personalizada reserva a porta na própria faixa, ignorando o padrão global', async () => {
+    const config = localConfig()
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: { ...config, environment: { ...config.environment, inheritPorts: false, previewPortMin: 7000, previewPortMax: 7005 } } })
+    mocks.settings.mockResolvedValue({ settings: { ...DEFAULT_AGENTIC_SETTINGS, ports: { previewPortMin: 6000, previewPortMax: 6010 } } })
+    const wb = await workbench({ port: null })
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(mocks.allocatePort).toHaveBeenCalled())
+    expect(mocks.allocatePort.mock.calls[0]?.[2]).toEqual({ min: 7000, max: 7005 })
+  })
+
   it('prévia sem resposta fecha como "unhealthy"', async () => {
     mocks.waitPreview.mockResolvedValue(false)
     const wb = await workbench()
@@ -314,6 +332,8 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     expect(appended()).toContain('actions/runs/42')
     expect(mocks.assertRemote).toHaveBeenCalledTimes(1)
     expect(mocks.invalidateRemote).not.toHaveBeenCalled()
+    // A tentativa remota leva a faixa efetiva (central nova herda a padrão global, 5002–5998).
+    expect(mocks.reserveRemote.mock.calls[0]?.[5]).toEqual({ min: 5002, max: 5998 })
     expect(mocks.settleBuild).toHaveBeenCalledWith(id, 'succeeded', null)
   })
 

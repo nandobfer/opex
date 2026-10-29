@@ -26,15 +26,18 @@ const ready: BuildersQuery = {
   refetch,
 }
 let buildersQuery: BuildersQuery = ready
-vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useDockerBuilders: () => buildersQuery }))
+vi.mock('@/features/agentic/hooks/useAgentic', () => ({
+  useDockerBuilders: () => buildersQuery,
+  useAgenticSettings: () => ({ data: { settings: { ports: { previewPortMin: 6000, previewPortMax: 6010 } } } }),
+}))
 // Builder Machine: integração desativada por padrão (o card da central não aparece).
 const builderMachine = vi.hoisted(() => ({ active: false }))
 vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({ useBuilderMachineActive: () => builderMachine.active }))
 vi.mock('@/features/local-docker/components/LocalDockerCentralCard', () => ({ LocalDockerCentralCard: () => <div data-testid="builder-machine-card" /> }))
 
-function Harness({ dockerBuilder = '' }: { dockerBuilder?: string }) {
+function Harness({ dockerBuilder = '', inheritPorts = true }: { dockerBuilder?: string; inheritPorts?: boolean }) {
   const base = defaultCentralConfig('/home/u/app')
-  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, dockerBuilder } } })
+  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, dockerBuilder, inheritPorts, previewPortMin: 7000, previewPortMax: 7005 } } })
   return <EnvironmentSection form={form} centralId="c1" />
 }
 function BackupHarness() {
@@ -72,6 +75,39 @@ describe('card da Builder Machine', () => {
     expect(screen.queryByTestId('builder-machine-card')).toBeNull()
   })
 })
+describe('faixa de portas da prévia', () => {
+  it('herdando, usa a faixa padrão global (campos desabilitados) no texto e no comando', () => {
+    render(<Harness />)
+    const min = screen.getByLabelText('Porta inicial da prévia') as HTMLInputElement
+    expect(min.disabled).toBe(true)
+    expect(min.value).toBe('6000')
+    expect((screen.getByLabelText('Porta final da prévia') as HTMLInputElement).value).toBe('6010')
+    expect(document.body.textContent).toContain('porta livre entre 6000 e 6010')
+    expect(document.body.textContent).toContain('PORT=6000 docker compose')
+  })
+
+  it('faixa personalizada: campos próprios editáveis e o texto segue a faixa da central', () => {
+    render(<Harness inheritPorts={false} />)
+    expect((screen.getByLabelText('Porta inicial da prévia') as HTMLInputElement).disabled).toBe(false)
+    expect((screen.getByLabelText('Porta inicial da prévia') as HTMLInputElement).value).toBe('7000')
+    expect((screen.getByLabelText('Porta final da prévia') as HTMLInputElement).value).toBe('7005')
+    expect(document.body.textContent).toContain('porta livre entre 7000 e 7005')
+  })
+
+  it('"Publicar prévia" fica direto no card, sem card interno com borda', () => {
+    render(<Harness />)
+    const row = screen.getByTestId('central-env-publish-row')
+    expect(row.classList.contains('border')).toBe(false)
+    expect(row.classList.contains('bg-muted/40')).toBe(false)
+  })
+
+  it('porta final menor que a inicial é inválida só na faixa personalizada', () => {
+    const base = defaultCentralConfig('/home/u/app')
+    expect(centralConfigSchema.safeParse({ ...base, environment: { ...base.environment, inheritPorts: false, previewPortMin: 5000, previewPortMax: 4000 } }).success).toBe(false)
+    expect(centralConfigSchema.safeParse({ ...base, environment: { ...base.environment, inheritPorts: true, previewPortMin: 5000, previewPortMax: 4000 } }).success).toBe(true)
+  })
+})
+
 describe('método da prévia por central', () => {
   it('inicia Local e exibe configuração remota somente ao selecionar GitHub Action', () => {
     render(<Harness />)

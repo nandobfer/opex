@@ -92,6 +92,7 @@ export async function saveAgenticSettings(input: AgenticSettings, actorId: strin
         columns: normalizeColumns(input.columns),
         ci: { fixCi: input.ci.fixCi, ciFixLimit: input.ci.ciFixLimit },
         liveChat: input.liveChat === true,
+        ports: { previewPortMin: input.ports.previewPortMin, previewPortMax: input.ports.previewPortMax },
     }
     await assertAgentConfigs(
         AGENT_ROLES.map((role) => ({ label: AGENT_ROLE_LABELS[role].label, config: next.agents[role] })),

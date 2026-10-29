@@ -15,7 +15,14 @@ const mocks = vi.hoisted(() => {
         refetch: vi.fn(),
         save: vi.fn(),
         data: {
-            settings: { enabled: false, agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } }, columns: { queue: null, onStart: null, onPr: null, onDone: null }, ci: { fixCi: true, ciFixLimit: null } },
+            settings: {
+                enabled: false,
+                agents: { planning: { ...agent }, implementation: { ...agent }, build: { ...agent }, pr: { ...agent } },
+                columns: { queue: null, onStart: null, onPr: null, onDone: null },
+                ci: { fixCi: true, ciFixLimit: null },
+                liveChat: false,
+                ports: { previewPortMin: 5002, previewPortMax: 5998 },
+            },
             isDefault: true,
             availability: { available: false, reason: "OpenCode não configurado" },
             updatedAt: null,
@@ -106,11 +113,35 @@ describe("AgenticTab: abas internas", () => {
         expect(window.location.hash).toBe("#config")
     })
 
-    it("abre na aba Agentes com os agentes padrão e Salvar/Desfazer, sem as centrais", () => {
+    it("mostra as subabas na ordem Configurações Padrão | Agentes | Centrais de desenvolvimento", () => {
         render(<AgenticTab onDirtyChange={vi.fn()} />)
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Configurações Padrão", "Agentes", "Centrais de desenvolvimento"])
+    })
+
+    it("abre em Configurações Padrão com chat, fila, movimentação, CI e portas padrão e Salvar/Desfazer", () => {
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        expect(screen.getByRole("tab", { name: "Configurações Padrão" }).getAttribute("aria-selected")).toBe("true")
+        expect(screen.getByText("Chat durante a execução")).toBeTruthy()
+        // Fila e movimentação padrão das colunas, herdadas pelas centrais.
+        expect(screen.getAllByTestId("columns-card").map((card) => card.textContent)).toEqual(["Fila padrão", "Movimentação padrão das colunas"])
+        expect(screen.getByText("Portas da prévia")).toBeTruthy()
+        expect((screen.getByLabelText("Porta inicial da prévia") as HTMLInputElement).value).toBe("5002")
+        expect((screen.getByLabelText("Porta final da prévia") as HTMLInputElement).value).toBe("5998")
+        expect(screen.getByRole("button", { name: /Salvar/ })).toBeTruthy()
+        expect(screen.getByRole("button", { name: /Desfazer/ })).toBeTruthy()
+        expect(screen.queryByTestId("agent-roles")).toBeNull()
+        expect(screen.queryByTestId("centrals")).toBeNull()
+    })
+
+    it("a aba Agentes mostra os agentes padrão e Salvar/Desfazer, sem as configurações padrão movidas", () => {
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        fireEvent.click(screen.getByRole("tab", { name: "Agentes" }))
         expect(screen.getByRole("tab", { name: "Agentes" }).getAttribute("aria-selected")).toBe("true")
-        expect(screen.getByRole("tab", { name: "Centrais de desenvolvimento" }).getAttribute("aria-selected")).toBe("false")
         expect(screen.getByTestId("agent-roles")).toBeTruthy()
+        expect(screen.queryAllByTestId("columns-card")).toHaveLength(0)
+        expect(screen.queryByText("Chat durante a execução")).toBeNull()
+        expect(screen.queryByText("Portas da prévia")).toBeNull()
+        expect(screen.queryByText("Corrigir CI falho")).toBeNull()
         expect(screen.getByRole("button", { name: /Salvar/ })).toBeTruthy()
         expect(screen.getByRole("button", { name: /Desfazer/ })).toBeTruthy()
         expect(screen.queryByTestId("centrals")).toBeNull()
@@ -126,14 +157,7 @@ describe("AgenticTab: abas internas", () => {
         expect(screen.queryByRole("button", { name: /Salvar/ })).toBeNull()
     })
 
-    it("traz a fila e a movimentação globais junto dos agentes padrão", () => {
-        render(<AgenticTab onDirtyChange={vi.fn()} />)
-        const cards = screen.getAllByTestId("columns-card")
-        expect(cards).toHaveLength(2)
-        expect(cards.map((card) => card.textContent)).toEqual(["Fila da central de desenvolvimento", "Movimentação das colunas"])
-    })
-
-    it("traz o padrão global da correção de CI (ligada, sem limite) junto dos agentes padrão", () => {
+    it("traz o padrão global da correção de CI (ligada, sem limite) em Configurações Padrão", () => {
         render(<AgenticTab onDirtyChange={vi.fn()} />)
         expect(screen.getByText("Corrigir CI falho")).toBeTruthy()
         expect((screen.getByLabelText("Corrigir automaticamente") as HTMLElement).getAttribute("aria-checked")).toBe("true")

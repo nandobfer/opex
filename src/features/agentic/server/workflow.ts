@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildFixPrompt,
@@ -148,6 +148,13 @@ interface Loaded {
     projectName: string
     projectId: string
     repo: { repo: string; repoUrl: string } | null
+}
+
+/** Faixa efetiva de portas: só lê a configuração geral quando a central herda a faixa padrão. */
+async function effectivePorts(env: CentralConfig["environment"]): Promise<{ min: number; max: number }> {
+    if (!inheritsGlobalPorts(env)) return resolveCentralPorts(undefined, env)
+    const { settings } = await loadAgenticSettings()
+    return resolveCentralPorts(settings.ports, env)
 }
 
 async function loadAll(id: string): Promise<Loaded> {
@@ -797,7 +804,7 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
                 if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
                 if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
                 await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
-                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, fresh.doc.previewBackup, ctx)
+                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
                 await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
             }
             step = null
@@ -1240,7 +1247,8 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
               forceServer: method !== "local",
           })
         : null
-    const port = await allocatePreviewPort(id, env.previewHost, { min: env.previewPortMin, max: env.previewPortMax }, target?.portCheck)
+    const range = await effectivePorts(env)
+    const port = await allocatePreviewPort(id, env.previewHost, range, target?.portCheck)
     // No PC, o override do compose leva as CAs do PC aos containers (redes com inspeção TLS).
     const attached = target ? await target.attach(port) : null
     // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
@@ -1261,7 +1269,7 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
         if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
-        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
+        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, range, backup, ctx)
         await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "previewBuild.port": port } })
         return { stage: "building", text: remotePreviewCommands(ctx, remote).command, build: { method, port, local: false, docker: null } }
     }

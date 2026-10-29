@@ -98,13 +98,13 @@ describe('modelos de fallback', () => {
 })
 
 describe('pickPreviewPort', () => {
-  it('menor porta livre da faixa 4001–4098', () => {
-    expect(pickPreviewPort([])).toBe(4001)
-    expect(pickPreviewPort([4001, 4002, 4004])).toBe(4003)
+  it('menor porta livre da faixa padrão 5002–5998', () => {
+    expect(pickPreviewPort([])).toBe(5002)
+    expect(pickPreviewPort([5002, 5003, 5005])).toBe(5004)
   })
 
   it('faixa esgotada devolve null (nunca sai da faixa)', () => {
-    expect(pickPreviewPort(Array.from({ length: 98 }, (_, index) => 4001 + index))).toBeNull()
+    expect(pickPreviewPort(Array.from({ length: 997 }, (_, index) => 5002 + index))).toBeNull()
   })
 
   it('respeita a faixa configurada na central', () => {
@@ -182,7 +182,7 @@ describe('parseCentralConfig', () => {
     expect(parsed.cleanup).toEqual({ teardownEnvironment: true, removeWorktree: true, deleteBranch: true })
   })
 
-  it('preenche a pasta dos worktrees e a faixa de portas quando ausentes', () => {
+  it('preenche a pasta dos worktrees e a faixa de portas antiga quando ausentes (central salva)', () => {
     const parsed = parseCentralConfig({ sessionDirectory: '/repo' })
     expect(parsed.worktreeRoot).toBe('/repo/worktrees')
     expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
@@ -196,7 +196,7 @@ describe('parseCentralConfig', () => {
 
   it('faixa inválida (final antes da inicial) cai nos padrões', () => {
     const parsed = parseCentralConfig({ sessionDirectory: '/repo', environment: { previewPortMin: 5000, previewPortMax: 4000 } })
-    expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([4001, 4098])
+    expect([parsed.environment.previewPortMin, parsed.environment.previewPortMax]).toEqual([5002, 5998])
   })
 
   it('central antiga sem builder do Docker usa o padrão do host; o salvo é preservado', () => {
