@@ -40,6 +40,12 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 
 ## Arquivos no chat (Storage S3 com upload assinado)
 
+- O kit é compartilhado com os campos da mesa de trabalho (ver `agentic-dev.md`, "Anexos nos campos
+  da mesa"): tipo/rótulos/contratos em `src/lib/chat-files/kind.ts`, conferência e promoção no S3 em
+  `src/lib/storage/staged-upload.ts`, fila genérica `src/hooks/useChatUploads.tsx` (`useOpexUploads` é
+  um wrapper que passa as rotas do escopo — dono ou portal — ao provider) e componentes em
+  `src/components/chat-attachments/` (`AttachmentChips`, `FileDropZone`, `MessageFiles` com `fileHref`
+  para a rota do escopo, `AttachButton`; os `Opex*` reexportam ou envolvem).
 - O usuário anexa pelo clipe, colando (Ctrl+V de print) ou arrastando (área de soltar animada). Cada
   arquivo vira um chip com miniatura/ícone, **progresso real do PUT** (axios `onUploadProgress`),
   "Confirmando…", erro com **Tentar novamente** e X para remover. Enviar só libera com todos os

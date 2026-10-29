@@ -1,10 +1,11 @@
+import type { ChatFileDto } from "@/lib/chat-files/kind"
 import type { AdversarialVerdictFinding, OpencodeFormDto, OpencodePermissionDto, PrWatchOutcome, PrWatchStep, WorkbenchStreamLine } from "./types"
 
 /** Saída da mesa como a tela desenha (módulo puro: o hook só aplica as linhas do stream). */
 
 export type TimelineItem =
     | { kind: "turn"; key: string; stage: string; title: string; agent: string | null; model: string | null; ts: string; end: { outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number } | null }
-    | { kind: "user"; key: string; text: string; ts: string }
+    | { kind: "user"; key: string; text: string; ts: string; files: ChatFileDto[] }
     | { kind: "text"; key: string; text: string }
     | { kind: "tool"; key: string; id: string; name: string; state: "running" | "done" | "error"; input: string | null; output: string | null; error: string | null }
     | { kind: "notice"; key: string; level: "info" | "warn" | "error" | "success"; message: string }
@@ -82,7 +83,7 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
             return { ...state, reasoning: false, items: replaceLast(items, index, { ...turn, end: { outcome: line.outcome, message: line.message, durationMs: line.durationMs, costUsd: line.costUsd } }) }
         }
         case "user":
-            return { ...state, items: [...items, { kind: "user", key: keyOf("user", line.seq, items.length), text: line.text, ts: line.ts }] }
+            return { ...state, items: [...items, { kind: "user", key: keyOf("user", line.seq, items.length), text: line.text, ts: line.ts, files: line.files ?? [] }] }
         case "notice":
             return { ...state, items: [...items, { kind: "notice", key: keyOf("notice", line.seq, items.length), level: line.level, message: line.message }] }
         case "permission": {

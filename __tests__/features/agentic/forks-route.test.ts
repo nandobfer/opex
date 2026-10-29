@@ -51,7 +51,7 @@ describe('rotas dos forks da conversa', () => {
     mocks.sendForkMessage.mockResolvedValue({ id: 'f1' })
     mocks.closeFork.mockResolvedValue({ id: 'f1' })
     expect((await messageRoute(request('/f1/messages', 'POST', { text: 'e Y?' }), { params: Promise.resolve({ id: 'w1', forkId: 'f1' }) })).status).toBe(200)
-    expect(mocks.sendForkMessage).toHaveBeenCalledWith('w1', 'f1', 'e Y?')
+    expect(mocks.sendForkMessage).toHaveBeenCalledWith('w1', 'f1', 'e Y?', undefined)
     expect((await action('close')).status).toBe(200)
     expect(mocks.closeFork).toHaveBeenCalledWith('w1', 'f1')
     expect((await action('apagar-tudo')).status).toBe(404)

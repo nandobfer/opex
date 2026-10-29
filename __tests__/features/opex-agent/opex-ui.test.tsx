@@ -125,7 +125,7 @@ describe('mensagens', () => {
 
 const upload = (overrides: Partial<OpexUploadItem>): OpexUploadItem => ({
   localId: 'u1',
-  sessionId: 's1',
+  scope: 's1',
   file: new File(['x'], 'erro.log'),
   name: 'erro.log',
   size: 2048,

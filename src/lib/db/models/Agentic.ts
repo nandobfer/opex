@@ -91,6 +91,8 @@ export interface IPendingTurn {
     /** Etapa da mesa ao entrar na espera; se mudar até a vaga chegar, a espera é descartada. */
     fromStage: string
     queuedAt: Date
+    /** Anexos da mensagem do usuário (`agentic_files`), entregues quando o turno começar. */
+    fileIds?: string[]
 }
 
 /** Resumo de um fork integrado ao contexto da conversa principal (instrução durável da sessão da mesa). */
@@ -117,7 +119,8 @@ export interface IAgenticWorkbench {
     runState: string
     error: string | null
     lastStage: string | null
-    lastPrompt: { stage: string; text: string } | null
+    /** Prompt do último turno (o "Tentar novamente" reenvia o texto e os anexos). */
+    lastPrompt: { stage: string; text: string; fileIds?: string[] } | null
     /** Instante em que o último turno começou (delimita a execução acompanhada ao reconectar). */
     turnStartedAt: Date | null
     /**
@@ -294,7 +297,7 @@ export interface IAgenticFork {
     /** Resumo proposto para integração (em revisão enquanto `integrating`). */
     summary: string | null
     integration: IForkIntegration | null
-    lastPrompt: { text: string } | null
+    lastPrompt: { text: string; fileIds?: string[] } | null
     turnStartedAt: Date | null
     pendingPermissions: unknown[]
     pendingForms: unknown[]
@@ -407,7 +410,45 @@ const AgenticBuildSchema = new Schema<IAgenticBuild>(
 )
 AgenticBuildSchema.index({ workbenchId: 1, number: 1 }, { unique: true })
 
+/**
+ * Arquivo anexado a uma mensagem da mesa de trabalho (ou de um fork). O binário fica no Storage S3
+ * (`uploadKey` temporária até a confirmação, `key` definitiva); sem `workbenchId`, ainda não foi numa
+ * mensagem (a limpeza oportunista remove depois de 24 h).
+ */
+export interface IAgenticFile {
+    _id: Types.ObjectId
+    workbenchId: string | null
+    forkId: string | null
+    name: string
+    mediaType: string
+    size: number
+    key: string
+    uploadKey: string | null
+    ready: boolean
+    claimedAt: Date | null
+    createdAt: Date
+}
+
+const AgenticFileSchema = new Schema<IAgenticFile>(
+    {
+        workbenchId: { type: String, default: null },
+        forkId: { type: String, default: null },
+        name: { type: String, required: true },
+        mediaType: { type: String, required: true },
+        size: { type: Number, required: true },
+        key: { type: String, required: true },
+        uploadKey: { type: String, default: null },
+        ready: { type: Boolean, default: false },
+        claimedAt: { type: Date, default: null },
+    },
+    { collection: "agentic_files", versionKey: false, timestamps: { createdAt: true, updatedAt: false } },
+)
+AgenticFileSchema.index({ workbenchId: 1 })
+AgenticFileSchema.index({ forkId: 1 })
+AgenticFileSchema.index({ workbenchId: 1, createdAt: 1 })
+
 if (process.env.NODE_ENV === "development") {
+    delete models.AgenticFile
     delete models.AgenticCentral
     delete models.AgenticWorkbench
     delete models.AgenticFork
@@ -421,3 +462,4 @@ export const AgenticWorkbench: Model<IAgenticWorkbench> =
 export const AgenticFork: Model<IAgenticFork> = (models.AgenticFork as Model<IAgenticFork>) || model<IAgenticFork>("AgenticFork", AgenticForkSchema)
 export const AgenticEvent: Model<IAgenticEvent> = (models.AgenticEvent as Model<IAgenticEvent>) || model<IAgenticEvent>("AgenticEvent", AgenticEventSchema)
 export const AgenticBuild: Model<IAgenticBuild> = (models.AgenticBuild as Model<IAgenticBuild>) || model<IAgenticBuild>("AgenticBuild", AgenticBuildSchema)
+export const AgenticFile: Model<IAgenticFile> = (models.AgenticFile as Model<IAgenticFile>) || model<IAgenticFile>("AgenticFile", AgenticFileSchema)

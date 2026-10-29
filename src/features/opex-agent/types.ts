@@ -2,30 +2,14 @@ import type { AiFeatureAvailability } from "@/features/ai/types"
 import type { OpexAgentSettings, OpexFilesSettings } from "./schemas"
 import type { OpexToolGroup } from "./constants"
 import type { OpexClientToolGroup } from "./client-tools"
-import type { OpexFileKind } from "./files"
+import type { ChatFileDto, ChatFileReservationDto } from "@/lib/chat-files/kind"
 import type { OpexToolMetaDto } from "./tool-tree"
 
-/** Arquivo enviado no chat (o binário fica no Storage S3). */
-export interface OpexFileDto {
-    id: string
-    name: string
-    mediaType: string
-    size: number
-    kind: OpexFileKind
-    /** Rota do conteúdo (sem `basePath`). */
-    url: string
-}
+/** Arquivo enviado no chat (o binário fica no Storage S3; `url` = rota do conteúdo, sem `basePath`). */
+export type OpexFileDto = ChatFileDto
 
-/** Reserva do envio: onde e como o navegador faz o PUT direto no storage. */
-export interface OpexFileReservationDto {
-    id: string
-    method: "PUT"
-    /** URL assinada (absoluta) do storage. */
-    url: string
-    /** Cabeçalhos obrigatórios do PUT (o `Content-Type` entra na assinatura). */
-    headers: Record<string, string>
-    expiresIn: number
-}
+/** Reserva do envio direto ao Storage S3: o navegador faz o PUT e depois confirma. */
+export type OpexFileReservationDto = ChatFileReservationDto
 
 export interface OpexAgentSettingsDto {
     settings: OpexAgentSettings

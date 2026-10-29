@@ -5,12 +5,13 @@ import { Info, ListOrdered, Loader2, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Textarea } from "@/components/ui/textarea"
 import { ToggleCard } from "@/components/ui/toggle-card"
 import { apiErrorMessage } from "@/lib/api"
 import { useTaskDetail, useUpdateTask } from "@/features/tasks/hooks/useTasks"
 import { TASK_AGENTIC_FLOW_LABELS, type TaskAgenticFlow } from "@/features/tasks/constants"
 import { useAgenticSettings, useCentralQueue, useStartWorkbench } from "../../hooks/useAgentic"
+import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
+import { AttachableTextarea } from "./AttachableTextarea"
 import type { CentralDto } from "../../types"
 
 /**
@@ -26,6 +27,8 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const start = useStartWorkbench()
     const update = useUpdateTask()
     const [text, setText] = useState("")
+    const attachments = useFieldAttachments(`start:${taskId}`)
+    const uploadBlock = attachments.blockReason
     const availability = settings.data?.availability
     const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
     const otherProject = task.data && task.data.project?.id !== central.projectId
@@ -113,11 +116,18 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <label htmlFor="workbench-start-context" className="text-sm font-medium">
                         Informações adicionais (opcional)
                     </label>
-                    <Textarea id="workbench-start-context" rows={5} value={text} onChange={(event) => setText(event.target.value)} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
-                    <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
+                    <AttachableTextarea id="workbench-start-context" rows={5} value={text} onValueChange={setText} replyEnabled={false} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" attachments={attachments} />
+                    <p className="text-xs text-muted-foreground">Essas informações (e os arquivos anexados) são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending} onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined })}>
+                    <Button
+                        type="button"
+                        data-ctrl-enter-submit
+                        className="gap-1.5"
+                        disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending || Boolean(uploadBlock)}
+                        title={uploadBlock ?? undefined}
+                        onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}) }, { onSuccess: () => attachments.clearSent() })}
+                    >
                         {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                         Abrir mesa e gerar o plano
                     </Button>

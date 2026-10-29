@@ -57,6 +57,8 @@ import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
+import { claimAgenticFiles, deleteForkFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
+import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
@@ -322,7 +324,7 @@ function turnHooks(doc: IAgenticFork) {
 }
 
 /** Executa o turno do fork em segundo plano; no turno de consolidação, extrai o resumo. */
-async function executeForkTurn(id: string, text: string, controller: AbortController): Promise<void> {
+async function executeForkTurn(id: string, text: string, controller: AbortController, fileIds?: string[]): Promise<void> {
     const fork = (await AgenticFork.findById(id).lean()) as unknown as IAgenticFork | null
     if (!fork) return
     if (!fork.sessionId) throw new Error("O fork não tem uma sessão do OpenCode")
@@ -344,6 +346,9 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         text = `${forkNotesInstructions(fork.childNotes, "fork")}\n\n---\n${text}`
         await AgenticFork.updateOne({ _id: fork._id }, { $set: { childNotesSynced: true } })
     }
+    // Anexos da mensagem do usuário: conteúdo no prompt e links para baixar (fora do worktree).
+    const attachments = fileIds?.length ? await promptFilesFor(fileIds, { downloadDir: agenticDownloadDir(fork.taskCode, fork.number), signal: controller.signal }) : { files: [], section: "" }
+    text = withAttachmentsSection(text, attachments.section)
     log.info({ forkId: id, workbenchId: fork.workbenchId, agent: agent.agent, model: agent.model }, `Fork ${fork.number} ${fork.taskCode}: turno iniciado`)
     const sessionId = fork.sessionId
     // Modelo/provedor falhou: segue com os modelos de fallback do papel Fork da conversa (só nesta mensagem).
@@ -353,7 +358,7 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         (attempt, prompt) =>
             runAgentTurn(
                 client,
-                { id, sessionId, stage: "fork", title: `Fork ${fork.number}`, agent: attempt, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "agentic", subject: fork.workbenchId } },
+                { id, sessionId, stage: "fork", title: `Fork ${fork.number}`, agent: attempt, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "agentic", subject: fork.workbenchId }, files: attachments.files },
                 { ...turnHooks(fork), publish },
             ),
         {
@@ -395,21 +400,23 @@ async function requestForkPreview(fork: IAgenticFork): Promise<void> {
 }
 
 /** Dispara um turno do fork em segundo plano (a rota responde na hora; a saída chega pelo stream). */
-async function launchForkTurn(fork: IAgenticFork, text: string, options: { userText?: string; set?: Record<string, unknown> } = {}): Promise<void> {
+async function launchForkTurn(fork: IAgenticFork, text: string, options: { userText?: string; set?: Record<string, unknown>; fileIds?: string[] } = {}): Promise<void> {
     const id = String(fork._id)
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está respondendo neste fork", "FORK_BUSY")
     await prepareHub(id)
-    if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
+    const fileIds = options.fileIds?.length ? options.fileIds : undefined
+    const shown = await fileDtosFor(fileIds)
+    if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText, ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
     try {
-        await AgenticFork.updateOne({ _id: fork._id }, { $set: { ...options.set, runState: "running", error: null, lastPrompt: { text }, turnStartedAt: new Date(), heartbeatAt: new Date(), pendingForms: [], pendingPermissions: [] } })
+        await AgenticFork.updateOne({ _id: fork._id }, { $set: { ...options.set, runState: "running", error: null, lastPrompt: { text, ...(fileIds ? { fileIds } : {}) }, turnStartedAt: new Date(), heartbeatAt: new Date(), pendingForms: [], pendingPermissions: [] } })
     } catch (error) {
         clearWorkbenchActive(id, controller)
         throw error
     }
     await publishFork(fork)
-    void executeForkTurn(id, text, controller)
+    void executeForkTurn(id, text, controller, fileIds)
         .catch(async (error) => {
             log.error({ err: errorText(error), forkId: id }, "[agentic-fork] falha inesperada no turno")
             notice(id, "error", errorText(error))
@@ -464,9 +471,10 @@ function workbenchContext(workbench: IAgenticWorkbench, config: CentralConfig, p
  * inicial vem do agente do papel Fork (`plan` = somente leitura; demais = Build), de `mode` ou da trava
  * `readOnly` (Plan sem volta). Fork de fork não herda a trava nem o modo do pai.
  */
-export async function openFork(workbenchId: string, text: string, options: { parentForkId?: string; readOnly?: boolean; mode?: ForkMode } = {}): Promise<ForkDto> {
+export async function openFork(workbenchId: string, text: string, options: { parentForkId?: string; readOnly?: boolean; mode?: ForkMode; fileIds?: string[] } = {}): Promise<ForkDto> {
     const { parentForkId, readOnly: locked = false } = options
     const workbench = await loadWorkbenchDoc(workbenchId)
+    const files = await loadClaimableFiles(options.fileIds, workbenchId)
     const { doc: central, config } = await loadCentral(workbench.centralId)
     await assertForkReady(config)
     const parent = parentForkId ? await loadParentFork(workbenchId, parentForkId) : null
@@ -528,7 +536,8 @@ export async function openFork(workbenchId: string, text: string, options: { par
     const prompt = forkFirstPrompt(text, freshContext)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_FORK, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: workbench.taskCode, fork: number, origem: session.origin, modo: mode, somenteLeitura: locked, etapa: workbench.stage, ...(parent ? { forkPai: parent.number } : {}) } })
     log.info({ forkId: id, workbenchId, origin: session.origin, parentForkId: parent ? String(parent._id) : null }, `Fork ${number} ${workbench.taskCode}: aberto`)
-    await launchForkTurn(fork, protocolApplied ? prompt : `${instructions}\n\n---\n${prompt}`, { userText: text })
+    await launchForkTurn(fork, protocolApplied ? prompt : `${instructions}\n\n---\n${prompt}`, { userText: text, ...fileIdsOf(files) })
+    await claimAgenticFiles(files, { workbenchId, forkId: id })
     return getFork(workbenchId, id)
 }
 
@@ -536,17 +545,23 @@ export async function openFork(workbenchId: string, text: string, options: { par
  * Nova mensagem do usuário no fork ativo. Com o agente respondendo (e o chat durante a execução
  * ligado), entra no turno em andamento; parado, abre um turno novo.
  */
-export async function sendForkMessage(workbenchId: string, forkId: string, text: string): Promise<ForkDto> {
+export async function sendForkMessage(workbenchId: string, forkId: string, text: string, fileIds?: string[]): Promise<ForkDto> {
     const fork = await loadFork(workbenchId, forkId)
+    const owner = { workbenchId, forkId: String(fork._id) }
     if (isWorkbenchActive(String(fork._id))) {
         // Consolidando o resumo da integração: a mensagem se misturaria ao resumo.
         if (asForkStatus(fork.status) !== "active") throw new DomainError(409, `O fork ${fork.number} está consolidando o resumo da integração: aguarde terminar`, "FORK_INVALID_STATE")
-        await deliverLiveMessage({ runId: String(fork._id), centralId: fork.centralId, label: `o fork ${fork.number}`, audit: { entidade: AGENTIC_AUDIT_FORK, contexto: { tarefa: fork.taskCode, fork: fork.number } } }, text)
+        const files = await loadClaimableFiles(fileIds, workbenchId)
+        const attachments = files.length ? await liveAttachments(files, agenticDownloadDir(fork.taskCode, fork.number)) : undefined
+        await deliverLiveMessage({ runId: String(fork._id), centralId: fork.centralId, label: `o fork ${fork.number}`, audit: { entidade: AGENTIC_AUDIT_FORK, contexto: { tarefa: fork.taskCode, fork: fork.number } } }, text, attachments)
+        await claimAgenticFiles(files, owner)
         return getFork(workbenchId, forkId)
     }
     assertForkAction(fork, "send")
     await assertForkReady((await loadCentral(fork.centralId)).config)
-    await launchForkTurn(fork, text, { userText: text })
+    const files = await loadClaimableFiles(fileIds, workbenchId)
+    await launchForkTurn(fork, text, { userText: text, ...fileIdsOf(files) })
+    await claimAgenticFiles(files, owner)
     return getFork(workbenchId, forkId)
 }
 
@@ -666,7 +681,7 @@ export async function retryFork(workbenchId: string, forkId: string): Promise<Fo
     assertForkAction(fork, "retry")
     if (!fork.lastPrompt?.text) throw new DomainError(409, "Não há mensagem para tentar de novo", "FORK_INVALID_STATE")
     await assertForkReady((await loadCentral(fork.centralId)).config)
-    await launchForkTurn(fork, forkRetryPrompt(fork.error, fork.lastPrompt.text), { userText: "Tentar novamente" })
+    await launchForkTurn(fork, forkRetryPrompt(fork.error, fork.lastPrompt.text), { userText: "Tentar novamente", ...(fork.lastPrompt.fileIds?.length ? { fileIds: fork.lastPrompt.fileIds } : {}) })
     return getFork(workbenchId, forkId)
 }
 
@@ -760,6 +775,7 @@ export async function discardFork(workbenchId: string, forkId: string): Promise<
     assertForkAction(fork, "discard")
     await finishForkSession(fork)
     await dropWorkbenchEvents(forkId)
+    await deleteForkFiles(forkId).catch((error) => log.warn({ err: errorText(error), forkId }, "[agentic-fork] anexos do fork não removidos"))
     await AgenticFork.deleteOne({ _id: fork._id })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_FORK, entidadeId: forkId, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: fork.taskCode, fork: fork.number, status: fork.status } })
     log.info({ forkId, workbenchId }, `Fork ${fork.number} ${fork.taskCode}: descartado`)

@@ -185,7 +185,7 @@ describe('chat durante a execução no fork', () => {
     mocks.liveChat.value = true
     const { id, forkId, finish } = await runningFork()
     const dto = await sendForkMessage(id, forkId, 'olhe também o módulo Y')
-    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'olhe também o módulo Y')
+    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'olhe também o módulo Y', [])
     expect(mocks.runTurn).toHaveBeenCalledTimes(1)
     expect(mocks.publish).toHaveBeenCalledWith(forkId, { type: 'user', text: 'olhe também o módulo Y' })
     expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ entidade: 'ForkDaMesa', depois: expect.objectContaining({ fork: 1, mensagemDuranteExecucao: 'olhe também o módulo Y' }) }))
@@ -200,7 +200,7 @@ describe('chat durante a execução no fork', () => {
     expect(mocks.steer).not.toHaveBeenCalled()
     mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: { ...defaultCentralConfig('/home/u/app'), liveChat: 'on' } })
     await sendForkMessage(id, forkId, 'agora vai')
-    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'agora vai')
+    expect(mocks.steer).toHaveBeenCalledWith(forkId, 'agora vai', [])
     finish()
     await settle(forkId)
   })

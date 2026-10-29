@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
+import { AGENTIC_FILES_PER_MESSAGE } from "./files"
 
 /** Máximo de modelos de fallback por papel. */
 export const MAX_MODEL_FALLBACKS = 5
@@ -289,11 +290,20 @@ export type CreateCentralInput = z.infer<typeof createCentralSchema>
 const optionalUserText = z.string().trim().optional()
 
 /** Texto do usuário enviado ao planejador (correção do plano, da prévia, do PR ou reabertura). */
-export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar") })
+/**
+ * Anexos de uma mensagem da mesa (ids de `agentic_files` já confirmados em `/api/agentic/files`). Vão
+ * ao agente junto do texto, no prompt do turno.
+ */
+export const fileIdsSchema = z
+    .array(z.string().regex(/^[a-f0-9]{24}$/i, "Arquivo anexado inválido"))
+    .max(AGENTIC_FILES_PER_MESSAGE, `Até ${AGENTIC_FILES_PER_MESSAGE} arquivos por mensagem`)
+    .optional()
+
+export const feedbackSchema = z.object({ text: z.string().trim().min(3, "Descreva o que precisa mudar"), fileIds: fileIdsSchema })
 export type FeedbackInput = z.infer<typeof feedbackSchema>
 
 /** Texto opcional anexado a uma ação (ex.: informações adicionais ao aprovar o plano de implementação). */
-export const optionalFeedbackSchema = z.object({ text: optionalUserText })
+export const optionalFeedbackSchema = z.object({ text: optionalUserText, fileIds: fileIdsSchema })
 export type OptionalFeedbackInput = z.infer<typeof optionalFeedbackSchema>
 
 /** Definir a etapa da mesa (ou concluí-la sem PR): etapa de espera e o motivo, registrado na auditoria. */
@@ -308,6 +318,8 @@ export const startWorkbenchSchema = z.object({
     taskId: z.string().regex(/^[a-f0-9]{24}$/i),
     /** Informações adicionais opcionais digitadas ao abrir a mesa; vão no primeiro prompt do planejador. */
     text: optionalUserText,
+    /** Anexos das informações adicionais (vão no primeiro prompt). */
+    fileIds: fileIdsSchema,
 })
 
 export const permissionReplySchema = z.object({
@@ -327,7 +339,11 @@ export const liveMessageSchema = z.object({ text: z.string().trim().min(1, "Escr
 export type LiveMessageInput = z.infer<typeof liveMessageSchema>
 
 /** Mensagem do usuário num fork da conversa (a primeira abre o fork). */
-export const forkMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem") })
+/** Mensagem ao vivo da mesa ou de um fork, com anexos opcionais. */
+export const workbenchLiveMessageSchema = liveMessageSchema.extend({ fileIds: fileIdsSchema })
+
+/** Mensagem do usuário num fork da conversa (a primeira abre o fork), com anexos opcionais. */
+export const forkMessageSchema = z.object({ text: z.string().trim().min(1, "Escreva a mensagem"), fileIds: fileIdsSchema })
 export type ForkMessageInput = z.infer<typeof forkMessageSchema>
 
 /** Modo do fork: `plan` (somente leitura) ou `build` (pode alterar arquivos). */

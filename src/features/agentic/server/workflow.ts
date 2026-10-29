@@ -51,6 +51,8 @@ import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { probeReconnect } from "./reconnect"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
+import { claimAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
+import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
@@ -261,6 +263,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
             reopen: Boolean(flags.reopen),
             fromStage: stage,
             queuedAt: new Date(),
+            ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}),
         }
         await update(doc, { pendingTurn })
         const position = await slotQueuePosition(id)
@@ -304,7 +307,7 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
         reopened = Boolean(pending.reopen)
         await launchTurn(
             ready,
-            { stage: asStage(pending.stage), text: pending.text },
+            { stage: asStage(pending.stage), text: pending.text, ...(pending.fileIds?.length ? { fileIds: pending.fileIds } : {}) },
             {
                 ...(pending.userText ? { userText: pending.userText } : {}),
                 ...(pending.feedback !== null ? { feedback: pending.feedback } : {}),
@@ -546,6 +549,8 @@ interface TurnPlan {
     attach?: boolean
     /** Turno "Subindo a prévia": método, porta, máquina e Docker do build (o app roda o comando). */
     build?: { method: "local" | "github"; port: number; local: boolean; docker: PreviewDocker | null }
+    /** Anexos da mensagem do usuário (`agentic_files`): vão no prompt deste turno (os encadeados não reenviam). */
+    fileIds?: string[]
 }
 
 /** Log do build (aba Build): melhor esforço — uma falha no registro nunca derruba o build. */
@@ -576,7 +581,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     if (turn.attach || options.bypassLimit) await assertAgenticReady(loaded.config)
     else await assertAvailable(loaded.doc.centralId, id, loaded.config)
     await prepareHub(id)
-    if (options.userText) publishWorkbenchEvent(id, { type: "user", text: options.userText })
+    const shown = turn.attach ? [] : await fileDtosFor(turn.fileIds)
+    if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
     try {
@@ -587,7 +593,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             heartbeatAt: new Date(),
             // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam
             // válidos) e a causa da parada; um turno novo começa um episódio novo (limpa o desfecho).
-            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -640,8 +646,11 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             }
             // Resumos de forks que não puderam virar instrução da sessão vão no prompt (uma vez).
             const notes = turn.attach ? null : await AgenticWorkbench.findById(id).select({ forkNotes: 1, forkNotesSynced: 1 }).lean()
-            const text = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
-            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach }, sessionId, controller)
+            const withNotes = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
+            // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
+            const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
+            const text = withAttachmentsSection(withNotes, attachments.section)
+            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
@@ -668,7 +677,13 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
 }
 
 /** Turno do agente na sessão da mesa (com os modelos de fallback do papel da etapa). */
-async function runStageAgent(client: OpencodeClient, loaded: Loaded, step: { stage: WorkbenchStage; text: string; attach?: boolean }, sessionId: string, controller: AbortController): Promise<TurnResult> {
+async function runStageAgent(
+    client: OpencodeClient,
+    loaded: Loaded,
+    step: { stage: WorkbenchStage; text: string; attach?: boolean; files?: Awaited<ReturnType<typeof promptFilesFor>>["files"] },
+    sessionId: string,
+    controller: AbortController,
+): Promise<TurnResult> {
     const id = String(loaded.doc._id)
     const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
     const { settings } = await loadAgenticSettings()
@@ -694,6 +709,7 @@ async function runStageAgent(client: OpencodeClient, loaded: Loaded, step: { sta
                     signal: controller.signal,
                     attach: step.attach,
                     startedAt: loaded.doc.turnStartedAt ? new Date(loaded.doc.turnStartedAt).getTime() : 0,
+                    files: step.files,
                 },
                 turnHooks(loaded.doc),
             ),
@@ -1262,14 +1278,15 @@ async function localPreviewTornDown(loaded: Loaded): Promise<boolean> {
     return local ? local.teardownForCleanup(String(loaded.doc._id)) : false
 }
 
-export async function startWorkbench(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
-    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text))
+export async function startWorkbench(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
+    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text, fileIds))
 }
 
 /** Chamado pelo motor já dentro da decisão serializada de vagas da central. */
-export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string): Promise<WorkbenchDto> {
+export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
     await dbConnect()
+    const files = await loadClaimableFiles(fileIds, null)
     const existing = await AgenticWorkbench.findOne({ taskId }).lean()
     if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
     const task = await getTask(taskId)
@@ -1312,22 +1329,26 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     const additionalInfo = text?.trim() || null
     await launchTurn(
         loaded,
-        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo) },
-        { ...(additionalInfo ? { userText: additionalInfo } : {}) },
+        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo), ...fileIdsOf(files) },
+        { ...(additionalInfo ? { userText: additionalInfo } : files.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}) },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function revisePlan(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function revisePlan(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "revise-plan")
-    await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    const files = await loadClaimableFiles(fileIds, id)
+    await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function implement(id: string, additionalInfo?: string): Promise<WorkbenchDto> {
+export async function implement(id: string, additionalInfo?: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "implement")
+    const files = await loadClaimableFiles(fileIds, id)
     const ctx = contextOf(loaded)
     // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
     const info = additionalInfo?.trim() || null
@@ -1335,18 +1356,21 @@ export async function implement(id: string, additionalInfo?: string): Promise<Wo
     await launchOrQueue(
         loaded,
         "implement",
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info) },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info), ...fileIdsOf(files) },
         { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
 /** Correção pedida na prévia (ou após falha na implementação/build): volta ao planejamento. */
-export async function requestCorrection(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function requestCorrection(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "request-correction")
+    const files = await loadClaimableFiles(fileIds, id)
     await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
-    await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback) }, { userText: feedback, feedback })
+    await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
@@ -1418,24 +1442,28 @@ export async function adversarialSkip(id: string): Promise<WorkbenchDto> {
     return getWorkbench(id)
 }
 
-export async function submitPrFeedback(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function submitPrFeedback(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "submit-pr-feedback")
-    await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: feedback, feedback })
+    const files = await loadClaimableFiles(fileIds, id)
+    await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
-export async function reopen(id: string, feedback: string): Promise<WorkbenchDto> {
+export async function reopen(id: string, feedback: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "reopen")
+    const files = await loadClaimableFiles(fileIds, id)
     // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.
     await launchOrQueue(
         loaded,
         "reopen",
-        { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null) },
+        { stage: "planning", text: reopenPrompt(loaded.config, contextOf(loaded), feedback, loaded.doc.plans?.at(-1)?.text ?? null), ...fileIdsOf(files) },
         { userText: `Mesa reaberta: ${feedback}`, feedback },
         { reopen: true },
     )
+    await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
 
@@ -1627,7 +1655,8 @@ export async function retry(id: string): Promise<WorkbenchDto> {
         return getWorkbench(id)
     }
     const text = `A execução anterior desta etapa não terminou (${doc.error ?? "motivo desconhecido"}). Retome de onde parou e conclua a etapa conforme as instruções abaixo.\n\n${doc.lastPrompt.text}`
-    await launchTurn({ ...loaded, doc }, { stage, text }, { userText: "Tentar novamente" })
+    // Os anexos da mensagem original voltam junto (o turno não terminou: o agente pode não tê-los lido).
+    await launchTurn({ ...loaded, doc }, { stage, text, ...(doc.lastPrompt.fileIds?.length ? { fileIds: doc.lastPrompt.fileIds } : {}) }, { userText: "Tentar novamente" })
     return getWorkbench(id)
 }
 
@@ -1654,12 +1683,15 @@ export async function interrupt(id: string): Promise<WorkbenchDto> {
 }
 
 /** Chat durante a execução: mensagem do usuário que entra no turno em andamento da mesa (sem interromper). */
-export async function sendLiveMessage(id: string, text: string): Promise<WorkbenchDto> {
+export async function sendLiveMessage(id: string, text: string, fileIds?: string[]): Promise<WorkbenchDto> {
     const doc = await loadWorkbench(id)
     if (doc.deletionRequestedAt) throw new DomainError(409, "A mesa está sendo excluída: não é possível enviar mensagens", "WORKBENCH_DELETING")
     if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está trabalhando nesta mesa: use as ações da etapa", "WORKBENCH_NOT_RUNNING")
     if (asStage(doc.stage) === "adversarial_review") throw new DomainError(409, "O agente adversário revisa sem interferência: aguarde o veredito para orientar a correção", "WORKBENCH_ADVERSARIAL_REVIEW")
-    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text)
+    const files = await loadClaimableFiles(fileIds, id)
+    const attachments = files.length ? await liveAttachments(files, agenticDownloadDir(doc.taskCode)) : undefined
+    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text, attachments)
+    await claimAgenticFiles(files, { workbenchId: id })
     centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)
 }
@@ -1741,6 +1773,8 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await trackBuild(id, () => dropBuilds(id))
+    // Anexos das mensagens da mesa e dos forks (melhor esforço: falha no storage não segura a exclusão).
+    await deleteWorkbenchFiles(id).catch((error) => logger.warn({ err: error, workbenchId: id }, "[agentic] Falha ao remover os anexos da mesa"))
     await AgenticWorkbench.deleteOne({ _id: doc._id })
     await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })

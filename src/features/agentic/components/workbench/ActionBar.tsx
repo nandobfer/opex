@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCheck, GitFork, GitPullRequest, Hammer, Hourglass, ListOrdered, Loader2, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Send, Square, X } from "lucide-react"
+import { CheckCheck, GitFork, GitPullRequest, Hammer, Hourglass, ListOrdered, MessageSquareWarning, PlugZap, RefreshCw, RotateCcw, Square, X } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -16,14 +16,16 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
-import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
-import { REPLY_PRIORITY, useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
+import { useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
 import { insertQuote } from "@/lib/markdown/quote"
 import { useSendWorkbenchLiveMessage, useWorkbenchAction, useWorkbenchReconnect } from "../../hooks/useAgentic"
 import { workbenchActions, type WorkbenchAction } from "../../logic"
 import type { ForkDto, WorkbenchDto } from "../../types"
 import { PENDING_TURN_LABELS } from "../../constants"
+import { useFieldAttachments, type FieldAttachments } from "../../hooks/useWorkbenchFiles"
+import { FeedbackComposer } from "./FeedbackComposer"
 import { ForkComposer } from "./ForkComposer"
+import { ImplementInfoField } from "./ImplementInfoField"
 import { LiveMessageComposer } from "./LiveMessageComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
@@ -102,14 +104,18 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
     // A revisão do agente adversário não recebe mensagens: ele revisa sem interferência.
     const liveChat = workbench.liveChat && workbench.runState === "running" && !slotQueue && !workbench.deletionRequestedAt && workbench.stage !== "adversarial_review"
     const pending = mutation.isPending
-    const run = (action: WorkbenchAction, body?: string) =>
+    const feedbackFiles = useFieldAttachments(`feedback:${workbench.id}`)
+    const implementFiles = useFieldAttachments(`implement:${workbench.id}`)
+    const liveFiles = useFieldAttachments(`live:${workbench.id}`)
+    const run = (action: WorkbenchAction, body?: string, files?: FieldAttachments) =>
         mutation.mutate(
-            { action, text: body },
+            { action, text: body, ...(files?.fileIds.length ? { fileIds: files.fileIds } : {}) },
             {
                 onSuccess: () => {
                     setComposer(null)
                     setText("")
                     setAdditional("")
+                    files?.clearSent()
                 },
             },
         )
@@ -181,34 +187,28 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                         <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Aguardando a vez do build{workbench.buildQueuePosition ? ` — posição #${workbench.buildQueuePosition}` : ""}. Um build por vez.
                     </motion.p>
                 )}
-                {!composer && !forking && canImplement && (
-                    <motion.div key="implement-info" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-1.5 overflow-hidden">
-                        <label htmlFor="workbench-implement-info" className="text-sm font-medium">
-                            Informações adicionais (opcional)
-                        </label>
-                        <ReplyTextarea id="workbench-implement-info" rows={3} value={additional} onValueChange={setAdditional} replyPriority={REPLY_PRIORITY.extra} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" />
-                        <p className="text-xs text-muted-foreground">Essas informações são enviadas ao agente junto do plano aprovado, no prompt de implementação.</p>
-                    </motion.div>
-                )}
-                {composer && (
-                    <motion.div key="composer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-2 overflow-hidden">
-                        <label htmlFor="workbench-feedback" className="text-sm font-medium">
-                            {FEEDBACK[composer].title}
-                        </label>
-                        <ReplyTextarea id="workbench-feedback" autoFocus rows={4} value={text} onValueChange={setText} placeholder={FEEDBACK[composer].placeholder} />
-                        <div className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => setComposer(null)} disabled={pending}>
-                                <X className="h-3.5 w-3.5" aria-hidden /> Cancelar
-                            </Button>
-                            <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || text.trim().length < 3} onClick={() => run(composer, text.trim())}>
-                                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
-                                {FEEDBACK[composer].submit}
-                            </Button>
-                        </div>
-                    </motion.div>
-                )}
+                {!composer && !forking && canImplement && <ImplementInfoField key="implement-info" value={additional} onValueChange={setAdditional} attachments={implementFiles} />}
+                {composer && <FeedbackComposer key="composer" copy={FEEDBACK[composer]} value={text} onValueChange={setText} attachments={feedbackFiles} pending={pending} onCancel={() => setComposer(null)} onSubmit={(value) => run(composer, value, feedbackFiles)} />}
                 {liveChat && !composer && !forking && (
-                    <LiveMessageComposer key="live-message" id="workbench-live-message" value={liveText} onValueChange={setLiveText} pending={liveMessage.isPending} onSubmit={(value) => liveMessage.mutate(value, { onSuccess: () => setLiveText("") })} />
+                    <LiveMessageComposer
+                        key="live-message"
+                        id="workbench-live-message"
+                        value={liveText}
+                        onValueChange={setLiveText}
+                        attachments={liveFiles}
+                        pending={liveMessage.isPending}
+                        onSubmit={(value) =>
+                            liveMessage.mutate(
+                                { text: value, ...(liveFiles.fileIds.length ? { fileIds: liveFiles.fileIds } : {}) },
+                                {
+                                    onSuccess: () => {
+                                        setLiveText("")
+                                        liveFiles.clearSent()
+                                    },
+                                },
+                            )
+                        }
+                    />
                 )}
                 {forking && !composer && (
                     <ForkComposer
@@ -274,7 +274,7 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                             switch (action) {
                                 case "implement":
                                     return (
-                                        <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => run("implement", additional.trim() || undefined)}>
+                                        <Button key={action} type="button" data-ctrl-enter-submit size="sm" className={ACTION_BUTTON} disabled={pending || Boolean(implementFiles.blockReason)} title={implementFiles.blockReason ?? undefined} onClick={() => run("implement", additional.trim() || undefined, implementFiles)}>
                                             <Hammer className="h-3.5 w-3.5" aria-hidden /> Implementar
                                         </Button>
                                     )

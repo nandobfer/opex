@@ -70,7 +70,7 @@ describe('ActionBar', () => {
     expect(send.hasAttribute('disabled')).toBe(true)
     fireEvent.change(field, { target: { value: '  use o componente X  ' } })
     fireEvent.click(send)
-    expect(mocks.sendLive).toHaveBeenCalledWith('use o componente X', expect.anything())
+    expect(mocks.sendLive).toHaveBeenCalledWith({ text: 'use o componente X' }, expect.anything())
     expect(screen.getByRole('button', { name: /Parar/ })).toBeTruthy()
   })
 

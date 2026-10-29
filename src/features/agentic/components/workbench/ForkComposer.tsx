@@ -5,8 +5,9 @@ import { motion } from "framer-motion"
 import { GitFork, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { useOpenFork } from "../../hooks/useForks"
+import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
+import { AttachableTextarea } from "./AttachableTextarea"
 import type { ForkDto } from "../../types"
 
 /**
@@ -18,13 +19,15 @@ export function ForkComposer({ workbenchId, parent, onCancel, onOpened }: { work
     const [text, setText] = useState("")
     const [readOnly, setReadOnly] = useState(false)
     const open = useOpenFork(workbenchId)
+    const attachments = useFieldAttachments(`fork-new:${parent?.id ?? workbenchId}`)
+    const blocked = attachments.blockReason
     const pending = open.isPending
     return (
         <motion.div key="fork-composer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-2 overflow-hidden">
             <label htmlFor={fieldId} className="text-sm font-medium">
                 O que você quer perguntar ou investigar no fork?
             </label>
-            <ReplyTextarea id={fieldId} autoFocus rows={4} value={text} onValueChange={setText} placeholder="Ex.: por que o plano usa o serviço X? Investigue como o módulo Y trata Z…" />
+            <AttachableTextarea id={fieldId} autoFocus rows={4} value={text} onValueChange={setText} placeholder="Ex.: por que o plano usa o serviço X? Investigue como o módulo Y trata Z…" attachments={attachments} />
             <p className="text-xs text-muted-foreground">
                 {parent
                     ? `O fork copia a conversa do Fork ${parent.number} até aqui e responde separado, sem mudar a conversa dele.`
@@ -42,7 +45,20 @@ export function ForkComposer({ workbenchId, parent, onCancel, onOpened }: { work
                 <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onCancel} disabled={pending}>
                     <X className="h-3.5 w-3.5" aria-hidden /> Cancelar
                 </Button>
-                <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim()} onClick={() => open.mutate({ text: text.trim(), parentForkId: parent?.id, readOnly }, { onSuccess: onOpened })}>
+                <Button type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim() || Boolean(blocked)}
+                    title={blocked ?? undefined}
+                    onClick={() =>
+                        open.mutate(
+                            { text: text.trim(), parentForkId: parent?.id, readOnly, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}) },
+                            {
+                                onSuccess: (fork) => {
+                                    attachments.clearSent()
+                                    onOpened(fork)
+                                },
+                            },
+                        )
+                    }
+                >
                     {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <GitFork className="h-3.5 w-3.5" aria-hidden />}
                     Abrir fork
                 </Button>

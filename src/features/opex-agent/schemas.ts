@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { reserveChatFileSchema, type ReserveChatFileInput } from "@/lib/chat-files/kind"
 import {
     DEFAULT_OPEX_INSTRUCTIONS,
     DEFAULT_OPEX_TITLE_INSTRUCTIONS,
@@ -143,12 +144,8 @@ export const decideOpexActionSchema = z.object({
  * limites e devolve a URL assinada do PUT direto no storage. O tamanho é conferido de novo na
  * confirmação (a URL assinada não impõe limite).
  */
-export const reserveOpexFileSchema = z.object({
-    name: z.string().trim().min(1, "Informe o nome do arquivo").max(300, "Nome muito longo"),
-    size: z.number({ error: "Informe o tamanho do arquivo" }).int().min(1, "O arquivo está vazio"),
-    mediaType: z.string().trim().max(200).optional(),
-})
-export type ReserveOpexFileInput = z.infer<typeof reserveOpexFileSchema>
+export const reserveOpexFileSchema = reserveChatFileSchema
+export type ReserveOpexFileInput = ReserveChatFileInput
 
 /** Título e resumo devolvidos pelo subagente (cortados ao limite depois de validar). */
 export const opexTitleOutputSchema = z.object({

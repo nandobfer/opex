@@ -33,15 +33,15 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect((await call('revise-plan', { text: 'x' })).status).toBe(400)
     const res = await call('revise-plan', { text: 'Use o componente X' })
     expect(res.status).toBe(200)
-    expect(mocks.revisePlan).toHaveBeenCalledWith('w1', 'Use o componente X')
+    expect(mocks.revisePlan).toHaveBeenCalledWith('w1', 'Use o componente X', undefined)
   })
 
   it('implementar aceita texto opcional; ações sem corpo e ação desconhecida', async () => {
     mocks.implement.mockResolvedValue({ id: 'w1' })
     expect((await call('implement', {})).status).toBe(200)
-    expect(mocks.implement).toHaveBeenCalledWith('w1', undefined)
+    expect(mocks.implement).toHaveBeenCalledWith('w1', undefined, undefined)
     expect((await call('implement', { text: 'Use o componente X' })).status).toBe(200)
-    expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X')
+    expect(mocks.implement).toHaveBeenLastCalledWith('w1', 'Use o componente X', undefined)
     expect((await call('apagar-tudo')).status).toBe(404)
   })
 

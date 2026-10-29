@@ -74,14 +74,14 @@ describe('StartWorkbench', () => {
 
     fireEvent.change(screen.getByLabelText('Informações adicionais (opcional)'), { target: { value: 'Use o componente X' } })
     fireEvent.click(screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ }))
-    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: 'Use o componente X' })
+    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: 'Use o componente X' }, expect.anything())
   })
 
   it('sem informações adicionais envia o texto indefinido', () => {
     renderStart()
     expect(screen.queryByLabelText('Informações adicionais (opcional)')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ }))
-    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: undefined })
+    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: undefined }, expect.anything())
   })
 
   it('central desativada desabilita o botão com o motivo', () => {

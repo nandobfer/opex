@@ -14,7 +14,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
+import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
+import { AttachableTextarea } from "./AttachableTextarea"
 import { canOpenChildFork, forkActions, isOpenFork } from "../../fork-logic"
 import { useDiscardFork, useForkAction, useSetForkModel } from "../../hooks/useForks"
 import type { ForkDto } from "../../types"
@@ -34,6 +35,8 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
     const discard = useDiscardFork(workbenchId)
     const setModel = useSetForkModel(workbenchId, fork)
     const [text, setText] = useState("")
+    const attachments = useFieldAttachments(`fork:${fork.id}`)
+    const blocked = attachments.blockReason
     const [confirm, setConfirm] = useState<"interrupt" | "discard" | null>(null)
     const [forking, setForking] = useState(false)
     const actions = forkActions(fork.status, fork.runState, Boolean(fork.summary)).filter((action) => !["apply", "revise-summary", "cancel-integration"].includes(action))
@@ -42,7 +45,16 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
     // Chat durante a execução: com o agente respondendo no fork ativo, a mensagem entra no turno atual.
     const live = fork.liveChat && fork.runState === "running" && fork.status === "active"
     if (!actions.length && !canFork && !extra) return null
-    const send = (value = text.trim()) => mutation.mutate({ action: "send", text: value }, { onSuccess: () => setText("") })
+    const send = (value = text.trim()) =>
+        mutation.mutate(
+            { action: "send", text: value, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}) },
+            {
+                onSuccess: () => {
+                    setText("")
+                    attachments.clearSent()
+                },
+            },
+        )
 
     if (forking)
         return (
@@ -65,13 +77,13 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
     return (
         <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
             <AnimatePresence initial={false}>
-                {live && <LiveMessageComposer key="fork-live-message" id={`fork-live-message-${fork.id}`} value={text} onValueChange={setText} pending={mutation.isPending} onSubmit={send} />}
+                {live && <LiveMessageComposer key="fork-live-message" id={`fork-live-message-${fork.id}`} value={text} onValueChange={setText} attachments={attachments} pending={mutation.isPending} onSubmit={send} />}
                 {actions.includes("send") && (
                     <motion.div key="fork-message" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
                         <label htmlFor={`fork-message-${fork.id}`} className="sr-only">
                             Mensagem para o fork
                         </label>
-                        <ReplyTextarea id={`fork-message-${fork.id}`} rows={3} value={text} onValueChange={setText} placeholder="Continue a conversa do fork…" />
+                        <AttachableTextarea id={`fork-message-${fork.id}`} rows={3} value={text} onValueChange={setText} placeholder="Continue a conversa do fork…" attachments={attachments} />
                     </motion.div>
                 )}
                 {fork.status === "closed" && (
@@ -97,7 +109,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
                     switch (action) {
                         case "send":
                             return (
-                                <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim()} onClick={() => send()}>
+                                <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim() || Boolean(blocked)} title={blocked ?? undefined} onClick={() => send()}>
                                     {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />} Enviar
                                 </Button>
                             )

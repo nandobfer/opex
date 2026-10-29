@@ -1,5 +1,6 @@
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import type { ChatFileDto } from "@/lib/chat-files/kind"
 import type { ForkIntegrationTarget, ForkMode, ForkStatus, PendingTurnAction, RunState, WorkbenchModelRole, WorkbenchStage } from "./constants"
 import type { ReconnectInfoDto } from "./reconnect"
 import type { AgenticSettings, CentralConfig } from "./schemas"
@@ -264,7 +265,8 @@ export interface PrWatchScheduleDto {
 
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
-    | { type: "user"; text: string }
+    /** Mensagem do usuário; `files`: anexos enviados com ela (metadados e rota do app, nunca a URL assinada). */
+    | { type: "user"; text: string; files?: ChatFileDto[] }
     | { type: "text"; text: string }
     | { type: "reasoning" }
     | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }

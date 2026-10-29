@@ -2,7 +2,8 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowUp, Loader2, Paperclip, Square } from "lucide-react"
+import { ArrowUp, Loader2, Square } from "lucide-react"
+import { AttachButton, pasteFiles } from "@/components/chat-attachments/AttachButton"
 import type { OpexUploadItem } from "../../hooks/useOpexUploads"
 import { OpexAttachmentChips } from "./OpexAttachmentChips"
 import { Button } from "@/components/ui/button"
@@ -48,7 +49,6 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
         textRef.current = text
     }, [text])
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const inputRef = useRef<HTMLInputElement>(null)
 
     useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus(), setText: (value: string) => setText(value), getText: () => textRef.current }), [])
 
@@ -71,12 +71,7 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
     const canSend = !blocked && !running && !sending && !uploading && !failed && hasContent
     const sendHint = uploading ? "Aguarde o envio dos arquivos" : failed ? "Remova ou reenvie os arquivos com erro" : "Enviar (Enter)"
 
-    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-        const files = Array.from(event.clipboardData?.files ?? [])
-        if (!files.length || blocked) return
-        event.preventDefault()
-        attachments.onFiles(files)
-    }
+    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => pasteFiles(event, attachments.onFiles, blocked)
 
     const submit = () => {
         if (!canSend) return
@@ -95,31 +90,7 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
         <div className="border-t bg-background/60 px-3 pb-3 pt-2.5">
             <OpexAttachmentChips items={attachments.items} onRetry={attachments.onRetry} onRemove={attachments.onRemove} />
             <div className={cn("flex items-end gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/60", blocked && "opacity-70")}>
-                <input
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    hidden
-                    tabIndex={-1}
-                    aria-hidden
-                    onChange={(event) => {
-                        const files = Array.from(event.target.files ?? [])
-                        event.target.value = ""
-                        if (files.length) attachments.onFiles(files)
-                    }}
-                />
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-                    onClick={() => inputRef.current?.click()}
-                    disabled={blocked}
-                    aria-label="Anexar arquivos"
-                    title="Anexar arquivos (ou cole/arraste no chat)"
-                >
-                    <Paperclip className="h-4 w-4" aria-hidden />
-                </Button>
+                <AttachButton onFiles={attachments.onFiles} disabled={blocked} title="Anexar arquivos (ou cole/arraste no chat)" />
                 <ReplyTextarea
                     ref={textareaRef}
                     vim={false}

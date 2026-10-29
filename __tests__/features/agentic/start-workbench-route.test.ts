@@ -19,13 +19,13 @@ describe('POST /api/agentic/workbenches', () => {
     mocks.startWorkbench.mockResolvedValue({ id: 'w1' })
     const res = await call({ centralId: CENTRAL, taskId: TASK, text: 'Use o componente X' })
     expect(res.status).toBe(201)
-    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, 'Use o componente X')
+    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, 'Use o componente X', undefined)
   })
 
   it('sem informações adicionais chama com texto indefinido', async () => {
     mocks.startWorkbench.mockResolvedValue({ id: 'w1' })
     expect((await call({ centralId: CENTRAL, taskId: TASK })).status).toBe(201)
-    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, undefined)
+    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, undefined, undefined)
   })
 
   it('aceita informações adicionais sem limite artificial de caracteres', async () => {
@@ -33,6 +33,6 @@ describe('POST /api/agentic/workbenches', () => {
     const text = 'x'.repeat(20_000)
     const res = await call({ centralId: CENTRAL, taskId: TASK, text })
     expect(res.status).toBe(201)
-    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, text)
+    expect(mocks.startWorkbench).toHaveBeenCalledWith(CENTRAL, TASK, text, undefined)
   })
 })

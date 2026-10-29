@@ -15,7 +15,9 @@ function matchValue(actual: unknown, expected: unknown): boolean {
         const ops = expected as Record<string, unknown>
         const asTime = (value: unknown) => (value instanceof Date ? value.getTime() : new Date(value as string).getTime())
         const actualTime = actual == null ? null : asTime(actual)
-        if ("$in" in ops && !(ops.$in as unknown[]).includes(actual)) return false
+        // ObjectId x string: compara pelo texto (como o Mongo, que converte o id do filtro).
+        const same = (value: unknown) => value === actual || (value != null && actual != null && typeof value !== "boolean" && String(value) === String(actual))
+        if ("$in" in ops && !(ops.$in as unknown[]).some(same)) return false
         if ("$nin" in ops && (ops.$nin as unknown[]).includes(actual)) return false
         if ("$ne" in ops && (actual ?? null) === ops.$ne) return false
         if ("$exists" in ops) {
@@ -206,7 +208,9 @@ export function memoryModel() {
             return { upsertedCount: 0, modifiedCount: 0 }
         },
         updateMany: async (filter: Doc, update: Doc) => {
-            for (const doc of docs.filter((item) => matches(item, filter))) applyUpdate(doc, update, false)
+            const found = docs.filter((item) => matches(item, filter))
+            for (const doc of found) applyUpdate(doc, update, false)
+            return { matchedCount: found.length, modifiedCount: found.length }
         },
         findOneAndUpdate: (filter: Doc, update: Doc) =>
             query(() => {

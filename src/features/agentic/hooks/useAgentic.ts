@@ -142,7 +142,7 @@ function useSetWorkbench() {
 export function useStartWorkbench() {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (input: { centralId: string; taskId: string; text?: string }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
+        mutationFn: async (input: { centralId: string; taskId: string; text?: string; fileIds?: string[] }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
         onSuccess: (workbench) => {
             setWorkbench(workbench)
             toast.success("Mesa aberta: o planejamento começou")
@@ -169,8 +169,8 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
     const queryClient = useQueryClient()
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async ({ action, text }: { action: WorkbenchAction; text?: string }) =>
-            unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, text === undefined ? {} : { text })).data),
+        mutationFn: async ({ action, text, fileIds }: { action: WorkbenchAction; text?: string; fileIds?: string[] }) =>
+            unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench!.id}/actions/${action}`, { ...(text === undefined ? {} : { text }), ...(fileIds?.length ? { fileIds } : {}) })).data),
         onMutate: async ({ action }) => {
             // Reconectar e interromper não marcam "executando" otimista: quem decide é o estado remoto.
             // Nova prévia não é turno: a mesa vai otimista para a fila do build.
@@ -203,7 +203,7 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
 export function useSendWorkbenchLiveMessage(workbenchId: string) {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (text: string) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/messages`, { text })).data),
+        mutationFn: async ({ text, fileIds }: { text: string; fileIds?: string[] }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbenchId}/messages`, { text, ...(fileIds?.length ? { fileIds } : {}) })).data),
         onSuccess: (saved) => {
             setWorkbench(saved)
             toast.success("Mensagem enviada ao agente")

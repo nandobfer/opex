@@ -4,6 +4,7 @@ import { format } from "date-fns"
 import { AlertTriangle, Bot, CheckCircle2, CircleSlash, Info, ShieldQuestion, User, XCircle } from "lucide-react"
 import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
+import { MessageFiles } from "@/components/chat-attachments/MessageFiles"
 import { DECISION_LABELS, type TimelineItem } from "../../timeline"
 import { PrWatchItem } from "./PrWatchItem"
 import { ToolItem } from "./ToolItem"
@@ -44,9 +45,12 @@ export function TimelineItemView({ item, latestPrWatch = false }: { item: Timeli
             )
         case "user":
             return (
-                <div className="ml-auto flex max-w-[85%] items-start gap-2 rounded-lg bg-primary/15 px-3 py-2 text-sm">
-                    <User className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-                    <p className="whitespace-pre-wrap">{item.text}</p>
+                <div className="ml-auto flex max-w-[85%] flex-col items-end gap-1.5">
+                    <div className="flex items-start gap-2 rounded-lg bg-primary/15 px-3 py-2 text-sm">
+                        <User className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        <p className="whitespace-pre-wrap">{item.text}</p>
+                    </div>
+                    {item.files.length > 0 && <MessageFiles files={item.files} className="max-w-full" />}
                 </div>
             )
         case "text":

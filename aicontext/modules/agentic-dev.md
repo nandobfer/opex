@@ -871,18 +871,61 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 - Citar linha da saída com a mesa executando (sem campo de correção aberto) preenche o campo.
 - Fora do escopo: revisão automática de PR (sem tela de conversa) e o Agente Opex (outro motor).
 
+## Anexos nos campos da mesa
+
+- **Onde**: todos os campos de texto que mandam instruções ao agente da mesa aceitam arquivos, como
+  no chat do Agente Opex: **Informações adicionais** (abrir a mesa e Implementar), os campos de
+  feedback (**Solicitar correção** do plano/da prévia, **Descrever as mudanças** do PR, **Reabrir
+  mesa**), o **chat durante a execução** e os **forks** (abrir fork/fork de fork, mensagem e chat ao
+  vivo do fork). A orientação do Agente Adversário continua só texto.
+- **Na tela** (`AttachableTextarea`): clipe no canto do campo, colar (Ctrl+V de print; capturado no
+  contêiner, vale no modo Vim) ou arrastar (área de soltar animada). Os chips (kit compartilhado
+  `src/components/chat-attachments`) mostram miniatura/ícone, progresso, erro com "Tentar novamente"
+  e X (apaga a reserva). O botão de envio fica desabilitado com envio em andamento ou com erro
+  (dica no `title`). O texto continua obrigatório onde já era (correções, reabrir, fork); nas
+  Informações adicionais dá para mandar só arquivos. Cancelar o campo mantém os anexos na fila.
+- **Fila**: `WorkbenchUploadsProvider` (`hooks/useWorkbenchFiles.ts`, sobre a fila genérica
+  `src/hooks/useChatUploads.tsx`) fica no `WorkbenchPane`, separada por campo (`scope`: `start:<tarefa>`,
+  `implement:/feedback:/live:<mesa>`, `fork-new:<mesa|fork pai>`, `fork:<fork>`); trocar de aba, fork
+  ou etapa não perde envios. Os enviados saem da fila no sucesso da ação.
+- **Limites** (`features/agentic/files.ts`, iguais aos padrões do Opex): 10 arquivos por mensagem e
+  100 MB por arquivo.
+- **Envio** (duas fases, `src/lib/storage/staged-upload.ts`, compartilhado com o Opex):
+  `POST /api/agentic/files` reserva (`agentic_files`, sem dono) e assina o PUT para
+  `agentic/tmp/{id}/{nome}`; o navegador envia direto ao Storage S3; `POST /api/agentic/files/[id]/complete`
+  confere (HeadObject), promove para `agentic/files/{id}/{nome}` e marca pronto.
+- **Ações**: os corpos aceitam `fileIds` (até 10). O servidor confere (`loadClaimableFiles`: prontos,
+  sem dono ou já desta mesa) **antes** do turno e vincula (`claimAgenticFiles`: `workbenchId`, `forkId`)
+  quando a ação é aceita. Os ids vão no `TurnPlan`, em `pendingTurn.fileIds` (espera por vaga) e em
+  `lastPrompt.fileIds` (o **Tentar novamente** reenvia). Turnos encadeados (build) e a reconexão não
+  reenviam.
+- **Agente** (`promptFilesFor`, a cada turno que recebe a mensagem): imagens, PDFs e textos até
+  20 MB (soma até 50 MB) vão como anexo do prompt do OpenCode (`data:` URI em `files`, inclusive no
+  `delivery: "steer"` do chat ao vivo); **todos** entram numa seção "Arquivos anexados pelo
+  usuário" ao fim do prompt com link assinado do S3 (24 h, gerado a cada turno) e a instrução de
+  baixar com `curl` **fora do worktree** (`/tmp/opex-anexos/<tarefa>[/fork-N]`) e nunca commitar.
+  Melhor esforço: o que não baixa fica só com o link. O link exige o S3 acessível pela máquina do
+  OpenCode.
+- **Saída**: o evento `user` leva `files` (metadados + rota `/api/agentic/files/[id]`, nunca a URL
+  assinada); a mensagem mostra as miniaturas (ampliam) e os demais para baixar. A auditoria do chat
+  ao vivo registra `anexos` (nomes).
+- **Limpeza**: excluir a mesa (ou a central) apaga os anexos dela; descartar o fork apaga os do fork;
+  sem uso, a limpeza oportunista (`cleanupPendingAgenticFilesThrottled`, no máximo 1×/hora, disparada
+  pelas reservas) remove os sem dono há mais de 24 h (objeto primeiro, depois o registro).
+
 ## APIs (`src/app/api/agentic/`)
 
 | Rota | Uso |
 |---|---|
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
-| `POST /workbenches` `{centralId, taskId, text?}` | abre a mesa e inicia o plano; `text` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `POST /workbenches` `{centralId, taskId, text?, fileIds?}` | abre a mesa e inicia o plano; `text`/`fileIds` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `POST /files` `{name, size, mediaType?}`, `POST /files/[id]/complete`, `GET/DELETE /files/[id]` | anexos dos campos da mesa: reserva + URL do PUT no S3, confirmação, conteúdo (`?download=1`) e remoção de um anexo ainda não enviado (409 se já foi) |
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text}`); `implement` (`{text?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
-| `POST /workbenches/[id]/messages` `{text}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text, fileIds?}`); `implement` (`{text?, fileIds?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
+| `POST /workbenches/[id]/messages` `{text, fileIds?}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
@@ -915,7 +958,8 @@ aba Ambiente do formulário da central (`environment-section`, com o toggle do b
 central** (`workflow-flow-mode`) e a chave Gerar prévia da mesa (`workflow-preview-switch`), a migração que preserva o fluxo das tarefas antigas
 (`task-flow-backfill`) e **exclusão da mesa com limpeza do ambiente**
 (`workflow-deletion`) e a decisão da limpeza (`environment-cleanup`)), definir etapa/concluir sem PR
-(`workflow-manual-stage`, `SetStageDialog`, `logic` › manualStageBlock, `actions-route`),
+(`workflow-manual-stage`, `SetStageDialog`, `logic` › manualStageBlock, `actions-route`), os **anexos dos campos**
+(`files`, `files-server`, `workflow-attachments`, `workbench-attachments-ui`),
 build rodado pelo app e aba "Build (N)" — Local e GitHub Action, correções, falhas terminais e
 retomada (`workflow-build-logs`), registro do log (`build-log`, `build-logs`), execução no host
 (`preview-build`) e a tela (`BuildLogView`, `WorkbenchView`),

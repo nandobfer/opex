@@ -177,12 +177,13 @@ export function isAgentTurnLive(id: string): boolean {
 /**
  * Mensagem do usuário no meio da execução em andamento (`delivery: "steer"`): entra como contexto do
  * turno atual, sem interromper nem abrir turno novo. `false` = não há turno vivo com esse id (terminou
- * ou está trocando de etapa) e nada foi enviado.
+ * ou está trocando de etapa) e nada foi enviado. `files`: anexos da mensagem (`data:` URI), como no turno.
  */
-export async function steerAgentTurn(id: string, text: string): Promise<boolean> {
+export async function steerAgentTurn(id: string, text: string, files: readonly { uri: string; name: string }[] = []): Promise<boolean> {
     const live = liveTurns.get(id)
     if (!live || live.finished()) return false
-    await live.client.session.prompt({ sessionID: live.sessionId, text, delivery: "steer" })
+    const attached = files.length ? { files: files.map((file) => ({ uri: file.uri, name: file.name })) } : {}
+    await live.client.session.prompt({ sessionID: live.sessionId, text, delivery: "steer", ...attached })
     return true
 }
 
