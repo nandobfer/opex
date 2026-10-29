@@ -5,13 +5,16 @@ import { dirname } from "node:path"
 import { shellQuote } from "../preview-backup"
 import type { CentralConfig } from "../schemas"
 
-/** Estado fora do worktree: o runner retoma a mesma execução após reconexão. */
-export async function reserveRemotePreview(client: OpencodeClient, doc: IAgenticWorkbench, config: CentralConfig, repo: string, port: number, backup: { dir: string; path: string }, context: { branch: string; worktreePath: string; composeProject: string }) {
+/**
+ * Estado fora do worktree: o runner retoma a mesma execução após reconexão. `range` é a faixa efetiva
+ * de portas da central (a padrão global ou a própria — `resolveCentralPorts`).
+ */
+export async function reserveRemotePreview(client: OpencodeClient, doc: IAgenticWorkbench, config: CentralConfig, repo: string, port: number, range: { min: number; max: number }, backup: { dir: string; path: string }, context: { branch: string; worktreePath: string; composeProject: string }) {
     const attempt = randomId()
     const dumpRequired = config.environment.backupDatabase
     const statePath = `${backup.dir}/remote-preview-${attempt}.json`
     const currentPath = `${backup.dir}/remote-current`
-    const state = { attempt, currentPath, active: true, repo, port, min: config.environment.previewPortMin, max: config.environment.previewPortMax, workflow: config.environment.githubWorkflow, service: config.environment.previewService, composeFile: config.environment.composeFile || "docker-compose.yml", portEnvVar: config.environment.portEnvVar, previewHost: config.environment.previewHost, healthPath: config.environment.healthPath || "/", timeoutMinutes: config.environment.buildTimeoutMinutes, backupPath: backup.path, dumpRequired, ...context }
+    const state = { attempt, currentPath, active: true, repo, port, min: range.min, max: range.max, workflow: config.environment.githubWorkflow, service: config.environment.previewService, composeFile: config.environment.composeFile || "docker-compose.yml", portEnvVar: config.environment.portEnvVar, previewHost: config.environment.previewHost, healthPath: config.environment.healthPath || "/", timeoutMinutes: config.environment.buildTimeoutMinutes, backupPath: backup.path, dumpRequired, ...context }
     const write = `printf '%s' ${shellQuote(JSON.stringify(state))} > ${shellQuote(statePath)} && printf '%s' ${shellQuote(attempt)} > ${shellQuote(currentPath)}`
     const result = await runOpencodeShell(client, config.sessionDirectory, `mkdir -p ${shellQuote(backup.dir)} && flock ${shellQuote(`${backup.dir}/preview-publish.lock`)} sh -c ${shellQuote(write)}`, { timeoutMs: 150_000 })
     if (result.exitCode !== 0) throw new Error("Não foi possível reservar a tentativa da prévia remota")

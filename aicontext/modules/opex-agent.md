@@ -458,7 +458,9 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 - **Ferramentas de memórias** (`tools/memories.ts`, grupo "Memórias do agente"): o enum `agent` cobre
   todas as listas do catálogo — as três do Agente Opex **e a do Agente Adversário** (`adversarial`) —,
   então o Agente Opex lista, lê, cria, edita e exclui também as memórias do adversário (excluir é
-  `destructive`). Sem ferramentas para as decisões do bloqueio adversário na mesa.
+  `destructive`). Sem limite de quantidade por lista; a resposta traz a origem (`origin`, ex.:
+  "Mentor · OPE-12", quando gravada pelo Agente Mentor). Sem ferramentas para as decisões do bloqueio
+  adversário na mesa.
 - **Prompt de sistema estável**: instruções + dono do app (+ memórias). A data e a hora do turno vão como uma
   parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
   prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.

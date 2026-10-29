@@ -127,7 +127,9 @@ e opções na própria aba da página "Provedores de IA".
   configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
   DeepSeek) — ver `modules/opex-agent.md` —, a aba **Agente Adversário** (`agente-adversario`,
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
-  `modules/adversarial-agent.md` — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
+  `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
+  transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
+  "Agente Mentor" — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
@@ -137,6 +139,11 @@ e opções na própria aba da página "Provedores de IA".
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Refinar tarefa, Agente Revisor e Desenvolvimento agêntico são
   exclusivos do OpenCode.
+- **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
+  `ModelPickerField` (busca do modelo com `ModelOption` — nome, id e selo "grátis" —, modelo salvo
+  mostrado mesmo fora da lista e erro ao listar) e `VariantSelectField` ("Padrão do modelo" ou uma
+  variante). Usados por `ProviderModelCard`, `OpexModelCard` (Agente Opex) e `MentorModelFields`
+  (Agente Mentor): mudança no seletor de modelo se faz só ali.
 - Em `/integracoes/ia/jev`, o card **Consumo do JEV** mostra tokens totais, entrada/saída conhecidos,
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Abaixo dos cards há uma
   **tabela por recurso** (feature de IA que consumiu o JEV: "Tags de tarefas", "Estimar prazos"…)
@@ -371,13 +378,17 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa). Cada lista tem a
   aba onde aparece (`tab`: `agente-opex` ou `agente-adversario`; `aiAgentsOfTab`). Uma lista nova
   entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
-- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `createdBy`,
-  `updatedBy`, datas; índice `{ agentId, createdAt }`). Até **50** por lista (409 `MEMORY_LIMIT`);
-  texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
+- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `origin`
+  opcional, `createdBy`, `updatedBy`, datas; índice `{ agentId, createdAt }`). **Sem limite de
+  quantidade** por lista (o antigo limite de 50 e o 409 `MEMORY_LIMIT` saíram na OPE-92, como na
+  MT-27 do my-tasks); texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
   desconhecida dá 404 `AI_AGENT_NOT_FOUND`.
 - **Serviço** (`server/agent-memory-service.ts`): listar (mais recentes primeiro), ler, criar, editar
-  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias"); auditoria
-  `MemoriaAgente` (criar/atualizar/excluir, com o texto), log Pino e evento
+  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias") e aceitam
+  `{ origin, auditContext }` opcionais (`AgentMemoryWriteOptions`): a origem (`{ source, label }`, ex.:
+  `Mentor · OPE-12`, gravada pelo Agente Mentor) fica no documento e no DTO (`origin`), nunca no
+  texto, e o contexto vai para o `depois` da auditoria; auditoria
+  `MemoriaAgente` (criar/atualizar/excluir, com o texto e a origem), log Pino e evento
   `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
 - **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (módulo puro
   `src/features/ai/memories-prompt.ts`, compartilhado; ver `modules/opex-agent.md` e
@@ -385,7 +396,9 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 - **Tela**: aba Agente Opex › Memórias mostra só as listas da aba (`aiAgentsOfTab("agente-opex")`:
   três cards); aba Agente Adversário › Memórias mostra o card `adversarial` (sem modelo de resumo
   próprio: usa o Resumo de memórias global). Cards `AgentMemoriesCard` com `MemoryList` — linha com o
-  resumo de uma linha que expande o texto completo, autor e "há X tempo"; **Nova memória**/editar com
+  resumo de uma linha que expande o texto completo, autor e "há X tempo", o **selo da origem**
+  (`GraduationCap` + rótulo) quando houver e o **total de memórias** ao lado de **Nova memória**
+  (sempre habilitado); **Nova memória**/editar com
   `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
   (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
   confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi

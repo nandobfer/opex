@@ -10,6 +10,8 @@ export interface IAgentMemory {
     agentId: string
     texto: string
     resumo: string
+    /** Origem quando gravada por outro agente (ex.: `{ source: "mentor", label: "Mentor · OPE-12" }`). */
+    origin?: { source: string; label: string } | null
     createdBy: string
     updatedBy: string
     createdAt: Date
@@ -21,6 +23,7 @@ const AgentMemorySchema = new Schema<IAgentMemory>(
         agentId: { type: String, required: true },
         texto: { type: String, required: true },
         resumo: { type: String, required: true },
+        origin: { type: Schema.Types.Mixed, default: null },
         createdBy: { type: String, required: true },
         updatedBy: { type: String, required: true },
         createdAt: { type: Date, default: Date.now },

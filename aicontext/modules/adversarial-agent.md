@@ -113,7 +113,8 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
   **Centrais** (todas ou escolhidas).
 - **Contexto**: as chaves acima e a lista "Seções enviadas" (`plannedSectionTitles`).
 - **Memórias**: a lista `adversarial` do módulo de memórias dos agentes (`AgentMemoriesCard`,
-  coleção `agent_memories`, até 50; ver `ai.md`, "Memórias"). O texto passa pelo **Resumo de
+  coleção `agent_memories`, sem limite de quantidade; as gravadas pelo Agente Mentor mostram o selo
+  "Mentor · <tarefa>", campo `origin`; ver `ai.md`, "Memórias"). O texto passa pelo **Resumo de
   memórias** global (sem modelo próprio). O Agente Opex também lê e edita esta lista pelas
   ferramentas de memórias.
 - **Revisões**: as 50 rodadas mais recentes (tarefa, ciclo, rodada, nível, achados por severidade,
@@ -144,6 +145,80 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
 - Auditoria: `RevisaoAdversaria` (cada rodada, cada decisão e a rodada órfã), `MemoriaAgente` (memórias)
   e a decisão "seguiu mesmo assim" em `MesaDeTrabalho`.
 
+## Agente Mentor (OPE-92, portado da MT-27 do my-tasks)
+
+Transforma lições das mesas em memórias **genéricas** do Agente Adversário, sem passar pelo Agente
+Opex. Código em `mentor/` (puro) e `server/mentor/`; aba própria **Agente Mentor** em
+`/integracoes/ia?aba=agente-mentor` (logo depois de Agente Adversário, ícone `GraduationCap`),
+documento `{ feature: "adversarial-mentor" }` em `ai_feature_settings` (`mentorSettingsSchema`, o mesmo
+na tela e na API; `withMentorDefaults`).
+
+- **Gate** (`mentorSettingsFor`): Agente Adversário ativo + Mentor ativo + central no escopo do Mentor
+  (todas ou as escolhidas). Nunca lança: na dúvida, a mesa segue sem ele. Disponibilidade
+  (`mentorAvailability`): exige o Adversário ativo e os modelos do decisor e do redator conectados.
+- **Duas portas, um funil**: o Mentor **observa sozinho** os turnos configurados e o **agente
+  desenvolvedor pede** quando julga relevante. As duas passam por decisor → redator → sanitizador; se o
+  mesmo fim de cadeia tiver as duas, roda **uma** execução com tudo no contexto.
+  - **Mensagens do usuário** (padrão: todas ligadas), avaliadas ao fim da cadeia de turnos que a
+    mensagem originou: revisão do plano, informações ao implementar, correção da prévia, feedback do
+    PR (inclusive comentários do GitHub), reabertura, orientação do bloqueio adversário e chat ao vivo
+    (fim do turno em andamento). O mapa ação → tipo é `mentorTriggerOf`.
+  - **Turnos da IA** (padrão: desligados): planejamento e implementação/correções.
+  - **Pedidos do desenvolvedor** (padrão: ligado, etapa implementação): o pedido do turno ganha a
+    instrução `LESSON_INSTRUCTION` (`withLessonInstruction`); o agente termina a resposta com
+    ` ```opex-lesson {"problem","shouldHaveCaught","evidence?","why"} ``` ` (no máximo um, só lições
+    relevantes). A cerca própria não colide com os blocos ` ```json ` das etapas, e `takeLessonBlock`
+    retira o bloco antes de a mesa interpretar o turno (vale o último válido). Bloco inválido sem outro
+    gatilho vira execução `failed` com o motivo. Chave "Pedidos do desenvolvedor pulam o decisor"
+    (padrão: desligada).
+- **Sem limites de quantidade** (nem de memórias, nem por mesa/dia): o rigor do decisor e a fusão pelo
+  redator seguram o acúmulo.
+- **Decisor**: JEV (`askJevSystemOne`, pergunta `noul` `lesson`; a nota é a probabilidade) ou qualquer
+  provedor de texto (`streamAi`, JSON `{score, reason}`), origem de consumo
+  `adversarial-mentor-decision`. **Rigor da curadoria** (slider com painel "Grava / Não grava"):
+  Generoso 35%, Receptivo 50%, **Equilibrado 65%** (padrão), Seletivo 80%, Implacável 90%; abaixo do
+  limiar → `skipped`.
+- **Redator** (`streamAi`, origem `adversarial-mentor-writer`, instruções adicionais configuráveis):
+  recebe o caso e **todas as memórias** da lista `adversarial` e responde `create` / `update` (fundir
+  com o id de uma existente) / `skip`. A regra diz a classe de erro, como detectá-la numa revisão e que
+  teste ou pergunta a teria pegado; o caso é tratado como dado (nunca vira instrução nem é copiado).
+  `update` com id inexistente vira `create`.
+- **Sanitizador** (`sanitizeMemoryText`, determinístico): recusa código de tarefa, `#N`, URL, rota
+  (`/api/…`, `/app/…`), nome do projeto, do repositório e o título da tarefa (termos de 4+ caracteres),
+  a regra acima do tamanho máximo de uma memória (`MEMORY_TEXT_MAX`, 2.000 caracteres: "reescreva em
+  até 2.000"), e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
+  pontuação, `copiedExcerpt`) à mensagem do usuário, às respostas do agente ou aos pedidos do
+  desenvolvedor. Recusa → nova tentativa do redator com o motivo; recusada de novo → `discarded`.
+- **Gravação**: **Gravar direto** (padrão) ou **Sugerir e aguardar aprovação**. Gravar usa o serviço
+  de memórias dos agentes (`createAgentMemory`/`updateAgentMemory("adversarial", …)`; o Resumo de
+  memórias gera o título), com `origin { source: "mentor", label: "Mentor · <tarefa>" }` e a auditoria
+  `MemoriaAgente` com origem, execução, mesa e tarefa. A mesa recebe um aviso discreto (`notice` info)
+  na Saída da IA.
+- **Execução** (`adversarial_mentor_runs`, `server/mentor/models.ts`): fila em memória por mesa
+  (`globalThis.__opexMentorQueue`, uma por vez), status
+  `queued → running → skipped | discarded | suggested | created | updated | failed`, com nota/limiar,
+  motivos do decisor/redator/sanitizador, proposta, memória, erro, custo e duração. Execuções de antes
+  de um reinício viram `failed` ("interrompida") no primeiro uso. Auditoria `MentorAgenteAdversario`
+  (EXECUTAR em cada fim; APROVAR/DEVOLVER nas decisões) e evento `adversarial-mentor-updated`
+  (`{ runId }`) em `private-app`.
+- **Mesa** (`agentic/server/workflow.ts`): `action` em `LaunchOptions` (repassada por `launchOrQueue` e
+  `startPendingTurn`), `mentorPrepareTurn`/`mentorTakeLesson` em volta do `runStageAgent` em
+  `executeTurns`, `notifyMentor` (fim da cadeia, no `finally` do `launchTurn`; nunca na reconexão nem
+  na limpeza) e `mentorRecordLiveMessage` em `sendLiveMessage`. A mesa nunca espera o Mentor e uma
+  falha dele não muda a etapa.
+- **Aba**: seções **Geral** (ativação e disponibilidade, Gatilhos, Decisor e rigor, Redator e gravação
+  com tempo máximo por chamada de 15–600 s, Centrais — `ScopeCard` reutilizado com `id`,
+  `description` e `listLabel`), **Contexto** (mensagem do usuário, resposta do agente, pedido do
+  desenvolvedor, dados básicos da tarefa e último veredito do adversário ligados; plano aprovado
+  desligado) e **Execuções** (100 mais recentes; **Ver/Decidir** abre o detalhe e, numa sugestão,
+  Aprovar com texto editável ou Descartar com confirmação). Provedor/modelo/variante usam os campos
+  compartilhados `ModelPickerField`/`VariantSelectField` (`src/features/ai/components/ModelFields.tsx`).
+- **Decisão da sugestão** atômica: aprovar/descartar reivindica a execução (`suggested` → `running`
+  num `findOneAndUpdate` filtrado pelo status); a decisão concorrente (duplo clique, outra aba) recebe
+  409 `MENTOR_RUN_NOT_SUGGESTED`, e uma falha ao gravar devolve a execução a `suggested`.
+- **Chat ao vivo** de uma cadeia que não vai ao Mentor (reconexão, limpeza) é descartado
+  (`mentorDiscardLiveMessages`), para não entrar na avaliação da próxima cadeia.
+
 ## APIs (só o dono; sem OpenAPI)
 
 | Rota | Uso |
@@ -154,12 +229,18 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
 | `GET /api/adversarial/workbenches/[id]/reviews` | Rodadas da mesa, da mais antiga para a mais nova, com detalhes (aba "Adversário") |
 | `POST /api/agentic/workbenches/[id]/actions/adversarial-fix` `{ text?, excluded? }` | Corrigir |
 | `POST …/actions/adversarial-skip`, `…/actions/adversarial-rerun` | Seguir mesmo assim / Revisar de novo |
-| `/api/ai/agents/adversarial/memories*` | Memórias (rotas do módulo de memórias dos agentes) |
+| `/api/ai/agents/adversarial/memories*` | Memórias (rotas do módulo de memórias dos agentes; sem limite de quantidade) |
+| `GET/PUT /api/ai/features/adversarial-mentor` | Configuração do Agente Mentor |
+| `GET /api/adversarial/mentor/runs` | As 100 execuções mais recentes do Mentor (marca as órfãs como falhas) |
+| `POST /api/adversarial/mentor/runs/[id]/approve` `{ text? }`, `POST …/discard` | Aprovar (texto editável) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
 
 ## Dados
 
 - Coleção `adversarial_reviews` (índices no primeiro uso, `adversarialDb`).
-- Documento `{ feature: "adversarial-agent" }` em `ai_feature_settings`.
+- Documentos `{ feature: "adversarial-agent" }` e `{ feature: "adversarial-mentor" }` em
+  `ai_feature_settings`; coleção `adversarial_mentor_runs` (`mentorDb`).
+- Consumo `adversarial-agent`/`adversarial-mentor-decision`/`adversarial-mentor-writer` (o JEV registra
+  o uso com a feature `adversarial-mentor-decision`).
 - Memórias em `agent_memories` com `agentId: "adversarial"`.
 - Mesas com `stage` `adversarial_review`/`adversarial_blocked` e `pendingTurn.action`
   `adversarial-*`; eventos `adversarial-verdict` em `agentic_events`.
@@ -170,7 +251,12 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
   `permission-policy.ts`, `context.ts`, `prompt.ts`.
 - `server/`: `models.ts`, `settings.ts` (inclui `adversaryApplies`), `reviews.ts`, `review.ts`,
   `attachments.ts`, `workflow-hook.ts` (único ponto que o fluxo da mesa importa, import dinâmico e
-  memorizado).
+  memorizado; também reexporta os pontos do Mentor).
+- Agente Mentor: `mentor/` (puros: `constants.ts`, `schemas.ts`, `types.ts`, `lesson-block.ts`,
+  `sanitize.ts`, `decision.ts`, `prompt.ts`), `server/mentor/` (`models.ts`, `settings.ts`, `queue.ts`,
+  `run.ts`, `hooks.ts`), `hooks/useMentor.ts` e `components/mentor/` (`MentorAgentTab`,
+  `MentorTriggersCard`, `MentorDeciderCard`, `MentorWriterCard`, `MentorModelFields`, `MentorCheckbox`,
+  `MentorContextSection`, `MentorRunsSection`, `MentorRunDialog`, `MentorRunBadge`).
 - `hooks/useAdversarial.ts`; `components/` (`FindingList`, `ReviewBadges`, `ReviewDetailDialog`,
   `ReviewFindingsBody`, `VerdictCard`, `settings/*`, `workbench/*`).
 - `src/lib/ai/opencode-run.ts`: campo opcional `files` (`{ uri, name }[]`) em `TurnRequest`.
@@ -178,7 +264,10 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
 ## Testes
 
 `__tests__/features/adversarial-agent/` (`verdict`, `rounds`, `permission-policy`, `context-prompt`,
-`review`, `reviews`, `workflow`, `adversarial-ui`, `rounds-tab`) e casos em
+`review`, `reviews`, `workflow` (inclui "Agente Mentor no fluxo da mesa"), `adversarial-ui`,
+`rounds-tab`, `mentor-sanitize`, `mentor-decision`, `mentor-lesson-block`, `mentor-prompt`,
+`mentor-run`, `mentor-hooks`, `mentor-ui`, `mentor-tab`) e casos em
 `__tests__/features/agentic/{actions-route,dev-center-filters,logic,stage-steps,timeline,ActionBar,WorkbenchView}`
 e `__tests__/features/ai/memories.test.ts`. `__tests__/setup.ts` deixa o adversário de fora por
-padrão (mock de `server/workflow-hook` com `adversaryApplies` → `false`).
+padrão (mock de `server/workflow-hook` com `adversaryApplies` → `false` e o Mentor inativo:
+`mentorPrepareTurn`/`mentorTakeLesson` devolvem o texto igual).

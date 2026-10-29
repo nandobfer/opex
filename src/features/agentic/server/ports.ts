@@ -4,7 +4,8 @@ import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { pickPreviewPort } from "../logic"
 
 /**
- * Portas das prévias: faixa configurada na central (padrão 4001–4098), reservadas no banco
+ * Portas das prévias: faixa efetiva da central (a padrão global de "Configurações Padrão" ou a
+ * própria, quando personalizada), reservadas no banco
  * (índice único em `port`) e conferidas no host — uma porta ocupada por outro processo é pulada.
  */
 

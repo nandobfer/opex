@@ -10,7 +10,7 @@ import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, type WorkbenchAction } from "../logic"
+import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildFixPrompt,
@@ -150,6 +150,13 @@ interface Loaded {
     repo: { repo: string; repoUrl: string } | null
 }
 
+/** Faixa efetiva de portas: só lê a configuração geral quando a central herda a faixa padrão. */
+async function effectivePorts(env: CentralConfig["environment"]): Promise<{ min: number; max: number }> {
+    if (!inheritsGlobalPorts(env)) return resolveCentralPorts(undefined, env)
+    const { settings } = await loadAgenticSettings()
+    return resolveCentralPorts(settings.ports, env)
+}
+
 async function loadAll(id: string): Promise<Loaded> {
     const doc = await loadWorkbench(id)
     const { doc: central, config } = await loadCentral(doc.centralId)
@@ -237,7 +244,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
     const id = String(doc._id)
     const stage = asStage(doc.stage)
     if (!needsSlotToRun(stage)) {
-        await launchTurn(loaded, turn, options)
+        await launchTurn(loaded, turn, { ...options, action })
         return true
     }
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está trabalhando nesta mesa", "WORKBENCH_BUSY")
@@ -250,7 +257,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
         }
         const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
         if (!othersWaiting && occupied < config.maxConcurrent) {
-            await launchTurn(flags.reopen ? await applyReopen(loaded) : loaded, turn, options)
+            await launchTurn(flags.reopen ? await applyReopen(loaded) : loaded, turn, { ...options, action })
             return true
         }
         const pendingTurn: IPendingTurn = {
@@ -309,6 +316,7 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
             ready,
             { stage: asStage(pending.stage), text: pending.text, ...(pending.fileIds?.length ? { fileIds: pending.fileIds } : {}) },
             {
+                action: pending.action as PendingTurnAction,
                 ...(pending.userText ? { userText: pending.userText } : {}),
                 ...(pending.feedback !== null ? { feedback: pending.feedback } : {}),
                 ...(pending.extraSet ? { extraSet: pending.extraSet } : {}),
@@ -570,6 +578,37 @@ interface LaunchOptions {
     extraSet?: Record<string, unknown>
     /** Ignora o limite de mesas abertas (a limpeza da exclusão nunca espera uma vaga). */
     bypassLimit?: boolean
+    /** Ação do usuário (ou do PR) que originou o turno (gatilho do Agente Mentor). */
+    action?: PendingTurnAction
+}
+
+/** Turno bem-sucedido da cadeia, com o bloco de lição do desenvolvedor já retirado (Agente Mentor). */
+type MentorTurns = Parameters<Awaited<ReturnType<typeof adversaryModule>>["mentorAfterTurns"]>[0]["turns"]
+
+/** Agente Mentor: fim da cadeia de turnos → avalia em segundo plano (nunca bloqueia a mesa). */
+async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns): Promise<void> {
+    if (turn.attach || turn.stage === "finishing") {
+        // Sem avaliação nesta cadeia: as mensagens ao vivo dela não podem ficar para a próxima.
+        const adversary = await adversaryModule()
+        adversary.mentorDiscardLiveMessages(id)
+        return
+    }
+    const loaded = await loadAll(id)
+    const { doc } = loaded
+    await (
+        await adversaryModule()
+    ).mentorAfterTurns({
+        workbenchId: id,
+        centralId: doc.centralId,
+        taskId: doc.taskId,
+        taskCode: doc.taskCode,
+        taskTitle: doc.taskTitle,
+        projectName: loaded.projectName,
+        repo: loaded.repo?.repo ?? null,
+        approvedPlan: doc.plans?.at(-1)?.text ?? null,
+        origin: { action: options.action ?? null, userText: options.userText ?? null, feedback: options.feedback ?? null },
+        turns,
+    })
 }
 
 /** Inicia um turno em segundo plano (as rotas respondem na hora; a saída chega pelo stream). */
@@ -584,6 +623,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     const shown = turn.attach ? [] : await fileDtosFor(turn.fileIds)
     if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
+    const mentorTurns: MentorTurns = []
     markWorkbenchActive(id, controller)
     try {
         await update(loaded.doc, {
@@ -601,17 +641,18 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
         clearWorkbenchActive(id, controller)
         throw error
     }
-    void executeTurns(id, turn, controller)
+    void executeTurns(id, turn, controller, mentorTurns)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
         .finally(() => {
             clearWorkbenchActive(id, controller)
             // Terminou um build (liberou a vaga) ou uma implementação/revisão adversária (entrou na fila): avalia a fila do build.
             if (turn.stage === "building" || turn.stage === "implementing" || turn.stage === "adversarial_review") pumpBuildQueue()
+            void notifyMentor(id, turn, options, mentorTurns).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
         })
 }
 
 /** Executa o turno e os encadeados (implementação → build), mantendo a mesa ativa entre eles. */
-async function executeTurns(id: string, first: TurnPlan, controller: AbortController): Promise<void> {
+async function executeTurns(id: string, first: TurnPlan, controller: AbortController, mentorTurns: MentorTurns = []): Promise<void> {
     let turn: TurnPlan | null = first
     while (turn) {
         const loaded = await loadAll(id)
@@ -650,7 +691,14 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
             const text = withAttachmentsSection(withNotes, attachments.section)
-            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
+            // Agente Mentor: pode pedir ao agente um bloco de lição no fim da resposta.
+            const adversary = await adversaryModule()
+            const stageText = turn.attach ? text : await adversary.mentorPrepareTurn({ centralId: loaded.doc.centralId, stage: turn.stage, text })
+            const raw = await runStageAgent(client, loaded, { stage: turn.stage, text: stageText, attach: turn.attach, files: attachments.files }, sessionId, controller)
+            // O bloco de lição sai da resposta antes de a mesa interpretar o turno (plano, JSON da etapa).
+            const taken = raw.outcome === "succeeded" ? adversary.mentorTakeLesson(raw.text) : null
+            const result = taken ? { ...raw, text: taken.text } : raw
+            if (taken) mentorTurns.push({ stage: turn.stage, text: taken.text, lesson: taken.lesson, lessonError: taken.error })
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
@@ -797,7 +845,7 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
                 if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
                 if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
                 await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
-                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, fresh.doc.previewBackup, ctx)
+                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
                 await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
             }
             step = null
@@ -1240,7 +1288,8 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
               forceServer: method !== "local",
           })
         : null
-    const port = await allocatePreviewPort(id, env.previewHost, { min: env.previewPortMin, max: env.previewPortMax }, target?.portCheck)
+    const range = await effectivePorts(env)
+    const port = await allocatePreviewPort(id, env.previewHost, range, target?.portCheck)
     // No PC, o override do compose leva as CAs do PC aos containers (redes com inspeção TLS).
     const attached = target ? await target.attach(port) : null
     // Política efetiva desta tentativa (OPE-72): desligar o backup na central não altera o turno em andamento.
@@ -1261,7 +1310,7 @@ async function prepareBuildTurn(loaded: Loaded, method: "local" | "github"): Pro
     if (method === "github") {
         if (!loaded.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
         if (!backup) throw new Error("Não foi possível reservar a pasta da prévia remota")
-        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, backup, ctx)
+        const remote = await reserveRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config, loaded.repo.repo, port, range, backup, ctx)
         await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "previewBuild.port": port } })
         return { stage: "building", text: remotePreviewCommands(ctx, remote).command, build: { method, port, local: false, docker: null } }
     }
@@ -1691,6 +1740,9 @@ export async function sendLiveMessage(id: string, text: string, fileIds?: string
     const files = await loadClaimableFiles(fileIds, id)
     const attachments = files.length ? await liveAttachments(files, agenticDownloadDir(doc.taskCode)) : undefined
     await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text, attachments)
+    // Agente Mentor: avalia a mensagem ao fim do turno em andamento.
+    const adversary = await adversaryModule()
+    adversary.mentorRecordLiveMessage(id, text)
     await claimAgenticFiles(files, { workbenchId: id })
     centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)

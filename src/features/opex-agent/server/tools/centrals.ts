@@ -97,7 +97,7 @@ export const centralTools = [
         group: "centrals",
         label: "Desenvolvimento agêntico",
         risk: "read",
-        description: "Configuração geral do desenvolvimento agêntico (ativo, agente/modelo/variante de cada papel e as colunas globais de fila e movimentação).",
+        description: "Configuração geral do desenvolvimento agêntico: ativo, agente/modelo/variante de cada papel (planning, implementation, build, pr, fork) e os padrões herdados pelas centrais (columns: fila e movimentação; ci: correção do CI; liveChat; ports: faixa de portas das prévias previewPortMin/previewPortMax).",
         input: z.object({}),
         execute: async () => getAgenticSettings(),
     }),

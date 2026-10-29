@@ -4,19 +4,15 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
-import { FieldTrigger } from "@/components/ui/field-trigger"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { SearchPicker } from "@/components/ui/search-picker"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { apiErrorMessage } from "@/lib/api"
-import { getAiProvider, type AiModelDto, type AiProviderStatusDto } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import { isOpexProviderId, OPEX_PROVIDER_IDS, type OpexProviderId } from "../../constants"
 import type { OpexAgentSettings } from "../../schemas"
 
-const DEFAULT_OPTION = "__default__"
 const SAME_AS_MAIN = "__same__"
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))
 
@@ -80,53 +76,22 @@ export function OpexModelCard({ form, target, providers, title, description }: O
                     {provider && (
                         <motion.div key="model" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                             <div className={FORM_GRID_WIDE}>
-                                <Field id={id("model")} label="Modelo" error={errors?.model?.message ?? (models.isError ? apiErrorMessage(models.error, "Não foi possível listar os modelos") : undefined)}>
-                                    <SearchPicker<AiModelDto>
-                                        trigger={<FieldTrigger id={id("model")} placeholder="Escolha o modelo" invalid={Boolean(errors?.model)} value={model ? model.name : modelId || undefined} />}
-                                        items={models.data ?? []}
-                                        getKey={(item) => item.id}
-                                        searchKeys={["name", "id", "group"]}
-                                        renderItem={(item) => (
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate font-medium">{item.name}</span>
-                                                <span className="block truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>
-                                            </span>
-                                        )}
-                                        onPick={(item) => {
-                                            form.setValue(`${target}.model`, item.id, { shouldDirty: true, shouldValidate: true })
-                                            form.setValue(`${target}.variant`, null, { shouldDirty: true })
-                                        }}
-                                        loading={models.isLoading}
-                                        matchTriggerWidth
-                                        placeholder="Buscar modelo"
-                                        searchLabel="Buscar modelo"
-                                        listLabel="Modelos"
-                                        emptyText={models.isError ? "Não foi possível listar os modelos" : "Nenhum modelo disponível"}
-                                        emptySearchText="Nenhum modelo encontrado"
-                                    />
-                                </Field>
+                                <ModelPickerField
+                                    id={id("model")}
+                                    models={models}
+                                    modelId={modelId}
+                                    error={errors?.model?.message}
+                                    onPick={(item) => {
+                                        form.setValue(`${target}.model`, item.id, { shouldDirty: true, shouldValidate: true })
+                                        form.setValue(`${target}.variant`, null, { shouldDirty: true })
+                                    }}
+                                />
                                 {def && model && model.variants.length > 0 && (
-                                    <Field id={id("variant")} label={def.variantLabel}>
-                                        <Controller
-                                            control={form.control}
-                                            name={`${target}.variant`}
-                                            render={({ field }) => (
-                                                <Select value={field.value ?? DEFAULT_OPTION} onValueChange={(value) => field.onChange(value === DEFAULT_OPTION ? null : value)}>
-                                                    <SelectTrigger id={id("variant")} className="w-full">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value={DEFAULT_OPTION}>Padrão do modelo</SelectItem>
-                                                        {model.variants.map((variant) => (
-                                                            <SelectItem key={variant} value={variant}>
-                                                                {variant}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            )}
-                                        />
-                                    </Field>
+                                    <Controller
+                                        control={form.control}
+                                        name={`${target}.variant`}
+                                        render={({ field }) => <VariantSelectField id={id("variant")} label={def.variantLabel} variants={model.variants} value={field.value ?? null} onChange={field.onChange} />}
+                                    />
                                 )}
                                 {target === "main" && def?.supportsSampling && (
                                     <>

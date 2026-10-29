@@ -16,15 +16,17 @@ interface ToggleCardProps {
     /** Textos da situação ao lado do interruptor. Padrão: "Ativo"/"Inativo". */
     onLabel?: string
     offLabel?: string
+    /** Sem borda/fundo/espaçamento próprios: para o interruptor que já está dentro de um `Card` (nunca card dentro de card). */
+    bare?: boolean
 }
 
 /**
  * Linha compartilhada dos cards de liga/desliga (e das listas de ferramentas): rótulo + descrição à
  * esquerda e o controle à direita. Use quando o controle não é um `Switch` (ex.: checkbox de grupo).
  */
-export function ToggleRow({ id, label, description, disabled, right }: { id: string; label: ReactNode; description: ReactNode; disabled?: boolean; right: ReactNode }) {
+export function ToggleRow({ id, label, description, disabled, right, bare = false }: { id: string; label: ReactNode; description: ReactNode; disabled?: boolean; right: ReactNode; bare?: boolean }) {
     return (
-        <div className={cn("flex items-center justify-between gap-4 rounded-xl border bg-muted/40 p-3", disabled && "opacity-80")}>
+        <div data-testid={`${id}-row`} className={cn("flex items-center justify-between gap-4", !bare && "rounded-xl border bg-muted/40 p-3", disabled && "opacity-80")}>
             <div className="min-w-0 space-y-0.5">
                 <Label htmlFor={id} className={cn("text-sm font-bold", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
                     {label}
@@ -41,9 +43,10 @@ export function ToggleRow({ id, label, description, disabled, right }: { id: str
  * card "Status do Usuário" do formulário de usuários do Smart Desk. Use para opções liga/desliga
  * em formulários (ex.: "Produto ativo", "Oferta ativa").
  */
-export function ToggleCard({ id, checked, onCheckedChange, label, description, disabled, onLabel = "Ativo", offLabel = "Inativo" }: ToggleCardProps) {
+export function ToggleCard({ id, checked, onCheckedChange, label, description, disabled, onLabel = "Ativo", offLabel = "Inativo", bare = false }: ToggleCardProps) {
     return (
         <ToggleRow
+            bare={bare}
             id={id}
             label={label}
             description={description}
@@ -60,7 +63,7 @@ export function ToggleCard({ id, checked, onCheckedChange, label, description, d
     )
 }
 
-interface FormToggleCardProps<T extends FieldValues> extends Pick<ToggleCardProps, "label" | "description" | "disabled" | "onLabel" | "offLabel"> {
+interface FormToggleCardProps<T extends FieldValues> extends Pick<ToggleCardProps, "label" | "description" | "disabled" | "onLabel" | "offLabel" | "bare"> {
     name: Path<T>
     control: Control<T>
     id?: string

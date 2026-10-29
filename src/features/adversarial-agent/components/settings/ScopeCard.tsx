@@ -9,8 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import type { AdversarialSettings } from "../../schemas"
 
-/** Centrais em que as mesas passam pelo adversário: todas ou as escolhidas. */
-export function ScopeCard({ form }: { form: UseFormReturn<AdversarialSettings> }) {
+const DEFAULT_DESCRIPTION = "Ao fim de cada implementação nas centrais escolhidas, o adversário revisa antes da prévia (ou do Pull Request, no fluxo PR automático)."
+
+/**
+ * Centrais em que as mesas passam pelo adversário (ou pelo Agente Mentor): todas ou as escolhidas.
+ * Só usa os campos `scope.*` do formulário (o Mentor tem a mesma forma).
+ */
+export function ScopeCard({ form, id = "adversarial", description = DEFAULT_DESCRIPTION, listLabel = "Centrais com o agente adversário" }: { form: UseFormReturn<AdversarialSettings>; id?: string; description?: string; listLabel?: string }) {
     const all = useWatch({ control: form.control, name: "scope.all" })
     const centrals = useCentrals()
     const error = form.formState.errors.scope?.centralIds?.message
@@ -18,7 +23,7 @@ export function ScopeCard({ form }: { form: UseFormReturn<AdversarialSettings> }
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Centrais</CardTitle>
-                <CardDescription>Ao fim de cada implementação nas centrais escolhidas, o adversário revisa antes da prévia (ou do Pull Request, no fluxo PR automático).</CardDescription>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <Controller
@@ -26,7 +31,7 @@ export function ScopeCard({ form }: { form: UseFormReturn<AdversarialSettings> }
                     name="scope.all"
                     render={({ field }) => (
                         <OptionTabs<"all" | "selected">
-                            id="adversarial-scope"
+                            id={`${id}-scope`}
                             options={[
                                 { value: "all", label: "Todas as centrais" },
                                 { value: "selected", label: "Centrais escolhidas" },
@@ -49,14 +54,14 @@ export function ScopeCard({ form }: { form: UseFormReturn<AdversarialSettings> }
                                     control={form.control}
                                     name="scope.centralIds"
                                     render={({ field }) => (
-                                        <ul className="grid gap-2 sm:grid-cols-2" aria-label="Centrais com o agente adversário">
+                                        <ul className="grid gap-2 sm:grid-cols-2" aria-label={listLabel}>
                                             {(centrals.data ?? []).map((central) => {
                                                 const checked = field.value.includes(central.id)
-                                                const id = `adversarial-central-${central.id}`
+                                                const checkboxId = `${id}-central-${central.id}`
                                                 return (
                                                     <li key={central.id} className="flex items-center gap-2 rounded-md border px-3 py-2">
-                                                        <Checkbox id={id} checked={checked} onCheckedChange={(next) => field.onChange(next ? [...field.value, central.id] : field.value.filter((item) => item !== central.id))} />
-                                                        <label htmlFor={id} className="min-w-0 flex-1 truncate text-sm">
+                                                        <Checkbox id={checkboxId} checked={checked} onCheckedChange={(next) => field.onChange(next ? [...field.value, central.id] : field.value.filter((item) => item !== central.id))} />
+                                                        <label htmlFor={checkboxId} className="min-w-0 flex-1 truncate text-sm">
                                                             {central.projectName}
                                                             {central.repo && <span className="ml-1.5 font-mono text-xs text-muted-foreground">{central.repo}</span>}
                                                         </label>

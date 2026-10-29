@@ -8,15 +8,17 @@ import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { AnimatePresence, motion } from "framer-motion"
-import { PREVIEW_PORT_MAX, PREVIEW_PORT_MIN } from "../../constants"
+import { useAgenticSettings } from "../../hooks/useAgentic"
+import { resolveCentralPorts } from "../../logic"
 import { DockerBuilderField } from "./DockerBuilderField"
+import { PreviewPortsField } from "./PreviewPortsField"
 import { LocalDockerCentralCard } from "@/features/local-docker/components/LocalDockerCentralCard"
 import { useBuilderMachineActive } from "@/features/local-docker/hooks/useLocalDocker"
 import type { CentralForm } from "./form"
 
 /**
  * Aba Ambiente: o **fluxo padrão da mesa** (publicar a prévia ou abrir o PR direto — OPE-79) e a
- * prévia em si (docker compose, faixa de portas, variável da porta, endereço, teste de saúde e
+ * prévia em si (docker compose, faixa de portas — herdada do padrão global ou personalizada —, variável da porta, endereço, teste de saúde e
  * backup do banco). Sem publicar a prévia, os ajustes ficam guardados e só o switch aparece. Com a
  * integração Builder Machine ativa e a prévia Local, o card da Builder Machine escolhe se a central usa o PC.
  */
@@ -25,6 +27,8 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
     const env = useWatch({ control: form.control, name: "environment" })
     const publishPreview = env.publishPreview !== false
     const builderMachine = useBuilderMachineActive() && env.previewMethod !== "github"
+    const globalPorts = useAgenticSettings().data?.settings.ports
+    const ports = resolveCentralPorts(globalPorts, env)
     return (
         <>
             <Card>
@@ -34,6 +38,7 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                 </CardHeader>
                 <CardContent>
                     <FormToggleCard
+                        bare
                         control={form.control}
                         name="environment.publishPreview"
                         id="central-env-publish"
@@ -46,13 +51,16 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                         {publishPreview ? (
                             <motion.div key="preview-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                                 <p className="mt-4 text-sm text-muted-foreground">
-                                    Cada mesa recebe uma porta livre entre {env.previewPortMin || PREVIEW_PORT_MIN} e {env.previewPortMax || PREVIEW_PORT_MAX}. {env.previewMethod === "github" ? "O GitHub constrói a imagem e o agente publica sem build local." : "O agente constrói no worktree."}{" "}
+                                    Cada mesa recebe uma porta livre entre {ports.min || "?"} e {ports.max || "?"}. {env.previewMethod === "github" ? "O GitHub constrói a imagem e o agente publica sem build local." : "O agente constrói no worktree."}{" "}
                                     <code className="font-mono text-foreground">
                                         {env.previewMethod !== "github" && env.dockerBuilder ? `BUILDX_BUILDER=${env.dockerBuilder} ` : ""}
-                                        {env.portEnvVar || "PORT"}={env.previewPortMin || PREVIEW_PORT_MIN} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}
+                                        {env.portEnvVar || "PORT"}={ports.min || "?"} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}
                                     </code>{" "}
                                     no worktree.
                                 </p>
+                                <div className="mt-4">
+                                    <PreviewPortsField form={form} global={globalPorts} />
+                                </div>
                                 <div className={`mt-4 ${FORM_GRID_WIDE}`}>
                                     <Field id="central-preview-method" label="Construir prévia">
                                         <OptionTabs id="central-preview-method" aria-label="Método de construção da prévia" value={env.previewMethod ?? "local"} options={[{ value: "local", label: "Local" }, { value: "github", label: "GitHub Action" }]} onChange={(value) => form.setValue("environment.previewMethod", value, { shouldDirty: true, shouldValidate: true })} />
@@ -80,12 +88,6 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                                     </Field>
                                     <Field id="central-env-timeout" label="Tempo máximo do build (minutos)" error={errors?.buildTimeoutMinutes?.message}>
                                         <Input id="central-env-timeout" type="number" min={2} max={120} {...form.register("environment.buildTimeoutMinutes", { valueAsNumber: true })} aria-invalid={errors?.buildTimeoutMinutes ? true : undefined} />
-                                    </Field>
-                                    <Field id="central-env-port-min" label="Porta inicial da prévia" error={errors?.previewPortMin?.message}>
-                                        <Input id="central-env-port-min" type="number" min={1024} max={65535} {...form.register("environment.previewPortMin", { valueAsNumber: true })} aria-invalid={errors?.previewPortMin ? true : undefined} />
-                                    </Field>
-                                    <Field id="central-env-port-max" label="Porta final da prévia" error={errors?.previewPortMax?.message}>
-                                        <Input id="central-env-port-max" type="number" min={1024} max={65535} {...form.register("environment.previewPortMax", { valueAsNumber: true })} aria-invalid={errors?.previewPortMax ? true : undefined} />
                                     </Field>
                                 </div>
                                 <div className="mt-4">

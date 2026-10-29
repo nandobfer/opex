@@ -23,6 +23,10 @@ const mocks = vi.hoisted(() => ({
   removeReviewSessions: vi.fn(async () => undefined),
   repoForProject: vi.fn(async () => null as { repo: string; repoUrl: string } | null),
   shell: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+  mentorPrepare: vi.fn(async (input: { text: string }) => input.text),
+  mentorAfterTurns: vi.fn<(input: unknown) => Promise<null>>(async () => null),
+  mentorRecordLive: vi.fn(),
+  mentorDiscardLive: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -81,6 +85,14 @@ vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   restoreAwaiting: mocks.restoreAwaiting,
   failOrphanReviews: mocks.failOrphans,
   removeWorkbenchReviewSessions: mocks.removeReviewSessions,
+  mentorPrepareTurn: mocks.mentorPrepare,
+  mentorTakeLesson: (text: string) => {
+    const match = /```opex-lesson\n([\s\S]*?)```/.exec(text)
+    return match ? { text: text.replace(match[0], '').trim(), lesson: JSON.parse(match[1]!), error: null } : { text, lesson: null, error: null }
+  },
+  mentorRecordLiveMessage: mocks.mentorRecordLive,
+  mentorDiscardLiveMessages: mocks.mentorDiscardLive,
+  mentorAfterTurns: mocks.mentorAfterTurns,
 }))
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
@@ -119,6 +131,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   model.docs.length = 0
   mocks.applies.mockResolvedValue(true)
+  mocks.mentorPrepare.mockImplementation(async (input: { text: string }) => input.text)
   mocks.active.mockReturnValue(false)
   mocks.repoForProject.mockResolvedValue(null)
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
@@ -184,6 +197,39 @@ describe('fim da implementação com o agente adversário', () => {
     await implement(wb._id)
     await waitFor('adversarial_review', 'failed')
     expect(model.docs[0]!.error).toBe('Agente adversário falhou: tempo esgotado')
+  })
+})
+
+describe('Agente Mentor no fluxo da mesa', () => {
+  const lesson = { problem: 'Crash ao salvar', shouldHaveCaught: 'Provider ausente', why: 'Genérico' }
+
+  it('ao fim da cadeia, avisa o Mentor com a ação, o texto do usuário e as respostas (sem o bloco de lição)', async () => {
+    mocks.applies.mockResolvedValue(false)
+    mocks.mentorPrepare.mockImplementation(async (input: { text: string }) => `${input.text}\n\nINSTRUÇÃO DO BLOCO`)
+    mocks.runTurn.mockResolvedValue(succeeded(`Implementado.\n\n\`\`\`opex-lesson\n${JSON.stringify(lesson)}\n\`\`\``))
+    const wb = await workbench()
+    await implement(wb._id, 'Use o provider do tema')
+    await waitFor('build_queued')
+    await vi.waitFor(() => expect(mocks.mentorAfterTurns).toHaveBeenCalled())
+    expect(mocks.runTurn.mock.calls[0]![1].text).toContain('INSTRUÇÃO DO BLOCO')
+    expect(mocks.mentorAfterTurns.mock.calls[0]![0]).toMatchObject({
+      workbenchId: wb._id,
+      taskCode: 'OPX-1',
+      projectName: 'App',
+      origin: { action: 'implement', userText: 'Plano aprovado: implementar\n\nUse o provider do tema' },
+      turns: [{ stage: 'implementing', text: 'Implementado.', lesson }],
+    })
+  })
+
+  it('falha do Mentor não muda a etapa nem o estado da mesa', async () => {
+    mocks.applies.mockResolvedValue(false)
+    mocks.mentorAfterTurns.mockRejectedValueOnce(new Error('Mentor caiu'))
+    const wb = await workbench()
+    await implement(wb._id)
+    await waitFor('build_queued')
+    await vi.waitFor(() => expect(mocks.mentorAfterTurns).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect([stage(), model.docs[0]!.runState]).toEqual(['build_queued', 'idle'])
   })
 })
 

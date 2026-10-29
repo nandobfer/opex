@@ -36,6 +36,16 @@ describe('ToggleCard (liga/desliga com Switch)', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 
+  it('padrão com borda e fundo; `bare` (dentro de um Card) sem borda nem fundo', () => {
+    const { rerender } = render(<ToggleCard id="x" checked onCheckedChange={vi.fn()} label="Opção" description="d" />)
+    expect(screen.getByTestId('x-row').classList.contains('border')).toBe(true)
+    expect(screen.getByTestId('x-row').classList.contains('bg-muted/40')).toBe(true)
+    rerender(<ToggleCard id="x" bare checked onCheckedChange={vi.fn()} label="Opção" description="d" />)
+    expect(screen.getByTestId('x-row').classList.contains('border')).toBe(false)
+    expect(screen.getByTestId('x-row').classList.contains('bg-muted/40')).toBe(false)
+    expect(screen.getByRole('switch', { name: 'Opção' })).toBeTruthy()
+  })
+
   it('desabilitado: o interruptor fica bloqueado', () => {
     render(<Harness disabled />)
     expect(screen.getByRole('switch', { name: 'Produto ativo' }).hasAttribute('disabled')).toBe(true)

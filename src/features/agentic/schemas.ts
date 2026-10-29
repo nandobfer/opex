@@ -92,7 +92,26 @@ export type AgenticCi = z.infer<typeof agenticCiSchema>
 /** Padrão global da correção de CI: ligada e sem limite. */
 export const DEFAULT_AGENTIC_CI: AgenticCi = { fixCi: true, ciFixLimit: null }
 
-/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes, as colunas e a correção de CI padrão. */
+/** Porta de prévia (faixa inclusiva): fora das portas privilegiadas. */
+const previewPort = z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535")
+
+/**
+ * Faixa padrão de portas das prévias ("Configurações Padrão"). Cada central herda esta faixa ou a
+ * personaliza (`CentralConfig.environment.inheritPorts`).
+ */
+export const agenticPortsSchema = z
+    .object({
+        previewPortMin: previewPort,
+        previewPortMax: previewPort,
+    })
+    .superRefine((value, ctx) => {
+        if (value.previewPortMin > value.previewPortMax) ctx.addIssue({ code: "custom", path: ["previewPortMax"], message: "A porta final deve ser maior ou igual à inicial" })
+    })
+export type AgenticPorts = z.infer<typeof agenticPortsSchema>
+
+export const DEFAULT_AGENTIC_PORTS: AgenticPorts = { previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX }
+
+/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes, as colunas, a correção de CI e as portas padrão. */
 export const agenticSettingsSchema = z.object({
     enabled: z.boolean(),
     agents: z.object(agentsShape),
@@ -100,6 +119,8 @@ export const agenticSettingsSchema = z.object({
     ci: agenticCiSchema,
     /** Chat durante a execução: mensagens com o agente trabalhando (mesa, forks e refinamento) entram no turno atual. */
     liveChat: z.boolean(),
+    /** Faixa padrão de portas das prévias, herdada pelas centrais que não personalizam. */
+    ports: agenticPortsSchema,
 })
 export type AgenticSettings = z.infer<typeof agenticSettingsSchema>
 
@@ -115,6 +136,7 @@ export const DEFAULT_AGENTIC_SETTINGS: AgenticSettings = {
     columns: { ...DEFAULT_AGENTIC_COLUMNS },
     ci: { ...DEFAULT_AGENTIC_CI },
     liveChat: false,
+    ports: { ...DEFAULT_AGENTIC_PORTS },
 }
 
 /**
@@ -126,7 +148,14 @@ export function withDefaultAgents(raw: unknown): unknown {
     const value = typeof raw === "object" && raw !== null ? (raw as Partial<AgenticSettings>) : {}
     const saved = (typeof value.agents === "object" && value.agents !== null ? value.agents : {}) as Partial<AgenticSettings["agents"]>
     const ci = typeof value.ci === "object" && value.ci !== null ? value.ci : {}
-    return { ...DEFAULT_AGENTIC_SETTINGS, ...value, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, ...saved, fork: saved.fork ?? saved.planning ?? DEFAULT_AGENTIC_SETTINGS.agents.fork }, ci: { ...DEFAULT_AGENTIC_CI, ...ci } }
+    const ports = typeof value.ports === "object" && value.ports !== null ? value.ports : {}
+    return {
+        ...DEFAULT_AGENTIC_SETTINGS,
+        ...value,
+        agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, ...saved, fork: saved.fork ?? saved.planning ?? DEFAULT_AGENTIC_SETTINGS.agents.fork },
+        ci: { ...DEFAULT_AGENTIC_CI, ...ci },
+        ports: { ...DEFAULT_AGENTIC_PORTS, ...ports },
+    }
 }
 
 const absolutePath = z
@@ -204,9 +233,14 @@ export const centralConfigSchema = z.object({
          * tarefa (`DevTask.agenticFlow`) tem prioridade sobre este padrão. Padrão **ligado**.
          */
         publishPreview: z.boolean().default(true),
-        /** Faixa de portas reservadas às prévias das mesas (min/max inclusive). */
-        previewPortMin: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
-        previewPortMax: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1024, "Mínimo 1024").max(65535, "Máximo 65535"),
+        /**
+         * Faixa de portas: `true` = usa a faixa padrão global ("Configurações Padrão"); `false` = a
+         * própria (`previewPortMin`/`previewPortMax`), que também fica como ponto de partida ao personalizar.
+         */
+        inheritPorts: z.boolean(),
+        /** Faixa própria de portas reservadas às prévias das mesas (min/max inclusive). */
+        previewPortMin: previewPort,
+        previewPortMax: previewPort,
     }),
     columns: z.object({
         /** Fila: `true` usa a coluna global da aba; `false` personaliza nesta central. */
@@ -233,7 +267,8 @@ export const centralConfigSchema = z.object({
     liveChat: z.enum(LIVE_CHAT_POLICIES),
     instructions: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, optionalText(4000)])) as Record<AgentRole, ReturnType<typeof optionalText>>),
 }).superRefine((value, ctx) => {
-    if (value.environment.previewPortMin > value.environment.previewPortMax) {
+    // A faixa própria só vale (e só é conferida) quando a central não herda a faixa padrão global.
+    if (!value.environment.inheritPorts && value.environment.previewPortMin > value.environment.previewPortMax) {
         ctx.addIssue({ code: "custom", path: ["environment", "previewPortMax"], message: "A porta final deve ser maior ou igual à inicial" })
     }
     if (value.git.autoMerge && value.git.prDraft) {
@@ -267,7 +302,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, inheritPorts: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         // Central nova herda os padrões globais de fila e movimentação (a personalização é explícita).
         columns: { inheritQueue: true, inheritMovement: true, queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
