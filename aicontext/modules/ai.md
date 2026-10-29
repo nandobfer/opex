@@ -59,6 +59,15 @@ e opções na própria aba da página "Provedores de IA".
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
   ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
+- **Conexão confirmada na hora** (`confirmAiProviderConnection`, `src/lib/ai/connection.ts`,
+  OPE-91): a disponibilidade das features (`availability`/`availabilityOf*`, `agenticAvailability`)
+  e a validação ao salvar (`assertCatalog`, `assertAgentConfigs`) não recusam só pelo status
+  gravado. Gravado conectado = segue sem rede; gravado desconectado (ex.: a verificação periódica
+  falhou de passagem) = testa o provedor agora (OpenCode: `GET /api/info`; demais: lista de modelos
+  sem cache), com limite de 8 s. Respondeu: a ação segue e o teste completo regrava o status em
+  segundo plano (um por vez por provedor). Falhou: o motivo traz a falha real (`… não está conectado
+  (ECONNREFUSED): …`). O resultado do teste na hora vale 15 s por provedor (chamadas simultâneas
+  compartilham o mesmo teste).
 - Testes de conexão (`src/features/ai/server/testers.ts`): OpenCode = info + modelos + agentes
   (amarelo sem modelos); Gemini, Anthropic, OpenAI e DeepSeek = lista de modelos (amarelo sem
   modelos de texto); hub `ai` = testa cada provedor configurado

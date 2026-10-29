@@ -25,7 +25,12 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   vazio = sem limite; configuração antiga sem `ci` cai nesse padrão via `withDefaultAgents`) — e o
   **chat durante a execução** (`liveChat`, desligado por padrão; ver "Chat durante a execução"). Agentes/modelos (inclusive os de fallback) são conferidos no OpenCode ao salvar (com a feature ativa, exige
   o OpenCode conectado).
-- Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`).
+- Disponível = ativa + OpenCode configurado e conectado (`agenticAvailability`). "Conectado" é
+  conferido na hora quando o status gravado diz o contrário (OPE-91, ver `modules/ai.md`, "Conexão
+  confirmada na hora"): Implementar, enviar mensagem, abrir mesa e forks não são bloqueados por uma
+  verificação periódica que falhou de passagem. Indisponível de fato, o 409 `AGENTIC_UNAVAILABLE`
+  traz a falha real: "O OpenCode não está conectado (motivo): confira se o opencode serve está no ar
+  e acessível; …".
 - A aba tem duas **abas internas** (estado local, não vão à URL; padrão **Agentes**):
   - **Agentes**: card que liga a feature (ativa) + os **agentes padrão** de cada etapa + os dois
     cards de **colunas globais** — **Fila da central de desenvolvimento** (OPE-79) e
