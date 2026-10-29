@@ -193,7 +193,9 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - `GET/POST /api/routines/scheduler-tick` executa o mesmo motor sob demanda (ex.: cron do
   sistema), com `Bearer` igual ao `CRON_SECRET` do ambiente **ou** ao cron secret da integração.
 - **Rotinas internas são do código** (`DEFAULT_CRON_JOBS`; `withBuiltInJobs` completa a lista
-  salva). Hoje: `integrations-health-check` (a cada 5 min, testa todas as integrações) e
+  salva). Hoje: `integrations-health-check` (a cada 5 min, testa todas as integrações; uma falha é
+  repetida uma vez após 5 s — `runIntegrationTest` com `retries: 1` — e só a última tentativa grava o
+  status, então falha passageira não fica vermelha; o teste manual não repete) e
   `github-issue-sync` (a cada 2 min, issues dos repositórios vinculados → tarefas — ver
   `modules/github.md`), `agentic-pr-watch` (a cada 2 min, acompanha os PRs das
   mesas de trabalho — ver `modules/agentic-dev.md`) e `ai-task-summary` (a cada 2 min, resumos de

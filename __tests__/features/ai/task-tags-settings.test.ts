@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     recordAudit: vi.fn(),
     publish: vi.fn(async () => {}),
     statuses: vi.fn(),
+    confirm: vi.fn(),
     models: vi.fn(),
     agents: vi.fn(),
 }))
@@ -18,6 +19,8 @@ vi.mock("@/lib/db/models/Ai", () => ({
     },
 }))
 vi.mock("@/lib/ai/catalog", () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models, listAiAgents: mocks.agents }))
+// A conexão é confirmada na hora (OPE-91); aqui ela segue o status gravado do mock.
+vi.mock("@/lib/ai/connection", () => ({ confirmAiProviderConnection: mocks.confirm }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/lib/after-response", () => ({ runAfterResponse: vi.fn() }))
 
@@ -42,6 +45,10 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.doc = null
     mocks.statuses.mockResolvedValue(connected())
+    mocks.confirm.mockImplementation(async (id: string) => {
+        const status = ((await mocks.statuses()) as { id: string; configured: boolean; connected: boolean }[]).find((item) => item.id === id)
+        return { configured: Boolean(status?.configured), connected: Boolean(status?.connected), detail: null }
+    })
     mocks.models.mockResolvedValue([{ id: "gemini-3-flash", name: "Flash", variants: [], group: null, contextWindow: null, free: false }])
     mocks.agents.mockResolvedValue([])
 })

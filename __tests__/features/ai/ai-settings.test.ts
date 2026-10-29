@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(),
   publish: vi.fn(async () => {}),
   statuses: vi.fn(),
+  confirm: vi.fn(),
   models: vi.fn(),
   agents: vi.fn(),
 }))
@@ -18,6 +19,8 @@ vi.mock('@/lib/db/models/Ai', () => ({
   },
 }))
 vi.mock('@/lib/ai/catalog', () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models, listAiAgents: mocks.agents }))
+// A conexão é confirmada na hora (OPE-91); aqui ela segue o status gravado do mock.
+vi.mock('@/lib/ai/connection', () => ({ confirmAiProviderConnection: mocks.confirm }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 
 import { DomainError } from '@/lib/api/route'
@@ -41,6 +44,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.doc = null
   mocks.statuses.mockResolvedValue(connected())
+  mocks.confirm.mockImplementation(async (id: string) => {
+    const status = ((await mocks.statuses()) as { id: string; configured: boolean; connected: boolean }[]).find((item) => item.id === id)
+    return { configured: Boolean(status?.configured), connected: Boolean(status?.connected), detail: null }
+  })
   mocks.models.mockResolvedValue([{ id: 'anthropic/claude', name: 'Claude', variants: ['high'], group: 'anthropic', contextWindow: null, free: false }])
   mocks.agents.mockResolvedValue([{ id: 'leitor', name: 'Leitor', description: null }])
 })
@@ -75,6 +82,18 @@ describe('configuração e disponibilidade', () => {
     expect(await availabilityOf(settings())).toEqual({ available: true, reason: null })
     mocks.statuses.mockResolvedValue(connected({ connected: false }))
     expect((await availabilityOf(settings())).reason).toContain('OpenCode não está conectado')
+  })
+
+  it('status gravado desatualizado: com a conexão confirmada na hora, fica disponível (OPE-91)', async () => {
+    mocks.statuses.mockResolvedValue(connected({ connected: false }))
+    mocks.confirm.mockResolvedValue({ configured: true, connected: true, detail: null })
+    expect(await availabilityOf(settings())).toEqual({ available: true, reason: null })
+    expect(mocks.confirm).toHaveBeenCalledWith('opencode')
+  })
+
+  it('desconectado de fato: o motivo traz a falha real', async () => {
+    mocks.confirm.mockResolvedValue({ configured: true, connected: false, detail: 'ECONNREFUSED' })
+    expect((await availabilityOf(settings())).reason).toContain('OpenCode não está conectado (ECONNREFUSED)')
   })
 
   it('normaliza: OpenCode descarta temperatura/tokens; Gemini descarta agente', () => {

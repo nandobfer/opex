@@ -3,7 +3,8 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AiFeatureSetting } from "@/lib/db/models/Ai"
 import { DomainError } from "@/lib/api/route"
 import { runAfterResponse } from "@/lib/after-response"
-import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { confirmAiProviderConnection } from "@/lib/ai/connection"
 import { AiProviderError } from "@/lib/ai/errors"
 import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { normalizeTaxonomy } from "@/features/tasks/tags"
@@ -65,9 +66,11 @@ export async function loadFeature<T>(feature: string, schema: ZodType<T>, defaul
 export async function availability(settings: Pick<ProviderSettings, "enabled" | "provider" | "model">, featureLabel: string): Promise<AiFeatureAvailability> {
     if (!settings.enabled) return { available: false, reason: `${featureLabel} está desativada em Integrações › Provedores de IA` }
     if (!settings.provider || !settings.model) return { available: false, reason: "Selecione o provedor e o modelo em Integrações › Provedores de IA" }
-    const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
-    if (!status?.configured) return { available: false, reason: `${getAiProvider(settings.provider).name} não está configurado` }
-    if (!status.connected) return { available: false, reason: `${getAiProvider(settings.provider).name} não está conectado: teste a conexão em Integrações › Provedores de IA` }
+    // Confirma na hora: o status gravado pode ser de uma verificação periódica que falhou de passagem.
+    const status = await confirmAiProviderConnection(settings.provider)
+    const name = getAiProvider(settings.provider).name
+    if (!status.configured) return { available: false, reason: `${name} não está configurado` }
+    if (!status.connected) return { available: false, reason: `${name} não está conectado${status.detail ? ` (${status.detail})` : ""}: o provedor não respondeu agora; o resultado fica em Integrações › Provedores de IA › ${name}` }
     return { available: true, reason: null }
 }
 
@@ -75,9 +78,9 @@ export async function availability(settings: Pick<ProviderSettings, "enabled" | 
 export async function assertCatalog(settings: ProviderSettings): Promise<void> {
     if (!settings.provider || !settings.model) return
     const provider = getAiProvider(settings.provider)
-    const status = (await getAiProviderStatuses()).find((item) => item.id === settings.provider)
-    if (!status?.connected) {
-        if (settings.enabled) throw new DomainError(409, `${provider.name} não está conectado: teste a conexão antes de ativar a feature`, "AI_PROVIDER_DISCONNECTED")
+    const status = await confirmAiProviderConnection(settings.provider)
+    if (!status.connected) {
+        if (settings.enabled) throw new DomainError(409, `${provider.name} não está conectado${status.detail ? ` (${status.detail})` : ""}: teste a conexão antes de ativar a feature`, "AI_PROVIDER_DISCONNECTED")
         return
     }
     try {

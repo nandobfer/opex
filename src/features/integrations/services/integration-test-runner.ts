@@ -17,6 +17,9 @@ import type { IntegrationHealthDto, IntegrationStatusEvent } from "../types";
 /** Tempo máximo de um teste completo, somando todas as etapas. */
 export const INTEGRATION_TEST_TIMEOUT_MS = 60_000;
 
+/** Espera antes de repetir um teste que falhou (`retries`), para uma falha passageira não virar status vermelho. */
+export const INTEGRATION_TEST_RETRY_DELAY_MS = 5_000;
+
 export interface IntegrationTestResult {
   ok: boolean;
   warn?: boolean;
@@ -28,6 +31,9 @@ interface RunOptions {
   emit?: TestEmit;
   source: "manual" | "scheduler";
   signal?: AbortSignal;
+  /** Repetições depois de uma falha (rotina periódica); o status só é gravado no fim. */
+  retries?: number;
+  retryDelayMs?: number;
   testers?: Partial<Record<IntegrationId, IntegrationTester>>;
 }
 
@@ -58,28 +64,54 @@ export async function runIntegrationTest(
   await markRunning(id, options.source);
 
   let result: IntegrationTestResult;
-  try {
-    emit(
-      "info",
-      options.source === "manual"
-        ? "Iniciando teste de conexão"
-        : "Verificação periódica de status",
-    );
-    const outcome = await tester({ emit, signal });
-    const warn = typeof outcome !== "string";
-    const message = warn ? outcome.message : outcome;
-    result = { ok: true, warn, latencyMs: Date.now() - startedAt, message };
-    emit(warn ? "warn" : "success", `${message} (${result.latencyMs} ms)`);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    result = { ok: false, latencyMs: Date.now() - startedAt, message };
-    options.emit?.("error", message);
-    dbg.error(`[teste] ${message}`);
+  let retriesLeft = Math.max(0, options.retries ?? 0);
+  emit(
+    "info",
+    options.source === "manual"
+      ? "Iniciando teste de conexão"
+      : "Verificação periódica de status",
+  );
+  for (;;) {
+    try {
+      const outcome = await tester({ emit, signal });
+      const warn = typeof outcome !== "string";
+      const message = warn ? outcome.message : outcome;
+      result = { ok: true, warn, latencyMs: Date.now() - startedAt, message };
+      emit(warn ? "warn" : "success", `${message} (${result.latencyMs} ms)`);
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (retriesLeft > 0 && !signal.aborted) {
+        retriesLeft--;
+        emit("warn", `${message}: tentando novamente`);
+        if (await waitRetry(options.retryDelayMs ?? INTEGRATION_TEST_RETRY_DELAY_MS, signal)) continue;
+      }
+      result = { ok: false, latencyMs: Date.now() - startedAt, message };
+      options.emit?.("error", message);
+      dbg.error(`[teste] ${message}`);
+      break;
+    }
   }
 
   const health = await saveStatus(id, result, options.source);
   await publishStatus({ id, checking: false, health });
   return result;
+}
+
+/** Espera a repetição; `false` se o teste foi cancelado ou estourou o tempo no meio. */
+function waitRetry(ms: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false);
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /**
@@ -178,7 +210,10 @@ async function healthCheckQueue(): Promise<IntegrationId[]> {
   return ids;
 }
 
-/** Health check periódico: todas as integrações (menos as desativadas), em paralelo limitado. */
+/**
+ * Health check periódico: todas as integrações (menos as desativadas), em paralelo limitado. Uma
+ * falha é repetida uma vez antes de gravar o status vermelho (falha passageira não bloqueia nada).
+ */
 export async function runAllIntegrationHealthChecks(
   concurrency = 3,
 ): Promise<Record<string, IntegrationTestResult>> {
@@ -186,7 +221,7 @@ export async function runAllIntegrationHealthChecks(
   const results: Record<string, IntegrationTestResult> = {};
   async function worker() {
     for (let id = queue.shift(); id; id = queue.shift()) {
-      results[id] = await runIntegrationTest(id, { source: "scheduler" });
+      results[id] = await runIntegrationTest(id, { source: "scheduler", retries: 1 });
     }
   }
   await Promise.all(Array.from({ length: concurrency }, worker));

@@ -1,7 +1,8 @@
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AiFeatureSetting } from "@/lib/db/models/Ai"
 import { DomainError } from "@/lib/api/route"
-import { getAiProviderStatuses, listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { CONNECTION_READ_PROBE_TIMEOUT_MS, confirmAiProviderConnection } from "@/lib/ai/connection"
 import { AiProviderError } from "@/lib/ai/errors"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_ROLE_LABELS, AGENT_ROLES, AGENTIC_FEATURE, AGENTIC_UPDATED_EVENT } from "../constants"
@@ -18,26 +19,35 @@ export async function loadAgenticSettings(): Promise<{ settings: AgenticSettings
     return { settings: parsed.success ? parsed.data : DEFAULT_AGENTIC_SETTINGS, isDefault: !parsed.success, updatedAt: doc.updatedAt ?? null }
 }
 
-export async function agenticAvailability(settings: AgenticSettings): Promise<AgenticAvailability> {
+/** Motivo real (conferido agora) e onde agir: o servidor do OpenCode e a integração. */
+export function opencodeDisconnectedReason(detail: string | null): string {
+    return `O OpenCode não está conectado${detail ? ` (${detail})` : ""}: confira se o opencode serve está no ar e acessível; o resultado fica em Integrações › Provedores de IA › OpenCode`
+}
+
+/** `probeTimeoutMs`: limite do teste na hora (as telas de leitura usam um curto, e o tempo esgotado nele não bloqueia). */
+export async function agenticAvailability(settings: AgenticSettings, options: { probeTimeoutMs?: number } = {}): Promise<AgenticAvailability> {
     if (!settings.enabled) return { available: false, reason: "O desenvolvimento agêntico está desativado em Integrações › Provedores de IA" }
-    const status = (await getAiProviderStatuses()).find((item) => item.id === "opencode")
-    if (!status?.configured) return { available: false, reason: "O OpenCode não está configurado em Integrações › Provedores de IA" }
-    if (!status.connected) return { available: false, reason: "O OpenCode não está conectado: teste a conexão em Integrações › Provedores de IA" }
+    // Confirma na hora: o status gravado pode ser de uma verificação periódica que falhou de passagem.
+    const status = await confirmAiProviderConnection("opencode", { timeoutMs: options.probeTimeoutMs })
+    if (!status.configured) return { available: false, reason: "O OpenCode não está configurado em Integrações › Provedores de IA" }
+    // Leitura (teste curto): estourar o limite não prova queda; a ação confere com o limite cheio.
+    if (!status.connected && status.timedOut && options.probeTimeoutMs !== undefined) return { available: true, reason: null }
+    if (!status.connected) return { available: false, reason: opencodeDisconnectedReason(status.detail) }
     return { available: true, reason: null }
 }
 
 export async function getAgenticSettings(): Promise<AgenticSettingsDto> {
     const { settings, isDefault, updatedAt } = await loadAgenticSettings()
-    return { settings, isDefault, availability: await agenticAvailability(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+    return { settings, isDefault, availability: await agenticAvailability(settings, { probeTimeoutMs: CONNECTION_READ_PROBE_TIMEOUT_MS }), updatedAt: updatedAt ? updatedAt.toISOString() : null }
 }
 
 /** Confere no OpenCode os agentes, modelos e variantes informados (ignora quando desconectado). */
 export async function assertAgentConfigs(configs: { label: string; config: AgentConfig | null }[], strict: boolean): Promise<void> {
     const used = configs.filter((item): item is { label: string; config: AgentConfig } => Boolean(item.config && (item.config.agent || item.config.model || item.config.fallbacks?.length)))
     if (!used.length) return
-    const status = (await getAiProviderStatuses()).find((item) => item.id === "opencode")
-    if (!status?.connected) {
-        if (strict) throw new DomainError(409, "O OpenCode não está conectado: teste a conexão antes de ativar", "AI_PROVIDER_DISCONNECTED")
+    const status = await confirmAiProviderConnection("opencode")
+    if (!status.connected) {
+        if (strict) throw new DomainError(409, `O OpenCode não está conectado${status.detail ? ` (${status.detail})` : ""}: teste a conexão antes de ativar`, "AI_PROVIDER_DISCONNECTED")
         return
     }
     try {
