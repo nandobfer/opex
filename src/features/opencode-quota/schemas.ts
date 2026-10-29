@@ -1,38 +1,61 @@
 import { z } from "zod"
 
 /**
- * Export público do `opencode-quota` (versões 2 e 3 do formato). Tolerante: campos desconhecidos
- * passam e quase tudo é opcional, para uma versão nova do plugin não derrubar o painel.
+ * Snapshot v6 do `opencode-quota`, a resposta do RPC `refresh` (`{ snapshot }`). Tolerante: campos
+ * desconhecidos passam e quase tudo é opcional, para uma versão nova do plugin não derrubar o painel.
  */
-const exportEntrySchema = z.looseObject({
+const amountSchema = z.looseObject({
+    decimal: z.string(),
+    unit: z.looseObject({ kind: z.string(), code: z.string().optional(), unit: z.string().optional(), symbol: z.string().optional() }).optional(),
+})
+
+const snapshotRowSchema = z.looseObject({
     id: z.string().optional(),
-    name: z.string().optional(),
+    providerId: z.string().optional(),
     account: z.string().nullish(),
-    resultType: z.string().optional(),
+    label: z.string().optional(),
     window: z.string().nullish(),
-    resetAt: z.number().nullish(),
-    renderType: z.string().optional(),
     percentRemaining: z.number().nullish(),
-    value: z.string().nullish(),
+    used: amountSchema.nullish(),
+    limit: amountSchema.nullish(),
+    remaining: amountSchema.nullish(),
+    amount: amountSchema.nullish(),
+    flag: z.boolean().nullish(),
+    text: z.string().nullish(),
+    resetsAt: z.string().nullish(),
 })
 
-const exportProviderSchema = z.looseObject({
-    status: z.string(),
-    fetchedAt: z.number().nullish(),
-    entries: z.array(exportEntrySchema).optional(),
-    error: z.string().nullish(),
-    errors: z.array(z.union([z.string(), z.looseObject({ message: z.string().optional() })])).optional(),
+const snapshotErrorSchema = z.looseObject({
+    code: z.string(),
+    status: z.number().nullish(),
+    retryAtMs: z.number().nullish(),
+    tool: z.string().nullish(),
+    missing: z.boolean().nullish(),
 })
 
-export const quotaExportSchema = z.looseObject({
-    version: z.number(),
-    exportedAt: z.number().nullish(),
-    providers: z.record(z.string(), exportProviderSchema),
+const snapshotProviderSchema = z.looseObject({
+    providerId: z.string(),
+    label: z.string().optional(),
+    rows: z.array(snapshotRowSchema).default([]),
+    okAtMs: z.number().nullish(),
+    checkedAtMs: z.number().nullish(),
+    error: snapshotErrorSchema.nullish(),
+    refreshing: z.boolean().optional(),
 })
 
-export type QuotaExport = z.infer<typeof quotaExportSchema>
-export type QuotaExportEntry = z.infer<typeof exportEntrySchema>
-export type QuotaExportProvider = z.infer<typeof exportProviderSchema>
+export const quotaSnapshotSchema = z.looseObject({
+    version: z.literal(6),
+    providers: z.array(snapshotProviderSchema),
+})
+
+/** Resposta do método `refresh` do RPC. */
+export const quotaRpcOutputSchema = z.looseObject({ snapshot: z.unknown() })
+
+export type QuotaSnapshot = z.infer<typeof quotaSnapshotSchema>
+export type QuotaSnapshotProvider = z.infer<typeof snapshotProviderSchema>
+export type QuotaSnapshotRow = z.infer<typeof snapshotRowSchema>
+export type QuotaSnapshotError = z.infer<typeof snapshotErrorSchema>
+export type QuotaAmount = z.infer<typeof amountSchema>
 
 /**
  * Preferência do painel salva no navegador: card recolhido e ids dos provedores recolhidos (provedor

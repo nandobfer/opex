@@ -65,7 +65,7 @@ export function QuotaPanelBody({ data, isLoading, error, now, onRetry, collapsed
     }
     if (data.state === "missing") {
         return (
-            <PanelMessage icon={FileWarning} tone="warning" title="Export do opencode-quota desligado" description="Ligue “Quota file (JSON)” em /quota_status › Plugin no OpenCode, ou use system.exportFile: true no settings.jsonc do plugin.">
+            <PanelMessage icon={FileWarning} tone="warning" title="Plugin opencode-quota não respondeu" description="Instale ou atualize o @slkiser/opencode-quota 6.x no OpenCode e reinicie o opencode serve.">
                 <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[11px]" onClick={onRetry}>
                     Verificar de novo
                 </Button>

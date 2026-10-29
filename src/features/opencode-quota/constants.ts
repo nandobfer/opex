@@ -1,24 +1,48 @@
-/** Quota do OpenCode lida do arquivo de export do plugin `opencode-quota` (`aicontext/modules/opencode-quota.md`). */
+/** Quota do OpenCode pedida ao plugin `opencode-quota` pelo RPC (`aicontext/modules/opencode-quota.md`). */
 
 /** Evento em `private-app` quando a quota lida muda (payload: `{ checkedAt }`). */
 export const OPENCODE_QUOTA_UPDATED_EVENT = "opencode-quota-updated"
 
 export const OPENCODE_QUOTA_QUERY_KEY = "opencode-quota"
 
-/** Caminho padrão do export no host do OpenCode (o mesmo que o plugin usa). */
-export const OPENCODE_QUOTA_DEFAULT_PATH = "${XDG_CACHE_HOME:-$HOME/.cache}/opencode/quota-export.json"
+/** RPC do plugin no `opencode serve` (o mesmo canal do TUI). */
+export const QUOTA_RPC_ID = "slkiser.opencode-quota"
+export const QUOTA_RPC_METHOD = "refresh"
+export const OPENCODE_QUOTA_RPC_TIMEOUT_MS = 60_000
 
-/** Saída do comando quando o arquivo de export não existe (export desligado no plugin). */
-export const OPENCODE_QUOTA_MISSING_MARKER = "__OPENCODE_QUOTA_MISSING__"
+/**
+ * Motivo do `refresh`: `poll` respeita o intervalo, o backoff e o `retryAtMs` do plugin; `manual`
+ * consulta todos os provedores na hora. (`turn` existe no plugin, mas o Opex não usa.)
+ */
+export const QUOTA_REFRESH_REASONS = ["poll", "manual"] as const
+export type QuotaRefreshReason = (typeof QUOTA_REFRESH_REASONS)[number]
+export const DEFAULT_QUOTA_BUTTON_REASON: QuotaRefreshReason = "manual"
 
-/** Primeira linha da saída: a quota veio do snapshot do plugin (`show --json`) ou do arquivo de export (reserva). */
-export const OPENCODE_QUOTA_SNAPSHOT_MARKER = "__OPENCODE_QUOTA_SNAPSHOT__"
-export const OPENCODE_QUOTA_EXPORT_MARKER = "__OPENCODE_QUOTA_EXPORT__"
+/** Erro do provedor (código do plugin) → texto em pt-BR. `rate_limited` ganha "tente após HH:mm". */
+export const QUOTA_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+    not_configured: "Provedor não configurado no OpenCode",
+    login_expired: "Login expirado: entre de novo no provedor pelo OpenCode",
+    no_plan: "A conta não tem plano com quota",
+    rate_limited: "Limite de consultas atingido",
+    timeout: "O provedor demorou demais para responder",
+    network: "Falha de rede ao consultar o provedor",
+    provider_error: "O provedor respondeu com erro",
+    bad_response: "Resposta do provedor não reconhecida",
+    no_data: "O provedor não informou a quota",
+    local_tool: "Falha no programa local do provedor",
+    internal: "Erro interno do opencode-quota",
+}
 
-/** Executável do plugin instalado pelo OpenCode no host (glob de shell; o mais recente vence). */
-export const OPENCODE_QUOTA_CLI_GLOB = '"${XDG_CACHE_HOME:-$HOME/.cache}"/opencode/npm/@slkiser/opencode-quota@*/*/node_modules/@slkiser/opencode-quota/dist/bin/opencode-quota.js'
+/** Falhas do RPC → mensagem do painel. */
+export const QUOTA_RPC_MESSAGES = {
+    unavailable: "O plugin opencode-quota não respondeu no OpenCode: instale ou atualize o @slkiser/opencode-quota 6.x e reinicie o opencode serve.",
+    unauthorized: "O OpenCode recusou a senha do servidor (HTTP 401): confira a senha na integração OpenCode.",
+    timeout: "O opencode-quota não respondeu em 60 s.",
+    network: "Não foi possível falar com o OpenCode",
+    internal: "O opencode-quota falhou ao calcular a quota",
+} as const
 
-/** Sem regravação do export há mais que isso, o painel avisa "Desatualizado". */
+/** Sem nenhum provedor consultado há mais que isso, o painel avisa "Desatualizado". */
 export const OPENCODE_QUOTA_STALE_MS = 30 * 60_000
 
 /** Faixas de cor pelo percentual usado. */
@@ -28,7 +52,7 @@ export const QUOTA_CRITICAL_PERCENT = 85
 /** Preferência do painel (recolhido/expandido) no navegador. */
 export const OPENCODE_QUOTA_PANEL_KEY = "opex:opencode-quota-panel:v1"
 
-/** Nomes legíveis dos provedores mais comuns; os demais vêm do nome das linhas. */
+/** Nomes legíveis dos provedores mais comuns; os demais usam o `label` do plugin. */
 export const QUOTA_PROVIDER_NAMES: Readonly<Record<string, string>> = {
     anthropic: "Anthropic",
     openai: "OpenAI",

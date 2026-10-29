@@ -53,7 +53,7 @@ export function OpencodeQuotaPanel() {
                     <span className="shrink-0">Quota do OpenCode</span>
                 </button>
                 {stale && (
-                    <span className="flex shrink-0 items-center gap-0.5 rounded-sm bg-warning/15 px-1 text-[10px] text-warning" title="O opencode-quota não regrava o export há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado.">
+                    <span className="flex shrink-0 items-center gap-0.5 rounded-sm bg-warning/15 px-1 text-[10px] text-warning" title="O opencode-quota não consulta nenhum provedor há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado.">
                         <Clock className="h-2.5 w-2.5" aria-hidden />
                         Desatualizado
                     </span>
