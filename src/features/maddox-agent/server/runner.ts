@@ -10,7 +10,7 @@ import { claimOpexFiles, readOpexFileBytes, type OpexFileDoc } from "@/features/
 import { OWNER_SCOPE, sessionScopeOf, withAgent, type OpexServerScope } from "@/features/opex-agent/server/scope"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "@/features/opex-agent/server/sessions"
 import { refreshSessionTitleWith } from "@/features/opex-agent/server/titler"
-import { redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-runtime"
+import { redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { OpexConfirmationDto, OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexToolPartGroup, OpexUsageDto } from "@/features/opex-agent/types"
 import { listAiModels } from "@/lib/ai/catalog"

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
-import { compactToolOutput } from "@/features/opex-agent/server/tool-runtime"
+import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { actorIdOf, sessionScopeOf, type OpexServerScope } from "@/features/opex-agent/server/scope"
 import { getOpencodeClient } from "@/lib/ai/opencode-client"
 import { dbConnect } from "@/lib/db"

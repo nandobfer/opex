@@ -3,49 +3,11 @@ import { loggerFor } from "@/lib/logger"
 import type { OpexConfirmationDto } from "../types"
 import { toolErrorMessage, type OpexTool, type OpexToolContext } from "./tools/define"
 import { needsConfirmation } from "./tools/registry"
+import { compactToolOutput } from "./tool-display"
 
-/** Saída de ferramenta enviada ao modelo (o resto é cortado com aviso). */
-export const MAX_TOOL_OUTPUT_CHARS = 30_000
-/** Entrada/saída guardadas para exibição no card. */
-export const MAX_TOOL_DISPLAY_CHARS = 6000
+export { MAX_TOOL_DISPLAY_CHARS, MAX_TOOL_OUTPUT_CHARS, compactToolOutput, redactToolInput, stringifyForDisplay } from "./tool-display"
 
 const log = loggerFor({ module: "opex-agent" })
-
-/**
- * Entrada sem segredos para exibir e guardar (cards, NDJSON e histórico): aplica o `redact` da
- * ferramenta sobre a entrada validada. Compartilhado pelo Agente Opex e pelo Agente Maddox.
- * `strict`: entrada que não valida numa ferramenta com `redact` não sai (`null`) — no Maddox a entrada
- * vem do OpenCode e não passou pela validação do Opex.
- */
-export function redactToolInput(tool: OpexTool | undefined, input: unknown, options: { strict?: boolean } = {}): unknown {
-    if (!tool?.redact) return input
-    const parsed = tool.input.safeParse(input)
-    if (parsed.success) return tool.redact(parsed.data)
-    return options.strict ? null : input
-}
-
-export function stringifyForDisplay(value: unknown, max = MAX_TOOL_DISPLAY_CHARS): string | null {
-    if (value === undefined) return null
-    let text: string
-    try {
-        text = typeof value === "string" ? value : JSON.stringify(value, null, 2)
-    } catch {
-        text = String(value)
-    }
-    if (text === undefined) return null
-    return text.length > max ? `${text.slice(0, max)}\n…(+${(text.length - max).toLocaleString("pt-BR")} caracteres)` : text
-}
-
-/** Resultado grande vira um texto cortado (o modelo é avisado para refinar a consulta). */
-export function compactToolOutput(value: unknown): unknown {
-    const json = JSON.stringify(value ?? null) ?? "null"
-    if (json.length <= MAX_TOOL_OUTPUT_CHARS) return value ?? null
-    return {
-        truncated: true,
-        note: `Resultado com ${json.length.toLocaleString("pt-BR")} caracteres cortado em ${MAX_TOOL_OUTPUT_CHARS.toLocaleString("pt-BR")}: use filtros ou limites menores para ver o resto.`,
-        partialJson: json.slice(0, MAX_TOOL_OUTPUT_CHARS),
-    }
-}
 
 export interface ToolRuntimeHooks {
     /** Grava a ação pendente e devolve o card de confirmação. */
