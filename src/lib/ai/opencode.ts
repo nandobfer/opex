@@ -1,8 +1,9 @@
 import { createOpencode, type OpencodeProvider } from "ai-sdk-provider-opencode-sdk"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
-import type { AiAgentDto, AiModelDto } from "./providers"
+import type { AiAgentDto, AiModelDto, AiSkillDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { toOpencodeSkill, type OpencodeSkillRaw } from "./opencode-skills"
 
 /**
  * Servidor OpenCode 2.x (`opencode serve`) — SOMENTE servidor. Catálogo (modelos, agentes) pelas
@@ -90,6 +91,12 @@ export async function listOpencodeAgents(signal?: AbortSignal): Promise<AiAgentD
     return (body.data ?? [])
         .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
         .map((agent) => ({ id: agent.id, name: agent.name ?? agent.id, description: agent.description ?? null }))
+}
+
+/** Skills instaladas no servidor (globais + as do diretório da integração), sem o conteúdo. */
+export async function listOpencodeSkills(signal?: AbortSignal): Promise<AiSkillDto[]> {
+    const body = await opencodeGet<{ data?: OpencodeSkillRaw[] }>("/api/skill", signal)
+    return (body.data ?? []).map(toOpencodeSkill).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export async function getOpencodeInfo(signal?: AbortSignal): Promise<{ version: string }> {

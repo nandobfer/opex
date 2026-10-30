@@ -7,8 +7,8 @@ import { listDeepseekModels } from "./deepseek"
 import { listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
 import { listOpenaiModels } from "./openai"
-import { listOpencodeAgents, listOpencodeModels } from "./opencode"
-import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
+import { listOpencodeAgents, listOpencodeModels, listOpencodeSkills } from "./opencode"
+import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiSkillDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
 
 /**
  * Catálogo dos provedores de IA (SOMENTE servidor): situação de cada provedor e modelos/agentes
@@ -66,4 +66,10 @@ export async function listAiModels(providerId: AiProviderId, options: { fresh?: 
 export async function listAiAgents(options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiAgentDto[]> {
     const { version } = await getIntegration("ai_opencode")
     return cached(`agents:${version}`, () => listOpencodeAgents(options.signal), options.fresh === true)
+}
+
+/** Skills instaladas no servidor OpenCode (cache curto, como os agentes). */
+export async function listAiSkills(options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiSkillDto[]> {
+    const { version } = await getIntegration("ai_opencode")
+    return cached(`skills:${version}`, () => listOpencodeSkills(options.signal), options.fresh === true)
 }

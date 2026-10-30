@@ -1,5 +1,7 @@
 import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
+import { resolveRefinementSkill } from "@/features/ai/refinement-skill"
+import type { AiSkillDto } from "@/lib/ai/providers"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from "./constants"
 
@@ -8,7 +10,24 @@ import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from "./constants"
  * completa em Markdown. Reaproveita a montagem da tarefa de "Entender tarefas".
  */
 
-export function buildRefinementInstructions(settings: Pick<TaskRefinementSettings, "instructions">): string {
+/**
+ * Como as instruções do refinamento são aplicadas: `skill` (a skill é ativada na sessão e a entrada
+ * durável leva só o protocolo) ou `text` (texto configurado + protocolo). `fallback` explica por que a
+ * skill configurada não pôde ser usada (o turno cai no texto e avisa).
+ */
+export type RefinementInstructionsPlan = { mode: "skill"; skill: AiSkillDto } | { mode: "text"; fallback: string | null }
+
+/** Decide a origem das instruções do turno. `skills === null`: o OpenCode não pôde ser consultado. */
+export function planRefinementInstructions(settings: Pick<TaskRefinementSettings, "instructionsSource" | "skill">, skills: readonly AiSkillDto[] | null): RefinementInstructionsPlan {
+    if (settings.instructionsSource !== "skill") return { mode: "text", fallback: null }
+    const state = resolveRefinementSkill(settings.skill, skills)
+    if (state.status === "ok" && state.skill) return { mode: "skill", skill: state.skill }
+    return { mode: "text", fallback: state.message }
+}
+
+/** Entrada durável da sessão: o protocolo fixo vale sempre; o texto configurado só sem skill. */
+export function buildRefinementInstructions(settings: Pick<TaskRefinementSettings, "instructions">, plan: RefinementInstructionsPlan = { mode: "text", fallback: null }): string {
+    if (plan.mode === "skill") return `Suas instruções são as da skill "${plan.skill.name}", ativada nesta sessão; siga-as junto com o protocolo abaixo, que prevalece em caso de conflito.\n\n${REFINEMENT_PROTOCOL}`
     return `${settings.instructions.trim()}\n\n${REFINEMENT_PROTOCOL}`
 }
 
