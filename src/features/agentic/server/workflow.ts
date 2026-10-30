@@ -59,7 +59,7 @@ import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup }
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
-import { syncDeveloperMemories, withDeveloperMemories } from "./developer-memories"
+import { syncDeveloperMemories, withDeveloperMemories, type DeveloperMemoriesSync } from "./developer-memories"
 import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
@@ -684,7 +684,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const memories = turn.attach ? null : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId)
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
-                next = await buildTurn(client, loaded, turn, sessionId, controller)
+                next = await buildTurn(client, loaded, turn, sessionId, controller, memories)
                 turn = controller.signal.aborted ? null : next
                 continue
             }
@@ -796,7 +796,7 @@ type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
  * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
  * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
  */
-async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController): Promise<TurnPlan | null> {
+async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
     const ctx = contextOf(loaded)
@@ -821,10 +821,14 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
     if (turn.attach && !resumeJob) step = { kind: needsPrepare && !saved?.prepared ? "prepare" : "fix", text: "", attach: true }
     else if (!turn.attach && needsPrepare && !saved?.prepared) step = { kind: "prepare", text: previewPreparePrompt(config, ctx, { method, backup }), attach: false }
     let round = 0
+    // Memórias que a sessão recusou como instrução: vão à frente do primeiro prompt do agente neste turno (depois ficam no histórico).
+    let pendingMemories = memories
     for (;;) {
         if (step) {
             if (step.kind === "prepare" && !step.attach) appendBuildOutput(id, buildPrepareSeparator([backup ? "dump do MongoDB" : "", remote ? "commit" : ""].filter(Boolean).join(" e ")))
-            const result = await runStageAgent(client, loaded, { stage: "building", text: step.text, attach: step.attach }, sessionId, controller)
+            const text = !step.attach && pendingMemories ? withDeveloperMemories(pendingMemories, step.text) : step.text
+            if (!step.attach) pendingMemories = null
+            const result = await runStageAgent(client, loaded, { stage: "building", text, attach: step.attach }, sessionId, controller)
             if (result.outcome !== "succeeded") {
                 const status = result.outcome === "interrupted" ? "interrupted" : "failed"
                 await trackBuild(id, () => settleBuild(id, status, result.message ?? null))

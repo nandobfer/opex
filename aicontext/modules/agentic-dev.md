@@ -123,7 +123,9 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   criar, editar ou excluir vale **a partir do próximo turno**, inclusive numa sessão já existente ou
   recriada. Sem memórias, a entrada é removida da sessão.
 - **Fallback**: se o OpenCode recusar a instrução, a seção vai à frente do prompt do turno
-  (`withDeveloperMemories`, separada por `---`). Falha ao ler as memórias no banco não derruba o
+  (`withDeveloperMemories`, separada por `---`) — também na etapa de build, no primeiro prompt do
+agente no turno (preparo da prévia ou correção do build; as correções seguintes do mesmo turno já
+as têm no histórico). Falha ao ler as memórias no banco não derruba o
   turno (a sessão segue com a última versão gravada).
 - O Agente Mentor não grava nestas listas, e os agentes de refinamento e de revisão de PR não as
   recebem.

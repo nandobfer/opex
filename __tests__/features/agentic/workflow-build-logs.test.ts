@@ -38,7 +38,8 @@ const mocks = vi.hoisted(() => ({
   assertRemote: vi.fn(async () => undefined),
 }))
 
-vi.mock('@/features/agentic/server/developer-memories', () => ({ syncDeveloperMemories: async () => ({ applied: true, section: '' }), withDeveloperMemories: (_sync: unknown, text: string) => text }))
+const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
+vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
 vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ resolveBuildTarget: async () => null, teardownForCleanup: async () => false }))
@@ -231,6 +232,32 @@ describe('workflow — build da prévia rodado pelo app', () => {
     expect(mocks.beginSection).toHaveBeenCalledTimes(4)
     expect(appended()).toContain('agente corrigindo o código (correção 3)')
     expect(mocks.settleBuild).toHaveBeenCalledWith(id, 'succeeded', null)
+  })
+
+  it('OPE-97: memórias recusadas pela sessão vão à frente do primeiro prompt do agente de build (uma vez por turno)', async () => {
+    memories.sync.mockResolvedValueOnce({ applied: false, section: '## Memórias e instruções permanentes\n- Rode o lint.' })
+    mocks.runBuild
+      .mockResolvedValueOnce({ exitCode: 1, tail: 'ERROR: npm ci falhou' })
+      .mockResolvedValueOnce({ exitCode: 1, tail: 'ERROR: tsc falhou' })
+      .mockResolvedValueOnce({ exitCode: 0, tail: '' })
+    const wb = await workbench()
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    const prompts = mocks.runTurn.mock.calls.map(([, request]) => (request as { text: string }).text)
+    expect(prompts).toHaveLength(2)
+    expect(prompts[0]!.startsWith('## Memórias e instruções permanentes\n- Rode o lint.\n\n---\n')).toBe(true)
+    expect(prompts[0]).toContain('ERROR: npm ci falhou')
+    expect(prompts[1]).not.toContain('Memórias e instruções permanentes')
+  })
+
+  it('OPE-97: memórias aplicadas como instrução da sessão não entram no prompt do build', async () => {
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
+    memories.sync.mockResolvedValueOnce({ applied: true, section: '## Memórias e instruções permanentes\n- Rode o lint.' })
+    const wb = await workbench()
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(memories.sync).toHaveBeenCalled()
+    expect((mocks.runTurn.mock.calls[0]![1] as { text: string }).text).not.toContain('Memórias e instruções permanentes')
   })
 
   it('agente que não consegue corrigir (ok:false) falha o build com o motivo', async () => {
