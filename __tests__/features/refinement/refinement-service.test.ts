@@ -14,11 +14,14 @@ const mocks = vi.hoisted(() => {
             remove: vi.fn(async () => ({})),
             form: { reply: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})) },
             instructions: { entry: { put: vi.fn(async () => ({})), remove: vi.fn(async () => ({})) } },
+            skill: vi.fn(async () => undefined),
         },
         permission: { reply: vi.fn(async () => ({})) },
+        skill: { list: vi.fn(async () => ({ location: {}, data: [] as Record<string, unknown>[] })) },
     }
     return {
         fakeClient,
+        settings: {} as Record<string, unknown>,
         doc: null as Record<string, unknown> | null,
         central: { _id: 'a'.repeat(24), projectId: 'p1', projectName: 'Opex', config: {} } as Record<string, unknown> | null,
         centralEnabled: true,
@@ -81,7 +84,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
 vi.mock('@/features/agentic/logic', () => ({ parseCentralConfig: () => ({ enabled: mocks.centralEnabled, sessionDirectory: '/repo/opex' }) }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(async () => task), updateTask: mocks.updateTask }))
 vi.mock('@/features/ai/server/settings', () => ({
-    loadTaskRefinementSettings: vi.fn(async () => ({ settings: { enabled: true, model: 'anthropic/claude', agent: null, variant: null, instructions: 'Regras.', include: { comments: true, history: true } } })),
+    loadTaskRefinementSettings: vi.fn(async () => ({ settings: { enabled: true, model: 'anthropic/claude', agent: null, variant: null, instructionsSource: 'text', instructions: 'Regras.', skill: null, include: { comments: true, history: true }, ...mocks.settings } })),
     availabilityOfTaskRefinement: vi.fn(async () => mocks.availability),
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
@@ -98,6 +101,9 @@ beforeEach(() => {
     mocks.updateTask.mockReset()
     mocks.updateTask.mockResolvedValue(undefined)
     mocks.doc = null
+    mocks.settings = {}
+    mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [] })
+    mocks.fakeClient.session.skill.mockResolvedValue(undefined)
     mocks.central = { _id: 'a'.repeat(24), projectId: 'p1', projectName: 'Opex', config: {} }
     mocks.centralEnabled = true
     mocks.liveChat = false
@@ -248,6 +254,63 @@ describe('turno e conclusão', () => {
         const instructions = (mocks.fakeClient.session.instructions.entry.put.mock.calls[0]![0] as { value: string }).value
         expect(instructions).toContain('Regras.')
         expect(instructions).toContain('Protocolo do refinamento')
+    })
+
+    describe('instruções por skill do OpenCode', () => {
+        const grill = { id: 'grill-me', name: 'grill-me', description: 'Interroga', path: '/skills/grill-me/SKILL.md', content: '# Grill me' }
+        const instructionsValue = () => (mocks.fakeClient.session.instructions.entry.put.mock.calls[0]![0] as { value: string }).value
+
+        it('ativa a skill na sessão (uma vez) e a entrada durável leva só o protocolo', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'grill-me' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await startRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.skill).toHaveBeenCalledWith({ sessionID: 'sess-1', id: 'grill-me', resume: false }))
+            expect(mocks.fakeClient.skill.list).toHaveBeenCalledWith({ location: { directory: '/repo/opex' } })
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(instructionsValue()).toContain('Protocolo do refinamento')
+            expect(instructionsValue()).toContain('grill-me')
+            expect(instructionsValue()).not.toContain('Regras.')
+            expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, { $set: { activeSkill: { sessionId: 'sess-1', skillId: 'grill-me' } } })
+        })
+
+        it('não reativa a skill já ativa na mesma sessão (Continuar)', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'grill-me' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })
+            mocks.fakeClient.session.get.mockResolvedValueOnce({ id: 'sess-1' } as never)
+            mocks.doc = {
+                _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'Ajustar login', projectId: 'p1', centralId: 'a'.repeat(24),
+                sessionId: 'sess-1', sessionDirectory: '/repo/opex', runState: 'interrupted', resolved: false, pendingForms: [], pendingPermissions: [], pendingSessionDeletions: [],
+                activeSkill: { sessionId: 'sess-1', skillId: 'grill-me' }, usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }, startedAt: new Date(), updatedAt: new Date(),
+            }
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await continueRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(mocks.fakeClient.session.skill).not.toHaveBeenCalled()
+            expect(instructionsValue()).not.toContain('Regras.')
+        })
+
+        it('skill ausente no OpenCode cai nas instruções de texto e avisa na saída', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'sumiu' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await startRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(mocks.fakeClient.session.skill).not.toHaveBeenCalled()
+            expect(instructionsValue()).toContain('Regras.')
+            expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice', level: 'warn', message: expect.stringContaining('sumiu') }))
+        })
+
+        it('falha ao ativar (ou OpenCode sem listar) também cai no texto', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'grill-me' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })
+            mocks.fakeClient.session.skill.mockRejectedValue(new Error('404'))
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await startRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(instructionsValue()).toContain('Regras.')
+            expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice', message: expect.stringContaining('Não foi possível ativar a skill') }))
+        })
     })
 
     it('turno sem a especificação dispara a consolidação automática e conclui sem exigir Continuar', async () => {

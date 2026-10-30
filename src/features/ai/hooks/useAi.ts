@@ -12,7 +12,7 @@ import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
 import type { TaskSummarySettings, TaskTagsSettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
+import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -54,6 +54,18 @@ export function useRefreshAiModels(provider: AiProviderId) {
 }
 
 export const useAiAgents = (enabled: boolean) => useQuery({ queryKey: key("agents"), queryFn: () => get<AiAgentDto[]>("/ai/agents"), enabled, staleTime: 2 * 60_000, retry: false })
+
+/** Skills instaladas no servidor OpenCode (sem o conteúdo). */
+export const useAiSkills = (enabled: boolean) => useQuery({ queryKey: key("skills"), queryFn: () => get<AiSkillDto[]>("/ai/skills"), enabled, staleTime: 2 * 60_000, retry: false })
+
+/** Recarrega a lista de skills ignorando o cache do servidor. */
+export function useRefreshAiSkills() {
+    const queryClient = useQueryClient()
+    return () =>
+        queryClient
+            .fetchQuery({ queryKey: key("skills"), queryFn: () => get<AiSkillDto[]>("/ai/skills?refresh=1") })
+            .catch((error: unknown) => toast.error(apiErrorMessage(error, "Não foi possível atualizar as skills")))
+}
 
 export const useUnderstandTaskSettings = () => useQuery({ queryKey: key("feature", "understand-task"), queryFn: () => get<UnderstandTaskSettingsDto>("/ai/features/understand-task") })
 
@@ -133,7 +145,7 @@ export function useSaveTaskRefinementSettings() {
         mutationFn: async (input: TaskRefinementSettings) => unwrapApi((await api.put<ApiResponse<TaskRefinementSettingsDto>>("/ai/features/task-refinement", input)).data),
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "task-refinement"), saved)
-            toast.success("Configuração de \"Refinar tarefa\" salva")
+            toast.success("Configuração do \"Agente Refinador\" salva")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })

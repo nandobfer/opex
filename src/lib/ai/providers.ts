@@ -73,6 +73,15 @@ export interface AiAgentDto {
     description: string | null
 }
 
+/** Skill instalada no servidor OpenCode (o conteúdo fica no servidor; `empty` = conteúdo em branco). */
+export interface AiSkillDto {
+    id: string
+    name: string
+    description: string | null
+    path: string
+    empty: boolean
+}
+
 /** Situação de um provedor para escolha nas features. */
 export interface AiProviderStatusDto {
     id: AiProviderId

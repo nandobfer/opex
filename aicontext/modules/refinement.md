@@ -1,4 +1,4 @@
-# Módulo: Refinar tarefa (refinamento de tarefa por agente)
+# Módulo: Refinar tarefa (refinamento de tarefa pelo Agente Refinador)
 
 Na página da tarefa, ao lado de **Entender tarefa**, o botão de ícone **Refinar tarefa** seleciona a
 aba **"Especificação técnica"** e **inicia** o refinamento (se ainda não houver): um agente do
@@ -17,14 +17,48 @@ Código: `src/features/refinement/` (domínio + servidor + UI). Reaproveita o cl
 mesa) e o **mesmo barramento de eventos** das mesas (`agentic/server/hub.ts` + `agentic_events`,
 chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
-## Configuração (Integrações › Provedores de IA › aba "Refinar tarefa")
+## Configuração (Integrações › Provedores de IA › aba "Agente Refinador")
 
 - `ai_feature_settings` (`feature: "task-refinement"`), schema `taskRefinementSettingsSchema`:
-  ativa, **modelo** e **agente** do OpenCode, variante, instruções e o que enviar (comentários,
-  histórico). **Exclusiva do OpenCode** (como "Estimar prazos"), porque depende da sessão longa e
-  dos formulários. Ativar exige modelo; modelo/variante/agente são conferidos no catálogo. O agente
+  ativa, **modelo** e **agente** do OpenCode, variante, **origem das instruções**, instruções de texto,
+  skill e o que enviar (comentários, histórico). **Exclusiva do OpenCode** (como "Estimar prazos"),
+  porque depende da sessão longa e dos formulários. Ativar exige modelo (vale para as duas origens);
+  modelo/variante/agente são conferidos no catálogo. O agente
   padrão é o **`plan`** (somente leitura e com a ferramenta de perguntas habilitada); subagentes como
   `general` e `explore` **não** conseguem perguntar pela ferramenta nativa e não devem ser usados.
+- A aba se chama **"Agente Refinador"** (id `refinar-tarefa` na URL); o botão da página da tarefa
+  continua **Refinar tarefa**.
+
+### Origem das instruções: Texto ou Skill do OpenCode
+
+- Seletor **Origem das instruções** (`OptionTabs`, `RefinementInstructionsCard`): **Texto**
+  (`instructionsSource: "text"`, padrão, campo de até 8.000 caracteres com "Restaurar padrão") ou
+  **Skill do OpenCode** (`instructionsSource: "skill"`, `skill` = id da skill).
+- Os dois valores são **sempre guardados**: trocar de origem não apaga o texto nem a skill. O texto é
+  também o **fallback** da skill. Configurações antigas (sem os campos) carregam como "Texto".
+- A lista vem do próprio OpenCode (`GET /api/ai/skills` → `GET /api/skill` do servidor, diretório da
+  integração; nenhum id fixo no código), no seletor genérico `OpencodeSkillSelect` (busca, descrição,
+  **Atualizar lista**). Skills **vazias** aparecem marcadas e não podem ser escolhidas; a skill salva
+  fora da lista aparece como "(não encontrada)". Sem nenhuma skill: estado vazio orientando a instalar
+  uma skill ou **Usar instruções de texto**; erro ao listar: "Tentar novamente".
+- **Ao salvar** com origem "Skill": é obrigatório escolher a skill ("Selecione a skill"); o servidor
+  confere no OpenCode que ela existe (`AI_SKILL_NOT_FOUND`, 400) e não está vazia (`AI_SKILL_EMPTY`,
+  400). Não há limite de tamanho do conteúdo. OpenCode desconectado só recusa (409) com a feature
+  ativa.
+- **Aviso na tela**: o `GET` devolve `skill: { status, name, message }` (`ok` | `not_found` | `empty`
+  | `unavailable`; `null` com origem "Texto", regra pura em `features/ai/refinement-skill.ts`). Fora
+  de `ok`, o topo da aba mostra a mensagem: o refinamento vai usar as instruções de texto.
+- **No refinamento**: a cada execução de turno o servidor lista as skills **no diretório da sessão**
+  (a central do projeto; `client.skill.list`), decide o plano (`planRefinementInstructions`, puro, em
+  `prompt.ts`) e, com a skill disponível, **ativa a skill na sessão** (`client.session.skill`,
+  `resume: false`) — **uma vez por sessão/skill** (`activeSkill { sessionId, skillId }` no documento;
+  Continuar/consolidação na mesma sessão não reativam; Recomeçar, sessão recriada ou troca de skill
+  ativam de novo; Reconectar não ativa nada). A entrada durável `opex-refinement` passa a levar só o
+  aviso de que as instruções são as da skill + o **protocolo fixo**, que continua valendo.
+- **Fallback explícito**: skill ausente no diretório da sessão, vazia, OpenCode sem listar ou falha ao
+  ativar → o turno usa as **instruções de texto + protocolo** (como a origem "Texto"), registra
+  `log.warn` e publica um aviso (`notice` warn) na saída do refinamento explicando o motivo. O
+  refinamento nunca quebra por causa da skill.
 - A aba traz um card **Diretório da sessão** explicando (e listando as centrais) que a sessão é
   criada no diretório da **central de desenvolvimento do projeto da tarefa** — não no diretório da
   integração OpenCode. Ver `modules/agentic-dev.md`.
@@ -65,8 +99,8 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
 **Conclusão (`resolved`)**: um turno só é marcado como esclarecido quando ele termina (`succeeded`),
 o texto do agente traz a especificação técnica **e** ela é gravada com sucesso no campo
-`technicalSpec` da tarefa. As instruções configuradas + o protocolo fixo são aplicados como **entrada
-durável da sessão** (`session.instructions.entry.put`, chave `opex-refinement`); se o servidor não
+`technicalSpec` da tarefa. As instruções configuradas (texto, ou a skill ativada na sessão) + o protocolo
+fixo são aplicados como **entrada durável da sessão** (`session.instructions.entry.put`, chave `opex-refinement`); se o servidor não
 aceitar a entrada, o protocolo é reenviado no prompt de cada turno. Quando o turno termina **sem** a
 especificação (o agente encerrou só com "tudo esclarecido"), o serviço dispara automaticamente, na
 mesma sessão, **até 2 turnos de consolidação** (`buildRefinementFinalizePrompt`) que reescrevem a
@@ -128,7 +162,7 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
 - Documento `task_refinements` (um por tarefa): `runState` (`idle`|`running`|`failed`|`interrupted`),
   `resolved`, `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
   gravada), `pendingForms`/`pendingPermissions`, `pendingSessionDeletions` (sessões do OpenCode ainda
-  pendentes de exclusão), `turnStartedAt` (marco do turno; episódio do ciclo de reconexão),
+  pendentes de exclusão), `activeSkill` (skill já ativada na sessão: `{sessionId, skillId}`), `turnStartedAt` (marco do turno; episódio do ciclo de reconexão),
   `stopRequestedAt` (Parar do usuário; desliga a reconexão automática), `reconnect` (`{outcome,
   message, at}` — desfecho estável para o cliente), `usage`, `sessionId`, `sessionDirectory`,
   `centralId`, `projectId`.
@@ -189,7 +223,8 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
 | `POST /api/tasks/[id]/refinement/permissions/[requestId]` `{decision, message?}` | Responde permissão |
 | `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart`, `reconnect` |
 | `POST /api/tasks/[id]/refinement/messages` `{text}` | Chat durante a execução: mensagem que entra no turno em andamento |
-| `GET/PUT /api/ai/features/task-refinement` | Configuração da feature + disponibilidade |
+| `GET/PUT /api/ai/features/task-refinement` | Configuração da feature + disponibilidade + situação da skill |
+| `GET /api/ai/skills` | Skills instaladas no OpenCode (para a origem "Skill do OpenCode") |
 
 Auditoria: `RefinamentoTarefa` (iniciar, recomeçar, excluir, mensagem durante a execução). A gravação da especificação usa a
 auditoria normal da tarefa (`updateTask`, entidade `Tarefa`, `especificacao: "alterada"`); como
@@ -212,5 +247,9 @@ esclarecido e **Reconectar** ao lado de **Continuar**).
 O ciclo automático compartilhado é coberto por `__tests__/features/agentic/reconnect.test.ts` (agenda e
 máquina do ciclo) e `__tests__/features/agentic/auto-reconnect.test.tsx` (hook).
 `__tests__/features/tasks/task-detail-tabs.test.tsx` cobre o slot do refinamento abaixo da
-especificação. `__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração. O
+especificação. `__tests__/features/ai/task-refinement-settings.test.ts` cobre a configuração (origem
+texto/skill, validação da skill, aviso), `__tests__/features/ai/task-refinement-tab.test.tsx` a aba,
+`__tests__/features/ai/opencode-skills.test.ts` a lista de skills e
+`__tests__/features/refinement/prompt-skill.test.ts` o plano de instruções; a ativação e o fallback
+estão em `refinement-service.test.ts`. O
 OpenCode é sempre mockado.
