@@ -6,11 +6,13 @@ import {
     MENTOR_AI_STAGES,
     MENTOR_LEVELS,
     MENTOR_SAVE_MODES,
+    MENTOR_TARGETS,
     MENTOR_TIMEOUT_DEFAULT,
     MENTOR_TIMEOUT_MAX,
     MENTOR_TIMEOUT_MIN,
     MENTOR_USER_TRIGGERS,
     type MentorAiStage,
+    type MentorTarget,
     type MentorUserTrigger,
 } from "./constants"
 
@@ -53,6 +55,14 @@ export const mentorSettingsSchema = z
         /** Decide se vale gravar: JEV (pergunta `noul`) ou qualquer provedor de texto (JSON com a nota). */
         decider: z.object({ provider: z.enum(AI_PROVIDER_IDS).nullable(), ...modelFields }),
         level: z.enum(MENTOR_LEVELS),
+        /** Triador (OPE-97): escolhe a lista de destino — JEV (pergunta `choice`) ou qualquer provedor de texto. */
+        router: z.object({
+            provider: z.enum(AI_PROVIDER_IDS).nullable(),
+            ...modelFields,
+            instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),
+        }),
+        /** Listas em que o Mentor pode gravar (ao menos uma). */
+        targets: flags(MENTOR_TARGETS),
         /** Escreve a regra genérica e decide entre criar, atualizar (fundir) ou não gravar. */
         writer: z.object({
             provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
@@ -70,12 +80,21 @@ export const mentorSettingsSchema = z
     .superRefine((value, ctx) => {
         if (value.decider.provider && !value.decider.model) ctx.addIssue({ code: "custom", path: ["decider", "model"], message: "Selecione o modelo" })
         if (value.writer.provider && !value.writer.model) ctx.addIssue({ code: "custom", path: ["writer", "model"], message: "Selecione o modelo" })
+        if (value.router.provider && !value.router.model) ctx.addIssue({ code: "custom", path: ["router", "model"], message: "Selecione o modelo" })
+        const targets = enabledTargets(value.targets)
+        if (!targets.length) ctx.addIssue({ code: "custom", path: ["targets"], message: "Escolha ao menos um destino" })
         if (!value.enabled) return
+        if (targets.length > 1 && !value.router.provider) ctx.addIssue({ code: "custom", path: ["router", "provider"], message: "Escolha o provedor do Triador" })
         if (!value.decider.provider) ctx.addIssue({ code: "custom", path: ["decider", "provider"], message: "Escolha o provedor do decisor" })
         if (!value.writer.provider) ctx.addIssue({ code: "custom", path: ["writer", "provider"], message: "Escolha o provedor do redator" })
         if (!value.scope.all && !value.scope.centralIds.length) ctx.addIssue({ code: "custom", path: ["scope", "centralIds"], message: "Escolha ao menos uma central" })
     })
 export type MentorSettings = z.infer<typeof mentorSettingsSchema>
+
+/** Destinos ligados, na ordem do catálogo. */
+export function enabledTargets(targets: Record<MentorTarget, boolean>): MentorTarget[] {
+    return MENTOR_TARGETS.filter((target) => targets[target])
+}
 
 const allUser = (value: boolean) => Object.fromEntries(MENTOR_USER_TRIGGERS.map((key) => [key, value])) as Record<MentorUserTrigger, boolean>
 
@@ -89,6 +108,8 @@ export const DEFAULT_MENTOR_SETTINGS: MentorSettings = {
     },
     decider: { provider: null, model: null, variant: null },
     level: "balanced",
+    router: { provider: null, model: null, variant: null, instructions: "" },
+    targets: { adversarial: true, "developer-global": true, "developer-central": true },
     writer: { provider: null, model: null, variant: null, instructions: DEFAULT_MENTOR_WRITER_INSTRUCTIONS },
     saveMode: "direct",
     timeoutSeconds: MENTOR_TIMEOUT_DEFAULT,
@@ -107,5 +128,7 @@ export type LessonBlock = z.infer<typeof lessonBlockSchema>
 /** Aprovar uma sugestão (o texto pode ser editado antes). */
 export const mentorApproveSchema = z.object({
     text: z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres`).optional(),
+    /** Lista de destino (trocar antes de aprovar; ausente = a escolhida pelo Triador). */
+    target: z.enum(MENTOR_TARGETS).optional(),
 })
 export type MentorApproveInput = z.infer<typeof mentorApproveSchema>

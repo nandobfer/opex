@@ -46,3 +46,40 @@ describe('textos do Agente Mentor', () => {
     expect(buildJevMentorQuestions().lesson).toMatchObject({ type: 'noul', criteria: { true: expect.any(String), false: expect.any(String) } })
   })
 })
+
+describe('prompts do Triador e do redator por destino (OPE-97)', () => {
+  it('a pergunta choice do JEV tem uma opção por destino ligado, com o critério e as instruções adicionais', async () => {
+    const { buildJevRouterQuestions } = await import('@/features/adversarial-agent/mentor/prompt')
+    const question = buildJevRouterQuestions(['adversarial', 'developer-central'], 'Prefira a central.').target
+    expect(question.type).toBe('choice')
+    if (question.type !== 'choice') return
+    expect(Object.keys(question.criteria)).toEqual(['adversarial', 'developer-central'])
+    expect(question.criteria['developer-central']).toContain('DESTE projeto')
+    expect(question.instructions).toContain('Prefira a central.')
+  })
+
+  it('Triador por texto: instruções listam só os destinos ligados; o estado leva os resumos de cada lista', async () => {
+    const { buildRouterInstructions, buildRouterState } = await import('@/features/adversarial-agent/mentor/prompt')
+    const text = buildRouterInstructions(['adversarial', 'developer-global'])
+    expect(text).toContain('- adversarial (Agente Adversário)')
+    expect(text).toContain('- developer-global')
+    expect(text).not.toContain('- developer-central')
+    expect(text).toContain('"target": "<adversarial | developer-global>"')
+    expect(buildRouterState({ origem: [] }, [{ target: 'developer-global', summaries: ['Escreva testes'] }])).toEqual({ origem: [], memoriasExistentes: { 'Agente desenvolvedor — globais': ['Escreva testes'] } })
+  })
+
+  it('redator: público por destino, lista de destino completa e as outras só pelos resumos', () => {
+    expect(buildWriterInstructions('', 'developer-central')).toContain('DESTE projeto')
+    expect(buildWriterInstructions('', 'developer-central')).toContain('Pode citar caminhos')
+    expect(buildWriterInstructions('', 'adversarial')).toContain('revisor adversário')
+    expect(buildWriterInstructions('', 'developer-global')).toContain('nunca grave a mesma regra em duas listas')
+    const prompt = buildWriterPrompt({}, [{ id: 'g1', summary: 'Testes', text: 'Escreva testes.' }], null, 'developer-global', [{ target: 'adversarial', summaries: ['Providers'] }])
+    expect(prompt).toContain('Memórias existentes da lista de destino (Agente desenvolvedor — globais)')
+    expect(prompt).toContain('id g1 · Testes')
+    expect(prompt).toContain('Agente Adversário:\n- Providers')
+  })
+
+  it('o decisor pergunta pelo revisor ou pelo desenvolvedor', () => {
+    expect(buildJevMentorQuestions().lesson!.instructions).toContain('agente desenvolvedor')
+  })
+})

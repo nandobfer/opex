@@ -6,9 +6,10 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
+import { OptionTabs } from "@/components/ui/option-tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
-import { MENTOR_LEVEL_DEFS, MENTOR_SOURCE_LABELS, MENTOR_USER_TRIGGER_LABELS } from "../../mentor/constants"
+import { MENTOR_LEVEL_DEFS, MENTOR_SOURCE_LABELS, MENTOR_TARGET_LABELS, MENTOR_TARGETS, MENTOR_USER_TRIGGER_LABELS, type MentorTarget } from "../../mentor/constants"
 import type { MentorRunDto } from "../../mentor/types"
 import { useMentorRunDecision } from "../../hooks/useMentor"
 import { formatCost, formatDuration } from "../ReviewBadges"
@@ -23,17 +24,27 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     )
 }
 
-/** Detalhe de uma execução do Mentor; numa sugestão, Aprovar (com o texto editável) e Descartar. */
+/** Linha do Triador: destino, confiança e motivo. */
+function routerLine(run: MentorRunDto): string {
+    if (!run.target) return ""
+    const confidence = run.routerConfidence === null ? "" : ` · confiança ${Math.round(run.routerConfidence * 100)}%`
+    return `${MENTOR_TARGET_LABELS[run.target].label}${confidence}${run.routerReason ? `\n${run.routerReason}` : ""}`
+}
+
+/** Detalhe de uma execução do Mentor; numa sugestão, Aprovar (com o texto e o destino editáveis) e Descartar. */
 export function MentorRunDialog({ run, onClose }: { run: MentorRunDto | null; onClose: () => void }) {
     const decision = useMentorRunDecision()
     const [draft, setDraft] = useState<{ id: string; text: string } | null>(null)
+    const [targetDraft, setTargetDraft] = useState<{ id: string; target: MentorTarget } | null>(null)
     const [confirmDiscard, setConfirmDiscard] = useState(false)
     const suggested = run?.status === "suggested" && run.proposal
     const text = run && draft?.id === run.id ? draft.text : (run?.proposal?.text ?? "")
+    const target: MentorTarget = run && targetDraft?.id === run.id ? targetDraft.target : (run?.proposal?.target ?? "adversarial")
+    const moved = Boolean(run?.proposal && target !== run.proposal.target)
     const tooLong = text.length > MEMORY_TEXT_MAX
     const decide = (kind: "approve" | "discard") => {
         if (!run) return
-        decision.mutate({ id: run.id, decision: kind, ...(kind === "approve" ? { text } : {}) }, { onSuccess: onClose })
+        decision.mutate({ id: run.id, decision: kind, ...(kind === "approve" ? { text, target } : {}) }, { onSuccess: onClose })
     }
     return (
         <Dialog open={run !== null} onOpenChange={(open) => !open && onClose()}>
@@ -57,15 +68,28 @@ export function MentorRunDialog({ run, onClose }: { run: MentorRunDto | null; on
                         {run.userMessage && <Row label="Mensagem">{run.userMessage}</Row>}
                         {run.lessonCount > 0 && <Row label="Pedidos do desenvolvedor">{run.lessonCount}</Row>}
                         <Row label="Decisor">{`${MENTOR_LEVEL_DEFS[run.level].label} · ${formatScore(run.score, run.threshold)}${run.deciderReason ? `\n${run.deciderReason}` : ""}`}</Row>
+                        {run.target && <Row label="Triador">{routerLine(run)}</Row>}
                         {run.writerAction && <Row label="Redator">{`${run.writerAction === "create" ? "Criar" : run.writerAction === "update" ? "Fundir com uma memória existente" : "Não gravar"}${run.writerReason ? `\n${run.writerReason}` : ""}`}</Row>}
                         {run.sanitizerReason && <Row label={run.status === "discarded" ? "Motivo do descarte" : "Sanitizador"}>{run.sanitizerReason}</Row>}
                         {run.error && <Row label="Erro">{run.error}</Row>}
+                        {suggested && (
+                            <Field id="mentor-run-target" label="Destino da memória">
+                                <OptionTabs<MentorTarget>
+                                    id="mentor-run-target"
+                                    options={MENTOR_TARGETS.map((value) => ({ value, label: MENTOR_TARGET_LABELS[value].short }))}
+                                    value={target}
+                                    onChange={(next) => setTargetDraft({ id: run.id, target: next })}
+                                    className="w-full flex-wrap"
+                                />
+                                {moved && run.proposal?.action === "update" && <p className="text-xs text-muted-foreground">Em outra lista, a fusão vira uma memória nova.</p>}
+                            </Field>
+                        )}
                         {suggested ? (
                             <Field id="mentor-run-text" label="Memória sugerida (pode editar antes de aprovar)" error={tooLong ? `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres` : undefined}>
                                 <Textarea id="mentor-run-text" rows={6} value={text} onChange={(event) => setDraft({ id: run.id, text: event.target.value })} />
                             </Field>
                         ) : (
-                            run.proposal && <Row label="Memória">{run.proposal.text}</Row>
+                            run.proposal && <Row label={`Memória (${MENTOR_TARGET_LABELS[run.proposal.target].short})`}>{run.proposal.text}</Row>
                         )}
                     </dl>
                 )}
@@ -83,7 +107,7 @@ export function MentorRunDialog({ run, onClose }: { run: MentorRunDto | null; on
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>Descartar a sugestão?</AlertDialogTitle>
-                            <AlertDialogDescription>Nenhuma memória será gravada para o Agente Adversário a partir desta execução.</AlertDialogDescription>
+                            <AlertDialogDescription>Nenhuma memória será gravada a partir desta execução.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Voltar</AlertDialogCancel>

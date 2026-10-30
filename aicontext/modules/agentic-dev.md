@@ -127,8 +127,10 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 agente no turno (preparo da prévia ou correção do build; as correções seguintes do mesmo turno já
 as têm no histórico). Falha ao ler as memórias no banco não derruba o
   turno (a sessão segue com a última versão gravada).
-- O Agente Mentor não grava nestas listas, e os agentes de refinamento e de revisão de PR não as
-  recebem.
+- O **Agente Mentor** também grava nestas listas: depois do decisor, o **Triador** escolhe UMA lista
+  entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
+  `modules/adversarial-agent.md`, "Agente Mentor"). Os agentes de refinamento e de revisão de PR não
+  recebem estas memórias.
 - O Agente Opex gerencia as duas listas pelas ferramentas de memórias (`centralId` de
   `list_centrals` na lista da central; ver `modules/opex-agent.md`).
 

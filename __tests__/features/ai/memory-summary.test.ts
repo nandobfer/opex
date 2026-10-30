@@ -4,9 +4,18 @@ import { memoryInputSchema, memorySummarySettingsSchema, DEFAULT_MEMORY_SUMMARY_
 
 describe('Resumo de memórias (puro)', () => {
   it('interpreta o JSON do modelo, tolerando cercas e texto em volta', () => {
-    expect(parseFormattedMemory('Claro!\n```json\n{"texto": "Use  pt-BR.\\n\\n\\nSempre.", "resumo": "- **Idioma** pt-BR\\nextra"}\n```', 80)).toEqual({ texto: 'Use pt-BR.\n\nSempre.', resumo: 'Idioma pt-BR' })
-    expect(parseFormattedMemory('sem json', 80)).toBeNull()
-    expect(parseFormattedMemory('{"texto": "", "resumo": "x"}', 80)).toBeNull()
+    expect(parseFormattedMemory('Claro!\n```json\n{"texto": "Use  pt-BR.\\n\\n\\nSempre.", "resumo": "- **Idioma** pt-BR\\nextra"}\n```')).toEqual({ texto: 'Use pt-BR.\n\nSempre.', resumo: 'Idioma pt-BR' })
+    expect(parseFormattedMemory('sem json')).toBeNull()
+    expect(parseFormattedMemory('{"texto": "", "resumo": "x"}')).toBeNull()
+  })
+
+  it('regressão: o resumo da IA maior que o tamanho configurado fica inteiro; só o teto de segurança corta', () => {
+    const long = 'Usar o design da tarefa de referência como base visual nas próximas telas do módulo'
+    expect(long.length).toBeGreaterThan(80)
+    expect(parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: long }))?.resumo).toBe(long)
+    const runaway = parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: 'palavra '.repeat(60) }))!.resumo
+    expect(runaway.length).toBeLessThanOrEqual(200)
+    expect(runaway.endsWith('…')).toBe(true)
   })
 
   it('resumo de reserva: primeira frase, cortada em limite de palavra', () => {
