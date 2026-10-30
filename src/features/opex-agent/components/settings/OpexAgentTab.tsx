@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Brain, Info, Loader2, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
+import { Brain, Info, Loader2, Plug, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
@@ -24,11 +24,13 @@ import { OpexFilesCard } from "./OpexFilesCard"
 import { OpexHostCard } from "./OpexHostCard"
 import { OpexToolsCard } from "./OpexToolsCard"
 import { OpexMemoriesSection } from "./OpexMemoriesSection"
+import { OpexMcpSection } from "./mcp/OpexMcpSection"
 
-type OpexSection = "geral" | "ferramentas" | "memorias"
+type OpexSection = "geral" | "ferramentas" | "mcps" | "memorias"
 const SECTIONS: IntegrationTabDef<OpexSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "ferramentas", label: "Ferramentas", icon: Wrench },
+    { id: "mcps", label: "MCPs", icon: Plug },
     { id: "memorias", label: "Memórias", icon: Brain },
 ]
 
@@ -37,7 +39,7 @@ const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1
 /**
  * Aba "Agente Opex" de `/integracoes/ia`, em seções (copiadas do Ciliar): Geral (ativo, agente
  * principal, subagente de título e resumo, instruções e arquivos), Ferramentas (seleção e confirmação
- * por ferramenta) e Memórias (globais, do dono e do cliente). Um único formulário para Geral e
+ * por ferramenta), MCPs (servidores Model Context Protocol) e Memórias (globais, do dono e do cliente). Um único formulário para Geral e
  * Ferramentas: trocar de seção mantém o rascunho.
  */
 export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
@@ -148,7 +150,8 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                             {footer(go)}
                         </>
                     )}
-                    {/* Salva sozinho (cada memória grava na hora). */}
+                    {/* Salvam sozinhos (cada MCP e cada memória gravam na hora). */}
+                    {section === "mcps" && <OpexMcpSection />}
                     {section === "memorias" && <OpexMemoriesSection />}
                 </>
             )}

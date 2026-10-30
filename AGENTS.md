@@ -166,7 +166,8 @@ sem pedido explícito.
   `src/lib/pusher/channel-auth.ts`.
 - Agente Opex: `opex-session-updated` / `opex-session-deleted` em `private-app` (dono) ou no canal
   `private-opex-{clientId}-{userId}` (payload `{ id }`); a resposta ao vivo do chat vai por NDJSON
-  (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher.
+  (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher. MCPs do agente: `opex-mcp-updated`
+  (`{ id }`) em `private-app`.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.
@@ -278,7 +279,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai` e `@ai-sdk/deepseek`, sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
-  Integrações › Provedores de IA (`aicontext/modules/ai.md`)
+  Integrações › Provedores de IA (`aicontext/modules/ai.md`); cliente MCP do Agente Opex com
+  `@ai-sdk/mcp` (importada sob demanda; `aicontext/modules/opex-agent.md`, "MCPs")
 - Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com
   4 shards paralelos (`.github/workflows/ci-cd.yml`) e `maxWorkers: "100%"`
 - Build e execução: scripts de `package.json`; Docker (`Dockerfile` + `docker-compose.yml`)

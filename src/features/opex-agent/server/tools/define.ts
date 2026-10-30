@@ -1,7 +1,9 @@
+import type { FlexibleSchema } from "ai"
 import type { ZodType } from "zod"
 import { DomainError } from "@/lib/api/route"
 import type { OpexToolGroup } from "../../constants"
 import type { OpexClientToolGroup } from "../../client-tools"
+import type { OPEX_MCP_TOOL_GROUP } from "../../mcp"
 import type { OpexServerScope } from "../scope"
 
 /**
@@ -22,7 +24,7 @@ export interface OpexToolContext {
 
 export interface OpexToolDef<I = unknown> {
     name: string
-    group: OpexToolGroup | OpexClientToolGroup
+    group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP
     /** Rótulo curto em pt-BR exibido no card da ferramenta. */
     label: string
     description: string
@@ -32,6 +34,10 @@ export interface OpexToolDef<I = unknown> {
     /** Só o **admin** do cliente recebe a ferramenta (catálogo do portal). */
     adminOnly?: boolean
     input: ZodType<I>
+    /** Esquema mostrado ao modelo quando difere de `input` (ex.: o JSON Schema de uma ferramenta de MCP). */
+    modelInputSchema?: FlexibleSchema<unknown>
+    /** Ferramenta vinda de um MCP cadastrado (revalidada antes de executar no portal). */
+    mcpServerId?: string
     /** Frase do card de confirmação ("Excluir o apontamento de 2 h da GO-DEV-12"). */
     // Sintaxe de método: permite guardar ferramentas de entradas diferentes numa lista `OpexTool`.
     summarize?(input: I): string

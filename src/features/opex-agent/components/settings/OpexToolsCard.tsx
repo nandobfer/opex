@@ -2,11 +2,8 @@
 
 import { useMemo } from "react"
 import { useWatch, type UseFormReturn } from "react-hook-form"
-import { AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckTree } from "@/components/ui/check-tree/CheckTree"
-import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
 import type { OpexAgentSettings } from "../../schemas"
 import {
     buildOpexToolTree,
@@ -16,14 +13,8 @@ import {
     nextConfirmationOverrides,
     toolConfirms,
     type OpexToolMetaDto,
-    type OpexToolRisk,
 } from "../../tool-tree"
-
-const RISK_BADGES: Record<OpexToolRisk, { label: string; className: string }> = {
-    read: { label: "Leitura", className: "bg-muted text-muted-foreground" },
-    write: { label: "Altera", className: "bg-primary/10 text-primary" },
-    destructive: { label: "Destrutiva", className: "bg-warning/15 text-warning" },
-}
+import { ToolConfirmMeta } from "./ToolConfirmMeta"
 
 interface ToolLeafMetaProps {
     meta: OpexToolMetaDto
@@ -33,28 +24,18 @@ interface ToolLeafMetaProps {
 
 /** Risco, "sempre ligada" e se pede confirmação, ao lado do nome de cada ferramenta (copiado do Ciliar). */
 function ToolLeafMeta({ meta, overrides, onChange }: ToolLeafMetaProps) {
-    const badge = RISK_BADGES[meta.risk]
     const confirms = toolConfirms(meta, overrides)
-    const custom = confirms !== defaultToolConfirms(meta)
-    const id = `opex-confirm-${meta.name}`
     return (
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <code className="text-[10px] text-muted-foreground">{meta.name}</code>
-            <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-semibold", badge.className)}>{badge.label}</span>
-            {meta.alwaysOn && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Sempre ligada</span>}
-            <span className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                <Switch id={id} checked={confirms} onCheckedChange={(value) => onChange(meta, value)} className="scale-75" aria-label={`${meta.label}: pede confirmação`} />
-                <label htmlFor={id} className="cursor-pointer">
-                    Pede confirmação
-                </label>
-                {custom && <span className="font-semibold text-primary">· personalizado</span>}
-            </span>
-            {meta.risk === "destructive" && !confirms && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning" role="note">
-                    <AlertTriangle className="h-3 w-3" aria-hidden /> Ação destrutiva sem confirmação
-                </span>
-            )}
-        </span>
+        <ToolConfirmMeta
+            id={`opex-confirm-${meta.name}`}
+            name={meta.name}
+            label={meta.label}
+            risk={meta.risk}
+            confirms={confirms}
+            custom={confirms !== defaultToolConfirms(meta)}
+            onChange={(value) => onChange(meta, value)}
+            badges={meta.alwaysOn ? <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Sempre ligada</span> : null}
+        />
     )
 }
 

@@ -27,8 +27,13 @@ vi.mock('@/features/opex-agent/server/settings', () => ({
   opexAvailability: async () => ({ available: true, reason: null }),
 }))
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: mocks.clientActorFor }))
+vi.mock('@/features/opex-agent/server/mcp/service', () => ({
+  existingMcpServerIds: async (ids: string[]) => ids.filter((id) => id !== MISSING_MCP),
+  loadEnabledMcpServers: async (ids: string[]) => ids.filter((id) => id === MCP_ON).map((id) => ({ _id: id })),
+}))
 
 import {
+  setClientMcpAccess,
   assertClientOpexEnabled,
   assertClientToolAllowed,
   clientOpexConfigDto,
@@ -45,6 +50,9 @@ import type { MemoryModel } from '../../helpers/memory-model'
 const clients = () => store.clients as MemoryModel
 const CLIENT_A = 'a'.repeat(24)
 const CLIENT_B = 'b'.repeat(24)
+const MCP_ON = 'c'.repeat(24)
+const MCP_OFF = 'd'.repeat(24)
+const MISSING_MCP = 'e'.repeat(24)
 
 const actor = (clientId: string): ClientActor =>
   ({
@@ -65,7 +73,7 @@ beforeEach(() => {
 
 describe('configuração do Agente Opex por cliente', () => {
   it('sem configuração salva, o agente vem ativado com todas as ferramentas do portal, menos as desligadas por padrão', async () => {
-    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [] })
+    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [], enabledMcpServers: [] })
     const dto = await getClientOpexConfig(CLIENT_A)
     expect(dto.enabled).toBe(true)
     expect(dto.enabledTools).toEqual(OPEX_CLIENT_TOOL_NAMES.filter((name) => !OPEX_CLIENT_OPT_IN_TOOLS.includes(name)))
@@ -73,11 +81,12 @@ describe('configuração do Agente Opex por cliente', () => {
   })
 
   it('normaliza valor ausente e ignora nomes fora do catálogo', () => {
-    expect(normalizeClientOpexConfig(undefined)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [] })
+    expect(normalizeClientOpexConfig(undefined)).toEqual({ enabled: true, disabledTools: [], enabledOptInTools: [], enabledMcpServers: [] })
     expect(normalizeClientOpexConfig({ enabled: false, disabledTools: [OPEX_CLIENT_CONTEXT_TOOL, 'nao_existe', 'list_tasks'], enabledOptInTools: ['list_tasks', 'list_jobs'] })).toEqual({
       enabled: false,
       disabledTools: ['list_tasks'],
       enabledOptInTools: ['list_jobs'],
+      enabledMcpServers: [],
     })
   })
 
@@ -87,7 +96,7 @@ describe('configuração do Agente Opex por cliente', () => {
 
     expect(saved.enabledTools).toContain(OPEX_CLIENT_CONTEXT_TOOL)
     expect(saved.enabledTools).not.toContain('delete_user')
-    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: ['delete_user'], enabledOptInTools: [...OPEX_CLIENT_OPT_IN_TOOLS] })
+    expect(await loadClientOpexConfig(CLIENT_A)).toEqual({ enabled: true, disabledTools: ['delete_user'], enabledOptInTools: [...OPEX_CLIENT_OPT_IN_TOOLS], enabledMcpServers: [] })
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidadeId: CLIENT_A, acao: 'ATUALIZAR' }))
     expect(mocks.publishAppEvent).toHaveBeenCalledWith('opex-client-config-updated', { clientId: CLIENT_A })
     expect(mocks.publishToChannels).toHaveBeenCalledWith([`private-client-${CLIENT_A}`], 'opex-client-config-updated', { clientId: CLIENT_A })
@@ -147,5 +156,35 @@ describe('configuração do Agente Opex por cliente', () => {
     const status = await clientOpexStatus(actor(CLIENT_A))
     expect(status).toMatchObject({ enabled: true, available: true, reason: null, files: { maxPerMessage: 10, maxSizeMb: 100 } })
     expect(status.modelLabel).toContain('gemini-2.5-flash')
+  })
+
+  it('MCPs: desligados por padrão, liberados por cliente e mantidos quando a tela salva só as ferramentas', async () => {
+    expect((await getClientOpexConfig(CLIENT_A)).enabledMcpServers).toEqual([])
+    const saved = await saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: [OPEX_CLIENT_CONTEXT_TOOL], enabledMcpServers: [MCP_ON, MCP_ON] }, 'local')
+    expect(saved.enabledMcpServers).toEqual([MCP_ON])
+    expect((await loadClientOpexConfig(CLIENT_B)).enabledMcpServers).toEqual([])
+    await saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: [OPEX_CLIENT_CONTEXT_TOOL] }, 'local')
+    expect((await loadClientOpexConfig(CLIENT_A)).enabledMcpServers).toEqual([MCP_ON])
+    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ depois: expect.objectContaining({ mcps: [MCP_ON] }) }))
+  })
+
+  it('MCP inexistente dá 400 OPEX_MCP_NOT_FOUND', async () => {
+    await expect(saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: [], enabledMcpServers: [MISSING_MCP] }, 'local')).rejects.toMatchObject({ status: 400, code: 'OPEX_MCP_NOT_FOUND' })
+  })
+
+  it('setClientMcpAccess libera e retira um MCP do cliente', async () => {
+    expect((await setClientMcpAccess(CLIENT_A, MCP_ON, true, 'local')).enabledMcpServers).toEqual([MCP_ON])
+    expect((await setClientMcpAccess(CLIENT_A, MCP_ON, false, 'local')).enabledMcpServers).toEqual([])
+  })
+
+  it('ferramenta de MCP no portal: exige o MCP liberado ao cliente e habilitado no agente', async () => {
+    mocks.clientActorFor.mockResolvedValue(actor(CLIENT_A))
+    await saveClientOpexConfig(CLIENT_A, { enabled: true, enabledTools: [], enabledMcpServers: [MCP_ON, MCP_OFF] }, 'local')
+    await expect(assertClientToolAllowed('mcp_x_y', actor(CLIENT_A), MCP_ON)).resolves.toBeTruthy()
+    // Liberado, mas desabilitado no agente.
+    await expect(assertClientToolAllowed('mcp_x_y', actor(CLIENT_A), MCP_OFF)).rejects.toMatchObject({ status: 403, code: 'OPEX_TOOL_DISABLED' })
+    // Habilitado, mas não liberado a este cliente.
+    mocks.clientActorFor.mockResolvedValue(actor(CLIENT_B))
+    await expect(assertClientToolAllowed('mcp_x_y', actor(CLIENT_B), MCP_ON)).rejects.toMatchObject({ status: 403 })
   })
 })

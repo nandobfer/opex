@@ -16,13 +16,14 @@ import { OPEX_CLIENT_TOOLS } from "../../../client-tools"
 import { clientOpexAgentConfigSchema, type ClientOpexAgentConfigInput } from "../../../schemas"
 import { useClientOpexAgentConfig, useSaveClientOpexAgentConfig } from "../../../hooks/useClientOpexAgentConfig"
 import { ClienteOpexToolsCard } from "./ClienteOpexToolsCard"
+import { ClienteOpexMcpCard } from "./ClienteOpexMcpCard"
 
 const ALL_TOOLS = OPEX_CLIENT_TOOLS.map((tool) => tool.name)
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
 /**
  * Aba "Agente Opex" do detalhe do cliente (dono): ativa/desativa o agente no portal e escolhe as
- * ferramentas. Sem configuração salva, o agente aparece **ativado** com todas as ferramentas.
+ * ferramentas e os MCPs liberados. Sem configuração salva, o agente aparece **ativado** com todas as ferramentas.
  */
 export function ClienteOpexAgentTab({ clientId }: { clientId: string }) {
     const query = useClientOpexAgentConfig(clientId)
@@ -30,14 +31,15 @@ export function ClienteOpexAgentTab({ clientId }: { clientId: string }) {
     const form = useForm<ClientOpexAgentConfigInput>({
         resolver: zodResolver(clientOpexAgentConfigSchema),
         mode: "onChange",
-        defaultValues: { enabled: true, enabledTools: ALL_TOOLS },
+        defaultValues: { enabled: true, enabledTools: ALL_TOOLS, enabledMcpServers: [] },
     })
     const dirty = form.formState.isDirty
     const enabled = useWatch({ control: form.control, name: "enabled" })
     const enabledTools = useWatch({ control: form.control, name: "enabledTools" }) ?? []
+    const enabledMcpServers = useWatch({ control: form.control, name: "enabledMcpServers" }) ?? []
 
     useEffect(() => {
-        if (query.data) form.reset({ enabled: query.data.enabled, enabledTools: query.data.enabledTools })
+        if (query.data) form.reset({ enabled: query.data.enabled, enabledTools: query.data.enabledTools, enabledMcpServers: query.data.enabledMcpServers })
     }, [query.data, form])
 
     if (query.isLoading) return <Skeleton className="h-96 w-full" />
@@ -47,7 +49,7 @@ export function ClienteOpexAgentTab({ clientId }: { clientId: string }) {
 
     const submit = form.handleSubmit(async (values) => {
         const saved = await save.mutateAsync(values).catch(() => null)
-        if (saved) form.reset({ enabled: saved.enabled, enabledTools: saved.enabledTools })
+        if (saved) form.reset({ enabled: saved.enabled, enabledTools: saved.enabledTools, enabledMcpServers: saved.enabledMcpServers })
     })
 
     return (
@@ -75,6 +77,7 @@ export function ClienteOpexAgentTab({ clientId }: { clientId: string }) {
 
             <fieldset disabled={!enabled} className="min-w-0 space-y-4 border-0 p-0 disabled:opacity-60">
                 <ClienteOpexToolsCard value={enabledTools} onChange={(next) => form.setValue("enabledTools", next, { shouldDirty: true })} />
+                <ClienteOpexMcpCard value={enabledMcpServers} onChange={(next) => form.setValue("enabledMcpServers", next, { shouldDirty: true })} />
             </fieldset>
 
             <FormFooter>
