@@ -22,6 +22,7 @@ vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 // Memórias do adversário: a lista `adversarial` do serviço de memórias dos agentes.
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, createAgentMemory: mocks.create, updateAgentMemory: mocks.update }))
+vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: vi.fn(async () => [{ id: 'c1', projectName: 'App' }]) }))
 vi.mock('@/features/adversarial-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   store.reviews = memoryModel()
@@ -205,7 +206,11 @@ describe('pipeline do Agente Mentor', () => {
     const other = await run(settings({ saveMode: 'suggest' }))
     expect(await discardMentorRun(String(other._id), 'local')).toMatchObject({ status: 'discarded' })
     expect(mocks.create).toHaveBeenCalledTimes(1)
-    expect((await listMentorRuns()).map((item) => item.status).sort()).toEqual(['created', 'discarded'])
+    expect((await listMentorRuns()).items.map((item) => item.status).sort()).toEqual(['created', 'discarded'])
+    // Lista paginada (página Agente Mentor): recorte por situação, total do recorte e as centrais do filtro.
+    const suggested = await listMentorRuns({ statuses: ['discarded'], page: 1, limit: 1 })
+    expect(suggested).toMatchObject({ total: 1, totalPages: 1, page: 1, centrals: [{ id: 'c1', projectName: 'App' }] })
+    expect(suggested.items.map((item) => item.status)).toEqual(['discarded'])
   })
 
   it('decisões simultâneas na mesma sugestão: grava uma vez só e a outra recebe 409', async () => {

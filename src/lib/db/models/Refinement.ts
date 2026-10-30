@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 
 /**
- * Refinamento de tarefa (Integrações › Provedores de IA › Refinar tarefa):
+ * Refinamento de tarefa (Integrações › Inteligência Artificial › Refinar tarefa):
  * - `task_refinements`: um refinamento por tarefa (sessão longa do OpenCode, estado, perguntas
  *   pendentes e a última especificação salva);
  * - a saída da IA é gravada na mesma coleção de eventos das sessões longas (`agentic_events`),

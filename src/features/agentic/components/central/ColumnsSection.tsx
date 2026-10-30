@@ -10,7 +10,7 @@ import type { CentralForm } from "./form"
 
 /**
  * Aba Colunas e conclusão: a **fila** e a **movimentação** das colunas (que podem herdar o padrão
- * global da aba "Desenvolvimento agêntico" ou ser personalizadas nesta central — OPE-79), a limpeza
+ * global da aba "Agente Desenvolvedor" ou ser personalizadas nesta central — OPE-79), a limpeza
  * após o merge e o que vai para o planejador.
  */
 export function ColumnsSection({ form }: { form: CentralForm }) {

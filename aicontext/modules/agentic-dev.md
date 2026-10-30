@@ -14,7 +14,7 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 `src/features/agentic/server/preview-backup.ts`; se ele roda ou não é uma opção da central
 (`environment.backupDatabase`, OPE-72 — ver “Backup do MongoDB da prévia”).
 
-## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
+## Configuração (Integrações › Inteligência Artificial › aba "Agente Desenvolvedor", ícone `</>` `CodeXml`)
 
 - Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
   `agenticSettingsSchema`): **ativa**, o **agente padrão** (agente, modelo `provedor/modelo`,
@@ -103,7 +103,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 Cada central pode apontar uma **coluna da fila** (`columns.queue`, `null` = desligada; aba "Colunas e
 conclusão"). A coluna pode ser **personalizada** na central ou **herdada** do padrão global da aba
-"Desenvolvimento agêntico" (`columns.inheritQueue`, OPE-79) — o que vale é sempre a **coluna
+"Agente Desenvolvedor" (`columns.inheritQueue`, OPE-79) — o que vale é sempre a **coluna
 efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila para abrir a mesa:
 
 - **Vaga livre** (mesas abertas `< maxConcurrent`) → a mesa é criada **na hora** e o planejamento

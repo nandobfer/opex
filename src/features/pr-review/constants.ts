@@ -56,7 +56,7 @@ export const PR_REVIEW_STAGE_LABEL = "Agente Revisor"
 export const PR_REVIEW_INSTRUCTIONS_KEY = "opex-pr-review"
 /** Página `/agente-revisor` (lista das revisões, item da barra lateral). */
 export const PR_REVIEWS_HREF = "/agente-revisor"
-/** Aba de configuração em Integrações › Provedores de IA (id mantido para não quebrar links). */
+/** Aba de configuração em Integrações › Inteligência Artificial (id mantido para não quebrar links). */
 export const PR_REVIEW_SETTINGS_HREF = "/integracoes/ia?aba=revisao-pr"
 /** Revisões por página na lista (padrão e máximo aceitos pela API). */
 export const PR_REVIEW_PAGE_LIMIT = 20

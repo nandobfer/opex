@@ -106,8 +106,8 @@ describe('catálogo de integrações', () => {
     expect(def.publicFields.find((field) => field.key === 'commentOnCreate')?.defaultValue).toBe(true)
   })
 
-  it('Provedores de IA: hub com rotas próprias e provedores filhos, sem .env', () => {
-    expect(getIntegrationDef('ai').name).toBe('Provedores de IA')
+  it('Inteligência Artificial: hub com rotas próprias e provedores filhos, sem .env', () => {
+    expect(getIntegrationDef('ai').name).toBe('Inteligência Artificial')
     expect(integrationPath('ai')).toBe('/integracoes/ia')
     expect(integrationPath('ai_opencode')).toBe('/integracoes/ia/opencode')
     expect(integrationPath('ai_gemini')).toBe('/integracoes/ia/gemini')

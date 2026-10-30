@@ -77,7 +77,7 @@ export function CentralPage({ id }: { id: string }) {
                 <div className="min-w-0 space-y-1">
                     <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
                         <Link href={AGENTIC_SETTINGS_HREF}>
-                            <ArrowLeft className="h-4 w-4" aria-hidden /> Desenvolvimento agêntico
+                            <ArrowLeft className="h-4 w-4" aria-hidden /> Agente Desenvolvedor
                         </Link>
                     </Button>
                     <h1 className="text-xl font-semibold md:text-2xl">Central {central.projectName}</h1>

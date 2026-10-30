@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model } from "mongoose"
 
 /**
- * Provedores de IA:
+ * Inteligência Artificial:
  * - `ai_feature_settings`: configuração de cada feature que usa IA (provedor, modelo, prompt…),
  *   validada pelo schema Zod da feature;
  * - `ai_usage_logs`: uma linha por geração (tokens, custo, duração, resultado), retida 90 dias.

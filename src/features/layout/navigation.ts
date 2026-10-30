@@ -1,4 +1,6 @@
-import { Banknote, Clock, GitPullRequest, LayoutDashboard, ListTodo, Plug, Server, Workflow } from "lucide-react"
+import { Banknote, Clock, CodeXml, GitPullRequest, GraduationCap, LayoutDashboard, ListTodo, Plug, Server, Swords } from "lucide-react"
+import { ADVERSARIAL_PAGE_HREF } from "@/features/adversarial-agent/constants"
+import { MENTOR_PAGE_HREF } from "@/features/adversarial-agent/mentor/constants"
 import { PR_REVIEWS_HREF } from "@/features/pr-review/constants"
 import type { NavBadgeKey, NavItemDef, NavSectionDef } from "./types"
 
@@ -11,9 +13,17 @@ export const APP_NAV: readonly NavSectionDef[] = [
             { href: "/tarefas", label: "Tarefas", title: "Tarefas", icon: ListTodo },
             { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
             { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
-            { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: Workflow },
-            { href: PR_REVIEWS_HREF, label: "Agente Revisor", title: "Agente Revisor", icon: GitPullRequest },
+            { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: CodeXml },
             { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
+        ],
+    },
+    {
+        id: "agentes",
+        label: "Agentes",
+        items: [
+            { href: PR_REVIEWS_HREF, label: "Agente Revisor", title: "Agente Revisor", icon: GitPullRequest },
+            { href: ADVERSARIAL_PAGE_HREF, label: "Agente Adversário", title: "Agente Adversário", icon: Swords },
+            { href: MENTOR_PAGE_HREF, label: "Agente Mentor", title: "Agente Mentor", icon: GraduationCap },
         ],
     },
     {

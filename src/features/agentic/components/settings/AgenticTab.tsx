@@ -26,7 +26,7 @@ const TABS: readonly IntegrationTabDef<SettingsTab>[] = [
 ]
 
 /**
- * Aba "Desenvolvimento agêntico" (Provedores de IA): padrões globais (chat durante a execução, fila,
+ * Aba "Agente Desenvolvedor" (Inteligência Artificial): padrões globais (chat durante a execução, fila,
  * movimentação das colunas, correção de CI e portas da prévia, que as centrais herdam ou
  * personalizam), liga a feature e define os agentes padrão de cada etapa, e lista as centrais (uma
  * por projeto). Só usa o OpenCode.

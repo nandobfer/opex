@@ -6,7 +6,7 @@ import { getOpencodeInfo } from "@/lib/ai/opencode"
 import { AI_PROVIDERS } from "@/lib/ai/providers"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
 
-/** Testes de conexão dos provedores de IA e do hub "Provedores de IA". */
+/** Testes de conexão dos provedores de IA e do hub "Inteligência Artificial". */
 
 function failFrom(error: unknown): never {
     fail(error instanceof AiProviderError ? error.message : describeFetchError(error))

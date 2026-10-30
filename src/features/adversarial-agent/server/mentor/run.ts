@@ -6,14 +6,17 @@ import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import type { AiProviderId } from "@/lib/ai/providers"
 import { flushWorkbenchEvents, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
-import { MENTOR_AUDIT_ENTITY, MENTOR_DECISION_CONSUMPTION_ORIGIN, MENTOR_HISTORY_LIMIT, MENTOR_MEMORY_SOURCE, MENTOR_UPDATED_EVENT, MENTOR_WRITER_CONSUMPTION_ORIGIN, type MentorRunStatus } from "../../mentor/constants"
+import { MENTOR_AUDIT_ENTITY, MENTOR_DECISION_CONSUMPTION_ORIGIN, MENTOR_MEMORY_SOURCE, MENTOR_PAGE_LIMIT, MENTOR_UPDATED_EVENT, MENTOR_WRITER_CONSUMPTION_ORIGIN, type MentorRunStatus } from "../../mentor/constants"
 import { parseDeciderAnswer, parseWriterAnswer, passesThreshold, resolveWriterAction } from "../../mentor/decision"
 import { buildDeciderPrompt, buildJevMentorQuestions, buildMentorState, buildWriterInstructions, buildWriterPrompt, MENTOR_DECIDER_INSTRUCTIONS, type MentorCase } from "../../mentor/prompt"
 import { sanitizeMemoryText, type SanitizeContext } from "../../mentor/sanitize"
-import type { MentorSettings } from "../../mentor/schemas"
-import type { MentorRunDto } from "../../mentor/types"
+import type { MentorRunListQuery, MentorSettings } from "../../mentor/schemas"
+import type { MentorRunDto, MentorRunListDto } from "../../mentor/types"
 import { AdversarialReview } from "../models"
 import { createAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
+import { pageInfo } from "@/lib/list/query"
+import { listCentralOptions } from "../central-options"
+import { buildMentorRunListFilter } from "./list-query"
 import { MentorRun, mentorDb, type IMentorRun } from "./models"
 
 /**
@@ -202,7 +205,7 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
             if (rejection) continue
             const proposal = resolveWriterAction(answer, memories.map((memory) => memory.id))
             if (settings.saveMode === "suggest") {
-                await notice(input.workbenchId, "info", "O Agente Mentor sugeriu uma memória para o Agente Adversário: aprove ou descarte em Integrações › Provedores de IA › Agente Mentor.")
+                await notice(input.workbenchId, "info", "O Agente Mentor sugeriu uma memória para o Agente Adversário: aprove ou descarte em Integrações › Inteligência Artificial › Agente Mentor.")
                 return await finish("suggested", { proposal })
             }
             const applied = await applyProposal({ _id: new Types.ObjectId(runId), workbenchId: input.workbenchId, taskCode: input.taskCode }, proposal, getLocalUser().id)
@@ -219,10 +222,18 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
 
 // ── Execuções na aba ────────────────────────────────────────────────────────
 
-export async function listMentorRuns(): Promise<MentorRunDto[]> {
+/** Execuções no recorte dos filtros, mais recentes primeiro, com as centrais (opções do filtro). */
+export async function listMentorRuns(query: Partial<MentorRunListQuery> = {}): Promise<MentorRunListDto> {
     await mentorDb()
-    const rows = (await MentorRun.find({}).sort({ createdAt: -1 }).limit(MENTOR_HISTORY_LIMIT).lean()) as unknown as IMentorRun[]
-    return rows.map(toMentorRunDto)
+    const page = query.page ?? 1
+    const limit = query.limit ?? MENTOR_PAGE_LIMIT
+    const filter = buildMentorRunListFilter({ q: query.q ?? "", statuses: query.statuses ?? [], sources: query.sources ?? [], triggers: query.triggers ?? [], centrals: query.centrals ?? [], from: query.from, to: query.to })
+    const [rows, total, centrals] = await Promise.all([
+        MentorRun.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean() as unknown as Promise<IMentorRun[]>,
+        MentorRun.countDocuments(filter),
+        listCentralOptions(),
+    ])
+    return { items: rows.map(toMentorRunDto), ...pageInfo(page, limit, total), centrals }
 }
 
 async function suggestedRun(id: string): Promise<IMentorRun> {

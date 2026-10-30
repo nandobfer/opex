@@ -204,7 +204,7 @@ async function assertAgenticReady(config: CentralConfig): Promise<void> {
     const { settings } = await loadAgenticSettings()
     const availability = await agenticAvailability(settings)
     if (!availability.available) throw new DomainError(409, availability.reason ?? "Desenvolvimento agêntico indisponível", "AGENTIC_UNAVAILABLE")
-    if (!config.enabled) throw new DomainError(409, "A central está desativada em Integrações › Provedores de IA", "CENTRAL_DISABLED")
+    if (!config.enabled) throw new DomainError(409, "A central está desativada em Integrações › Inteligência Artificial", "CENTRAL_DISABLED")
 }
 
 /** Abre a próxima mesa da fila da central (import dinâmico evita o ciclo estático com `queue.ts`). */

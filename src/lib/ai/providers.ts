@@ -1,6 +1,6 @@
 /**
  * Provedores de IA (módulo PURO, usado pela tela e pelo servidor). Cada provedor é uma
- * integração-filha de "Provedores de IA" (`ai`) no catálogo de integrações.
+ * integração-filha de "Inteligência Artificial" (`ai`) no catálogo de integrações.
  */
 
 import type { IntegrationId } from "@/lib/integrations/catalog"

@@ -1,16 +1,17 @@
 "use client"
 
 import { useEffect } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
-import { MENTOR_FEATURE, MENTOR_UPDATED_EVENT } from "../mentor/constants"
+import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_UPDATED_EVENT } from "../mentor/constants"
+import type { MentorRunListParams } from "../mentor/filters"
 import type { MentorSettings } from "../mentor/schemas"
-import type { MentorRunDto, MentorSettingsDto } from "../mentor/types"
+import type { MentorRunDto, MentorRunListDto, MentorSettingsDto } from "../mentor/types"
 
 /** Consultas e mutações do Agente Mentor (parte do Agente Adversário). */
 
@@ -34,7 +35,21 @@ export function useSaveMentorSettings() {
     })
 }
 
-export const useMentorRuns = () => useQuery({ queryKey: MENTOR_RUNS_KEY, queryFn: () => get<MentorRunDto[]>("/adversarial/mentor/runs") })
+const getRuns = async (params: MentorRunListParams & { page?: number }) => unwrapApi((await api.get<ApiResponse<MentorRunListDto>>("/adversarial/mentor/runs", { params })).data)
+
+/** As execuções mais recentes (aba Execuções da configuração). */
+export const useMentorRuns = () => useQuery({ queryKey: [...MENTOR_RUNS_KEY, "history"], queryFn: () => getRuns({ limit: String(MENTOR_HISTORY_LIMIT) }), select: (data) => data.items })
+
+/** Execuções paginadas no recorte dos filtros (página Agente Mentor, rolagem infinita). */
+export function useMentorRunPages(params: MentorRunListParams) {
+    return useInfiniteQuery({
+        queryKey: [...MENTOR_RUNS_KEY, "pages", params],
+        queryFn: ({ pageParam }) => getRuns({ ...params, page: pageParam }),
+        initialPageParam: 1,
+        getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+        staleTime: 10_000,
+    })
+}
 
 /** Aprovar (com o texto opcionalmente editado) ou descartar uma sugestão do Mentor. */
 export function useMentorRunDecision() {
@@ -42,8 +57,9 @@ export function useMentorRunDecision() {
     return useMutation({
         mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string }) =>
             unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" && vars.text ? { text: vars.text } : {})).data),
-        onSuccess: (saved, vars) => {
-            queryClient.setQueryData<MentorRunDto[]>(MENTOR_RUNS_KEY, (current) => current?.map((run) => (run.id === saved.id ? saved : run)))
+        onSuccess: (_saved, vars) => {
+            // A lista da aba e as páginas filtradas (a execução pode sair do recorte de Situação).
+            void queryClient.invalidateQueries({ queryKey: MENTOR_RUNS_KEY })
             void queryClient.invalidateQueries({ queryKey: ["adversarial", "memories"] })
             toast.success(vars.decision === "approve" ? "Memória do Agente Adversário gravada" : "Sugestão descartada")
         },

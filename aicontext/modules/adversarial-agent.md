@@ -120,6 +120,33 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
 - **Revisões**: as 50 rodadas mais recentes (tarefa, ciclo, rodada, nível, achados por severidade,
   decisão, custo, duração); **Ver** abre achados, contestações e o relatório completo.
 
+## Páginas `/agente-adversario` e `/agente-mentor` (OPE-99)
+
+Itens **Agente Adversário** (ícone `Swords`) e **Agente Mentor** (ícone `GraduationCap`) da seção
+**Agentes** da barra lateral, no padrão da página do Agente Revisor (`/agente-revisor`): cabeçalho
+`AgentPageHeader` com **Configurar** (leva à aba da configuração), aviso de indisponibilidade
+(`AvailabilityNotice`), filtros `ListFilters` **na URL** (`useUrlFilters`, valores inválidos
+descartados), lista paginada pela API com rolagem infinita e "Carregar mais (x de y)" de reserva
+(`InfiniteListView`), vazio com e sem filtro ("Limpar filtros"), erro com Tentar novamente e tempo
+real (`adversarial-review-updated` / `adversarial-mentor-updated` invalidam as páginas).
+
+- **Agente Adversário** (`components/page/AdversarialReviewsPage.tsx`): abas `OptionTabs`
+  **Revisões · Memórias**, com a aba na URL (`?aba=memorias`; padrão omitida, troca sem perder os
+  filtros).
+  - **Revisões**: rodadas de todas as mesas, mais recentes primeiro (`AdversarialReviewList`, a mesma
+    lista da seção Revisões da configuração; **Ver** abre o detalhe). Filtros: busca (código ou
+    título da tarefa), **Situação** (Revisando, Concluída, Falhou, Interrompida), **Decisão**,
+    **Criticidade**, **Central** e **Período**.
+  - **Memórias**: a lista `adversarial` (`MemoriesSection`, o mesmo componente da configuração).
+- **Agente Mentor** (`components/mentor/MentorRunsPage.tsx`): execuções, mais recentes primeiro
+  (`MentorRunList`, a mesma da seção Execuções; **Ver/Decidir** abre o detalhe e, numa sugestão,
+  Aprovar/Descartar). Filtros: busca, **Situação**, **Origem** (mensagem do usuário, turno da IA,
+  pedido do desenvolvedor — casa quem tem ao menos uma), **Gatilho**, **Central** e **Período**.
+- O filtro **Central** (`page/CentralFilter.tsx`) lista as centrais existentes (`centrals` da
+  resposta); central filtrada que deixou de existir continua como opção para poder desmarcar.
+- As seções **Revisões**, **Memórias** e **Execuções** das abas de configuração continuam, lendo a
+  primeira página da mesma API (50 rodadas / 100 execuções).
+
 ## Mesa
 
 - Passo **"Revisão adversária"** na trilha (`StageSteps` + `workbenchSteps`) quando o adversário se
@@ -224,14 +251,15 @@ na tela e na API; `withMentorDefaults`).
 | Rota | Uso |
 |---|---|
 | `GET/PUT /api/ai/features/adversarial-agent` | Configuração e disponibilidade |
-| `GET /api/adversarial/reviews`, `GET /api/adversarial/reviews/[id]` | Histórico e detalhe |
+| `GET /api/adversarial/reviews?q&states&decisions&levels&centrals&from&to&page&limit` | Rodadas paginadas no recorte (listas em CSV, datas ISO; `limit` padrão 20, máx. 100) → `{ items, page, limit, total, totalPages, centrals }` |
+| `GET /api/adversarial/reviews/[id]` | Detalhe da rodada |
 | `GET /api/adversarial/workbenches/[id]` | Última rodada da mesa (responde mesmo com o adversário desativado) |
 | `GET /api/adversarial/workbenches/[id]/reviews` | Rodadas da mesa, da mais antiga para a mais nova, com detalhes (aba "Adversário") |
 | `POST /api/agentic/workbenches/[id]/actions/adversarial-fix` `{ text?, excluded? }` | Corrigir |
 | `POST …/actions/adversarial-skip`, `…/actions/adversarial-rerun` | Seguir mesmo assim / Revisar de novo |
 | `/api/ai/agents/adversarial/memories*` | Memórias (rotas do módulo de memórias dos agentes; sem limite de quantidade) |
 | `GET/PUT /api/ai/features/adversarial-mentor` | Configuração do Agente Mentor |
-| `GET /api/adversarial/mentor/runs` | As 100 execuções mais recentes do Mentor (marca as órfãs como falhas) |
+| `GET /api/adversarial/mentor/runs?q&statuses&sources&triggers&centrals&from&to&page&limit` | Execuções paginadas no recorte (mesmo envelope; marca as órfãs como falhas antes de listar) |
 | `POST /api/adversarial/mentor/runs/[id]/approve` `{ text? }`, `POST …/discard` | Aprovar (texto editável) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
 
 ## Dados
@@ -248,7 +276,14 @@ na tela e na API; `withMentorDefaults`).
 ## Arquivos
 
 - Módulos puros: `constants.ts`, `schemas.ts`, `types.ts`, `verdict.ts`, `rounds.ts`,
-  `permission-policy.ts`, `context.ts`, `prompt.ts`.
+  `permission-policy.ts`, `context.ts`, `prompt.ts`, `filters.ts` e `mentor/filters.ts` (filtros
+  das páginas na URL → parâmetros da API).
+- Listas paginadas: `server/list-query.ts` e `server/mentor/list-query.ts` (filtro do Mongo, puros),
+  `server/central-options.ts` (opções do filtro Central); peças comuns em `src/lib/list/query.ts`
+  (`csvList`, `isoDate`, `objectIdCsv`, `pageQuery`, `searchPattern`, `createdAtRange`, `mergeAnd`,
+  `pageInfo`) e `src/lib/list/day-filter.ts` (período na URL), também usadas pelo Agente Revisor.
+- UI compartilhada com o Agente Revisor: `src/components/list/AgentPageHeader.tsx`,
+  `src/components/list/InfiniteListView.tsx` e `src/components/feedback/AvailabilityNotice.tsx`.
 - `server/`: `models.ts`, `settings.ts` (inclui `adversaryApplies`), `reviews.ts`, `review.ts`,
   `attachments.ts`, `workflow-hook.ts` (único ponto que o fluxo da mesa importa, import dinâmico e
   memorizado; também reexporta os pontos do Mentor).
@@ -265,7 +300,7 @@ na tela e na API; `withMentorDefaults`).
 
 `__tests__/features/adversarial-agent/` (`verdict`, `rounds`, `permission-policy`, `context-prompt`,
 `review`, `reviews`, `workflow` (inclui "Agente Mentor no fluxo da mesa"), `adversarial-ui`,
-`rounds-tab`, `mentor-sanitize`, `mentor-decision`, `mentor-lesson-block`, `mentor-prompt`,
+`rounds-tab`, `list-query`, `filters`, `adversarial-reviews-page`, `mentor-runs-page`, `mentor-sanitize`, `mentor-decision`, `mentor-lesson-block`, `mentor-prompt`,
 `mentor-run`, `mentor-hooks`, `mentor-ui`, `mentor-tab`) e casos em
 `__tests__/features/agentic/{actions-route,dev-center-filters,logic,stage-steps,timeline,ActionBar,WorkbenchView}`
 e `__tests__/features/ai/memories.test.ts`. `__tests__/setup.ts` deixa o adversário de fora por

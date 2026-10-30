@@ -3,7 +3,7 @@ import { loggerFor } from "@/lib/logger"
 import { centralLogScope } from "../constants"
 
 /**
- * Logs de uma central: vão para o terminal da página da central (integração "Provedores de IA",
+ * Logs de uma central: vão para o terminal da página da central (integração "Inteligência Artificial",
  * sempre gravados, com `data.scope` da central) e para o Pino.
  */
 

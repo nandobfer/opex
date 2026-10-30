@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { csvList, isoDate, pageQuery } from "@/lib/list/query"
 import {
     PR_REVIEW_CONCURRENCY_MAX,
     PR_REVIEW_PAGE_LIMIT,
@@ -75,14 +76,6 @@ export const requestPrReviewSchema = z.object({
 })
 export type RequestPrReviewInput = z.infer<typeof requestPrReviewSchema>
 
-/** Lista CSV da query (`a,b`) → itens; vazio = sem recorte. */
-const csvList = z
-    .string()
-    .optional()
-    .transform((value) => (value ? value.split(",").map((part) => part.trim()).filter(Boolean) : []))
-
-const isoDate = z.string().refine((value) => !Number.isNaN(new Date(value).getTime()), "Data inválida")
-
 /** `GET /api/pr-reviews` — filtros e página da lista do Agente Revisor (listas em CSV, datas ISO). */
 export const prReviewListQuerySchema = z.object({
     q: z.string().trim().max(200).optional().transform((value) => value ?? ""),
@@ -92,7 +85,6 @@ export const prReviewListQuerySchema = z.object({
     triggers: csvList.pipe(z.array(z.enum(PR_REVIEW_TRIGGERS)).max(PR_REVIEW_TRIGGERS.length)),
     from: isoDate.optional(),
     to: isoDate.optional(),
-    page: z.coerce.number().int().min(1).max(1000).default(1),
-    limit: z.coerce.number().int().min(1).max(PR_REVIEW_PAGE_LIMIT_MAX).default(PR_REVIEW_PAGE_LIMIT),
+    ...pageQuery(PR_REVIEW_PAGE_LIMIT, PR_REVIEW_PAGE_LIMIT_MAX),
 })
 export type PrReviewListQuery = z.infer<typeof prReviewListQuerySchema>

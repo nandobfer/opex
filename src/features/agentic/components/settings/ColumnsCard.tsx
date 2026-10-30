@@ -34,7 +34,7 @@ interface ColumnsCardProps {
 
 /**
  * Card de colunas da **fila** ou da **movimentação** (OPE-79), usado nos dois escopos: o padrão
- * global da aba "Desenvolvimento agêntico" e a configuração da central, que pode herdar o padrão ou
+ * global da aba "Agente Desenvolvedor" e a configuração da central, que pode herdar o padrão ou
  * personalizá-lo — a mesma experiência do card de agentes.
  */
 export function ColumnsCard({ title, description, idPrefix, fields, inherited }: ColumnsCardProps) {

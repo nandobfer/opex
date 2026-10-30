@@ -27,7 +27,7 @@ const limitText = (limit: number | null) => (limit === null ? "Sem limite" : `${
 
 /**
  * Card "Corrigir CI falho" (OPE-81), usado nos dois escopos como o card de colunas: o padrão global
- * da aba "Desenvolvimento agêntico" e a aba Git e PR da central, que pode herdar ou personalizar.
+ * da aba "Agente Desenvolvedor" e a aba Git e PR da central, que pode herdar ou personalizar.
  */
 export function CiFixCard({ idPrefix, value, onChange, limitError, globalValue, inherited }: CiFixCardProps) {
     const inheriting = inherited?.value === true

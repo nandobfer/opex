@@ -17,7 +17,7 @@ Código: `src/features/refinement/` (domínio + servidor + UI). Reaproveita o cl
 mesa) e o **mesmo barramento de eventos** das mesas (`agentic/server/hub.ts` + `agentic_events`,
 chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
 
-## Configuração (Integrações › Provedores de IA › aba "Agente Refinador")
+## Configuração (Integrações › Inteligência Artificial › aba "Agente Refinador")
 
 - `ai_feature_settings` (`feature: "task-refinement"`), schema `taskRefinementSettingsSchema`:
   ativa, **modelo** e **agente** do OpenCode, variante, **origem das instruções**, instruções de texto,

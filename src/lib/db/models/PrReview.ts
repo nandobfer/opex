@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 
 /**
- * Agente Revisor (configuração em Integrações › Provedores de IA › Agente Revisor; lista em `/agente-revisor`): uma revisão por PR e commit (head
+ * Agente Revisor (configuração em Integrações › Inteligência Artificial › Agente Revisor; lista em `/agente-revisor`): uma revisão por PR e commit (head
  * SHA). A saída do agente vai para `agentic_events`, chaveada pelo id da revisão.
  */
 

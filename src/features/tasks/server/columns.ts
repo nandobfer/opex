@@ -113,7 +113,7 @@ export async function deleteColumn(key: string, actorId: string): Promise<void> 
     if (repos.length > 0) {
         throw new DomainError(409, `A coluna é usada por ${repos.join(", ")}: ajuste o vínculo do GitHub antes de excluí-la`, "COLUMN_IN_USE")
     }
-    // A coluna pode ser a fila **global** (aba Desenvolvimento agêntico) ou a de uma central que a
+    // A coluna pode ser a fila **global** (aba Agente Desenvolvedor) ou a de uma central que a
     // personaliza ou herda dela (OPE-79).
     const { settings } = await loadAgenticSettings()
     const queueCentrals = (await AgenticCentral.find().select({ projectName: 1, config: 1 }).lean())

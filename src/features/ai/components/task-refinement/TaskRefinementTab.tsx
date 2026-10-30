@@ -92,7 +92,7 @@ export function TaskRefinementTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                     ) : (centrals.data ?? []).length === 0 ? (
                         <p className="flex items-start gap-2 text-sm text-muted-foreground">
                             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> Nenhuma central de desenvolvimento criada. Crie uma em
-                            <span className="font-medium"> Desenvolvimento agêntico › Centrais de desenvolvimento</span> para poder refinar tarefas.
+                            <span className="font-medium"> Agente Desenvolvedor › Centrais de desenvolvimento</span> para poder refinar tarefas.
                         </p>
                     ) : (
                         <ul className="space-y-1.5">

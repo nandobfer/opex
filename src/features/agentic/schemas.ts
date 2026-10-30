@@ -57,7 +57,7 @@ export type WorkbenchPreviewInput = z.infer<typeof workbenchPreviewSchema>
 const agentsShape = Object.fromEntries(AGENT_ROLES.map((role) => [role, agentConfigSchema])) as Record<AgentRole, typeof agentConfigSchema>
 
 /**
- * Colunas globais (aba "Desenvolvimento agêntico"): o padrão de fila e movimentação de todas as
+ * Colunas globais (aba "Agente Desenvolvedor"): o padrão de fila e movimentação de todas as
  * centrais. Uma central pode herdar estes valores ou personalizá-los (`CentralConfig.columns`).
  */
 export const agenticColumnsSchema = z.object({
@@ -79,7 +79,7 @@ export const DEFAULT_AGENTIC_COLUMNS: AgenticColumns = { queue: null, onStart: n
 const ciFixLimitSchema = z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1, "Mínimo 1").max(20, "Máximo 20").nullable()
 
 /**
- * Correção do CI falho do PR (OPE-81): padrão global da aba "Desenvolvimento agêntico", herdado pelas
+ * Correção do CI falho do PR (OPE-81): padrão global da aba "Agente Desenvolvedor", herdado pelas
  * centrais que não personalizam (`CentralConfig.git.inheritCi`).
  */
 export const agenticCiSchema = z.object({
@@ -111,7 +111,7 @@ export type AgenticPorts = z.infer<typeof agenticPortsSchema>
 
 export const DEFAULT_AGENTIC_PORTS: AgenticPorts = { previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX }
 
-/** Configuração geral (aba "Desenvolvimento agêntico"): liga a feature, define os agentes, as colunas, a correção de CI e as portas padrão. */
+/** Configuração geral (aba "Agente Desenvolvedor"): liga a feature, define os agentes, as colunas, a correção de CI e as portas padrão. */
 export const agenticSettingsSchema = z.object({
     enabled: z.boolean(),
     agents: z.object(agentsShape),

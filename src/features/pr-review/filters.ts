@@ -1,5 +1,5 @@
-import { endOfDay, isValid, parseISO, startOfDay } from "date-fns"
 import { urlFilterCodecs, type UrlFilterCodec, type UrlFilterSchema } from "@/hooks/useUrlFilters"
+import { dayCodec, dayRangeParams } from "@/lib/list/day-filter"
 import {
     PR_REVIEW_STATE_LABELS,
     PR_REVIEW_STATES,
@@ -44,26 +44,14 @@ const repoList: UrlFilterCodec<string[]> = {
     serialize: (value) => value.join(","),
 }
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/
-
-/** Dia válido (`yyyy-MM-dd`) ou nada: link antigo, truncado ou editado à mão não derruba a página. */
-function validDay(value: string): string {
-    return DAY.test(value) && isValid(parseISO(value)) ? value : ""
-}
-
-const day: UrlFilterCodec<string> = {
-    parse: (raw, fallback) => (raw === null ? fallback : validDay(raw.trim())),
-    serialize: (value) => value,
-}
-
 export const PR_REVIEW_FILTER_SCHEMA: UrlFilterSchema<PrReviewFilters> = {
     q: urlFilterCodecs.string(),
     states: urlFilterCodecs.strings<PrReviewState>(PR_REVIEW_STATES),
     verdicts: urlFilterCodecs.strings<PrReviewVerdict>(PR_REVIEW_VERDICTS),
     repos: repoList,
     triggers: urlFilterCodecs.strings<PrReviewTrigger>(PR_REVIEW_TRIGGERS),
-    from: day,
-    to: day,
+    from: dayCodec,
+    to: dayCodec,
 }
 
 export const PR_REVIEW_STATE_OPTIONS = PR_REVIEW_STATES.map((value) => ({ value, label: PR_REVIEW_STATE_LABELS[value] }))
@@ -84,9 +72,5 @@ export function toPrReviewListParams(filters: PrReviewFilters): PrReviewListPara
     if (filters.verdicts.length) params.verdicts = filters.verdicts.join(",")
     if (filters.repos.length) params.repos = filters.repos.join(",")
     if (filters.triggers.length) params.triggers = filters.triggers.join(",")
-    const from = validDay(filters.from)
-    const to = validDay(filters.to)
-    if (from) params.from = startOfDay(parseISO(from)).toISOString()
-    if (to) params.to = endOfDay(parseISO(to)).toISOString()
-    return params
+    return { ...params, ...dayRangeParams(filters.from, filters.to) }
 }

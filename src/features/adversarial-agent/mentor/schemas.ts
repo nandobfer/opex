@@ -1,11 +1,16 @@
 import { z } from "zod"
+import { csvList, isoDate, objectIdCsv, pageQuery } from "@/lib/list/query"
 import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
 import {
     DEFAULT_MENTOR_WRITER_INSTRUCTIONS,
     MENTOR_AI_STAGES,
     MENTOR_LEVELS,
+    MENTOR_PAGE_LIMIT,
+    MENTOR_PAGE_LIMIT_MAX,
+    MENTOR_RUN_STATUSES,
     MENTOR_SAVE_MODES,
+    MENTOR_SOURCES,
     MENTOR_TIMEOUT_DEFAULT,
     MENTOR_TIMEOUT_MAX,
     MENTOR_TIMEOUT_MIN,
@@ -109,3 +114,16 @@ export const mentorApproveSchema = z.object({
     text: z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres`).optional(),
 })
 export type MentorApproveInput = z.infer<typeof mentorApproveSchema>
+
+/** `GET /api/adversarial/mentor/runs` — filtros e página das execuções (listas em CSV, datas ISO). */
+export const mentorRunListQuerySchema = z.object({
+    q: z.string().trim().max(200).optional().transform((value) => value ?? ""),
+    statuses: csvList.pipe(z.array(z.enum(MENTOR_RUN_STATUSES)).max(MENTOR_RUN_STATUSES.length)),
+    sources: csvList.pipe(z.array(z.enum(MENTOR_SOURCES)).max(MENTOR_SOURCES.length)),
+    triggers: csvList.pipe(z.array(z.enum(MENTOR_USER_TRIGGERS)).max(MENTOR_USER_TRIGGERS.length)),
+    centrals: objectIdCsv("Central"),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    ...pageQuery(MENTOR_PAGE_LIMIT, MENTOR_PAGE_LIMIT_MAX),
+})
+export type MentorRunListQuery = z.infer<typeof mentorRunListQuerySchema>

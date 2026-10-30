@@ -197,7 +197,7 @@ export const AGENTIC_FEATURE = "agentic-dev"
 /** Evento em `private-app` quando uma central, uma mesa ou a configuração muda. */
 export const AGENTIC_UPDATED_EVENT = "agentic-updated"
 
-/** Escopo dos logs de uma central na integração "Provedores de IA" (`data.scope`). */
+/** Escopo dos logs de uma central na integração "Inteligência Artificial" (`data.scope`). */
 export const centralLogScope = (centralId: string) => `agentic:${centralId}`
 
 /** Seções da tarefa enviadas ao planejamento. */

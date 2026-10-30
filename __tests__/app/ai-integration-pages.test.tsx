@@ -23,7 +23,7 @@ const APP_DIR = path.resolve(__dirname, "../../src/app/(app)")
 
 afterEach(() => cleanup())
 
-describe("páginas dos Provedores de IA", () => {
+describe("páginas dos Inteligência Artificial", () => {
     it("toda integração com rota própria tem uma página que atende o endereço", () => {
         for (const id of INTEGRATION_IDS.filter(hasCustomIntegrationPath)) {
             const segments = integrationPath(id).split("/").filter(Boolean)

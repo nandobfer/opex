@@ -1,6 +1,6 @@
 /**
  * Vocabulário de tags das tarefas (módulo PURO, cliente e servidor). A **taxonomia** é fechada e
- * gerenciada na aba "Tags de tarefas" (Integrações › Provedores de IA), persistida na configuração
+ * gerenciada na aba "Tags de tarefas" (Integrações › Inteligência Artificial), persistida na configuração
  * da feature `task-tags`. As tarefas guardam apenas os `id` das tags (estáveis); o rótulo é
  * resolvido na hora pela taxonomia.
  */

@@ -48,7 +48,7 @@ export function ScopeCard({ form, id = "adversarial", description = DEFAULT_DESC
                             {centrals.isLoading ? (
                                 <Skeleton className="h-20 w-full" />
                             ) : (centrals.data ?? []).length === 0 ? (
-                                <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhuma central criada: crie uma na aba Desenvolvimento agêntico.</p>
+                                <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhuma central criada: crie uma na aba Agente Desenvolvedor.</p>
                             ) : (
                                 <Controller
                                     control={form.control}

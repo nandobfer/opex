@@ -1,16 +1,13 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import Link from "next/link"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { FilterX, FolderGit2, GitPullRequest, Info, Loader2, Plus, Settings2 } from "lucide-react"
+import { motion, useReducedMotion } from "framer-motion"
+import { FolderGit2, GitPullRequest, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
-import { EmptyState } from "@/components/feedback/EmptyState"
-import { ErrorState } from "@/components/feedback/ErrorState"
+import { AvailabilityNotice } from "@/components/feedback/AvailabilityNotice"
+import { AgentPageHeader } from "@/components/list/AgentPageHeader"
+import { InfiniteListView } from "@/components/list/InfiniteListView"
 import { useUrlFilters } from "@/hooks/useUrlFilters"
-import { useInfiniteScroll } from "@/hooks/useInfiniteScroll"
-import { apiErrorMessage } from "@/lib/api"
 import { PR_REVIEW_SETTINGS_HREF } from "../constants"
 import { DEFAULT_PR_REVIEW_FILTERS, hasPrReviewFilters, PR_REVIEW_FILTER_SCHEMA, toPrReviewListParams } from "../filters"
 import { usePrReviewPages, usePrReviewRealtime, usePrReviewSettings } from "../hooks/usePrReview"
@@ -18,12 +15,10 @@ import { PrReviewFiltersBar } from "./PrReviewFiltersBar"
 import { PrReviewList } from "./PrReviewList"
 import { RequestPrReviewDialog } from "./RequestPrReviewDialog"
 
-const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
-
 /**
  * Agente Revisor (`/agente-revisor`): revisões dos PRs das centrais, mais recentes primeiro, com os
  * filtros na URL (recorte feito pela API), rolagem infinita e tempo real. Ações: Ver, Revisar de
- * novo, Parar e Revisar PR. A configuração fica em Integrações › Provedores de IA › Agente Revisor.
+ * novo, Parar e Revisar PR. A configuração fica em Integrações › Inteligência Artificial › Agente Revisor.
  */
 export function PrReviewsPage() {
     const reduceMotion = useReducedMotion()
@@ -33,10 +28,6 @@ export function PrReviewsPage() {
     const query = usePrReviewPages(params)
     const settings = usePrReviewSettings()
     const [requesting, setRequesting] = useState(false)
-    const { sentinelRef, supported } = useInfiniteScroll({
-        onLoadMore: () => void query.fetchNextPage(),
-        disabled: !query.hasNextPage || query.isFetchingNextPage || query.isFetchNextPageError,
-    })
 
     const pages = query.data?.pages ?? []
     const items = pages.flatMap((page) => page.items)
@@ -45,40 +36,16 @@ export function PrReviewsPage() {
     const total = first?.total ?? 0
     const availability = settings.data?.availability
     const available = availability?.available === true
-    const filtering = hasPrReviewFilters(filters)
-    const view = query.isLoading ? "loading" : query.isError ? "error" : items.length === 0 ? "empty" : "list"
 
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
-                        <GitPullRequest className="h-5 w-5" aria-hidden />
-                    </span>
-                    <div>
-                        <h1 className="text-lg font-semibold md:text-2xl">Agente Revisor</h1>
-                        <p className="text-sm text-muted-foreground">Revisões dos PRs das centrais. Atualiza em tempo real.</p>
-                    </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button asChild variant="outline" size="sm" className="h-9 gap-1.5">
-                        <Link href={PR_REVIEW_SETTINGS_HREF}>
-                            <Settings2 className="h-4 w-4" aria-hidden /> Configurar
-                        </Link>
-                    </Button>
-                    <Button type="button" size="sm" className="h-9 gap-1.5" disabled={!available} onClick={() => setRequesting(true)}>
-                        <Plus className="h-4 w-4" aria-hidden /> Revisar PR
-                    </Button>
-                </div>
-            </header>
+            <AgentPageHeader icon={GitPullRequest} title="Agente Revisor" description="Revisões dos PRs das centrais. Atualiza em tempo real." settingsHref={PR_REVIEW_SETTINGS_HREF}>
+                <Button type="button" size="sm" className="h-9 gap-1.5" disabled={!available} onClick={() => setRequesting(true)}>
+                    <Plus className="h-4 w-4" aria-hidden /> Revisar PR
+                </Button>
+            </AgentPageHeader>
 
-            <AnimatePresence initial={false}>
-                {availability && !available && availability.reason && (
-                    <motion.p key="availability" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="flex items-start gap-2 overflow-hidden text-xs text-muted-foreground">
-                        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {availability.reason}
-                    </motion.p>
-                )}
-            </AnimatePresence>
+            <AvailabilityNotice reason={available ? null : availability?.reason} />
 
             {repos.length > 0 && (
                 <div className="flex flex-wrap gap-2" aria-label="Repositórios acompanhados">
@@ -95,48 +62,29 @@ export function PrReviewsPage() {
 
             <PrReviewFiltersBar filters={filters} setFilters={setFilters} onClear={resetFilters} total={total} repos={repos} />
 
-            <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={view} {...swap}>
-                    {view === "loading" && (
-                        <div className="space-y-2" aria-label="Carregando revisões">
-                            <Skeleton className="h-20 w-full" />
-                            <Skeleton className="h-20 w-full" />
-                            <Skeleton className="h-20 w-full" />
-                        </div>
-                    )}
-                    {view === "error" && <ErrorState title="Não foi possível carregar as revisões" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />}
-                    {view === "empty" &&
-                        (filtering ? (
-                            <EmptyState icon={FilterX} title="Nenhuma revisão com estes filtros" description="Ajuste ou limpe os filtros para ver mais revisões." actionLabel="Limpar filtros" onAction={resetFilters} />
-                        ) : (
-                            <EmptyState
-                                icon={GitPullRequest}
-                                title="Nenhuma revisão ainda"
-                                description={repos.length ? "As revisões aparecem aqui quando a rotina de PRs encontrar PRs que atendem ao critério." : "Crie uma central de desenvolvimento com repositório vinculado para revisar os PRs dele."}
-                                actionLabel={available ? "Revisar PR" : undefined}
-                                onAction={available ? () => setRequesting(true) : undefined}
-                            />
-                        ))}
-                    {view === "list" && (
-                        <div className="space-y-3">
-                            <PrReviewList items={items} available={available} />
-                            <div ref={sentinelRef} aria-hidden className="h-px w-full" />
-                            {query.isFetchingNextPage && (
-                                <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Carregando mais revisões…
-                                </div>
-                            )}
-                            {(!supported || query.isFetchNextPageError) && query.hasNextPage && (
-                                <div className="flex justify-center">
-                                    <Button type="button" variant="outline" onClick={() => void query.fetchNextPage()} disabled={query.isFetchingNextPage}>
-                                        Carregar mais ({items.length} de {total})
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </motion.div>
-            </AnimatePresence>
+            <InfiniteListView
+                query={query}
+                count={items.length}
+                total={total}
+                filtering={hasPrReviewFilters(filters)}
+                onClearFilters={resetFilters}
+                labels={{
+                    loading: "Carregando revisões",
+                    error: "Não foi possível carregar as revisões",
+                    filteredTitle: "Nenhuma revisão com estes filtros",
+                    filteredDescription: "Ajuste ou limpe os filtros para ver mais revisões.",
+                    loadingMore: "Carregando mais revisões…",
+                }}
+                empty={{
+                    icon: GitPullRequest,
+                    title: "Nenhuma revisão ainda",
+                    description: repos.length ? "As revisões aparecem aqui quando a rotina de PRs encontrar PRs que atendem ao critério." : "Crie uma central de desenvolvimento com repositório vinculado para revisar os PRs dele.",
+                    actionLabel: available ? "Revisar PR" : undefined,
+                    onAction: available ? () => setRequesting(true) : undefined,
+                }}
+            >
+                <PrReviewList items={items} available={available} />
+            </InfiniteListView>
 
             <RequestPrReviewDialog open={requesting} onOpenChange={setRequesting} />
         </motion.section>

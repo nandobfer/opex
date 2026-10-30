@@ -13,7 +13,7 @@ export const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 async function getGeminiApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_gemini")
-    if (!apiKey) throw new AiProviderError("Gemini sem API key: configure em Integrações › Provedores de IA › Gemini")
+    if (!apiKey) throw new AiProviderError("Gemini sem API key: configure em Integrações › Inteligência Artificial › Gemini")
     return apiKey
 }
 

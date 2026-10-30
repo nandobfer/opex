@@ -79,7 +79,7 @@ describe('listIntegrations', () => {
     const items = await listIntegrations()
     expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine'])
     // Builder Machine aparece sempre (mesmo desativada), para poder ser ativada.
-    // Provedores de IA são filhos do hub "Provedores de IA" (fora da lista principal na tela).
+    // Inteligência Artificial são filhos do hub "Inteligência Artificial" (fora da lista principal na tela).
     expect(items.filter((item) => item.parent === 'ai').map((item) => item.id)).toEqual(['ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev'])
     expect(items.find((item) => item.id === 'ai_gemini')?.configured).toBe(false)
     for (const item of items) {

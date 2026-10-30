@@ -13,7 +13,7 @@ export const OPENAI_API_URL = "https://api.openai.com/v1"
 
 async function getOpenaiApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_openai")
-    if (!apiKey) throw new AiProviderError("OpenAI sem API key: configure em Integrações › Provedores de IA › OpenAI")
+    if (!apiKey) throw new AiProviderError("OpenAI sem API key: configure em Integrações › Inteligência Artificial › OpenAI")
     return apiKey
 }
 

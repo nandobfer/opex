@@ -20,7 +20,7 @@ const GO_COLUMNS = [
     { key: "development", label: "Desenvolvimento" },
 ]
 
-/** Dentro de um <form>, como na aba "Desenvolvimento agêntico" (AiEditorForm). */
+/** Dentro de um <form>, como na aba "Agente Desenvolvedor" (AiEditorForm). */
 function renderCard(value: string | null, onChange: (value: string | null) => void) {
     const card = (current: string | null) => (
         <form>

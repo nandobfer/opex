@@ -6,6 +6,11 @@ export const ADVERSARIAL_FEATURE = "adversarial-agent"
 /** Aba de `/integracoes/ia` com a configuração do agente. */
 export const ADVERSARIAL_AI_TAB = "agente-adversario" as const
 
+/** Página com as rodadas (filtros) e as memórias do agente. */
+export const ADVERSARIAL_PAGE_HREF = "/agente-adversario"
+/** Configuração do agente em Integrações › Inteligência Artificial. */
+export const ADVERSARIAL_SETTINGS_HREF = `/integracoes/ia?aba=${ADVERSARIAL_AI_TAB}`
+
 /**
  * Níveis de criticidade do slider, do mais liberal ao mais crítico. Cada nível bloqueia a partir de
  * uma severidade (`blocksFrom`); abaixo dela, o achado vira sugestão e não volta ao implementador.
@@ -101,6 +106,9 @@ export const ADVERSARIAL_FILES_TOTAL_MB = 20
 
 /** Revisões guardadas na aba Revisões. */
 export const ADVERSARIAL_HISTORY_LIMIT = 50
+/** Rodadas por página na página do Agente Adversário. */
+export const ADVERSARIAL_PAGE_LIMIT = 20
+export const ADVERSARIAL_PAGE_LIMIT_MAX = 100
 
 export const ADVERSARIAL_UPDATED_EVENT = "adversarial-review-updated"
 export const ADVERSARIAL_AUDIT_ENTITY = "RevisaoAdversaria"
@@ -109,6 +117,17 @@ export const ADVERSARIAL_CONSUMPTION_ORIGIN = "adversarial-agent"
 export const ADVERSARIAL_INSTRUCTIONS_KEY = "opex-adversarial"
 /** Rótulo do turno na saída da mesa. */
 export const ADVERSARIAL_STAGE_LABEL = "Agente adversário"
+
+/** Situação de uma rodada. */
+export const ADVERSARIAL_REVIEW_STATES = ["running", "done", "failed", "interrupted"] as const
+export type AdversarialReviewState = (typeof ADVERSARIAL_REVIEW_STATES)[number]
+
+export const ADVERSARIAL_REVIEW_STATE_LABELS: Record<AdversarialReviewState, string> = {
+    running: "Revisando",
+    done: "Concluída",
+    failed: "Falhou",
+    interrupted: "Interrompida",
+}
 
 /** Decisão tomada depois de uma rodada (pelo fluxo ou pelo usuário). */
 export const ADVERSARIAL_DECISIONS = ["approved", "fix-auto", "fix-user", "awaiting", "skipped", "rerun", "proceeded-limit", "proceeded-failure", "failed", "interrupted"] as const

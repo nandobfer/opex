@@ -192,7 +192,7 @@ sem pedido explícito.
 - **Ferramentas do Agente Opex** (`src/features/opex-agent/server/tools/`) chamam a **função de
   serviço real** do app (nunca HTTP). Ferramenta de exclusão, arquivamento, gravação de integração ou
   usuário/senha/token de cliente é `destructive` (por padrão pede Confirmar/Cancelar no chat; o dono
-  pode trocar a confirmação ferramenta a ferramenta em Integrações › Provedores de IA › Agente Opex,
+  pode trocar a confirmação ferramenta a ferramenta em Integrações › Inteligência Artificial › Agente Opex,
   e a tela avisa a destrutiva sem confirmação); segredos
   nunca vão para o modelo, os cards ou o histórico (`redact`). Ver `aicontext/modules/opex-agent.md`.
 
@@ -278,7 +278,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai` e `@ai-sdk/deepseek`, sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
-  Integrações › Provedores de IA (`aicontext/modules/ai.md`)
+  Integrações › Inteligência Artificial (`aicontext/modules/ai.md`)
 - Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com
   4 shards paralelos (`.github/workflows/ci-cd.yml`) e `maxWorkers: "100%"`
 - Build e execução: scripts de `package.json`; Docker (`Dockerfile` + `docker-compose.yml`)

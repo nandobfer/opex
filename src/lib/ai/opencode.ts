@@ -22,7 +22,7 @@ export interface OpencodeConnection {
 export async function getOpencodeConnection(): Promise<OpencodeConnection> {
     const config = await getIntegrationConfig("ai_opencode")
     const baseUrl = config.baseUrl?.trim().replace(/\/+$/, "")
-    if (!baseUrl) throw new AiProviderError("OpenCode sem URL do servidor: configure em Integrações › Provedores de IA › OpenCode")
+    if (!baseUrl) throw new AiProviderError("OpenCode sem URL do servidor: configure em Integrações › Inteligência Artificial › OpenCode")
     const headers: Record<string, string> = { Accept: "application/json" }
     if (config.password) headers.Authorization = `Basic ${Buffer.from(`${OPENCODE_USER}:${config.password}`).toString("base64")}`
     return { baseUrl, headers, directory: config.directory?.trim() || undefined }

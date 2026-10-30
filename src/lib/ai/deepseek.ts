@@ -13,7 +13,7 @@ export const DEEPSEEK_API_URL = "https://api.deepseek.com"
 
 async function getDeepseekApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_deepseek")
-    if (!apiKey) throw new AiProviderError("DeepSeek sem API key: configure em Integrações › Provedores de IA › DeepSeek")
+    if (!apiKey) throw new AiProviderError("DeepSeek sem API key: configure em Integrações › Inteligência Artificial › DeepSeek")
     return apiKey
 }
 

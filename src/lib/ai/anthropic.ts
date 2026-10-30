@@ -14,7 +14,7 @@ const ANTHROPIC_VERSION = "2023-06-01"
 
 async function getAnthropicApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_anthropic")
-    if (!apiKey) throw new AiProviderError("Anthropic sem API key: configure em Integrações › Provedores de IA › Anthropic")
+    if (!apiKey) throw new AiProviderError("Anthropic sem API key: configure em Integrações › Inteligência Artificial › Anthropic")
     return apiKey
 }
 
