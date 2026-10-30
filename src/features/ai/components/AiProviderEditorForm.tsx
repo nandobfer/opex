@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BarChart3, Cpu, KeyRound, Settings2 } from "lucide-react"
+import { BarChart3, Bot, Cpu, Gauge, KeyRound, Puzzle, ServerCog, Settings2, Sparkles, SquareSlash } from "lucide-react"
 import type { IntegrationDef, PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { aiProviderOfIntegration } from "@/lib/ai/providers"
@@ -15,6 +15,8 @@ import { SecretFieldsCard } from "@/features/integrations/components/detail/Secr
 import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { OpencodeAccountsCard } from "@/features/opencode-accounts/components/OpencodeAccountsCard"
+import { OpencodeResourceTab } from "@/features/opencode-resources/components/OpencodeResourceTab"
+import { OpencodeControlsTab } from "@/features/opencode-service/components/OpencodeControlsTab"
 import { AI_PROVIDER_TAB_IDS, type AiProviderTab } from "../constants"
 import { AiModelsCard } from "./AiModelsCard"
 import { JevUsageCard } from "./JevUsageCard"
@@ -35,12 +37,19 @@ const TAB_DEFS: Record<AiProviderTab, IntegrationTabDef<AiProviderTab>> = {
     configuracao: { id: "configuracao", label: "Configuração", icon: Settings2 },
     modelos: { id: "modelos", label: "Modelos", icon: Cpu },
     contas: { id: "contas", label: "Contas", icon: KeyRound },
+    controles: { id: "controles", label: "Controles", icon: Gauge },
+    skills: { id: "skills", label: "Skills", icon: Sparkles },
+    agentes: { id: "agentes", label: "Agentes", icon: Bot },
+    comandos: { id: "comandos", label: "Comandos", icon: SquareSlash },
+    plugins: { id: "plugins", label: "Plugins", icon: Puzzle },
+    mcps: { id: "mcps", label: "MCPs", icon: ServerCog },
     consumo: { id: "consumo", label: "Consumo", icon: BarChart3 },
 }
 
 /**
  * Página de um provedor de IA em abas: Configuração (campos e ações), Modelos (lista do provedor),
- * Contas (só OpenCode: contas dos providers do servidor) e Consumo (uso medido). O Gemini não tem a aba Consumo. Trocar de aba com alterações pede descarte.
+ * Contas (só OpenCode: contas dos providers do servidor), Controles e os recursos Skills, Agentes,
+ * Comandos, Plugins e MCPs (só OpenCode) e Consumo (uso medido). O Gemini não tem a aba Consumo. Trocar de aba com alterações pede descarte.
  */
 export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiProviderEditorFormProps) {
     const provider = aiProviderOfIntegration(def.id)
@@ -79,6 +88,12 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                 )}
                 {tab === "modelos" && provider && <AiModelsCard provider={provider.id} dirty={dirty} />}
                 {tab === "contas" && provider?.id === "opencode" && <OpencodeAccountsCard dirty={dirty} />}
+                {tab === "controles" && provider?.id === "opencode" && <OpencodeControlsTab dirty={dirty} />}
+                {tab === "skills" && provider?.id === "opencode" && <OpencodeResourceTab key="skill" kind="skill" dirty={dirty} />}
+                {tab === "agentes" && provider?.id === "opencode" && <OpencodeResourceTab key="agent" kind="agent" dirty={dirty} />}
+                {tab === "comandos" && provider?.id === "opencode" && <OpencodeResourceTab key="command" kind="command" dirty={dirty} />}
+                {tab === "plugins" && provider?.id === "opencode" && <OpencodeResourceTab key="plugin" kind="plugin" dirty={dirty} />}
+                {tab === "mcps" && provider?.id === "opencode" && <OpencodeResourceTab key="mcp" kind="mcp" dirty={dirty} />}
                 {tab === "consumo" && provider?.id === "jev" && <JevUsageCard />}
                 {tab === "consumo" && provider?.id === "opencode" && <OpencodeUsageCard />}
             </IntegrationTabs>

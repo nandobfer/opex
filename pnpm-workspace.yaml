@@ -1,7 +1,9 @@
 allowBuilds:
   '@tsparticles/engine': false
   core-js: true
+  cpu-features: false
   esbuild: true
   msgpackr-extract: false
   sharp: true
+  ssh2: false
   unrs-resolver: true

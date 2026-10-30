@@ -40,7 +40,7 @@ export interface IntegrationConfigMap {
     crons: { schedulerEnabled: boolean; internalBaseUrl?: string; jobs: CronJobConfig[]; cronSecret?: string }
     github: { apiUrl: string; commentOnCreate: boolean; token?: string }
     ai: Record<string, never>
-    ai_opencode: { baseUrl?: string; directory?: string; quotaRefreshReason?: string; password?: string }
+    ai_opencode: { baseUrl?: string; directory?: string; quotaRefreshReason?: string; sshHost?: string; sshPort: number; sshUser?: string; opencodeBin?: string; sshHostFingerprint?: string; password?: string; sshPrivateKey?: string }
     ai_gemini: { apiKey?: string }
     ai_anthropic: { apiKey?: string }
     ai_openai: { apiKey?: string }
