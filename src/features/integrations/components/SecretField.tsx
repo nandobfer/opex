@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Eraser, KeyRound, Pencil, Undo2 } from "lucide-react"
 import { IconAction } from "./IconAction"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import type { SecretFieldDef } from "@/lib/integrations/catalog"
@@ -57,18 +58,34 @@ export function SecretField({ field, state, action, onChange, disabled, encrypti
                         transition={{ duration: 0.18 }}
                         className="flex gap-2"
                     >
-                        <Input
-                            id={inputId}
-                            type="password"
-                            autoComplete="new-password"
-                            autoFocus
-                            placeholder={`Novo valor para ${field.label.toLowerCase()}`}
-                            value={action?.action === "set" ? action.value : ""}
-                            onChange={(event) =>
-                                onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)
-                            }
-                            disabled={disabled}
-                        />
+                        {field.multiline ? (
+                            <Textarea
+                                id={inputId}
+                                vim={false}
+                                autoComplete="off"
+                                spellCheck={false}
+                                autoFocus
+                                rows={5}
+                                className="font-mono text-xs [-webkit-text-security:disc]"
+                                placeholder={`Cole ${field.label.toLowerCase()}`}
+                                value={action?.action === "set" ? action.value : ""}
+                                onChange={(event) => onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)}
+                                disabled={disabled}
+                            />
+                        ) : (
+                            <Input
+                                id={inputId}
+                                type="password"
+                                autoComplete="new-password"
+                                autoFocus
+                                placeholder={`Novo valor para ${field.label.toLowerCase()}`}
+                                value={action?.action === "set" ? action.value : ""}
+                                onChange={(event) =>
+                                    onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)
+                                }
+                                disabled={disabled}
+                            />
+                        )}
                         <IconAction label="Desfazer" icon={<Undo2 className="h-4 w-4" />} onClick={reset} className="h-10 w-10" />
                     </motion.div>
                 ) : (

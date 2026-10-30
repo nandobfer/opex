@@ -9,14 +9,15 @@ export type AiTab = (typeof AI_TABS)[number]
 /**
  * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
  * (omitida da URL). Gemini, Anthropic, OpenAI e DeepSeek não têm consumo próprio medido aqui, então não
- * têm a aba Consumo. `contas` (contas dos providers do servidor) é só do OpenCode.
+ * têm a aba Consumo. `contas` (contas dos providers do servidor), `controles` (serviço) e os recursos
+ * (`skills`, `agentes`, `comandos`, `plugins`, `mcps`) são só do OpenCode.
  */
-export const AI_PROVIDER_TABS = ["configuracao", "modelos", "contas", "consumo"] as const
+export const AI_PROVIDER_TABS = ["configuracao", "controles", "modelos", "contas", "skills", "agentes", "comandos", "plugins", "mcps", "consumo"] as const
 export type AiProviderTab = (typeof AI_PROVIDER_TABS)[number]
 
 /** Abas mostradas em cada provedor. [`configuracao`, `modelos`] ou com `consumo`. */
 export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]> = {
-    opencode: ["configuracao", "modelos", "contas", "consumo"],
+    opencode: ["configuracao", "controles", "modelos", "contas", "skills", "agentes", "comandos", "plugins", "mcps", "consumo"],
     gemini: ["configuracao", "modelos"],
     anthropic: ["configuracao", "modelos"],
     openai: ["configuracao", "modelos"],

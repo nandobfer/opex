@@ -111,6 +111,8 @@ export interface SecretFieldDef {
     readonly env?: readonly string[]
     readonly required?: boolean
     readonly group?: FieldGroup
+    /** Valor de várias linhas (ex.: chave privada SSH): a tela usa área de texto mascarada. */
+    readonly multiline?: boolean
 }
 
 export interface IntegrationDef {
@@ -543,6 +545,29 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
                 ],
                 defaultValue: "manual",
             },
+            {
+                key: "sshHost",
+                label: "Host SSH",
+                description: "Acesso SSH à máquina do OpenCode, usado só para iniciar, parar, reiniciar e atualizar o serviço (aba Controles). Vazio usa o host da URL do servidor",
+                kind: "text",
+                placeholder: "192.168.0.10",
+            },
+            { key: "sshPort", label: "Porta SSH", kind: "number", defaultValue: 22, min: 1, max: 65535 },
+            { key: "sshUser", label: "Usuário SSH", description: "Usuário da máquina que roda o opencode serve", kind: "text", placeholder: "usuario" },
+            {
+                key: "opencodeBin",
+                label: "Executável do opencode",
+                description: "Caminho absoluto do opencode no host; vazio é detectado sozinho enquanto o serviço está no ar",
+                kind: "text",
+                placeholder: "/home/usuario/.nvm/versions/node/v22/bin/opencode",
+            },
+            {
+                key: "sshHostFingerprint",
+                label: "Impressão digital do host SSH",
+                description: "Gravada ao clicar em Confiar na aba Controles; uma chave de host diferente é recusada. Limpe para confiar de novo",
+                kind: "text",
+                placeholder: "SHA256:…",
+            },
         ],
         secretFields: [
             {
@@ -550,6 +575,12 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
                 label: "Senha do servidor",
                 description: "OPENCODE_PASSWORD do opencode serve (usuário opencode, autenticação Basic)",
                 required: true,
+            },
+            {
+                key: "sshPrivateKey",
+                label: "Chave privada SSH",
+                description: "Chave privada (OpenSSH/PEM, sem senha) do usuário SSH; o servidor do app a usa só para o ciclo de vida do serviço",
+                multiline: true,
             },
         ],
     },
