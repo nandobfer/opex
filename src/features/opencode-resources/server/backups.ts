@@ -1,4 +1,5 @@
 import { DomainError } from "@/lib/api/route"
+import { clearAiCatalogCache } from "@/lib/ai/catalog"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { addBackup, backupArchivePath, backupIndexPath, newBackupId, parseBackupIndex, type BackupMeta } from "../backups"
@@ -58,6 +59,7 @@ export async function restoreBackup(id: string, actor: { id: string; origin: str
         const safetyBackupId = await createBackup(host, { action: "restaurar", label: `Antes de restaurar o backup de ${meta.createdAt}`, paths: meta.paths })
         await runOrFail(host, restoreCommand(backupArchivePath(host.home, meta.id), meta.absent), "Não foi possível restaurar o backup", 60_000)
         await host.client.location.reload().catch(() => undefined)
+        clearAiCatalogCache()
         await recordAudit({ userId: actor.id, entidade: OPENCODE_BACKUP_AUDIT_ENTITY, entidadeId: meta.id, acao: AcaoAuditoria.EXECUTAR, depois: { acao: "restaurar", backup: meta.id, caminhos: meta.paths, backupDeSeguranca: safetyBackupId, origem: actor.origin } })
         await publishAppEvent(OPENCODE_RESOURCES_UPDATED_EVENT, { kind: "all", scope: "all" })
         return { restored: toBackupDto(meta), safetyBackupId }

@@ -77,7 +77,7 @@ lista o que muda e pede confirmação. Com alterações não salvas na Configura
 - **Gravação**: `opencode.jsonc` editado com `jsonc-parser` (comentários preservados) no formato que o
   arquivo já usa (1.x ou 2.x). Depois de gravar, `config.get` confere; se o OpenCode recusar, a
   alteração é **desfeita pelo backup** (422 `OPENCODE_CONFIG_REJECTED`). Então `location.reload`,
-  cache do catálogo limpo (agentes), auditoria e Pusher.
+  cache do catálogo limpo (agentes e skills, também usado pelo Refinar tarefa), auditoria e Pusher.
 - **Ligar/desligar sem remover**: o manifesto `~/.config/opencode/.opex-disabled/manifest.json` (no
   host) guarda o caminho original ou a entrada do JSON removida; sobrevive à perda do banco do Opex.
 - **Segredos dos MCPs**: valores de `environment`/`headers` nunca saem do servidor (DTO só com os

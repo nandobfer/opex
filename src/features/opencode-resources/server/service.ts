@@ -98,7 +98,7 @@ async function mutate(key: ResourceKey, action: MutationAction, actor: ResourceA
             const effect = await run(ctx, HANDLERS[key.kind])
             await verify(ctx)
             await ctx.host.client.location.reload().catch(() => undefined)
-            if (key.kind === "agent") clearAiCatalogCache()
+            if (key.kind === "agent" || key.kind === "skill") clearAiCatalogCache()
             await recordAudit({
                 userId: actor.id,
                 entidade: OPENCODE_RESOURCE_AUDIT_ENTITY,
