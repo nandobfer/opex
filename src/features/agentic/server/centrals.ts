@@ -107,8 +107,10 @@ export async function deleteCentral(id: string, actorId: string): Promise<void> 
     const { deleteWorkbenchFiles } = await import("./files")
     for (const item of finished) await deleteWorkbenchFiles(String(item._id)).catch(() => undefined)
     await AgenticWorkbench.deleteMany({ centralId: id })
+    // Memórias do agente desenvolvedor desta central (a auditoria de cada uma não se aplica: saem com a central).
+    const memories = await (await import("@/features/ai/server/agent-memory-service")).deleteCentralMemories(id)
     await AgenticCentral.deleteOne({ _id: doc._id })
-    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName } })
+    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName, ...(memories ? { memorias: memories } : {}) } })
     await publishAgentic({ centralId: id })
 }
 

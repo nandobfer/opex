@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   assertRemote: vi.fn(async () => undefined),
 }))
 
+vi.mock('@/features/agentic/server/developer-memories', () => ({ syncDeveloperMemories: async () => ({ applied: true, section: '' }), withDeveloperMemories: (_sync: unknown, text: string) => text }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
 vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ resolveBuildTarget: async () => null, teardownForCleanup: async () => false }))

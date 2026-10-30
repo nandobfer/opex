@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   deleteWorkbenchForks: vi.fn(async () => undefined),
 }))
 
+const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
+vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 // Builder Machine desativada: o build e a limpeza seguem no servidor.
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
@@ -145,5 +147,23 @@ describe('resumos de forks no contexto da conversa principal', () => {
     await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
     expect(mocks.runTurn.mock.calls[0]![1].text).toContain('Usar o serviço X')
     expect(state(id).forkNotesSynced).toBe(true)
+  })
+})
+
+describe('memórias do agente desenvolvedor na mesa (OPE-97)', () => {
+  it('cada turno sincroniza as memórias da central na sessão da mesa', async () => {
+    const id = await workbench({})
+    await implement(id)
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
+    expect(memories.sync).toHaveBeenCalledWith(expect.anything(), expect.any(String), 'c1')
+    expect(mocks.runTurn.mock.calls[0]![1].text).not.toContain('Memórias e instruções permanentes')
+  })
+
+  it('regressão: sessão sem a instrução das memórias recebe-as à frente do prompt do turno', async () => {
+    memories.sync.mockResolvedValueOnce({ applied: false, section: '## Memórias e instruções permanentes\n- Rode o lint.' })
+    const id = await workbench({})
+    await implement(id)
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
+    expect(mocks.runTurn.mock.calls[0]![1].text.startsWith('## Memórias e instruções permanentes\n- Rode o lint.\n\n---\n')).toBe(true)
   })
 })

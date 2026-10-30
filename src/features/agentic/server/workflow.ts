@@ -59,6 +59,7 @@ import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup }
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
+import { syncDeveloperMemories, withDeveloperMemories } from "./developer-memories"
 import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
@@ -679,6 +680,8 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
+            // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão a cada turno.
+            const memories = turn.attach ? null : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId)
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
                 next = await buildTurn(client, loaded, turn, sessionId, controller)
@@ -690,7 +693,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const withNotes = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
             // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
-            const text = withAttachmentsSection(withNotes, attachments.section)
+            const text = withAttachmentsSection(memories ? withDeveloperMemories(memories, withNotes) : withNotes, attachments.section)
             // Agente Mentor: pode pedir ao agente um bloco de lição no fim da resposta.
             const adversary = await adversaryModule()
             const stageText = turn.attach ? text : await adversary.mentorPrepareTurn({ centralId: loaded.doc.centralId, stage: turn.stage, text })

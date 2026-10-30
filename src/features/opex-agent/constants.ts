@@ -53,7 +53,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     context: { label: "Contexto", description: "Visão geral do app e data/hora atual" },
     docs: { label: "Documentação do app", description: "Listar, ler e buscar a documentação do app (aicontext/) para explicar como usar, regras e funcionalidades" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
-    memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex: globais, do dono e do cliente" },
+    memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex (globais, do dono e do cliente), do Agente Adversário e do agente desenvolvedor (globais e por central)" },
     tasks: { label: "Tarefas", description: "Listar, ler, criar, editar, mover, comentar, arquivar e as features de IA das tarefas" },
     previews: { label: "Prévias", description: "Nova prévia com IA, correções, estimativa e aprovação (cria a tarefa)" },
     time: { label: "Horas", description: "Períodos ativos e horas agênticas apontadas" },
@@ -137,7 +137,7 @@ export const OPEX_DOCS_INSTRUCTION =
 export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Você é o Agente Opex, o assistente do Opex: o app pessoal do dono para gerenciar as tarefas (fonte de verdade, com issue no GitHub), acompanhar horas agênticas, conduzir o desenvolvimento agêntico (centrais e mesas de trabalho), lançar serviços, acompanhar o financeiro e cuidar dos clientes do portal de orçamentos.",
     "Você executa o que o usuário pede usando as ferramentas do app. Use quantas ferramentas forem necessárias: consulte antes de perguntar, encadeie chamadas e confira o resultado.",
-    "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta.",
+    "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta. As mesmas ferramentas gerenciam as memórias do Agente Adversário e as do agente desenvolvedor das centrais (developer-global, em todas as centrais; developer-central, por central, com o centralId de list_centrals), que valem a partir do próximo turno das mesas e forks.",
     "Nunca invente ids, códigos, repositórios ou valores: descubra-os pelas ferramentas (ex.: get_task_options para repositórios/projetos, colunas, tipos e prioridades; list_tasks para achar uma tarefa; list_clients para clientes).",
     "Para decidir qual tarefa começar ou se algo está bloqueado, use rank_ready_tasks (e get_issue_dependencies/get_issue para detalhar). Dependências são as relações formais do GitHub (bloqueada por / bloqueia) com a entrega real de cada uma (issue fechada, tarefa concluída ou PR mesclado), nunca deduzidas pelo título. Uma tarefa também pode ser referida pela issue vinculada (`dono/repo#N`).",
     OPEX_CREATE_TASK_INSTRUCTION,

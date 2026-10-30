@@ -82,6 +82,8 @@ export interface AgentMemoryOrigin {
 }
 
 export interface MemoryDto {
+    /** Central da memória, nas listas por central (`developer-central`). */
+    centralId?: string
     id: string
     texto: string
     resumo: string

@@ -272,6 +272,8 @@ export const LIVE_CHAT_DESCRIPTION = "Com o agente trabalhando (mesa, forks e re
 export const FORK_INSTRUCTIONS_KEY = "opex-fork"
 export const FORK_NOTES_INSTRUCTIONS_KEY = "opex-fork-notes"
 export const FORK_CHILD_NOTES_INSTRUCTIONS_KEY = "opex-fork-child-notes"
+/** Memórias do agente desenvolvedor (globais + da central), regravadas a cada turno da mesa e do fork. */
+export const DEVELOPER_MEMORIES_INSTRUCTIONS_KEY = "opex-developer-memories"
 
 /**
  * Permissões da sessão de um fork em Plan (somente leitura): nega edição, subagentes e comandos, liberando
