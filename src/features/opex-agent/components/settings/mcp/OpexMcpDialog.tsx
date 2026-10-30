@@ -45,7 +45,11 @@ export function OpexMcpDialog({ open, server, onClose }: OpexMcpDialogProps) {
     }, [name, server, form])
 
     const submit = form.handleSubmit(async (values) => {
-        const saved = await save.mutateAsync({ id: server?.id ?? null, input: values }).catch(() => null)
+        // O retrato das ferramentas só vai quando o "Testar conexão" deste diálogo trouxe um novo:
+        // sem teste, o servidor mantém o que já tem (inclusive o atualizado por um turno no meio-tempo).
+        const { tools, ...rest } = values
+        const input: OpexMcpServerInput = form.getFieldState("tools").isDirty && tools ? { ...rest, tools } : rest
+        const saved = await save.mutateAsync({ id: server?.id ?? null, input }).catch(() => null)
         if (saved) onClose()
     })
 

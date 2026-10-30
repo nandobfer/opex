@@ -33,6 +33,11 @@ export interface McpTurnTools {
 
 const EMPTY: McpTurnTools = { tools: [], overrides: {}, notices: [], close: async () => undefined }
 
+/** Erro mostrado no portal do cliente, sem detalhes da infraestrutura do dono. */
+export function mcpClientError(name: string): string {
+    return `MCP "${name}" indisponível no momento. Tente novamente mais tarde.`
+}
+
 type ContentItem = Record<string, unknown> & { type?: unknown }
 
 function contentOf(result: CallToolResult): ContentItem[] {
@@ -113,7 +118,8 @@ export function mcpOpexTools(server: ServerDoc, client: MCPClient, definitions: 
                 } catch (error) {
                     const message = error instanceof OpexToolError ? error.message : `MCP ${server.name}: ${describeMcpError(error)}`
                     log.info({ ...base, durationMs: Date.now() - startedAt, ok: false, err: message }, "[opex-mcp] chamada de ferramenta")
-                    throw new OpexToolError(message)
+                    // Portal: o detalhe (endereço interno, corpo de 401/403…) fica só no log do dono.
+                    throw new OpexToolError(context.scope?.kind === "client" ? mcpClientError(server.name) : message)
                 }
             },
         }
@@ -163,7 +169,9 @@ export async function loadMcpTools(scope: OpexServerScope, signal?: AbortSignal)
         if (outcome.status === "rejected") {
             const message = describeMcpError(outcome.reason)
             log.warn({ mcp: server.slug, transport: server.transport, err: message }, "[opex-mcp] MCP indisponível no turno")
-            notices.push(`MCP "${server.name}" indisponível neste turno (${message}); as ferramentas dele não estão disponíveis — avise o usuário se ele pedir algo desse MCP.`)
+            // No portal, o aviso é genérico: o erro completo fica no log e na situação do MCP (tela do dono).
+            const reason = scope.kind === "client" ? "" : ` (${message})`
+            notices.push(`MCP "${server.name}" indisponível neste turno${reason}; as ferramentas dele não estão disponíveis — avise o usuário se ele pedir algo desse MCP.`)
             void recordMcpStatus(id, { error: message })
             return
         }
@@ -190,7 +198,8 @@ export async function resolveMcpTool(name: string, scope: OpexServerScope): Prom
     const candidates = (await serversFor(scope)).filter((server) => name.startsWith(`mcp_${server.slug}_`))
     for (const server of candidates) {
         const connected = await connectServer(server).catch((error: unknown) => {
-            throw new OpexToolError(`MCP "${server.name}" indisponível: ${describeMcpError(error)}`)
+            log.warn({ mcp: server.slug, err: describeMcpError(error) }, "[opex-mcp] MCP indisponível na ação confirmada")
+            throw new OpexToolError(scope.kind === "client" ? mcpClientError(server.name) : `MCP "${server.name}" indisponível: ${describeMcpError(error)}`)
         })
         const tool = mcpOpexTools(server, connected.client, connected.definitions).tools.find((item) => item.name === name)
         if (tool) return { tool, close: () => closeMcp(connected.client) }

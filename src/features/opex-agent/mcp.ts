@@ -40,7 +40,9 @@ const URL_PATTERN = /^https?:\/\/[^\s]+$/i
  * fora da lista é removida. O valor salvo nunca volta para a tela.
  */
 export const opexMcpSecretEntrySchema = z.object({
-    key: z.string().trim().min(1, "Informe o nome").max(128, "Máximo de 128 caracteres").regex(SECRET_KEY_PATTERN, "Use letras, números, _ . ou -"),
+    // Nome obrigatório e formato conferidos só na lista do transporte ativo (`refineConnection`): a
+    // lista do outro transporte fica fora da tela e é descartada ao salvar.
+    key: z.string().trim().max(128, "Máximo de 128 caracteres"),
     value: z.string().max(8000, "Máximo de 8000 caracteres"),
 })
 export type OpexMcpSecretEntry = z.infer<typeof opexMcpSecretEntrySchema>
@@ -71,19 +73,26 @@ const connectionShape = {
 
 type ConnectionValues = { transport: OpexMcpTransport; url: string; command: string; headers: OpexMcpSecretEntry[]; env: OpexMcpSecretEntry[] }
 
+/** Lista de segredos usada pelo transporte (a outra é ignorada e descartada ao salvar). */
+export function activeSecretList(transport: OpexMcpTransport): "headers" | "env" {
+    return transport === "stdio" ? "env" : "headers"
+}
+
 function refineConnection(value: ConnectionValues, ctx: z.RefinementCtx): void {
     if (value.transport === "stdio") {
         if (!value.command) ctx.addIssue({ code: "custom", path: ["command"], message: "Informe o comando (ex.: npx)" })
     } else if (!URL_PATTERN.test(value.url)) {
         ctx.addIssue({ code: "custom", path: ["url"], message: "Informe uma URL http(s) válida" })
     }
-    for (const field of ["headers", "env"] as const) {
-        const seen = new Set<string>()
-        value[field].forEach((entry, index) => {
-            if (seen.has(entry.key)) ctx.addIssue({ code: "custom", path: [field, index, "key"], message: "Nome repetido" })
-            seen.add(entry.key)
-        })
-    }
+    const field = activeSecretList(value.transport)
+    const seen = new Set<string>()
+    value[field].forEach((entry, index) => {
+        const path = [field, index, "key"]
+        if (!entry.key) ctx.addIssue({ code: "custom", path, message: "Informe o nome" })
+        else if (!SECRET_KEY_PATTERN.test(entry.key)) ctx.addIssue({ code: "custom", path, message: "Use letras, números, _ . ou -" })
+        else if (seen.has(entry.key)) ctx.addIssue({ code: "custom", path, message: "Nome repetido" })
+        seen.add(entry.key)
+    })
 }
 
 /** Cadastro/edição de um MCP (mesmo schema na tela e na API). */

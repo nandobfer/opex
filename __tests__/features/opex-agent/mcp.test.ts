@@ -108,6 +108,10 @@ describe('MCPs — módulo puro', () => {
     expect(opexMcpServerInputSchema.safeParse({ ...input(), transport: 'stdio', url: '', command: '' }).success).toBe(false)
     expect(opexMcpServerInputSchema.safeParse({ ...input(), transport: 'stdio', url: '', command: 'npx', headers: [] }).success).toBe(true)
     expect(opexMcpServerInputSchema.safeParse({ ...input(), headers: [{ key: 'A', value: '1' }, { key: 'A', value: '2' }] }).success).toBe(false)
+    expect(opexMcpServerInputSchema.safeParse({ ...input(), headers: [{ key: '', value: '1' }] }).success).toBe(false)
+    // Regressão: linha vazia na lista do outro transporte (fora da tela) não bloqueia o envio.
+    expect(opexMcpServerInputSchema.safeParse({ ...input(), transport: 'stdio', url: '', command: 'npx', headers: [{ key: '', value: '' }] }).success).toBe(true)
+    expect(opexMcpServerInputSchema.safeParse({ ...input(), headers: [], env: [{ key: '', value: '' }] }).success).toBe(true)
     expect(slugifyMcpName('GitHub Ações!')).toBe('github_acoes')
   })
 
@@ -138,6 +142,17 @@ describe('MCPs — cadastro', () => {
     expect(mcpConnectionOf(servers().docs[0] as never).headers).toEqual({ Authorization: 'Bearer segredo' })
     expect((await getMcpServer(id)).name).toBe('GitHub 2')
     await expect(updateMcpServer(id, input({ headers: [{ key: 'X-Novo', value: '' }] }), 'local')).rejects.toMatchObject({ status: 400, code: 'OPEX_MCP_SECRET_REQUIRED' })
+  })
+
+  it('regressão: editar sem novo teste mantém o retrato das ferramentas e a data de sincronização', async () => {
+    const tools = [{ name: 'ping', title: null, description: '', annotations: {} }]
+    const { id } = await createMcpServer(input({ tools }), 'local')
+    const syncedAt = servers().docs[0]!.toolsSyncedAt
+    const { tools: _omit, ...withoutTools } = input({ url: 'https://outro.example.com/mcp' })
+    void _omit
+    await updateMcpServer(id, withoutTools, 'local')
+    expect(servers().docs[0]!.tools).toEqual(tools)
+    expect(servers().docs[0]!.toolsSyncedAt).toEqual(syncedAt)
   })
 
   it('identificador repetido dá 409 e sem a chave de criptografia gravar segredo dá 400', async () => {
@@ -213,6 +228,25 @@ describe('MCPs — ferramentas no turno', () => {
     mocks.connectMcp.mockResolvedValue(fakeClient([{ name: 'x', inputSchema: { type: 'object' } }], vi.fn(async () => ({ isError: true, content: [{ type: 'text', text: 'sem permissão' }] }))))
     const turn = await loadMcpTools({ kind: 'owner' })
     await expect(turn.tools[0]!.execute({}, { sessionId: 's1', actorId: 'local' })).rejects.toThrow('MCP GitHub: sem permissão')
+  })
+
+  it('portal: aviso de MCP indisponível e erro de ferramenta sem detalhes da infraestrutura do dono', async () => {
+    const a = await createMcpServer(input(), 'local')
+    const b = await createMcpServer(input({ name: 'Jira', slug: 'jira' }), 'local')
+    mocks.clientConfig.mockResolvedValue({ enabled: true, disabledTools: [], enabledOptInTools: [], enabledMcpServers: [a.id, b.id] })
+    mocks.connectMcp
+      .mockResolvedValueOnce(fakeClient([{ name: 'x', inputSchema: { type: 'object' } }], vi.fn(async () => { throw new Error('fetch failed (connect ECONNREFUSED 10.0.0.5:3000)') })))
+      .mockRejectedValueOnce(new Error('fetch failed (connect ECONNREFUSED 10.0.0.6:3000)'))
+    const scope = { kind: 'client', actor: { client: { _id: 'c1' } } } as never
+    const turn = await loadMcpTools(scope)
+    expect(turn.notices).toHaveLength(1)
+    expect(turn.notices[0]).toContain('MCP "Jira" indisponível neste turno')
+    expect(turn.notices[0]).not.toContain('10.0.0.6')
+    const error = await turn.tools[0]!.execute({}, { sessionId: 's1', actorId: 'u1', scope }).catch((e: Error) => e)
+    expect((error as Error).message).toBe('MCP "GitHub" indisponível no momento. Tente novamente mais tarde.')
+    // O detalhe fica no log e na situação do MCP (tela do dono).
+    expect(JSON.stringify(mocks.log.info.mock.calls)).toContain('10.0.0.5')
+    await vi.waitFor(() => expect(servers().docs.find((doc) => doc.slug === 'jira')!.lastError).toContain('10.0.0.6'))
   })
 
   it('portal: só os MCPs liberados ao cliente e habilitados', async () => {

@@ -116,6 +116,32 @@ describe('seção MCPs do Agente Opex', () => {
     expect(id).toBe(SERVER.id)
     expect(input.headers).toEqual([{ key: 'Authorization', value: '' }])
     expect(input.confirmations).toEqual({ search: true })
+    // Regressão: sem "Testar conexão", o retrato das ferramentas não vai no PUT.
+    expect('tools' in input).toBe(false)
+  })
+
+  it('editar depois de testar a conexão envia o retrato novo das ferramentas', async () => {
+    const tools = [{ name: 'ping', title: null, description: '', annotations: { readOnlyHint: true } }]
+    mocks.test.mockResolvedValue({ ok: true, tools, error: null, durationMs: 100, serverInfo: null })
+    render(<OpexMcpSection />)
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Testar conexão/ }))
+    await waitFor(() => expect(screen.getByText('mcp_github_ping')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    expect((mocks.save.mock.calls[0]![0] as { input: { tools?: unknown } }).input.tools).toEqual(tools)
+  })
+
+  it('regressão: header vazio deixado no HTTP não bloqueia salvar depois de trocar para stdio', async () => {
+    render(<OpexMcpSection />)
+    fireEvent.click(screen.getAllByRole('button', { name: /Cadastrar MCP/ })[0]!)
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Local' } })
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar header/ }))
+    fireEvent.click(screen.getByRole('radio', { name: 'stdio' }))
+    fireEvent.change(screen.getByLabelText('Comando'), { target: { value: 'npx' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    expect((mocks.save.mock.calls[0]![0] as { input: { transport: string } }).input.transport).toBe('stdio')
   })
 
   it('cadastrar: identificador sugerido pelo nome, aviso do stdio e testar conexão envia o rascunho', async () => {

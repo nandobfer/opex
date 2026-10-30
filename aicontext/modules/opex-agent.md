@@ -385,7 +385,10 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
 - **Testar conexão** (no diálogo, sem gravar; na edição os segredos vazios usam os salvos): conecta,
   lista as ferramentas (nome, título, descrição e anotações `readOnlyHint`/`destructiveHint`) e o
   servidor. Cada ferramenta mostra o nome que o agente vê, o selo de risco e o switch **"Pede
-  confirmação"** (componente compartilhado `ToolConfirmMeta` com a árvore de Ferramentas).
+  confirmação"** (componente compartilhado `ToolConfirmMeta` com a árvore de Ferramentas). O retrato
+  das ferramentas só é regravado ao salvar quando o teste do diálogo trouxe um novo; sem teste, o
+  salvo (ou o atualizado por um turno) fica. Headers/variáveis do transporte que não está em uso são
+  ignorados na validação e descartados ao salvar.
 - **Risco e confirmação** pela anotação do servidor: `readOnlyHint` = Leitura (não pede);
   `destructiveHint: false` = Altera (pede); sem anotação = Destrutiva (pede). O ajuste fica em
   `confirmations` (`{ [ferramenta original]: boolean }`, só o que difere do padrão) e vale no dono e
@@ -399,7 +402,9 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
 - **Falha não derruba o agente**: MCP que não conecta fica de fora do turno; o agente recebe um aviso
   no contexto do turno ("MCP X indisponível neste turno…") e a situação vai para o cadastro
   (`lastError`/`lastCheckedAt`, exibidos na lista em tempo real). Erro devolvido pelo MCP
-  (`isError`) vira erro da ferramenta "MCP {nome}: …".
+  (`isError`) vira erro da ferramenta "MCP {nome}: …". **No portal do cliente**, o aviso e os erros
+  das ferramentas de MCP são genéricos ("MCP X indisponível no momento…"), sem endereço nem resposta
+  do servidor; o detalhe fica só no log e na situação do MCP (tela do dono).
 - **Logs**: `module: "opex-agent-mcp"`, uma linha por chamada (`mcp`, `tool`, `sessionId`, `scope`,
   `durationMs`, `ok`, `err`, tamanho da entrada — nunca a entrada), MCP indisponível e testes de conexão.
 - **Ação confirmada depois do turno**: `decideAction` reconecta só ao MCP da ferramenta
