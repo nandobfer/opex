@@ -83,6 +83,8 @@ URL). Token inválido leva ao `/login` com aviso.
 - `/cliente` (exato) — entrada do portal (resolve `?t=` e a escolha de cliente);
 - `/api/v1/*` — API pública por token de sistema (`requireApiToken`);
 - `/api/routines/*` — tick do agendador (token de cron);
+- `/api/maddox/mcp/*` — servidor MCP do Opex chamado pelo OpenCode (Agente Maddox), autenticado pelo
+  segredo derivado da chave das integrações e com o escopo conferido pela sessão (ver `maddox-agent.md`);
 - `/api/openapi.json` e `/api/docs` — só o contrato OpenAPI, nenhum dado.
 
 `next` é gravado sem o subcaminho público (`normalizePath` remove o `BASE_PATH`), e o formulário

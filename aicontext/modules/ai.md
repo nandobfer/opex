@@ -382,12 +382,14 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 
 - **Listas** (catálogo puro `src/features/ai/agents.ts`): `opex-global` (**Memórias globais**, valem
   no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono), `opex-client`
-  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes) e `adversarial`
+  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes), as mesmas três do Agente
+  Maddox (`maddox-global`, `maddox-owner`, `maddox-client`, aba `agente-maddox`; entram nas instruções
+  da sessão do OpenCode do Maddox) e `adversarial`
   (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa), `developer-global`
   (**Memórias globais do agente desenvolvedor**, valem em todas as centrais) e `developer-central`
   (**Memórias da central**, uma lista por central — `scope: "central"`, `isCentralScopedAgent`; ver
   `modules/agentic-dev.md`, "Memórias do agente desenvolvedor"). Cada lista tem a aba onde aparece
-  (`tab`: `agente-opex`, `agente-adversario` ou `desenvolvimento-agentico`; `aiAgentsOfTab` devolve só
+  (`tab`: `agente-opex`, `agente-maddox`, `agente-adversario` ou `desenvolvimento-agentico`; `aiAgentsOfTab` devolve só
   as listas que não são por central — as da central aparecem na página da central). Uma lista nova
   entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
 - **Listas por central**: toda operação exige `centralId` (sem ele, 400 `CENTRAL_REQUIRED`; central
