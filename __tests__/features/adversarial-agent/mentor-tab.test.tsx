@@ -59,6 +59,7 @@ vi.mock('@/features/ai/components/estimate-hours/EstimateHoursTab', () => stub('
 vi.mock('@/features/ai/components/task-refinement/TaskRefinementTab', () => stub('TaskRefinementTab'))
 vi.mock('@/features/agentic/components/settings/AgenticTab', () => stub('AgenticTab'))
 vi.mock('@/features/pr-review/components/PrReviewTab', () => stub('PrReviewTab'))
+vi.mock('@/features/maddox-agent/components/settings/MaddoxAgentTab', () => ({ MaddoxAgentTab: () => null }))
 vi.mock('@/features/opex-agent/components/settings/OpexAgentTab', () => ({ OpexAgentTab: () => null, OPEX_AI_TAB_DEF: { id: 'agente-opex', label: 'Agente Opex', icon: () => null } }))
 vi.mock('@/features/adversarial-agent/components/settings/AdversarialAgentTab', () => ({
   AdversarialAgentTab: () => null,

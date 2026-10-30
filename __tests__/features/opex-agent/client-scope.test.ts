@@ -74,7 +74,7 @@ describe('sessões do Agente Opex por escopo', () => {
     expect(doc).toMatchObject({ clientId: CLIENT_A, userId: 'u1' })
 
     mocks.clientActorFor.mockResolvedValue(actor(CLIENT_A, 'u1'))
-    expect(await sessionScopeOf(doc)).toEqual({ kind: 'client', actor: actor(CLIENT_A, 'u1') })
+    expect(await sessionScopeOf(doc)).toEqual({ kind: 'client', actor: actor(CLIENT_A, 'u1'), agent: 'opex' })
     expect(mocks.clientActorFor).toHaveBeenCalledWith('u1', CLIENT_A)
   })
 
