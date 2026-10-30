@@ -92,9 +92,17 @@ vi.mock('@/features/ai/server/agent-memory-service', async (original) => ({
   ...(await original<object>()),
   agentMemoryTexts: async (ids: string[]) => ids.flatMap((id) => (id === 'maddox-global' ? ['Memória global do Maddox'] : id === 'maddox-owner' ? ['Memória do dono'] : [])),
 }))
+const secretTool = {
+  name: 'update_integration',
+  group: 'integrations',
+  label: 'Configurar integração',
+  input: { safeParse: (value: unknown) => ({ success: true, data: value }) },
+  redact: (input: { id: string; values: Record<string, string> }) => ({ id: input.id, values: Object.fromEntries(Object.keys(input.values).map((key) => [key, '[oculto]'])) }),
+}
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
-  findOpexTool: (name: string) => (name === 'list_tasks' ? { name, group: 'tasks', label: 'Listar tarefas' } : undefined),
+  findOpexTool: (name: string) => (name === 'list_tasks' ? { name, group: 'tasks', label: 'Listar tarefas' } : name === 'update_integration' ? secretTool : undefined),
 }))
+vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ findOpexClientServerTool: () => undefined }))
 
 import { queueMaddoxFollowUp, sendMaddoxMessage } from '@/features/maddox-agent/server/runner'
 import { MADDOX_OWNER_SCOPE } from '@/features/maddox-agent/server/sessions'
@@ -168,6 +176,27 @@ describe('runner do Agente Maddox (OpenCode)', () => {
     expect(saved).toMatchObject({ status: 'complete', text: 'Achei 2 tarefas.', model: 'anthropic/claude (high)', usage: { inputTokens: 40, outputTokens: 10, totalTokens: 55 } })
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', opencodeSessionId: 'ses_oc' })
     expect(mocks.refreshTitle).toHaveBeenCalledWith(sessionId, expect.objectContaining({ provider: 'opencode', model: 'anthropic/claude', origin: 'maddox-title' }), expect.objectContaining({ userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.' }))
+  })
+
+  it('entrada de ferramenta do Opex com segredo sai com o redact: nem o chat ao vivo nem o histórico guardam o valor', async () => {
+    const sessionId = await newSession()
+    const rawInput = { id: 'github', values: { token: 'ghp_SEGREDO' } }
+    mocks.scenario = (async (hooks) => {
+      emit(hooks, { type: 'tool', id: 't1', name: 'opex_app_update_integration', state: 'running' })
+      // O resumo cru do OpenCode também pode trazer o segredo: ele nunca é usado nas ferramentas do Opex.
+      emit(hooks, { type: 'tool', id: 't1', name: 'opex_app_update_integration', state: 'running', input: 'ghp_SEGREDO', rawInput })
+      emit(hooks, { type: 'tool', id: 't1', name: 'opex_app_update_integration', state: 'done', input: 'ghp_SEGREDO', rawInput, output: '{"ok":true}' })
+      return { outcome: 'succeeded' }
+    }) satisfies Scenario
+    const { lines, ended } = collect(sessionId)
+    await sendMaddoxMessage(sessionId, { text: 'Grave o token' }, 'local', MADDOX_OWNER_SCOPE)
+    await ended
+    const published = JSON.stringify(lines)
+    expect(published).not.toContain('ghp_SEGREDO')
+    expect(published).toContain('[oculto]')
+    const saved = JSON.stringify(messages().docs.find((doc) => doc.role === 'assistant')!.parts)
+    expect(saved).not.toContain('ghp_SEGREDO')
+    expect(saved).toContain('[oculto]')
   })
 
   it('permissão do OpenCode deixa a sessão aguardando; Confirmar responde "once" e o turno continua', async () => {

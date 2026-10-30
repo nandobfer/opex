@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { maddoxSessionPermissions } from '@/features/maddox-agent/permissions'
 import { MADDOX_CLIENT_TOOL_NAMES, buildMaddoxClientToolTree, enabledMaddoxClientToolNames, maddoxMcpToolName, maddoxOwnerToolMetas, parseMaddoxMcpToolName } from '@/features/maddox-agent/catalog'
-import { agentColorStyle, contrastRatio, hexToHslTriplet, readableForeground, AGENT_COLOR_HEX } from '@/features/maddox-agent/colors'
+import { readFileSync } from 'node:fs'
+import { agentColorStyle } from '@/features/maddox-agent/colors'
+import { COLUMN_COLORS } from '@/features/tasks/board'
 import { isMaddoxShortcut } from '@/features/maddox-agent/constants'
 import { isOpexShortcut } from '@/features/opex-agent/constants'
 import { activeAgentStorageKey, otherAgent, resolveActiveAgent } from '@/features/opex-agent/agents'
@@ -68,19 +70,16 @@ describe('cor do agente', () => {
     expect(agentColorStyle(null)).toEqual({})
   })
 
-  it('a cor vira as variáveis do tema e o texto tem contraste legível', () => {
-    const style = agentColorStyle('sky') as Record<string, string>
-    expect(style['--primary']).toBe(hexToHslTriplet(AGENT_COLOR_HEX.sky))
-    // Cores claras ficam com texto escuro; as escuras, com texto branco.
-    expect(readableForeground(AGENT_COLOR_HEX.amber)).toBe('#09090b')
-    expect(readableForeground(AGENT_COLOR_HEX.lime)).toBe('#09090b')
-    expect(readableForeground(AGENT_COLOR_HEX.zinc)).toBe('#ffffff')
-    for (const hex of Object.values(AGENT_COLOR_HEX)) expect(contrastRatio(hex, readableForeground(hex))).toBeGreaterThanOrEqual(4)
+  it('a cor vira os tokens do tema (cor e texto legível), sem valores fixos', () => {
+    expect(agentColorStyle('sky')).toEqual({ '--primary': 'var(--agent-sky)', '--primary-foreground': 'var(--agent-sky-foreground)', '--ring': 'var(--agent-sky)' })
   })
 
-  it('converte hex para o triplo HSL do tema', () => {
-    expect(hexToHslTriplet('#8000ff')).toBe('270 100% 50%')
-    expect(hexToHslTriplet('#ffffff')).toBe('0 0% 100%')
+  it('o tema declara a cor e o texto de cada cor da paleta', () => {
+    const css = readFileSync('src/app/globals.css', 'utf8')
+    for (const color of COLUMN_COLORS) {
+      expect(css).toMatch(new RegExp(`--agent-${color}: [0-9]`))
+      expect(css).toMatch(new RegExp(`--agent-${color}-foreground: [0-9]`))
+    }
   })
 })
 

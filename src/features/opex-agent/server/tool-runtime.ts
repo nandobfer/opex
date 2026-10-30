@@ -11,6 +11,19 @@ export const MAX_TOOL_DISPLAY_CHARS = 6000
 
 const log = loggerFor({ module: "opex-agent" })
 
+/**
+ * Entrada sem segredos para exibir e guardar (cards, NDJSON e histórico): aplica o `redact` da
+ * ferramenta sobre a entrada validada. Compartilhado pelo Agente Opex e pelo Agente Maddox.
+ * `strict`: entrada que não valida numa ferramenta com `redact` não sai (`null`) — no Maddox a entrada
+ * vem do OpenCode e não passou pela validação do Opex.
+ */
+export function redactToolInput(tool: OpexTool | undefined, input: unknown, options: { strict?: boolean } = {}): unknown {
+    if (!tool?.redact) return input
+    const parsed = tool.input.safeParse(input)
+    if (parsed.success) return tool.redact(parsed.data)
+    return options.strict ? null : input
+}
+
 export function stringifyForDisplay(value: unknown, max = MAX_TOOL_DISPLAY_CHARS): string | null {
     if (value === undefined) return null
     let text: string

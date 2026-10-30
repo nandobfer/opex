@@ -21,7 +21,7 @@ import { refreshSessionTitle } from "./titler"
 import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
 import { opexMemoryAgentsFor } from "@/features/ai/agents"
 import type { McpTurnTools } from "./mcp/tools"
-import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
+import { buildToolRuntime, redactToolInput, stringifyForDisplay } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
 import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
@@ -70,12 +70,7 @@ function turnContext(notices: readonly string[] = []): string {
     return [`Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`, ...notices].join(" ")
 }
 
-const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => {
-    const tool = findTool(scope, toolName, extra)
-    if (!tool?.redact) return input
-    const parsed = tool.input.safeParse(input)
-    return parsed.success ? tool.redact(parsed.data) : input
-}
+const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => redactToolInput(findTool(scope, toolName, extra), input)
 
 const numberOrNull = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null)
 

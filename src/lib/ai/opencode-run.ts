@@ -51,7 +51,17 @@ export type TurnEvent =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "text"; text: string }
     | { type: "reasoning"; text?: string }
-    | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }
+    | {
+          type: "tool"
+          id: string
+          name: string
+          state: "running" | "done" | "error"
+          input?: string | null
+          output?: string | null
+          error?: string | null
+          /** Entrada completa da chamada (quem publica decide o que exibir; pode conter segredos). */
+          rawInput?: Record<string, unknown> | null
+      }
     | { type: "tool-progress"; id: string; output: string }
     | { type: "notice"; level: "info" | "warn" | "error" | "success"; message: string }
     | { type: "permission"; permission: OpencodePermissionDto }
@@ -200,6 +210,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
+    const toolRawInputs = new Map<string, Record<string, unknown>>()
     // Pendências vivas NESTE acompanhamento (dedupe por id): nem o evento ao vivo nem a releitura do
     // estado (reconexão) publicam duas vezes a mesma pergunta/permissão.
     const liveForms = new Map<string, OpencodeFormDto>()
@@ -311,17 +322,18 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             case "tool-called": {
                 const input = describeToolInput(event.input)
                 toolInputs.set(event.id, input)
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "running", input })
+                toolRawInputs.set(event.id, event.input)
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "running", input, rawInput: event.input })
                 break
             }
             case "tool-progress":
                 if (event.output) publish({ type: "tool-progress", id: event.id, output: event.output.slice(-20_000) })
                 break
             case "tool-done":
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "done", input: toolInputs.get(event.id) ?? null, output: event.output })
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "done", input: toolInputs.get(event.id) ?? null, rawInput: toolRawInputs.get(event.id) ?? null, output: event.output })
                 break
             case "tool-error":
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "error", input: toolInputs.get(event.id) ?? null, output: event.output || null, error: event.message })
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "error", input: toolInputs.get(event.id) ?? null, rawInput: toolRawInputs.get(event.id) ?? null, output: event.output || null, error: event.message })
                 break
             case "step":
                 costUsd += event.costUsd

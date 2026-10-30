@@ -45,11 +45,16 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   Sessões novas começam no modelo padrão. O modelo usado aparece no rodapé de cada resposta.
 - **Cor** (configuração): paleta das colunas (`ColumnColorPicker` com a opção "Primária (padrão)" =
   `null`). `agentColorStyle` (`colors.ts`) sobrescreve `--primary`, `--primary-foreground` e `--ring` no
-  contêiner do agente, então ícone, ponto, cabeçalho, destaques e bolhas usam a cor sem markup novo; o
-  texto sobre a cor é escolhido pelo maior contraste (WCAG) entre branco e quase preto.
+  contêiner do agente com os tokens do tema `--agent-{cor}` e `--agent-{cor}-foreground`
+  (`globals.css`), então ícone, ponto, cabeçalho, destaques e bolhas usam a cor sem markup novo nem
+  valor fixo em código; o token `-foreground` traz o texto legível (contraste) de cada cor.
 - **Ferramentas** viram cards como no Agente Opex: as do Opex (`opex_app_*` no dono, `opex_portal_*`
   no portal) com o rótulo e o ícone do grupo do catálogo; as nativas do OpenCode com o próprio nome e o
   ícone de terminal (grupo `opencode-native`).
+- **Segredos**: a entrada exibida das ferramentas do Opex é a entrada completa da chamada com o
+  `redact` da ferramenta (`redactToolInput`, o mesmo do Agente Opex; entrada que não valida numa
+  ferramenta com `redact` não sai). O resumo cru do OpenCode nunca é usado nelas; no chat ao vivo
+  (NDJSON) e em `opex_messages.parts` não ficam tokens, senhas nem headers/variáveis de MCP.
 - **Confirmação**: segue as permissões do OpenCode. Quando o OpenCode pede permissão
   (`permission.asked`), o card da chamada (`source.id`; sem ele, um card "Permissão · …") mostra
   **Confirmar/Cancelar** (linha NDJSON `tool-confirmation`); a resposta vai ao OpenCode

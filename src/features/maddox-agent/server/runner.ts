@@ -10,7 +10,8 @@ import { claimOpexFiles, readOpexFileBytes, type OpexFileDoc } from "@/features/
 import { OWNER_SCOPE, sessionScopeOf, withAgent, type OpexServerScope } from "@/features/opex-agent/server/scope"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "@/features/opex-agent/server/sessions"
 import { refreshSessionTitleWith } from "@/features/opex-agent/server/titler"
-import { stringifyForDisplay } from "@/features/opex-agent/server/tool-runtime"
+import { redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-runtime"
+import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { OpexConfirmationDto, OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexToolPartGroup, OpexUsageDto } from "@/features/opex-agent/types"
 import { listAiModels } from "@/lib/ai/catalog"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
@@ -69,25 +70,37 @@ export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: Opex
     return [...head, ...notices, memoriesSection(memories)].join("\n")
 }
 
-type ToolCard = { group: OpexToolPartGroup | null; label: string }
+type ToolCard = { group: OpexToolPartGroup | null; label: string; tool?: OpexTool; opex: boolean }
 
 /**
- * Cards das ferramentas: as do Opex com o rótulo e o grupo do catálogo; as nativas do OpenCode com o
- * próprio nome. Carregado antes do turno para a tradução dos eventos ser síncrona (a ordem das linhas
- * do chat segue a dos eventos).
+ * Cards das ferramentas: as do Opex com o rótulo e o grupo do catálogo (e a ferramenta, para o
+ * `redact` da entrada); as nativas do OpenCode com o próprio nome. Carregado antes do turno para a
+ * tradução dos eventos ser síncrona (a ordem das linhas do chat segue a dos eventos).
  */
 export async function toolCardResolver(): Promise<(name: string) => ToolCard> {
-    const { findOpexTool } = await import("@/features/opex-agent/server/tools/registry")
+    const [{ findOpexTool }, { findOpexClientServerTool }] = await Promise.all([import("@/features/opex-agent/server/tools/registry"), import("@/features/opex-agent/server/client-tools/registry")])
     return (name) => {
         const parsed = parseMaddoxMcpToolName(name)
-        if (!parsed) return { group: MADDOX_NATIVE_TOOL_GROUP, label: name }
+        if (!parsed) return { group: MADDOX_NATIVE_TOOL_GROUP, label: name, opex: false }
         if (parsed.scope === "portal") {
             const meta = findOpexClientTool(parsed.tool)
-            return { group: meta?.group ?? null, label: meta?.label ?? parsed.tool }
+            return { group: meta?.group ?? null, label: meta?.label ?? parsed.tool, tool: findOpexClientServerTool(parsed.tool), opex: true }
         }
         const tool = findOpexTool(parsed.tool)
-        return { group: tool?.group ?? null, label: tool?.label ?? parsed.tool }
+        return { group: tool?.group ?? null, label: tool?.label ?? parsed.tool, tool, opex: true }
     }
+}
+
+/**
+ * Entrada exibida no card (e gravada nas partes): nas ferramentas do Opex, a entrada completa com o
+ * `redact` da ferramenta (nunca o resumo cru do OpenCode, que pode trazer segredos); sem a entrada
+ * completa (reconexão), nada. Nas nativas, o resumo do OpenCode.
+ */
+export function toolInputForDisplay(card: ToolCard, event: { input?: string | null; rawInput?: Record<string, unknown> | null }): string | null | undefined {
+    if (!card.opex) return event.input
+    if (event.rawInput === undefined) return undefined
+    if (!event.rawInput) return null
+    return stringifyForDisplay(redactToolInput(card.tool, event.rawInput, { strict: true }))
 }
 
 async function startTurn(sessionId: string, followUp: OpexFollowUp, scope: OpexServerScope): Promise<OpexMessageDto> {
@@ -296,13 +309,14 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const onTool = (event: Extract<TurnEvent, { type: "tool" }>) => {
             const live = liveMessageOf(sessionId)
             const exists = live?.parts.some((part) => part.type === "tool" && part.id === event.id)
+            const card = toolCardOf(event.name)
             if (!exists) {
-                const card = toolCardOf(event.name)
                 toolNames.push(card.label)
                 toolStarts.set(event.id, Date.now())
                 publishLine(sessionId, { type: "tool-start", id: event.id, name: event.name, group: card.group, label: card.label })
             }
-            if (event.input !== undefined) publishLine(sessionId, { type: "tool-input", id: event.id, input: event.input ?? null })
+            const input = toolInputForDisplay(card, event)
+            if (input !== undefined) publishLine(sessionId, { type: "tool-input", id: event.id, input })
             if (event.state !== "running") {
                 const started = toolStarts.get(event.id)
                 publishLine(sessionId, {

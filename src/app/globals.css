@@ -115,6 +115,27 @@
     --popover-foreground: 260 20% 96%;
     --primary: 270 100% 50%;
     --primary-foreground: 0 0% 100%;
+    /* Cores dos agentes de chat (paleta das colunas, tom 500) e o texto legível sobre cada uma. */
+    --agent-violet: 258 90% 66%;
+    --agent-violet-foreground: 240 10% 4%;
+    --agent-sky: 199 89% 48%;
+    --agent-sky-foreground: 240 10% 4%;
+    --agent-emerald: 160 84% 39%;
+    --agent-emerald-foreground: 240 10% 4%;
+    --agent-amber: 38 92% 50%;
+    --agent-amber-foreground: 240 10% 4%;
+    --agent-rose: 350 89% 60%;
+    --agent-rose-foreground: 240 10% 4%;
+    --agent-cyan: 189 94% 43%;
+    --agent-cyan-foreground: 240 10% 4%;
+    --agent-orange: 25 95% 53%;
+    --agent-orange-foreground: 240 10% 4%;
+    --agent-pink: 330 81% 60%;
+    --agent-pink-foreground: 240 10% 4%;
+    --agent-lime: 84 81% 44%;
+    --agent-lime-foreground: 240 10% 4%;
+    --agent-zinc: 240 4% 46%;
+    --agent-zinc-foreground: 0 0% 100%;
     --secondary: 260 16% 15%;
     --secondary-foreground: 260 20% 96%;
     --muted: 260 16% 14%;
