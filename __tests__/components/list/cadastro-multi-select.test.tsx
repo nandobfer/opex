@@ -63,3 +63,12 @@ describe('CadastroMultiSelect com "Todos"', () => {
     expect(screen.getByText('Backlog')).toBeTruthy()
   })
 })
+
+describe('CadastroMultiSelect (fundo do campo de filtro)', () => {
+  it('o gatilho usa o fundo do card, sem o fundo escuro do botão outline', () => {
+    render(<Harness initial={['development']} />)
+    const trigger = screen.getByRole('button', { name: /Desenvolvimento/ })
+    expect(trigger.classList.contains('bg-transparent')).toBe(true)
+    expect(trigger.classList.contains('bg-background')).toBe(false)
+  })
+})

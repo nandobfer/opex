@@ -109,6 +109,8 @@ sem pedido explícito.
   novamente) e confirmação explícita em ações críticas (excluir, revogar, parar timer).
 - Telas de listagem usam o kit de `src/components/list` (`CadastroHeader`, `ListFilters`,
   `CadastroTableCard`, `TableAction`...).
+- Campos de filtro (busca, selects, multiselects, período, switches e o botão Limpar) usam o
+  **fundo do card** (`bg-transparent`), nunca o fundo escuro do botão `outline` (`bg-background`).
 - Formulários usam react-hook-form + `zodResolver` com **o mesmo schema Zod da API**, validação em
   tempo real e mensagens pt-BR.
 - **Campos de formulário ocupam toda a largura disponível**: nenhum campo, seletor ou grupo termina

@@ -73,7 +73,9 @@ Kit de listagem copiado dos "cadastros" do CRM: `CadastroHeader` (título + desc
 `CadastroTableCard` + `CadastroTableSkeleton` (tabela em card com esqueleto), `TableAction`
 (ações de linha: editar, excluir, testar, debug...), `ListFilters` + `CadastroFilterCard` +
 `FilterGroup` (filtros), `CadastroMultiSelect`/`StatusFilterMultiSelect`/`StatusPill`,
-`ChipOverflowList` e `TabFooter`. Hooks: `useUrlFilters` (filtros na URL),
+`ChipOverflowList` e `TabFooter`. Os campos de filtro (busca, `Select`, `CadastroMultiSelect`,
+`PresetDateRangeFilter`/`DateRangeCalendar`, switches e o botão Limpar do `ListFilters`) usam o
+fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hooks: `useUrlFilters` (filtros na URL),
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 

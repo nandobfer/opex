@@ -107,7 +107,7 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
                             type="button"
                             variant="outline"
                             size="icon"
-                            className="h-10 w-10 transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                            className="h-10 w-10 bg-transparent transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                             onClick={clear}
                             title="Limpar filtros"
                             aria-label="Limpar filtros"
