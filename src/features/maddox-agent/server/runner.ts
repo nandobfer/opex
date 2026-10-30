@@ -35,6 +35,8 @@ import { assertClientMaddoxEnabled } from "./client-config"
 import { setPendingRequest } from "./requests"
 import { applySessionSetup, createOpencodeSession, ensureMaddoxMcp, maddoxDirectory, opencodeSessionExists } from "./opencode-session"
 import { maddoxPermissionsFor } from "./scope-tools"
+import { resolveTurnModel } from "./runner-model"
+export { resolveTurnModel }
 import { loadMaddoxSettings, maddoxAvailability } from "./settings"
 
 /**
@@ -65,20 +67,6 @@ export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: Opex
                   `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"}).`,
               ]
     return [...head, ...notices, memoriesSection(memories)].join("\n")
-}
-
-/** Modelo do turno: o da sessão (se ainda estiver no catálogo) ou o padrão da configuração. */
-export function resolveTurnModel(
-    settings: Pick<MaddoxAgentSettings, "main">,
-    override: { model: string; variant: string | null } | null | undefined,
-    catalog: readonly { id: string; variants: string[] }[] | null,
-): { model: string | null; variant: string | null; fellBack: boolean } {
-    if (override?.model) {
-        const found = catalog ? catalog.find((item) => item.id === override.model) : { id: override.model, variants: override.variant ? [override.variant] : [] }
-        if (found) return { model: override.model, variant: override.variant && found.variants.includes(override.variant) ? override.variant : null, fellBack: false }
-        return { model: settings.main.model, variant: settings.main.variant, fellBack: true }
-    }
-    return { model: settings.main.model, variant: settings.main.variant, fellBack: false }
 }
 
 type ToolCard = { group: OpexToolPartGroup | null; label: string }
