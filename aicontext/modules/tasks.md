@@ -128,7 +128,11 @@ semeado na primeira leitura (`ensureBoard`).
   abre `/tarefas/previa` — o fluxo de prévia por IA do portal do cliente, agora para o dono (ver
   "Prévia de tarefa (dono)"). Sem repositório vinculado, fica desabilitado como **Nova tarefa**.
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e, no fim, o
+  switch **Arquivadas** (`FilterSwitch`: ícone + "Mostrar" + `Switch` do projeto, `h-10` com o fundo do
+  card; **desligado por padrão**; ligado faz uma nova busca com `includeArchived` e mostra o chip
+  "Arquivadas: mostrando"; OPE-100, port do MT-30 sem o switch de issues fechadas, que no Opex não
+  se aplica por não haver rascunhos). O
   filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
   + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
   guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub

@@ -1,13 +1,12 @@
 "use client"
 
 import { useMemo, type Dispatch, type SetStateAction } from "react"
-import { Archive, Flag, Github, Layers, ListChecks, Shapes, Tag } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Archive, Flag, Github, Layers, ListChecks, Shapes, Tag, type LucideIcon } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { ListFilters } from "@/components/list/ListFilters"
-import { cn } from "@/lib/utils"
 import { TASK_PRIORITIES, TASK_PRIORITY_LABELS, TASK_SORT_KEYS, TASK_SORT_LABELS, TASK_TYPES, TASK_TYPE_LABELS, type TaskPriority, type TaskSortKey, type TaskType } from "../constants"
 import { DEFAULT_TASK_FILTERS, TASK_FILTER_KEYS, taskRepoOptions, type TaskFilters } from "../filters"
 import type { TaskDto, TaskOptionsDto } from "../types"
@@ -30,6 +29,25 @@ interface TaskFiltersBarProps {
 }
 
 const COL = "min-w-[160px] flex-1"
+
+interface FilterSwitchProps {
+    icon: LucideIcon
+    text: string
+    ariaLabel: string
+    checked: boolean
+    onCheckedChange: (checked: boolean) => void
+}
+
+/** Switch de filtro com ícone e texto, na altura dos demais campos (`h-10`) e com o fundo do card. */
+function FilterSwitch({ icon: Icon, text, ariaLabel, checked, onCheckedChange }: FilterSwitchProps) {
+    return (
+        <div className="flex h-10 items-center gap-2 rounded-md border border-input bg-transparent px-3">
+            <Icon className={checked ? "h-4 w-4 text-primary" : "h-4 w-4 text-muted-foreground"} aria-hidden />
+            <span className="text-sm">{text}</span>
+            <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={ariaLabel} />
+        </div>
+    )
+}
 
 /** Filtros da tela de Tarefas (`ListFilters` do projeto). Os valores ficam no navegador. */
 export function TaskFiltersBar({ filters, setFilters, total, tasks, options, columns }: TaskFiltersBarProps) {
@@ -110,16 +128,7 @@ export function TaskFiltersBar({ filters, setFilters, total, tasks, options, col
                         </Select>
                     </FilterGroup>
                     <FilterGroup label="Arquivadas" className="shrink-0">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            aria-pressed={filters.showArchived}
-                            onClick={() => set("showArchived")(!filters.showArchived)}
-                            className={cn("h-10 gap-2", filters.showArchived && "border-primary bg-primary/15 text-primary hover:bg-primary/20")}
-                        >
-                            <Archive className="h-4 w-4" aria-hidden />
-                            {filters.showArchived ? "Mostrando" : "Ocultas"}
-                        </Button>
+                        <FilterSwitch icon={Archive} text="Mostrar" ariaLabel="Mostrar tarefas arquivadas" checked={filters.showArchived} onCheckedChange={set("showArchived")} />
                     </FilterGroup>
                 </>
             }
