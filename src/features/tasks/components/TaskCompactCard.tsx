@@ -9,8 +9,8 @@ import { RunningClock, useRunningTimer } from "@/features/time/components/Runnin
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
 import { WorkbenchWaitingLink } from "@/features/agentic/components/WorkbenchWaitingLink"
 import { workbenchProgressTone } from "@/features/agentic/logic"
-import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
-import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
+import { IssueLinkButton } from "@/features/github/components/shared"
+import { TaskProjectRepoLabel } from "./TaskProjectRepoLabel"
 import { cn } from "@/lib/utils"
 import type { BoardColumnView } from "../board"
 import type { TaskPriority } from "../constants"
@@ -21,6 +21,7 @@ import { EstimateBadge } from "./EstimateBadge"
 import { TaskColumnMenu } from "./TaskColumnMenu"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
 import { TaskTagsBadge } from "./TaskTagsBadge"
+import { COMPACT_CARD_CLASS } from "./board-layout"
 
 interface TaskCompactCardProps {
     task: TaskDto
@@ -45,7 +46,6 @@ export function TaskCompactCard({ task, columns, moving, updating, ordered, sele
     const selected = selection.selected.has(task.id)
     const running = useRunningTimer(task.id)
     const progress = useWorkbenchProgress()?.progressOf(task.id)
-    const repoIndex = useRepoIndex()
     const waiting = progress && !progress.running ? progress : null
     const tone = waiting ? workbenchProgressTone(waiting) : null
 
@@ -63,7 +63,8 @@ export function TaskCompactCard({ task, columns, moving, updating, ordered, sele
             onClick={() => onOpen(task)}
             onKeyDown={(event) => event.key === "Enter" && onOpen(task)}
             className={cn(
-                "w-full cursor-pointer rounded-lg border bg-card p-3 text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                COMPACT_CARD_CLASS,
+                "cursor-pointer transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
                 selected
                     ? "border-primary bg-primary/10"
                     : tone === "failed"
@@ -109,7 +110,7 @@ export function TaskCompactCard({ task, columns, moving, updating, ordered, sele
 
             {(task.project || task.issue || task.updatedAt) && (
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
-                    {task.project && <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} />}
+                    {task.project && <TaskProjectRepoLabel project={task.project} />}
                     {task.issue && <IssueLinkButton url={task.issue.url} number={task.issue.number} label={`Abrir issue ${task.issue.repo}#${task.issue.number} no GitHub`} />}
                     {task.updatedAt && <span className="whitespace-nowrap">Atualizada {format(new Date(task.updatedAt), "dd/MM/yy HH:mm", { locale: ptBR })}</span>}
                 </div>

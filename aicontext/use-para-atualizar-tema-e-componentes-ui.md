@@ -73,7 +73,9 @@ Kit de listagem copiado dos "cadastros" do CRM: `CadastroHeader` (título + desc
 `CadastroTableCard` + `CadastroTableSkeleton` (tabela em card com esqueleto), `TableAction`
 (ações de linha: editar, excluir, testar, debug...), `ListFilters` + `CadastroFilterCard` +
 `FilterGroup` (filtros), `CadastroMultiSelect`/`StatusFilterMultiSelect`/`StatusPill`,
-`ChipOverflowList` e `TabFooter`. Hooks: `useUrlFilters` (filtros na URL),
+`ChipOverflowList` e `TabFooter`. Os campos de filtro (busca, `Select`, `CadastroMultiSelect`,
+`PresetDateRangeFilter`/`DateRangeCalendar`, switches e o botão Limpar do `ListFilters`) usam o
+fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hooks: `useUrlFilters` (filtros na URL),
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 
@@ -148,7 +150,10 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 
 Toda tela ou bloco que carrega dados trata:
 
-- **Carregando**: skeleton no formato do conteúdo (operações acima de 200 ms);
+- **Carregando**: skeleton no formato do conteúdo (operações acima de 200 ms), com as mesmas
+  larguras, alturas e estrutura do resultado final. **Toda alteração de interface atualiza o
+  skeleton correspondente no mesmo commit**; quando der, os dois usam as mesmas constantes de classe
+  (ex.: `board-layout.ts` do kanban de Tarefas, `TABLE_COLUMN_WIDTHS` da tabela);
 - **Vazio**: ícone + texto descritivo + ação pertinente;
 - **Erro**: mensagem pt-BR acionável + "Tentar novamente";
 - **Em desenvolvimento**: recursos fora do escopo exibidos sem dados simulados nem controles que

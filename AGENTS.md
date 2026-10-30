@@ -109,6 +109,13 @@ sem pedido explícito.
   novamente) e confirmação explícita em ações críticas (excluir, revogar, parar timer).
 - Telas de listagem usam o kit de `src/components/list` (`CadastroHeader`, `ListFilters`,
   `CadastroTableCard`, `TableAction`...).
+- **Skeleton acompanha a interface**: toda alteração visual numa tela ou bloco (layout, largura,
+  altura, colunas, estrutura de cards ou linhas) atualiza **no mesmo commit** o skeleton de
+  carregamento correspondente, para que ele continue com as dimensões e a estrutura do resultado
+  final. Quando possível, o skeleton reaproveita as mesmas constantes de classe do componente real
+  (ex.: `src/features/tasks/components/board-layout.ts`).
+- Campos de filtro (busca, selects, multiselects, período, switches e o botão Limpar) usam o
+  **fundo do card** (`bg-transparent`), nunca o fundo escuro do botão `outline` (`bg-background`).
 - Formulários usam react-hook-form + `zodResolver` com **o mesmo schema Zod da API**, validação em
   tempo real e mensagens pt-BR.
 - **Campos de formulário ocupam toda a largura disponível**: nenhum campo, seletor ou grupo termina
@@ -407,6 +414,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 10. Eventos de tempo real são disparados pelo servidor, em canais privados conhecidos, com payload
     mínimo.
 11. Não adicionei biblioteca que duplica a função de outra da seção 5.
+12. Se alterei a interface de uma tela ou bloco, atualizei o skeleton correspondente para manter as
+    dimensões e a estrutura do resultado final.
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

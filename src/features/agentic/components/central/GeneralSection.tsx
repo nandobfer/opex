@@ -13,6 +13,7 @@ import { integrationPath } from "@/lib/integrations/catalog"
 import { FORK_DONE_POLICIES, FORK_DONE_POLICY_LABELS, LIVE_CHAT_DESCRIPTION, LIVE_CHAT_POLICIES, LIVE_CHAT_POLICY_LABELS } from "../../constants"
 import { useAgenticSettings } from "../../hooks/useAgentic"
 import type { CentralDto } from "../../types"
+import { CentralColorField } from "./CentralColorField"
 import type { CentralForm } from "./form"
 
 /** Aba Geral: ativa, diretório das sessões, pasta dos worktrees, limite de mesas, forks e repositório. */
@@ -45,6 +46,7 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
                 <p className="text-xs text-muted-foreground">
                     Mesas em Plano pronto, Prévia pronta ou PR aberto não ocupam vaga. Ao voltarem a executar com o limite cheio, aguardam vaga e têm prioridade sobre as tarefas novas da fila.
                 </p>
+                <CentralColorField form={form} label={central.repo || central.projectName || "Projeto"} />
                 <div className="space-y-1.5">
                     <p id="central-forks-done" className="text-sm font-medium">
                         Forks: ao concluir a mesa

@@ -65,4 +65,11 @@ describe("ListFilters (wrapper genérico de filtros)", () => {
         expect(screen.queryByLabelText("Busca")).toBeNull()
         expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeTruthy()
     })
+
+    it("botão Limpar usa o fundo do card, sem o fundo escuro do botão outline", () => {
+        renderFilters()
+        const clear = screen.getByRole("button", { name: "Limpar filtros" })
+        expect(clear.classList.contains("bg-transparent")).toBe(true)
+        expect(clear.classList.contains("bg-background")).toBe(false)
+    })
 })

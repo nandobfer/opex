@@ -680,6 +680,8 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const client = await getOpencodeClient()
             const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
+            // Limpeza: a sessão volta ao diretório da central antes de qualquer outra chamada (GO-DEV-805).
+            if (turn.stage === "finishing" && !turn.attach) await moveSessionHome(client, loaded, sessionId)
             // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão a cada turno.
             const memories = turn.attach ? null : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId)
             if (turn.stage === "building") {
@@ -979,6 +981,19 @@ function turnHooks(doc: IAgenticWorkbench) {
             await AgenticWorkbench.updateOne(filter, { $set: { heartbeatAt: new Date() } })
         },
     }
+}
+
+/**
+ * Limpeza: a sessão volta ao diretório da central ANTES do turno. Se ela ainda estiver no worktree e o
+ * worktree já tiver sido removido (limpeza anterior parcial ou manual), o OpenCode não consegue nem
+ * selecionar o agente ("Location not found") e a mesa nunca conclui.
+ */
+async function moveSessionHome(client: OpencodeClient, { doc, config }: Loaded, sessionId: string): Promise<void> {
+    const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
+    const directory = info?.location?.directory ?? doc.sessionDirectory
+    if (directory === config.sessionDirectory) return
+    await client.session.move({ sessionID: sessionId, directory: config.sessionDirectory })
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: config.sessionDirectory } })
 }
 
 /** Sessão da mesa: a gravada (se ainda existir no OpenCode) ou uma nova no diretório da central. */

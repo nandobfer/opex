@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Check, Loader2, Search } from "lucide-react"
+import { Loader2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
@@ -12,8 +12,9 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { COLUMN_COLOR_STYLES, COLUMN_COLORS, COLUMN_ICON_KEYS, type TaskColumnDto } from "../board"
+import { COLUMN_COLOR_STYLES, COLUMN_ICON_KEYS, type TaskColumnDto } from "../board"
 import { columnInputSchema, type ColumnInput } from "../schemas"
+import { ColumnColorPicker } from "./ColumnColorPicker"
 import { COLUMN_ICONS, ColumnIconView } from "./column-icons"
 
 interface ColumnFormDialogProps {
@@ -94,29 +95,7 @@ export function ColumnFormDialog({ open, column, submitting, onSubmit, onClose }
                         <Controller
                             control={form.control}
                             name="color"
-                            render={({ field }) => (
-                                <div role="radiogroup" aria-label="Cor" className="flex flex-wrap gap-2">
-                                    {COLUMN_COLORS.map((value) => (
-                                        <motion.button
-                                            key={value}
-                                            type="button"
-                                            role="radio"
-                                            aria-checked={field.value === value}
-                                            aria-label={COLUMN_COLOR_STYLES[value].label}
-                                            title={COLUMN_COLOR_STYLES[value].label}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={() => field.onChange(value)}
-                                            className={cn(
-                                                "flex h-7 w-7 items-center justify-center rounded-full ring-offset-2 ring-offset-background transition-shadow",
-                                                COLUMN_COLOR_STYLES[value].swatch,
-                                                field.value === value && "ring-2 ring-foreground",
-                                            )}
-                                        >
-                                            {field.value === value && <Check className="h-3.5 w-3.5 text-white" aria-hidden />}
-                                        </motion.button>
-                                    ))}
-                                </div>
-                            )}
+                            render={({ field }) => <ColumnColorPicker aria-label="Cor" value={field.value} onChange={field.onChange} />}
                         />
                     </Field>
 

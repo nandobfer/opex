@@ -33,12 +33,14 @@ export function GithubUserLabel({ login, name, avatarUrl }: { login: string; nam
 export { FieldTrigger } from "@/components/ui/field-trigger"
 
 /** Item de repositório do GitHub (padrão único do app): avatar real (fallback inicial) + `owner/repo` + descrição + cadeado quando privado. */
-export function GithubRepoLabel({ repo }: { repo: GithubRepoLabelData }) {
+export function GithubRepoLabel({ repo, nameClassName }: { repo: GithubRepoLabelData; /** Classe extra do `org/repo` (ex.: cor da central em Tarefas). */ nameClassName?: string }) {
     return (
         <span className="flex min-w-0 flex-1 items-center gap-2">
             <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} />
             <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{repo.fullName}</span>
+                <span className={cn("block truncate font-medium", nameClassName)} data-testid="github-repo-name">
+                    {repo.fullName}
+                </span>
                 {repo.description && <span className="block truncate text-xs text-muted-foreground">{repo.description}</span>}
             </span>
             {repo.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Privado" />}

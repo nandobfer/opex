@@ -18,6 +18,7 @@ import type { TaskDto } from "../types"
 import { ColumnIconView } from "./column-icons"
 import { BULK_BAR_CLEARANCE_PX } from "./TaskBulkBar"
 import { SortableTaskCard } from "./TaskCard"
+import { KANBAN_COLUMN_CARDS_CLASS, KANBAN_COLUMN_CLASS, KANBAN_COLUMN_HEADER_CLASS, KANBAN_COLUMN_META_CLASS } from "./board-layout"
 
 const VIRTUALIZE_ABOVE = 50
 const CARD_ESTIMATE = 130
@@ -93,9 +94,9 @@ export function TaskColumn(props: TaskColumnProps) {
                 transition={{ duration: 0.2 }}
                 aria-label={column.label}
                 data-status={column.key}
-                className={cn("flex w-[290px] max-md:h-[80vh] max-md:w-[85vw] max-md:max-w-[300px] flex-col rounded-lg border border-t-4 bg-muted/40 p-2 transition-colors", column.border, overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
+                className={cn(KANBAN_COLUMN_CLASS, "transition-colors", column.border, overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
             >
-                <header className="group/col mb-2 flex flex-col gap-1.5 border-b px-1 pb-2">
+                <header className={cn("group/col", KANBAN_COLUMN_HEADER_CLASS)}>
                     <div className="flex items-center justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">
                             <button
@@ -122,7 +123,7 @@ export function TaskColumn(props: TaskColumnProps) {
                         </div>
                     </div>
 
-                    <div className="flex h-7 items-center gap-2 rounded-md border border-border/60 bg-muted/60 px-1.5" data-testid={`column-meta-${column.key}`}>
+                    <div className={KANBAN_COLUMN_META_CLASS} data-testid={`column-meta-${column.key}`}>
                         {tasks.length > 0 && (
                             <SelectionCheckbox
                                 checked={columnState}
@@ -165,7 +166,7 @@ export function TaskColumn(props: TaskColumnProps) {
                     )}
                 </AnimatePresence>
 
-                <div ref={setDropRef} className="flex min-h-[200px] max-md:min-h-0 flex-1 basis-0 flex-col">
+                <div ref={setDropRef} className={KANBAN_COLUMN_CARDS_CLASS}>
                     <div ref={scrollRef} className="-mr-1 flex min-h-0 flex-1 basis-0 flex-col gap-2 overflow-y-auto pr-1" data-testid={`column-cards-${column.key}`}>
                         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
                             {tasks.length === 0 ? (

@@ -87,7 +87,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 
 | Aba | Campos |
 |---|---|
-| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), **Chat durante a execução** (`liveChat`: **Padrão global** — padrão, inclusive para centrais antigas, com o estado global no rótulo — / Ligado / Desligado; ver "Chat durante a execução"), repositório (do vínculo em Integrações › GitHub) |
+| Geral | ativa, diretório das sessões, pasta dos worktrees (padrão `<diretório das sessões>/worktrees`), mesas abertas ao mesmo tempo (1–10, padrão 2), **Cor do projeto** (`color`, `CentralColorField` com o seletor compartilhado `ColumnColorPicker` de Tarefas: paleta das colunas `COLUMN_COLORS` ou **Sem cor** — padrão `null`, inclusive para centrais antigas; cor fora da paleta vira `null` em `parseCentralConfig`; pinta o repositório nos cards da Central de desenvolvimento e em `/tarefas`, com prévia no campo; OPE-100), **Chat durante a execução** (`liveChat`: **Padrão global** — padrão, inclusive para centrais antigas, com o estado global no rótulo — / Ligado / Desligado; ver "Chat durante a execução"), repositório (do vínculo em Integrações › GitHub) |
 | Agentes | cada etapa herda o padrão da aba ou é personalizada (override campo a campo: agente vazio herda; modelo próprio leva a variante própria — `resolveAgent`); etapa personalizada escolhe os **modelos de fallback**: Usar os do padrão / Personalizar / Sem fallback (ver "Modelos de fallback") |
 | Git e PR | branch base, branch de destino do PR, padrões da branch/commit/título (`{code}`, `{title}`, `{slug}`), PR rascunho, **merge automático** (o agente mergeia o PR e apaga a branch remota — ver “Merge automático”), card **Corrigir CI falho** (`git.inheritCi`: **Padrão global** — padrão das centrais novas e das antigas sem valor próprio — ou **Personalizar** com `git.fixCi`, padrão ligado, e `git.ciFixLimit`, 1–20, vazio = sem limite; efetivo em `resolveCentralCi` — ver “CI falho”), revisores, labels, comandos de preparo do worktree e de validação antes do PR |
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), **faixa de portas da prévia** (`PreviewPortsField`): switch **Personalizar portas** (`environment.inheritPorts` invertido; padrão **desligado**). Desligado, a porta inicial/final aparecem **desabilitadas** com a faixa de Configurações Padrão (o switch espera a configuração geral carregar); ligado, os campos ficam editáveis começando com essa faixa padrão (os números não mudam ao ligar) e a faixa própria prevalece sobre o padrão. A faixa própria só é validada (inicial ≤ final) quando personalizada; desligar troca uma porta própria inválida pela salva ou pelo padrão (`keepValidPort`) para não travar o Salvar. Central nova herda; centrais salvas antes do padrão global continuam **personalizadas** com a faixa que já tinham, e as salvas sem faixa ficam com a antiga 4001–4098. A faixa efetiva vem de `resolveCentralPorts` (texto do card, exemplo do comando e reserva da porta no build Local e no GitHub Action — `effectivePorts` no `workflow.ts`, que só lê a configuração geral quando a central herda), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
@@ -371,8 +371,14 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   `localStorage` (`opex:dev-center-filters:v1`), sem botão de restaurar na própria coluna (limpar
   pelos filtros persistidos, pelo `localStorage` ou pelo "Limpar filtros" do estado vazio). Lista
   virtualizada, com a altura de cada linha
-  medida dinamicamente; cada item mostra o título e, **abaixo dele, o resumo (`summary`) da tarefa**
-  quando houver (texto discreto, com o texto completo na dica e limitado a 2 linhas). Cada tarefa
+  medida dinamicamente; cada item (`TaskRow`, OPE-100, port do MT-31) tem na **primeira linha** o
+  bullet da coluna do quadro (dica do Radix com o nome da coluna; o nome **não** é repetido em
+  texto), o código e os selos da mesa; abaixo, a **linha do projeto** em negrito: o repositório
+  (`org/repo`) da central ou da tarefa e, sem repositório, o nome do projeto (`taskProductLabel`,
+  `dev-center-product.ts`), na **cor da central** (`config.color`, `productColorClass`; sem cor =
+  neutra); depois o título e, **abaixo dele, o resumo (`summary`) da tarefa**
+  quando houver (texto discreto, com o texto completo na dica e limitado a 2 linhas). O carregamento
+  usa `TaskRowSkeleton`, com as mesmas classes do item. Cada tarefa
   mostra a etapa da mesa ou, sem mesa, a posição na fila ("Na fila · #N"). Quando a mesa está
   **parada aguardando o
   usuário**, o item mostra um **warning** (ícone de alerta, com o motivo na dica): revisão do plano,
@@ -621,6 +627,13 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, remove o **backup do
   MongoDB da prévia**, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
   central) e a porta é liberada.
+  - Todo turno de limpeza (`finishing`: merge, conclusão manual, exclusão e Tentar novamente) começa
+    com o **app** movendo a sessão de volta ao diretório da central (`moveSessionHome` em
+    `server/workflow.ts`), antes das memórias do desenvolvedor e da seleção de agente/modelo: com o
+    worktree já removido (limpeza anterior parcial ou manual), a sessão parada nele fazia o OpenCode
+    recusar o turno ("Location not found") e a mesa nunca concluía (OPE-100, port do GO-DEV-805).
+    Sessão já no diretório da central não é movida; falha ao mover segue o tratamento do turno
+    (mesa em `finishing` com Tentar novamente).
 - **Exclusão da sessão (OPE-46)**: ao concluir a mesa (depois da limpeza), a sessão do OpenCode é
   **desvinculada** (`sessionId`/`sessionDirectory` = `null`, preservando todo o histórico da mesa no
   Opex — planos, saída, PR, uso) e **excluída** no OpenCode (`session.remove`). Se a exclusão falhar

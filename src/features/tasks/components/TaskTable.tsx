@@ -19,8 +19,8 @@ import { TASK_PRIORITY_RANK, TASK_TYPE_LABELS, type TaskPriority } from "../cons
 import type { TaskFilters, TaskTableColumn } from "../filters"
 import type { TaskSelection } from "../hooks/useTaskSelection"
 import type { TaskDto } from "../types"
-import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
-import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
+import { IssueLinkButton } from "@/features/github/components/shared"
+import { TaskProjectRepoLabel } from "./TaskProjectRepoLabel"
 import { ArchivedBadge, IssueNoticeBadge, TaskTypeBadge } from "./TaskBadges"
 import { TaskTagsBadge } from "./TaskTagsBadge"
 import { EstimateBadge } from "./EstimateBadge"
@@ -102,7 +102,6 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
     const headerState = selection.stateOf(orderedIds)
     const timer = useTimer()
     const progress = useWorkbenchProgress()
-    const repoIndex = useRepoIndex()
     const virtualize = rows.length > VIRTUALIZE_ABOVE
     const { anchorRef, items, padTop, padBottom, stuck } = usePageVirtualizer({ count: virtualize ? rows.length : 0, estimateSize: TASK_TABLE_ROW_HEIGHT })
     const hasSelection = selection.selected.size > 0
@@ -195,7 +194,7 @@ export function TaskTable({ tasks, columns, sort, onSortChange, movingId, updati
                     <TaskTypeBadge type={task.taskType} />
                 </td>
                 <td className={cn("px-3 py-2 text-xs", hide("project"))} title={task.project?.repo}>
-                    {task.project ? <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} /> : <span className="text-muted-foreground">—</span>}
+                    {task.project ? <TaskProjectRepoLabel project={task.project} /> : <span className="text-muted-foreground">—</span>}
                 </td>
                 <td className={cn("whitespace-nowrap px-3 py-2 text-xs text-muted-foreground", hide("updatedAt"))}>
                     {task.updatedAt ? format(new Date(task.updatedAt), "dd/MM/yy HH:mm", { locale: ptBR }) : "—"}

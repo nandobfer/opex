@@ -75,7 +75,7 @@ export function PresetDateRangeFilter({ startDate, endDate, onChange, emptyLabel
                     variant="outline"
                     className={cn(
                         "h-10 w-full justify-start truncate px-3 text-left font-normal",
-                        hasValue ? "border-primary/30 bg-primary/5 text-foreground" : "text-muted-foreground",
+                        hasValue ? "border-primary/30 bg-primary/5 text-foreground" : "bg-transparent text-muted-foreground",
                         className,
                     )}
                 >

@@ -77,7 +77,7 @@ export function CadastroMultiSelect({
     return (
         <Popover>
             <PopoverTrigger asChild>
-                <Button id={id} aria-label={ariaLabel} variant="outline" className={cn("w-full justify-start h-10 font-normal px-3 transition-all", className)}>
+                <Button id={id} aria-label={ariaLabel} variant="outline" className={cn("w-full justify-start h-10 bg-transparent font-normal px-3 transition-all", className)}>
                     <div className="flex items-center gap-2 truncate flex-1">
                         {Icon && <Icon className="h-4 w-4 shrink-0 opacity-50 text-primary" />}
                         <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>

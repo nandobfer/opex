@@ -89,7 +89,7 @@ function DateRangeCalendarImpl({ value, onChange, placeholder = "Selecionar per√
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button type="button" variant="outline" className={cn("h-10 w-full justify-start truncate px-3 text-left font-normal", !hasValue && "text-muted-foreground", className)}>
+                <Button type="button" variant="outline" className={cn("h-10 w-full justify-start truncate bg-transparent px-3 text-left font-normal", !hasValue && "text-muted-foreground", className)}>
                     <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
                     <span className="truncate">{formatRangeLabel(value.startDate, value.endDate, placeholder)}</span>
                 </Button>

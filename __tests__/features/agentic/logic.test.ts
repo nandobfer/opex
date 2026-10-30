@@ -171,6 +171,16 @@ describe('workbenchActions', () => {
 })
 
 describe('parseCentralConfig', () => {
+  it('cor do projeto (OPE-100): válida fica; fora da paleta ou ausente vira neutra sem descartar o resto', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', color: 'emerald' }).color).toBe('emerald')
+    const invalid = parseCentralConfig({ sessionDirectory: '/repo', color: 'magenta', git: { baseBranch: 'dev' } })
+    expect(invalid.color).toBeNull()
+    expect(invalid.git.baseBranch).toBe('dev')
+    expect(parseCentralConfig({ sessionDirectory: '/repo' }).color).toBeNull()
+    expect(defaultCentralConfig('/repo').color).toBeNull()
+    expect(centralConfigSchema.safeParse({ ...defaultCentralConfig('/repo'), color: 'magenta' }).error?.issues[0]?.message).toBe('Escolha uma cor da paleta')
+  })
+
   it('completa configurações antigas com os padrões', () => {
     const parsed = parseCentralConfig({ sessionDirectory: '/repo', git: { baseBranch: 'dev' } })
     expect(parsed.sessionDirectory).toBe('/repo')

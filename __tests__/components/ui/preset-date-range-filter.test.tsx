@@ -118,3 +118,23 @@ describe('DateRangeCalendar (calendário de intervalo)', () => {
     expect(onChange).toHaveBeenLastCalledWith({ startDate: '2026-06-15', endDate: '' })
   })
 })
+
+describe('campos de período (fundo do campo de filtro)', () => {
+  it('PresetDateRangeFilter sem valor usa o fundo do card; com valor, o destaque primário', () => {
+    render(<Harness onChange={vi.fn()} />)
+    // O primeiro é o gatilho do popover (o conteúdo, sem portal no mock, vem depois).
+    const trigger = screen.getAllByRole('button', { name: /Selecionar período/ })[0]!
+    expect(trigger.classList.contains('bg-transparent')).toBe(true)
+    expect(trigger.classList.contains('bg-background')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: /Hoje/ }))
+    expect(trigger.classList.contains('bg-primary/5')).toBe(true)
+    expect(trigger.classList.contains('bg-transparent')).toBe(false)
+  })
+
+  it('DateRangeCalendar usa o fundo do card, sem o fundo escuro do botão outline', () => {
+    render(<DateRangeCalendar value={{ startDate: '', endDate: '' }} onChange={vi.fn()} />)
+    const trigger = screen.getByRole('button', { name: /Selecionar período/ })
+    expect(trigger.classList.contains('bg-transparent')).toBe(true)
+    expect(trigger.classList.contains('bg-background')).toBe(false)
+  })
+})

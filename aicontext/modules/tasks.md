@@ -128,7 +128,11 @@ semeado na primeira leitura (`ensureBoard`).
   abre `/tarefas/previa` — o fluxo de prévia por IA do portal do cliente, agora para o dono (ver
   "Prévia de tarefa (dono)"). Sem repositório vinculado, fica desabilitado como **Nova tarefa**.
 - **Filtros** (`TaskFiltersBar`, sobre `ListFilters`): busca (código exato, senão título tolerante a
-  erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e Arquivadas. O
+  erro com fuse.js), **Repositório**, **Coluna**, **Tags**, Prioridade, Tipo, Ordenar cards e, no fim, o
+  switch **Arquivadas** (`FilterSwitch`: ícone + "Mostrar" + `Switch` do projeto, `h-10` com o fundo do
+  card; **desligado por padrão**; ligado faz uma nova busca com `includeArchived` e mostra o chip
+  "Arquivadas: mostrando"; OPE-100, port do MT-30 sem o switch de issues fechadas, que no Opex não
+  se aplica por não haver rascunhos). O
   filtro **Repositório** usa o **mesmo item da integração** (`GithubRepoLabel`: avatar real do GitHub
   + `owner/repo` + descrição + cadeado quando privado), restrito aos repositórios **vinculados**, e
   guarda o `projectId` — o sistema infere o projeto a partir do repositório escolhido. Sem o GitHub
@@ -137,6 +141,17 @@ semeado na primeira leitura (`ensureBoard`).
   `modules/repository-recency.md`); adicionar um ao filtro registra o uso.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
+- **Carregando** (`TasksSkeleton`, OPE-100, port do MT-32): o skeleton tem as dimensões e a
+  estrutura do resultado final, com as mesmas constantes de classe dos componentes reais
+  (`components/board-layout.ts`: quadro, coluna, cabeçalho, faixa da coluna, área dos cards, card do
+  kanban e card compacto).
+  - Kanban: uma coluna de skeleton por coluna visível, com a borda colorida dela (enquanto o quadro
+    não chega, 4 colunas neutras), cabeçalho de duas linhas e cards no formato do `TaskCard` (código,
+    título em 2 linhas, repositório com avatar em parte deles e rodapé com badges e issue), na altura
+    e sangria do quadro.
+  - Tabela: cabeçalho com as colunas, larguras e ocultação responsiva do `TaskTable`
+    (`TABLE_COLUMN_*`, `TASK_TABLE_RESPONSIVE`) e linhas de `TASK_TABLE_ROW_HEIGHT` (64 px); no
+    celular, os cards do `TaskCompactList`.
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
   editáveis (alça para arrastar, ícone, descrição em tooltip, contador `n/limite` com aviso de WIP,
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no
@@ -146,6 +161,15 @@ semeado na primeira leitura (`ensureBoard`).
   colorido, sem rótulo), a **estimativa real** de horas e, **com cliente**, o **faturamento estimado**
   (`EstimateBadge` — ver `modules/orcamentos.md`), o chip de tipo, as **tags** e "Arquivada"; o
   título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
+  - **Repositório na cor da central** (OPE-100, port do MT-33): no card do kanban, na coluna
+    Repositório da tabela e no card compacto do celular, o `org/repo` do `GithubRepoLabel` sai na
+    **cor configurada na central de desenvolvimento** daquele projeto (`config.color`, a mesma da
+    linha do projeto na Central — ver `modules/agentic-dev.md`). Componente `TaskProjectRepoLabel`
+    (`GithubRepoLabel` com `nameClassName` = `productColorClass` de `agentic/dev-center-product.ts`); as
+    cores vêm do `CentralColorsProvider` (layout de `/tarefas`, `useCentrals` +
+    `useProjectColor(projectId)`) e atualizam em tempo real (`useCentralsRealtime`:
+    `AGENTIC_UPDATED_EVENT` em `private-app` recarrega só as centrais, e só nos eventos de configuração da central — payload `{ centralId }`, `isCentralConfigEvent`; os avanços de mesa, com `workbenchId`, e as configurações globais, com `scope`, não refazem a consulta). Sem central, sem cor, consulta
+    com erro ou fora do provider, o rótulo fica no padrão. A lateral da página da tarefa não muda.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
   (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**
