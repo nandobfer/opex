@@ -372,6 +372,8 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                 signal: controller.signal,
                 consumption: { origin: scope.kind === "client" ? MADDOX_CLIENT_CONSUMPTION_ORIGIN : MADDOX_CONSUMPTION_ORIGIN, subject: sessionId },
                 files: uris,
+                // A entrada completa só vem para aplicar o `redact` das ferramentas do Opex (`toolInputForDisplay`).
+                exposeRawToolInput: true,
             },
             {
                 publish,

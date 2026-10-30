@@ -53,7 +53,9 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   ícone de terminal (grupo `opencode-native`).
 - **Segredos**: a entrada exibida das ferramentas do Opex é a entrada completa da chamada com o
   `redact` da ferramenta (`redactToolInput`, o mesmo do Agente Opex; entrada que não valida numa
-  ferramenta com `redact` não sai). O resumo cru do OpenCode nunca é usado nelas; no chat ao vivo
+  ferramenta com `redact` não sai). A entrada completa só chega porque o turno do Maddox pede
+  `exposeRawToolInput` ao `runAgentTurn`; mesas, forks e revisões continuam recebendo só o resumo
+  cortado. O resumo cru do OpenCode nunca é usado nas ferramentas do Opex; no chat ao vivo
   (NDJSON) e em `opex_messages.parts` não ficam tokens, senhas nem headers/variáveis de MCP.
 - **Confirmação**: segue as permissões do OpenCode. Quando o OpenCode pede permissão
   (`permission.asked`), o card da chamada (`source.id`; sem ele, um card "Permissão · …") mostra
