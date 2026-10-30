@@ -168,7 +168,7 @@ semeado na primeira leitura (`ensureBoard`).
     (`GithubRepoLabel` com `nameClassName` = `productColorClass` de `agentic/dev-center-product.ts`); as
     cores vêm do `CentralColorsProvider` (layout de `/tarefas`, `useCentrals` +
     `useProjectColor(projectId)`) e atualizam em tempo real (`useCentralsRealtime`:
-    `AGENTIC_UPDATED_EVENT` em `private-app` recarrega só as centrais). Sem central, sem cor, consulta
+    `AGENTIC_UPDATED_EVENT` em `private-app` recarrega só as centrais, e só nos eventos de configuração da central — payload `{ centralId }`, `isCentralConfigEvent`; os avanços de mesa, com `workbenchId`, e as configurações globais, com `scope`, não refazem a consulta). Sem central, sem cor, consulta
     com erro ou fora do provider, o rótulo fica no padrão. A lateral da página da tarefa não muda.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário

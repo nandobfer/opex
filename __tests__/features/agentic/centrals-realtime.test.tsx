@@ -31,13 +31,22 @@ function setup() {
 }
 
 describe('useCentralsRealtime', () => {
-  it('no canal do app, o evento das centrais invalida só a lista de centrais', () => {
+  it('no canal do app, o evento de configuração da central invalida só a lista de centrais', () => {
     const { invalidate } = setup()
     expect(mocks.acquire).toHaveBeenCalledWith(appChannel())
-    const handler = mocks.bind.mock.calls.find(([name]) => name === AGENTIC_UPDATED_EVENT)?.[1] as () => void
-    handler()
+    const handler = mocks.bind.mock.calls.find(([name]) => name === AGENTIC_UPDATED_EVENT)?.[1] as (payload: unknown) => void
+    handler({ centralId: 'c1' })
     expect(invalidate).toHaveBeenCalledTimes(1)
     expect(invalidate).toHaveBeenCalledWith({ queryKey: agenticKey('centrals') })
+  })
+
+  it('eventos de mesa (com workbenchId), das configurações globais ou sem payload não recarregam as centrais', () => {
+    const { invalidate } = setup()
+    const handler = mocks.bind.mock.calls.find(([name]) => name === AGENTIC_UPDATED_EVENT)?.[1] as (payload: unknown) => void
+    handler({ centralId: 'c1', workbenchId: 'w1', taskId: 't1' })
+    handler({ scope: 'settings' })
+    handler(undefined)
+    expect(invalidate).not.toHaveBeenCalled()
   })
 
   it('desmontar desfaz a assinatura e libera o canal', () => {

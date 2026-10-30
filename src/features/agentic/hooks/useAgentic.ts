@@ -366,14 +366,27 @@ export function useWorkbenchProgressRealtime(): void {
     }, [queryClient])
 }
 
-/** Centrais alteradas no servidor (ex.: cor do projeto): recarrega só a lista de centrais. */
+/**
+ * Evento `agentic-updated` que muda a configuração de uma central (criar, salvar, excluir:
+ * `{ centralId }`). Avanços de mesa trazem `workbenchId` e as configurações globais trazem `scope`:
+ * nenhum dos dois muda a cor da central.
+ */
+export function isCentralConfigEvent(payload: unknown): boolean {
+    if (typeof payload !== "object" || payload === null) return false
+    const data = payload as Record<string, unknown>
+    return typeof data.centralId === "string" && data.workbenchId === undefined && data.scope === undefined
+}
+
+/** Centrais alteradas no servidor (ex.: cor do projeto): recarrega só a lista de centrais, nunca nos eventos de mesa. */
 export function useCentralsRealtime(): void {
     const queryClient = useQueryClient()
     useEffect(() => {
         if (!isPusherClientAvailable()) return
         const name = appChannel()
         const channel = acquireChannel(name)
-        const handler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("centrals") })
+        const handler = (payload: unknown) => {
+            if (isCentralConfigEvent(payload)) void queryClient.invalidateQueries({ queryKey: agenticKey("centrals") })
+        }
         channel.bind(AGENTIC_UPDATED_EVENT, handler)
         return () => {
             channel.unbind(AGENTIC_UPDATED_EVENT, handler)
