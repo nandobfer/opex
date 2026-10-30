@@ -129,7 +129,15 @@ describe('catálogo de integrações', () => {
       const def = getIntegrationDef(id)
       expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
     }
-    expect(getIntegrationDef('ai_opencode').secretFields).toEqual([expect.objectContaining({ key: 'password', required: true })])
+    expect(getIntegrationDef('ai_opencode').secretFields).toEqual([expect.objectContaining({ key: 'password', required: true }), expect.objectContaining({ key: 'sshPrivateKey', multiline: true })])
+    // Acesso SSH (só ciclo de vida do serviço, aba Controles): opcional, sem .env.
+    expect(getIntegrationDef('ai_opencode').publicFields.filter((field) => field.key.startsWith('ssh') || field.key === 'opencodeBin').map((field) => [field.key, Boolean(field.required)])).toEqual([
+      ['sshHost', false],
+      ['sshPort', false],
+      ['sshUser', false],
+      ['opencodeBin', false],
+      ['sshHostFingerprint', false],
+    ])
     for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek'] as const) {
       expect(getIntegrationDef(id).secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     }

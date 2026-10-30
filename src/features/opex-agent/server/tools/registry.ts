@@ -14,6 +14,7 @@ import { integrationTools } from "./integrations"
 import { issueTools } from "./issues"
 import { jobTools } from "./jobs"
 import { memoryTools } from "./memories"
+import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { previewTools } from "./previews"
 import { serviceTools } from "./services"
@@ -44,6 +45,8 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...clientTools,
     ...hostTools,
     ...environmentTools,
+    ...opencodeServiceTools,
+    ...opencodeResourceTools,
 ] as readonly OpexTool[]
 
 export function findOpexTool(name: string): OpexTool | undefined {

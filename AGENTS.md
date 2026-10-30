@@ -284,6 +284,9 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Build e execução: scripts de `package.json`; Docker (`Dockerfile` + `docker-compose.yml`)
 - Agendador interno (Crons): `instrumentation.ts` (`setInterval`); tick sob demanda em
   `/api/routines/scheduler-tick`
+- OpenCode (serviço e recursos, `aicontext/modules/opencode-resources.md`): `ssh2` (só o ciclo de vida
+  do serviço, exceção à regra de Ambientes), `jsonc-parser` (edição do `opencode.jsonc` preservando
+  comentários) e `yaml` (frontmatter de skills/agentes/comandos)
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),
   Swagger UI via `swagger-ui-dist` (CDN)
 

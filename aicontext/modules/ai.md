@@ -22,6 +22,8 @@ e opções na própria aba da página "Provedores de IA".
   (agentes primários e visíveis). Com diretório configurado, as consultas usam
   `?location[directory]=` — a pasta precisa existir na máquina do OpenCode (senão o servidor
   responde 404, com mensagem acionável). Em Docker, a URL precisa ser o IP do host, não `127.0.0.1`.
+  Campos opcionais de **acesso SSH** (host, porta, usuário, executável, impressão digital do host e o
+  segredo chave privada, área de texto) — usados só pela aba Controles (`modules/opencode-resources.md`).
   Campo público opcional **"Arquivo de quota (opencode-quota)"** (`quotaExportPath`): export do plugin
   `opencode-quota` lido pelo painel de quota de `/desenvolvimento` (`modules/opencode-quota.md`).
 - **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
@@ -131,9 +133,11 @@ e opções na própria aba da página "Provedores de IA".
   transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
   "Agente Mentor" — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
-  ações de salvar), **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
+  ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
+  **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
-  (só OpenCode; seção abaixo) e **Consumo** (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não
+  (só OpenCode; seção abaixo), **Skills**, **Agentes**, **Comandos**, **Plugins** e **MCPs** (só
+  OpenCode — `modules/opencode-resources.md`) e **Consumo** (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não
   têm essa aba). Trocar de aba com alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
@@ -455,6 +459,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `GET/DELETE .../accounts/[integrationId]/command/[attemptId]` | Status / cancela |
 | `PATCH/DELETE .../accounts/credentials/[credentialId]` | Renomeia `{ label }` / remove a conta |
 | `POST .../accounts/credentials/[credentialId]/activate` | Seleciona a conta em uso |
+| `/api/ai/providers/opencode/service/**`, `/scopes`, `/resources/**`, `/backups/**` | Serviço e recursos do OpenCode (`modules/opencode-resources.md`, "APIs") |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET /api/ai/skills` (`?refresh=1`) | Skills instaladas no OpenCode (`AiSkillDto`, sem o conteúdo; `empty` = vazia) |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
