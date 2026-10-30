@@ -65,13 +65,13 @@ export async function loadFeature<T>(feature: string, schema: ZodType<T>, defaul
 
 /** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
 export async function availability(settings: Pick<ProviderSettings, "enabled" | "provider" | "model">, featureLabel: string): Promise<AiFeatureAvailability> {
-    if (!settings.enabled) return { available: false, reason: `${featureLabel} está desativada em Integrações › Provedores de IA` }
-    if (!settings.provider || !settings.model) return { available: false, reason: "Selecione o provedor e o modelo em Integrações › Provedores de IA" }
+    if (!settings.enabled) return { available: false, reason: `${featureLabel} está desativada em Integrações › Inteligência Artificial` }
+    if (!settings.provider || !settings.model) return { available: false, reason: "Selecione o provedor e o modelo em Integrações › Inteligência Artificial" }
     // Confirma na hora: o status gravado pode ser de uma verificação periódica que falhou de passagem.
     const status = await confirmAiProviderConnection(settings.provider)
     const name = getAiProvider(settings.provider).name
     if (!status.configured) return { available: false, reason: `${name} não está configurado` }
-    if (!status.connected) return { available: false, reason: `${name} não está conectado${status.detail ? ` (${status.detail})` : ""}: o provedor não respondeu agora; o resultado fica em Integrações › Provedores de IA › ${name}` }
+    if (!status.connected) return { available: false, reason: `${name} não está conectado${status.detail ? ` (${status.detail})` : ""}: o provedor não respondeu agora; o resultado fica em Integrações › Inteligência Artificial › ${name}` }
     return { available: true, reason: null }
 }
 

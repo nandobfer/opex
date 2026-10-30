@@ -11,13 +11,14 @@ vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { remove: mocks.sessionRemove } }) }))
+vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: vi.fn(async () => [{ id: 'c1', projectName: 'App' }]) }))
 vi.mock('@/features/adversarial-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { AdversarialReview: memoryModel(), adversarialDb: vi.fn(async () => undefined) }
 })
 
 import { AdversarialReview } from '@/features/adversarial-agent/server/models'
-import { failOrphanReviews, latestWorkbenchReview, listWorkbenchReviews, prepareUserFix, recordSkip, removeWorkbenchReviewSessions, restoreAwaiting } from '@/features/adversarial-agent/server/reviews'
+import { failOrphanReviews, latestWorkbenchReview, listAdversarialReviews, listWorkbenchReviews, prepareUserFix, recordSkip, removeWorkbenchReviewSessions, restoreAwaiting } from '@/features/adversarial-agent/server/reviews'
 import { planRound } from '@/features/adversarial-agent/rounds'
 
 const reviews = AdversarialReview as unknown as { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
@@ -102,5 +103,29 @@ describe('reinício e exclusão da mesa', () => {
     expect(mocks.sessionRemove).toHaveBeenCalledWith({ sessionID: 'adv-1' }, expect.anything())
     expect(reviews.docs[0]).toMatchObject({ pendingSessionDeletion: null })
     expect(reviews.docs[1]).toMatchObject({ pendingSessionDeletion: 'adv-2' })
+  })
+})
+
+describe('lista paginada das rodadas (página Agente Adversário)', () => {
+  const seed = async () => {
+    for (let index = 0; index < 5; index += 1)
+      await reviews.create({ workbenchId: `w${index}`, centralId: index < 3 ? 'c1' : 'c2', taskId: `t${index}`, taskCode: `OPX-${index}`, taskTitle: `Tarefa ${index}`, cycle: 1, round: 1, level: 'balanced', state: index === 4 ? 'failed' : 'done', decision: index === 4 ? 'failed' : 'approved', findings: [], createdAt: new Date(2026, 9, 1 + index) })
+  }
+
+  it('mais recentes primeiro, com página, total e as centrais do filtro', async () => {
+    await seed()
+    const first = await listAdversarialReviews({ page: 1, limit: 2 })
+    expect(first.items.map((item) => item.taskCode)).toEqual(['OPX-4', 'OPX-3'])
+    expect(first).toMatchObject({ page: 1, limit: 2, total: 5, totalPages: 3, centrals: [{ id: 'c1', projectName: 'App' }] })
+    const last = await listAdversarialReviews({ page: 3, limit: 2 })
+    expect(last.items.map((item) => item.taskCode)).toEqual(['OPX-0'])
+  })
+
+  it('recorta por situação e central (o total é do recorte)', async () => {
+    await seed()
+    expect((await listAdversarialReviews({ states: ['failed'] })).items.map((item) => item.taskCode)).toEqual(['OPX-4'])
+    const byCentral = await listAdversarialReviews({ centrals: ['c1'] })
+    expect(byCentral.total).toBe(3)
+    expect(byCentral.totalPages).toBe(1)
   })
 })

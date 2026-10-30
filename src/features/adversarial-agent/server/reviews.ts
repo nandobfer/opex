@@ -6,12 +6,15 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { getLocalUser } from "@/lib/local-user"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { ADVERSARIAL_AUDIT_ENTITY, ADVERSARIAL_DECISION_LABELS, ADVERSARIAL_HISTORY_LIMIT, ADVERSARIAL_UPDATED_EVENT, type AdversarialDecision } from "../constants"
+import { pageInfo } from "@/lib/list/query"
+import { ADVERSARIAL_AUDIT_ENTITY, ADVERSARIAL_DECISION_LABELS, ADVERSARIAL_HISTORY_LIMIT, ADVERSARIAL_PAGE_LIMIT, ADVERSARIAL_UPDATED_EVENT, type AdversarialDecision } from "../constants"
 import { buildFixPrompt } from "../prompt"
 import { findingsToFix } from "../rounds"
-import type { AdversarialFixInput } from "../schemas"
-import type { AdversarialReviewDetailDto, AdversarialReviewDto } from "../types"
+import type { AdversarialFixInput, AdversarialReviewListQuery } from "../schemas"
+import type { AdversarialReviewDetailDto, AdversarialReviewDto, AdversarialReviewListDto } from "../types"
 import { countBySeverity } from "../verdict"
+import { listCentralOptions } from "./central-options"
+import { buildAdversarialReviewListFilter } from "./list-query"
 import { AdversarialReview, adversarialDb, type IAdversarialReview } from "./models"
 
 /** Revisões do adversário: consultas (aba Revisões, mesa) e as decisões do usuário na mesa. */
@@ -64,10 +67,18 @@ export async function publishReviews(workbenchId: string): Promise<void> {
     await publishAppEvent(ADVERSARIAL_UPDATED_EVENT, { workbenchId }).catch(() => undefined)
 }
 
-export async function listAdversarialReviews(): Promise<AdversarialReviewDto[]> {
+/** Rodadas no recorte dos filtros, mais recentes primeiro, com as centrais (opções do filtro). */
+export async function listAdversarialReviews(query: Partial<AdversarialReviewListQuery> = {}): Promise<AdversarialReviewListDto> {
     await adversarialDb()
-    const docs = (await AdversarialReview.find().sort({ createdAt: -1 }).limit(ADVERSARIAL_HISTORY_LIMIT).lean()) as unknown as IAdversarialReview[]
-    return docs.map(toReviewDto)
+    const page = query.page ?? 1
+    const limit = query.limit ?? ADVERSARIAL_PAGE_LIMIT
+    const filter = buildAdversarialReviewListFilter({ q: query.q ?? "", states: query.states ?? [], decisions: query.decisions ?? [], levels: query.levels ?? [], centrals: query.centrals ?? [], from: query.from, to: query.to })
+    const [docs, total, centrals] = await Promise.all([
+        AdversarialReview.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean() as unknown as Promise<IAdversarialReview[]>,
+        AdversarialReview.countDocuments(filter),
+        listCentralOptions(),
+    ])
+    return { items: docs.map(toReviewDto), ...pageInfo(page, limit, total), centrals }
 }
 
 export async function getAdversarialReview(id: string): Promise<AdversarialReviewDetailDto> {

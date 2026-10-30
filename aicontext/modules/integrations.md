@@ -15,7 +15,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   campos públicos, campos privados e as variáveis legadas do `.env`.
 - **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
   dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
-  `modules/github.md`), `ai` (Provedores de IA, com os provedores `ai_opencode`, `ai_gemini` e
+  `modules/github.md`), `ai` (Inteligência Artificial, com os provedores `ai_opencode`, `ai_gemini` e
   `ai_jev` — ver `modules/ai.md`), `orcamentos` (nome exibido **Clientes**: clientes do portal
   público, rota `/integracoes/clientes` — ver `modules/orcamentos.md`) e `smtp` (SMTP) e
   `storage_s3` (Storage S3).
@@ -119,13 +119,13 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Abas** (`components/tabs/`: `IntegrationTabs` + `useIntegrationTab`, copiados do Orquestrador
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
-  Geral, Vínculos, Mapeamento, Sincronização), Provedores de IA (`AiEditorForm`:
-  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Desenvolvimento agêntico), página de
+  Geral, Vínculos, Mapeamento, Sincronização), Inteligência Artificial (`AiEditorForm`:
+  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Agente Desenvolvedor), página de
   cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
   Crons (`CronsEditorForm`: Geral, Rotinas e Jobs) e a página da central de desenvolvimento
   (`/integracoes/ia/centrais/[id]`). A integração **Clientes** (`/integracoes/clientes`) **não tem
   abas**: a lista de clientes aparece direto, sem card interno. `useLocalTabs` é o irmão **sem URL**
-  (mesmo formato de retorno), usado nas abas internas da aba "Desenvolvimento agêntico", que não
+  (mesmo formato de retorno), usado nas abas internas da aba "Agente Desenvolvedor", que não
   podem reutilizar `?aba` (já reservado para as abas externas de `AiEditorForm`).
 - **Não use `layout` do framer-motion na grade/formulário desta página**: dentro do
   `<motion.main>` do `AppShell` a projeção mede errado e deixa a tela em branco às vezes.
@@ -145,7 +145,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   - **SMTP**: `transporter.verify()`; sem host configurado falha avisando que os envios estão em
     modo simulado.
   - **Storage S3**: `HeadBucket` no bucket configurado (exige endpoint e credenciais).
-  - **OpenCode / Gemini / Provedores de IA**: ver `modules/ai.md`.
+  - **OpenCode / Gemini / Inteligência Artificial**: ver `modules/ai.md`.
   - **Clientes**: sem serviço externo — só conta os clientes cadastrados (ver
     `modules/orcamentos.md`).
 - `warnResult(mensagem)` (`testers/types.ts`) grava status amarelo ("Disponível com restrição").

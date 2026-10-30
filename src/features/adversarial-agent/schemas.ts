@@ -1,9 +1,14 @@
 import { z } from "zod"
+import { csvList, isoDate, objectIdCsv, pageQuery } from "@/lib/list/query"
 import { agentConfigSchema } from "@/features/agentic/schemas"
 import {
     ADVERSARIAL_ATTACHMENT_MODES,
     ADVERSARIAL_CORRECTION_MODES,
+    ADVERSARIAL_DECISIONS,
     ADVERSARIAL_LEVELS,
+    ADVERSARIAL_PAGE_LIMIT,
+    ADVERSARIAL_PAGE_LIMIT_MAX,
+    ADVERSARIAL_REVIEW_STATES,
     ADVERSARIAL_ROUNDS_DEFAULT,
     ADVERSARIAL_ROUNDS_MAX,
     ADVERSARIAL_ROUNDS_MIN,
@@ -112,3 +117,16 @@ export const adversarialFixSchema = z.object({
     excluded: z.array(z.string().trim().min(1).max(20)).max(100).optional(),
 })
 export type AdversarialFixInput = z.infer<typeof adversarialFixSchema>
+
+/** `GET /api/adversarial/reviews` — filtros e página das rodadas (listas em CSV, datas ISO). */
+export const adversarialReviewListQuerySchema = z.object({
+    q: z.string().trim().max(200).optional().transform((value) => value ?? ""),
+    states: csvList.pipe(z.array(z.enum(ADVERSARIAL_REVIEW_STATES)).max(ADVERSARIAL_REVIEW_STATES.length)),
+    decisions: csvList.pipe(z.array(z.enum(ADVERSARIAL_DECISIONS)).max(ADVERSARIAL_DECISIONS.length)),
+    levels: csvList.pipe(z.array(z.enum(ADVERSARIAL_LEVELS)).max(ADVERSARIAL_LEVELS.length)),
+    centrals: objectIdCsv("Central"),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    ...pageQuery(ADVERSARIAL_PAGE_LIMIT, ADVERSARIAL_PAGE_LIMIT_MAX),
+})
+export type AdversarialReviewListQuery = z.infer<typeof adversarialReviewListQuerySchema>

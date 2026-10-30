@@ -1,7 +1,7 @@
 /**
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
- * Integrações ativas: Pusher, API interna, Crons, GitHub, Provedores de IA (hub `ai`
+ * Integrações ativas: Pusher, API interna, Crons, GitHub, Inteligência Artificial (hub `ai`
  * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e `ai_jev`, que só aparecem dentro do hub), Clientes,
  * SMTP, Storage S3 e Builder Machine (prévias no Docker do PC; liga pelo campo "Integração ativa").
  * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
@@ -138,7 +138,7 @@ export interface IntegrationDef {
     readonly streamsDebugOverPusher: boolean
     /**
      * Integração-filha: some da lista de `/integracoes` e aparece dentro da página da mãe (ex.:
-     * provedores de IA dentro de "Provedores de IA"). O voltar da página leva à mãe.
+     * provedores de IA dentro de "Inteligência Artificial"). O voltar da página leva à mãe.
      */
     readonly parent?: IntegrationId
     readonly publicFields: readonly PublicFieldDef[]
@@ -324,7 +324,7 @@ export const PUSHER_MODE_OPTIONS = [
 ] as const satisfies readonly FieldOption[]
 
 // ---------------------------------------------------------------------------
-// Provedores de IA
+// Inteligência Artificial
 // ---------------------------------------------------------------------------
 
 export const OPENCODE_DEFAULT_URL = "http://127.0.0.1:4096"
@@ -503,7 +503,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     },
     {
         id: "ai",
-        name: "Provedores de IA",
+        name: "Inteligência Artificial",
         description: "Provedores de IA (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, JEV) e as features do app que os usam",
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,

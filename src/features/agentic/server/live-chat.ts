@@ -53,7 +53,7 @@ export interface LiveMessageAttachments {
 
 export async function deliverLiveMessage(target: LiveMessageTarget, text: string, attachments?: LiveMessageAttachments): Promise<void> {
     if (!(await liveChatEnabled(target.centralId))) {
-        throw new DomainError(409, "O chat durante a execução está desligado (Integrações › Provedores de IA › Desenvolvimento agêntico ou na central)", "LIVE_CHAT_DISABLED")
+        throw new DomainError(409, "O chat durante a execução está desligado (Integrações › Inteligência Artificial › Agente Desenvolvedor ou na central)", "LIVE_CHAT_DISABLED")
     }
     let delivered: boolean
     try {

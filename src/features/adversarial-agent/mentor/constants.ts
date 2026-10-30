@@ -10,6 +10,11 @@ export const MENTOR_FEATURE = "adversarial-mentor"
 /** Aba de `/integracoes/ia` com a configuração do Mentor. */
 export const MENTOR_AI_TAB = "agente-mentor" as const
 
+/** Página com as execuções do Mentor (filtros). */
+export const MENTOR_PAGE_HREF = "/agente-mentor"
+/** Configuração do Mentor em Integrações › Inteligência Artificial. */
+export const MENTOR_SETTINGS_HREF = `/integracoes/ia?aba=${MENTOR_AI_TAB}`
+
 /**
  * Rigor da curadoria (slider), do mais generoso ao mais seletivo. O decisor dá uma nota de 0 a 1
  * para "vale virar regra permanente do revisor?"; a lição segue a partir do limiar do nível.
@@ -110,6 +115,9 @@ export const MENTOR_TIMEOUT_DEFAULT = 120
 
 /** Execuções exibidas na aba. */
 export const MENTOR_HISTORY_LIMIT = 100
+/** Execuções por página na página do Agente Mentor. */
+export const MENTOR_PAGE_LIMIT = 20
+export const MENTOR_PAGE_LIMIT_MAX = 100
 /** Resposta do agente enviada ao decisor/redator (o fim, quando passar). */
 export const MENTOR_RESPONSE_MAX = 12_000
 /** Mensagem do usuário enviada ao decisor/redator. */

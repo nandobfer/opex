@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
@@ -10,9 +10,10 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
 import { agenticKey } from "@/features/agentic/hooks/useAgentic"
 import type { WorkbenchDto } from "@/features/agentic/types"
-import { ADVERSARIAL_FEATURE, ADVERSARIAL_UPDATED_EVENT } from "../constants"
+import { ADVERSARIAL_FEATURE, ADVERSARIAL_HISTORY_LIMIT, ADVERSARIAL_UPDATED_EVENT } from "../constants"
+import type { AdversarialReviewListParams } from "../filters"
 import type { AdversarialFixInput, AdversarialSettings } from "../schemas"
-import type { AdversarialReviewDetailDto, AdversarialReviewDto, AdversarialSettingsDto } from "../types"
+import type { AdversarialReviewDetailDto, AdversarialReviewListDto, AdversarialSettingsDto } from "../types"
 
 /** Consultas e mutações do Agente Adversário. */
 
@@ -38,7 +39,23 @@ export function useSaveAdversarialSettings() {
     })
 }
 
-export const useAdversarialReviews = () => useQuery({ queryKey: ADVERSARIAL_REVIEWS_KEY, queryFn: () => get<AdversarialReviewDto[]>("/adversarial/reviews") })
+const getReviews = async (params: AdversarialReviewListParams & { page?: number }) =>
+    unwrapApi((await api.get<ApiResponse<AdversarialReviewListDto>>("/adversarial/reviews", { params })).data)
+
+/** As rodadas mais recentes (aba Revisões da configuração). */
+export const useAdversarialReviews = () =>
+    useQuery({ queryKey: [...ADVERSARIAL_REVIEWS_KEY, "history"], queryFn: () => getReviews({ limit: String(ADVERSARIAL_HISTORY_LIMIT) }), select: (data) => data.items })
+
+/** Rodadas paginadas no recorte dos filtros (página Agente Adversário, rolagem infinita). */
+export function useAdversarialReviewPages(params: AdversarialReviewListParams) {
+    return useInfiniteQuery({
+        queryKey: [...ADVERSARIAL_REVIEWS_KEY, "pages", params],
+        queryFn: ({ pageParam }) => getReviews({ ...params, page: pageParam }),
+        initialPageParam: 1,
+        getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
+        staleTime: 10_000,
+    })
+}
 
 export const useAdversarialReview = (id: string | null) => useQuery({ queryKey: reviewKey(id ?? ""), queryFn: () => get<AdversarialReviewDetailDto>(`/adversarial/reviews/${id}`), enabled: Boolean(id) })
 

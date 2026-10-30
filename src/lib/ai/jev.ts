@@ -16,7 +16,7 @@ export const JEV_API_URL = "https://api.typesafe.ai/v1"
 
 async function getJevApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_jev")
-    if (!apiKey) throw new AiProviderError("JEV sem API key: configure em Integrações › Provedores de IA › JEV")
+    if (!apiKey) throw new AiProviderError("JEV sem API key: configure em Integrações › Inteligência Artificial › JEV")
     return apiKey
 }
 

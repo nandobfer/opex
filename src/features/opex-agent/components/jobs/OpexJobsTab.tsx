@@ -93,7 +93,7 @@ export function OpexJobsTab() {
                                 className="overflow-hidden rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
                                 role="alert"
                             >
-                                {unavailable}: os jobs do dono ficam agendados e rodam (com atraso) quando o agente for configurado em Integrações › Provedores de IA › Agente Opex.
+                                {unavailable}: os jobs do dono ficam agendados e rodam (com atraso) quando o agente for configurado em Integrações › Inteligência Artificial › Agente Opex.
                             </motion.p>
                         )}
                     </AnimatePresence>

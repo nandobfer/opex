@@ -1,8 +1,8 @@
-# Módulo: Provedores de IA (`/integracoes/ia`)
+# Módulo: Inteligência Artificial (`/integracoes/ia`)
 
 Chamadas a IA do app passam por uma camada única sobre a **Vercel AI SDK** (`ai` v7). Os provedores
 são integrações configuradas na tela (sem `.env`) e cada feature que usa IA escolhe provedor, modelo
-e opções na própria aba da página "Provedores de IA".
+e opções na própria aba da página "Inteligência Artificial".
 
 ## Provedores
 
@@ -114,15 +114,15 @@ e opções na própria aba da página "Provedores de IA".
 
 ## Página `/integracoes/ia`
 
-- `ai` é o hub do catálogo ("Provedores de IA"); `ai_opencode`, `ai_gemini`, `ai_anthropic`,
+- `ai` é o hub do catálogo ("Inteligência Artificial"); `ai_opencode`, `ai_gemini`, `ai_anthropic`,
   `ai_openai`, `ai_deepseek` e `ai_jev` são **filhas** (`parent: "ai"`): ficam fora da lista de
   `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
-  **Orçamentos**, **Estimar prazos**, **Agente Refinador** e **Desenvolvimento agêntico**
+  **Orçamentos**, **Estimar prazos**, **Agente Refinador** e **Agente Desenvolvedor** (ícone `</>`, `CodeXml`; id `desenvolvimento-agentico`)
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
-  A aba **Desenvolvimento agêntico** tem abas internas **Agentes** (agentes padrão e as **colunas
+  A aba **Agente Desenvolvedor** tem abas internas **Agentes** (agentes padrão e as **colunas
   globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
   (subaba endereçável por `abaAgentic`). Há também a aba **Agente Revisor** (id `revisao-pr`), só com a
   configuração (as revisões ficam na página `/agente-revisor`) — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
@@ -141,7 +141,7 @@ e opções na própria aba da página "Provedores de IA".
   têm essa aba). Trocar de aba com alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
-  conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Desenvolvimento agêntico são
+  conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Agente Desenvolvedor são
   exclusivos do OpenCode.
 - **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
   `ModelPickerField` (busca do modelo com `ModelOption` — nome, id e selo "grátis" —, modelo salvo
@@ -364,7 +364,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   da sessão longa e do sistema de perguntas), como "Estimar prazos". Ativar exige modelo; modelo,
   variante e agente são conferidos no catálogo do OpenCode.
 - A aba mostra um card **Diretório da sessão**: as sessões são criadas no diretório da **central de
-  desenvolvimento do projeto da tarefa** (Integrações › Provedores de IA › Desenvolvimento agêntico),
+  desenvolvimento do projeto da tarefa** (Integrações › Inteligência Artificial › Agente Desenvolvedor),
   nunca no diretório da integração OpenCode; lista as centrais com seus diretórios.
 - Regras ao salvar iguais às demais features. Auditoria `FeatureIA` e evento `ai-feature-updated`.
 - **Entrada** (`src/features/refinement/prompt.ts`, puro): a tarefa inteira em Markdown

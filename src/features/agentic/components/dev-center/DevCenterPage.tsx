@@ -85,7 +85,7 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     if (centrals.isError) return <ErrorState title="Não foi possível carregar as centrais" description={apiErrorMessage(centrals.error, "Tente novamente.")} onRetry={() => void centrals.refetch()} />
     if (!list.length) {
         return (
-            <EmptyState icon={Workflow} title="Nenhuma central de desenvolvimento" description="Crie uma central para um produto em Integrações › Provedores de IA › Desenvolvimento agêntico.">
+            <EmptyState icon={Workflow} title="Nenhuma central de desenvolvimento" description="Crie uma central para um produto em Integrações › Inteligência Artificial › Agente Desenvolvedor.">
                 <Button asChild size="sm" className="gap-1.5">
                     <Link href={AGENTIC_SETTINGS_HREF}>
                         <Settings2 className="h-4 w-4" aria-hidden /> Configurar centrais

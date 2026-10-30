@@ -81,7 +81,7 @@ export function GeneralSection({ form, central }: { form: CentralForm; central: 
                             />
                         )}
                     />
-                    <p className="text-xs text-muted-foreground">{LIVE_CHAT_DESCRIPTION} O padrão global fica em Desenvolvimento agêntico › Agentes.</p>
+                    <p className="text-xs text-muted-foreground">{LIVE_CHAT_DESCRIPTION} O padrão global fica em Agente Desenvolvedor › Agentes.</p>
                 </div>
                 {central.repo ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">

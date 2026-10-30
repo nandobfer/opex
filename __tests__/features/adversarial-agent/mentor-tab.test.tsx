@@ -7,7 +7,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
  * Aba "Agente Mentor" montada inteira, com a configuração salva (decisor e redator com provedor,
- * modelo e variante), depois de salvar e dentro da página Provedores de IA (AiEditorForm, num <form>):
+ * modelo e variante), depois de salvar e dentro da página Inteligência Artificial (AiEditorForm, num <form>):
  * cobre crash de render e o bug do Radix Select que apaga o valor salvo ao carregar (MT-3).
  */
 
@@ -153,7 +153,7 @@ describe('aba Agente Mentor com a configuração salva', () => {
   })
 })
 
-describe('página Provedores de IA (AiEditorForm)', () => {
+describe('página Inteligência Artificial (AiEditorForm)', () => {
   const page = () => (
     <AiEditorForm def={{} as never} data={{} as never} draft={{} as never} setDraft={vi.fn()} dirty={false} pending={false} onSave={vi.fn(async () => true)} onUndo={vi.fn()} />
   )
@@ -165,5 +165,14 @@ describe('página Provedores de IA (AiEditorForm)', () => {
     const names = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())
     expect(names.indexOf('Agente Mentor')).toBe(names.indexOf('Agente Adversário') + 1)
     expectSavedValuesShown()
+  })
+
+  it('a aba do desenvolvimento agêntico se chama "Agente Desenvolvedor" e usa o ícone </> (code-xml)', () => {
+    window.history.replaceState(null, '', '/integracoes/ia?aba=agente-mentor')
+    render(page())
+    expect(screen.getByRole('tablist', { name: 'Seções de Inteligência Artificial' })).toBeTruthy()
+    const tab = screen.getByRole('tab', { name: /Agente Desenvolvedor/ })
+    expect(tab.querySelector('svg')?.getAttribute('class')).toContain('lucide-code-xml')
+    expect(screen.queryByRole('tab', { name: /Desenvolvimento agêntico/ })).toBeNull()
   })
 })

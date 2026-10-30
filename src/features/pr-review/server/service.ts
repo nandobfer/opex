@@ -1,4 +1,5 @@
 import { isValidObjectId } from "mongoose"
+import { pageInfo } from "@/lib/list/query"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { PrReview, type IPrReview } from "@/lib/db/models/PrReview"
@@ -264,10 +265,7 @@ export async function listPrReviews(query: Partial<PrReviewListQuery> = {}): Pro
     ])
     return {
         items: (docs as unknown as IPrReview[]).map(toDto),
-        page,
-        limit,
-        total,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
+        ...pageInfo(page, limit, total),
         githubLogin: githubLoginValue,
         repos: targets.map((target) => ({ repo: target.repo, projectName: target.projectName, enabled: target.config.enabled })),
     }

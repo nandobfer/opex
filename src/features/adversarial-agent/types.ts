@@ -1,5 +1,5 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import type { AdversarialDecision, AdversarialLevel, FindingSeverity } from "./constants"
+import type { AdversarialDecision, AdversarialLevel, AdversarialReviewState, FindingSeverity } from "./constants"
 import type { AdversarialSettings } from "./schemas"
 import type { EvaluatedFinding, PreviousStatus } from "./verdict"
 
@@ -10,7 +10,7 @@ export interface AdversarialSettingsDto {
     updatedAt: string | null
 }
 
-export type AdversarialReviewState = "running" | "done" | "failed" | "interrupted"
+export type { AdversarialReviewState }
 
 export type AdversarialFindingDto = EvaluatedFinding
 
@@ -48,4 +48,20 @@ export interface AdversarialReviewDetailDto extends AdversarialReviewDto {
     userText: string | null
     /** Texto completo do adversário na rodada. */
     report: string | null
+}
+
+/** Central (opção do filtro Central das páginas do Adversário e do Mentor). */
+export interface AgentCentralOption {
+    id: string
+    projectName: string
+}
+
+/** Página da lista `GET /api/adversarial/reviews` (página do Agente Adversário e aba Revisões). */
+export interface AdversarialReviewListDto {
+    items: AdversarialReviewDto[]
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    centrals: AgentCentralOption[]
 }

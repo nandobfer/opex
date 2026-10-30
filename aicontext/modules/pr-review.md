@@ -1,7 +1,7 @@
 # Módulo: Agente Revisor (`/agente-revisor` + `/integracoes/ia?aba=revisao-pr`)
 
 As revisões ficam na página **Agente Revisor** (barra lateral) e a configuração na aba **Agente
-Revisor** de Integrações › Provedores de IA (id da aba `revisao-pr` mantido para não quebrar links).
+Revisor** de Integrações › Inteligência Artificial (id da aba `revisao-pr` mantido para não quebrar links).
 Nomes internos (`pr-review`, `PrReview`, `pr_reviews`, auditoria `RevisaoPR`) não mudaram.
 
 Agente OpenCode executa a skill configurada (padrão `code-review`) nos PRs dos repositórios locais

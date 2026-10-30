@@ -8,7 +8,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
 
-/** Padrão global da aba "Desenvolvimento agêntico" (o que a central herda). */
+/** Padrão global da aba "Agente Desenvolvedor" (o que a central herda). */
 const settingsData = {
     settings: {
         enabled: true,

@@ -122,7 +122,7 @@ async function resolveCentral(task: Awaited<ReturnType<typeof getTask>>): Promis
     if (!task.project?.id) throw new DomainError(400, "A tarefa não tem repositório (projeto) vinculado", "TASK_WITHOUT_PROJECT")
     await dbConnect()
     const central = await AgenticCentral.findOne({ projectId: task.project.id }).lean()
-    if (!central) throw new DomainError(409, `Crie uma central de desenvolvimento para ${task.project.name} em Integrações › Provedores de IA`, "CENTRAL_NOT_FOUND")
+    if (!central) throw new DomainError(409, `Crie uma central de desenvolvimento para ${task.project.name} em Integrações › Inteligência Artificial`, "CENTRAL_NOT_FOUND")
     const config = parseCentralConfig(central.config)
     if (!config.enabled) throw new DomainError(409, `A central de desenvolvimento de ${central.projectName} está desativada`, "CENTRAL_DISABLED")
     return { centralId: String(central._id), projectId: central.projectId, projectName: central.projectName, directory: config.sessionDirectory }
@@ -135,7 +135,7 @@ async function availabilityFor(task: Awaited<ReturnType<typeof getTask>>): Promi
     if (!task.project?.id) return { available: false, reason: "A tarefa não tem repositório (projeto) vinculado", centralId: null, sessionDirectory: null }
     await dbConnect()
     const central = await AgenticCentral.findOne({ projectId: task.project.id }).lean()
-    if (!central) return { available: false, reason: `Crie uma central de desenvolvimento para ${task.project.name} em Integrações › Provedores de IA`, centralId: null, sessionDirectory: null }
+    if (!central) return { available: false, reason: `Crie uma central de desenvolvimento para ${task.project.name} em Integrações › Inteligência Artificial`, centralId: null, sessionDirectory: null }
     const config = parseCentralConfig(central.config)
     if (!config.enabled) return { available: false, reason: `A central de desenvolvimento de ${central.projectName} está desativada`, centralId: String(central._id), sessionDirectory: config.sessionDirectory }
     return { available: true, reason: null, centralId: String(central._id), sessionDirectory: config.sessionDirectory }

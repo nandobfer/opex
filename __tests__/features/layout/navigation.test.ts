@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { CodeXml, GraduationCap, Swords } from "lucide-react"
 import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
 
 describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
@@ -8,9 +9,10 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Agente Revisor, Ambientes) e Sistema (Integrações)", () => {
+    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Ambientes), Agentes (Revisor, Adversário, Mentor) e Sistema (Integrações)", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
             ["inicio", undefined],
+            ["agentes", "Agentes"],
             ["sistema", "Sistema"],
         ])
         expect(APP_NAV_ITEMS.map((item) => [item.label, item.href])).toEqual([
@@ -19,11 +21,22 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             ["Horas agênticas", "/tarefas/horas"],
             ["Financeiro", "/financeiro"],
             ["Central de desenvolvimento", "/desenvolvimento"],
-            ["Agente Revisor", "/agente-revisor"],
             ["Ambientes", "/ambientes"],
+            ["Agente Revisor", "/agente-revisor"],
+            ["Agente Adversário", "/agente-adversario"],
+            ["Agente Mentor", "/agente-mentor"],
             ["Integrações", "/integracoes"],
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)
+    })
+
+    it("Central de desenvolvimento usa o ícone </> (CodeXml); os agentes usam os ícones das abas de configuração", () => {
+        const icon = (href: string) => APP_NAV_ITEMS.find((item) => item.href === href)?.icon
+        expect(icon("/desenvolvimento")).toBe(CodeXml)
+        expect(icon("/agente-adversario")).toBe(Swords)
+        expect(icon("/agente-mentor")).toBe(GraduationCap)
+        expect(activeNavHref("/agente-adversario", APP_NAV_ITEMS)).toBe("/agente-adversario")
+        expect(activeNavHref("/agente-mentor", APP_NAV_ITEMS)).toBe("/agente-mentor")
     })
 
     it("item ativo é o mais específico: Horas agênticas em /tarefas/horas, Tarefas em /tarefas/123", () => {

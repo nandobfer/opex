@@ -31,7 +31,7 @@ export function AiModelsCard({ provider, dirty }: { provider: AiProviderId; dirt
             <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
                 <div className="space-y-1.5">
                     <CardTitle className="text-base">Modelos disponíveis{models.data ? <span className="ml-2 font-mono text-xs text-muted-foreground">{models.data.length}</span> : null}</CardTitle>
-                    <CardDescription>Os modelos são escolhidos em cada feature (aba da página Provedores de IA).</CardDescription>
+                    <CardDescription>Os modelos são escolhidos em cada feature (aba da página Inteligência Artificial).</CardDescription>
                 </div>
                 <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => void refresh()} disabled={dirty || models.isFetching}>
                     <motion.span animate={{ rotate: models.isFetching ? 360 : 0 }} transition={models.isFetching ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">

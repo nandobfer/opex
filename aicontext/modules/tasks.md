@@ -54,7 +54,7 @@ semeado na primeira leitura (`ensureBoard`).
 - Ordenação dos cards (`ordering.ts`): Prioridade (padrão), Manual (arrastar), Mais recentes, Mais
   antigas. `order` novo = ponto médio entre vizinhos (`computeDropOrderInList`).
 - **Tags** (`src/features/tasks/tags.ts`, puro): taxonomia **fechada** (`{ id, label }`) gerenciada
-  em "Tags de tarefas" (Integrações › Provedores de IA); a tarefa guarda só os ids. `slugifyTag`,
+  em "Tags de tarefas" (Integrações › Inteligência Artificial); a tarefa guarda só os ids. `slugifyTag`,
   `normalizeTaxonomy`, `filterKnownTags`, `tagLabel`. Ver `modules/ai.md`.
 
 ## Servidor (`src/features/tasks/server/`)

@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, ScrollText, Swords } from "lucide-react"
+import { BrainCircuit, Bot, CodeXml, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, ScrollText, Swords } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -47,7 +47,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "estimar-prazos", label: "Estimar prazos", icon: Timer },
     { id: "refinar-tarefa", label: "Agente Refinador", icon: Wand2 },
     { id: "revisao-pr", label: "Agente Revisor", icon: GitPullRequest },
-    { id: "desenvolvimento-agentico", label: "Desenvolvimento agêntico", icon: Bot },
+    { id: "desenvolvimento-agentico", label: "Agente Desenvolvedor", icon: CodeXml },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-adversario", label: "Agente Adversário", icon: Swords },
     MENTOR_AI_TAB_DEF,
@@ -55,7 +55,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
 ]
 
 /**
- * Página "Provedores de IA" (`/integracoes/ia`): aba Provedores (OpenCode, Gemini e as opções gerais
+ * Página "Inteligência Artificial" (`/integracoes/ia`): aba Provedores (OpenCode, Gemini e as opções gerais
  * do hub) e uma aba por feature que usa IA. Trocar de aba com alterações pede descarte.
  */
 export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiEditorFormProps) {
@@ -82,7 +82,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
             }}
         >
             <DetailHeader def={def} data={data} hasAnySecret={false} />
-            <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções de Provedores de IA">
+            <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções de Inteligência Artificial">
                 {tab === "provedores" && (
                     <>
                         <AiProvidersTab />

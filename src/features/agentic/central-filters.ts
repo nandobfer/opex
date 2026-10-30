@@ -2,7 +2,7 @@ import Fuse from "fuse.js"
 import { urlFilterCodecs, type UrlFilterSchema } from "@/hooks/useUrlFilters"
 import type { CentralDto } from "./types"
 
-/** Busca das centrais de desenvolvimento (Integrações › Provedores de IA). Módulo puro. */
+/** Busca das centrais de desenvolvimento (Integrações › Inteligência Artificial). Módulo puro. */
 
 /** Filtros da busca, persistidos na URL (`?buscaCentrais=…`) junto da aba (`?aba=…`). */
 export interface CentralSearchFilters {

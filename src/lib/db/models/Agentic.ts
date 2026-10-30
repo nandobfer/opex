@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 
 /**
- * Desenvolvimento agêntico (Integrações › Provedores de IA › Desenvolvimento agêntico):
+ * Desenvolvimento agêntico (Integrações › Inteligência Artificial › Agente Desenvolvedor):
  * - `agentic_centrals`: uma central por projeto (repositório vinculado), com o diretório das sessões e a
  *   configuração (validada pelo schema Zod `centralConfigSchema`);
  * - `agentic_workbenches`: uma mesa de trabalho por tarefa (etapa, sessão do OpenCode, worktree,

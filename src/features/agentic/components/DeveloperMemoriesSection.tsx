@@ -4,7 +4,7 @@ import { AgentMemoriesCard } from "@/features/ai/components/memories/AgentMemori
 import { useMemoriesRealtime } from "@/features/ai/hooks/useMemories"
 
 /**
- * Seção "Memórias" do agente desenvolvedor (OPE-97), compartilhada pela aba Desenvolvimento agêntico
+ * Seção "Memórias" do agente desenvolvedor (OPE-97), compartilhada pela aba Agente Desenvolvedor
  * (só as globais) e pela página da central (as da central e, abaixo, as globais). Salva sozinha (cada
  * memória grava na hora), com tempo real; a mudança vale a partir do próximo turno da mesa ou do fork.
  */

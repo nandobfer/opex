@@ -87,13 +87,13 @@ describe("IntegrationList", () => {
 
     it("provedores de IA (integrações-filhas) ficam fora da lista; o hub aparece e abre /integracoes/ia", () => {
         mocks.useIntegrations.mockReturnValue({
-            data: [item({ id: "ai", name: "Provedores de IA" }), item({ id: "ai_opencode", name: "OpenCode", parent: "ai" }), item({ id: "ai_gemini", name: "Gemini", parent: "ai" })],
+            data: [item({ id: "ai", name: "Inteligência Artificial" }), item({ id: "ai_opencode", name: "OpenCode", parent: "ai" }), item({ id: "ai_gemini", name: "Gemini", parent: "ai" })],
             isLoading: false,
         })
         render(<IntegrationList />)
         expect(screen.queryByText("OpenCode")).toBeNull()
         expect(screen.queryByText("Gemini")).toBeNull()
-        expect(within(screen.getByText("Provedores de IA").closest("li")!).getByText("Provedores de IA").closest("a")!.getAttribute("href")).toBe("/integracoes/ia")
+        expect(within(screen.getByText("Inteligência Artificial").closest("li")!).getByText("Inteligência Artificial").closest("a")!.getAttribute("href")).toBe("/integracoes/ia")
     })
 
     it("Google Drive aparece como Em desenvolvimento (fonte de tarefas do Google Sheets), sem ações nem link", () => {

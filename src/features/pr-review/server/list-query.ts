@@ -1,8 +1,7 @@
+import { createdAtRange, mergeAnd, searchPattern } from "@/lib/list/query"
 import type { PrReviewListQuery } from "../schemas"
 
 /** Filtro do Mongo da lista do Agente Revisor (função pura: `GET /api/pr-reviews`). */
-
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 type ListFilterInput = Pick<PrReviewListQuery, "q" | "states" | "verdicts" | "repos" | "triggers"> & { from?: string; to?: string }
 
@@ -12,7 +11,7 @@ export function buildPrReviewListFilter(query: ListFilterInput): Record<string, 
 
     const q = query.q.trim()
     if (q) {
-        const pattern = { $regex: escapeRegex(q), $options: "i" }
+        const pattern = searchPattern(q)
         const or: Record<string, unknown>[] = [{ repo: pattern }, { title: pattern }, { author: pattern }]
         const number = /^#?(\d{1,9})$/.exec(q)
         if (number) or.push({ number: Number(number[1]) })
@@ -29,12 +28,8 @@ export function buildPrReviewListFilter(query: ListFilterInput): Record<string, 
         if (auto !== manual) and.push(manual ? { trigger: "manual" } : { trigger: { $ne: "manual" } })
     }
 
-    const createdAt: Record<string, Date> = {}
-    if (query.from) createdAt.$gte = new Date(query.from)
-    if (query.to) createdAt.$lte = new Date(query.to)
-    if (Object.keys(createdAt).length) filter.createdAt = createdAt
+    const createdAt = createdAtRange(query.from, query.to)
+    if (createdAt) filter.createdAt = createdAt
 
-    if (and.length === 1) Object.assign(filter, and[0])
-    else if (and.length > 1) filter.$and = and
-    return filter
+    return mergeAnd(filter, and)
 }

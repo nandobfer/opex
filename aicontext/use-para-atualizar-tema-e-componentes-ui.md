@@ -126,7 +126,7 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
   (240px) e mantém dono, versão e "Sair" inline. Animações em Framer Motion
   (entrada dos itens, `whileHover x:4`, `whileTap 0.98`, largura, gaveta).
 - **Seções** (`NavSectionDef { id, label?, items }` em `src/features/layout/navigation.ts`,
-  `APP_NAV`): Tarefas (sem título) · Sistema (Integrações). Até 7 itens por seção. Título em
+  `APP_NAV`): Início (sem título) · Agentes (Revisor, Adversário, Mentor) · Sistema (Integrações). Até 7 itens por seção. Título em
   caixa-alta é um botão com `aria-expanded` que abre/fecha a lista; fechadas ficam no
   `localStorage` (`opex-sidebar-closed-sections`); a seção da página atual sempre abre ao
   navegar para ela. Recolhido, o título vira divisor. `APP_NAV_ITEMS` (`flattenNav`) serve o

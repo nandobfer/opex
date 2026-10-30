@@ -21,15 +21,15 @@ export async function loadAgenticSettings(): Promise<{ settings: AgenticSettings
 
 /** Motivo real (conferido agora) e onde agir: o servidor do OpenCode e a integração. */
 export function opencodeDisconnectedReason(detail: string | null): string {
-    return `O OpenCode não está conectado${detail ? ` (${detail})` : ""}: confira se o opencode serve está no ar e acessível; o resultado fica em Integrações › Provedores de IA › OpenCode`
+    return `O OpenCode não está conectado${detail ? ` (${detail})` : ""}: confira se o opencode serve está no ar e acessível; o resultado fica em Integrações › Inteligência Artificial › OpenCode`
 }
 
 /** `probeTimeoutMs`: limite do teste na hora (as telas de leitura usam um curto, e o tempo esgotado nele não bloqueia). */
 export async function agenticAvailability(settings: AgenticSettings, options: { probeTimeoutMs?: number } = {}): Promise<AgenticAvailability> {
-    if (!settings.enabled) return { available: false, reason: "O desenvolvimento agêntico está desativado em Integrações › Provedores de IA" }
+    if (!settings.enabled) return { available: false, reason: "O desenvolvimento agêntico está desativado em Integrações › Inteligência Artificial" }
     // Confirma na hora: o status gravado pode ser de uma verificação periódica que falhou de passagem.
     const status = await confirmAiProviderConnection("opencode", { timeoutMs: options.probeTimeoutMs })
-    if (!status.configured) return { available: false, reason: "O OpenCode não está configurado em Integrações › Provedores de IA" }
+    if (!status.configured) return { available: false, reason: "O OpenCode não está configurado em Integrações › Inteligência Artificial" }
     // Leitura (teste curto): estourar o limite não prova queda; a ação confere com o limite cheio.
     if (!status.connected && status.timedOut && options.probeTimeoutMs !== undefined) return { available: true, reason: null }
     if (!status.connected) return { available: false, reason: opencodeDisconnectedReason(status.detail) }

@@ -1,6 +1,7 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import type { MentorLevel, MentorRunStatus, MentorSource, MentorTarget, MentorUserTrigger } from "./constants"
 import type { MentorSettings } from "./schemas"
+import type { AgentCentralOption } from "../types"
 
 /** DTOs do Agente Mentor (módulo puro). */
 
@@ -45,4 +46,14 @@ export interface MentorRunDto {
     durationMs: number | null
     createdAt: string
     finishedAt: string | null
+}
+
+/** Página da lista `GET /api/adversarial/mentor/runs` (página do Agente Mentor e aba Execuções). */
+export interface MentorRunListDto {
+    items: MentorRunDto[]
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    centrals: AgentCentralOption[]
 }

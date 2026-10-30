@@ -14,7 +14,7 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 `src/features/agentic/server/preview-backup.ts`; se ele roda ou não é uma opção da central
 (`environment.backupDatabase`, OPE-72 — ver “Backup do MongoDB da prévia”).
 
-## Configuração (Integrações › Provedores de IA › aba "Desenvolvimento agêntico")
+## Configuração (Integrações › Inteligência Artificial › aba "Agente Desenvolvedor", ícone `</>` `CodeXml`)
 
 - Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
   `agenticSettingsSchema`): **ativa**, o **agente padrão** (agente, modelo `provedor/modelo`,
@@ -111,7 +111,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   "Resumo de memórias", auditoria `MemoriaAgente`, evento `ai-memories-updated`; ver
   `modules/ai.md`, "Memórias dos agentes"). Duas listas:
   - `developer-global` — **Memórias globais do agente desenvolvedor**, valem em todas as centrais
-    (aba Desenvolvimento agêntico › Memórias e, abaixo do card da central, na página da central);
+    (aba Agente Desenvolvedor › Memórias e, abaixo do card da central, na página da central);
   - `developer-central` — **Memórias da central**, uma lista por central (`centralId` no documento;
     aba Memórias da página da central).
 - **Onde valem**: em **todo turno da mesa** (planejamento, revisões do plano, implementação, build,
@@ -138,7 +138,7 @@ as têm no histórico). Falha ao ler as memórias no banco não derruba o
 
 Cada central pode apontar uma **coluna da fila** (`columns.queue`, `null` = desligada; aba "Colunas e
 conclusão"). A coluna pode ser **personalizada** na central ou **herdada** do padrão global da aba
-"Desenvolvimento agêntico" (`columns.inheritQueue`, OPE-79) — o que vale é sempre a **coluna
+"Agente Desenvolvedor" (`columns.inheritQueue`, OPE-79) — o que vale é sempre a **coluna
 efetiva**. Ao mover um card para essa coluna, a tarefa do projeto entra na fila para abrir a mesa:
 
 - **Vaga livre** (mesas abertas `< maxConcurrent`) → a mesa é criada **na hora** e o planejamento
