@@ -6,12 +6,36 @@ import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import type { AiProviderId } from "@/lib/ai/providers"
 import { flushWorkbenchEvents, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
-import { MENTOR_AUDIT_ENTITY, MENTOR_DECISION_CONSUMPTION_ORIGIN, MENTOR_MEMORY_SOURCE, MENTOR_PAGE_LIMIT, MENTOR_UPDATED_EVENT, MENTOR_WRITER_CONSUMPTION_ORIGIN, type MentorRunStatus } from "../../mentor/constants"
-import { parseDeciderAnswer, parseWriterAnswer, passesThreshold, resolveWriterAction } from "../../mentor/decision"
-import { buildDeciderPrompt, buildJevMentorQuestions, buildMentorState, buildWriterInstructions, buildWriterPrompt, MENTOR_DECIDER_INSTRUCTIONS, type MentorCase } from "../../mentor/prompt"
+import {
+    MENTOR_AUDIT_ENTITY,
+    MENTOR_DECISION_CONSUMPTION_ORIGIN,
+    MENTOR_MEMORY_SOURCE,
+    MENTOR_PAGE_LIMIT,
+    MENTOR_ROUTER_CONSUMPTION_ORIGIN,
+    MENTOR_TARGET_LABELS,
+    MENTOR_UPDATED_EVENT,
+    MENTOR_WRITER_CONSUMPTION_ORIGIN,
+    type MentorRunStatus,
+    type MentorTarget,
+} from "../../mentor/constants"
+import { parseDeciderAnswer, parseRouterAnswer, parseWriterAnswer, passesThreshold, resolveWriterAction, routerChoiceOf } from "../../mentor/decision"
+import {
+    buildDeciderPrompt,
+    buildJevMentorQuestions,
+    buildJevRouterQuestions,
+    buildMentorState,
+    buildRouterInstructions,
+    buildRouterPrompt,
+    buildRouterState,
+    buildWriterInstructions,
+    buildWriterPrompt,
+    MENTOR_DECIDER_INSTRUCTIONS,
+    type MentorCase,
+    type TargetSummaries,
+} from "../../mentor/prompt"
 import { sanitizeMemoryText, type SanitizeContext } from "../../mentor/sanitize"
-import type { MentorRunListQuery, MentorSettings } from "../../mentor/schemas"
-import type { MentorRunDto, MentorRunListDto } from "../../mentor/types"
+import { enabledTargets, type MentorRunListQuery, type MentorSettings } from "../../mentor/schemas"
+import type { MentorProposal, MentorRunDto, MentorRunListDto } from "../../mentor/types"
 import { AdversarialReview } from "../models"
 import { createAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
 import { pageInfo } from "@/lib/list/query"
@@ -21,24 +45,35 @@ import { MentorRun, mentorDb, type IMentorRun } from "./models"
 
 /**
  * Pipeline de uma execução do Agente Mentor: contexto → decisor (JEV ou texto, nota contra o limiar
- * do slider) → redator (regra genérica + deduplicação/fusão) → sanitizador (recusa o que identifica o
- * caso; uma nova tentativa do redator) → grava a memória do adversário (ou deixa como sugestão).
- * Roda em segundo plano: nunca afeta a mesa.
+ * do slider) → Triador (OPE-97: escolhe UMA lista entre as ligadas — Agente Adversário, globais do
+ * agente desenvolvedor ou as da central da mesa) → redator (regra para aquela lista + deduplicação/
+ * fusão) → sanitizador (recusa o que identifica o caso; uma nova tentativa do redator) → grava a memória
+ * (ou deixa como sugestão). Roda em segundo plano: nunca afeta a mesa.
  */
 
 const log = loggerFor({ module: "adversarial-agent", feature: "mentor" })
 
-/** Lista `adversarial` das memórias dos agentes (`agent_memories`), no formato que o redator lê. */
-async function listAdversarialMemories(): Promise<{ id: string; summary: string; text: string }[]> {
-    return (await listAgentMemories("adversarial")).map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto }))
+/** Central da lista: só `developer-central` tem (a da mesa). */
+const centralOf = (target: MentorTarget, centralId: string | null) => (target === "developer-central" ? centralId : null)
+
+/** Memórias de uma lista (`agent_memories`), no formato que o redator lê. */
+async function listTargetMemories(target: MentorTarget, centralId: string | null): Promise<{ id: string; summary: string; text: string }[]> {
+    return (await listAgentMemories(target, centralOf(target, centralId))).map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto }))
 }
 
-async function createAdversarialMemory(text: string, actorId: string, options: AgentMemoryWriteOptions): Promise<{ memory: { id: string } }> {
-    return { memory: { id: (await createAgentMemory("adversarial", text, actorId, options)).memoria.id } }
+async function createTargetMemory(target: MentorTarget, text: string, actorId: string, options: AgentMemoryWriteOptions): Promise<{ memory: { id: string } }> {
+    return { memory: { id: (await createAgentMemory(target, text, actorId, options)).memoria.id } }
 }
 
-async function updateAdversarialMemory(id: string, text: string, actorId: string, options: AgentMemoryWriteOptions): Promise<{ memory: { id: string } }> {
-    return { memory: { id: (await updateAgentMemory("adversarial", id, text, actorId, options)).memoria.id } }
+async function updateTargetMemory(target: MentorTarget, id: string, text: string, actorId: string, options: AgentMemoryWriteOptions): Promise<{ memory: { id: string } }> {
+    return { memory: { id: (await updateAgentMemory(target, id, text, actorId, options)).memoria.id } }
+}
+
+/** Proposta gravada (execuções de antes do Triador não têm destino: são do adversário). */
+function proposalOf(run: Pick<IMentorRun, "proposal" | "centralId">): MentorProposal | null {
+    if (!run.proposal) return null
+    const target = run.proposal.target ?? "adversarial"
+    return { action: run.proposal.action, memoryId: run.proposal.memoryId, text: run.proposal.text, target, centralId: centralOf(target, run.proposal.centralId ?? run.centralId) }
 }
 
 export interface MentorRunInput {
@@ -61,6 +96,7 @@ export function toMentorRunDto(run: IMentorRun): MentorRunDto {
     return {
         id: String(run._id),
         workbenchId: run.workbenchId,
+        centralId: run.centralId,
         taskId: run.taskId,
         taskCode: run.taskCode,
         taskTitle: run.taskTitle,
@@ -73,10 +109,14 @@ export function toMentorRunDto(run: IMentorRun): MentorRunDto {
         score: run.score,
         threshold: run.threshold,
         deciderReason: run.deciderReason,
+        target: run.target ?? run.proposal?.target ?? (run.proposal ? "adversarial" : null),
+        routerConfidence: run.routerConfidence ?? null,
+        routerReason: run.routerReason ?? null,
+        routerProbabilities: run.routerProbabilities ?? null,
         writerAction: run.writerAction,
         writerReason: run.writerReason,
         sanitizerReason: run.sanitizerReason,
-        proposal: run.proposal,
+        proposal: proposalOf(run),
         memoryId: run.memoryId,
         error: run.error,
         costUsd: run.costUsd ?? 0,
@@ -131,6 +171,34 @@ async function decide(settings: MentorSettings, state: Record<string, unknown>, 
     return { score: parsed.score, reason: parsed.reason || null }
 }
 
+/** Lista de destino escolhida pelo Triador entre as ligadas (sem chamada quando só uma está ligada). */
+async function route(
+    settings: MentorSettings,
+    state: Record<string, unknown>,
+    lists: readonly TargetSummaries[],
+    subject: string,
+    usage: StepUsage,
+): Promise<{ target: MentorTarget; confidence: number | null; reason: string | null; probabilities: Record<string, number> | null }> {
+    const targets = lists.map((list) => list.target)
+    if (targets.length === 1) return { target: targets[0]!, confidence: null, reason: null, probabilities: null }
+    const { provider, model, variant, instructions } = settings.router
+    if (!provider || !model) throw new Error("O Triador do Agente Mentor não tem provedor e modelo configurados")
+    const routerState = buildRouterState(state, lists)
+    if (provider === "jev") {
+        const { askJevSystemOne } = await import("@/lib/ai/jev")
+        const response = await askJevSystemOne({ model, state: routerState, questions: buildJevRouterQuestions(targets, instructions), signal: AbortSignal.timeout(settings.timeoutSeconds * 1000), tracking: { feature: MENTOR_ROUTER_CONSUMPTION_ORIGIN, subject } })
+        const answer = response.answers?.target
+        if (!answer || answer.type !== "choice") throw new Error("O JEV não respondeu a pergunta do Triador do Agente Mentor")
+        const target = routerChoiceOf(answer.choice, targets)
+        if (!target) throw new Error(`O Triador do Agente Mentor escolheu um destino desligado ("${answer.choice}")`)
+        return { target, confidence: answer.confidence, reason: null, probabilities: answer.probabilities ?? null }
+    }
+    const text = await generate({ provider, model, variant, instructions: buildRouterInstructions(targets, instructions), prompt: buildRouterPrompt(routerState), timeoutSeconds: settings.timeoutSeconds, origin: MENTOR_ROUTER_CONSUMPTION_ORIGIN, subject }, usage)
+    const parsed = parseRouterAnswer(text, targets)
+    if (!parsed) throw new Error("O Triador do Agente Mentor respondeu sem um destino válido")
+    return { target: parsed.target, confidence: parsed.confidence, reason: parsed.reason || null, probabilities: null }
+}
+
 async function verdictOf(workbenchId: string): Promise<MentorCase["adversarialVerdict"]> {
     const latest = await AdversarialReview.findOne({ workbenchId }).sort({ createdAt: -1 }).lean()
     if (!latest) return null
@@ -145,12 +213,21 @@ function notice(workbenchId: string, level: "info" | "warn", message: string): P
     })().catch(() => undefined)
 }
 
-/** Cria ou atualiza a memória do adversário com a origem do Mentor (auditoria com a mesa e a tarefa). */
-async function applyProposal(run: Pick<IMentorRun, "_id" | "workbenchId" | "taskCode">, proposal: NonNullable<IMentorRun["proposal"]>, actorId: string) {
+/** Cria ou atualiza a memória na lista de destino com a origem do Mentor (auditoria com a mesa, a tarefa e o destino). */
+async function applyProposal(run: Pick<IMentorRun, "_id" | "workbenchId" | "taskCode">, proposal: MentorProposal, actorId: string) {
     const origin = { source: MENTOR_MEMORY_SOURCE, label: `Mentor · ${run.taskCode}` }
-    const auditContext = { origem: "Agente Mentor", execucao: String(run._id), mesa: run.workbenchId, tarefa: run.taskCode }
-    const result = proposal.action === "update" && proposal.memoryId ? await updateAdversarialMemory(proposal.memoryId, proposal.text, actorId, { origin, auditContext }) : await createAdversarialMemory(proposal.text, actorId, { origin, auditContext })
-    return { status: (proposal.action === "update" && proposal.memoryId ? "updated" : "created") as MentorRunStatus, memoryId: result.memory.id }
+    const auditContext = { origem: "Agente Mentor", execucao: String(run._id), mesa: run.workbenchId, tarefa: run.taskCode, destino: proposal.target }
+    const options = { origin, auditContext, centralId: proposal.centralId }
+    const update = proposal.action === "update" && proposal.memoryId
+    const result = update ? await updateTargetMemory(proposal.target, proposal.memoryId!, proposal.text, actorId, options) : await createTargetMemory(proposal.target, proposal.text, actorId, options)
+    return { status: (update ? "updated" : "created") as MentorRunStatus, memoryId: result.memory.id }
+}
+
+/** Nome da lista no aviso da mesa ("do Agente Adversário", "do agente desenvolvedor (da central)"…). */
+const targetPhrase: Record<MentorTarget, string> = {
+    adversarial: "do Agente Adversário",
+    "developer-global": "do agente desenvolvedor (globais)",
+    "developer-central": "do agente desenvolvedor (desta central)",
 }
 
 /** Executa o pipeline de uma execução já registrada (`queued`). Nunca lança: falha vira `failed`. */
@@ -159,7 +236,7 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
     const usage: StepUsage = { costUsd: 0 }
     const finish = async (status: MentorRunStatus, set: Partial<IMentorRun> = {}) => {
         await setRun(runId, { status, ...set, costUsd: usage.costUsd, durationMs: Date.now() - startedAt, finishedAt: new Date() })
-        await recordAudit({ userId: getLocalUser().id, entidade: MENTOR_AUDIT_ENTITY, entidadeId: runId, acao: AcaoAuditoria.EXECUTAR, depois: { status, tarefa: input.taskCode, mesa: input.workbenchId, origens: input.case.sources, memoria: set.memoryId ?? null } })
+        await recordAudit({ userId: getLocalUser().id, entidade: MENTOR_AUDIT_ENTITY, entidadeId: runId, acao: AcaoAuditoria.EXECUTAR, depois: { status, tarefa: input.taskCode, mesa: input.workbenchId, origens: input.case.sources, memoria: set.memoryId ?? null, ...(set.target ? { destino: set.target } : {}) } })
         return status
     }
     try {
@@ -183,8 +260,15 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
 
         const { provider, model, variant, instructions } = settings.writer
         if (!provider || !model) throw new Error("O redator do Agente Mentor não tem provedor e modelo configurados")
-        const memories = await listAdversarialMemories()
+        const lists = await Promise.all(enabledTargets(settings.targets).map(async (target) => ({ target, memories: await listTargetMemories(target, input.centralId) })))
+        const summaries: TargetSummaries[] = lists.map((list) => ({ target: list.target, summaries: list.memories.map((memory) => memory.summary) }))
+        const routed = await route(settings, state, summaries, subject, usage)
+        const target = routed.target
+        await setRun(runId, { target, routerConfidence: routed.confidence, routerReason: routed.reason, routerProbabilities: routed.probabilities })
+        const memories = lists.find((list) => list.target === target)?.memories ?? []
+        const others = summaries.filter((list) => list.target !== target)
         const sanitizeContext: SanitizeContext = {
+            allowPaths: target === "developer-central",
             taskCode: input.taskCode,
             taskTitle: input.taskTitle,
             projectName: input.projectName,
@@ -194,7 +278,7 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
         let rejection: string | null = null
         for (let attempt = 0; attempt < 2; attempt++) {
             const text = await generate(
-                { provider, model, variant, instructions: buildWriterInstructions(instructions), prompt: buildWriterPrompt(state, memories, rejection), timeoutSeconds: settings.timeoutSeconds, origin: MENTOR_WRITER_CONSUMPTION_ORIGIN, subject },
+                { provider, model, variant, instructions: buildWriterInstructions(instructions, target), prompt: buildWriterPrompt(state, memories, rejection, target, others), timeoutSeconds: settings.timeoutSeconds, origin: MENTOR_WRITER_CONSUMPTION_ORIGIN, subject },
                 usage,
             )
             const answer = parseWriterAnswer(text)
@@ -203,13 +287,13 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
             rejection = sanitizeMemoryText(answer.text, sanitizeContext)
             await setRun(runId, { writerAction: answer.action, writerReason: answer.reason || null, sanitizerReason: rejection })
             if (rejection) continue
-            const proposal = resolveWriterAction(answer, memories.map((memory) => memory.id))
+            const proposal: MentorProposal = { ...resolveWriterAction(answer, memories.map((memory) => memory.id)), target, centralId: centralOf(target, input.centralId) }
             if (settings.saveMode === "suggest") {
-                await notice(input.workbenchId, "info", "O Agente Mentor sugeriu uma memória para o Agente Adversário: aprove ou descarte em Integrações › Inteligência Artificial › Agente Mentor.")
+                await notice(input.workbenchId, "info", `O Agente Mentor sugeriu uma memória ${targetPhrase[target]}: aprove ou descarte em Integrações › Inteligência Artificial › Agente Mentor.`)
                 return await finish("suggested", { proposal })
             }
             const applied = await applyProposal({ _id: new Types.ObjectId(runId), workbenchId: input.workbenchId, taskCode: input.taskCode }, proposal, getLocalUser().id)
-            await notice(input.workbenchId, "info", applied.status === "updated" ? "O Agente Mentor atualizou uma memória do Agente Adversário com a lição deste turno." : "O Agente Mentor registrou uma memória nova do Agente Adversário com a lição deste turno.")
+            await notice(input.workbenchId, "info", applied.status === "updated" ? `O Agente Mentor atualizou uma memória ${targetPhrase[target]} com a lição deste turno.` : `O Agente Mentor registrou uma memória nova ${targetPhrase[target]} com a lição deste turno.`)
             return await finish(applied.status, { proposal, memoryId: applied.memoryId })
         }
         return await finish("discarded", { sanitizerReason: rejection })
@@ -259,22 +343,36 @@ async function claimSuggestion(id: string): Promise<IMentorRun> {
 /** Falha depois de reivindicar: a sugestão volta a aguardar decisão. */
 const releaseSuggestion = (run: IMentorRun) => MentorRun.updateOne({ _id: run._id, status: "running" }, { $set: { status: "suggested" } }).catch(() => undefined)
 
-/** Aprovar a sugestão (texto opcionalmente editado): grava a memória do adversário. */
-export async function approveMentorRun(id: string, text: string | undefined, actorId: string): Promise<MentorRunDto> {
+/**
+ * Aprovar a sugestão (texto e destino opcionalmente trocados): grava a memória na lista escolhida.
+ * Trocar a lista transforma uma fusão (`update`) em memória nova; a central excluída depois da
+ * sugestão devolve 409 (a sugestão volta a aguardar e pode ir para outra lista).
+ */
+export async function approveMentorRun(id: string, text: string | undefined, actorId: string, target?: MentorTarget): Promise<MentorRunDto> {
     const run = await claimSuggestion(id)
-    const proposal = { ...run.proposal!, text: text?.trim() || run.proposal!.text }
+    const saved = proposalOf(run)!
+    const nextTarget = target ?? saved.target
+    const moved = nextTarget !== saved.target
+    const proposal: MentorProposal = {
+        action: moved ? "create" : saved.action,
+        memoryId: moved ? null : saved.memoryId,
+        text: text?.trim() || saved.text,
+        target: nextTarget,
+        centralId: centralOf(nextTarget, saved.centralId ?? run.centralId),
+    }
     let applied: Awaited<ReturnType<typeof applyProposal>>
     try {
-        const exists = proposal.action === "update" && proposal.memoryId ? (await listAdversarialMemories()).some((memory) => memory.id === proposal.memoryId) : false
+        const exists = proposal.action === "update" && proposal.memoryId ? (await listTargetMemories(proposal.target, proposal.centralId)).some((memory) => memory.id === proposal.memoryId) : false
         applied = await applyProposal(run, exists ? proposal : { ...proposal, action: "create", memoryId: null }, actorId)
     } catch (error) {
         await releaseSuggestion(run)
+        if (error instanceof DomainError && error.code === "CENTRAL_NOT_FOUND") throw new DomainError(409, `A central desta execução foi excluída: escolha outro destino que não "${MENTOR_TARGET_LABELS["developer-central"].label}"`, "MENTOR_CENTRAL_GONE")
         throw error
     }
-    await MentorRun.updateOne({ _id: run._id }, { $set: { status: applied.status, memoryId: applied.memoryId, proposal } })
-    await recordAudit({ userId: actorId, entidade: MENTOR_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { status: applied.status, memoria: applied.memoryId, tarefa: run.taskCode } })
+    await MentorRun.updateOne({ _id: run._id }, { $set: { status: applied.status, memoryId: applied.memoryId, proposal, target: proposal.target } })
+    await recordAudit({ userId: actorId, entidade: MENTOR_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { status: applied.status, memoria: applied.memoryId, tarefa: run.taskCode, destino: proposal.target } })
     await publish(id)
-    return toMentorRunDto({ ...run, status: applied.status, memoryId: applied.memoryId, proposal })
+    return toMentorRunDto({ ...run, status: applied.status, memoryId: applied.memoryId, proposal, target: proposal.target })
 }
 
 /** Descartar a sugestão: nada é gravado. */

@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Bot, FolderGit2, SlidersHorizontal } from "lucide-react"
+import { Bot, Brain, FolderGit2, SlidersHorizontal } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
@@ -11,25 +11,27 @@ import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "../../hooks/useAgentic"
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
+import { DeveloperMemoriesSection } from "../DeveloperMemoriesSection"
 import { AgentsSettingsSection } from "./AgentsSettingsSection"
 import { CentralsCard } from "./CentralsCard"
 import { DefaultSettingsSection } from "./DefaultSettingsSection"
 import { SettingsActions } from "./SettingsActions"
 
-/** Abas internas da configuração: padrões globais e agentes (com salvar) e a lista de centrais. */
-type SettingsTab = "padrao" | "agentes" | "centrais"
-const SETTINGS_TABS: readonly SettingsTab[] = ["padrao", "agentes", "centrais"]
+/** Abas internas da configuração: padrões globais e agentes (com salvar), memórias globais (salvam sozinhas) e a lista de centrais. */
+type SettingsTab = "padrao" | "agentes" | "memorias" | "centrais"
+const SETTINGS_TABS: readonly SettingsTab[] = ["padrao", "agentes", "memorias", "centrais"]
 const TABS: readonly IntegrationTabDef<SettingsTab>[] = [
     { id: "padrao", label: "Configurações Padrão", icon: SlidersHorizontal },
     { id: "agentes", label: "Agentes", icon: Bot },
+    { id: "memorias", label: "Memórias", icon: Brain },
     { id: "centrais", label: "Centrais de desenvolvimento", icon: FolderGit2 },
 ]
 
 /**
  * Aba "Agente Desenvolvedor" (Inteligência Artificial): padrões globais (chat durante a execução, fila,
  * movimentação das colunas, correção de CI e portas da prévia, que as centrais herdam ou
- * personalizam), liga a feature e define os agentes padrão de cada etapa, e lista as centrais (uma
- * por projeto). Só usa o OpenCode.
+ * personalizam), liga a feature e define os agentes padrão de cada etapa, as memórias globais do
+ * agente desenvolvedor e lista as centrais (uma por projeto). Só usa o OpenCode.
  */
 export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     useAgenticRealtime()
@@ -72,6 +74,8 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
                     {actions}
                 </>
             )}
+
+            {tab === "memorias" && <DeveloperMemoriesSection />}
 
             {tab === "centrais" && <CentralsCard />}
         </IntegrationTabs>

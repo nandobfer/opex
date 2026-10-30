@@ -12,12 +12,12 @@ import { workbenchPath } from "@/features/agentic/constants"
 import { MENTOR_SOURCE_LABELS } from "../../mentor/constants"
 import type { MentorRunDto } from "../../mentor/types"
 import { formatCost } from "../ReviewBadges"
-import { MentorRunBadge, formatScore } from "./MentorRunBadge"
+import { MentorRunBadge, MentorTargetBadge, formatScore } from "./MentorRunBadge"
 import { MentorRunDialog } from "./MentorRunDialog"
 
 /**
  * Execuções do Agente Mentor (aba Execuções da configuração e página `/agente-mentor`): tarefa,
- * origens, nota/limiar, situação, custo e "Ver" ou "Decidir" (sugestão aguardando aprovação).
+ * origens, nota/limiar, situação, lista de destino, custo e "Ver" ou "Decidir" (sugestão aguardando aprovação).
  */
 export function MentorRunList({ items }: { items: readonly MentorRunDto[] }) {
     const [openId, setOpenId] = useState<string | null>(null)
@@ -36,6 +36,7 @@ export function MentorRunList({ items }: { items: readonly MentorRunDto[] }) {
                             </span>
                             <span className="text-xs tabular-nums text-muted-foreground">{formatScore(run.score, run.threshold)}</span>
                             <MentorRunBadge status={run.status} />
+                            {run.target && <MentorTargetBadge target={run.target} />}
                             <span className="text-xs tabular-nums text-muted-foreground">
                                 {formatCost(run.costUsd)} · {formatDistanceToNow(new Date(run.createdAt), { addSuffix: true, locale: ptBR })}
                             </span>

@@ -48,6 +48,11 @@ export const MEMORY_SUMMARY_CONSUMPTION_ORIGIN = "memory-summary"
 export const SUMMARY_MAX_LENGTH_MIN = 40
 export const SUMMARY_MAX_LENGTH_MAX = 200
 export const SUMMARY_MAX_LENGTH_DEFAULT = 80
+/**
+ * Teto de segurança do resumo gerado pela IA, separado (e bem acima) do tamanho configurável, que é só
+ * orientação no prompt: o resumo é gravado inteiro até aqui, e só uma resposta desgovernada é cortada.
+ */
+export const SUMMARY_SAFETY_MAX_LENGTH = 1000
 
 export const DEFAULT_MEMORY_SUMMARY_INSTRUCTIONS = `Você organiza instruções e memórias dos agentes de IA do Opex.
 - Corrija ortografia e pontuação, deixe o texto claro e direto, em português do Brasil, sem mudar o sentido nem acrescentar fatos.

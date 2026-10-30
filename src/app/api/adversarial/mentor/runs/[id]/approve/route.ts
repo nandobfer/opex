@@ -11,5 +11,5 @@ export const dynamic = "force-dynamic"
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, mentorApproveSchema)
     if (!body.ok) return body.response
-    return ok(await approveMentorRun(params.id, body.data.text, getLocalUser().id))
+    return ok(await approveMentorRun(params.id, body.data.text, getLocalUser().id, body.data.target))
 })

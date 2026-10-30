@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion } from "framer-motion"
-import { ArrowLeft, Bot, Bug, FileText, FolderCog, GitBranch, LayoutDashboard, ListChecks, Server } from "lucide-react"
+import { ArrowLeft, Bot, Brain, Bug, FileText, FolderCog, GitBranch, LayoutDashboard, ListChecks, Server } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { Button } from "@/components/ui/button"
@@ -25,8 +25,9 @@ import { FormActions } from "./FormActions"
 import { GeneralSection } from "./GeneralSection"
 import { GitSection } from "./GitSection"
 import { InstructionsSection } from "./InstructionsSection"
+import { DeveloperMemoriesSection } from "../DeveloperMemoriesSection"
 
-const TAB_IDS = ["geral", "agentes", "git", "ambiente", "colunas", "instrucoes", "logs", "mesas"] as const
+const TAB_IDS = ["geral", "agentes", "git", "ambiente", "colunas", "instrucoes", "memorias", "logs", "mesas"] as const
 type CentralTab = (typeof TAB_IDS)[number]
 const FORM_TABS: readonly CentralTab[] = ["geral", "agentes", "git", "ambiente", "colunas", "instrucoes"]
 
@@ -37,6 +38,7 @@ const TABS: IntegrationTabDef<CentralTab>[] = [
     { id: "ambiente", label: "Ambiente", icon: Server },
     { id: "colunas", label: "Colunas e conclusão", icon: ListChecks },
     { id: "instrucoes", label: "Instruções", icon: FileText },
+    { id: "memorias", label: "Memórias", icon: Brain },
     { id: "logs", label: "Logs", icon: Bug },
     { id: "mesas", label: "Mesas", icon: LayoutDashboard },
 ]
@@ -100,6 +102,7 @@ export function CentralPage({ id }: { id: string }) {
                     {tab === "ambiente" && <EnvironmentSection form={form} centralId={id} />}
                     {tab === "colunas" && <ColumnsSection form={form} />}
                     {tab === "instrucoes" && <InstructionsSection form={form} />}
+                    {tab === "memorias" && <DeveloperMemoriesSection centralId={id} />}
                     {tab === "logs" && <CentralLogsSection centralId={id} />}
                     {tab === "mesas" && <CentralWorkbenchesSection centralId={id} />}
                     {FORM_TABS.includes(tab) && <FormActions dirty={dirty} pending={save.isPending} valid={form.formState.isValid} onUndo={() => form.reset(central.config)} />}

@@ -23,6 +23,7 @@ import { useMentorSettings, useSaveMentorSettings } from "../../hooks/useMentor"
 import { ScopeCard } from "../settings/ScopeCard"
 import { MentorContextSection } from "./MentorContextSection"
 import { MentorDeciderCard } from "./MentorDeciderCard"
+import { MentorRouterCard } from "./MentorRouterCard"
 import { MentorRunsSection } from "./MentorRunsSection"
 import { MentorTriggersCard } from "./MentorTriggersCard"
 import { MentorWriterCard } from "./MentorWriterCard"
@@ -103,6 +104,7 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                             </Card>
                             <MentorTriggersCard form={form} />
                             <MentorDeciderCard form={form} providers={providers} />
+                            <MentorRouterCard form={form} providers={providers} />
                             <MentorWriterCard form={form} providers={providers} />
                             {/* O cartão de centrais só usa `scope.*`, igual nas duas configurações. */}
                             <ScopeCard form={form as unknown as UseFormReturn<AdversarialSettings>} id="mentor" description="O Mentor avalia só as mesas das centrais escolhidas." listLabel="Centrais com o Agente Mentor" />

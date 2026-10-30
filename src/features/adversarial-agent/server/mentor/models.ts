@@ -1,6 +1,6 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 import { dbConnect } from "@/lib/db"
-import type { MentorLevel, MentorRunStatus, MentorSource, MentorUserTrigger } from "../../mentor/constants"
+import type { MentorLevel, MentorRunStatus, MentorSource, MentorTarget, MentorUserTrigger } from "../../mentor/constants"
 
 /** Uma execução do Agente Mentor — `adversarial_mentor_runs` (índices garantidos no primeiro uso). */
 export interface IMentorRun {
@@ -20,11 +20,16 @@ export interface IMentorRun {
     score: number | null
     threshold: number
     deciderReason: string | null
+    /** Triador (OPE-97): lista escolhida, confiança, motivo e probabilidades (JEV). Execuções antigas não têm. */
+    target?: MentorTarget | null
+    routerConfidence?: number | null
+    routerReason?: string | null
+    routerProbabilities?: Record<string, number> | null
     writerAction: "create" | "update" | "skip" | null
     writerReason: string | null
     sanitizerReason: string | null
-    /** Proposta do redator (no modo Sugerir, aguarda Aprovar/Descartar). */
-    proposal: { action: "create" | "update"; memoryId: string | null; text: string } | null
+    /** Proposta do redator (no modo Sugerir, aguarda Aprovar/Descartar). Antigas não têm `target` (= adversário). */
+    proposal: { action: "create" | "update"; memoryId: string | null; text: string; target?: MentorTarget; centralId?: string | null } | null
     memoryId: string | null
     error: string | null
     costUsd: number
@@ -51,6 +56,10 @@ const MentorRunSchema = new Schema<IMentorRun>(
         score: { type: Number, default: null },
         threshold: { type: Number, required: true },
         deciderReason: { type: String, default: null },
+        target: { type: String, default: null },
+        routerConfidence: { type: Number, default: null },
+        routerReason: { type: String, default: null },
+        routerProbabilities: { type: Schema.Types.Mixed, default: null },
         writerAction: { type: String, default: null },
         writerReason: { type: String, default: null },
         sanitizerReason: { type: String, default: null },

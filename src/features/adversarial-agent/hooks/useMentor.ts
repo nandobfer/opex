@@ -8,7 +8,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
-import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_UPDATED_EVENT } from "../mentor/constants"
+import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_TARGET_LABELS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../mentor/constants"
 import type { MentorRunListParams } from "../mentor/filters"
 import type { MentorSettings } from "../mentor/schemas"
 import type { MentorRunDto, MentorRunListDto, MentorSettingsDto } from "../mentor/types"
@@ -55,13 +55,13 @@ export function useMentorRunPages(params: MentorRunListParams) {
 export function useMentorRunDecision() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string }) =>
-            unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" && vars.text ? { text: vars.text } : {})).data),
+        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string; target?: MentorTarget }) =>
+            unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" ? { ...(vars.text ? { text: vars.text } : {}), ...(vars.target ? { target: vars.target } : {}) } : {})).data),
         onSuccess: (_saved, vars) => {
             // A lista da aba e as páginas filtradas (a execução pode sair do recorte de Situação).
             void queryClient.invalidateQueries({ queryKey: MENTOR_RUNS_KEY })
             void queryClient.invalidateQueries({ queryKey: ["adversarial", "memories"] })
-            toast.success(vars.decision === "approve" ? "Memória do Agente Adversário gravada" : "Sugestão descartada")
+            toast.success(vars.decision === "approve" ? `Memória gravada em "${vars.target ? MENTOR_TARGET_LABELS[vars.target].label : "Agente Adversário"}"` : "Sugestão descartada")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível concluir a ação")),
     })

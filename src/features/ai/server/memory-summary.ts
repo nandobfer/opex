@@ -67,6 +67,6 @@ export async function formatMemory(texto: string): Promise<FormattedMemory & { f
         failed = true
     }
     if (failed) return fallback
-    const parsed = parseFormattedMemory(text, settings.maxLength)
+    const parsed = parseFormattedMemory(text)
     return parsed ? { ...parsed, formatadaPorIa: true } : fallback
 }

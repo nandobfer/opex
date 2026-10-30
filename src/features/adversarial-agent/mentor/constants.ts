@@ -127,6 +127,32 @@ export const MENTOR_UPDATED_EVENT = "adversarial-mentor-updated"
 export const MENTOR_AUDIT_ENTITY = "MentorAgenteAdversario"
 export const MENTOR_DECISION_CONSUMPTION_ORIGIN = "adversarial-mentor-decision"
 export const MENTOR_WRITER_CONSUMPTION_ORIGIN = "adversarial-mentor-writer"
+export const MENTOR_ROUTER_CONSUMPTION_ORIGIN = "adversarial-mentor-router"
+
+/**
+ * Destinos das memórias do Mentor (OPE-97): os ids são as listas do catálogo de memórias dos agentes.
+ * O Triador escolhe um por execução; `developer-central` é a lista da central da mesa.
+ */
+export const MENTOR_TARGETS = ["adversarial", "developer-global", "developer-central"] as const
+export type MentorTarget = (typeof MENTOR_TARGETS)[number]
+
+export const MENTOR_TARGET_LABELS: Record<MentorTarget, { label: string; short: string; criteria: string }> = {
+    adversarial: {
+        label: "Agente Adversário",
+        short: "Adversário",
+        criteria: "A lição é sobre O QUE VERIFICAR ou detectar numa revisão de código: a classe de erro e que teste ou pergunta a teria pegado.",
+    },
+    "developer-global": {
+        label: "Agente desenvolvedor — globais",
+        short: "Desenvolvedor · global",
+        criteria: "A lição é sobre COMO FAZER o trabalho de desenvolvimento e vale em QUALQUER projeto (processo, hábito, cuidado recorrente).",
+    },
+    "developer-central": {
+        label: "Agente desenvolvedor — da central",
+        short: "Desenvolvedor · central",
+        criteria: "A lição é uma convenção, comando, padrão ou preferência do dono DESTE projeto (vale só nesta central).",
+    },
+}
 /** Origem gravada nas memórias criadas ou atualizadas pelo Mentor. */
 export const MENTOR_MEMORY_SOURCE = "mentor"
 

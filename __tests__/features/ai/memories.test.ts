@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type Row = { _id: string; agentId: string; texto: string; resumo: string; createdBy: string; updatedBy: string; createdAt: Date; updatedAt: Date }
+type Row = { _id: string; agentId: string; centralId?: string | null; texto: string; resumo: string; createdBy: string; updatedBy: string; createdAt: Date; updatedAt: Date }
 
-const store = vi.hoisted(() => ({ rows: [] as Row[], seq: 0, clock: 0 }))
+const store = vi.hoisted(() => ({ rows: [] as Row[], seq: 0, clock: 0, centrals: [] as { id: string; projectName: string }[] }))
 const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(async () => undefined),
   publishToChannels: vi.fn(async () => undefined),
@@ -12,9 +12,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishToChannels: mocks.publishToChannels }))
 vi.mock('@/features/ai/server/memory-summary', () => ({ formatMemory: mocks.formatMemory }))
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { exists: async (query: { _id: string }) => (store.centrals.some((central) => central.id === query._id) ? { _id: query._id } : null) } }))
+vi.mock('@/features/agentic/server/centrals', () => ({ listCentrals: async () => store.centrals.map((central) => ({ ...central })) }))
 vi.mock('@/lib/db/models/AgentMemory', () => {
-  const matches = (row: Row, query: Record<string, unknown>) =>
+  const matches = (row: Row, query: Record<string, unknown>): boolean =>
     Object.entries(query).every(([key, value]) => {
+      if (key === '$or') return (value as Record<string, unknown>[]).some((part) => matches(row, part))
       const field = (row as unknown as Record<string, unknown>)[key]
       if (value && typeof value === 'object' && '$in' in value) return (value.$in as unknown[]).includes(field)
       return String(field) === String(value)
@@ -55,11 +58,16 @@ vi.mock('@/lib/db/models/AgentMemory', () => {
     deleteOne: async (query: Record<string, unknown>) => {
       store.rows = store.rows.filter((row) => !matches(row, query))
     },
+    deleteMany: async (query: Record<string, unknown>) => {
+      const before = store.rows.length
+      store.rows = store.rows.filter((row) => !matches(row, query))
+      return { deletedCount: before - store.rows.length }
+    },
   }
   return { AgentMemory }
 })
 
-import { agentMemoryTexts, createAgentMemory, deleteAgentMemory, listAgentMemories, memoriesSection, updateAgentMemory } from '@/features/ai/server/agent-memory-service'
+import { agentMemoryTexts, createAgentMemory, deleteAgentMemory, deleteCentralMemories, developerMemoryTexts, getAgentMemory, listAgentMemories, memoriesSection, updateAgentMemory } from '@/features/ai/server/agent-memory-service'
 import { memoryTools } from '@/features/opex-agent/server/tools/memories'
 import { aiAgentsOfTab, opexMemoryAgentsFor } from '@/features/ai/agents'
 
@@ -72,7 +80,11 @@ beforeEach(() => {
   vi.clearAllMocks()
   store.rows = []
   store.seq = 0
+  store.centrals = []
 })
+
+const C1 = 'c0000000000000000000000a'
+const C2 = 'c0000000000000000000000b'
 
 describe('memórias do Agente Opex', () => {
   it('criar, editar e excluir: formatação, auditoria, tempo real e autor (dono)', async () => {
@@ -127,7 +139,7 @@ describe('memórias do Agente Opex', () => {
     await run('create_agent_memory', { agent: 'opex-global', text: 'Liste antes de alterar.' })
     const all = (await run('list_agent_memories', {})) as { total: number; agents: { agent: string; items: unknown[] }[] }
     expect(all.total).toBe(2)
-    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1], ['adversarial', 0]])
+    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1], ['adversarial', 0], ['developer-global', 0]])
     const id = created.id as string
     expect(await run('get_agent_memory', { agent: 'opex-client', memoryId: id })).toMatchObject({ text: 'Seja cordial com o cliente.' })
     expect(await run('update_agent_memory', { agent: 'opex-client', memoryId: id, text: 'Seja cordial e objetivo.' })).toMatchObject({ text: 'Seja cordial e objetivo.' })
@@ -162,5 +174,82 @@ describe('memórias do Agente Adversário', () => {
   it('regressão: a aba do Agente Opex não lista a memória do adversário (cada aba mostra as suas listas)', () => {
     expect(aiAgentsOfTab('agente-opex')).toEqual(['opex-global', 'opex-owner', 'opex-client'])
     expect(aiAgentsOfTab('agente-adversario')).toEqual(['adversarial'])
+  })
+})
+
+describe('memórias do agente desenvolvedor (OPE-97)', () => {
+  beforeEach(() => {
+    store.centrals = [
+      { id: C1, projectName: 'opex' },
+      { id: C2, projectName: 'site' },
+    ]
+  })
+
+  it('lista da central: isolada por central, com auditoria e tempo real levando o centralId', async () => {
+    const created = await createAgentMemory('developer-central', 'Rode pnpm lint antes do PR.', 'local', { centralId: C1 })
+    expect(created.memoria).toMatchObject({ centralId: C1, texto: 'Rode pnpm lint antes do PR.' })
+    await createAgentMemory('developer-central', 'Use a pasta app/.', 'local', { centralId: C2 })
+    expect((await listAgentMemories('developer-central', C1)).map((memory) => memory.texto)).toEqual(['Rode pnpm lint antes do PR.'])
+    expect(mocks.publishToChannels).toHaveBeenCalledWith(['private-integration-ai'], 'ai-memories-updated', { agentId: 'developer-central', centralId: C1 })
+    expect(mocks.recordAudit.mock.calls[0]?.[0]).toMatchObject({ acao: 'CRIAR', depois: { agente: 'developer-central', central: C1 } })
+    // A memória de uma central não é alcançada pela outra.
+    await expect(getAgentMemory('developer-central', created.memoria.id, C2)).rejects.toMatchObject({ status: 404 })
+    await expect(updateAgentMemory('developer-central', created.memoria.id, 'Outra central', 'local', { centralId: C2 })).rejects.toMatchObject({ status: 404 })
+    await expect(deleteAgentMemory('developer-central', created.memoria.id, 'local', C2)).rejects.toMatchObject({ status: 404 })
+    expect(await updateAgentMemory('developer-central', created.memoria.id, 'Rode pnpm lint e tsc.', 'local', { centralId: C1 })).toMatchObject({ memoria: { texto: 'Rode pnpm lint e tsc.' } })
+    await deleteAgentMemory('developer-central', created.memoria.id, 'local', C1)
+    expect(await listAgentMemories('developer-central', C1)).toEqual([])
+  })
+
+  it('central obrigatória na lista da central, recusada nas demais e inexistente dá 404', async () => {
+    await expect(listAgentMemories('developer-central')).rejects.toMatchObject({ status: 400, code: 'CENTRAL_REQUIRED' })
+    await expect(createAgentMemory('developer-central', 'Sem central.', 'local')).rejects.toMatchObject({ status: 400, code: 'CENTRAL_REQUIRED' })
+    await expect(listAgentMemories('developer-global', C1)).rejects.toMatchObject({ status: 400, code: 'CENTRAL_NOT_ALLOWED' })
+    await expect(listAgentMemories('developer-central', 'c0000000000000000000000f')).rejects.toMatchObject({ status: 404, code: 'CENTRAL_NOT_FOUND' })
+    await expect(listAgentMemories('developer-central', 'nao-e-id')).rejects.toMatchObject({ status: 404, code: 'CENTRAL_NOT_FOUND' })
+  })
+
+  it('prompt da central: globais e depois as da central, sem as de outra central nem as dos outros agentes', async () => {
+    await createAgentMemory('developer-central', 'Da central 1.', 'local', { centralId: C1 })
+    await createAgentMemory('developer-global', 'Global do desenvolvedor.', 'local')
+    await createAgentMemory('developer-central', 'Da central 2.', 'local', { centralId: C2 })
+    await createAgentMemory('opex-global', 'Do Agente Opex.', 'local')
+    await createAgentMemory('adversarial', 'Do adversário.', 'local')
+    expect(await developerMemoryTexts(C1)).toEqual(['Global do desenvolvedor.', 'Da central 1.'])
+    expect(await developerMemoryTexts(C2)).toEqual(['Global do desenvolvedor.', 'Da central 2.'])
+    // O Agente Opex não recebe as memórias do desenvolvedor.
+    expect(await agentMemoryTexts(opexMemoryAgentsFor('owner'))).toEqual(['Do Agente Opex.'])
+  })
+
+  it('excluir a central remove só as memórias dela', async () => {
+    await createAgentMemory('developer-central', 'Da central 1.', 'local', { centralId: C1 })
+    await createAgentMemory('developer-central', 'Da central 2.', 'local', { centralId: C2 })
+    await createAgentMemory('developer-global', 'Global.', 'local')
+    expect(await deleteCentralMemories(C1)).toBe(1)
+    expect(await developerMemoryTexts(C1)).toEqual(['Global.'])
+    expect(await developerMemoryTexts(C2)).toEqual(['Global.', 'Da central 2.'])
+    expect(await deleteCentralMemories(C1)).toBe(0)
+  })
+
+  it('ferramentas do Agente Opex: criar/editar/excluir na central e listar agrupado por central', async () => {
+    const created = await run('create_agent_memory', { agent: 'developer-central', centralId: C1, text: 'Siga o AGENTS.md.' })
+    expect(created).toMatchObject({ ok: true, agent: 'developer-central', centralId: C1, agentLabel: 'Memórias da central' })
+    await run('create_agent_memory', { agent: 'developer-global', text: 'Escreva testes.' })
+    const grouped = (await run('list_agent_memories', { agent: 'developer-central' })) as { total: number; agents: { centralId?: string; centralName?: string; items: unknown[] }[] }
+    expect(grouped.agents.map((list) => [list.centralName, list.items.length])).toEqual([['opex', 1], ['site', 0]])
+    const one = (await run('list_agent_memories', { agent: 'developer-central', centralId: C1 })) as { total: number }
+    expect(one.total).toBe(1)
+    const all = (await run('list_agent_memories', {})) as { total: number; agents: { agent: string }[] }
+    expect(all.total).toBe(2)
+    expect(all.agents.map((list) => list.agent)).toEqual(['opex-global', 'opex-owner', 'opex-client', 'adversarial', 'developer-global', 'developer-central', 'developer-central'])
+    const id = created.id as string
+    expect(await run('update_agent_memory', { agent: 'developer-central', centralId: C1, memoryId: id, text: 'Siga o AGENTS.md sempre.' })).toMatchObject({ text: 'Siga o AGENTS.md sempre.' })
+    await expect(run('get_agent_memory', { agent: 'developer-central', memoryId: id })).rejects.toMatchObject({ code: 'CENTRAL_REQUIRED' })
+    expect(await run('delete_agent_memory', { agent: 'developer-central', centralId: C1, memoryId: id })).toMatchObject({ ok: true })
+    await expect(run('list_agent_memories', { agent: 'developer-central', centralId: 'c0000000000000000000000f' })).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('a aba Desenvolvimento agêntico mostra só as globais (as da central ficam na página da central)', () => {
+    expect(aiAgentsOfTab('desenvolvimento-agentico')).toEqual(['developer-global'])
   })
 })

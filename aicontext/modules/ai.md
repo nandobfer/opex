@@ -378,16 +378,27 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   como texto; o refinamento só é marcado como esclarecido quando o turno produz a especificação **e**
   ela é gravada. Ver `modules/refinement.md`.
 
-## Memórias dos agentes (Agente Opex OPE-85, copiado do Ciliar · Agente Adversário OPE-87)
+## Memórias dos agentes (Agente Opex OPE-85, copiado do Ciliar · Agente Adversário OPE-87 · agente desenvolvedor OPE-97)
 
 - **Listas** (catálogo puro `src/features/ai/agents.ts`): `opex-global` (**Memórias globais**, valem
   no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono), `opex-client`
   (**Memórias do cliente**, só nos turnos do portal, para todos os clientes) e `adversarial`
-  (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa). Cada lista tem a
-  aba onde aparece (`tab`: `agente-opex` ou `agente-adversario`; `aiAgentsOfTab`). Uma lista nova
+  (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa), `developer-global`
+  (**Memórias globais do agente desenvolvedor**, valem em todas as centrais) e `developer-central`
+  (**Memórias da central**, uma lista por central — `scope: "central"`, `isCentralScopedAgent`; ver
+  `modules/agentic-dev.md`, "Memórias do agente desenvolvedor"). Cada lista tem a aba onde aparece
+  (`tab`: `agente-opex`, `agente-adversario` ou `desenvolvimento-agentico`; `aiAgentsOfTab` devolve só
+  as listas que não são por central — as da central aparecem na página da central). Uma lista nova
   entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
-- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `texto`, `resumo`, `origin`
-  opcional, `createdBy`, `updatedBy`, datas; índice `{ agentId, createdAt }`). **Sem limite de
+- **Listas por central**: toda operação exige `centralId` (sem ele, 400 `CENTRAL_REQUIRED`; central
+  inexistente, 404 `CENTRAL_NOT_FOUND`) e só alcança as memórias daquela central (memória de outra
+  central = 404); as demais listas recusam `centralId` (400 `CENTRAL_NOT_ALLOWED`). O DTO, a auditoria
+  (`central`) e o evento (`{ agentId, centralId }`) levam a central. Rotas:
+  `/api/agentic/centrals/[id]/memories[/memoryId]`; `deleteCentralMemories` limpa a lista ao excluir a
+  central.
+- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `centralId` (só nas listas por
+  central; `null` nas demais), `texto`, `resumo`, `origin` opcional, `createdBy`, `updatedBy`, datas;
+  índices `{ agentId, createdAt }` e `{ agentId, centralId, createdAt }`). **Sem limite de
   quantidade** por lista (o antigo limite de 50 e o 409 `MEMORY_LIMIT` saíram na OPE-92, como na
   MT-27 do my-tasks); texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
   desconhecida dá 404 `AI_AGENT_NOT_FOUND`.
@@ -400,26 +411,33 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
 - **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (módulo puro
   `src/features/ai/memories-prompt.ts`, compartilhado; ver `modules/opex-agent.md` e
-  `modules/adversarial-agent.md`). O prompt do Agente Opex nunca recebe a lista `adversarial`.
+  `modules/adversarial-agent.md`). O prompt do Agente Opex nunca recebe a lista `adversarial` nem as
+  do agente desenvolvedor; o agente desenvolvedor recebe `developerMemoryTexts(centralId)` (globais e
+  depois as da central) como instrução da sessão do OpenCode.
 - **Tela**: aba Agente Opex › Memórias mostra só as listas da aba (`aiAgentsOfTab("agente-opex")`:
   três cards); aba Agente Adversário › Memórias mostra o card `adversarial` (sem modelo de resumo
   próprio: usa o Resumo de memórias global). Cards `AgentMemoriesCard` com `MemoryList` — linha com o
-  resumo de uma linha que expande o texto completo, autor e "há X tempo", o **selo da origem**
+  resumo (inteiro, quebrando linha quando não cabe — nunca cortado na tela) que expande o texto completo, autor e "há X tempo", o **selo da origem**
   (`GraduationCap` + rótulo) quando houver e o **total de memórias** ao lado de **Nova memória**
   (sempre habilitado); **Nova memória**/editar com
   `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
   (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
   confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi
-  salva sem formatação. Tempo real por `useMemoriesRealtime`.
+  salva sem formatação. Tempo real por `useMemoriesRealtime`. O card aceita `centralId` nas listas por
+  central (`centralMemoriesSource`, cache `["ai","memories","developer-central",centralId]`); a seção
+  compartilhada `DeveloperMemoriesSection` monta os cards do agente desenvolvedor na aba
+  Desenvolvimento agêntico › Memórias e na aba Memórias da central.
 - **Ferramentas do agente**: grupo "Memórias do agente" (`list/get/create/update/delete_agent_memory`),
-  com o enum de todas as listas do catálogo — inclusive a do Agente Adversário.
+  com o enum de todas as listas do catálogo — inclusive a do Agente Adversário e as do agente
+  desenvolvedor (`centralId` opcional, obrigatório em `developer-central`).
 
 ## Feature "Resumo de memórias"
 
 - Aba `resumo-memorias` (`MemorySummaryTab`, moldura `FeatureFormShell` copiada do Ciliar): liga/
   desliga com a disponibilidade, provedor e modelo pelo cartão do Agente Opex (`OpexModelCard`:
   Gemini, Anthropic, OpenAI ou DeepSeek), instruções e **tamanho máximo do resumo** (40–200, padrão
-  80). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
+  80; é a orientação dada ao modelo: o resumo da IA é gravado **inteiro**, cortado só no teto de
+  segurança de 1.000 caracteres — `SUMMARY_SAFETY_MAX_LENGTH`, separado do máximo configurável). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
 - `formatMemory` (`server/memory-summary.ts`) nunca lança: com a feature disponível, pede ao modelo
   `{"texto","resumo"}` (texto revisado + resumo de uma linha; `parseFormattedMemory` tolera cercas e
   texto em volta); desligada, indisponível, com erro ou resposta inválida, salva o texto como escrito

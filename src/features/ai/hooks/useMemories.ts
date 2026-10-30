@@ -26,6 +26,9 @@ export const PENDING_PREFIX = "pendente-"
 /** Memórias de uma lista do catálogo `agents.ts`. */
 export const agentMemoriesSource = (agentId: AiAgentId, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId], basePath: `/ai/agents/${agentId}/memories`, enabled })
 
+/** Memórias do agente desenvolvedor de uma central (`developer-central`). */
+export const centralMemoriesSource = (centralId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "developer-central", centralId], basePath: `/agentic/centrals/${centralId}/memories`, enabled })
+
 export function optimisticMemories(list: MemoryDto[], action: MemoryAction): MemoryDto[] {
     const now = new Date().toISOString()
     if (action.type === "create") return [{ id: `${PENDING_PREFIX}${Date.now()}`, texto: action.texto, resumo: "", autor: null, criadaEm: now, atualizadaEm: now }, ...list]
@@ -85,7 +88,10 @@ export function useMemoriesRealtime(enabled: boolean): void {
         if (!enabled || !isPusherClientAvailable()) return
         const name = integrationChannel("ai")
         const channel = acquireChannel(name)
-        const handler = (payload: { agentId?: string }) => void queryClient.invalidateQueries({ queryKey: payload?.agentId ? ["ai", "memories", payload.agentId] : ["ai", "memories"] })
+        const handler = (payload: { agentId?: string; centralId?: string }) => {
+            const queryKey = payload?.agentId ? ["ai", "memories", payload.agentId, ...(payload.centralId ? [payload.centralId] : [])] : ["ai", "memories"]
+            void queryClient.invalidateQueries({ queryKey })
+        }
         channel.bind(AI_MEMORIES_UPDATED_EVENT, handler)
         return () => {
             channel.unbind(AI_MEMORIES_UPDATED_EVENT, handler)

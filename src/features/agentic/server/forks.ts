@@ -55,6 +55,7 @@ import type { ForkDto, ModelChoiceDto, WorkbenchDto, WorkbenchEventPayload } fro
 import { loadCentral, publishAgentic, repoForProject } from "./centrals"
 import { asRunState, asStage } from "./dto"
 import { applyForkNotes } from "./fork-notes"
+import { syncDeveloperMemories, withDeveloperMemories } from "./developer-memories"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, deleteForkFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
@@ -346,6 +347,8 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         text = `${forkNotesInstructions(fork.childNotes, "fork")}\n\n---\n${text}`
         await AgenticFork.updateOne({ _id: fork._id }, { $set: { childNotesSynced: true } })
     }
+    // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão do fork a cada turno.
+    text = withDeveloperMemories(await syncDeveloperMemories(client, fork.sessionId, fork.centralId), text)
     // Anexos da mensagem do usuário: conteúdo no prompt e links para baixar (fora do worktree).
     const attachments = fileIds?.length ? await promptFilesFor(fileIds, { downloadDir: agenticDownloadDir(fork.taskCode, fork.number), signal: controller.signal }) : { files: [], section: "" }
     text = withAttachmentsSection(text, attachments.section)

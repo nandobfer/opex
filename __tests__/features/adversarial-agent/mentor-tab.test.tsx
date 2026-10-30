@@ -75,6 +75,7 @@ const SAVED: MentorSettings = {
   enabled: true,
   decider: { provider: 'gemini', model: 'flash', variant: 'high' },
   level: 'selective',
+  router: { ...DEFAULT_MENTOR_SETTINGS.router, provider: 'jev', model: 'jev-latest' },
   writer: { ...DEFAULT_MENTOR_SETTINGS.writer, provider: 'anthropic', model: 'claude', variant: 'medium' },
   saveMode: 'suggest',
   context: { ...DEFAULT_MENTOR_SETTINGS.context, approvedPlan: true },
@@ -136,7 +137,8 @@ describe('aba Agente Mentor com a configuração salva', () => {
 
   it('decisor: o JEV conectado pode ser escolhido (não aparece como "não conectado")', () => {
     renderTab()
-    const jev = screen.getByRole('radio', { name: 'JEV' })
+    // O JEV aparece no decisor e no Triador; o primeiro é o do decisor.
+    const jev = screen.getAllByRole('radio', { name: 'JEV' })[0]!
     expect(jev.hasAttribute('disabled') || jev.getAttribute('aria-disabled') === 'true').toBe(false)
     expect(jev.getAttribute('title') ?? '').not.toContain('não conectado')
   })

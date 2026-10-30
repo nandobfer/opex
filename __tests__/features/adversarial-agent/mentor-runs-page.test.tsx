@@ -37,6 +37,7 @@ const run = (overrides: Partial<MentorRunDto>): MentorRunDto => ({
     writerReason: null,
     sanitizerReason: null,
     proposal: null,
+    target: null,
     memoryId: "mem1",
     error: null,
     costUsd: 0.01,
@@ -65,7 +66,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     window.history.replaceState(null, "", "/agente-mentor")
     mocks.settings.mockReturnValue({ data: { availability: { available: true, reason: null } } })
-    mocks.pages.mockReturnValue(result(page([run({ id: "m1" }), run({ id: "m2", taskCode: "OPE-21", status: "suggested", proposal: { action: "create", memoryId: null, text: "Regra" } })])))
+    mocks.pages.mockReturnValue(result(page([run({ id: "m1" }), run({ id: "m2", taskCode: "OPE-21", status: "suggested", proposal: { action: "create", memoryId: null, text: "Regra", target: "adversarial", centralId: null }, target: "adversarial" })])))
 })
 afterEach(cleanup)
 
