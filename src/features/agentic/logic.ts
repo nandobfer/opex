@@ -1,5 +1,6 @@
 import { LEGACY_PREVIEW_PORT_MAX, LEGACY_PREVIEW_PORT_MIN, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
+import { COLUMN_COLORS } from "@/features/tasks/board"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
@@ -80,6 +81,8 @@ export function parseCentralConfig(raw: unknown, sessionDirectory = "/"): Centra
         ...base,
         ...value,
         worktreeRoot: value.worktreeRoot?.trim() ? value.worktreeRoot : base.worktreeRoot,
+        // Cor fora da paleta (ou ausente, nas centrais antigas) vira neutra sem descartar o resto da configuração.
+        color: value.color && COLUMN_COLORS.includes(value.color) ? value.color : base.color,
         agents: { ...base.agents, ...value.agents },
         // Correção de CI: central sem valor próprio (anterior à OPE-81) herda o padrão global.
         git: { ...base.git, ...value.git, inheritCi: typeof value.git?.inheritCi === "boolean" ? value.git.inheritCi : value.git?.fixCi === undefined },

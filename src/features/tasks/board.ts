@@ -10,17 +10,17 @@ export const COLUMN_COLORS = ["violet", "sky", "emerald", "amber", "rose", "cyan
 export type ColumnColor = (typeof COLUMN_COLORS)[number]
 
 /** Classes completas (o Tailwind só gera o que aparece literal no código). */
-export const COLUMN_COLOR_STYLES: Record<ColumnColor, { label: string; border: string; dot: string; swatch: string }> = {
-    violet: { label: "Violeta", border: "border-t-violet-400", dot: "bg-violet-400", swatch: "bg-violet-500" },
-    sky: { label: "Azul", border: "border-t-sky-400", dot: "bg-sky-400", swatch: "bg-sky-500" },
-    emerald: { label: "Verde", border: "border-t-emerald-400", dot: "bg-emerald-400", swatch: "bg-emerald-500" },
-    amber: { label: "Âmbar", border: "border-t-amber-400", dot: "bg-amber-400", swatch: "bg-amber-500" },
-    rose: { label: "Rosa", border: "border-t-rose-400", dot: "bg-rose-400", swatch: "bg-rose-500" },
-    cyan: { label: "Ciano", border: "border-t-cyan-400", dot: "bg-cyan-400", swatch: "bg-cyan-500" },
-    orange: { label: "Laranja", border: "border-t-orange-400", dot: "bg-orange-400", swatch: "bg-orange-500" },
-    pink: { label: "Pink", border: "border-t-pink-400", dot: "bg-pink-400", swatch: "bg-pink-500" },
-    lime: { label: "Lima", border: "border-t-lime-400", dot: "bg-lime-400", swatch: "bg-lime-500" },
-    zinc: { label: "Cinza", border: "border-t-zinc-400", dot: "bg-zinc-400", swatch: "bg-zinc-500" },
+export const COLUMN_COLOR_STYLES: Record<ColumnColor, { label: string; border: string; dot: string; swatch: string; text: string }> = {
+    violet: { label: "Violeta", border: "border-t-violet-400", dot: "bg-violet-400", swatch: "bg-violet-500", text: "text-violet-400" },
+    sky: { label: "Azul", border: "border-t-sky-400", dot: "bg-sky-400", swatch: "bg-sky-500", text: "text-sky-400" },
+    emerald: { label: "Verde", border: "border-t-emerald-400", dot: "bg-emerald-400", swatch: "bg-emerald-500", text: "text-emerald-400" },
+    amber: { label: "Âmbar", border: "border-t-amber-400", dot: "bg-amber-400", swatch: "bg-amber-500", text: "text-amber-400" },
+    rose: { label: "Rosa", border: "border-t-rose-400", dot: "bg-rose-400", swatch: "bg-rose-500", text: "text-rose-400" },
+    cyan: { label: "Ciano", border: "border-t-cyan-400", dot: "bg-cyan-400", swatch: "bg-cyan-500", text: "text-cyan-400" },
+    orange: { label: "Laranja", border: "border-t-orange-400", dot: "bg-orange-400", swatch: "bg-orange-500", text: "text-orange-400" },
+    pink: { label: "Pink", border: "border-t-pink-400", dot: "bg-pink-400", swatch: "bg-pink-500", text: "text-pink-400" },
+    lime: { label: "Lima", border: "border-t-lime-400", dot: "bg-lime-400", swatch: "bg-lime-500", text: "text-lime-400" },
+    zinc: { label: "Cinza", border: "border-t-zinc-400", dot: "bg-zinc-400", swatch: "bg-zinc-500", text: "text-zinc-400" },
 }
 
 /** Ícones disponíveis para colunas (componentes em `components/column-icons.tsx`). */

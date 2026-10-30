@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { COLUMN_COLORS } from "@/features/tasks/board"
 import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
 import { AGENTIC_FILES_PER_MESSAGE } from "./files"
 
@@ -184,6 +185,8 @@ export const centralConfigSchema = z.object({
     /** Vazio usa `<diretório das sessões>/worktrees`. */
     worktreeRoot: z.union([absolutePath, z.literal("")]),
     maxConcurrent: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1, "Mínimo 1").max(10, "Máximo 10"),
+    /** Cor do projeto nos cards da Central de desenvolvimento e em Tarefas (paleta das colunas); `null` = neutra. */
+    color: z.enum(COLUMN_COLORS, { error: "Escolha uma cor da paleta" }).nullable(),
     /** Etapa sem override (`null`) usa o agente padrão da aba. */
     agents: z.object(Object.fromEntries(AGENT_ROLES.map((role) => [role, agentConfigSchema.nullable()])) as Record<AgentRole, z.ZodNullable<typeof agentConfigSchema>>),
     git: z.object({
@@ -284,6 +287,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
         sessionDirectory,
         worktreeRoot: sessionDirectory === "/" ? "" : `${sessionDirectory.replace(/\/+$/, "")}/worktrees`,
         maxConcurrent: 2,
+        color: null,
         agents: { planning: null, implementation: null, build: null, pr: null, fork: null },
         git: {
             baseBranch: "main",
