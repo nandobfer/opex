@@ -51,8 +51,11 @@ export function ServiceActionsBar({ status }: { status: OpencodeServiceStatusDto
             {button({ action: "start" }, "Iniciar", !canControl || up)}
             {button({ action: "stop" }, "Parar", !canControl || status.state === "stopped", "destructive")}
             {button({ action: "restart" }, "Reiniciar serviço", !canControl)}
-            {update?.latestSupported ? button({ action: "upgrade", version: update.latestSupported }, `Atualizar OpenCode (${update.latestSupported})`, !canControl || !update.available || update.latestSupported === update.current, "default") : null}
+            {update?.latestSupported
+                ? button({ action: "upgrade", version: update.latestSupported }, `Atualizar OpenCode (${update.latestSupported})`, !canControl || !update.available || update.latestSupported === update.current, "default")
+                : button({ action: "upgrade" }, "Atualizar OpenCode", true, "default")}
             {update?.latestMajor ? button({ action: "upgrade", version: update.latestMajor, allowMajor: true }, `Major nova ${update.latestMajor}`, !canControl) : null}
+            {!update?.latestSupported ? <p className="basis-full text-xs text-muted-foreground">{update ? "Nenhuma versão 2.x publicada no npm para atualizar." : "Não foi possível consultar as versões do OpenCode no npm: tente Atualizar o status mais tarde."}</p> : null}
             <ConfirmDialog
                 open={pending !== null}
                 onOpenChange={(open) => !open && !action.isPending && setPending(null)}

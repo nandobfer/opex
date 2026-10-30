@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { ErrorState } from "@/components/feedback/ErrorState"
+import { apiErrorMessage } from "@/lib/api"
 import { mcpContentFromForm, mcpFormFromDetail, mcpFormSchema, type McpFormValues } from "../form-schemas"
 import { useCreateOpencodeResource, useOpencodeResource, useUpdateOpencodeResource } from "../hooks/useOpencodeResources"
 import type { OpencodeResourceDto } from "../types"
@@ -95,8 +97,11 @@ export function McpFormDialog({ scope, target, onClose }: { scope: string; targe
                     <DialogTitle>{editing ? `Editar MCP ${editing.name}` : "Adicionar MCP"}</DialogTitle>
                     <DialogDescription>Validado antes de salvar; um backup da configuração é feito antes de cada alteração.</DialogDescription>
                 </DialogHeader>
-                {editing && detail.isLoading ? (
+                {editing && (detail.isLoading || detail.isFetching) ? (
                     <Skeleton className="h-64 w-full" />
+                ) : editing && (detail.isError || !detail.data?.mcp) ? (
+                    // Sem o detalhe não há formulário: abrir vazio sobrescreveria o MCP salvo.
+                    <ErrorState title="Não foi possível abrir o MCP" description={apiErrorMessage(detail.error, "Confira se o OpenCode está no ar e tente de novo.")} onRetry={() => void detail.refetch()} />
                 ) : (
                     <McpForm key={editing?.id ?? "new"} initial={mcpFormFromDetail(editing?.name ?? "", detail.data?.mcp ?? null)} creating={!editing} pending={pending} onSubmit={submit} onCancel={onClose} />
                 )}

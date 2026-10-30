@@ -44,7 +44,10 @@ export const useOpencodeResource = (kind: OpencodeResourceKind, id: string | nul
         queryKey: detailKey(id ?? ""),
         queryFn: async () => unwrapApi((await api.get<ApiResponse<OpencodeResourceDetailDto>>(`${BASE}/resources/${kind}/${seg(id ?? "")}`)).data),
         enabled: Boolean(id),
+        // O editor sempre parte do arquivo atual: nada de detalhe velho em cache ao reabrir.
         staleTime: 0,
+        gcTime: 0,
+        refetchOnMount: "always",
         retry: false,
     })
 

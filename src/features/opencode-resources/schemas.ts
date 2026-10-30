@@ -139,11 +139,22 @@ export type ResourceUpdateInput = z.infer<typeof resourceUpdateSchema>
 
 export const resourceToggleSchema = z.object({ enabled: z.boolean() })
 
+/**
+ * Origem de uma instalação (repositório ou pacote). Sem espaços nem caracteres especiais e começando
+ * por letra, número, `@` ou `.` — nunca por `-`, que viraria uma opção do `npx`/`skills add`.
+ */
+export const installSourceSchema = z
+    .string()
+    .trim()
+    .min(1, "Informe a origem (repositório ou pacote)")
+    .max(300)
+    .regex(/^[A-Za-z0-9@.][A-Za-z0-9@:/._#+~-]*$/, "Origem inválida: sem espaços nem caracteres especiais, começando por letra, número, @ ou .")
+
 export const resourceInstallSchema = z.object({
     kind: installableKindSchema,
     scope: scopeIdSchema,
     /** Skill: `dono/repo` ou URL; plugin: pacote npm (`nome`, `nome@versão`) ou `github:dono/repo`; MCP: pacote npm ou `github:dono/repo`. */
-    source: z.string().trim().min(1, "Informe a origem (repositório ou pacote)").max(300).regex(/^[A-Za-z0-9@:/._#+~-]+$/, "Origem inválida: sem espaços nem caracteres especiais"),
+    source: installSourceSchema,
     /** Skills do repositório a instalar (vazio = todas). */
     skills: z.array(resourceNameSchema).max(50).optional(),
     /** MCP: nome do servidor (padrão: derivado do pacote). */

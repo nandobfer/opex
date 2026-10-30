@@ -180,9 +180,11 @@ export async function updateResources(kind: OpencodeResourceKind, scope: string,
     const handler = HANDLERS[kind]
     if (!handler.updateVersions) throw unsupported(kind, "atualizar")
     const items = await listResources(kind, scope, { refresh: true })
-    const wanted = input.all ? items.filter((item) => item.version?.outdated) : items.filter((item) => input.ids?.includes(item.id))
+    // Em massa: os mesmos itens que a tela conta e lista na confirmação (ligados e desatualizados).
+    const wanted = input.all ? items.filter((item) => item.enabled && item.version?.outdated) : items.filter((item) => input.ids?.includes(item.id))
     if (!input.all && wanted.length !== (input.ids?.length ?? 0)) throw new DomainError(404, "Algum dos itens não foi encontrado neste escopo", "OPENCODE_RESOURCE_NOT_FOUND")
     if (wanted.length === 0) return { updated: [], backupId: null, restartRequired: false }
     const result = await mutate({ kind, scope, name: wanted.map((item) => item.name).join(",") }, "atualizar", actor, (ctx) => handler.updateVersions!(ctx, wanted), { itens: wanted.map((item) => item.name) })
-    return { updated: wanted.map((item) => ({ id: item.id, name: item.name })), backupId: result.backupId, restartRequired: result.restartRequired }
+    const treated = new Set(result.names ?? [])
+    return { updated: wanted.filter((item) => treated.has(item.name)).map((item) => ({ id: item.id, name: item.name })), backupId: result.backupId, restartRequired: result.restartRequired }
 }

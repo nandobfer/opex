@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { OPENCODE_RESOURCE_KINDS, type OpencodeResourceKind } from "@/features/opencode-resources/constants"
-import { creatableKindSchema, installableKindSchema, mcpConfigSchema, mcpSecretsSchema, resourceNameSchema, scopeIdSchema, type ResourceContentInput } from "@/features/opencode-resources/schemas"
+import { creatableKindSchema, installableKindSchema, mcpConfigSchema, mcpSecretsSchema, resourceInstallSchema, resourceNameSchema, scopeIdSchema, type ResourceContentInput } from "@/features/opencode-resources/schemas"
 import type { OpencodeResourceDto } from "@/features/opencode-resources/types"
 import { OPENCODE_LOG_LINES_DEFAULT, OPENCODE_LOG_LINES_MAX } from "@/features/opencode-service/constants"
 import { serviceActionBodySchema } from "@/features/opencode-service/schemas"
@@ -282,13 +282,8 @@ export const opencodeResourceTools = [
         confirmByDefault: true,
         description:
             "Instala skills de um repositório (source 'dono/repo' ou URL; skills = nomes, vazio = todas), um plugin (pacote npm ou 'github:dono/repo') ou um MCP de pacote npm/'github:dono/repo' (name opcional). Executa código de terceiros no host. Plugins exigem reiniciar o serviço.",
-        input: z.object({
-            kind: installableKindSchema,
-            scope,
-            source: z.string().trim().min(1).max(300),
-            skills: z.array(resourceNameSchema).max(50).optional(),
-            name: resourceNameSchema.optional(),
-        }),
+        // Mesmo schema da rota (sem os segredos, que vão por set_opencode_mcp_secrets).
+        input: resourceInstallSchema.omit({ secrets: true }).extend({ kind: installableKindSchema, scope }),
         summarize: (input) => `Instalar ${input.kind} de ${input.source} (${input.scope})`,
         execute: async (input, context) => (await resources()).installResource(input, agentActor(context)),
     }),

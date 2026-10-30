@@ -43,7 +43,9 @@ export function buildMcpEntry(input: McpConfigInput, existing: Json | undefined,
     const previous = existing && existing.type === input.type ? existing : {}
     const extra = Object.fromEntries(Object.entries(previous).filter(([key]) => !OWN_KEYS.has(key)))
     const base: Json = { ...extra, type: input.type, disabled: input.disabled === true }
-    if (input.timeout && Object.keys(input.timeout).length) base.timeout = input.timeout
+    // Sem timeout no formulário, o configurado no arquivo continua (o formulário não edita o timeout).
+    const timeout = input.timeout ?? (previous.timeout && typeof previous.timeout === "object" ? previous.timeout : undefined)
+    if (timeout && Object.keys(timeout).length) base.timeout = timeout
     if (input.type === "local") {
         base.command = [...input.command]
         if (input.cwd) base.cwd = input.cwd

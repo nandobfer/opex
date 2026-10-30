@@ -68,6 +68,13 @@ describe('ferramentas do Agente Opex para o OpenCode', () => {
     await expect(run('create_opencode_resource', { kind: 'agent', scope: 'global', name: 'a', frontmatterJson: '[1]' })).rejects.toThrow(/objeto JSON/)
   })
 
+  it('instalar usa o schema da rota: origem com espaço ou começando por "-" é recusada (F6)', () => {
+    const tool = findOpexTool('install_opencode_resource')!
+    expect(tool.input.safeParse({ kind: 'mcp', scope: 'global', source: '--registry=http://x' }).success).toBe(false)
+    expect(tool.input.safeParse({ kind: 'skill', scope: 'global', source: 'dono/repo extra' }).success).toBe(false)
+    expect(tool.input.safeParse({ kind: 'plugin', scope: 'global', source: '@escopo/pkg@1.0.0' }).success).toBe(true)
+  })
+
   it('editar MCP mantém os segredos atuais (só os nomes vão na lista)', async () => {
     mocks.getResource.mockResolvedValue({ format: 'mcp', mcp: { type: 'local', command: ['x'], url: null, cwd: null, disabled: false, environmentKeys: ['TOKEN'], headerKeys: [] } })
     await run('update_opencode_resource', { id: 'x', mcpJson: '{"type":"local","command":["y"]}' })

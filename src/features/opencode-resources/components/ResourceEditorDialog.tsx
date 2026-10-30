@@ -40,7 +40,7 @@ export function ResourceEditorDialog({ kind, scope, target, onClose }: { kind: M
                     <DialogDescription>O frontmatter é validado antes de salvar e um backup da configuração é feito antes de cada alteração.</DialogDescription>
                 </DialogHeader>
                 <AnimatePresence mode="wait" initial={false}>
-                    {editing && detail.isLoading ? (
+                    {editing && (detail.isLoading || detail.isFetching) ? (
                         <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
                             <Skeleton className="h-10 w-full" />
                             <Skeleton className="h-48 w-full" />

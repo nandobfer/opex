@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { joinCommand, splitCommand } from "./logic"
 import type { McpDetailDto } from "./types"
-import { agentConfigSchema, agentFrontmatterSchema, commandConfigSchema, mcpConfigSchema, resourceNameSchema, secretKeySchema, skillFrontmatterSchema, type ResourceContentInput } from "./schemas"
+import { agentConfigSchema, agentFrontmatterSchema, commandConfigSchema, mcpConfigSchema, resourceNameSchema, secretKeySchema, skillFrontmatterSchema, installSourceSchema, type ResourceContentInput } from "./schemas"
 
 /**
  * Schemas dos formulários da tela — montados a partir dos MESMOS schemas da API (`schemas.ts`), para a
@@ -126,12 +126,7 @@ export const mcpFormSchema = z
 export type McpFormValues = z.infer<typeof mcpFormSchema>
 
 export const installFormSchema = z.object({
-    source: z
-        .string()
-        .trim()
-        .min(1, "Informe a origem")
-        .max(300)
-        .regex(/^[A-Za-z0-9@:/._#+~-]+$/, "Origem inválida: sem espaços"),
+    source: installSourceSchema,
     skills: z.array(resourceNameSchema).max(50),
     name: optionalName,
 })

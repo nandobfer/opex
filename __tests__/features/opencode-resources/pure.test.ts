@@ -169,6 +169,11 @@ describe("entradas de MCP e segredos", () => {
         expect(detail.environmentKeys).toEqual(["TOKEN"])
         expect(JSON.stringify(detail)).not.toContain('"s"')
         expect(withSecrets(entry, { environment: [{ key: "TOKEN", value: null }] }).environment).toBeUndefined()
+        // O formulário não edita o timeout: editar mantém o do arquivo (F1); tipo trocado começa do zero.
+        const withTimeout = { type: "remote", url: "https://a", timeout: { startup: 60000 } }
+        expect(buildMcpEntry({ type: "remote", url: "https://b" }, withTimeout, undefined, "replace").timeout).toEqual({ startup: 60000 })
+        expect(buildMcpEntry({ type: "remote", url: "https://b", timeout: { startup: 5 } }, withTimeout, undefined, "replace").timeout).toEqual({ startup: 5 })
+        expect(buildMcpEntry({ type: "local", command: ["x"] }, withTimeout, undefined, "replace").timeout).toBeUndefined()
         expect(inspectorConfig("x", entry)).toEqual({ mcpServers: { x: { command: "npx", args: ["x"], env: { TOKEN: "s" } } } })
     })
 })

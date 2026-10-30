@@ -142,8 +142,8 @@ async function install(ctx: ScopeContext, input: { source: string; name?: string
 }
 
 async function updateVersions(ctx: ScopeContext, items: readonly OpencodeResourceDto[]) {
-    const targets = items.filter((item) => item.version?.outdated && item.version.available)
-    if (targets.length === 0) return {}
+    const targets = items.filter((item) => item.enabled && item.version?.outdated && item.version.available)
+    if (targets.length === 0) return { names: [] }
     const file = await ctx.configFile()
     await ctx.backup("atualizar", `Atualizar MCPs: ${targets.map((item) => item.name).join(", ")}`, [file.path])
     let text = file.text
@@ -154,7 +154,7 @@ async function updateVersions(ctx: ScopeContext, items: readonly OpencodeResourc
         text = setMcpEntry(text, target.name, { ...entry.config, command: pinMcpPackage(entry.config.command.map(String), target.version!.available!) })
     }
     await writeConfig(ctx, text)
-    return {}
+    return { names: targets.map((item) => item.name) }
 }
 
 /** Grava só os segredos (variáveis/cabeçalhos) — `null` remove; as demais chaves ficam. */

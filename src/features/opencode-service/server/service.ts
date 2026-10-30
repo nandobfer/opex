@@ -36,6 +36,8 @@ export interface ServiceActor {
 /** Operações em execução NESTE processo (as demais `running` foram interrompidas por um reinício). */
 const globalForOps = globalThis as unknown as { opencodeServiceOps?: Set<string> }
 const activeOps = (globalForOps.opencodeServiceOps ??= new Set<string>())
+const globalForReservation = globalThis as unknown as { opencodeServiceReservation?: { held: boolean } }
+const reservation = (globalForReservation.opencodeServiceReservation ??= { held: false })
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -232,6 +234,18 @@ async function execute(op: IOpencodeServiceOperation, command: string, settings:
  * devolve a operação `running`; as demais esperam terminar.
  */
 export async function runServiceAction(action: OpencodeServiceAction, body: ServiceActionBody, actor: ServiceActor): Promise<OpencodeServiceOperationDto> {
+    // Reserva síncrona (antes do primeiro await): duas chamadas simultâneas (duplo clique, tela +
+    // agente) não passam juntas pela conferência. Depois da criação, o documento `running` segura a vaga.
+    if (reservation.held) throw new DomainError(409, "Já há uma operação do serviço em andamento: aguarde terminar", "OPENCODE_OPERATION_RUNNING")
+    reservation.held = true
+    try {
+        return await startServiceAction(action, body, actor)
+    } finally {
+        reservation.held = false
+    }
+}
+
+async function startServiceAction(action: OpencodeServiceAction, body: ServiceActionBody, actor: ServiceActor): Promise<OpencodeServiceOperationDto> {
     const settings = await getSshSettings()
     if (!isSshConfigured(settings)) throw new DomainError(409, "Acesso SSH ao host do OpenCode não configurado: preencha host, usuário e chave privada na aba Configuração", "OPENCODE_SSH_NOT_CONFIGURED")
     if (!settings.fingerprint) throw new DomainError(409, "Confie na chave do host SSH antes (aba Controles › Acesso SSH)", "OPENCODE_SSH_UNTRUSTED")

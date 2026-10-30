@@ -70,6 +70,16 @@ describe("ações do serviço por SSH", () => {
         expect(mocks.runSsh).not.toHaveBeenCalled()
     })
 
+    it("duas chamadas simultâneas: só uma passa (reserva antes do primeiro await) (F5)", async () => {
+        mocks.runSsh.mockResolvedValue({ exitCode: 0, output: "" })
+        const [first, second] = await Promise.allSettled([runServiceAction("restart", {}, actor), runServiceAction("start", {}, actor)])
+        expect(first.status).toBe("fulfilled")
+        expect(second).toMatchObject({ status: "rejected", reason: { code: "OPENCODE_OPERATION_RUNNING" } })
+        expect(mocks.runSsh).toHaveBeenCalledTimes(1)
+        // A vaga é liberada no fim: a próxima chamada passa.
+        await expect(runServiceAction("start", {}, actor)).resolves.toMatchObject({ status: "succeeded" })
+    })
+
     it("uma operação por vez", async () => {
         mocks.exists.mockResolvedValue({ _id: "x" })
         await expect(runServiceAction("stop", {}, actor)).rejects.toMatchObject({ code: "OPENCODE_OPERATION_RUNNING" })

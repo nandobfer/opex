@@ -21,15 +21,37 @@ export function matchesStatus(item: OpencodeResourceDto, status: ResourceStatusF
 
 export const outdatedCount = (items: readonly OpencodeResourceDto[]) => items.filter((item) => item.enabled && item.version?.outdated).length
 
-/** Divide a linha de comando em partes, respeitando aspas simples/duplas (`npx -y "a b"` → 3 partes). */
+/**
+ * Divide a linha de comando em partes, como um shell simples: aspas simples são literais; dentro de
+ * aspas duplas (e fora de aspas) `\` escapa o caractere seguinte (`\"`, `\\`, espaço). É a inversa
+ * exata de `joinCommand`.
+ */
 export function splitCommand(line: string): string[] {
     const parts: string[] = []
     let current = ""
     let quote: '"' | "'" | null = null
     let started = false
-    for (const char of line.trim()) {
-        if (quote) {
-            if (char === quote) quote = null
+    const chars = [...line.trim()]
+    for (let index = 0; index < chars.length; index++) {
+        const char = chars[index]!
+        if (quote === "'") {
+            if (char === "'") quote = null
+            else current += char
+            continue
+        }
+        if (char === "\\" && index + 1 < chars.length) {
+            const next = chars[index + 1]!
+            // Dentro de aspas duplas só `\"` e `\\` são escapes; o resto mantém a barra.
+            if (quote === '"' && next !== '"' && next !== "\\") current += char
+            else {
+                current += next
+                index++
+            }
+            started = true
+            continue
+        }
+        if (quote === '"') {
+            if (char === '"') quote = null
             else current += char
             continue
         }
@@ -49,5 +71,5 @@ export function splitCommand(line: string): string[] {
     return parts
 }
 
-/** Junta as partes para exibir (com aspas quando há espaço). */
-export const joinCommand = (parts: readonly string[]) => parts.map((part) => (/[\s"']/.test(part) || !part ? JSON.stringify(part) : part)).join(" ")
+/** Junta as partes para exibir: entre aspas duplas quando preciso, escapando só `"` e `\`. */
+export const joinCommand = (parts: readonly string[]) => parts.map((part) => (/[\s"'\\]/.test(part) || !part ? `"${part.replace(/["\\]/g, "\\$&")}"` : part)).join(" ")

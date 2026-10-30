@@ -38,9 +38,11 @@ shell do OpenCode enquanto ele está no ar e gravado no campo) e **Impressão di
   que serão interrompidos.
 - **Atualizar**: versão disponível pelo npm (`@opencode/cli`). Sem pedido vai para a **última 2.x**
   (o Opex usa `@opencode/client` 2.x). Uma major nova (3.x+) aparece como botão próprio e exige
-  confirmação extra (`allowMajor`) sobre possível incompatibilidade. Roda em segundo plano.
+  confirmação extra (`allowMajor`) sobre possível incompatibilidade. Roda em segundo plano. Sem
+  resposta do npm, o botão continua visível e desabilitado, com o motivo.
 - **Operações** (`opencode_service_operations`, modelo `OpencodeServiceOperation`): uma por vez (409
-  `OPENCODE_OPERATION_RUNNING`), com ação, situação (`running`/`succeeded`/`failed`/`interrupted`),
+  `OPENCODE_OPERATION_RUNNING`; a vaga é reservada em memória antes de qualquer consulta, então duas
+  chamadas simultâneas — duplo clique, tela e agente — nunca passam juntas), com ação, situação (`running`/`succeeded`/`failed`/`interrupted`),
   versões de/para, fim da saída, erro, origem (`ui`/`opex-agent`) e sessão do agente. Depois do
   comando, espera a API voltar (ou parar) por até 45 s. A operação `running` que não é deste processo
   (o Opex reiniciou) vira **interrompida** na próxima leitura. A tela consulta a cada 3 s enquanto há
@@ -60,7 +62,8 @@ das sessões de cada **central**), busca por nome (fuse.js), filtro Todos/Ligado
 atualização, lista virtualizada acima de 50 (`VirtualizedRows`), linha com selos (origem, situação do
 MCP, versão instalada → disponível), **Switch** de ligar/desligar (otimista, reversão com toast) e menu
 (Editar, Atualizar, Testar conexão, Excluir/Desinstalar/Remover com confirmação). "Atualizar todos (N)"
-lista o que muda e pede confirmação. Com alterações não salvas na Configuração, pede para salvar.
+lista o que muda e pede confirmação; em massa entram só os itens **ligados** e desatualizados (os
+desligados ficam como estão), e o resultado informa só o que foi de fato atualizado. Com alterações não salvas na Configuração, pede para salvar.
 
 | Tipo | Lista | Criar/editar | Ligar/desligar | Instalar / atualizar |
 |---|---|---|---|---|
@@ -80,6 +83,14 @@ lista o que muda e pede confirmação. Com alterações não salvas na Configura
   cache do catálogo limpo (agentes e skills, também usado pelo Refinar tarefa), auditoria e Pusher.
 - **Ligar/desligar sem remover**: o manifesto `~/.config/opencode/.opex-disabled/manifest.json` (no
   host) guarda o caminho original ou a entrada do JSON removida; sobrevive à perda do banco do Opex.
+- **Editores**: sempre abrem com o conteúdo atual do host (o detalhe não fica em cache; enquanto a
+  busca roda, aparece o carregando). Se o detalhe falhar, o diálogo mostra o erro com Tentar novamente
+  e nenhum formulário (abrir vazio sobrescreveria o item salvo). No MCP, o comando é exibido com aspas
+  duplas quando preciso (`\"` e `\\` escapados) e lido de volta igual; o `timeout` do arquivo, que o
+  formulário não edita, é mantido ao salvar (também pelo Agente Opex).
+- **Origem da instalação**: sem espaços nem caracteres especiais e começando por letra, número, `@` ou
+  `.` (nunca `-`, que viraria opção do `npx`/`skills add`) — o mesmo schema na tela, na rota e na
+  ferramenta do agente.
 - **Segredos dos MCPs**: valores de `environment`/`headers` nunca saem do servidor (DTO só com os
   nomes; tela mostra "••••"). No formulário, valor vazio numa variável existente mantém o atual;
   remover a linha apaga. Auditoria, logs e eventos sem valores.

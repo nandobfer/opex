@@ -132,7 +132,7 @@ async function install(ctx: ScopeContext, input: { source: string }) {
 
 async function updateVersions(ctx: ScopeContext, items: readonly OpencodeResourceDto[]) {
     const targets = items.filter((item) => item.enabled && item.origin === "package").map((item) => item.name)
-    if (targets.length === 0) return {}
+    if (targets.length === 0) return { names: targets }
     const file = await ctx.configFile()
     await ctx.backup("atualizar", `Atualizar plugins: ${targets.join(", ")}`, [file.path])
     try {
@@ -140,7 +140,7 @@ async function updateVersions(ctx: ScopeContext, items: readonly OpencodeResourc
     } catch (error) {
         throw toDomainError(error)
     }
-    return RESTART
+    return { ...RESTART, names: targets }
 }
 
 export const pluginHandler: KindHandler = { list, get, remove, setEnabled, install, updateVersions }

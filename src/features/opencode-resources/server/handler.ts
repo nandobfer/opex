@@ -20,7 +20,8 @@ export interface KindHandler {
     remove(ctx: ScopeContext, name: string): Promise<MutationEffect>
     setEnabled(ctx: ScopeContext, name: string, enabled: boolean): Promise<MutationEffect>
     install?(ctx: ScopeContext, input: ResourceInstallInput): Promise<MutationEffect & { names: string[] }>
-    updateVersions?(ctx: ScopeContext, items: readonly OpencodeResourceDto[]): Promise<MutationEffect>
+    /** Devolve em `names` só os itens que de fato tratou. */
+    updateVersions?(ctx: ScopeContext, items: readonly OpencodeResourceDto[]): Promise<MutationEffect & { names: string[] }>
 }
 
 export function baseDto(ctx: ScopeContext, kind: OpencodeResourceKind, name: string, rest: Omit<OpencodeResourceDto, "id" | "kind" | "name" | "scope" | "scopeLabel">): OpencodeResourceDto {

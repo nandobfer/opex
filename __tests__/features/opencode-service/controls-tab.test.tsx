@@ -79,4 +79,11 @@ describe("aba Controles do OpenCode", () => {
         expect(screen.getByText(/configure e confie no acesso SSH/)).toBeTruthy()
         expect(screen.getByText("Não configurado")).toBeTruthy()
     })
+
+    it("sem resposta do npm o botão Atualizar OpenCode continua, desabilitado e com o motivo (F7)", () => {
+        mocks.status.mockReturnValue(ready(status({ update: null })))
+        render(<OpencodeControlsTab dirty={false} />)
+        expect(screen.getByRole("button", { name: "Atualizar OpenCode" }).hasAttribute("disabled")).toBe(true)
+        expect(screen.getByText(/Não foi possível consultar as versões do OpenCode no npm/)).toBeTruthy()
+    })
 })

@@ -209,10 +209,10 @@ async function install(ctx: ScopeContext, input: { source: string; skills?: stri
 
 async function updateVersions(ctx: ScopeContext, items: readonly OpencodeResourceDto[]) {
     const names = items.filter((item) => item.version && item.enabled).map((item) => item.name)
-    if (names.length === 0) return {}
+    if (names.length === 0) return { names }
     await ctx.backup("atualizar", `Atualizar skills: ${names.join(", ")}`, [...items.map((item) => item.path ?? "").filter(Boolean), ctx.paths.skillLockFile])
     await runOrFail(ctx.host, skillsUpdateCommand(names, ctx.paths.directory), "Não foi possível atualizar as skills", INSTALL_TIMEOUT_MS, { detached: true })
-    return {}
+    return { names }
 }
 
 export const skillHandler: KindHandler = { list, get, create, update, remove, setEnabled, install, updateVersions }

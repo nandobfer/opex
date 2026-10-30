@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { fromFrontmatter, jsonFormSchema, markdownFormSchema, mcpContentFromForm, mcpFormFromDetail, mcpFormSchema, toFrontmatter, type MarkdownFormValues } from "@/features/opencode-resources/form-schemas"
+import { fromFrontmatter, installFormSchema, jsonFormSchema, markdownFormSchema, mcpContentFromForm, mcpFormFromDetail, mcpFormSchema, toFrontmatter, type MarkdownFormValues } from "@/features/opencode-resources/form-schemas"
 import { joinCommand, matchesStatus, outdatedCount, splitCommand } from "@/features/opencode-resources/logic"
 import { withEnabled } from "@/features/opencode-resources/hooks/useOpencodeResources"
 import type { OpencodeResourceDto } from "@/features/opencode-resources/types"
@@ -62,11 +62,30 @@ describe("formulários dos recursos (mesmas regras da API)", () => {
     })
 })
 
+describe("origem da instalação (F6)", () => {
+    it("recusa espaço e origem começando por '-'", () => {
+        const ok = (source: string) => installFormSchema.safeParse({ source, skills: [], name: "" }).success
+        expect(ok("dono/repo")).toBe(true)
+        expect(ok("@escopo/pkg@1.0.0")).toBe(true)
+        expect(ok("github:dono/repo")).toBe(true)
+        expect(ok("--registry=http://x")).toBe(false)
+        expect(ok("-y")).toBe(false)
+        expect(ok("pkg extra")).toBe(false)
+    })
+})
+
 describe("lógica da tela", () => {
     it("divide e junta a linha de comando", () => {
         expect(splitCommand(`npx -y 'pacote x' "--a=b c"`)).toEqual(["npx", "-y", "pacote x", "--a=b c"])
         expect(splitCommand(`a ""`)).toEqual(["a", ""])
         expect(joinCommand(["npx", "a b"])).toBe('npx "a b"')
+    })
+
+    it("joinCommand e splitCommand são inversas com aspas e barra invertida (F2)", () => {
+        const cases = [["node", "-e", 'console.log("oi")'], ["/dir com espaço\\bin", "it's", ""], ["C:\\x\\", "\\\\"], ["a\\b"]]
+        for (const parts of cases) expect(splitCommand(joinCommand(parts))).toEqual(parts)
+        expect(joinCommand(["node", "-e", 'console.log("oi")'])).toBe('node -e "console.log(\\"oi\\")"')
+        expect(splitCommand('a\\ b "c\\d"')).toEqual(["a b", "c\\d"])
     })
 
     it("filtro de situação, contagem de atualizações e troca otimista", () => {
