@@ -161,6 +161,15 @@ semeado na primeira leitura (`ensureBoard`).
   colorido, sem rótulo), a **estimativa real** de horas e, **com cliente**, o **faturamento estimado**
   (`EstimateBadge` — ver `modules/orcamentos.md`), o chip de tipo, as **tags** e "Arquivada"; o
   título, o resumo de IA e o repositório (`GithubRepoLabel`) ficam no corpo.
+  - **Repositório na cor da central** (OPE-100, port do MT-33): no card do kanban, na coluna
+    Repositório da tabela e no card compacto do celular, o `org/repo` do `GithubRepoLabel` sai na
+    **cor configurada na central de desenvolvimento** daquele projeto (`config.color`, a mesma da
+    linha do projeto na Central — ver `modules/agentic-dev.md`). Componente `TaskProjectRepoLabel`
+    (`GithubRepoLabel` com `nameClassName` = `productColorClass` de `agentic/dev-center-product.ts`); as
+    cores vêm do `CentralColorsProvider` (layout de `/tarefas`, `useCentrals` +
+    `useProjectColor(projectId)`) e atualizam em tempo real (`useCentralsRealtime`:
+    `AGENTIC_UPDATED_EVENT` em `private-app` recarrega só as centrais). Sem central, sem cor, consulta
+    com erro ou fora do provider, o rótulo fica no padrão. A lateral da página da tarefa não muda.
   O **resumo de IA** aparece como uma linha sob o título quando existir, **sem substituir** a
   descrição (ver `modules/ai.md`). Quando uma **mesa de trabalho** da tarefa aguarda o usuário
   (revisão do plano, prévia, PR, permissão/pergunta) ou falhou, o card mostra o **motivo**

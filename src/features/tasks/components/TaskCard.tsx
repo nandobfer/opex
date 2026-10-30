@@ -12,8 +12,8 @@ import { RunningClock, useRunningTimer } from "@/features/time/components/Runnin
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
 import { WorkbenchWaitingLink } from "@/features/agentic/components/WorkbenchWaitingLink"
 import { workbenchProgressTone } from "@/features/agentic/logic"
-import { GithubRepoLabel, IssueLinkButton } from "@/features/github/components/shared"
-import { repoLabelOption, useRepoIndex } from "@/features/github/components/RepoIndexProvider"
+import { IssueLinkButton } from "@/features/github/components/shared"
+import { TaskProjectRepoLabel } from "./TaskProjectRepoLabel"
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityIcon, TaskTypeBadge } from "./TaskBadges"
 import { TaskTagsBadge } from "./TaskTagsBadge"
 import { EstimateBadge } from "./EstimateBadge"
@@ -41,7 +41,6 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
     const selected = selection?.selected ?? false
     const running = useRunningTimer(task.id)
     const progress = useWorkbenchProgress()?.progressOf(task.id)
-    const repoIndex = useRepoIndex()
     const waiting = progress && !progress.running ? progress : null
     const tone = waiting ? workbenchProgressTone(waiting) : null
     return (
@@ -120,7 +119,7 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
             {waiting && <WorkbenchWaitingLink taskId={task.id} taskCode={task.code} item={waiting} className="mb-2" />}
             {task.project && (
                 <div className="mb-2 text-[11px] text-muted-foreground">
-                    <GithubRepoLabel repo={repoLabelOption(task.project.repo, repoIndex)} />
+                    <TaskProjectRepoLabel project={task.project} />
                 </div>
             )}
             {task.issue?.notice && (

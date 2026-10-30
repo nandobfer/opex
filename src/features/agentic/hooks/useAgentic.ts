@@ -366,6 +366,22 @@ export function useWorkbenchProgressRealtime(): void {
     }, [queryClient])
 }
 
+/** Centrais alteradas no servidor (ex.: cor do projeto): recarrega só a lista de centrais. */
+export function useCentralsRealtime(): void {
+    const queryClient = useQueryClient()
+    useEffect(() => {
+        if (!isPusherClientAvailable()) return
+        const name = appChannel()
+        const channel = acquireChannel(name)
+        const handler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("centrals") })
+        channel.bind(AGENTIC_UPDATED_EVENT, handler)
+        return () => {
+            channel.unbind(AGENTIC_UPDATED_EVENT, handler)
+            releaseChannel(name)
+        }
+    }, [queryClient])
+}
+
 /** Centrais, mesas ou configuração alteradas no servidor: recarrega. */
 export function useAgenticRealtime(): void {
     const queryClient = useQueryClient()
