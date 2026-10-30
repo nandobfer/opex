@@ -130,7 +130,7 @@ Detalhes, exceções e como rodar só os testes afetados: `AGENTS.md`, seção 6
 
 ## Commits
 
-Mensagens claras, com bump de versão no `package.json`:
+Mensagens claras, no padrão Conventional Commits:
 ```
 feat(tasks): lista de tarefas com colunas configuráveis
 fix(integrations): corrige teste do Pusher em modo host
