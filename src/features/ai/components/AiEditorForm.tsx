@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, CodeXml, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, ScrollText, Swords } from "lucide-react"
+import { BrainCircuit, Bot, CodeXml, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, ScrollText, Swords, Orbit } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
@@ -23,6 +23,7 @@ import { TaskRefinementTab } from "./task-refinement/TaskRefinementTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
 import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
+import { MaddoxAgentTab } from "@/features/maddox-agent/components/settings/MaddoxAgentTab"
 import { AdversarialAgentTab } from "@/features/adversarial-agent/components/settings/AdversarialAgentTab"
 import { MENTOR_AI_TAB_DEF, MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
 import { MemorySummaryTab } from "./memory-summary/MemorySummaryTab"
@@ -48,6 +49,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "refinar-tarefa", label: "Agente Refinador", icon: Wand2 },
     { id: "revisao-pr", label: "Agente Revisor", icon: GitPullRequest },
     { id: "desenvolvimento-agentico", label: "Agente Desenvolvedor", icon: CodeXml },
+    { id: "agente-maddox", label: "Agente Maddox", icon: Orbit },
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-adversario", label: "Agente Adversário", icon: Swords },
     MENTOR_AI_TAB_DEF,
@@ -98,6 +100,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "refinar-tarefa" && <TaskRefinementTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "revisao-pr" && <PrReviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "agente-maddox" && <MaddoxAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-adversario" && <AdversarialAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-mentor" && <MentorAgentTab key={resetKey} onDirtyChange={setTabDirty} />}

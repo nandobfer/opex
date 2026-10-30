@@ -24,7 +24,7 @@ export const OPEX_SETTINGS_HREF = OWNER_OPEX_SETTINGS_HREF
 
 /** Agente sem configuração ativa: explica e (no app do dono) leva à aba de configuração. */
 export function OpexUnavailable({ reason }: { reason: string }) {
-    const { settingsHref } = useOpexScope()
+    const { settingsHref, agent } = useOpexScope()
     return (
         <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
             <Settings2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -32,7 +32,7 @@ export function OpexUnavailable({ reason }: { reason: string }) {
                 <p>{reason}</p>
                 {settingsHref && (
                     <Button asChild size="sm" variant="outline" className="h-7">
-                        <Link href={settingsHref}>Configurar o Agente Opex</Link>
+                        <Link href={settingsHref}>Configurar o {agent.label}</Link>
                     </Button>
                 )}
             </div>
@@ -42,6 +42,7 @@ export function OpexUnavailable({ reason }: { reason: string }) {
 
 /** Sessão aberta: mensagens gravadas + resposta ao vivo + campo de mensagem. */
 export function OpexChat({ sessionId, initialText }: { sessionId: string; initialText?: string }) {
+    const { agent } = useOpexScope()
     const view = useOpexView()
     const query = useOpexSession(sessionId)
     const stream = useOpexStream(sessionId)
@@ -53,7 +54,7 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
     const limits = view.data?.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
 
     const availability = view.data?.availability
-    const disabledReason = availability && !availability.available ? (availability.reason ?? "O Agente Opex não está disponível") : null
+    const disabledReason = availability && !availability.available ? (availability.reason ?? `O ${agent.label} não está disponível`) : null
     const running = stream.live !== null || (stream.status ?? query.data?.session.status) === "running" || send.isPending
 
     if (query.isLoading) {

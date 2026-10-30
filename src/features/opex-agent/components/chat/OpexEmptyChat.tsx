@@ -1,18 +1,24 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Bot, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import { listContainer, listItem } from "@/components/motion/presets"
 import { OPEX_CLIENT_SUGGESTIONS, OPEX_SUGGESTIONS } from "../../constants"
+import { MADDOX_CLIENT_SUGGESTIONS, MADDOX_SUGGESTIONS } from "@/features/maddox-agent/constants"
 import { useOpexScope } from "../OpexScopeProvider"
 
 /** Estado vazio do chat: o robô, o que o agente faz e sugestões para começar. */
 export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => void; disabled?: boolean }) {
-    const { kind, clientName } = useOpexScope()
-    const suggestions = kind === "client" ? OPEX_CLIENT_SUGGESTIONS : OPEX_SUGGESTIONS
-    const description =
-        kind === "client"
-            ? `Ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos de nova tarefa, estimar orçamentos e (para administradores) consultar o financeiro. Peça em linguagem natural.`
+    const { kind, clientName, agent } = useOpexScope()
+    const maddox = agent.id === "maddox"
+    const AgentIcon = agent.icon
+    const suggestions = maddox ? (kind === "client" ? MADDOX_CLIENT_SUGGESTIONS : MADDOX_SUGGESTIONS) : kind === "client" ? OPEX_CLIENT_SUGGESTIONS : OPEX_SUGGESTIONS
+    const description = maddox
+        ? kind === "client"
+            ? `Rodo no OpenCode e ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos e consultar o andamento. Peça em linguagem natural.`
+            : "Rodo no OpenCode, na sua máquina: uso o terminal, os arquivos, as skills e os MCPs do OpenCode, além das ferramentas do Opex. Peça em linguagem natural."
+        : kind === "client"
+          ? `Ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos de nova tarefa, estimar orçamentos e (para administradores) consultar o financeiro. Peça em linguagem natural.`
             : "Crio tarefas e prévias, explico como usar o app, conduzo as mesas de trabalho, lanço serviços, consulto o financeiro e configuro centrais e integrações. Peça em linguagem natural."
     return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-8 text-center">
@@ -23,7 +29,7 @@ export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => 
                 className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15 text-primary shadow-[0_0_28px_-6px_hsl(var(--primary))] ring-1 ring-primary/40"
                 aria-hidden
             >
-                <Bot className="h-7 w-7" />
+                <AgentIcon className="h-7 w-7" />
             </motion.span>
             <div className="max-w-sm space-y-1">
                 <p className="text-sm font-semibold">Como posso ajudar?</p>

@@ -11,6 +11,8 @@ import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
 import { REPLY_PRIORITY } from "@/components/agent-reply/ReplyTargetProvider"
 import { cn } from "@/lib/utils"
 import { OPEX_MESSAGE_MAX } from "../../constants"
+import { useOpexScope } from "../OpexScopeProvider"
+
 
 export interface OpexComposerHandle {
     focus: () => void
@@ -43,6 +45,7 @@ const MAX_HEIGHT = 180
 
 /** Campo do chat: Enter envia, Shift+Enter quebra linha; cresce até ~7 linhas. */
 export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(function OpexComposer({ onSend, attachments, onStop, running, sending, stopping, disabledReason, initialText }, ref) {
+    const agentLabel = useOpexScope().agent.label
     const [text, setText] = useState(initialText ?? "")
     const textRef = useRef(text)
     useEffect(() => {
@@ -102,8 +105,8 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
                     disabled={blocked}
                     onKeyDown={onKeyDown}
                     onPaste={onPaste}
-                    placeholder={blocked ? (disabledReason ?? "") : "Peça algo ao Agente Opex…"}
-                    aria-label="Mensagem para o Agente Opex"
+                    placeholder={blocked ? (disabledReason ?? "") : `Peça algo ao ${agentLabel}…`}
+                    aria-label={`Mensagem para o ${agentLabel}`}
                     data-ctrl-enter-ignore
                     className="max-h-[180px] min-h-[24px] flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 />

@@ -10,7 +10,7 @@ import { FieldTrigger } from "@/components/ui/field-trigger"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { AiModelDto } from "@/lib/ai/providers"
 import { MAX_MODEL_FALLBACKS, type ModelChoice } from "../../schemas"
-import { ModelSearchPicker } from "./ModelSearchPicker"
+import { ModelSearchPicker } from "@/features/ai/components/model-picker/ModelSearchPicker"
 
 const DEFAULT_OPTION = "__default__"
 

@@ -63,3 +63,9 @@ export const DEFAULT_MADDOX_CLIENT_INSTRUCTIONS = [
     "Nunca revele senhas, tokens ou caminhos internos da máquina.",
     "Responda em português do Brasil, em Markdown, de forma objetiva.",
 ].join("\n")
+
+/** Sugestões do estado vazio do chat (app do dono). */
+export const MADDOX_SUGGESTIONS = ["Quais tarefas estão em andamento?", "Rode os testes do repositório e me mostre o resultado", "Revise o último commit do projeto", "Crie uma tarefa a partir de uma ideia"] as const
+
+/** Sugestões do estado vazio do chat no portal do cliente. */
+export const MADDOX_CLIENT_SUGGESTIONS = ["Quais tarefas estão em andamento?", "Como está o andamento dos meus pedidos?", "Quero pedir uma nova tarefa"] as const

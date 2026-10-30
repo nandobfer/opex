@@ -1,10 +1,9 @@
 "use client"
 
 import { useMemo } from "react"
-import { useWatch, type UseFormReturn } from "react-hook-form"
+import { useWatch, type FieldPath, type FieldValues, type PathValue, type UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckTree } from "@/components/ui/check-tree/CheckTree"
-import type { OpexAgentSettings } from "../../schemas"
 import {
     buildOpexToolTree,
     defaultToolConfirms,
@@ -44,9 +43,21 @@ function ToolLeafMeta({ meta, overrides, onChange }: ToolLeafMetaProps) {
  * grupo, caixa "todas" por grupo, busca e contador. A configuração guarda as **desligadas** (ferramenta
  * nova nasce ligada). Cada ferramenta tem o próprio "Pede confirmação" (padrão: só as destrutivas).
  */
-export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSettings>; tools: readonly OpexToolMetaDto[] }) {
-    const disabledTools = useWatch({ control: form.control, name: "disabledTools" })
-    const overrides = useWatch({ control: form.control, name: "confirmationOverrides" })
+/** Campos da seleção de ferramentas (Agente Opex e Agente Maddox têm os mesmos). */
+export interface AgentToolFields extends FieldValues {
+    disabledTools: string[]
+    confirmationOverrides: Record<string, boolean>
+}
+
+const DEFAULT_DESCRIPTION =
+    'O agente usa quantas ferramentas precisar, sem limite de chamadas. Desmarque as que ele não deve usar. Em cada ferramenta, "Pede confirmação" mostra Confirmar/Cancelar no chat antes de executar: vem ligado nas destrutivas (excluir, arquivar, parar, gravar integração, usuário/senha/token de cliente…) e desligado nas demais.'
+
+export function OpexToolsCard<T extends AgentToolFields>({ form, tools, description = DEFAULT_DESCRIPTION }: { form: UseFormReturn<T>; tools: readonly OpexToolMetaDto[]; description?: string }) {
+    const disabledName = "disabledTools" as FieldPath<T>
+    const overridesName = "confirmationOverrides" as FieldPath<T>
+    const disabledTools = useWatch({ control: form.control, name: disabledName }) as string[] | undefined
+    const overrides = useWatch({ control: form.control, name: overridesName }) as Record<string, boolean> | undefined
+    const setField = (name: FieldPath<T>, value: unknown) => form.setValue(name, value as PathValue<T, FieldPath<T>>, { shouldDirty: true, shouldValidate: true })
     const tree = useMemo(() => buildOpexToolTree(tools), [tools])
     const byName = useMemo(() => new Map(tools.map((tool) => [tool.name, tool])), [tools])
     const locked = useMemo(() => new Set(tools.filter((tool) => tool.alwaysOn).map((tool) => tool.name)), [tools])
@@ -59,7 +70,7 @@ export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSe
             <ToolLeafMeta
                 meta={meta}
                 overrides={overrides ?? {}}
-                onChange={(tool, confirms) => form.setValue("confirmationOverrides", nextConfirmationOverrides(overrides ?? {}, tool, confirms), { shouldDirty: true, shouldValidate: true })}
+                onChange={(tool, confirms) => setField(overridesName, nextConfirmationOverrides(overrides ?? {}, tool, confirms))}
             />
         )
     }
@@ -68,10 +79,7 @@ export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSe
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Ferramentas</CardTitle>
-                <CardDescription>
-                    O agente usa quantas ferramentas precisar, sem limite de chamadas. Desmarque as que ele não deve usar. Em cada ferramenta, &quot;Pede confirmação&quot; mostra Confirmar/Cancelar no chat antes de
-                    executar: vem ligado nas destrutivas (excluir, arquivar, parar, gravar integração, usuário/senha/token de cliente…) e desligado nas demais.
-                </CardDescription>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent>
                 <CheckTree
@@ -81,7 +89,7 @@ export function OpexToolsCard({ form, tools }: { form: UseFormReturn<OpexAgentSe
                     renderLeafMeta={renderLeafMeta}
                     searchPlaceholder="Buscar ferramenta..."
                     emptyText="Nenhuma ferramenta encontrada."
-                    onChange={(next) => form.setValue("disabledTools", disabledOpexToolNames(tools, next), { shouldDirty: true, shouldValidate: true })}
+                    onChange={(next) => setField(disabledName, disabledOpexToolNames(tools, next))}
                 />
             </CardContent>
         </Card>

@@ -7,7 +7,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 vi.mock('framer-motion', () => framerMotionMock())
 // Busca de modelos simplificada: o gatilho + um botão por modelo.
-vi.mock('@/features/agentic/components/settings/ModelSearchPicker', () => ({
+vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data?: { id: string; name: string }[] }; onPick: (model: { id: string }) => void }) => (
     <div>
       {trigger}

@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react"
 import { AppShell } from "@/features/layout/components/AppShell"
-import { OpexNavItem } from "@/features/opex-agent/components/OpexNavItem"
-import { OpexScopeProvider } from "@/features/opex-agent/components/OpexScopeProvider"
+import { useMemo } from "react"
+import { AgentChatNavItem } from "@/features/opex-agent/components/agents/AgentChatNavItem"
+import type { OpexClientUiScope } from "@/features/opex-agent/components/OpexScopeProvider"
 import { clienteDashboardPath } from "../constants"
 import { CLIENTE_PERSISTENT_HREFS, clienteNav } from "./navigation"
 import type { ClientePortalSession } from "./ClientePortalContext"
@@ -17,23 +18,13 @@ import { useClientePortal } from "./ClientePortalContext"
  */
 export function ClientePortalShell({ session, version, children }: { session: ClientePortalSession; version?: string; children: ReactNode }) {
     const portal = useClientePortal()
-    // Agente Opex no rodapé do menu, no escopo do **usuário** logado (sessões e ferramentas privadas).
-    const footerItems = session.opexEnabled
-        ? (collapsed: boolean) => (
-              <OpexScopeProvider
-                  client={{
-                      clientId: portal.clientId,
-                      clientName: portal.clientName,
-                      userId: portal.user.id,
-                      userName: portal.user.username,
-                      isAdmin: portal.isAdmin,
-                      http: portal.api,
-                  }}
-              >
-                  <OpexNavItem collapsed={collapsed} />
-              </OpexScopeProvider>
-          )
-        : undefined
+    // Agentes de chat (Opex e Maddox, um item só) no rodapé do menu, no escopo do **usuário** logado.
+    const client = useMemo<OpexClientUiScope>(
+        () => ({ clientId: portal.clientId, clientName: portal.clientName, userId: portal.user.id, userName: portal.user.username, isAdmin: portal.isAdmin, http: portal.api }),
+        [portal.clientId, portal.clientName, portal.user.id, portal.user.username, portal.isAdmin, portal.api],
+    )
+    const initial = useMemo(() => ({ opex: session.opexEnabled, maddox: session.maddoxEnabled }), [session.opexEnabled, session.maddoxEnabled])
+    const footerItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} />
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: `Portal · ${session.clientName}`, homeHref: clienteDashboardPath() }}

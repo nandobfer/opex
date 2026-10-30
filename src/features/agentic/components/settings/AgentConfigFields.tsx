@@ -11,7 +11,7 @@ import { apiErrorMessage } from "@/lib/api"
 import type { AiAgentDto, AiModelDto } from "@/lib/ai/providers"
 import type { AgentConfig } from "../../schemas"
 import { FallbackModelsField, describeFallbacks } from "./FallbackModelsField"
-import { ModelSearchPicker } from "./ModelSearchPicker"
+import { ModelSearchPicker } from "@/features/ai/components/model-picker/ModelSearchPicker"
 
 const DEFAULT_OPTION = "__default__"
 const EMPTY: AgentConfig = { agent: null, model: null, variant: null }
