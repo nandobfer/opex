@@ -63,7 +63,7 @@ export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolCon
     for (const def of list) {
         tools[def.name] = dynamicTool({
             description: def.description,
-            inputSchema: def.input,
+            inputSchema: def.modelInputSchema ?? def.input,
             execute: async (input: unknown, options) => {
                 const startedAt = Date.now()
                 try {

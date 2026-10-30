@@ -177,6 +177,8 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     permitidos (`allowedDirectories`, caminhos absolutos em `ChipInput`, até 30, normalizados e sem
     repetição ao salvar; **vazio = qualquer diretório**, com aviso animado) e tempo máximo por comando
     (`maxTimeoutSeconds`, 5–1800, padrão 300). Configuração antiga sem `host` recebe o padrão.
+  - **MCPs** (`OpexMcpSection`, `?secao=mcps`): lista, cadastra, edita, habilita/desabilita e exclui
+    os servidores MCP do agente; salva sozinha (cada ação grava na hora). Detalhes em "MCPs".
   - **Memórias** (`OpexMemoriesSection`): três cards do Ciliar (`AgentMemoriesCard`) — **Memórias
     globais**, **Memórias do dono** e **Memórias do cliente** (só as listas com `tab: "agente-opex"`,
     `aiAgentsOfTab`; a lista do Agente Adversário fica na aba dele); salvam sozinhos (ver
@@ -221,6 +223,8 @@ risco (os catálogos são distintos).
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
 | Terminal do host | `get_host_terminal`, `run_host_command`* — detalhes abaixo |
 | Ambientes | `list_environments`, `get_environment`, `get_environment_logs`, `list_environment_deploys`, `get_environment_deploy`, criar/editar/adotar/apagar, `deploy_environment`*, `move_environment`*, levantar/derrubar*/reiniciar, configuração e limpeza do registry — os mesmos serviços de `/ambientes`; o fim de um deploy pedido pelo agente chega à sessão como aviso (`kind: "notice"`). Detalhes em `modules/environments.md` |
+| MCPs | `list_mcp_servers`, `get_mcp_server`, `test_mcp_server` (conecta e atualiza as ferramentas descobertas), `create_mcp_server`*, `update_mcp_server`*, `set_mcp_server_enabled`, `set_mcp_tool_confirmation`†, `delete_mcp_server`*, `set_client_mcp_access`* (libera/retira um MCP de um cliente) — mesmos serviços da seção MCPs; headers/variáveis saem do histórico (`redact`) e nunca são lidos de volta |
+| Ferramentas dos MCPs (dinâmicas) | `mcp_{identificador}_{ferramenta}` de cada MCP habilitado — ver "MCPs" |
 | Clientes | `list_clients`, `get_client` (usuários do portal e prévias de orçamento recentes), `create_client`*, `update_client`, `regenerate_client_token`*, `delete_client`*, `create_client_user`*, `update_client_user`*, `regenerate_client_user_token`*, `delete_client_user`* |
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
@@ -357,6 +361,54 @@ integração GitHub (Issues: leitura; escrita para registrar relações). Só no
   tarefa); sem vínculo, erro acionável indicando `get_issue`.
 - As instruções padrão orientam o agente a usar `rank_ready_tasks` para "qual tarefa começar".
 
+### MCPs
+
+Servidores **Model Context Protocol** cujas ferramentas o agente usa nas conversas. Cliente MCP da
+`@ai-sdk/mcp` (importada sob demanda), em `server/mcp/` (`connect`, `service`, `tools`) e no módulo
+puro `mcp.ts` (schemas, nomes, risco e confirmação).
+
+- **Cadastro** (`opex_mcp_servers`): nome, **identificador** (`^[a-z0-9_]{2,24}$`, único — 409
+  `OPEX_MCP_SLUG_TAKEN`; sugerido pelo nome), descrição, habilitado e o **transporte**:
+  - **HTTP** (Streamable HTTP) ou **SSE**: URL http(s) + **headers** secretos (ex.: `Authorization`);
+  - **stdio**: comando + argumentos (um por linha) + **variáveis de ambiente** secretas. O processo roda
+    **dentro do servidor do Opex** (container; só node/npx; sem os arquivos do host — a tela avisa) e
+    herda só `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL` e `TERM` mais as variáveis cadastradas, nunca as
+    do Opex (banco, chave de criptografia…).
+- **Segredos**: headers e variáveis ficam cifrados (`secretBox`); a API e a tela devolvem só as chaves
+  (`configured`). Na edição, valor vazio mantém o salvo da mesma chave, valor novo substitui e chave
+  fora da lista é removida; chave nova sem valor dá 400 `OPEX_MCP_SECRET_REQUIRED`; sem
+  `INTEGRATIONS_ENCRYPTION_KEY`, gravar segredo dá 400 `OPEX_MCP_ENCRYPTION_MISSING`.
+- **Testar conexão** (no diálogo, sem gravar; na edição os segredos vazios usam os salvos): conecta,
+  lista as ferramentas (nome, título, descrição e anotações `readOnlyHint`/`destructiveHint`) e o
+  servidor. Cada ferramenta mostra o nome que o agente vê, o selo de risco e o switch **"Pede
+  confirmação"** (componente compartilhado `ToolConfirmMeta` com a árvore de Ferramentas).
+- **Risco e confirmação** pela anotação do servidor: `readOnlyHint` = Leitura (não pede);
+  `destructiveHint: false` = Altera (pede); sem anotação = Destrutiva (pede). O ajuste fica em
+  `confirmations` (`{ [ferramenta original]: boolean }`, só o que difere do padrão) e vale no dono e
+  no portal. Ferramenta nova que surgir no servidor segue o padrão.
+- **No turno** (`loadMcpTools`): conecta em paralelo aos MCPs habilitados (no portal, só os
+  **liberados ao cliente**), com limite de 10 s (HTTP/SSE) ou 30 s (stdio), e converte cada ferramenta
+  em ferramenta do agente: nome `mcp_{identificador}_{ferramenta}` (só `[a-zA-Z0-9_-]`, até 64, sem
+  colisão), rótulo "{MCP} · {ferramenta}", descrição prefixada `[MCP nome]`, JSON Schema do servidor
+  (sem `$schema`/`$id`), card, confirmação, corte de saída e chamada com limite de 120 s. As conexões
+  fecham no fim do turno, inclusive com erro.
+- **Falha não derruba o agente**: MCP que não conecta fica de fora do turno; o agente recebe um aviso
+  no contexto do turno ("MCP X indisponível neste turno…") e a situação vai para o cadastro
+  (`lastError`/`lastCheckedAt`, exibidos na lista em tempo real). Erro devolvido pelo MCP
+  (`isError`) vira erro da ferramenta "MCP {nome}: …".
+- **Logs**: `module: "opex-agent-mcp"`, uma linha por chamada (`mcp`, `tool`, `sessionId`, `scope`,
+  `durationMs`, `ok`, `err`, tamanho da entrada — nunca a entrada), MCP indisponível e testes de conexão.
+- **Ação confirmada depois do turno**: `decideAction` reconecta só ao MCP da ferramenta
+  (`resolveMcpTool`), executa e fecha; MCP desabilitado, excluído, retirado do cliente ou sem a
+  ferramenta faz a ação falhar com o motivo.
+- **Portal do cliente**: na aba **Agente Opex** do cliente, o card **MCPs** liga os MCPs que o agente
+  do cliente pode usar (desligados por padrão; aviso de que os usuários usam as credenciais do MCP).
+  Antes de cada chamada no portal, o MCP é revalidado (liberado ao cliente **e** habilitado; senão
+  403 `OPEX_TOOL_DISABLED`). Excluir um MCP o retira dos clientes.
+- **Auditoria** na entidade `McpServidor` (criar/editar/habilitar/confirmação/excluir; sem segredos,
+  sem argumentos e sem a query da URL) e evento `opex-mcp-updated` `{ id }` em `private-app`
+  (`useOpexMcpRealtime`).
+
 ### Terminal do host
 
 O app roda em container; os comandos rodam na **máquina do servidor OpenCode** (o host), pelo `shell`
@@ -490,6 +542,9 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `GET /api/opex/jobs?filter=scheduled\|finished\|all&origin=all\|owner\|client&clientId=&userId=` | Jobs do dono e do portal (agendados por horário; demais do mais recente) |
 | `POST /api/opex/jobs` | Cria `{ title, prompt, sessionId, when, amount?, unit?, date?, time?, sourceJobId? }` (reexecução de job do portal mantém o escopo dele) |
 | `GET/PATCH/DELETE /api/opex/jobs/[id]` | Detalhe; edita (agendado, só job do dono; 403 `OPEX_JOB_CLIENT_READONLY`); cancela (agendado) |
+| `GET/POST /api/opex/mcp-servers` | MCPs (segredos só pelas chaves); cadastra |
+| `GET/PUT/PATCH/DELETE /api/opex/mcp-servers/[id]` | Detalhe; edita; `{ enabled }`; exclui (e retira dos clientes) |
+| `POST /api/opex/mcp-servers/test` | Testa o rascunho (`id` opcional para usar os segredos salvos): `{ ok, tools, error, durationMs, serverInfo }` |
 
 ### Portal do cliente
 
@@ -507,31 +562,34 @@ Todas exigem `requireClientActor` + `assertClientOpexEnabled`; o dono só entra 
 
 ### Configuração do cliente (dono)
 
-`GET/PUT /api/integrations/orcamentos/clients/[id]/opex-agent` (`{ enabled, enabledTools }`),
-auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`.
+`GET/PUT /api/integrations/orcamentos/clients/[id]/opex-agent` (`{ enabled, enabledTools,
+enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNKNOWN`; MCP inexistente,
+400 `OPEX_MCP_NOT_FOUND`; sem `enabledMcpServers`, os MCPs liberados ficam como estão.
 
 ## Dados
 
 - Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
-  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs") e `opex_files` (só metadados: sessão, nome, mime,
+  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`) e `opex_files` (só metadados: sessão, nome, mime,
   tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
   `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`
-  (`enabled`, `disabledTools`, `enabledOptInTools`).
+  (`enabled`, `disabledTools`, `enabledOptInTools`, `enabledMcpServers`).
 - `{ feature: "opex-agent" }` em `ai_feature_settings`; objetos em `opex/…` no bucket do Storage S3.
 
 ## Código
 
 - Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
-  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues).
+  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues), `mcp` (MCPs: schemas, nomes, risco e confirmação).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`; `server/tools/` (um arquivo por grupo +
+  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`, `server/mcp/` (`connect`, `service`, `tools`); `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
-  `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`.
+  `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`, `useOpexMcpServers`.
 - `components/`: `OpexNavItem`, `OpexPanel`, `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
-  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` e `settings/client/`.
+  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` (com `settings/mcp/` e `ToolConfirmMeta`) e `settings/client/` (com
+  `ClienteOpexMcpCard`). O campo secreto somente-escrita é `SecretValueInput`
+  (`src/components/ui/secret-value-input.tsx`), compartilhado com `SecretField` das Integrações.
 - Pontos de montagem: `AppSidebar` (`footerItems`), `AppShell` (`sidebarFooterItems`),
   `AppLayoutShell`, `AiEditorForm`/`AI_TABS`, `prepareModel`/`PreparedModel` exportados de
   `src/lib/ai/stream.ts`, `loadFeature`/`availability`/`assertCatalog`/`persistFeature`/
@@ -550,5 +608,7 @@ portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (se
 migração da configuração antiga), `jobs` (serviço: agendamento, atraso, fila, confirmação, perdidos,
 escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agendado com o agente
 indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
-desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
+conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar
+MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memory-summary` e `agent-settings-tabs`.

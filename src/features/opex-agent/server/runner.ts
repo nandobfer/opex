@@ -20,6 +20,7 @@ import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
 import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
 import { opexMemoryAgentsFor } from "@/features/ai/agents"
+import type { McpTurnTools } from "./mcp/tools"
 import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
@@ -57,17 +58,20 @@ async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings)
     return { tools: enabledClientOpexServerTools(names, scope.actor.isAdmin), overrides: {} }
 }
 
-function findTool(scope: OpexServerScope, name: string): OpexTool | undefined {
-    return scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)
+/** Ferramentas de MCP do turno (pelo nome no modelo). */
+type TurnToolMap = ReadonlyMap<string, OpexTool>
+
+function findTool(scope: OpexServerScope, name: string, extra?: TurnToolMap): OpexTool | undefined {
+    return (scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)) ?? extra?.get(name)
 }
 
-function turnContext(): string {
+function turnContext(notices: readonly string[] = []): string {
     const now = nowContext()
-    return `Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`
+    return [`Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`, ...notices].join(" ")
 }
 
-const redactInput = (scope: OpexServerScope, toolName: string, input: unknown) => {
-    const tool = findTool(scope, toolName)
+const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => {
+    const tool = findTool(scope, toolName, extra)
     if (!tool?.redact) return input
     const parsed = tool.input.safeParse(input)
     return parsed.success ? tool.redact(parsed.data) : input
@@ -210,13 +214,13 @@ interface TurnArgs {
     jobId: string | null
 }
 
-async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId): Promise<ModelMessage[]> {
+async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, notices: readonly string[] = []): Promise<ModelMessage[]> {
     const stored = await OpexMessage.find({ sessionId: new Types.ObjectId(sessionId) }).sort({ seq: 1 }).select({ role: 1, modelMessages: 1 }).lean<Pick<IOpexMessage, "role" | "modelMessages">[]>()
     const turns = stored.map((item) => ({ role: item.role, modelMessages: parseModelMessages(item.modelMessages) }))
     // Os arquivos entram só nos turnos que couberam no orçamento, no formato que o provedor atual lê.
     const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider)
     // A data e a hora do turno vão só no envio, ao fim da mensagem do usuário, para o prompt de sistema não mudar.
-    return withTurnContext(messages, turnContext()) as ModelMessage[]
+    return withTurnContext(messages, turnContext(notices)) as ModelMessage[]
 }
 
 function parseModelMessages(json: string): unknown[] {
@@ -238,14 +242,23 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     let usage: OpexUsageDto | null = null
     let responseMessages: unknown[] | null = null
     const toolNames: string[] = []
+    let mcp: McpTurnTools | null = null
+    let lookup: TurnToolMap | undefined
 
     try {
         const session = await loadSession(sessionId, scope)
-        const history = await loadHistory(sessionId, session.summary, main.provider!)
-        const { tools, overrides } = await toolsForTurn(scope, settings)
+        const { tools: appTools, overrides: appOverrides } = await toolsForTurn(scope, settings)
+        // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
+        mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
+        const mcpTools: TurnToolMap = new Map(mcp.tools.map((tool) => [tool.name, tool]))
+        const appNames = new Set(appTools.map((tool) => tool.name))
+        const tools = [...appTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
+        const overrides = { ...mcp.overrides, ...appOverrides }
+        const history = await loadHistory(sessionId, session.summary, main.provider!, mcp.notices)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
+        lookup = mcpTools
         const runtime = buildToolRuntime(tools, toolContext, overrides, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
             ...(scope.kind === "client"
@@ -253,7 +266,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                       authorize: async (tool: OpexTool) => {
                           const current = toolContext.scope
                           if (!current || current.kind !== "client") return
-                          const actor = await assertClientToolAllowed(tool.name, current.actor)
+                          const actor = await assertClientToolAllowed(tool.name, current.actor, tool.mcpServerId)
                           toolContext.scope = { kind: "client", actor }
                       },
                   }
@@ -280,15 +293,15 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     publishLine(sessionId, { type: "reasoning-delta", text: part.text ?? "" })
                     break
                 case "tool-input-start": {
-                    const tool = findTool(scope, part.toolName)
+                    const tool = findTool(scope, part.toolName, lookup)
                     publishLine(sessionId, { type: "tool-start", id: part.id, name: part.toolName, group: tool?.group ?? null, label: tool?.label ?? part.toolName })
                     break
                 }
                 case "tool-call": {
-                    const tool = findTool(scope, part.toolName)
+                    const tool = findTool(scope, part.toolName, lookup)
                     toolNames.push(tool?.label ?? part.toolName)
                     publishLine(sessionId, { type: "tool-start", id: part.toolCallId, name: part.toolName, group: tool?.group ?? null, label: tool?.label ?? part.toolName })
-                    publishLine(sessionId, { type: "tool-input", id: part.toolCallId, input: stringifyForDisplay(redactInput(scope, part.toolName, part.input)) })
+                    publishLine(sessionId, { type: "tool-input", id: part.toolCallId, input: stringifyForDisplay(redactInput(scope, part.toolName, part.input, lookup)) })
                     break
                 }
                 case "tool-result": {
@@ -327,7 +340,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     break
             }
         }
-        if (!aborted && !errorMessage) responseMessages = redactToolCalls(await result.responseMessages, (name, input) => redactInput(scope, name, input))
+        if (!aborted && !errorMessage) responseMessages = redactToolCalls(await result.responseMessages, (name, input) => redactInput(scope, name, input, lookup))
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
@@ -336,6 +349,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         }
     } finally {
         await prepared?.dispose().catch(() => undefined)
+        await mcp?.close().catch(() => undefined)
     }
 
     await finishTurn(args, { startedAt, errorMessage, aborted, usage, responseMessages, toolNames })

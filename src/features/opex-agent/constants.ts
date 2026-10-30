@@ -41,6 +41,7 @@ export const OPEX_TOOL_GROUPS = [
     "clients",
     "host",
     "environments",
+    "mcps",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
@@ -72,6 +73,7 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     clients: { label: "Clientes", description: "Clientes do portal, usuários do portal e prévias de orçamento" },
     host: { label: "Terminal do host", description: "Executar comandos na máquina do OpenCode (fora do container do app)" },
     environments: { label: "Ambientes", description: "Listar, implantar, levantar/derrubar, mover, logs e histórico dos ambientes Docker Compose (/ambientes)" },
+    mcps: { label: "MCPs", description: "Cadastrar, editar, habilitar/desabilitar, testar e excluir os MCPs do agente, a confirmação de cada ferramenta e os MCPs liberados a cada cliente" },
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */

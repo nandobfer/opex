@@ -1,6 +1,7 @@
-import { AlarmClock, BookOpen, Boxes, Brain, BrainCircuit, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
+import { AlarmClock, BookOpen, Boxes, Cable, PlugZap, Brain, BrainCircuit, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Paperclip, Plug, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
+import { OPEX_MCP_TOOL_GROUP } from "../mcp"
 
 export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     context: Compass,
@@ -25,6 +26,7 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     finance: Wallet,
     clients: Users,
     environments: Boxes,
+    mcps: PlugZap,
 }
 
 const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
@@ -39,7 +41,8 @@ const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
     jobs: AlarmClock,
 }
 
-export const toolIcon = (group: OpexToolGroup | OpexClientToolGroup | null): LucideIcon => {
+export const toolIcon = (group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | null): LucideIcon => {
     if (!group) return Wrench
+    if (group === OPEX_MCP_TOOL_GROUP) return Cable
     return OPEX_TOOL_GROUP_ICONS[group as OpexToolGroup] ?? OPEX_CLIENT_GROUP_ICONS[group as OpexClientToolGroup] ?? Wrench
 }

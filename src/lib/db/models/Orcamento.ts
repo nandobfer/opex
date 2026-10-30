@@ -17,6 +17,8 @@ export interface IOrcamentoClientOpexAgent {
     disabledTools: string[]
     /** Ferramentas "desligadas por padrão" (ex.: Jobs agendados) que o dono ligou para o cliente. */
     enabledOptInTools?: string[]
+    /** MCPs do Agente Opex liberados para o cliente (ids de `opex_mcp_servers`; desligado por padrão). */
+    enabledMcpServers?: string[]
 }
 
 export interface IOrcamentoClient {
@@ -54,6 +56,7 @@ const OrcamentoClientSchema = new Schema<IOrcamentoClient>(
             enabled: { type: Boolean, default: true },
             disabledTools: { type: [String], default: [] },
             enabledOptInTools: { type: [String], default: [] },
+            enabledMcpServers: { type: [String], default: [] },
         },
     },
     { collection: "orcamento_clients", versionKey: false, timestamps: true },

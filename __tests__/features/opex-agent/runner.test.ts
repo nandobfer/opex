@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   enabledNames: vi.fn(async () => ({ names: ['list_tasks'], config: { enabled: true, disabledTools: [] } })),
   finishJobTurn: vi.fn(async () => {}),
   clientActorFor: vi.fn(),
+  mcpClose: vi.fn(async () => {}),
+  loadMcpTools: vi.fn(),
 }))
 
 vi.mock('ai', () => ({
@@ -118,6 +120,8 @@ vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({
   enabledClientOpexServerTools: () => [fakeTool],
   findOpexClientServerTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
 }))
+const mcpTool = { name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search', risk: 'read', description: '[MCP GitHub] Busca', mcpServerId: 'm1', input: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) }, execute: async () => 'ok' }
+vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ loadMcpTools: mocks.loadMcpTools }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
   enabledOpexTools: () => [fakeTool],
   findOpexTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
@@ -177,6 +181,7 @@ beforeEach(() => {
   mocks.responseMessages = []
   mocks.available = true
   mocks.gate = null
+  mocks.loadMcpTools.mockResolvedValue({ tools: [], overrides: {}, notices: [], close: mocks.mcpClose })
   for (const model of [sessions(), messages(), store.files as Model]) model.docs.splice(0)
 })
 
@@ -308,6 +313,33 @@ describe('runner do Agente Opex', () => {
     await expect(sendMessage(sessionId, { text: 'Segunda' }, 'local')).rejects.toMatchObject({ status: 409, code: 'OPEX_SESSION_BUSY' })
     release()
     await vi.waitFor(() => expect(isTurnActive(sessionId)).toBe(false))
+  })
+})
+
+describe('runner com MCPs', () => {
+  it('soma as ferramentas dos MCPs, mostra o card com o rótulo do MCP, avisa o MCP indisponível e fecha as conexões no fim', async () => {
+    mocks.loadMcpTools.mockResolvedValue({ tools: [mcpTool], overrides: { mcp_gh_search: true }, notices: ['MCP "Jira" indisponível neste turno (timeout).'], close: mocks.mcpClose })
+    const sessionId = await newSession()
+    mocks.parts = [
+      { type: 'tool-call', toolCallId: 't1', toolName: 'mcp_gh_search', input: { q: 'bug' } },
+      { type: 'tool-result', toolCallId: 't1', toolName: 'mcp_gh_search', output: 'ok' },
+      { type: 'finish', finishReason: 'stop', totalUsage: {} },
+    ]
+    const lines = await runTurn(sessionId, 'Busque bugs')
+    const options = mocks.streamText.mock.calls[0]![0] as { messages: { content: { text: string }[] }[]; tools: Record<string, unknown> }
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'mcp_gh_search'])
+    expect(options.messages[0]!.content.at(-1)!.text).toContain('MCP "Jira" indisponível')
+    expect(lines.find((line) => line.type === 'tool-start')).toMatchObject({ name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search' })
+    expect(mocks.loadMcpTools).toHaveBeenCalledWith({ kind: 'owner' }, expect.anything())
+    expect(mocks.mcpClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('fecha as conexões dos MCPs mesmo quando o turno falha', async () => {
+    const sessionId = await newSession()
+    mocks.parts = [{ type: 'error', error: new Error('provedor caiu') }]
+    await runTurn(sessionId, 'Oi')
+    expect(messages().docs.find((doc) => doc.role === 'assistant')).toMatchObject({ status: 'error' })
+    expect(mocks.mcpClose).toHaveBeenCalledTimes(1)
   })
 })
 

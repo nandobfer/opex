@@ -132,6 +132,8 @@ export const clientOpexAgentConfigSchema = z.object({
     enabled: z.boolean(),
     /** Ferramentas ligadas; nomes são validados contra o catálogo no servidor. */
     enabledTools: z.array(z.string().trim().min(1).max(64)).max(200),
+    /** MCPs liberados (ids); ausente = mantém os atuais. */
+    enabledMcpServers: z.array(z.string().regex(/^[a-f0-9]{24}$/i, "Id inválido")).max(100).optional(),
 })
 export type ClientOpexAgentConfigInput = z.infer<typeof clientOpexAgentConfigSchema>
 
