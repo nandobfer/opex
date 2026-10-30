@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
         ],
     },
     output: "standalone",
+    // `ssh2` (aba Controles do OpenCode) carrega binários opcionais em try/catch: fica fora do bundle.
+    serverExternalPackages: ["ssh2"],
     env: {
         APP_VERSION: pkg.version,
     },

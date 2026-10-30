@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Eraser, Pencil, Undo2 } from "lucide-react"
 import { IconAction } from "@/components/ui/icon-action"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
 /** Ação sobre um valor secreto: gravar um valor novo ou limpar (ausente = manter o salvo). */
@@ -27,6 +28,8 @@ interface SecretValueInputProps {
     allowClear?: boolean
     /** Começa já no campo de digitação (ex.: linha nova). */
     initiallyEditing?: boolean
+    /** Valor de várias linhas (ex.: chave privada): textarea com os caracteres mascarados. */
+    multiline?: boolean
 }
 
 const swap = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: 4 }, transition: { duration: 0.18 } }
@@ -36,7 +39,7 @@ const swap = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, ex
  * ou limpar; "Desfazer" volta a manter o atual. Usado nos campos privados das integrações e nos
  * headers/variáveis dos MCPs do Agente Opex.
  */
-export function SecretValueInput({ id, label, configured, statusLabel, action, onChange, disabled, editBlockedReason, allowClear = true, initiallyEditing = false }: SecretValueInputProps) {
+export function SecretValueInput({ id, label, configured, statusLabel, action, onChange, disabled, editBlockedReason, allowClear = true, initiallyEditing = false, multiline = false }: SecretValueInputProps) {
     const [editing, setEditing] = useState(initiallyEditing)
     const mode = action?.action === "clear" ? "clear" : editing || action?.action === "set" ? "set" : "keep"
 
@@ -49,16 +52,32 @@ export function SecretValueInput({ id, label, configured, statusLabel, action, o
         <AnimatePresence mode="wait" initial={false}>
             {mode === "set" ? (
                 <motion.div key="set" {...swap} className="flex gap-2">
-                    <Input
-                        id={id}
-                        type="password"
-                        autoComplete="new-password"
-                        autoFocus={!initiallyEditing}
-                        placeholder={`Novo valor para ${label.toLowerCase()}`}
-                        value={action?.action === "set" ? action.value : ""}
-                        onChange={(event) => onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)}
-                        disabled={disabled}
-                    />
+                    {multiline ? (
+                        <Textarea
+                            id={id}
+                            vim={false}
+                            autoComplete="off"
+                            spellCheck={false}
+                            autoFocus={!initiallyEditing}
+                            rows={5}
+                            className="font-mono text-xs [-webkit-text-security:disc]"
+                            placeholder={`Cole ${label.toLowerCase()}`}
+                            value={action?.action === "set" ? action.value : ""}
+                            onChange={(event) => onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)}
+                            disabled={disabled}
+                        />
+                    ) : (
+                        <Input
+                            id={id}
+                            type="password"
+                            autoComplete="new-password"
+                            autoFocus={!initiallyEditing}
+                            placeholder={`Novo valor para ${label.toLowerCase()}`}
+                            value={action?.action === "set" ? action.value : ""}
+                            onChange={(event) => onChange(event.target.value ? { action: "set", value: event.target.value } : undefined)}
+                            disabled={disabled}
+                        />
+                    )}
                     {!initiallyEditing && <IconAction label="Desfazer" icon={Undo2} onClick={reset} className="h-10 w-10" />}
                 </motion.div>
             ) : (

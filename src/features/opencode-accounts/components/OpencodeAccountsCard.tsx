@@ -2,17 +2,16 @@
 
 import { useMemo, useState } from "react"
 import Fuse from "fuse.js"
-import { motion } from "framer-motion"
-import { KeyRound, RefreshCw, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { KeyRound } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
-import { usePageVirtualizer } from "@/hooks/usePageVirtualizer"
+import { SearchInput } from "@/components/list/SearchInput"
+import { VirtualizedRows } from "@/components/list/VirtualizedRows"
+import { RefreshButton } from "@/components/ui/refresh-button"
 import { apiErrorMessage } from "@/lib/api"
 import { useOpencodeAccounts, useOpencodeAccountsRealtime } from "../hooks/useOpencodeAccounts"
 import type { OpencodeAuthProviderDto } from "../types"
@@ -20,41 +19,6 @@ import { AuthProviderRow } from "./AuthProviderRow"
 import { AddAccountDialog } from "./AddAccountDialog"
 
 const ROW_ESTIMATE = 60
-/** Acima disto a lista é virtualizada (a busca mostra todos os providers do OpenCode, centenas). */
-const VIRTUALIZE_ABOVE = 50
-
-interface ProviderListProps {
-    rows: readonly OpencodeAuthProviderDto[]
-    expanded: string | null
-    onToggle: (id: string) => void
-    onAdd: (row: OpencodeAuthProviderDto) => void
-}
-
-function PlainProviderList({ rows, expanded, onToggle, onAdd }: ProviderListProps) {
-    return rows.map((row) => (
-        <div key={row.id} className="border-b last:border-b-0">
-            <AuthProviderRow row={row} expanded={expanded === row.id} onToggle={() => onToggle(row.id)} onAdd={() => onAdd(row)} />
-        </div>
-    ))
-}
-
-function VirtualProviderList({ rows, expanded, onToggle, onAdd }: ProviderListProps) {
-    const { anchorRef, virtualizer, items, padTop, padBottom } = usePageVirtualizer({ count: rows.length, estimateSize: ROW_ESTIMATE })
-    return (
-        <div ref={anchorRef} style={{ paddingTop: padTop, paddingBottom: padBottom }}>
-            {items.map((item) => {
-                const row = rows[item.index]
-                if (!row) return null
-                // Linhas expandem: a altura real é medida (`measureElement`).
-                return (
-                    <div key={row.id} ref={virtualizer.measureElement} data-index={item.index} className="border-b last:border-b-0">
-                        <AuthProviderRow row={row} expanded={expanded === row.id} onToggle={() => onToggle(row.id)} onAdd={() => onAdd(row)} />
-                    </div>
-                )
-            })}
-        </div>
-    )
-}
 
 /**
  * Aba Contas do OpenCode: os providers do servidor com a conta em uso, para adicionar, selecionar,
@@ -76,7 +40,6 @@ export function OpencodeAccountsCard({ dirty }: { dirty: boolean }) {
     // Buscando, a lista mostra todos os providers: é assim que se conecta um provider novo.
     const visible = onlyConnected && !searching ? matched.filter((row) => row.connected) : matched
     const toggle = (id: string) => setExpanded((current) => (current === id ? null : id))
-    const List = visible.length > VIRTUALIZE_ABOVE ? VirtualProviderList : PlainProviderList
 
     return (
         <Card>
@@ -88,12 +51,7 @@ export function OpencodeAccountsCard({ dirty }: { dirty: boolean }) {
                     </CardTitle>
                     <CardDescription>Adicione ou selecione a conta que cada provider usa no OpenCode, como em Providers no TUI. Chaves e tokens nunca são exibidos.</CardDescription>
                 </div>
-                <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => void accounts.refetch()} disabled={dirty || accounts.isFetching}>
-                    <motion.span animate={{ rotate: accounts.isFetching ? 360 : 0 }} transition={accounts.isFetching ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.2 }} className="inline-flex">
-                        <RefreshCw className="h-4 w-4" aria-hidden />
-                    </motion.span>
-                    Atualizar
-                </Button>
+                <RefreshButton onClick={() => void accounts.refetch()} fetching={accounts.isFetching} disabled={dirty} />
             </CardHeader>
             <CardContent className="space-y-3">
                 {dirty ? (
@@ -107,10 +65,7 @@ export function OpencodeAccountsCard({ dirty }: { dirty: boolean }) {
                 ) : (
                     <>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <div className="relative flex-1">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                                <Input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Buscar provider (todos)" aria-label="Buscar provider" className="pl-9" />
-                            </div>
+                            <SearchInput value={term} onChange={setTerm} placeholder="Buscar provider (todos)" label="Buscar provider" />
                             <div className="flex shrink-0 items-center gap-2">
                                 <Switch id="opencode-only-connected" checked={onlyConnected} onCheckedChange={setOnlyConnected} disabled={searching} />
                                 <Label htmlFor="opencode-only-connected" className="text-sm">
@@ -128,7 +83,13 @@ export function OpencodeAccountsCard({ dirty }: { dirty: boolean }) {
                                     onAction={searching ? undefined : () => setOnlyConnected(false)}
                                 />
                             )}
-                            <List rows={visible} expanded={expanded} onToggle={toggle} onAdd={setAdding} />
+                            <VirtualizedRows
+                                rows={visible}
+                                rowKey={(row) => row.id}
+                                estimateSize={ROW_ESTIMATE}
+                                rowClassName="border-b last:border-b-0"
+                                renderRow={(row) => <AuthProviderRow row={row} expanded={expanded === row.id} onToggle={() => toggle(row.id)} onAdd={() => setAdding(row)} />}
+                            />
                         </div>
                     </>
                 )}

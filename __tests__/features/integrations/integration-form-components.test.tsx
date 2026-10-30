@@ -30,11 +30,11 @@ import type { PublicDraft } from "@/features/integrations/components/detail/draf
 import { buildIntegrationUpdateSchema, type SecretAction } from "@/features/integrations/schemas/integration.schema"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 
-function SecretHarness({ configured, onAction }: { configured: boolean; onAction: (a: SecretAction | undefined) => void }) {
+function SecretHarness({ configured, onAction, multiline }: { configured: boolean; onAction: (a: SecretAction | undefined) => void; multiline?: boolean }) {
     const [action, setAction] = useState<SecretAction | undefined>()
     return (
         <SecretField
-            field={{ key: "password", label: "Senha" }}
+            field={{ key: "password", label: "Senha", multiline }}
             state={{ configured, source: configured ? "db" : "none", unreadable: false }}
             action={action}
             onChange={(next) => {
@@ -79,6 +79,16 @@ describe("SecretField (issue #604)", () => {
         const substituir = screen.getByRole("button", { name: "Substituir" })
         expect(substituir.textContent).toBe("")
         expect(screen.getByRole("button", { name: "Limpar" }).textContent).toBe("")
+    })
+
+    it("campo de várias linhas (chave privada SSH) usa área de texto e preserva as quebras", () => {
+        const onAction = vi.fn()
+        render(<SecretHarness configured={false} multiline onAction={onAction} />)
+        fireEvent.click(screen.getByRole("button", { name: "Definir" }))
+        const area = screen.getByPlaceholderText(/Cole senha/)
+        expect(area.tagName).toBe("TEXTAREA")
+        fireEvent.change(area, { target: { value: "-----BEGIN\nabc\n-----END" } })
+        expect(onAction).toHaveBeenLastCalledWith({ action: "set", value: "-----BEGIN\nabc\n-----END" })
     })
 
     it("sem valor configurado oferece Definir e não oferece Limpar", () => {

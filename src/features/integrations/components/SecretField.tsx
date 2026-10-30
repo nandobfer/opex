@@ -45,6 +45,7 @@ export function SecretField({ field, state, action, onChange, disabled, encrypti
                 onChange={onChange}
                 disabled={disabled}
                 editBlockedReason={encryptionAvailable ? null : "Chave de criptografia ausente no servidor"}
+                multiline={field.multiline}
             />
             {state.unreadable && (
                 <p className="flex items-center gap-1 text-xs text-amber-600">

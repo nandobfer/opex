@@ -19,6 +19,10 @@ ou passados por `quote`), nunca de texto livre. O **build** continua sendo do ag
 no host com o prefixo `DOCKER_CONTEXT=opex-local BUILDX_BUILDER=<builder>` em todo comando docker da
 prévia; o `docker` do servidor lê o worktree e envia o contexto ao BuildKit do PC.
 
+Outra exceção, independente desta: o **ciclo de vida do serviço do OpenCode** (aba Controles, OPE-95)
+usa SSH direto do servidor do app até o host (`ssh2`), porque com o serviço parado o shell do OpenCode
+não existe — ver `modules/opencode-resources.md`.
+
 ## Ativação
 
 - Campo público **"Integração ativa"** (`active`, `boolean`, padrão `false`) da integração
