@@ -3,6 +3,8 @@
  * agentes do Ciliar: uma lista nova entra aqui e ganha, sem código novo, a API, as ferramentas do
  * Agente Opex (`agent`) e o card na aba de configuração do agente (`tab`).
  *
+ * O Agente Maddox tem as mesmas três listas, próprias (`maddox-*`, aba "Agente Maddox").
+ *
  * O Agente Opex tem três listas: as **globais** valem no dono e no portal; as **do dono**, só nos
  * turnos do dono; as **do cliente**, só nos turnos do portal (todos os clientes). O **Agente
  * Adversário** tem uma lista própria, que entra nas instruções de toda revisão da mesa. O **agente
@@ -10,7 +12,7 @@
  * uma lista **por central** (`scope: "central"`: cada memória tem `centralId`).
  */
 
-export const AI_AGENT_IDS = ["opex-global", "opex-owner", "opex-client", "adversarial", "developer-global", "developer-central"] as const
+export const AI_AGENT_IDS = ["opex-global", "opex-owner", "opex-client", "maddox-global", "maddox-owner", "maddox-client", "adversarial", "developer-global", "developer-central"] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
 export interface AiAgentDef {
@@ -40,6 +42,24 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
         title: "Memórias do cliente",
         description: "Instruções permanentes que o Agente Opex segue só nas conversas do portal do cliente (todos os clientes).",
         tab: "agente-opex",
+    },
+    "maddox-global": {
+        label: "Agente Maddox (global)",
+        title: "Memórias globais",
+        description: "Instruções permanentes que o Agente Maddox segue em toda conversa, no app do dono e no portal do cliente.",
+        tab: "agente-maddox",
+    },
+    "maddox-owner": {
+        label: "Agente Maddox do dono",
+        title: "Memórias do dono",
+        description: "Instruções permanentes que o Agente Maddox segue só nas conversas do dono.",
+        tab: "agente-maddox",
+    },
+    "maddox-client": {
+        label: "Agente Maddox do portal",
+        title: "Memórias do cliente",
+        description: "Instruções permanentes que o Agente Maddox segue só nas conversas do portal do cliente (todos os clientes).",
+        tab: "agente-maddox",
     },
     adversarial: {
         label: "Agente Adversário",
@@ -79,4 +99,9 @@ export function isAiAgentId(value: string): value is AiAgentId {
 /** Listas de memórias que entram no prompt do Agente Opex, conforme o escopo do turno. */
 export function opexMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
     return scope === "owner" ? ["opex-global", "opex-owner"] : ["opex-global", "opex-client"]
+}
+
+/** Listas de memórias que entram nas instruções do Agente Maddox, conforme o escopo da sessão. */
+export function maddoxMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
+    return scope === "owner" ? ["maddox-global", "maddox-owner"] : ["maddox-global", "maddox-client"]
 }

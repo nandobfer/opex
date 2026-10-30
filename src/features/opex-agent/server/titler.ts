@@ -1,4 +1,5 @@
 import { streamAi } from "@/lib/ai/stream"
+import type { AiProviderId } from "@/lib/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN, OPEX_DEFAULT_TITLE, OPEX_SUMMARY_MAX, OPEX_TITLE_CONSUMPTION_ORIGIN, OPEX_TITLE_MAX } from "../constants"
 import { parseTitleOutput, fallbackTitle } from "../title"
@@ -36,9 +37,27 @@ function buildPrompt(current: { title: string; summary: string; titleSource: str
  * começo da mensagem do usuário.
  */
 export async function refreshSessionTitle(sessionId: string, settings: OpexAgentSettings, turn: TitleTurn, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
+    const model = settings.title.provider && settings.title.model ? settings.title : settings.main
+    await refreshSessionTitleWith(
+        sessionId,
+        { provider: model.provider, model: model.model, variant: model.variant, instructions: settings.titleInstructions, origin: scope.kind === "client" ? OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN : OPEX_TITLE_CONSUMPTION_ORIGIN },
+        turn,
+    )
+}
+
+export interface TitleModel {
+    provider: AiProviderId | null
+    model: string | null
+    variant: string | null
+    instructions: string
+    /** Origem do consumo (painel de consumo). */
+    origin: string
+}
+
+/** Mesmo subagente com o modelo informado (o Agente Maddox usa o OpenCode). */
+export async function refreshSessionTitleWith(sessionId: string, model: TitleModel, turn: TitleTurn): Promise<void> {
     const session = await OpexSession.findById(sessionId).lean()
     if (!session) return
-    const model = settings.title.provider && settings.title.model ? settings.title : settings.main
     let text = ""
     let error: string | null = null
     if (model.provider && model.model) {
@@ -46,9 +65,9 @@ export async function refreshSessionTitle(sessionId: string, settings: OpexAgent
             provider: model.provider,
             model: model.model,
             variant: model.variant,
-            instructions: settings.titleInstructions,
+            instructions: model.instructions,
             prompt: buildPrompt(session, turn),
-            consumption: { origin: scope.kind === "client" ? OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN : OPEX_TITLE_CONSUMPTION_ORIGIN, subject: sessionId },
+            consumption: { origin: model.origin, subject: sessionId },
         })) {
             if (event.type === "delta") text += event.text
             if (event.type === "error") error = event.message

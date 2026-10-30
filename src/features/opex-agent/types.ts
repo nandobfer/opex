@@ -5,6 +5,11 @@ import type { OpexClientToolGroup } from "./client-tools"
 import type { OPEX_MCP_TOOL_GROUP } from "./mcp"
 import type { ChatFileDto, ChatFileReservationDto } from "@/lib/chat-files/kind"
 import type { OpexToolMetaDto } from "./tool-tree"
+import type { OpencodeFormDto } from "@/lib/ai/opencode-events"
+import type { MADDOX_NATIVE_TOOL_GROUP } from "@/features/maddox-agent/constants"
+
+/** Grupo do card de uma ferramenta (do dono, do portal, de MCP do Opex ou nativa do OpenCode no Maddox). */
+export type OpexToolPartGroup = OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | typeof MADDOX_NATIVE_TOOL_GROUP
 
 /** Arquivo enviado no chat (o binário fica no Storage S3; `url` = rota do conteúdo, sem `basePath`). */
 export type OpexFileDto = ChatFileDto
@@ -53,6 +58,8 @@ export interface OpexSessionDto {
     messageCount: number
     lastMessageAt: string
     createdAt: string
+    /** Agente Maddox: modelo trocado só nesta sessão (`null` = padrão da configuração). */
+    modelOverride?: { model: string; variant: string | null } | null
 }
 
 export type OpexConfirmationStatus = "pending" | "confirmed" | "cancelled" | "failed" | "expired"
@@ -71,7 +78,7 @@ export interface OpexToolPart {
     type: "tool"
     id: string
     name: string
-    group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | null
+    group: OpexToolPartGroup | null
     label: string
     state: OpexToolState
     /** Entrada e saída resumidas (JSON) para exibição. */
@@ -82,8 +89,18 @@ export interface OpexToolPart {
     durationMs: number | null
 }
 
+export type OpexFormStatus = "pending" | "answered" | "cancelled"
+
+/** Pergunta (formulário) do OpenCode no meio do turno do Agente Maddox. */
+export interface OpexFormPart {
+    type: "form"
+    id: string
+    form: OpencodeFormDto
+    status: OpexFormStatus
+}
+
 /** Parte exibida de uma resposta do agente. */
-export type OpexPart = { type: "text"; text: string } | { type: "reasoning"; text: string } | OpexToolPart
+export type OpexPart = { type: "text"; text: string } | { type: "reasoning"; text: string } | OpexToolPart | OpexFormPart
 
 export interface OpexUsageDto {
     inputTokens: number | null
@@ -132,8 +149,13 @@ export type OpexStreamLine =
     | { type: "turn-start"; messageId: string; startedAt: string }
     | { type: "text-delta"; text: string }
     | { type: "reasoning-delta"; text: string }
-    | { type: "tool-start"; id: string; name: string; group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | null; label: string }
+    | { type: "tool-start"; id: string; name: string; group: OpexToolPartGroup | null; label: string }
     | { type: "tool-input"; id: string; input: string | null }
     | { type: "tool-end"; id: string; state: "done" | "error"; output: string | null; error: string | null; confirmation: OpexConfirmationDto | null; durationMs: number | null }
+    /** Confirmação que chega no meio do turno (Agente Maddox: permissão do OpenCode) ou muda de situação. */
+    | { type: "tool-confirmation"; id: string; confirmation: OpexConfirmationDto }
+    /** Pergunta do OpenCode (Agente Maddox) e a mudança de situação dela. */
+    | { type: "form"; form: OpencodeFormDto }
+    | { type: "form-status"; id: string; status: OpexFormStatus }
     | { type: "turn-end"; messageId: string; status: OpexMessageStatus; error: string | null }
     | { type: "ping" }

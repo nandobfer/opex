@@ -11,6 +11,13 @@ import { Schema, model, models, type Model } from "mongoose"
  *   rascunho do dono, o cliente escolhido para calcular o custo).
  */
 
+/** Agente Maddox de um cliente do portal (`orcamento_clients.maddoxAgent`). */
+export interface IOrcamentoClientMaddoxAgent {
+    enabled: boolean
+    /** Ferramentas do portal desligadas para o Maddox (ferramenta nova entra ligada). */
+    disabledTools: string[]
+}
+
 export interface IOrcamentoClientOpexAgent {
     enabled: boolean
     /** Nomes das ferramentas desligadas (guardar as desligadas faz ferramenta nova entrar ligada). */
@@ -38,6 +45,8 @@ export interface IOrcamentoClient {
     active: boolean
     /** Agente Opex no portal: ativação (padrão ligado) e ferramentas **desligadas** pelo dono. */
     opexAgent?: IOrcamentoClientOpexAgent
+    /** Agente Maddox no portal: **desligado** por padrão; ferramentas desligadas pelo dono. */
+    maddoxAgent?: IOrcamentoClientMaddoxAgent
     createdAt: Date
     updatedAt: Date
 }
@@ -58,6 +67,8 @@ const OrcamentoClientSchema = new Schema<IOrcamentoClient>(
             enabledOptInTools: { type: [String], default: [] },
             enabledMcpServers: { type: [String], default: [] },
         },
+        // Mixed sem padrão: cliente novo nasce sem o Maddox (a normalização lê ausente = desligado).
+        maddoxAgent: { type: Schema.Types.Mixed, default: undefined },
     },
     { collection: "orcamento_clients", versionKey: false, timestamps: true },
 )

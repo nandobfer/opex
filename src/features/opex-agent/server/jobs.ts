@@ -60,7 +60,8 @@ function ownerOfScope(scope: OpexServerScope): JobOwner {
 const ownerOfJob = (job: Pick<IOpexJob, "clientId" | "userId">): JobOwner => ({ clientId: job.clientId ?? null, userId: job.userId || getLocalUser().id })
 
 /** Filtro das sessões de um dono de job (o dono vê as antigas, sem `clientId`). */
-const sessionFilterOfOwner = (owner: JobOwner) => (owner.clientId ? { clientId: owner.clientId, userId: owner.userId } : { clientId: null })
+// Jobs são só do Agente Opex: sessão do Agente Maddox nunca é alvo de job.
+const sessionFilterOfOwner = (owner: JobOwner) => ({ ...(owner.clientId ? { clientId: owner.clientId, userId: owner.userId } : { clientId: null }), agent: { $ne: "maddox" as const } })
 
 /** Jobs visíveis no escopo: o dono vê todos; o usuário do portal, só os próprios. */
 function jobFilterOf(scope: OpexServerScope): Record<string, unknown> {

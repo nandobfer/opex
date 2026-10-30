@@ -50,7 +50,7 @@ export interface TurnRequest {
 export type TurnEvent =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "text"; text: string }
-    | { type: "reasoning" }
+    | { type: "reasoning"; text?: string }
     | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }
     | { type: "tool-progress"; id: string; output: string }
     | { type: "notice"; level: "info" | "warn" | "error" | "success"; message: string }
@@ -302,7 +302,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 await hooks.onText?.(event.delta)
                 break
             case "reasoning":
-                publish({ type: "reasoning" })
+                publish(event.delta ? { type: "reasoning", text: event.delta } : { type: "reasoning" })
                 break
             case "tool-start":
                 toolNames.set(event.id, event.name)

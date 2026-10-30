@@ -3,12 +3,12 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { publishAppEvent, publishToChannels } from "@/lib/pusher/channels"
 import { opexChannel } from "@/lib/pusher/channel-names"
-import { OPEX_AUDIT_ENTITY, OPEX_DEFAULT_TITLE, OPEX_SESSION_DELETED_EVENT, OPEX_SESSION_UPDATED_EVENT } from "../constants"
+import { OPEX_DEFAULT_TITLE, agentAuditEntity, agentSessionEvents } from "../constants"
 import { opexFileKind, opexFilePath } from "../files"
 import { normalizeOpexParts } from "../live-message"
 import type { OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { forgetSession, isTurnActive } from "./hub"
-import { OWNER_SCOPE, sessionFilterOf, type OpexServerScope } from "./scope"
+import { OWNER_SCOPE, agentOf, sessionFilterOf, type OpexServerScope } from "./scope"
 import { OpexJob, OpexMessage, OpexPendingAction, OpexSession, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
 
 /** Conecta ao banco (os índices das coleções vêm da migração `ensure-opex-indexes`). */
@@ -31,6 +31,7 @@ export function toSessionDto(doc: SessionDoc): OpexSessionDto {
         messageCount: doc.messageCount ?? 0,
         lastMessageAt: new Date(doc.lastMessageAt ?? doc.createdAt).toISOString(),
         createdAt: new Date(doc.createdAt).toISOString(),
+        ...(doc.agent === "maddox" ? { modelOverride: doc.modelOverride ?? null } : {}),
     }
 }
 
@@ -65,15 +66,17 @@ export function assertSessionId(id: string): void {
  * (`private-opex-{clientId}-{userId}`), conforme o escopo gravado na sessão.
  */
 export async function publishSessionUpdated(id: string): Promise<void> {
-    const doc = await OpexSession.findById(id).select({ clientId: 1, userId: 1 }).lean<Pick<IOpexSession, "clientId" | "userId">>()
-    if (doc?.clientId && doc.userId) await publishToChannels([opexChannel(doc.clientId, doc.userId)], OPEX_SESSION_UPDATED_EVENT, { id })
-    else await publishAppEvent(OPEX_SESSION_UPDATED_EVENT, { id })
+    const doc = await OpexSession.findById(id).select({ clientId: 1, userId: 1, agent: 1 }).lean<Pick<IOpexSession, "clientId" | "userId" | "agent">>()
+    const event = agentSessionEvents(doc?.agent).updated
+    if (doc?.clientId && doc.userId) await publishToChannels([opexChannel(doc.clientId, doc.userId)], event, { id })
+    else await publishAppEvent(event, { id })
 }
 
-/** Mesma escolha de canal do `publishSessionUpdated`, para a exclusão. */
-async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "userId">, id: string): Promise<void> {
-    if (session.clientId && session.userId) await publishToChannels([opexChannel(session.clientId, session.userId)], OPEX_SESSION_DELETED_EVENT, { id })
-    else await publishAppEvent(OPEX_SESSION_DELETED_EVENT, { id })
+/** Mesma escolha de canal do `publishSessionUpdated`, para a exclusão (evento do agente da sessão). */
+async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "userId" | "agent">, id: string): Promise<void> {
+    const event = agentSessionEvents(session.agent).deleted
+    if (session.clientId && session.userId) await publishToChannels([opexChannel(session.clientId, session.userId)], event, { id })
+    else await publishAppEvent(event, { id })
 }
 
 /**
@@ -81,9 +84,16 @@ async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "u
  * com o aviso, para a sessão não ficar presa.
  */
 async function reconcile(doc: SessionDoc): Promise<SessionDoc> {
-    if (doc.status !== "running" || isTurnActive(doc._id.toString())) return doc
+    // No Maddox, "aguardando confirmação" também depende do turno vivo (o pedido está no OpenCode).
+    const live = doc.status === "running" || (doc.agent === "maddox" && doc.status === "awaiting_confirmation")
+    if (!live || isTurnActive(doc._id.toString())) return doc
     const lastError = "A resposta foi interrompida (o servidor reiniciou durante o turno)."
-    await OpexSession.updateOne({ _id: doc._id, status: "running" }, { $set: { status: "error", lastError } })
+    await OpexSession.updateOne({ _id: doc._id, status: doc.status }, { $set: { status: "error", lastError, pendingRequests: [] } })
+    // Agente Maddox: a execução pode continuar no OpenCode sem ninguém acompanhando; interrompe lá também.
+    if (doc.agent === "maddox" && doc.opencodeSessionId) {
+        const { interruptOpencodeSession } = await import("@/features/maddox-agent/server/opencode-session")
+        void interruptOpencodeSession(doc.opencodeSessionId)
+    }
     return { ...doc, status: "error", lastError }
 }
 
@@ -117,7 +127,7 @@ export async function getSessionDetail(id: string, scope: OpexServerScope = OWNE
     return { session: toSessionDto(session), messages: messages.map(toMessageDto) }
 }
 
-export async function createSession(actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexSessionDto> {
+export async function createSession(actorId: string, scope: OpexServerScope = OWNER_SCOPE, extra?: Partial<Pick<IOpexSession, "modelOverride">>): Promise<OpexSessionDto> {
     await opexDb()
     const doc = await OpexSession.create({
         title: OPEX_DEFAULT_TITLE,
@@ -125,8 +135,10 @@ export async function createSession(actorId: string, scope: OpexServerScope = OW
         lastMessageAt: new Date(),
         clientId: scope.kind === "client" ? String(scope.actor.client._id) : null,
         userId: scope.kind === "client" ? scope.actor.userId : actorId,
+        agent: agentOf(scope),
+        ...(extra ?? {}),
     })
-    await recordAudit({ userId: actorId, entidade: OPEX_AUDIT_ENTITY, entidadeId: doc._id.toString(), acao: AcaoAuditoria.CRIAR, depois: { titulo: doc.title } })
+    await recordAudit({ userId: actorId, entidade: agentAuditEntity(agentOf(scope)), entidadeId: doc._id.toString(), acao: AcaoAuditoria.CRIAR, depois: { titulo: doc.title } })
     await publishSessionUpdated(doc._id.toString())
     return toSessionDto(doc.toObject() as SessionDoc)
 }
@@ -140,7 +152,7 @@ export async function updateSession(id: string, input: { title?: string; archive
     if (!doc) throw new DomainError(404, "Sessão não encontrada", "OPEX_SESSION_NOT_FOUND")
     await recordAudit({
         userId: actorId,
-        entidade: OPEX_AUDIT_ENTITY,
+        entidade: agentAuditEntity(agentOf(scope)),
         entidadeId: id,
         acao: AcaoAuditoria.ATUALIZAR,
         antes: { titulo: before.title, arquivada: before.archived },
@@ -154,10 +166,14 @@ export async function updateSession(id: string, input: { title?: string; archive
 export async function deleteClientOpexData(clientId: string): Promise<void> {
     await opexDb()
     await OpexJob.deleteMany({ clientId })
-    const sessions = await OpexSession.find({ clientId }).select({ _id: 1 }).lean<Pick<SessionDoc, "_id">[]>()
+    const sessions = await OpexSession.find({ clientId }).select({ _id: 1, agent: 1, opencodeSessionId: 1 }).lean<Pick<SessionDoc, "_id" | "agent" | "opencodeSessionId">[]>()
     for (const session of sessions) {
         const id = session._id.toString()
         forgetSession(id)
+        if (session.agent === "maddox" && session.opencodeSessionId) {
+            const { removeOpencodeSession } = await import("@/features/maddox-agent/server/opencode-session")
+            await removeOpencodeSession(session.opencodeSessionId)
+        }
         const { deleteSessionFiles } = await import("./files")
         await deleteSessionFiles(id)
         await Promise.all([OpexMessage.deleteMany({ sessionId: session._id }), OpexPendingAction.deleteMany({ sessionId: session._id }), OpexSession.deleteOne({ _id: session._id })])
@@ -175,6 +191,10 @@ export async function deleteSession(id: string, actorId: string, scope: OpexServ
         OpexPendingAction.deleteMany({ sessionId: session._id }),
         OpexSession.deleteOne({ _id: session._id }),
     ])
-    await recordAudit({ userId: actorId, entidade: OPEX_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { titulo: session.title, mensagens: session.messageCount } })
+    if (session.agent === "maddox" && session.opencodeSessionId) {
+        const { removeOpencodeSession } = await import("@/features/maddox-agent/server/opencode-session")
+        await removeOpencodeSession(session.opencodeSessionId)
+    }
+    await recordAudit({ userId: actorId, entidade: agentAuditEntity(agentOf(scope)), entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { titulo: session.title, mensagens: session.messageCount } })
     await publishSessionDeleted(session, id)
 }

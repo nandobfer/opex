@@ -11,6 +11,19 @@ import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionSt
  * `ensure-opex-indexes`.
  */
 
+/** Agente dono de uma sessão (as coleções `opex_*` guardam os dois). */
+export type OpexAgentKind = "opex" | "maddox"
+
+/** Pedido do OpenCode em aberto numa sessão do Agente Maddox. */
+export interface IMaddoxPendingRequest {
+    /** Id do pedido no OpenCode (permissão ou formulário). */
+    id: string
+    kind: "permission" | "form"
+    /** Card da ferramenta (ou parte do formulário) na resposta em andamento. */
+    partId: string
+    createdAt: Date
+}
+
 export interface IOpexSession {
     title: string
     summary: string
@@ -25,6 +38,14 @@ export interface IOpexSession {
     clientId: string | null
     /** Usuário dono da sessão (`local` no app do dono; id do usuário no portal). */
     userId: string
+    /** Agente da sessão; ausente = Agente Opex (sessões anteriores ao Agente Maddox). */
+    agent?: OpexAgentKind
+    /** Agente Maddox: sessão do OpenCode que guarda a conversa (criada no primeiro turno). */
+    opencodeSessionId?: string | null
+    /** Agente Maddox: modelo trocado só nesta sessão (`null` = padrão da configuração). */
+    modelOverride?: { model: string; variant: string | null } | null
+    /** Agente Maddox: pedidos do OpenCode (permissão/pergunta) aguardando resposta neste turno. */
+    pendingRequests?: IMaddoxPendingRequest[]
     lastMessageAt: Date
     createdAt: Date
     updatedAt: Date
@@ -110,12 +131,19 @@ const OpexSessionSchema = new Schema<IOpexSession>(
         nextSeq: { type: Number, default: 1 },
         clientId: { type: String, default: null },
         userId: { type: String, default: "" },
+        agent: { type: String, enum: ["opex", "maddox"], default: "opex" },
+        opencodeSessionId: { type: String, default: null },
+        modelOverride: { type: Schema.Types.Mixed, default: null },
+        pendingRequests: { type: Schema.Types.Mixed, default: [] },
         lastMessageAt: { type: Date, default: () => new Date() },
     },
     { collection: "opex_sessions", versionKey: false, timestamps: true },
 )
 // Sessões do dono (`clientId: null`, inclusive as antigas sem o campo) e as privadas por cliente/usuário.
 OpexSessionSchema.index({ clientId: 1, userId: 1, archived: 1, lastMessageAt: -1 })
+// Agente Maddox: sessões por agente e a busca pela sessão do OpenCode (servidor MCP do Opex).
+OpexSessionSchema.index({ agent: 1, clientId: 1, userId: 1, lastMessageAt: -1 })
+OpexSessionSchema.index({ opencodeSessionId: 1 }, { sparse: true })
 
 const OpexMessageSchema = new Schema<IOpexMessage>(
     {

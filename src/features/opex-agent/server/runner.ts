@@ -151,6 +151,12 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
         await failJob("A sessão escolhida para o job foi excluída")
         return
     }
+    // Sessão do Agente Maddox (ex.: aviso de fim de deploy pedido por ele): o turno roda no OpenCode.
+    if (session.agent === "maddox") {
+        const { queueMaddoxFollowUp } = await import("@/features/maddox-agent/server/runner")
+        await queueMaddoxFollowUp(sessionId, followUp)
+        return
+    }
     const scope = await sessionScopeOf(session).catch((error: unknown) => {
         log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] escopo da sessão não resolve")
         void failJob(error instanceof Error ? error.message : String(error))
