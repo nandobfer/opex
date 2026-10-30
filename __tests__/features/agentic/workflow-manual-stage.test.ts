@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   runShell: vi.fn(async () => ({ exitCode: 0, status: 'exited', output: '' })),
   interrupt: vi.fn(async () => undefined),
   deleteSession: vi.fn(async () => true),
+  sessionDirectory: '/home/u/app',
+  move: vi.fn(async () => undefined),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -34,9 +36,10 @@ vi.mock('@/lib/ai/opencode-client', () => ({
   runOpencodeShell: mocks.runShell,
   getOpencodeClient: vi.fn(async () => ({
     session: {
-      get: async () => ({ id: 'sess-1', location: { directory: '/home/u/app' } }),
+      get: async () => ({ id: 'sess-1', location: { directory: mocks.sessionDirectory } }),
       create: async () => ({ id: 'sess-1', location: { directory: '/home/u/app' } }),
       interrupt: mocks.interrupt,
+      move: mocks.move,
     },
   })),
 }))
@@ -99,6 +102,7 @@ const succeeded = (text: string) => ({ outcome: 'succeeded', text, message: null
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.active.clear()
+  mocks.sessionDirectory = '/home/u/app'
   model.docs.length = 0
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: centralConfig() })
   mocks.repoForProject.mockResolvedValue({ repo: 'org/app', repoUrl: 'https://github.com/org/app' })
@@ -184,6 +188,16 @@ describe('concluir sem PR', () => {
     const request = mocks.runTurn.mock.calls[0]![1] as { text: string }
     expect(request.text).toContain('CONCLUÍDA manualmente')
     expect(request.text).not.toContain('git worktree remove')
+    expect(mocks.move).not.toHaveBeenCalled()
+  })
+
+  it('sessão ainda no worktree (já removido) volta ao diretório da central antes da limpeza (GO-DEV-805)', async () => {
+    mocks.sessionDirectory = '/home/u/app/worktrees/ope-88'
+    const wb = await createWorkbench({ stage: 'finishing', runState: 'failed', sessionDirectory: '/home/u/app/worktrees/ope-88', branch: 'feat/ope-88', worktreePath: '/home/u/app/worktrees/ope-88', lastPrompt: { stage: 'finishing', text: 'limpeza' }, manualCompletion: { reason: 'x', fromStage: 'preview', at: new Date() } })
+    await retry(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]!.stage).toBe('done'))
+    expect(mocks.move).toHaveBeenCalledWith({ sessionID: 'sess-1', directory: '/home/u/app' })
+    expect(mocks.move.mock.invocationCallOrder[0]).toBeLessThan(mocks.runTurn.mock.invocationCallOrder[0]!)
   })
 })
 

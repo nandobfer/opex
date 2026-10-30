@@ -621,6 +621,13 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   tarefas —, a limpeza é feita pela IA (volta a sessão ao diretório da central, remove o **backup do
   MongoDB da prévia**, `docker compose down`, `git worktree remove`, `git branch -D`, conforme a
   central) e a porta é liberada.
+  - Todo turno de limpeza (`finishing`: merge, conclusão manual, exclusão e Tentar novamente) começa
+    com o **app** movendo a sessão de volta ao diretório da central (`moveSessionHome` em
+    `server/workflow.ts`), antes das memórias do desenvolvedor e da seleção de agente/modelo: com o
+    worktree já removido (limpeza anterior parcial ou manual), a sessão parada nele fazia o OpenCode
+    recusar o turno ("Location not found") e a mesa nunca concluía (OPE-100, port do GO-DEV-805).
+    Sessão já no diretório da central não é movida; falha ao mover segue o tratamento do turno
+    (mesa em `finishing` com Tentar novamente).
 - **Exclusão da sessão (OPE-46)**: ao concluir a mesa (depois da limpeza), a sessão do OpenCode é
   **desvinculada** (`sessionId`/`sessionDirectory` = `null`, preservando todo o histórico da mesa no
   Opex — planos, saída, PR, uso) e **excluída** no OpenCode (`session.remove`). Se a exclusão falhar

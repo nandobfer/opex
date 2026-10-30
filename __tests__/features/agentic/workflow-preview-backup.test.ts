@@ -41,6 +41,8 @@ vi.mock('@/lib/ai/opencode-client', () => ({
     session: {
       get: async () => ({ id: 'sess-1', location: { directory: '/home/u/app/worktrees/ope-54' } }),
       create: async () => ({ id: 'sess-1', location: { directory: '/home/u/app' } }),
+      // A limpeza devolve a sessão ao diretório da central antes do turno (GO-DEV-805).
+      move: vi.fn(async () => undefined),
     },
   })),
 }))
