@@ -2,6 +2,7 @@ import type { AiFeatureAvailability } from "@/features/ai/types"
 import type { OpexAgentSettings, OpexFilesSettings } from "./schemas"
 import type { OpexToolGroup } from "./constants"
 import type { OpexClientToolGroup } from "./client-tools"
+import type { OPEX_MCP_TOOL_GROUP } from "./mcp"
 import type { ChatFileDto, ChatFileReservationDto } from "@/lib/chat-files/kind"
 import type { OpexToolMetaDto } from "./tool-tree"
 
@@ -25,6 +26,8 @@ export interface OpexClientAgentConfigDto {
     enabled: boolean
     /** Ferramentas ligadas (o contexto entra sempre). */
     enabledTools: string[]
+    /** MCPs liberados para o cliente (ids). */
+    enabledMcpServers: string[]
 }
 
 /** Situação do Agente Opex no portal do cliente. */
@@ -68,7 +71,7 @@ export interface OpexToolPart {
     type: "tool"
     id: string
     name: string
-    group: OpexToolGroup | OpexClientToolGroup | null
+    group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | null
     label: string
     state: OpexToolState
     /** Entrada e saída resumidas (JSON) para exibição. */
@@ -129,7 +132,7 @@ export type OpexStreamLine =
     | { type: "turn-start"; messageId: string; startedAt: string }
     | { type: "text-delta"; text: string }
     | { type: "reasoning-delta"; text: string }
-    | { type: "tool-start"; id: string; name: string; group: OpexToolGroup | OpexClientToolGroup | null; label: string }
+    | { type: "tool-start"; id: string; name: string; group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | null; label: string }
     | { type: "tool-input"; id: string; input: string | null }
     | { type: "tool-end"; id: string; state: "done" | "error"; output: string | null; error: string | null; confirmation: OpexConfirmationDto | null; durationMs: number | null }
     | { type: "turn-end"; messageId: string; status: OpexMessageStatus; error: string | null }

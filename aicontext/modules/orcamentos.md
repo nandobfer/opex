@@ -71,7 +71,8 @@ Logins e sessões: `aicontext/modules/auth.md`.
   - **Usuários** — lista + criação/edição/exclusão/copiar URL/regenerar (mesmos componentes do portal);
   - **Agente Opex** — ativa/desativa o agente no portal (padrão **ativado**) e escolhe, ferramenta a
     ferramenta, o que ele pode usar; ferramentas de admin (Financeiro e Usuários) só chegam ao admin
-    do cliente. Sem configuração salva, vale o padrão com todas as ferramentas. Salvar é auditado e
+    do cliente. Também liga os **MCPs** do Agente Opex que o cliente pode usar (desligados por
+    padrão). Sem configuração salva, vale o padrão com todas as ferramentas. Salvar é auditado e
     publica `opex-client-config-updated`. Detalhes em `opex-agent.md`, "Agente no portal do cliente";
   - **Token** — prefixo, **Copiar URL** e **Regenerar token** (com aviso: invalida a URL do cliente e
     do usuário padrão).

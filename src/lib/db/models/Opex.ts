@@ -1,9 +1,12 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 import type { OpexJobStatus, OpexJobUnit, OpexJobWhen } from "@/features/opex-agent/jobs"
+import type { OpexMcpToolInfo, OpexMcpTransport } from "@/features/opex-agent/mcp"
+import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
 
 /**
- * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files` e `opex_jobs`).
+ * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files`, `opex_jobs`
+ * e `opex_mcp_servers`).
  * Ver `aicontext/modules/opex-agent.md`. Os índices são garantidos pela migração
  * `ensure-opex-indexes`.
  */
@@ -224,7 +227,61 @@ OpexJobSchema.index({ createdAt: -1 })
 OpexJobSchema.index({ clientId: 1, userId: 1, runAt: -1 })
 OpexJobSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0, name: "purge_ttl" })
 
+/** Header (HTTP/SSE) ou variável de ambiente (stdio) de um MCP: valor cifrado com `secretBox`. */
+export interface IOpexMcpSecret {
+    key: string
+    value: EncryptedSecret
+}
+
+/** MCP (servidor Model Context Protocol) usado pelo Agente Opex. */
+export interface IOpexMcpServer {
+    name: string
+    /** Identificador único usado no nome das ferramentas (`mcp_{slug}_{ferramenta}`). */
+    slug: string
+    description: string
+    enabled: boolean
+    transport: OpexMcpTransport
+    url: string
+    command: string
+    args: string[]
+    headers: IOpexMcpSecret[]
+    env: IOpexMcpSecret[]
+    /** "Pede confirmação" por ferramenta (nome original); ausente = padrão pela anotação. */
+    confirmations: Record<string, boolean>
+    tools: OpexMcpToolInfo[]
+    toolsSyncedAt: Date | null
+    lastError: string | null
+    lastCheckedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const OpexMcpSecretSchema = new Schema<IOpexMcpSecret>({ key: { type: String, required: true }, value: { type: Schema.Types.Mixed, required: true } }, { _id: false })
+
+const OpexMcpServerSchema = new Schema<IOpexMcpServer>(
+    {
+        name: { type: String, required: true },
+        slug: { type: String, required: true },
+        description: { type: String, default: "" },
+        enabled: { type: Boolean, default: true },
+        transport: { type: String, required: true },
+        url: { type: String, default: "" },
+        command: { type: String, default: "" },
+        args: { type: [String], default: [] },
+        headers: { type: [OpexMcpSecretSchema], default: [] },
+        env: { type: [OpexMcpSecretSchema], default: [] },
+        confirmations: { type: Schema.Types.Mixed, default: {} },
+        tools: { type: Schema.Types.Mixed, default: [] },
+        toolsSyncedAt: { type: Date, default: null },
+        lastError: { type: String, default: null },
+        lastCheckedAt: { type: Date, default: null },
+    },
+    { collection: "opex_mcp_servers", versionKey: false, timestamps: true, minimize: false },
+)
+OpexMcpServerSchema.index({ slug: 1 }, { unique: true })
+
 if (process.env.NODE_ENV === "development") {
+    delete models.OpexMcpServer
     delete models.OpexJob
     delete models.OpexFile
     delete models.OpexSession
@@ -238,3 +295,4 @@ export const OpexFile: Model<IOpexFile> = (models.OpexFile as Model<IOpexFile>) 
 export const OpexJob: Model<IOpexJob> = (models.OpexJob as Model<IOpexJob>) || model<IOpexJob>("OpexJob", OpexJobSchema)
 export const OpexPendingAction: Model<IOpexPendingAction> =
     (models.OpexPendingAction as Model<IOpexPendingAction>) || model<IOpexPendingAction>("OpexPendingAction", OpexPendingActionSchema)
+export const OpexMcpServer: Model<IOpexMcpServer> = (models.OpexMcpServer as Model<IOpexMcpServer>) || model<IOpexMcpServer>("OpexMcpServer", OpexMcpServerSchema)

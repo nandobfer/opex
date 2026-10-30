@@ -4,6 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { decryptSecret, encryptSecret, isEncryptedSecret, isSecretBoxConfigured } from "@/lib/crypto/secretBox"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_AUDIT_ENTITY } from "../constants"
+import { isMcpToolName } from "../mcp"
 import type { OpexConfirmationDto, OpexConfirmationStatus, OpexPart } from "../types"
 import { OpexMessage, OpexPendingAction, type IOpexPendingAction } from "@/lib/db/models/Opex"
 import { loadSession, opexDb, publishSessionUpdated } from "./sessions"
@@ -11,7 +12,7 @@ import { assertClientOpexEnabled, assertClientToolAllowed } from "./client-confi
 import { findOpexClientServerTool } from "./client-tools/registry"
 import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 import { compactToolOutput, stringifyForDisplay } from "./tool-runtime"
-import { toolErrorMessage, type OpexTool } from "./tools/define"
+import { OpexToolError, toolErrorMessage, type OpexTool } from "./tools/define"
 import { findOpexTool } from "./tools/registry"
 
 /** Ação pendente expira depois disso (o card some como "Expirada"). */
@@ -106,20 +107,28 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
     let final: ActionDoc = claimed
     if (decision === "cancel") {
         followUp = `O usuário CANCELOU a ação "${claimed.summary}" (actionId ${actionId}). Ela não foi executada.`
-    } else if (!tool) {
+    } else if (!tool && !isMcpToolName(claimed.toolName)) {
         final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { status: "failed", error: "Ferramenta não existe mais" } }, { new: true }).lean<ActionDoc>())!
         followUp = `O usuário confirmou a ação "${claimed.summary}", mas a ferramenta ${claimed.toolName} não existe mais.`
     } else {
+        let mcp: { tool: OpexTool; close: () => Promise<void> } | null = null
         try {
+            // Ferramenta de MCP: reconecta só ao MCP dela (habilitado e, no portal, liberado ao cliente).
+            if (!tool) {
+                const { resolveMcpTool } = await import("./mcp/tools")
+                mcp = await resolveMcpTool(claimed.toolName, scope)
+                if (!mcp) throw new OpexToolError("O MCP desta ferramenta foi desabilitado, excluído, retirado do cliente ou não oferece mais a ferramenta.")
+            }
+            const target = tool ?? mcp!.tool
             // Revalida o cliente, o vínculo e a ferramenta na hora de executar (a configuração pode ter
             // mudado depois do card) e devolve o ator atualizado para o contexto.
             let executionScope = scope
             if (scope.kind === "client") {
                 await assertClientOpexEnabled(scope.actor)
-                const actor = await assertClientToolAllowed(claimed.toolName, scope.actor)
+                const actor = await assertClientToolAllowed(claimed.toolName, scope.actor, target.mcpServerId)
                 executionScope = { kind: "client", actor }
             }
-            output = compactToolOutput(await tool.execute(tool.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope }))
+            output = compactToolOutput(await target.execute(target.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope }))
             final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { result: JSON.stringify(output ?? null), input: null } }, { new: true }).lean<ActionDoc>())!
             followUp = `O usuário CONFIRMOU a ação "${claimed.summary}" (actionId ${actionId}) e ela foi executada. Resultado: ${JSON.stringify(output)}`
         } catch (error) {
@@ -127,6 +136,8 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
             final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { status: "failed", error: message, input: null } }, { new: true }).lean<ActionDoc>())!
             followUp = `O usuário confirmou a ação "${claimed.summary}" (actionId ${actionId}), mas ela falhou: ${message}`
             log.info({ actionId, tool: claimed.toolName, err: message }, "[opex] ação confirmada falhou")
+        } finally {
+            await mcp?.close()
         }
     }
     if (decision === "cancel") await OpexPendingAction.updateOne({ _id: claimed._id }, { $set: { input: null } })

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   queueFollowUp: vi.fn(async () => {}),
   execute: vi.fn(async (input: { id: string }) => ({ deleted: input.id })),
   recordAudit: vi.fn(async () => {}),
+  resolveMcpTool: vi.fn(),
 }))
 
 const store = vi.hoisted(() => ({ messages: null as unknown, actions: null as unknown }))
@@ -28,6 +29,7 @@ vi.mock('@/features/opex-agent/server/sessions', () => ({
 vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.queueFollowUp }))
 vi.mock('ai', () => ({ dynamicTool: (def: unknown) => def }))
 const tool = { name: 'delete_thing', group: 'tasks', label: 'Excluir', risk: 'destructive', description: 'd', input: z.object({ id: z.string() }), summarize: (input: { id: string }) => `Excluir ${input.id}`, execute: mocks.execute }
+vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ resolveMcpTool: mocks.resolveMcpTool }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => (name === tool.name ? tool : undefined) }))
 
 import { decideAction, requestConfirmation } from '@/features/opex-agent/server/confirmations'
@@ -90,5 +92,29 @@ describe('confirmações do Agente Opex', () => {
     const actionId = await pending()
     actions().docs[0]!.expiresAt = new Date(Date.now() - 1000)
     await expect(decideAction(actionId, 'confirm', 'local')).rejects.toMatchObject({ status: 409, code: 'OPEX_ACTION_EXPIRED' })
+  })
+
+  it('ferramenta de MCP confirmada: reconecta ao MCP, executa e fecha a conexão', async () => {
+    const execute = vi.fn(async () => 'feito')
+    const close = vi.fn(async () => {})
+    const mcpTool = { ...tool, name: 'mcp_gh_create', group: 'mcp', execute }
+    mocks.resolveMcpTool.mockResolvedValue({ tool: mcpTool, close })
+    const confirmation = await requestConfirmation(SESSION, MESSAGE, mcpTool as unknown as OpexTool, { id: 'x1' }, 'call-1')
+    await messages().create({ _id: MESSAGE, parts: [{ type: 'tool', id: 'call-1', name: mcpTool.name, state: 'done', output: null, confirmation }] })
+    const result = await decideAction(confirmation.actionId, 'confirm', 'local')
+    expect(result.status).toBe('confirmed')
+    expect(mocks.resolveMcpTool).toHaveBeenCalledWith('mcp_gh_create', { kind: 'owner' })
+    expect(execute).toHaveBeenCalledWith({ id: 'x1' }, expect.objectContaining({ sessionId: SESSION }))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('MCP desabilitado entre o pedido e a decisão: a ação falha com motivo claro', async () => {
+    mocks.resolveMcpTool.mockResolvedValue(null)
+    const mcpTool = { ...tool, name: 'mcp_gh_create', group: 'mcp' }
+    const confirmation = await requestConfirmation(SESSION, MESSAGE, mcpTool as unknown as OpexTool, { id: 'x1' }, 'call-1')
+    await messages().create({ _id: MESSAGE, parts: [{ type: 'tool', id: 'call-1', name: mcpTool.name, state: 'done', output: null, confirmation }] })
+    const result = await decideAction(confirmation.actionId, 'confirm', 'local')
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('O MCP desta ferramenta foi desabilitado')
   })
 })

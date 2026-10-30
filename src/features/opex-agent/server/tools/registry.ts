@@ -13,6 +13,7 @@ import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
 import { issueTools } from "./issues"
 import { jobTools } from "./jobs"
+import { mcpTools } from "./mcp"
 import { memoryTools } from "./memories"
 import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
@@ -47,6 +48,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...environmentTools,
     ...opencodeServiceTools,
     ...opencodeResourceTools,
+    ...mcpTools,
 ] as readonly OpexTool[]
 
 export function findOpexTool(name: string): OpexTool | undefined {
