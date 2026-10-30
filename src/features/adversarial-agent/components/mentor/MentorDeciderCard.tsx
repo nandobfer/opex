@@ -19,7 +19,7 @@ export function MentorDeciderCard({ form, providers }: { form: UseFormReturn<Men
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Decisor e rigor da curadoria</CardTitle>
-                <CardDescription>O decisor dá uma nota de 0 a 100% para &ldquo;este caso deve virar regra permanente do revisor?&rdquo;. Com o JEV, é a probabilidade da resposta estruturada; com um provedor de texto, a nota que ele devolve. Só segue para o redator a partir do limiar do nível.</CardDescription>
+                <CardDescription>O decisor dá uma nota de 0 a 100% para &ldquo;este caso deve virar regra permanente do revisor ou do desenvolvedor?&rdquo;. Com o JEV, é a probabilidade da resposta estruturada; com um provedor de texto, a nota que ele devolve. Só segue para o Triador e o redator a partir do limiar do nível.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <MentorModelFields form={form} part="decider" providerIds={AI_PROVIDER_IDS} providers={providers} />

@@ -32,3 +32,21 @@ describe('decisões do Agente Mentor', () => {
     expect(resolveWriterAction({ action: 'update', memoryId: 'm9', text: 'R', reason: '' }, ['m1'])).toEqual({ action: 'create', memoryId: null, text: 'R' })
   })
 })
+
+describe('Triador do Agente Mentor (OPE-97)', () => {
+  it('aceita só destinos ligados; JSON inválido é recusado', async () => {
+    const { parseRouterAnswer, routerChoiceOf } = await import('@/features/adversarial-agent/mentor/decision')
+    const enabled = ['adversarial', 'developer-global'] as const
+    expect(parseRouterAnswer('```json\n{"target": "developer-global", "confidence": 0.8, "reason": "processo"}\n```', enabled)).toEqual({ target: 'developer-global', confidence: 0.8, reason: 'processo' })
+    expect(parseRouterAnswer('{"target": "adversarial"}', enabled)).toMatchObject({ target: 'adversarial', confidence: null })
+    expect(parseRouterAnswer('{"target": "developer-central"}', enabled)).toBeNull()
+    expect(parseRouterAnswer('{"target": "outra"}', enabled)).toBeNull()
+    expect(parseRouterAnswer('sem json', enabled)).toBeNull()
+    expect(routerChoiceOf('developer-global', enabled)).toBe('developer-global')
+    expect(routerChoiceOf('developer-central', enabled)).toBeNull()
+  })
+
+  it('fusão com id de outra lista vira memória nova', () => {
+    expect(resolveWriterAction({ action: 'update', memoryId: 'de-outra-lista', text: 'Regra fundida.', reason: '' }, ['g1'])).toEqual({ action: 'create', memoryId: null, text: 'Regra fundida.' })
+  })
+})

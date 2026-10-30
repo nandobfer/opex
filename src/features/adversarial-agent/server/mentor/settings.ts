@@ -2,11 +2,15 @@ import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { MENTOR_FEATURE } from "../../mentor/constants"
-import { DEFAULT_MENTOR_SETTINGS, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
+import { DEFAULT_MENTOR_SETTINGS, enabledTargets, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
 import type { MentorSettingsDto } from "../../mentor/types"
 import { loadAdversarialSettings } from "../settings"
 
-/** Configuração salva antes de um campo novo existir recebe o padrão dele antes de validar. */
+/**
+ * Configuração salva antes de um campo novo existir recebe o padrão dele antes de validar. O Triador
+ * (OPE-97) de uma configuração antiga nasce com o provedor e o modelo do decisor, para o Mentor seguir
+ * funcionando sem ação do dono.
+ */
 export function withMentorDefaults(saved: unknown): unknown {
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return saved
     const value = saved as Partial<MentorSettings>
@@ -25,6 +29,8 @@ export function withMentorDefaults(saved: unknown): unknown {
             },
         },
         decider: { ...defaults.decider, ...(value.decider ?? {}) },
+        router: value.router ? { ...defaults.router, ...value.router } : { ...defaults.router, ...(value.decider ?? {}), instructions: "" },
+        targets: { ...defaults.targets, ...(value.targets ?? {}) },
         writer: { ...defaults.writer, ...(value.writer ?? {}) },
         context: { ...defaults.context, ...(value.context ?? {}) },
     }
@@ -34,11 +40,15 @@ export async function loadMentorSettings(): Promise<{ settings: MentorSettings; 
     return loadFeature<MentorSettings>(MENTOR_FEATURE, z.preprocess(withMentorDefaults, mentorSettingsSchema), DEFAULT_MENTOR_SETTINGS)
 }
 
-/** Pode rodar? Mentor ativo, Agente Adversário ativo e os dois modelos (decisor e redator) conectados. */
+/** Pode rodar? Mentor ativo, Agente Adversário ativo e os modelos (decisor, Triador quando há mais de um destino, redator) conectados. */
 export async function mentorAvailability(settings: MentorSettings, adversaryEnabled: boolean): Promise<AiFeatureAvailability> {
     if (settings.enabled && !adversaryEnabled) return { available: false, reason: "O Agente Mentor grava memórias do Agente Adversário: ative o Agente Adversário na aba dele" }
     const decider = await availability({ enabled: settings.enabled, provider: settings.decider.provider, model: settings.decider.model }, '"Agente Mentor"')
     if (!decider.available) return decider
+    if (enabledTargets(settings.targets).length > 1) {
+        const router = await availability({ enabled: settings.enabled, provider: settings.router.provider, model: settings.router.model }, '"Agente Mentor" (Triador)')
+        if (!router.available) return router
+    }
     return availability({ enabled: settings.enabled, provider: settings.writer.provider, model: settings.writer.model }, '"Agente Mentor"')
 }
 
@@ -53,14 +63,15 @@ export function normalizeMentorSettings(input: MentorSettings): MentorSettings {
         ...input,
         scope: { all: input.scope.all, centralIds: input.scope.all ? [] : [...new Set(input.scope.centralIds)] },
         decider: model(input.decider),
+        router: model(input.router),
         writer: model(input.writer),
     }
 }
 
-/** Salva conferindo no catálogo os modelos do decisor e do redator. */
+/** Salva conferindo no catálogo os modelos do decisor, do Triador e do redator. */
 export async function saveMentorSettings(input: MentorSettings, actorId: string): Promise<MentorSettingsDto> {
     const next = normalizeMentorSettings(input)
-    for (const part of [next.decider, next.writer]) {
+    for (const part of [next.decider, next.router, next.writer]) {
         if (part.provider) await assertCatalog({ enabled: next.enabled, provider: part.provider, model: part.model, agent: null, variant: part.variant, temperature: null, maxOutputTokens: null })
     }
     const before = await loadMentorSettings()

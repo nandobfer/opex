@@ -1,17 +1,19 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AI_AGENTS, type AiAgentId } from "../../agents"
-import { agentMemoriesSource } from "../../hooks/useMemories"
+import { AI_AGENTS, isCentralScopedAgent, type AiAgentId } from "../../agents"
+import { agentMemoriesSource, centralMemoriesSource } from "../../hooks/useMemories"
 import { MemoryList } from "./MemoryList"
 
 /**
  * Card de uma lista de memórias do agente (mesmo card "Memórias" do Ciliar): alimenta e treina o
  * agente com instruções permanentes. Salva sozinho (cada memória grava na hora). O tempo real
- * (`useMemoriesRealtime`) fica com quem monta os cards, uma assinatura para todas as listas.
+ * (`useMemoriesRealtime`) fica com quem monta os cards, uma assinatura para todas as listas. Nas
+ * listas por central (`developer-central`), `centralId` escolhe a central.
  */
-export function AgentMemoriesCard({ agentId }: { agentId: AiAgentId }) {
+export function AgentMemoriesCard({ agentId, centralId }: { agentId: AiAgentId; centralId?: string }) {
     const agent = AI_AGENTS[agentId]
+    const source = isCentralScopedAgent(agentId) && centralId ? centralMemoriesSource(centralId) : agentMemoriesSource(agentId)
     return (
         <Card>
             <CardHeader>
@@ -21,7 +23,7 @@ export function AgentMemoriesCard({ agentId }: { agentId: AiAgentId }) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <MemoryList source={agentMemoriesSource(agentId)} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
+                <MemoryList source={source} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
             </CardContent>
         </Card>
     )

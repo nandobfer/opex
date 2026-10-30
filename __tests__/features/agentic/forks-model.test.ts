@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   assertAgentConfigs: vi.fn(async () => undefined),
 }))
 
+vi.mock('@/features/agentic/server/developer-memories', () => ({ syncDeveloperMemories: async () => ({ applied: true, section: '' }), withDeveloperMemories: (_sync: unknown, text: string) => text }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (value: unknown) => (value as { notFound?: boolean } | null)?.notFound === true }))
 vi.mock('@/lib/logger', () => {
