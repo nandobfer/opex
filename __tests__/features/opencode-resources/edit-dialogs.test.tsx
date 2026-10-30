@@ -92,4 +92,30 @@ describe("editar skill/agente/comando", () => {
         fireEvent.click(save)
         await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ id: "id1", content: { frontmatter: { license: "MIT", description: "Nova" }, body: "corpo" } }, expect.anything()))
     })
+
+    it("refetch depois de uma falha ao salvar mantém o formulário e o que foi digitado (F10)", async () => {
+        const loaded = detail({ kind: "skill", name: "minha", format: "markdown", frontmatter: { description: "A" }, body: "corpo" })
+        mocks.detail.mockReturnValue(query(loaded, { isFetchedAfterMount: true }))
+        const { rerender } = render(<ResourceEditorDialog kind="skill" scope="global" target={skill} onClose={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText("Descrição (quando usar)"), { target: { value: "Digitado" } })
+        // O onSettled da mutação com erro invalida o detalhe: refetch com o dado já carregado.
+        mocks.detail.mockReturnValue(query(loaded, { isFetching: true, isFetchedAfterMount: true }))
+        rerender(<ResourceEditorDialog kind="skill" scope="global" target={skill} onClose={vi.fn()} />)
+        expect(screen.getByDisplayValue("Digitado")).toBeTruthy()
+        mocks.detail.mockReturnValue(query(loaded, { isFetchedAfterMount: true }))
+        rerender(<ResourceEditorDialog kind="skill" scope="global" target={skill} onClose={vi.fn()} />)
+        expect(screen.getByDisplayValue("Digitado")).toBeTruthy()
+    })
+})
+
+describe("refetch com o MCP aberto (F10)", () => {
+    it("não troca o formulário pelo carregando nem perde o comando digitado", () => {
+        const loaded = detail({ mcp: { type: "local", command: ["srv"], url: null, cwd: null, disabled: false, timeout: null, environmentKeys: [], headerKeys: [] } })
+        mocks.detail.mockReturnValue(query(loaded, { isFetchedAfterMount: true }))
+        const { rerender } = render(<McpFormDialog scope="global" target={row({})} onClose={vi.fn()} />)
+        fireEvent.change(screen.getByLabelText("Comando"), { target: { value: "srv --novo" } })
+        mocks.detail.mockReturnValue(query(loaded, { isFetching: true, isFetchedAfterMount: true }))
+        rerender(<McpFormDialog scope="global" target={row({})} onClose={vi.fn()} />)
+        expect(screen.getByDisplayValue("srv --novo")).toBeTruthy()
+    })
 })

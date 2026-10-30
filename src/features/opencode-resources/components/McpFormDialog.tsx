@@ -97,7 +97,7 @@ export function McpFormDialog({ scope, target, onClose }: { scope: string; targe
                     <DialogTitle>{editing ? `Editar MCP ${editing.name}` : "Adicionar MCP"}</DialogTitle>
                     <DialogDescription>Validado antes de salvar; um backup da configuração é feito antes de cada alteração.</DialogDescription>
                 </DialogHeader>
-                {editing && (detail.isLoading || detail.isFetching) ? (
+                {editing && (detail.isLoading || (detail.isFetching && !detail.isFetchedAfterMount)) ? (
                     <Skeleton className="h-64 w-full" />
                 ) : editing && (detail.isError || !detail.data?.mcp) ? (
                     // Sem o detalhe não há formulário: abrir vazio sobrescreveria o MCP salvo.

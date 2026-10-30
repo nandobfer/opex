@@ -83,8 +83,9 @@ desligados ficam como estão), e o resultado informa só o que foi de fato atual
   cache do catálogo limpo (agentes e skills, também usado pelo Refinar tarefa), auditoria e Pusher.
 - **Ligar/desligar sem remover**: o manifesto `~/.config/opencode/.opex-disabled/manifest.json` (no
   host) guarda o caminho original ou a entrada do JSON removida; sobrevive à perda do banco do Opex.
-- **Editores**: sempre abrem com o conteúdo atual do host (o detalhe não fica em cache; enquanto a
-  busca roda, aparece o carregando). Se o detalhe falhar, o diálogo mostra o erro com Tentar novamente
+- **Editores**: sempre abrem com o conteúdo atual do host (o detalhe não fica em cache; o carregando
+  aparece só até a primeira busca ao abrir — buscas seguintes, como depois de um salvar recusado,
+  mantêm o formulário e o que foi digitado). Se o detalhe falhar, o diálogo mostra o erro com Tentar novamente
   e nenhum formulário (abrir vazio sobrescreveria o item salvo). No MCP, o comando é exibido com aspas
   duplas quando preciso (`\"` e `\\` escapados) e lido de volta igual; o `timeout` do arquivo, que o
   formulário não edita, é mantido ao salvar (também pelo Agente Opex).
