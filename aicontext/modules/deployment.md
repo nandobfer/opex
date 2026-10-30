@@ -110,3 +110,23 @@ container precisa ser recriado.
   apenas importa e reinicia.
 - Não há integração configurada na tela `/integracoes` para o deploy: é infraestrutura de CI/CD,
   não um serviço do app. Credenciais ficam em GitHub Secrets, nunca no repositório.
+
+## Estratégia de merge (OPE-96)
+
+- **Decisão: manter o merge commit.** PRs entram na `main` com `gh pr merge --merge`, inclusive o
+  merge automático das centrais (`mergePrPrompt` em `src/features/agentic/prompts.ts`, que proíbe
+  squash e rebase). A configuração de merge do repositório no GitHub não foi alterada.
+- **Bump de versão por commit removido** do `AGENTS.md` e dos guias: era a principal fonte de
+  conflitos (todo PR alterava a mesma linha do `package.json`). A versão do `package.json` (exibida
+  na barra lateral e em Ambientes) não muda mais a cada commit.
+- **Avaliação do squash:**
+  - Prós: `main` linear com um commit por tarefa (título com o código OPE-xx), revert de uma
+    entrega inteira simples, histórico mais legível.
+  - Contras: não reduz os conflitos por si só (o conflito do bump existiria igual); perde os commits
+    granulares na `main` (`git blame`/`bisect` menos precisos); branches empilhadas sobre outra
+    ainda aberta ganham conflitos falsos após o squash da base; `git branch --merged` deixa de
+    reconhecer branches entregues; exigiria mudar o merge automático do Opex, hoje fixo em merge
+    commit para todas as centrais (prompt, descrição em `GitSection.tsx` e testes).
+  - Recomendação: remover o bump ataca a causa dos conflitos; o merge commit continua compatível com
+    a integração da `main` por merge nas branches das tarefas. Reavaliar o squash só se os conflitos
+    persistirem.

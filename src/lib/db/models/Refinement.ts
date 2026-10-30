@@ -17,6 +17,8 @@ export interface ITaskRefinement {
     centralId: string
     sessionId: string | null
     sessionDirectory: string | null
+    /** Skill do OpenCode já ativada na sessão (evita reativar a cada turno da mesma sessão). */
+    activeSkill: { sessionId: string; skillId: string } | null
     /** IDs de sessões do OpenCode já desvinculadas e ainda pendentes de exclusão. */
     pendingSessionDeletions: string[]
     /** Instante em que o último turno começou (delimita a reconexão automática e o attach). */
@@ -55,6 +57,7 @@ const TaskRefinementSchema = new Schema<ITaskRefinement>(
         centralId: { type: String, required: true, index: true },
         sessionId: { type: String, default: null },
         sessionDirectory: { type: String, default: null },
+        activeSkill: { type: Schema.Types.Mixed, default: null },
         pendingSessionDeletions: { type: [String], default: [] },
         turnStartedAt: { type: Date, default: null },
         stopRequestedAt: { type: Date, default: null },

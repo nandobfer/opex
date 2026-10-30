@@ -120,7 +120,7 @@ e opções na própria aba da página "Provedores de IA".
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
   link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
-  **Orçamentos**, **Estimar prazos**, **Refinar tarefa** e **Desenvolvimento agêntico**
+  **Orçamentos**, **Estimar prazos**, **Agente Refinador** e **Desenvolvimento agêntico**
   (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
   A aba **Desenvolvimento agêntico** tem abas internas **Agentes** (agentes padrão e as **colunas
   globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
@@ -141,7 +141,7 @@ e opções na própria aba da página "Provedores de IA".
   têm essa aba). Trocar de aba com alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
-  conectados podem ser escolhidos. Refinar tarefa, Agente Revisor e Desenvolvimento agêntico são
+  conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Desenvolvimento agêntico são
   exclusivos do OpenCode.
 - **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
   `ModelPickerField` (busca do modelo com `ModelOption` — nome, id e selo "grátis" —, modelo salvo
@@ -352,11 +352,15 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   entre o rascunho e a tarefa existente. O cálculo exibido ao cliente (`H × fator × custo/hora`) é do
   servidor.
 
-## Feature "Refinar tarefa" (agente do OpenCode que conduz perguntas)
+## Feature "Agente Refinador" (refinar tarefa: agente do OpenCode que conduz perguntas)
 
+- Aba **"Agente Refinador"** (id `refinar-tarefa`, mantido para os links). O botão da tarefa continua
+  **Refinar tarefa**.
 - Configuração em `ai_feature_settings` (`feature: "task-refinement"`), schema Zod
-  `taskRefinementSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante, instruções
-  ("Restaurar padrão") e o que enviar (comentários, histórico). É **exclusiva do OpenCode** (depende
+  `taskRefinementSettingsSchema`: ativa, **modelo** e **agente** do OpenCode, variante, **origem das
+  instruções** (`instructionsSource`: `text` | `skill`), instruções de texto ("Restaurar padrão"),
+  **skill** do OpenCode (`skill`, id) e o que enviar (comentários, histórico). Detalhes da origem
+  "Skill do OpenCode" em `modules/refinement.md`, "Configuração". É **exclusiva do OpenCode** (depende
   da sessão longa e do sistema de perguntas), como "Estimar prazos". Ativar exige modelo; modelo,
   variante e agente são conferidos no catálogo do OpenCode.
 - A aba mostra um card **Diretório da sessão**: as sessões são criadas no diretório da **central de
@@ -439,12 +443,13 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `POST .../accounts/credentials/[credentialId]/activate` | Seleciona a conta em uso |
 | `/api/ai/providers/opencode/service/**`, `/scopes`, `/resources/**`, `/backups/**` | Serviço e recursos do OpenCode (`modules/opencode-resources.md`, "APIs") |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
+| `GET /api/ai/skills` (`?refresh=1`) | Skills instaladas no OpenCode (`AiSkillDto`, sem o conteúdo; `empty` = vazia) |
 | `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-tags` | Configuração de "Tags de tarefas" (taxonomia) + disponibilidade |
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
-| `GET/PUT /api/ai/features/task-refinement` | Configuração de "Refinar tarefa" + disponibilidade |
+| `GET/PUT /api/ai/features/task-refinement` | Configuração do "Agente Refinador" + disponibilidade + situação da skill |
 | `GET/PUT /api/ai/features/memory-summary` | Configuração do "Resumo de memórias" + disponibilidade |
 | `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista (`opex-global`, `opex-owner`, `opex-client`, `adversarial`); criar `{ texto }` → `{ memoria, formatadaPorIa }` |
 | `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto }` (reformata); excluir |
@@ -463,7 +468,7 @@ substituída pelo resumo, a especificação técnica em aba própria e a troca d
 hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
 `estimate-hours-settings` cobre a configuração de "Estimar prazos"; tags: `task-tags` puro,
 `task-tags-settings`, `task-tags-job`; estimativa por tarefas semelhantes: `orcamentos-estimate` e
-`orcamentos-similar`; `task-refinement-settings` cobre a configuração de "Refinar tarefa"). A
+`orcamentos-similar`; `task-refinement-settings` cobre a configuração do "Agente Refinador", `task-refinement-tab` a aba e `opencode-skills` a lista de skills). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o
 refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`). As contas dos providers do OpenCode em `__tests__/features/opencode-accounts/` (junção sem
 segredos, formulários dos métodos, detecção de retorno em localhost, serviço, rotas, aba e diálogo).

@@ -173,6 +173,12 @@ sem pedido explícito.
 - Ao reconectar, o cliente refaz as consultas afetadas; a tela avisa discretamente quando a
   conexão cai (`RealtimeStatusBanner`).
 
+### Git e Pull Requests
+
+- Pull Requests entram na `main` por **merge commit** (`gh pr merge --merge`); não use squash nem
+  rebase. A avaliação dessa escolha está em `aicontext/modules/deployment.md`, "Estratégia de merge".
+- Não altere a versão do `package.json` a cada commit.
+
 ### Banco, auditoria e integrações
 
 - Conecte ao banco antes de usar Mongoose (`dbConnect()`, conexão cacheada + migrações).
@@ -358,8 +364,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   - testes que dependem do código alterado: `npx vitest related --run <arquivos de src alterados>`;
   - pelo grafo de imports dos arquivos modificados no git: `npx vitest run --changed` (ou
     `--changed origin/main`). O `vitest.config.ts` tira o `package.json` dos `forceRerunTriggers`
-    para que o bump de versão não dispare a suíte inteira; alterar o próprio `vitest.config.ts`
-    ainda dispara, então nesse caso rode os arquivos de teste pelo caminho.
+    para que uma alteração nele (dependência ou versão) não dispare a suíte inteira; alterar o
+    próprio `vitest.config.ts` ainda dispara, então nesse caso rode os arquivos de teste pelo caminho.
 - Se um teste afetado falhar por causa da mudança, corrija antes de encerrar; falhas do CI em
   testes não rodados localmente são tratadas quando aparecerem no PR.
 
@@ -379,15 +385,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Ao criar um `git worktree`: copie o `.env` do repositório principal; **nunca** crie symlink do
   `node_modules` (rode `pnpm install` no worktree).
 
-## 8. Versionamento
-
-- **Sempre que for fazer um `git commit`, incremente a versão em `package.json`** seguindo
-  versionamento semântico (`major.minor.patch`), no mesmo commit da alteração:
-  - **major** (`X.0.0`): mudanças incompatíveis;
-  - **minor** (`x.Y.0`): nova funcionalidade compatível;
-  - **patch** (`x.y.Z`): correção de bug compatível.
-
-## 9. Checklist mínimo antes de encerrar
+## 8. Checklist mínimo antes de encerrar
 
 1. Li o contexto certo em `aicontext/`.
 2. Não introduzi autenticação, permissões nem multiempresa **no app do dono** sem pedido explícito.
