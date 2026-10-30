@@ -43,7 +43,9 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
   uma skill ou **Usar instruções de texto**; erro ao listar: "Tentar novamente".
 - **Ao salvar** com origem "Skill": é obrigatório escolher a skill ("Selecione a skill"); o servidor
   confere no OpenCode que ela existe (`AI_SKILL_NOT_FOUND`, 400) e não está vazia (`AI_SKILL_EMPTY`,
-  400). Não há limite de tamanho do conteúdo. OpenCode desconectado só recusa (409) com a feature
+  400). **Não há limite de tamanho do conteúdo**, por decisão do dono no planejamento da OPE-94: a skill
+  é ativada pelo mecanismo nativo do OpenCode (não é colada pelo Opex no prompt) e o tamanho das skills
+  instaladas é responsabilidade de quem as instala; por isso o Opex só recusa a skill vazia. OpenCode desconectado só recusa (409) com a feature
   ativa.
 - **Aviso na tela**: o `GET` devolve `skill: { status, name, message }` (`ok` | `not_found` | `empty`
   | `unavailable`; `null` com origem "Texto", regra pura em `features/ai/refinement-skill.ts`). Fora
@@ -53,7 +55,8 @@ chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
   `prompt.ts`) e, com a skill disponível, **ativa a skill na sessão** (`client.session.skill`,
   `resume: false`) — **uma vez por sessão/skill** (`activeSkill { sessionId, skillId }` no documento;
   Continuar/consolidação na mesma sessão não reativam; Recomeçar, sessão recriada ou troca de skill
-  ativam de novo; Reconectar não ativa nada). A entrada durável `opex-refinement` passa a levar só o
+  ativam de novo; Reconectar não ativa nada e, sem a skill já ativa naquela sessão, mantém as instruções
+de texto). A entrada durável `opex-refinement` passa a levar só o
   aviso de que as instruções são as da skill + o **protocolo fixo**, que continua valendo.
 - **Fallback explícito**: skill ausente no diretório da sessão, vazia, OpenCode sem listar ou falha ao
   ativar → o turno usa as **instruções de texto + protocolo** (como a origem "Texto"), registra

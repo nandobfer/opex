@@ -201,9 +201,11 @@ async function resolveInstructionsPlan(client: OpencodeClient, doc: ITaskRefinem
             return null
         })
     const plan = planRefinementInstructions(settings, skills)
-    if (plan.mode !== "skill" || attach) return plan
+    if (plan.mode !== "skill") return plan
     const active = doc.activeSkill
     if (active?.sessionId === sessionId && active.skillId === plan.skill.id) return plan
+    // Reconectar não ativa nada: sem a skill já ativa nesta sessão, o turno acompanhado segue com o texto.
+    if (attach) return { mode: "text", fallback: null }
     try {
         await client.session.skill({ sessionID: sessionId, id: plan.skill.id, resume: false })
         await TaskRefinement.updateOne({ _id: doc._id }, { $set: { activeSkill: { sessionId, skillId: plan.skill.id } } })

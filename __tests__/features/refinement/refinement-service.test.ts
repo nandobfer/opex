@@ -290,6 +290,22 @@ describe('turno e conclusão', () => {
             expect(instructionsValue()).not.toContain('Regras.')
         })
 
+        it('Reconectar sem a skill ativa na sessão mantém o texto (não diz que a skill está ativa)', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'grill-me' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })
+            mocks.doc = {
+                _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'Ajustar login', projectId: 'p1', centralId: 'a'.repeat(24),
+                sessionId: 'sess-1', sessionDirectory: '/repo/opex', runState: 'interrupted', resolved: false, pendingForms: [], pendingPermissions: [], pendingSessionDeletions: [],
+                activeSkill: null, turnStartedAt: new Date(), usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }, startedAt: new Date(), updatedAt: new Date(),
+            }
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await reconnectRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(mocks.fakeClient.session.skill).not.toHaveBeenCalled()
+            expect(instructionsValue()).toContain('Regras.')
+            expect(instructionsValue()).not.toContain('ativada nesta sessão')
+        })
+
         it('skill ausente no OpenCode cai nas instruções de texto e avisa na saída', async () => {
             mocks.settings = { instructionsSource: 'skill', skill: 'sumiu' }
             mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [grill] })

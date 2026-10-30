@@ -54,6 +54,16 @@ describe('aba "Agente Refinador"', () => {
         expect((screen.getByLabelText('Instruções (prompt de sistema)') as HTMLTextAreaElement).value).toBe('Meu texto')
     })
 
+    it('skill configurada e encontrada: mostra o nome, sem aviso nem "não encontrada"', () => {
+        mocks.settings = { ...mocks.settings, instructionsSource: 'skill', skill: 'grill-me' }
+        mocks.skillState = { status: 'ok', name: 'Grill me', message: null }
+        setQuery()
+        render(<TaskRefinementTab onDirtyChange={noop} />)
+        expect(screen.getByText('Grill me')).toBeTruthy()
+        expect(screen.queryByText(/não encontrada/)).toBeNull()
+        expect(screen.queryByRole('status')).toBeNull()
+    })
+
     it('mostra a skill salva e o aviso quando ela sumiu do OpenCode', () => {
         mocks.settings = { ...mocks.settings, instructionsSource: 'skill', skill: 'sumiu' }
         mocks.skillState = { status: 'not_found', name: null, message: 'A skill "sumiu" não está instalada no OpenCode: o refinamento usa as instruções de texto até você escolher outra.' }
