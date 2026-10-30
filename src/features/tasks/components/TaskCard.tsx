@@ -17,6 +17,7 @@ import { repoLabelOption, useRepoIndex } from "@/features/github/components/Repo
 import { ArchivedBadge, IssueNoticeBadge, TaskPriorityIcon, TaskTypeBadge } from "./TaskBadges"
 import { TaskTagsBadge } from "./TaskTagsBadge"
 import { EstimateBadge } from "./EstimateBadge"
+import { KANBAN_CARD_CLASS } from "./board-layout"
 
 /** Seleção do card: checkbox (aparece ao passar o mouse; sempre visível quando há seleção). */
 export interface CardSelection {
@@ -58,7 +59,9 @@ export function TaskCardView({ task, moving = false, dragging = false, selection
                 handleProps?.onKeyDown?.(event)
             }}
             className={cn(
-                "group relative cursor-grab select-none rounded-md border bg-card p-2.5 shadow-xs transition-colors hover:border-primary/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary active:cursor-grabbing",
+                "group relative cursor-grab select-none",
+                KANBAN_CARD_CLASS,
+                "transition-colors hover:border-primary/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary active:cursor-grabbing",
                 task.archived && "opacity-70",
                 selected && "border-primary bg-primary/10",
                 running && "border-success/70 bg-success/5",

@@ -150,7 +150,10 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 
 Toda tela ou bloco que carrega dados trata:
 
-- **Carregando**: skeleton no formato do conteúdo (operações acima de 200 ms);
+- **Carregando**: skeleton no formato do conteúdo (operações acima de 200 ms), com as mesmas
+  larguras, alturas e estrutura do resultado final. **Toda alteração de interface atualiza o
+  skeleton correspondente no mesmo commit**; quando der, os dois usam as mesmas constantes de classe
+  (ex.: `board-layout.ts` do kanban de Tarefas, `TABLE_COLUMN_WIDTHS` da tabela);
 - **Vazio**: ícone + texto descritivo + ação pertinente;
 - **Erro**: mensagem pt-BR acionável + "Tentar novamente";
 - **Em desenvolvimento**: recursos fora do escopo exibidos sem dados simulados nem controles que

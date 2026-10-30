@@ -19,7 +19,6 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
@@ -38,10 +37,10 @@ import type { TaskDto } from "../types"
 import { ColumnFormDialog } from "./ColumnFormDialog"
 import { TaskCreationActions } from "./TaskCreationActions"
 import { TaskBulkBar } from "./TaskBulkBar"
-import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
 import { useIsMobile } from "@/hooks/useMediaQuery"
 import { TaskBoard } from "./TaskBoard"
 import { TaskCompactList } from "./TaskCompactList"
+import { TasksSkeleton } from "./TasksSkeleton"
 import { TaskFiltersBar } from "./TaskFiltersBar"
 import { TaskTable } from "./TaskTable"
 import { TaskViewSwitch } from "./TaskViewSwitch"
@@ -143,7 +142,8 @@ export function TasksPage() {
     const projects = options.data?.projects ?? []
     const filtering = countActiveFilters(filters) > 0
     const view = !ready || list.isLoading ? "loading" : list.isError ? "error" : shown.length === 0 && (filtering || filters.view === "table") ? "empty" : filters.view
-    const kanbanLayout = view === "kanban"
+    // O skeleton do kanban usa a mesma altura do quadro (colunas até o fim da página).
+    const kanbanLayout = view === "kanban" || (view === "loading" && filters.view === "kanban")
     const isMobile = useIsMobile()
 
     // No kanban o quadro precisa de altura definida para as colunas rolarem por dentro (o cabeçalho
@@ -196,8 +196,8 @@ export function TasksPage() {
             </AnimatePresence>
 
             <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={view} {...swap} className={cn(view === "kanban" && "flex min-h-0 flex-col md:flex-1 md:basis-0")}>
-                    {view === "loading" && <TasksSkeleton kanban={filters.view === "kanban"} />}
+                <motion.div key={view} {...swap} className={cn(kanbanLayout && "flex min-h-0 flex-col md:flex-1 md:basis-0")}>
+                    {view === "loading" && <TasksSkeleton kanban={filters.view === "kanban"} columns={columns} mobile={isMobile} />}
                     {view === "error" && <ErrorState title="Não foi possível carregar as tarefas" description={apiErrorMessage(list.error, "Tente novamente.")} onRetry={refresh} />}
                     {view === "empty" && (
                         <EmptyState
@@ -305,21 +305,5 @@ export function TasksPage() {
                 </AlertDialogContent>
             </AlertDialog>
         </motion.section>
-    )
-}
-
-function TasksSkeleton({ kanban }: { kanban: boolean }) {
-    if (!kanban) return <Skeleton className="h-[420px] w-full" aria-label="Carregando tarefas" />
-    return (
-        <div className={cn("flex gap-3 overflow-hidden", CONTENT_BLEED_X)} aria-label="Carregando tarefas">
-            {Array.from({ length: 5 }, (_, column) => (
-                <div key={column} className="w-[290px] shrink-0 space-y-2 rounded-lg border bg-muted/40 p-2">
-                    <Skeleton className="h-6 w-1/2" />
-                    {Array.from({ length: 3 - (column % 2) }, (_, card) => (
-                        <Skeleton key={card} className="h-24 w-full" />
-                    ))}
-                </div>
-            ))}
-        </div>
     )
 }

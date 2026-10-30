@@ -141,6 +141,17 @@ semeado na primeira leitura (`ensureBoard`).
   `modules/repository-recency.md`); adicionar um ao filtro registra o uso.
 - Filtros salvos no navegador (`usePersistentState`, chave `opex:tasks-filters:v1`,
   `taskFiltersSchema`); chips resumem os ativos (`activeTaskFilterChips`).
+- **Carregando** (`TasksSkeleton`, OPE-100, port do MT-32): o skeleton tem as dimensões e a
+  estrutura do resultado final, com as mesmas constantes de classe dos componentes reais
+  (`components/board-layout.ts`: quadro, coluna, cabeçalho, faixa da coluna, área dos cards, card do
+  kanban e card compacto).
+  - Kanban: uma coluna de skeleton por coluna visível, com a borda colorida dela (enquanto o quadro
+    não chega, 4 colunas neutras), cabeçalho de duas linhas e cards no formato do `TaskCard` (código,
+    título em 2 linhas, repositório com avatar em parte deles e rodapé com badges e issue), na altura
+    e sangria do quadro.
+  - Tabela: cabeçalho com as colunas, larguras e ocultação responsiva do `TaskTable`
+    (`TABLE_COLUMN_*`, `TASK_TABLE_RESPONSIVE`) e linhas de `TASK_TABLE_ROW_HEIGHT` (64 px); no
+    celular, os cards do `TaskCompactList`.
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
   editáveis (alça para arrastar, ícone, descrição em tooltip, contador `n/limite` com aviso de WIP,
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no

@@ -21,6 +21,7 @@ import { EstimateBadge } from "./EstimateBadge"
 import { TaskColumnMenu } from "./TaskColumnMenu"
 import { TaskPriorityMenu } from "./TaskPriorityMenu"
 import { TaskTagsBadge } from "./TaskTagsBadge"
+import { COMPACT_CARD_CLASS } from "./board-layout"
 
 interface TaskCompactCardProps {
     task: TaskDto
@@ -63,7 +64,8 @@ export function TaskCompactCard({ task, columns, moving, updating, ordered, sele
             onClick={() => onOpen(task)}
             onKeyDown={(event) => event.key === "Enter" && onOpen(task)}
             className={cn(
-                "w-full cursor-pointer rounded-lg border bg-card p-3 text-left transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
+                COMPACT_CARD_CLASS,
+                "cursor-pointer transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
                 selected
                     ? "border-primary bg-primary/10"
                     : tone === "failed"

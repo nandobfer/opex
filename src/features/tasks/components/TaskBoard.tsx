@@ -32,6 +32,7 @@ import { TaskCardView } from "./TaskCard"
 import { columnSortableId, TaskColumn, type ColumnActions } from "./TaskColumn"
 import { cn } from "@/lib/utils"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
+import { KANBAN_BOARD_CLASS } from "./board-layout"
 
 interface TaskBoardProps {
     tasks: readonly TaskDto[]
@@ -199,7 +200,7 @@ export function TaskBoard({ tasks, columns, rawCounts, sort, movingId, selection
         <TooltipProvider>
             <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
                 <SortableContext items={visibleKeys.map(columnSortableId)} strategy={horizontalListSortingStrategy}>
-                    <div className={cn("flex min-h-0 flex-1 gap-3 overflow-x-auto pb-3", CONTENT_BLEED_X)} data-testid="task-board">
+                    <div className={cn(KANBAN_BOARD_CLASS, CONTENT_BLEED_X)} data-testid="task-board">
                         <AnimatePresence initial={false}>
                             {columns.map((column, index) => (
                                 <TaskColumn
