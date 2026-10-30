@@ -3,7 +3,7 @@
  * de reserva quando a IA não está disponível. Copiado do uso "Resumo" do Ciliar.
  */
 
-import { SUMMARY_MAX_LENGTH_MAX } from "./constants"
+import { SUMMARY_SAFETY_MAX_LENGTH } from "./constants"
 
 export interface FormattedMemory {
     texto: string
@@ -55,7 +55,7 @@ function cleanLine(line: string): string {
  * Interpreta a resposta do modelo (`{"texto","resumo"}`, tolerando cercas de código e texto em
  * volta). Sem JSON válido, `null` — quem chama usa o texto original e o resumo de reserva. O tamanho
  * configurado é só orientação no prompt: o resumo da IA é gravado inteiro, cortado apenas no teto de
- * segurança (`SUMMARY_MAX_LENGTH_MAX`) para uma resposta desgovernada não ocupar a lista.
+ * segurança (`SUMMARY_SAFETY_MAX_LENGTH`, bem acima do máximo configurável) para uma resposta desgovernada não ocupar a lista.
  */
 export function parseFormattedMemory(raw: string): FormattedMemory | null {
     const start = raw.indexOf("{")
@@ -65,7 +65,7 @@ export function parseFormattedMemory(raw: string): FormattedMemory | null {
         const parsed = JSON.parse(raw.slice(start, end + 1)) as { texto?: unknown; resumo?: unknown }
         if (typeof parsed.texto !== "string" || typeof parsed.resumo !== "string") return null
         const texto = normalizeText(parsed.texto)
-        const resumo = truncateAtWord(cleanLine(parsed.resumo.split("\n")[0] ?? ""), SUMMARY_MAX_LENGTH_MAX)
+        const resumo = truncateAtWord(cleanLine(parsed.resumo.split("\n")[0] ?? ""), SUMMARY_SAFETY_MAX_LENGTH)
         if (!texto || !resumo) return null
         return { texto, resumo }
     } catch {

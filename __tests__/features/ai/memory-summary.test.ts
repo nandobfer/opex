@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildSummaryInstructions, fallbackSummary, normalizeText, parseFormattedMemory, truncateAtWord } from '@/features/ai/memory-summary'
+import { SUMMARY_SAFETY_MAX_LENGTH } from '@/features/ai/constants'
 import { memoryInputSchema, memorySummarySettingsSchema, DEFAULT_MEMORY_SUMMARY_SETTINGS } from '@/features/ai/schemas'
 
 describe('Resumo de memórias (puro)', () => {
@@ -13,8 +14,13 @@ describe('Resumo de memórias (puro)', () => {
     const long = 'Usar o design da tarefa de referência como base visual nas próximas telas do módulo'
     expect(long.length).toBeGreaterThan(80)
     expect(parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: long }))?.resumo).toBe(long)
-    const runaway = parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: 'palavra '.repeat(60) }))!.resumo
-    expect(runaway.length).toBeLessThanOrEqual(200)
+    // Acima do máximo configurável (200) continua inteiro: o teto de segurança é separado da orientação.
+    const above = 'palavra '.repeat(29).trim()
+    expect(above.length).toBeGreaterThan(200)
+    expect(parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: above }))?.resumo).toBe(above)
+    const runaway = parseFormattedMemory(JSON.stringify({ texto: 'Texto.', resumo: 'palavra '.repeat(200) }))!.resumo
+    expect(runaway.length).toBeLessThanOrEqual(SUMMARY_SAFETY_MAX_LENGTH)
+    expect(runaway.length).toBeGreaterThan(900)
     expect(runaway.endsWith('…')).toBe(true)
   })
 

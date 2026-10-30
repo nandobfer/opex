@@ -437,7 +437,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   desliga com a disponibilidade, provedor e modelo pelo cartão do Agente Opex (`OpexModelCard`:
   Gemini, Anthropic, OpenAI ou DeepSeek), instruções e **tamanho máximo do resumo** (40–200, padrão
   80; é a orientação dada ao modelo: o resumo da IA é gravado **inteiro**, cortado só no teto de
-  segurança de 200 caracteres — `SUMMARY_MAX_LENGTH_MAX`). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
+  segurança de 1.000 caracteres — `SUMMARY_SAFETY_MAX_LENGTH`, separado do máximo configurável). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
 - `formatMemory` (`server/memory-summary.ts`) nunca lança: com a feature disponível, pede ao modelo
   `{"texto","resumo"}` (texto revisado + resumo de uma linha; `parseFormattedMemory` tolera cercas e
   texto em volta); desligada, indisponível, com erro ou resposta inválida, salva o texto como escrito
