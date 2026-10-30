@@ -33,7 +33,7 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
   e acessível; …". A leitura das configurações (`getAgenticSettings`, que desabilita o botão de
   abrir a mesa) usa um teste curto de 2 s e, se ele só estourar o tempo, não bloqueia: quem decide é a
   ação, com o limite cheio de 8 s.
-- A aba tem três **abas internas**, nesta ordem (`?abaAgentic=padrao|agentes|centrais`; padrão
+- A aba tem quatro **abas internas**, nesta ordem (`?abaAgentic=padrao|agentes|memorias|centrais`; padrão
   **Configurações Padrão**; OPE-92, portado da MT-23 do my-tasks):
   - **Configurações Padrão** (`DefaultSettingsSection`): padrões globais que cada central herda ou
     personaliza — card **Chat durante a execução** (`settings.liveChat`), **Fila padrão** (OPE-79) e
@@ -44,6 +44,9 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
     centrais personalizadas nem as mesas que já têm porta reservada.
   - **Agentes** (`AgentsSettingsSection`): card que liga a feature (ativa) + os **agentes padrão** de
     cada etapa.
+  - **Memórias** (OPE-97, `DeveloperMemoriesSection` sem central): card **Memórias globais do agente
+    desenvolvedor**, que valem em todas as centrais. Salva sozinho (cada memória grava na hora), sem
+    Salvar/Desfazer. Ver "Memórias do agente desenvolvedor".
   - **Centrais de desenvolvimento**: card com a lista das centrais (abaixo). Endereçável por
     `?aba=desenvolvimento-agentico&abaAgentic=centrais`; a troca preserva os demais parâmetros e
     mantém a confirmação de descarte.
@@ -90,6 +93,7 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 | Ambiente | fluxo padrão da mesa (**Publicar prévia**, ligado por padrão; desligado = PR automático direto — OPE-79), arquivo do compose (vazio = padrão do projeto), variável da porta (padrão `PORT`), **faixa de portas da prévia** (`PreviewPortsField`): switch **Personalizar portas** (`environment.inheritPorts` invertido; padrão **desligado**). Desligado, a porta inicial/final aparecem **desabilitadas** com a faixa de Configurações Padrão (o switch espera a configuração geral carregar); ligado, os campos ficam editáveis começando com essa faixa padrão (os números não mudam ao ligar) e a faixa própria prevalece sobre o padrão. A faixa própria só é validada (inicial ≤ final) quando personalizada; desligar troca uma porta própria inválida pela salva ou pelo padrão (`keepValidPort`) para não travar o Salvar. Central nova herda; centrais salvas antes do padrão global continuam **personalizadas** com a faixa que já tinham, e as salvas sem faixa ficam com a antiga 4001–4098. A faixa efetiva vem de `resolveCentralPorts` (texto do card, exemplo do comando e reserva da porta no build Local e no GitHub Action — `effectivePorts` no `workflow.ts`, que só lê a configuração geral quando a central herda), endereço da prévia (host, padrão `localhost`), caminho do teste de saúde, tempo máximo do build, **backup do banco de dados** (padrão **ligado**; desligue em projetos sem banco — ver “Backup do MongoDB da prévia”, OPE-72). Com **Publicar prévia desligado** os demais campos do ambiente são ocultados (os valores salvos são preservados) |
 | Colunas e conclusão | **Fila** e **Movimentação** das colunas, cada uma herdando o padrão global da aba ou **personalizada** nesta central (OPE-79); limpeza após o merge (derrubar a prévia, remover o worktree, apagar a branch local) — tudo padrão **sim**; o backup da prévia é sempre removido na conclusão; o que vai para o planejador (comentários, histórico) |
 | Instruções | texto extra anexado às mensagens de cada etapa |
+| Memórias | (OPE-97, fora do formulário: salva sozinha) card **Memórias da central** e, abaixo, **Memórias globais do agente desenvolvedor** (`DeveloperMemoriesSection` com `centralId`); ver "Memórias do agente desenvolvedor" |
 | Logs | terminal (`IntegrationDebugConsole` da integração `ai` com `scope=agentic:<id>`), sempre gravado (`integrationDebug(..., { always: true })`, 48 h) |
 | Mesas | mesas da central com etapa e atalho |
 
@@ -97,7 +101,38 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   diretório da central confere `git rev-parse --show-toplevel`, `git ls-remote` das branches base e
   de destino, `gh auth status`, `docker compose version`, o arquivo do compose e a pasta dos
   worktrees; mais feature/OpenCode e o vínculo do repositório (aviso). Grava `lastTest`.
-- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas).
+- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas e as **memórias
+  da central**, com a quantidade na auditoria da central — `deleteCentralMemories`).
+
+### Memórias do agente desenvolvedor (OPE-97)
+
+- Instruções permanentes que o agente desenvolvedor (o agente do OpenCode nas mesas e forks das
+  centrais) segue, no mesmo módulo das memórias do Agente Opex e do Adversário (`agent_memories`,
+  "Resumo de memórias", auditoria `MemoriaAgente`, evento `ai-memories-updated`; ver
+  `modules/ai.md`, "Memórias dos agentes"). Duas listas:
+  - `developer-global` — **Memórias globais do agente desenvolvedor**, valem em todas as centrais
+    (aba Desenvolvimento agêntico › Memórias e, abaixo do card da central, na página da central);
+  - `developer-central` — **Memórias da central**, uma lista por central (`centralId` no documento;
+    aba Memórias da página da central).
+- **Onde valem**: em **todo turno da mesa** (planejamento, revisões do plano, implementação, build,
+  correção de CI, PR, conclusão/limpeza etc.) e em **todo turno dos forks** (Plan e Build). A cada
+  turno (exceto a reconexão, que só reata a execução) o servidor relê as globais e as da central, nessa
+  ordem (`developerMemoryTexts`), e grava a seção "Memórias e instruções permanentes"
+  (`memoriesSection`) como entrada durável de instrução da sessão do OpenCode, chave
+  `opex-developer-memories` (`syncDeveloperMemories`, `server/developer-memories.ts`). Por isso
+  criar, editar ou excluir vale **a partir do próximo turno**, inclusive numa sessão já existente ou
+  recriada. Sem memórias, a entrada é removida da sessão.
+- **Fallback**: se o OpenCode recusar a instrução, a seção vai à frente do prompt do turno
+  (`withDeveloperMemories`, separada por `---`) — também na etapa de build, no primeiro prompt do
+agente no turno (preparo da prévia ou correção do build; as correções seguintes do mesmo turno já
+as têm no histórico). Falha ao ler as memórias no banco não derruba o
+  turno (a sessão segue com a última versão gravada).
+- O **Agente Mentor** também grava nestas listas: depois do decisor, o **Triador** escolhe UMA lista
+  entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
+  `modules/adversarial-agent.md`, "Agente Mentor"). Os agentes de refinamento e de revisão de PR não
+  recebem estas memórias.
+- O Agente Opex gerencia as duas listas pelas ferramentas de memórias (`centralId` de
+  `list_centrals` na lista da central; ver `modules/opex-agent.md`).
 
 ## Fila da central de desenvolvimento
 
@@ -946,6 +981,7 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 |---|---|
 | `GET/PUT /settings` | configuração geral |
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
+| `GET/POST /centrals/[id]/memories`, `GET/PATCH/DELETE /centrals/[id]/memories/[memoryId]` `{texto}` | memórias do agente desenvolvedor da central (lista `developer-central`; 404 `CENTRAL_NOT_FOUND`). As globais usam `/api/ai/agents/developer-global/memories` |
 | `POST /workbenches` `{centralId, taskId, text?, fileIds?}` | abre a mesa e inicia o plano; `text`/`fileIds` são as informações adicionais do primeiro prompt (409 se já existir) |
 | `POST /files` `{name, size, mediaType?}`, `POST /files/[id]/complete`, `GET/DELETE /files/[id]` | anexos dos campos da mesa: reserva + URL do PUT no S3, confirmação, conteúdo (`?download=1`) e remoção de um anexo ainda não enviado (409 se já foi) |
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |

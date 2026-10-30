@@ -50,6 +50,8 @@ const settings = (overrides: Partial<MentorSettings> = {}): MentorSettings => ({
   enabled: true,
   decider: { provider: 'gemini', model: 'flash', variant: null },
   writer: { ...DEFAULT_MENTOR_SETTINGS.writer, provider: 'anthropic', model: 'claude' },
+  // Os casos do pipeline usam só a lista do adversário (sem o Triador); os destinos do OPE-97 têm testes próprios.
+  targets: { adversarial: true, 'developer-global': false, 'developer-central': false },
   ...overrides,
 })
 
@@ -224,5 +226,104 @@ describe('pipeline do Agente Mentor', () => {
     await expect(approveMentorRun(String(doc._id), undefined, 'local')).rejects.toThrow('banco fora')
     expect(runs().docs.find((item) => String(item._id) === String(doc._id))!.status).toBe('suggested')
     expect(await approveMentorRun(String(doc._id), undefined, 'local')).toMatchObject({ status: 'created' })
+  })
+})
+
+describe('Triador e destinos do Agente Mentor (OPE-97)', () => {
+  const ALL = { adversarial: true, 'developer-global': true, 'developer-central': true }
+  const routed = (overrides: Partial<MentorSettings> = {}) => settings({ targets: ALL, router: { provider: 'gemini', model: 'flash', variant: null, instructions: '' }, ...overrides })
+  const memory = (id: string, resumo: string) => ({ id, resumo, texto: `${resumo}.`, autor: 'Eu', criadaEm: '', atualizadaEm: '' })
+
+  beforeEach(() => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('a1', 'Providers')] : agent === 'developer-global' ? [memory('g1', 'Escreva testes')] : [memory('c1m', 'Use a pasta features')]))
+  })
+
+  it('Triador por texto escolhe a lista da central: grava nela com a central da mesa, com caminhos aceitos', async () => {
+    const rule = 'Neste projeto, regras de negócio ficam em src/features e nunca em componentes de tela.'
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-central', confidence: 0.8, reason: 'convenção do projeto' }, 0.005))
+      .mockReturnValueOnce(reply({ action: 'create', text: rule }))
+    const doc = await run(routed())
+    expect(doc).toMatchObject({ status: 'created', target: 'developer-central', routerConfidence: 0.8, routerReason: 'convenção do projeto' })
+    expect(mocks.streamAi.mock.calls[1]![0]).toMatchObject({ consumption: { origin: 'adversarial-mentor-router' } })
+    // O Triador vê os resumos de cada lista ligada.
+    expect(mocks.streamAi.mock.calls[1]![0].prompt).toContain('Use a pasta features')
+    // O redator recebe a lista de destino completa (com ids) e as outras só pelos resumos.
+    const writerPrompt = mocks.streamAi.mock.calls[2]![0].prompt as string
+    expect(writerPrompt).toContain('id c1m · Use a pasta features')
+    expect(writerPrompt).not.toContain('id a1')
+    expect(writerPrompt).toContain('- Providers')
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    expect(mocks.create).toHaveBeenCalledWith('developer-central', rule, 'local', expect.objectContaining({ centralId: 'c1', auditContext: expect.objectContaining({ destino: 'developer-central' }) }))
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ message: expect.stringContaining('agente desenvolvedor (desta central)') }))
+    expect(doc.costUsd).toBeCloseTo(0.025)
+  })
+
+  it('Triador JEV (choice) escolhe as globais do desenvolvedor; fusão só com memória da mesma lista', async () => {
+    mocks.askJev.mockResolvedValue({ answers: { target: { type: 'choice', choice: 'developer-global', confidence: 0.72, probabilities: { adversarial: 0.2, 'developer-global': 0.72, 'developer-central': 0.08 } } } })
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'update', memoryId: 'a1', text: RULE }))
+    const doc = await run(routed({ router: { provider: 'jev', model: 'jev-latest', variant: null, instructions: '' } }))
+    const question = mocks.askJev.mock.calls[0]![0] as { questions: { target: { type: string; criteria: Record<string, string> } }; tracking: unknown }
+    expect(question.questions.target.type).toBe('choice')
+    expect(Object.keys(question.questions.target.criteria)).toEqual(['adversarial', 'developer-global', 'developer-central'])
+    expect(question.tracking).toEqual({ feature: 'adversarial-mentor-router', subject: 'OPE-746' })
+    // `a1` é do adversário: na lista global, vira memória nova.
+    expect(doc).toMatchObject({ status: 'created', target: 'developer-global', routerConfidence: 0.72 })
+    expect(mocks.create).toHaveBeenCalledWith('developer-global', RULE, 'local', expect.objectContaining({ centralId: null }))
+  })
+
+  it('um destino só ligado não chama o Triador', async () => {
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    const doc = await run(routed({ targets: { adversarial: false, 'developer-global': true, 'developer-central': false }, router: { provider: null, model: null, variant: null, instructions: '' } }))
+    expect(doc).toMatchObject({ status: 'created', target: 'developer-global', routerConfidence: null })
+    expect(mocks.streamAi).toHaveBeenCalledTimes(2)
+    expect(mocks.askJev).not.toHaveBeenCalled()
+  })
+
+  it('Triador com destino desligado ou JSON inválido: a execução falha sem gravar', async () => {
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ target: 'developer-central' }))
+    const doc = await run(routed({ targets: { adversarial: true, 'developer-global': true, 'developer-central': false } }))
+    expect(doc).toMatchObject({ status: 'failed', error: expect.stringContaining('Triador') })
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('sugestão: aprovar trocando o destino transforma a fusão em memória nova na lista escolhida', async () => {
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'adversarial', confidence: 0.55 }))
+      .mockReturnValueOnce(reply({ action: 'update', memoryId: 'a1', text: RULE }))
+    const doc = await run(routed({ saveMode: 'suggest' }))
+    expect(doc).toMatchObject({ status: 'suggested', proposal: { action: 'update', memoryId: 'a1', target: 'adversarial', centralId: null } })
+    const approved = await approveMentorRun(String(doc._id), undefined, 'local', 'developer-central')
+    expect(approved).toMatchObject({ status: 'created', target: 'developer-central', proposal: { action: 'create', target: 'developer-central', centralId: 'c1' } })
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.create).toHaveBeenCalledWith('developer-central', RULE, 'local', expect.objectContaining({ centralId: 'c1' }))
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: 'APROVAR', depois: expect.objectContaining({ destino: 'developer-central' }) }))
+  })
+
+  it('central excluída antes da aprovação: 409 e a sugestão volta a aguardar', async () => {
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-central' }))
+      .mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    const doc = await run(routed({ saveMode: 'suggest' }))
+    const { DomainError } = await import('@/lib/api/route')
+    mocks.create.mockRejectedValueOnce(new DomainError(404, 'Central não encontrada', 'CENTRAL_NOT_FOUND'))
+    await expect(approveMentorRun(String(doc._id), undefined, 'local')).rejects.toMatchObject({ status: 409, code: 'MENTOR_CENTRAL_GONE' })
+    expect(runs().docs.find((item) => String(item._id) === String(doc._id))!.status).toBe('suggested')
+    expect(await approveMentorRun(String(doc._id), undefined, 'local', 'developer-global')).toMatchObject({ status: 'created', target: 'developer-global' })
+  })
+
+  it('regressão: sugestão gravada antes do Triador (sem destino) é aprovada no Agente Adversário', async () => {
+    const legacy = await (store.runs as { create: (doc: Record<string, unknown>) => Promise<{ _id: unknown }> }).create({
+      workbenchId: 'w1', centralId: 'c1', taskId: 't1', taskCode: 'OPE-1', taskTitle: 'Antiga', sources: ['user'], trigger: null, userMessage: null, lessonCount: 0,
+      status: 'suggested', level: 'balanced', score: 0.9, threshold: 0.65, deciderReason: null, writerAction: 'create', writerReason: null, sanitizerReason: null,
+      proposal: { action: 'create', memoryId: null, text: RULE }, memoryId: null, error: null, costUsd: 0, durationMs: null, createdAt: new Date(),
+    })
+    expect((await listMentorRuns()).find((item) => item.id === String(legacy._id))).toMatchObject({ target: 'adversarial', proposal: { target: 'adversarial', centralId: null } })
+    expect(await approveMentorRun(String(legacy._id), undefined, 'local')).toMatchObject({ status: 'created', target: 'adversarial' })
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ centralId: null }))
   })
 })

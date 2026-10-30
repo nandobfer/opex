@@ -522,6 +522,12 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   `destructive`). Sem limite de quantidade por lista; a resposta traz a origem (`origin`, ex.:
   "Mentor · OPE-12", quando gravada pelo Agente Mentor). Sem ferramentas para as decisões do bloqueio
   adversário na mesa.
+  - **Agente desenvolvedor** (OPE-97): o enum também cobre `developer-global` (em todas as centrais) e
+    `developer-central` (por central). Todas as ferramentas aceitam `centralId` (de `list_centrals`),
+    obrigatório em `developer-central` e recusado nas demais listas (erro do serviço). Sem `agent`, ou
+    com `developer-central` sem `centralId`, `list_agent_memories` devolve uma lista por central
+    (`centralId`, `centralName`); `centralId` filtra uma (inexistente = 404). As mudanças valem a partir
+    do próximo turno das mesas e forks.
 - **Prompt de sistema estável**: instruções + dono do app (+ memórias). A data e a hora do turno vão como uma
   parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
   prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.

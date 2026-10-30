@@ -10,10 +10,10 @@ import { useAiModels } from "@/features/ai/hooks/useAi"
 import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import type { MentorSettings } from "../../mentor/schemas"
 
-type Part = "decider" | "writer"
+type Part = "decider" | "router" | "writer"
 
 /**
- * Provedor, modelo e variante de uma parte do Mentor (decisor ou redator). Só os provedores
+ * Provedor, modelo e variante de uma parte do Mentor (decisor, Triador ou redator). Só os provedores
  * conectados podem ser escolhidos; trocar de provedor limpa o modelo.
  */
 export function MentorModelFields({ form, part, providerIds, providers }: { form: UseFormReturn<MentorSettings>; part: Part; providerIds: readonly AiProviderId[]; providers: AiProviderStatusDto[] }) {

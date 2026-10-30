@@ -17,6 +17,7 @@ vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
 }))
 
 import { MentorDeciderCard } from '@/features/adversarial-agent/components/mentor/MentorDeciderCard'
+import { MentorRouterCard } from '@/features/adversarial-agent/components/mentor/MentorRouterCard'
 import { MentorTriggersCard } from '@/features/adversarial-agent/components/mentor/MentorTriggersCard'
 import { MentorRunsSection } from '@/features/adversarial-agent/components/mentor/MentorRunsSection'
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
@@ -36,6 +37,7 @@ function WithForm({ children }: { children: (form: ReturnType<typeof useForm<Men
 const run = (overrides: Partial<MentorRunDto> = {}): MentorRunDto => ({
   id: 'r1',
   workbenchId: 'w1',
+  centralId: 'c1',
   taskId: 't1',
   taskCode: 'OPE-746',
   taskTitle: 'Modelos',
@@ -48,10 +50,14 @@ const run = (overrides: Partial<MentorRunDto> = {}): MentorRunDto => ({
   score: 0.82,
   threshold: 0.65,
   deciderReason: 'Genérico',
+  target: 'adversarial',
+  routerConfidence: 0.7,
+  routerReason: 'classe de erro de revisão',
+  routerProbabilities: null,
   writerAction: 'create',
   writerReason: 'novo',
   sanitizerReason: null,
-  proposal: { action: 'create', memoryId: null, text: 'Confira providers.' },
+  proposal: { action: 'create', memoryId: null, text: 'Confira providers.', target: 'adversarial', centralId: null },
   memoryId: null,
   error: null,
   costUsd: 0.01,
@@ -94,7 +100,31 @@ describe('aba do Agente Mentor', () => {
     expect(textarea.value).toBe('Confira providers.')
     fireEvent.change(textarea, { target: { value: 'Confira os providers das telas.' } })
     fireEvent.click(screen.getByRole('button', { name: /Aprovar/ }))
-    expect(mocks.mutate).toHaveBeenCalledWith({ id: 'r1', decision: 'approve', text: 'Confira os providers das telas.' }, expect.anything())
+    expect(mocks.mutate).toHaveBeenCalledWith({ id: 'r1', decision: 'approve', text: 'Confira os providers das telas.', target: 'adversarial' }, expect.anything())
+  })
+
+  it('OPE-97: a execução mostra o destino do Triador; na sugestão, trocar o destino vai na aprovação', () => {
+    mocks.runs = [run({ proposal: { action: 'update', memoryId: 'm1', text: 'Confira providers.', target: 'adversarial', centralId: null } })]
+    render(<MentorRunsSection />)
+    expect(screen.getByText('Adversário')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Ver a execução do Mentor em OPE-746/ }))
+    expect(screen.getByText(/Agente Adversário · confiança 70%/)).toBeTruthy()
+    expect((screen.getByRole('radio', { name: 'Adversário' }) as HTMLElement).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Desenvolvedor · central' }))
+    expect(screen.getByText('Em outra lista, a fusão vira uma memória nova.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Aprovar/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith({ id: 'r1', decision: 'approve', text: 'Confira providers.', target: 'developer-central' }, expect.anything())
+  })
+
+  it('OPE-97: Triador e destinos — três destinos ligados mostram o modelo; com um só, o Triador some', () => {
+    render(<WithForm>{(form) => <MentorRouterCard form={form} providers={[]} />}</WithForm>)
+    const box = (name: RegExp) => screen.getByRole('checkbox', { name }) as HTMLElement
+    for (const name of [/^Agente Adversário/, /globais/, /da central/]) expect(box(name).getAttribute('aria-checked') ?? String((box(name) as HTMLInputElement).checked)).toBe('true')
+    expect(screen.getByText('Instruções adicionais do Triador (opcional)')).toBeTruthy()
+    fireEvent.click(box(/globais/))
+    fireEvent.click(box(/da central/))
+    expect(screen.queryByText('Instruções adicionais do Triador (opcional)')).toBeNull()
+    expect(screen.getByText(/Só um destino ligado: as memórias vão sempre para "Agente Adversário"/)).toBeTruthy()
   })
 
   it('execuções: vazio mostra o estado vazio; execução falha mostra o erro', () => {

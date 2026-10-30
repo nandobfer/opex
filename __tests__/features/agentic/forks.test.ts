@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => ({
   liveChat: { value: false },
 }))
 
+const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
+vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (value: unknown) => (value as { notFound?: boolean } | null)?.notFound === true }))
 vi.mock('@/lib/logger', () => {
@@ -260,6 +262,22 @@ describe('abrir fork', () => {
     expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ sessionId: 'fork-sess-1', text: 'Por que o plano usa X?', agent: expect.objectContaining({ agent: 'plan' }) }), expect.anything())
     await settle(dto.id)
     expect(fork(dto.id)).toMatchObject({ runState: 'idle', status: 'active' })
+  })
+
+  it('OPE-97: o turno do fork sincroniza as memórias da central na sessão do fork', async () => {
+    const id = await workbench()
+    const dto = await openFork(id, 'Por que o plano usa X?')
+    await settle(dto.id)
+    expect(memories.sync).toHaveBeenCalledWith(mocks.client, 'fork-sess-1', 'c1')
+    expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ text: 'Por que o plano usa X?' }), expect.anything())
+  })
+
+  it('OPE-97: sessão do fork sem a instrução das memórias recebe-as à frente da mensagem', async () => {
+    memories.sync.mockResolvedValueOnce({ applied: false, section: '## Memórias e instruções permanentes\n- Rode o lint.' })
+    const id = await workbench()
+    const dto = await openFork(id, 'Explique.')
+    await settle(dto.id)
+    expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ text: '## Memórias e instruções permanentes\n- Rode o lint.\n\n---\nExplique.' }), expect.anything())
   })
 
   it('numera os forks da mesa sem repetir', async () => {

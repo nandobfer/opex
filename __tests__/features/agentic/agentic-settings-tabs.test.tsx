@@ -37,6 +37,7 @@ vi.mock("@/features/agentic/hooks/useAgentic", () => ({
 }))
 vi.mock("@/features/agentic/components/settings/AgentRolesCard", () => ({ AgentRolesCard: () => <div data-testid="agent-roles">agentes padrão</div> }))
 vi.mock("@/features/agentic/components/settings/CentralsCard", () => ({ CentralsCard: () => <div data-testid="centrals">centrais</div> }))
+vi.mock("@/features/agentic/components/DeveloperMemoriesSection", () => ({ DeveloperMemoriesSection: ({ centralId }: { centralId?: string }) => <div data-testid="developer-memories">{centralId ?? "globais"}</div> }))
 vi.mock("@/features/agentic/components/settings/ColumnsCard", () => ({ ColumnsCard: ({ title }: { title: string }) => <div data-testid="columns-card">{title}</div> }))
 
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
@@ -113,9 +114,18 @@ describe("AgenticTab: abas internas", () => {
         expect(window.location.hash).toBe("#config")
     })
 
-    it("mostra as subabas na ordem Configurações Padrão | Agentes | Centrais de desenvolvimento", () => {
+    it("mostra as subabas na ordem Configurações Padrão | Agentes | Memórias | Centrais de desenvolvimento", () => {
         render(<AgenticTab onDirtyChange={vi.fn()} />)
-        expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Configurações Padrão", "Agentes", "Centrais de desenvolvimento"])
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Configurações Padrão", "Agentes", "Memórias", "Centrais de desenvolvimento"])
+    })
+
+    it("a aba Memórias mostra só as memórias globais do agente desenvolvedor, sem Salvar (cada memória grava na hora)", () => {
+        render(<AgenticTab onDirtyChange={vi.fn()} />)
+        fireEvent.click(screen.getByRole("tab", { name: "Memórias" }))
+        expect(screen.getByRole("tab", { name: "Memórias" }).getAttribute("aria-selected")).toBe("true")
+        expect(screen.getByTestId("developer-memories").textContent).toBe("globais")
+        expect(screen.queryByTestId("centrals")).toBeNull()
+        expect(screen.queryByRole("button", { name: /Salvar/ })).toBeNull()
     })
 
     it("abre em Configurações Padrão com chat, fila, movimentação, CI e portas padrão e Salvar/Desfazer", () => {

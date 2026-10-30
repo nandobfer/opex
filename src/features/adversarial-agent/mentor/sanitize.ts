@@ -17,6 +17,11 @@ export interface SanitizeContext {
     repo?: string | null
     /** Textos do caso que a regra não pode copiar (sequências de `COPY_NGRAM` palavras). */
     sources?: readonly (string | null | undefined)[]
+    /**
+     * Aceita caminhos e rotas (`src/…`, `/api/…`): só na lista da central do agente desenvolvedor
+     * (OPE-97), onde a convenção do projeto é legítima. As demais recusas continuam.
+     */
+    allowPaths?: boolean
 }
 
 /** Quantas palavras seguidas iguais a um texto do caso caracterizam cópia. */
@@ -79,7 +84,7 @@ export function sanitizeMemoryText(text: string, context: SanitizeContext = {}):
     if (TASK_CODE.test(value)) return "A regra cita um código de tarefa"
     if (ISSUE.test(value)) return "A regra cita uma issue ou PR (#N)"
     if (URL.test(value)) return "A regra cita uma URL"
-    if (ROUTE.test(value)) return "A regra cita uma rota ou tela específica"
+    if (!context.allowPaths && ROUTE.test(value)) return "A regra cita uma rota ou tela específica"
     for (const { term, label } of caseTerms(context)) {
         if (containsTerm(value, term)) return `A regra cita ${label} ("${term}")`
     }

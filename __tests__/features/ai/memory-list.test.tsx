@@ -43,6 +43,16 @@ describe('lista de memórias', () => {
     expect(net.get).toHaveBeenCalledWith('/ai/agents/opex-global/memories')
   })
 
+  it('regressão: o resumo longo aparece inteiro, quebrando linha (sem truncate)', async () => {
+    const resumo = 'Usar o design da tarefa de referência como base visual em todas as próximas telas do módulo de cadastro'
+    net.get.mockResolvedValue({ data: { data: [{ ...memory, resumo }] } })
+    mount(true)
+    const summary = await screen.findByText(resumo)
+    expect(summary.textContent).toBe(resumo)
+    expect(summary.classList.contains('truncate')).toBe(false)
+    expect(summary.classList.contains('break-words')).toBe(true)
+  })
+
   it('sem limite: mostra o total de memórias e o botão Nova memória sempre habilitado', async () => {
     const many = Array.from({ length: 60 }, (_, index) => ({ ...memory, id: index.toString(16).padStart(24, '0'), resumo: `Regra ${index}` }))
     net.get.mockResolvedValue({ data: { data: many } })

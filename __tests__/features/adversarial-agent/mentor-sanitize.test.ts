@@ -49,3 +49,17 @@ describe('sanitizador do Agente Mentor', () => {
     expect(sanitizeMemoryText('  ', context)).toBe('A regra está vazia')
   })
 })
+
+describe('sanitizador por destino (OPE-97)', () => {
+  it('lista da central aceita caminhos e rotas do projeto, mas continua recusando URL, código de tarefa e cópia', () => {
+    const central = { ...context, allowPaths: true }
+    expect(sanitizeMemoryText('Regras de negócio ficam em src/features e as rotas em /api/tasks, nunca no componente.', central)).toBeNull()
+    expect(sanitizeMemoryText('Veja https://exemplo.com antes.', central)).toContain('URL')
+    expect(sanitizeMemoryText('Como na OPE-746, use src/features.', central)).toContain('código de tarefa')
+    expect(sanitizeMemoryText('Rode o comando de lint em todo arquivo alterado antes de pedir revisão.', { ...central, sources: ['rode o comando de lint em todo arquivo alterado antes'] })).toContain('copia um trecho')
+  })
+
+  it('as demais listas continuam recusando rotas', () => {
+    expect(sanitizeMemoryText('Confira se /api/tasks valida o corpo.', context)).toContain('rota')
+  })
+})

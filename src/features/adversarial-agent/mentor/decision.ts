@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { extractJsonBlock } from "@/features/agentic/prompts"
-import { MENTOR_LEVEL_DEFS, type MentorLevel } from "./constants"
+import { MENTOR_LEVEL_DEFS, MENTOR_TARGETS, type MentorLevel, type MentorTarget } from "./constants"
 
 /** Decisões do Agente Mentor (módulo puro): limiar do slider e leitura das respostas do decisor e do redator. */
 
@@ -36,6 +36,24 @@ export type WriterAnswer = z.infer<typeof writerSchema>
 export function parseWriterAnswer(text: string): WriterAnswer | null {
     const parsed = writerSchema.safeParse(extractJsonBlock(text))
     return parsed.success ? parsed.data : null
+}
+
+const routerSchema = z.object({
+    target: z.enum(MENTOR_TARGETS),
+    confidence: z.coerce.number().min(0).max(1).nullable().optional().default(null),
+    reason: z.string().trim().max(2000).optional().default(""),
+})
+export type RouterAnswer = z.infer<typeof routerSchema>
+
+/** Resposta do Triador por texto: `{ target, confidence, reason }`. `null` = inválida ou destino desligado. */
+export function parseRouterAnswer(text: string, enabled: readonly MentorTarget[]): RouterAnswer | null {
+    const parsed = routerSchema.safeParse(extractJsonBlock(text))
+    return parsed.success && enabled.includes(parsed.data.target) ? parsed.data : null
+}
+
+/** Escolha do JEV (`choice`) entre os destinos ligados. `null` = opção fora da lista. */
+export function routerChoiceOf(choice: string, enabled: readonly MentorTarget[]): MentorTarget | null {
+    return (enabled as readonly string[]).includes(choice) ? (choice as MentorTarget) : null
 }
 
 /** `update` com id que não existe vira `create` (a memória pode ter sido excluída). */

@@ -8,7 +8,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
-import { MENTOR_FEATURE, MENTOR_UPDATED_EVENT } from "../mentor/constants"
+import { MENTOR_FEATURE, MENTOR_TARGET_LABELS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../mentor/constants"
 import type { MentorSettings } from "../mentor/schemas"
 import type { MentorRunDto, MentorSettingsDto } from "../mentor/types"
 
@@ -40,12 +40,12 @@ export const useMentorRuns = () => useQuery({ queryKey: MENTOR_RUNS_KEY, queryFn
 export function useMentorRunDecision() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string }) =>
-            unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" && vars.text ? { text: vars.text } : {})).data),
+        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string; target?: MentorTarget }) =>
+            unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" ? { ...(vars.text ? { text: vars.text } : {}), ...(vars.target ? { target: vars.target } : {}) } : {})).data),
         onSuccess: (saved, vars) => {
             queryClient.setQueryData<MentorRunDto[]>(MENTOR_RUNS_KEY, (current) => current?.map((run) => (run.id === saved.id ? saved : run)))
             void queryClient.invalidateQueries({ queryKey: ["adversarial", "memories"] })
-            toast.success(vars.decision === "approve" ? "Memória do Agente Adversário gravada" : "Sugestão descartada")
+            toast.success(vars.decision === "approve" ? `Memória gravada em "${vars.target ? MENTOR_TARGET_LABELS[vars.target].label : "Agente Adversário"}"` : "Sugestão descartada")
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível concluir a ação")),
     })

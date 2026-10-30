@@ -84,19 +84,19 @@ export function MemoryList({ source, canEdit, canCreate = true, emptyTitle, empt
                             const open = openId === memory.id
                             return (
                                 <motion.li key={memory.id} variants={listItem} initial="hidden" animate="visible" exit="exit" className="px-3 py-2">
-                                    <div className="flex items-center gap-2">
-                                        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open} onClick={() => setOpenId(open ? null : memory.id)}>
+                                    <div className="flex items-start gap-2">
+                                        <button type="button" className="flex min-w-0 flex-1 items-start gap-2 py-1 text-left" aria-expanded={open} onClick={() => setOpenId(open ? null : memory.id)}>
                                             {memory.origem === "agente" ? (
-                                                <Bot className="h-4 w-4 shrink-0 text-primary" aria-label="Registrada pelo agente" />
+                                                <Bot className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-label="Registrada pelo agente" />
                                             ) : (
-                                                <Brain className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                                                <Brain className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                                             )}
                                             {pending ? (
                                                 <span className="flex flex-1 items-center gap-2" aria-label="Resumindo a memória">
                                                     <Skeleton className="h-4 w-2/3" />
                                                 </span>
                                             ) : (
-                                                <span className="min-w-0 flex-1 truncate text-sm" title={memory.resumo}>
+                                                <span className="min-w-0 flex-1 break-words text-sm" data-testid="memory-summary">
                                                     {memory.resumo}
                                                 </span>
                                             )}
@@ -105,7 +105,7 @@ export function MemoryList({ source, canEdit, canCreate = true, emptyTitle, empt
                                                     <GraduationCap className="h-3 w-3" aria-hidden /> {memory.origin.label}
                                                 </Badge>
                                             ) : null}
-                                            <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0 text-muted-foreground">
+                                            <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="mt-0.5 shrink-0 text-muted-foreground">
                                                 <ChevronDown className="h-4 w-4" aria-hidden />
                                             </motion.span>
                                         </button>
