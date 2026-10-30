@@ -1,7 +1,7 @@
 import type { AiUsage } from "@/lib/ai/stream"
 import type { BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings, UnderstandTaskSettings } from "./schemas"
 
-export type { AiAgentDto, AiModelDto, AiProviderStatusDto } from "@/lib/ai/providers"
+export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/lib/ai/providers"
 
 /** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
 export interface AiFeatureAvailability {
@@ -49,11 +49,24 @@ export interface EstimateHoursSettingsDto {
     updatedAt: string | null
 }
 
+/** Situação da skill escolhida como instruções do Agente Refinador. */
+export type RefinementSkillStatus = "ok" | "not_found" | "empty" | "unavailable"
+
+export interface RefinementSkillStateDto {
+    status: RefinementSkillStatus
+    /** Nome da skill no OpenCode (quando encontrada). */
+    name: string | null
+    /** Aviso para a tela (null quando `ok`). */
+    message: string | null
+}
+
 export interface TaskRefinementSettingsDto {
     settings: TaskRefinementSettings
     /** Nada salvo ainda: valores iniciais do código. */
     isDefault: boolean
     availability: AiFeatureAvailability
+    /** Situação da skill salva (null quando a origem das instruções é o texto). */
+    skill: RefinementSkillStateDto | null
     updatedAt: string | null
 }
 

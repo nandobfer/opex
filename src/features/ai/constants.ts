@@ -116,7 +116,7 @@ export const DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS = [
     "Responda em português do Brasil.",
 ].join("\n")
 
-// ── Refinar tarefa (agente OpenCode que faz perguntas até a spec ficar clara) ─
+// ── Agente Refinador (agente OpenCode que faz perguntas até a spec ficar clara) ─
 
 export const DEFAULT_TASK_REFINEMENT_INSTRUCTIONS = [
     "Você é um agente de refinamento técnico que ajuda um desenvolvedor a esclarecer uma tarefa antes de implementá-la.",
@@ -124,6 +124,15 @@ export const DEFAULT_TASK_REFINEMENT_INSTRUCTIONS = [
     "Não invente requisitos: quando algo não estiver claro, pergunte em vez de supor.",
     "Escreva em português do Brasil.",
 ].join("\n")
+
+/** Origem das instruções do Agente Refinador: o texto configurado ou uma skill do OpenCode. */
+export const REFINEMENT_INSTRUCTIONS_SOURCES = ["text", "skill"] as const
+export type RefinementInstructionsSource = (typeof REFINEMENT_INSTRUCTIONS_SOURCES)[number]
+
+export const REFINEMENT_INSTRUCTIONS_SOURCE_LABELS: Record<RefinementInstructionsSource, string> = {
+    text: "Texto",
+    skill: "Skill do OpenCode",
+}
 
 /** O que, além dos dados principais, entra na entrada do refinamento. */
 export const REFINEMENT_INCLUDE_LABELS = {

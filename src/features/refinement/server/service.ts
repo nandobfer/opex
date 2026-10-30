@@ -6,6 +6,8 @@ import { AgenticCentral } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
+import { toOpencodeSkill } from "@/lib/ai/opencode-skills"
+import type { TaskRefinementSettings } from "@/features/ai/schemas"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
 import { getLocalUser } from "@/lib/local-user"
@@ -30,7 +32,7 @@ import { updateTask } from "@/features/tasks/server/service"
 import { availabilityOfTaskRefinement, loadTaskRefinementSettings } from "@/features/ai/server/settings"
 import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT } from "../constants"
 import { extractTechnicalSpec } from "../logic"
-import { buildRefinementFinalizePrompt, buildRefinementInstructions, buildRefinementPrompt, buildRefinementResumePrompt } from "../prompt"
+import { buildRefinementFinalizePrompt, buildRefinementInstructions, buildRefinementPrompt, buildRefinementResumePrompt, planRefinementInstructions, type RefinementInstructionsPlan } from "../prompt"
 import { deleteRefinementSession, flushRefinementSessionDeletions } from "./session-cleanup"
 import type { RefinementAvailability, TaskRefinementDto, TaskRefinementStateDto } from "../types"
 
@@ -184,6 +186,37 @@ async function applyInstructions(client: OpencodeClient, sessionId: string, inst
     }
 }
 
+/**
+ * Origem das instruções do turno. Com "skill", confere a skill no diretório da SESSÃO (as skills do
+ * OpenCode dependem do diretório) e, fora do turno acompanhado (`attach`), ativa a skill na sessão uma
+ * vez por sessão/skill. Qualquer falha cai nas instruções de texto, com aviso no log e na saída.
+ */
+async function resolveInstructionsPlan(client: OpencodeClient, doc: ITaskRefinement, settings: TaskRefinementSettings, sessionId: string, directory: string, attach: boolean): Promise<RefinementInstructionsPlan> {
+    if (settings.instructionsSource !== "skill") return { mode: "text", fallback: null }
+    const skills = await client.skill
+        .list({ location: { directory } })
+        .then((result) => result.data.map(toOpencodeSkill))
+        .catch((error: unknown) => {
+            log.warn({ err: errorText(error), refinementId: String(doc._id) }, "[refinement] não foi possível listar as skills do OpenCode")
+            return null
+        })
+    const plan = planRefinementInstructions(settings, skills)
+    if (plan.mode !== "skill") return plan
+    const active = doc.activeSkill
+    if (active?.sessionId === sessionId && active.skillId === plan.skill.id) return plan
+    // Reconectar não ativa nada: sem a skill já ativa nesta sessão, o turno acompanhado segue com o texto.
+    if (attach) return { mode: "text", fallback: null }
+    try {
+        await client.session.skill({ sessionID: sessionId, id: plan.skill.id, resume: false })
+        await TaskRefinement.updateOne({ _id: doc._id }, { $set: { activeSkill: { sessionId, skillId: plan.skill.id } } })
+        log.info({ refinementId: String(doc._id), skill: plan.skill.id }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: skill ativada na sessão`)
+        return plan
+    } catch (error) {
+        log.warn({ err: errorText(error), refinementId: String(doc._id), skill: plan.skill.id }, "[refinement] não foi possível ativar a skill na sessão")
+        return { mode: "text", fallback: `Não foi possível ativar a skill "${plan.skill.name}" na sessão do OpenCode: o refinamento usa as instruções de texto.` }
+    }
+}
+
 /** Sessão do refinamento: a gravada (se ainda existir no OpenCode) ou uma nova no diretório da central. */
 async function ensureSession(client: OpencodeClient, doc: ITaskRefinement, directory: string): Promise<string> {
     if (doc.sessionId) {
@@ -273,8 +306,14 @@ async function executeTurn(id: string, text: string, controller: AbortController
     const client = await getOpencodeClient()
     const attach = options.attach === true
     // Reconectar acompanha a sessão existente; um turno normal (re)usa a gravada ou cria uma nova.
-    const sessionId = attach ? (doc.sessionId as string) : await ensureSession(client, doc, doc.sessionDirectory ?? central.directory)
-    const instructions = buildRefinementInstructions(settings)
+    const directory = doc.sessionDirectory ?? central.directory
+    const sessionId = attach ? (doc.sessionId as string) : await ensureSession(client, doc, directory)
+    const plan = await resolveInstructionsPlan(client, doc, settings, sessionId, directory, attach)
+    if (plan.mode === "text" && plan.fallback) {
+        log.warn({ refinementId: id }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: ${plan.fallback}`)
+        publishWorkbenchEvent(id, { type: "notice", level: "warn", message: plan.fallback })
+    }
+    const instructions = buildRefinementInstructions(settings, plan)
     const instructionsApplied = await applyInstructions(client, sessionId, instructions)
     // Sem a entrada durável (servidor sem suporte), o protocolo vai no início de cada prompt.
     const withProtocol = (prompt: string) => (instructionsApplied ? prompt : `${instructions}\n\n---\n${prompt}`)

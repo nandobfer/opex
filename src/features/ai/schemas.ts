@@ -8,6 +8,7 @@ import {
     DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS,
     DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
     DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
+    REFINEMENT_INSTRUCTIONS_SOURCES,
     TASK_SUMMARY_MAX_LENGTH_DEFAULT,
     TASK_SUMMARY_MAX_LENGTH_MAX,
     TASK_SUMMARY_MAX_LENGTH_MIN,
@@ -212,9 +213,13 @@ export const DEFAULT_TASK_TAGS_SETTINGS: TaskTagsSettings = {
 }
 
 /**
- * Configuração da feature "Refinar tarefa" — agente do OpenCode que lê a tarefa, faz perguntas
- * (formulários) e reescreve a especificação técnica até ela ficar clara. Exclusiva do OpenCode
- * (depende de sessão longa e do sistema de perguntas), como "Estimar prazos".
+ * Configuração do "Agente Refinador" (feature `task-refinement`) — agente do OpenCode que lê a
+ * tarefa, faz perguntas (formulários) e reescreve a especificação técnica até ela ficar clara.
+ * Exclusiva do OpenCode (depende de sessão longa e do sistema de perguntas), como "Estimar prazos".
+ *
+ * As instruções vêm do texto (`instructions`) ou de uma skill do OpenCode (`skill`, pelo id), conforme
+ * `instructionsSource`. Os dois valores são sempre guardados: trocar de origem não apaga o outro, e o
+ * texto é o fallback quando a skill não pode ser usada.
  */
 export const taskRefinementSettingsSchema = z
     .object({
@@ -222,10 +227,13 @@ export const taskRefinementSettingsSchema = z
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
+        instructionsSource: z.enum(REFINEMENT_INSTRUCTIONS_SOURCES),
         instructions: z.string().trim().min(1, "Informe as instruções").max(8000, "Até 8.000 caracteres"),
+        skill: z.string().trim().max(200).nullable(),
         include: z.object({ comments: z.boolean(), history: z.boolean() }),
     })
     .superRefine((value, ctx) => {
+        if (value.instructionsSource === "skill" && !value.skill) ctx.addIssue({ code: "custom", path: ["skill"], message: "Selecione a skill" })
         if (!value.enabled) return
         if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
     })
@@ -237,7 +245,9 @@ export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
     model: null,
     agent: "plan",
     variant: null,
+    instructionsSource: "text",
     instructions: DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
+    skill: null,
     include: { comments: true, history: true },
 }
 

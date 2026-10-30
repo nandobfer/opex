@@ -3,13 +3,14 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AiFeatureSetting } from "@/lib/db/models/Ai"
 import { DomainError } from "@/lib/api/route"
 import { runAfterResponse } from "@/lib/after-response"
-import { listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { listAiAgents, listAiModels, listAiSkills } from "@/lib/ai/catalog"
 import { confirmAiProviderConnection } from "@/lib/ai/connection"
 import { AiProviderError } from "@/lib/ai/errors"
 import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { normalizeTaxonomy } from "@/features/tasks/tags"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
+import { resolveRefinementSkill } from "../refinement-skill"
 import {
     DEFAULT_BUDGET_PREVIEW_SETTINGS,
     DEFAULT_ESTIMATE_HOURS_SETTINGS,
@@ -30,7 +31,7 @@ import {
     type TaskTagsSettings,
     type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, RefinementSkillStateDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto } from "../types"
 import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
 import type { PrReviewSettingsDto } from "@/features/pr-review/types"
@@ -280,7 +281,7 @@ export async function saveEstimateHoursSettings(input: EstimateHoursSettings, ac
     return getEstimateHoursSettings()
 }
 
-// ── Refinar tarefa (agente OpenCode que conduz perguntas até a spec ficar clara) ──
+// ── Agente Refinador (agente OpenCode que conduz perguntas até a spec ficar clara) ──
 
 export async function loadTaskRefinementSettings(): Promise<{ settings: TaskRefinementSettings; isDefault: boolean; updatedAt: Date | null }> {
     return loadFeature(TASK_REFINEMENT_FEATURE, taskRefinementSettingsSchema, DEFAULT_TASK_REFINEMENT_SETTINGS)
@@ -288,21 +289,54 @@ export async function loadTaskRefinementSettings(): Promise<{ settings: TaskRefi
 
 /** A feature é exclusiva do OpenCode (depende da sessão longa e do sistema de perguntas). */
 export async function availabilityOfTaskRefinement(settings: TaskRefinementSettings): Promise<AiFeatureAvailability> {
-    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Refinar tarefa"')
+    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.model }, '"Agente Refinador"')
+}
+
+/** Situação da skill salva (só com origem "skill"); OpenCode fora do ar vira `unavailable`, sem erro. */
+async function refinementSkillState(settings: TaskRefinementSettings): Promise<RefinementSkillStateDto | null> {
+    if (settings.instructionsSource !== "skill") return null
+    const skills = await listAiSkills().catch(() => null)
+    const { status, name, message } = resolveRefinementSkill(settings.skill, skills)
+    return { status, name, message }
 }
 
 export async function getTaskRefinementSettings(): Promise<TaskRefinementSettingsDto> {
     const { settings, isDefault, updatedAt } = await loadTaskRefinementSettings()
-    return { settings, isDefault, availability: await availabilityOfTaskRefinement(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+    const [featureAvailability, skill] = await Promise.all([availabilityOfTaskRefinement(settings), refinementSkillState(settings)])
+    return { settings, isDefault, availability: featureAvailability, skill, updatedAt: updatedAt ? updatedAt.toISOString() : null }
 }
 
 export function normalizeTaskRefinementSettings(input: TaskRefinementSettings): TaskRefinementSettings {
-    return { ...input, agent: input.agent || null, variant: input.variant || null }
+    return { ...input, agent: input.agent || null, variant: input.variant || null, skill: input.skill || null }
+}
+
+/**
+ * Com origem "skill", confere no OpenCode que a skill existe e tem conteúdo. OpenCode desconectado só
+ * bloqueia quando a feature está sendo ativada (mesma regra do catálogo).
+ */
+export async function assertRefinementSkill(settings: TaskRefinementSettings): Promise<void> {
+    if (settings.instructionsSource !== "skill") return
+    const status = await confirmAiProviderConnection("opencode")
+    if (!status.connected) {
+        if (settings.enabled) throw new DomainError(409, `OpenCode não está conectado${status.detail ? ` (${status.detail})` : ""}: não foi possível conferir a skill`, "AI_PROVIDER_DISCONNECTED")
+        return
+    }
+    let skills
+    try {
+        skills = await listAiSkills({ fresh: true })
+    } catch (error) {
+        if (error instanceof AiProviderError) throw new DomainError(502, error.message, "AI_PROVIDER_ERROR")
+        throw error
+    }
+    const state = resolveRefinementSkill(settings.skill, skills)
+    if (state.status === "not_found") throw new DomainError(400, `A skill "${settings.skill}" não está instalada no OpenCode`, "AI_SKILL_NOT_FOUND")
+    if (state.status === "empty") throw new DomainError(400, `A skill "${state.name}" está vazia: escolha outra ou use instruções de texto`, "AI_SKILL_EMPTY")
 }
 
 export async function saveTaskRefinementSettings(input: TaskRefinementSettings, actorId: string): Promise<TaskRefinementSettingsDto> {
     const next = normalizeTaskRefinementSettings(input)
     await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    await assertRefinementSkill(next)
     const before = await loadTaskRefinementSettings()
     await persistFeature(TASK_REFINEMENT_FEATURE, next, actorId, before)
     return getTaskRefinementSettings()
