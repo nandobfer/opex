@@ -24,7 +24,8 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
         [portal.clientId, portal.clientName, portal.user.id, portal.user.username, portal.isAdmin, portal.api],
     )
     const initial = useMemo(() => ({ opex: session.opexEnabled, maddox: session.maddoxEnabled }), [session.opexEnabled, session.maddoxEnabled])
-    const footerItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} />
+    // Sem nenhum agente ligado, nem o rodapé (com o divisor) aparece.
+    const footerItems = session.opexEnabled || session.maddoxEnabled ? (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} /> : undefined
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: `Portal · ${session.clientName}`, homeHref: clienteDashboardPath() }}

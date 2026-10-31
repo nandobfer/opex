@@ -279,6 +279,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   ferramentas não entra no grafo estático nem roda no build); se o catálogo falhar, a especificação
   sai sem o MCP, com log de aviso. Pelo explorador, as chamadas ao MCP respondem 401 (o segredo não
   sai do servidor).
+- **Exposição intencional**: como o resto da especificação, a seção do MCP é pública sem login (e com
+  CORS aberto): quem tiver a URL vê nomes, descrições e esquemas de entrada das ferramentas do dono e
+  do portal. É só contrato (sem dados nem segredos) e foi a opção escolhida pelo dono no plano da
+  OPE-101; executar exige o segredo do MCP e uma sessão do Agente Maddox existente. Para esconder o
+  catálogo, a alternativa é servir a seção só com sessão do dono (outra URL de especificação).
 - **Documentação gerenciada**: `managedSwaggerPath` fixa a `swaggerUrl` em
   `getInternalBaseUrl() + /api/openapi.json`; somente leitura (PATCH → 400).
 - Rotas públicas só de contrato: `GET /api/openapi.json` e `GET /api/docs` (Swagger UI). São
