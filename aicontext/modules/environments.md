@@ -84,6 +84,13 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
   Machine.
 
+### Consumidores
+
+- **Engramind** (`modules/engramind.md`): a integração aponta para um Ambiente (adotado em
+  `/home/engramind`) e lê/grava o `.env` e recria o serviço `api` no host com o mesmo executor
+  (`createHostRunner`/`runDetached`), usando `resolveEnvironmentRef` + `composePlanOf`. Trocar
+  `APP_PORT` no Engramind atualiza o `source.projectName` do Ambiente adotado (`engramind-<porta>`).
+
 ### Agente Opex
 
 Grupo de ferramentas **Ambientes** do Agente Opex **do dono** (`src/features/opex-agent/server/tools/environments.ts`, formatação pura em

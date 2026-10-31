@@ -57,6 +57,10 @@ type Executable = { execute: (input: unknown, options: { toolCallId: string; abo
 const context = { sessionId: 's1', actorId: 'local' }
 const TASK_ID = 'e'.repeat(24)
 
+// Tokens do Engramind: listar, emitir e editar rodam direto (o segredo do emitido vai pelo "Ver token",
+// nunca para o modelo); só revogar pede confirmação. Ver aicontext/modules/opex-agent.md.
+const ENGRAMIND_NON_DESTRUCTIVE_TOKEN_TOOLS = ['list_engramind_tokens', 'issue_engramind_token', 'update_engramind_token']
+
 describe('registro de ferramentas', () => {
   it('nomes únicos e aceitos pelos provedores, com rótulo, descrição e grupo válidos', () => {
     const names = OPEX_TOOLS.map((tool) => tool.name)
@@ -79,12 +83,12 @@ describe('registro de ferramentas', () => {
       (tool) =>
         /^(delete|archive|stop|interrupt)_/.test(tool.name) ||
         /_archived$/.test(tool.name) ||
-        /token|password|_user$/.test(tool.name) ||
+        (/token|password|_user$/.test(tool.name) && !ENGRAMIND_NON_DESTRUCTIVE_TOKEN_TOOLS.includes(tool.name)) ||
         (tool.group === 'integrations' && tool.risk !== 'read') ||
         tool.name === 'create_client',
     )
     expect(sensitive.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['delete_task', 'set_task_archived', 'delete_workbench', 'delete_central', 'update_integration', 'set_service_archived', 'regenerate_client_token', 'create_client_user', 'update_client_user', 'delete_client_user', 'delete_client']),
+      expect.arrayContaining(['delete_task', 'set_task_archived', 'delete_workbench', 'delete_central', 'update_integration', 'set_service_archived', 'regenerate_client_token', 'create_client_user', 'update_client_user', 'delete_client_user', 'delete_client', 'revoke_engramind_token']),
     )
     for (const tool of sensitive) expect({ name: tool.name, risk: tool.risk }).toEqual({ name: tool.name, risk: 'destructive' })
     // Toda ferramenta destrutiva tem a frase do card de confirmação.

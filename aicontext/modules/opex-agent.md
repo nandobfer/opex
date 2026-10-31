@@ -238,6 +238,7 @@ risco (os catálogos são distintos).
 | Financeiro (leitura) | `get_finance` (totais e grupos por cliente/período, itens opcionais) |
 | Terminal do host | `get_host_terminal`, `run_host_command`* — detalhes abaixo |
 | Ambientes | `list_environments`, `get_environment`, `get_environment_logs`, `list_environment_deploys`, `get_environment_deploy`, criar/editar/adotar/apagar, `deploy_environment`*, `move_environment`*, levantar/derrubar*/reiniciar, configuração e limpeza do registry — os mesmos serviços de `/ambientes`; o fim de um deploy pedido pelo agente chega à sessão como aviso (`kind: "notice"`). Detalhes em `modules/environments.md` |
+| Engramind | Uma por operação do catálogo `features/engramind/operations.ts` (configurações e por canal, `set_engramind_secret`, testers, modelos, `reembed_engramind`, apps, agentes, tokens, canais, assinaturas, memórias, jobs, chamadas ao LLM, consumo, auditoria) mais `get_engramind_connection`, `run_engramind_bootstrap`, `import_engramind_memories`, `get_engramind_env`, `update_engramind_env`, `apply_engramind_env`. Destrutivas: `delete_engramind_{channel,memory,app,agent}`*, `archive_engramind_{channel,memory}`*, `revoke_engramind_token`*. `issue_engramind_token` devolve só o prefixo e o card ganha **"Ver token"** (ver "Ação no resultado") — `modules/engramind.md` |
 | Serviço do OpenCode | `get_opencode_service_status` (com o impacto: mesas e refinamentos rodando), `get_opencode_service_logs`, `start_opencode_service`, `stop_opencode_service`*, `restart_opencode_service`*, `upgrade_opencode`* (última 2.x; major nova só com `allowMajor`; em segundo plano, o fim chega como `notice`), `get_opencode_service_operation`, `list_opencode_backups`, `restore_opencode_backup`* — ver `modules/opencode-resources.md` |
 | Recursos do OpenCode | `list_opencode_scopes`, `list_opencode_resources` (`kind` skill/agent/command/plugin/mcp, escopo, nome, situação; sem caminho no host), `get_opencode_resource` (MCP só com os nomes dos segredos), `create_opencode_resource`, `update_opencode_resource` (o que não vier fica; segredos do MCP mantidos), `set_opencode_mcp_secrets`* (`redact` nos valores), `set_opencode_resource_enabled`†, `delete_opencode_resource`*, `install_opencode_resource`† (código de terceiros no host), `check_opencode_updates`, `update_opencode_resources`† (ids ou `all`), `test_opencode_mcp` |
 | MCPs | `list_mcp_servers`, `get_mcp_server`, `test_mcp_server` (conecta e atualiza as ferramentas descobertas), `create_mcp_server`*, `update_mcp_server`*, `set_mcp_server_enabled`, `set_mcp_tool_confirmation`†, `delete_mcp_server`*, `set_client_mcp_access`* (libera/retira um MCP de um cliente) — mesmos serviços da seção MCPs; headers/variáveis saem do histórico (`redact`) e nunca são lidos de volta |
@@ -245,9 +246,19 @@ risco (os catálogos são distintos).
 | Clientes | `list_clients`, `get_client` (usuários do portal e prévias de orçamento recentes), `create_client`*, `update_client`, `regenerate_client_token`*, `delete_client`*, `create_client_user`*, `update_client_user`*, `regenerate_client_user_token`*, `delete_client_user`* |
 
 \* `destructive`. Regra (testada): toda ferramenta de exclusão, arquivamento, gravação de integração
-ou credencial/token/senha de cliente é `destructive`. Tokens, `portalPath` (que carrega o token) e
+ou credencial/token/senha de cliente é `destructive` — exceto `list_engramind_tokens`,
+`issue_engramind_token` e `update_engramind_token` (lista explícita no teste: o segredo do token
+emitido nunca vai ao modelo e só revogar pede confirmação). Tokens, `portalPath` (que carrega o token) e
 senhas nunca saem para o modelo nem para os cards (`redact` + saídas enxutas). † `write` com
 `confirmByDefault` (pede confirmação por padrão).
+
+### Ação no resultado (genérica)
+
+Uma ferramenta pode devolver `resultAction` na saída (`src/features/opex-agent/result-actions.ts`) e
+o `OpexToolCard` mostra o botão (`ToolResultAction`). Hoje há `reveal-secret`: o segredo fica cifrado
+em `opex_secret_reveals` (`createSecretReveal(secret, { title, label, ttlMs })`, TTL) e
+`POST /api/opex/reveals/[id]` (só o dono) devolve e apaga na primeira leitura (`410` se já lido ou
+vencido); o card mostra o valor num diálogo com `SecretReveal` + Copiar e depois "Token já exibido".
 
 ### Criar tarefa (`create_task`)
 

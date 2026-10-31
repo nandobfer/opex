@@ -86,7 +86,9 @@ URL). Token inválido leva ao `/login` com aviso.
 - `/api/maddox/mcp/*` — servidor MCP do Opex chamado pelo OpenCode (Agente Maddox), autenticado pelo
   segredo derivado da chave das integrações e com o escopo conferido pela sessão — ou, no servidor do
   dono, pelo token de sistema com o escopo `mcp:owner` (ver `maddox-agent.md`);
-- `/api/openapi.json` e `/api/docs` — só o contrato OpenAPI, nenhum dado.
+- `/api/openapi.json` e `/api/docs` — só o contrato OpenAPI, nenhum dado;
+- `/api/engramind/webhook` (exato) — eventos do Engramind, autenticados só pela assinatura HMAC
+  (`Engramind-Signature`) com o segredo do webhook da integração (ver `engramind.md`).
 
 ### API pública por token de sistema — escopos
 

@@ -1,0 +1,189 @@
+# Módulo: Engramind (`src/features/engramind/`)
+
+O **Engramind** (v0.8.0, repositório `nandobfer/engramind`, instalado em `/home/engramind`) é uma rede
+de memórias para agentes de IA: um serviço Rust separado do Opex (SQLite + FTS5, backup contínuo
+pelo Litestream, Redator por LLM, embeddings locais ou remotos, webhooks) que guarda fatos curtos em
+**canais** e os entrega por REST, MCP e CLI. O Opex é o **gestor** da rede: configura o serviço,
+administra apps, agentes, tokens, canais, assinaturas e memórias e acompanha a operação.
+
+Fora de escopo (entrega posterior): usar as memórias do Engramind no lugar das memórias do Agente Opex.
+
+## Integração `engramind` (`/integracoes/engramind`)
+
+- **Catálogo** (`src/lib/integrations/catalog.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
+  `env`. Públicos: `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
+  Engramind alcança para os webhooks) e `environmentId` (`group: "card"`). Privados: `adminToken` e
+  `webhookSecret` (`group: "card"`, gerado pelo Opex, nunca exibido). Tudo é gravado pela aba Conexão
+  (`PUT /api/engramind/connection`), que chama o `updateIntegration` central (cifra e audita).
+- **Cliente HTTP** (`server/client.ts`, só servidor): Bearer com o token privado, `User-Agent:
+  opex/<versão>`, `Idempotency-Key` em toda mutação (fixa na importação), `debugFetch` mascarado e
+  corpo com segredo enviado como `Blob` (o debug só registra corpos em texto). Erros do envelope
+  `{ error: { code, details } }` viram `DomainError` com mensagem pt-BR (`server/errors.ts`, decide pelo
+  `code`; `LAST_ADMIN_TOKEN` → "Emita outro token admin antes", `CATEGORY_IN_USE` com a contagem,
+  `RATE_LIMITED` com `Retry-After`...). O `401` do Engramind vira `409 ENGRAMIND_AUTH_INVALID` no Opex
+  (a sessão do dono continua válida); fora do ar → `503 ENGRAMIND_UNREACHABLE`; sem conexão →
+  `409 ENGRAMIND_NOT_CONFIGURED`.
+- **O navegador nunca chama o Engramind** (CORS fechado): tudo passa por `/api/engramind/**`.
+
+### Bootstrap (`server/bootstrap.ts`)
+
+Ao salvar a conexão (token novo, URL trocada ou sem segredo de webhook):
+
+1. `GET /v1/whoami`. Token que não é `admin` `read+write+delete` → passo `whoami` falha ("Reconfigure o token").
+2. Token do app `bootstrap`: cria o app `opex` ("Opex") ou reaproveita o existente; emite um token
+   `admin` `read+write+delete` "Opex"; **grava o token novo**; só então revoga o de bootstrap (com o
+   token novo). O app `bootstrap` fica. Falha ao gravar → o de bootstrap **não** é revogado e o passo
+   avisa (revogue o emitido e repita).
+3. Webhook: gera o segredo (48 bytes aleatórios, base64), grava cifrado e faz `PATCH /v1/apps/<app do
+   token>` com `webhook_url = <URL pública>/api/engramind/webhook`. Já registrado e igual → `skipped`.
+4. Cada passo é auditado (`entidade: "Engramind"`, `entidadeId: "bootstrap"`, sem segredos) e
+   logado. A resposta traz os passos (`BootstrapStepDto[]`), mostrados na aba; "Repetir configuração
+   automática" (`POST /api/engramind/connection/bootstrap`) é seguro.
+
+### Teste de conexão (`server/tester.ts`)
+
+`GET /health/ready` (o Engramind não tem `/health`) + `whoami`. Vermelho: fora do ar, token inválido,
+token que não é admin `read+write+delete`, sem configuração. Amarelo (`warnResult`): token ainda de
+bootstrap, webhook não registrado (ou com outra URL), jobs `webhook` `failed`, backup `fail` ou
+reindexação `failed`.
+
+### Abas (`EngramindEditorForm`, `?aba=`)
+
+Sem conexão, as abas de Configurações em diante mostram "Configure a conexão"; token inválido ou
+insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazio com ação e erro com
+"Tentar novamente".
+
+| Aba | Conteúdo |
+|---|---|
+| Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
+| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card Geral (debug). |
+| Configurações | Todas as chaves de `GET /v1/settings` (menos segredos), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
+| Provedores | `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
+| Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex") e não podem ser revogados/rebaixados/desativados pela tela. |
+| Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed`), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
+| Variáveis de ambiente | Ver abaixo. |
+
+Os formulários validam com os **mesmos schemas Zod** da rota e do agente (`operations.ts`,
+`schemas/*`) em tempo real (`useSchemaForm`).
+
+### Tooltips e textos
+
+Tudo que explica algo ganha `InfoTooltip` (`src/components/ui/info-tooltip.tsx`): cada configuração
+(`help/settings.ts`; chave nova cai na descrição da API), cada variável (`help/env-vars.ts`), escopos,
+combinações, tipos e status de token, modos/acesso/alvo de assinatura, campos de canal e memória
+(`help/identities.ts`), jobs, chamadas ao LLM, consumo, status e auditoria (`help/operation.ts`).
+Um teste confere a cobertura de todas as chaves e variáveis.
+
+## Variáveis de ambiente (`server/host-env.ts`)
+
+- A instalação é o **Ambiente vinculado** (`environmentId`, módulo Ambientes; adote `/home/engramind`
+  se ainda não aparece). Só Ambientes no servidor (PC → `422`). Sem Ambiente → `409
+  ENGRAMIND_NO_ENVIRONMENT` (a aba mostra o estado vazio com "Ir para Conexão").
+- Tudo roda **no host pelo OpenCode** com o executor do módulo Ambientes (`createHostRunner` com o
+  debug da integração; comandos puros em `server/host-env-commands.ts`):
+  - **Ler**: `sha256sum` do arquivo real + conteúdo em base64 com `TOKEN_PEPPER`, `SECRETS_KEY`,
+    `BOOTSTRAP_ADMIN_TOKEN` e `LITESTREAM_SECRET_ACCESS_KEY` trocados por marcadores **pelo awk no
+    host** (`quiet`, sem registrar a saída). O segredo nunca chega ao servidor do Opex.
+  - **Gravar** (`PUT /api/engramind/env`, só as alteradas): o Opex monta o arquivo novo preservando
+    comentários, ordem e desconhecidas (`env-file.ts`); o host confere o hash lido (diferente → `409`
+    "O arquivo mudou; recarregue"), repõe as linhas sensíveis originais e troca o arquivo com
+    `mktemp` + `mv` (`umask 077`). A senha do Litestream é "só gravar" (vazia mantém).
+  - Editáveis com validação por tipo (`schemas/env.ts`): `APP_ENV`, `APP_HOST`, `APP_PORT`,
+    `CONTAINER_NAME`, `DATABASE_PATH`, `MODELS_PATH`, `ORT_DYLIB_PATH`, `READ_POOL_SIZE`,
+    `REQUEST_TIMEOUT_SECS`, `MAX_BODY_BYTES`, `MCP_ALLOWED_HOSTS`, `ENGRAMIND_NETWORK`, `S3_NETWORK`,
+    `LITESTREAM_ENABLED`, `ENGRAMIND_S3_*`, `LITESTREAM_ACCESS_KEY_ID`, `RUST_LOG`, `LOG_FORMAT`,
+    `LOG_ANSI`, `TZ`. Só leitura (configurada/não): `TOKEN_PEPPER`, `SECRETS_KEY`, `BOOTSTRAP_ADMIN_TOKEN`.
+  - Avisos: o `docker-compose.yml` do Engramind fixa `APP_HOST`, `DATABASE_PATH` e `MODELS_PATH` e não
+    repassa `ORT_DYLIB_PATH` (o valor do `.env` não chega ao container); trocar `APP_PORT`/`APP_HOST`
+    pode exigir ajustar a URL base; trocar `APP_PORT` ou `CONTAINER_NAME` recria o projeto.
+- **Salvar** só grava e marca "Alterações pendentes de aplicação" (`engramind_state.pendingApply`,
+  com os valores anteriores de `APP_PORT`/`CONTAINER_NAME`).
+- **Aplicar e reiniciar** (`POST /api/engramind/env/apply` com `{ confirm: true }`; log em
+  `POST /api/engramind/env/apply/events`, NDJSON, no xterm `IntegrationConsole`): job desacoplado no
+  host (sobrevive a fechar a tela) que lê a imagem do container em execução e roda `API_IMAGE=<atual>
+  docker compose --env-file .env -f <arquivos do Ambiente> up -d --no-build --pull never api` (a
+  instalação não tem código-fonte: build quebraria). Com a porta ou o container trocados, antes
+  `docker compose -p <projeto antigo> down`, e o Ambiente adotado passa a `engramind-<porta>`. No fim,
+  confere `GET /health/ready` por até 60 s. Um por vez (`409 ENGRAMIND_APPLY_BUSY`).
+- Gravar e aplicar são auditados só com os **nomes** das chaves.
+
+## Página `/engramind`
+
+Item "Engramind" em `APP_NAV`, logo abaixo de "Ambientes". Sem a integração configurada: estado vazio
+com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba mais") e abas (`?aba=`):
+
+- **Canais**: lista (`CadastroTableCard`, busca local, "Mostrar arquivados") com `channel_stats` por
+  linha; criar/editar (slug imutável), arquivar, restaurar e excluir de vez (só arquivado), com
+  confirmação. O nome leva ao detalhe `/engramind/canais/<slug codificado>`:
+  - **Assinantes**: listar (`?channel=`), assinar agente (alvo exato ou prefixo, modo
+    `inject`/`search`/`manage`, acesso = escopos do token ou restrito, prioridade), editar e remover.
+  - **Configurações do canal**: só as chaves com sobreposição, com efetivo, global e "Remover
+    sobreposição" (`null`).
+- **Memórias**: filtros (canal, status, categoria de `categories.list`, autor, desde), busca
+  (`/v1/memories/search`; `mode: "text"` mostra "Busca só textual"), histórico com **Reverter**,
+  fixar/desafixar, arquivar/restaurar, mover de canal e excluir de vez (confirmação nas destrutivas).
+  **Importar**: canal ativo + arquivo JSON (lista ou `{ memories }`) ou JSONL; prévia com a contagem e
+  os erros por índice (`parseImportFile`); acima de `limits.max_batch` recusa antes do envio (também
+  no servidor); `Idempotency-Key = opex-import-<sha256(canal + conteúdo)>` (o mesmo arquivo não
+  duplica); resultado com as criadas e as duplicadas (`existing_id`).
+
+## Webhook e tempo real
+
+- `POST /api/engramind/webhook` é **público** (`PUBLIC_ROUTES` em `src/features/auth/paths.ts`) e
+  autenticado só pela assinatura: `Engramind-Signature: t=<unix>,v1=<hex>`, `|agora − t| ≤ 300 s`,
+  `HMAC-SHA256(segredo, t + "." + corpo bruto)` comparado com `timingSafeEqual`. Falha → `401` sem
+  corpo (log `warn` com o motivo). Não entra em `PUBLIC_TOKEN_ROUTES` (não é token de sistema).
+- Válido → `204` na hora e, em `runAfterResponse`, o `id` é registrado em `engramind_webhook_events`
+  (único, TTL 24 h; repetido é descartado com log) e o Opex publica `engramind-updated` em
+  `private-app` com `{ type, channel?, keys? }` (sem textos nem valores).
+- As mutações feitas pelo próprio Opex também publicam (`identities.updated`, `jobs.updated`,
+  `status.updated`, `env.updated`, `env.applied` e os tipos do Engramind).
+- `useEngramindRealtime` invalida por área: `memory.*` → memórias e canais; `channel.updated` →
+  canais; `subscription.updated` → assinaturas e agentes; `settings.updated` → configurações, canais
+  e status; `identities.updated` → apps, agentes, tokens e conexão; `env.*` → env, status e conexão.
+  Eventos fora de ordem não importam (a tela relê). Ao reconectar, o `RealtimeStatusBanner` refaz as
+  consultas ativas.
+
+## Agente Opex (só o dono)
+
+Grupo `engramind` (`server/tools/engramind.ts`): uma ferramenta por operação do catálogo
+(`operations.ts`), mais `get_engramind_connection`, `run_engramind_bootstrap`,
+`import_engramind_memories`, `get_engramind_env`, `update_engramind_env` e `apply_engramind_env`. Todas
+chamam o serviço (`runEngramindOperation`, `importEngramindMemories`, `host-env.ts`), nunca o HTTP do
+app. Não existem no Agente Opex do portal.
+
+- `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
+  memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.
+- Segredos fora do histórico e dos cards (`redact` em `set_engramind_secret`, webhooks, propostas de
+  teste e `update_engramind_env`).
+- **Emitir token**: o modelo recebe só o prefixo; o segredo fica cifrado em `opex_secret_reveals`
+  (10 min, TTL) e o card mostra **"Ver token"** (`resultAction: reveal-secret`, `POST
+  /api/opex/reveals/[id]` lê e apaga). Já visto ou vencido: "revogue e emita outro".
+
+## APIs (sessão do dono)
+
+| Rota | Descrição |
+|---|---|
+| `GET/PUT /api/engramind/connection` | Estado da conexão / gravar + bootstrap |
+| `POST /api/engramind/connection/bootstrap` | Repetir o bootstrap |
+| `GET /api/engramind/environments` | Opções do seletor de Ambiente |
+| `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]`, `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
+| `POST /api/engramind/memories/import` | Importação com a chave derivada |
+| `GET/PUT /api/engramind/env` | `.env` no host |
+| `POST /api/engramind/env/apply` e `/env/apply/events` | Aplicar e reiniciar e o log NDJSON |
+| `POST /api/engramind/webhook` | Webhook (público, assinado) |
+
+Toda mutação é auditada no Opex (`entidade: "Engramind"`, `entidadeId` = operação, entrada sem
+segredos) e logada (Pino, `feature: "engramind"`).
+
+## Dados
+
+- `engramind_webhook_events` (`_id` = id do evento, TTL 24 h) e `engramind_state` (singleton
+  `pendingApply`) — `server/models.ts`.
+- `opex_secret_reveals` (Agente Opex) — `src/features/opex-agent/server/secret-reveals.ts`.
+
+## Testes
+
+`__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
+operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips) e
+`__tests__/components/engramind/engramind-ui.test.tsx`. O Engramind e o host são sempre mockados.

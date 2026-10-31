@@ -122,7 +122,8 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   Geral, Vínculos, Mapeamento, Sincronização), Inteligência Artificial (`AiEditorForm`:
   Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Agente Desenvolvedor), página de
   cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
-  Crons (`CronsEditorForm`: Geral, Rotinas e Jobs) e a página da central de desenvolvimento
+  Crons (`CronsEditorForm`: Geral, Rotinas e Jobs), Engramind (`EngramindEditorForm`: Sobre, Conexão,
+  Configurações, Provedores, Identidades, Operação e Variáveis de ambiente — ver `modules/engramind.md`) e a página da central de desenvolvimento
   (`/integracoes/ia/centrais/[id]`). A integração **Clientes** (`/integracoes/clientes`) **não tem
   abas**: a lista de clientes aparece direto, sem card interno. `useLocalTabs` é o irmão **sem URL**
   (mesmo formato de retorno), usado nas abas internas da aba "Agente Desenvolvedor", que não
@@ -379,6 +380,16 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   (`modules/tasks.md`, "Anexos da tarefa").
 - As duas integrações são **novas** no Opex: não declaram `env` e são configuradas só em
   `/integracoes`. Nenhum dos testes de conexão envia e-mail nem grava objeto.
+
+### Engramind
+
+Integração `engramind` (externo, sem `env`): campos gravados pela aba Conexão (`PUT
+/api/engramind/connection`, que chama `updateIntegration` e roda o bootstrap do token), tester em
+`src/features/engramind/server/tester.ts` (`/health/ready` + `whoami`) e um proxy administrativo em
+`/api/engramind/**`. O **webhook** `POST /api/engramind/webhook` é público e autenticado só pela
+assinatura HMAC (não é token de sistema). Componentes compartilhados nascidos aqui: `InfoTooltip`
+(`src/components/ui/info-tooltip.tsx`) e `SecretReveal` (`src/components/ui/secret-reveal.tsx`, usado
+também pelo `ApiTokenReveal`). Detalhes em `modules/engramind.md`.
 
 ### Planejado (em desenvolvimento)
 
