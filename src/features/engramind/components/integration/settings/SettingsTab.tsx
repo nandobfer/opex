@@ -35,7 +35,7 @@ export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (di
     const query = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     return (
         <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} skeleton={<SettingsSkeleton />} onConfigure={onConfigure}>
-            {query.data && <SettingsForm metas={query.data.settings.filter((meta) => !meta.secret)} onDirtyChange={onDirtyChange} />}
+            {query.data && <SettingsForm key={query.dataUpdatedAt} metas={query.data.settings.filter((meta) => !meta.secret)} onDirtyChange={onDirtyChange} />}
         </QueryBoundary>
     )
 }
@@ -44,7 +44,6 @@ function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyC
     const saved = useMemo(() => Object.fromEntries(metas.map((meta) => [meta.key, initialOf(meta)])), [metas])
     const [draft, setDraft] = useState<Record<string, unknown>>(saved)
     const [confirmReindex, setConfirmReindex] = useState(false)
-    useEffect(() => setDraft(saved), [saved])
     const changes = useMemo(() => changedSettings(saved, draft), [saved, draft])
     const dirty = Object.keys(changes).length > 0
     useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])

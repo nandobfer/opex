@@ -1,4 +1,4 @@
-import { Banknote, Clock, CodeXml, GitPullRequest, GraduationCap, LayoutDashboard, ListTodo, Plug, Server, Swords } from "lucide-react"
+import { Banknote, Clock, CodeXml, GitPullRequest, GraduationCap, LayoutDashboard, ListTodo, Network, Plug, Server, Swords } from "lucide-react"
 import { ADVERSARIAL_PAGE_HREF } from "@/features/adversarial-agent/constants"
 import { MENTOR_PAGE_HREF } from "@/features/adversarial-agent/mentor/constants"
 import { PR_REVIEWS_HREF } from "@/features/pr-review/constants"
@@ -15,6 +15,7 @@ export const APP_NAV: readonly NavSectionDef[] = [
             { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
             { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: CodeXml },
             { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
+            { href: "/engramind", label: "Engramind", title: "Engramind", icon: Network },
         ],
     },
     {

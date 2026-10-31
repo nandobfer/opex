@@ -15,7 +15,7 @@ export function ToolResultAction({ action }: { action: OpexResultAction }) {
     const reveal = useSecretReveal()
     const [secret, setSecret] = useState<string | null>(null)
     const [gone, setGone] = useState<string | null>(null)
-    const expired = Date.parse(action.expiresAt) <= Date.now()
+    const [expired] = useState(() => Date.parse(action.expiresAt) <= Date.now())
     const shownGone = gone ?? (expired ? "Token já exibido ou vencido: revogue e emita outro." : null)
 
     const open = async () => {

@@ -19,10 +19,14 @@ interface SettingFieldProps {
     /** Texto extra do rodapé (ex.: valor global e sobreposição no canal). */
     extra?: string
     resetLabel?: string
+    /** Rótulo do valor usado quando o rascunho é `null` ("Padrão"; no canal, "Global"). */
+    defaultLabel?: string
+    /** Esconde "Alterada em … por …" (configurações do canal). */
+    hideHistory?: boolean
 }
 
 /** Uma configuração: rótulo com tooltip, controle, padrão, intervalo, última alteração e "Voltar ao padrão". */
-export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão" }: SettingFieldProps) {
+export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão", defaultLabel = "Padrão", hideHistory = false }: SettingFieldProps) {
     const help = settingHelp(meta.key, meta.description)
     const id = `setting-${meta.key.replace(/\W/g, "-")}`
     const error = value === null ? null : settingValueSchema(meta).safeParse(value).error?.issues[0]?.message ?? null
@@ -46,9 +50,9 @@ export function SettingField({ meta, value, dirty, onChange, extra, resetLabel =
                 )}
             </AnimatePresence>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                <span>Padrão: {formatSettingValue(meta.default)}</span>
+                <span>{defaultLabel}: {formatSettingValue(meta.default)}</span>
                 {range && <span>Intervalo: {range}</span>}
-                {meta.updated_at ? <span>Alterada em {formatDateTime(meta.updated_at)}{meta.updated_by_app ? ` por ${meta.updated_by_app}` : ""}</span> : <span>Valendo o padrão</span>}
+                {!hideHistory && (meta.updated_at ? <span>Alterada em {formatDateTime(meta.updated_at)}{meta.updated_by_app ? ` por ${meta.updated_by_app}` : ""}</span> : <span>Valendo o padrão</span>)}
                 {extra && <span>{extra}</span>}
                 <Button type="button" variant="link" size="sm" className="ml-auto h-auto p-0 text-[11px]" onClick={() => onChange(null)} disabled={value === null}>
                     <RotateCcw className="mr-1 h-3 w-3" aria-hidden /> {resetLabel}

@@ -806,7 +806,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         label: "Auditoria do Engramind",
         description: "Eventos de auditoria do Engramind (do mais recente ao mais antigo) com filtro por entidade, id, ação e período (since/until; o recorte por período é feito pelo Opex).",
         input: z.object({ entity: z.string().trim().max(40).optional(), entity_id: z.string().trim().max(160).optional(), action: z.string().trim().max(60).optional(), since: isoDate.optional(), until: isoDate.optional(), ...page }),
-        request: ({ since: _since, until: _until, ...query }) => ({ path: "/v1/audit", query }),
+        request: (input) => ({ path: "/v1/audit", query: { entity: input.entity, entity_id: input.entity_id, action: input.action, cursor: input.cursor, limit: input.limit } }),
     }),
 ]
 
