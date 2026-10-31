@@ -8,9 +8,21 @@ const mocks = vi.hoisted(() => ({
   updateOne: vi.fn(),
   find: vi.fn(),
   created: [] as Record<string, unknown>[],
+  publish: vi.fn(async () => {}),
+  logInfo: vi.fn(),
+  logWarn: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
+vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: mocks.logInfo, warn: mocks.logWarn }) }))
+vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({
+  apiTokenScopeCatalog: async () => ({
+    routes: [],
+    groups: [{ id: 'tasks', label: 'Tarefas', description: '' }],
+    tools: [{ name: 'list_tasks', group: 'tasks', label: 'Listar', description: '', risk: 'read', alwaysOn: false }],
+  }),
+}))
 vi.mock('@/lib/audit/record', () => ({ recordAudit: mocks.recordAudit }))
 vi.mock('@/lib/db/plugins/audit.plugin', () => ({ createAuditContext: (userId: string) => ({ userId }) }))
 vi.mock('@/lib/db/models/ApiToken', () => {
@@ -39,7 +51,9 @@ import {
   listApiTokens,
   requireApiToken,
   revokeApiToken,
+  updateApiTokenScopes,
 } from '@/features/integrations/api-tokens/service'
+import { apiTokenInputSchema } from '@/features/integrations/api-tokens/schemas'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -58,7 +72,7 @@ const storedToken = (over: Record<string, unknown> = {}) => ({
 
 describe('createApiToken', () => {
   it('devolve o token com o prefixo mt_sys_ uma única vez e grava só o hash', async () => {
-    const result = await createApiToken('local', { nome: '  Script de relatórios ' })
+    const result = await createApiToken('local', { nome: '  Script de relatórios ', escopos: ['api:v1:*', 'mcp:owner', 'mcp:owner:tool:list_tasks'] })
 
     expect(API_TOKEN_PREFIX).toBe('mt_sys_')
     expect(result.token.startsWith('mt_sys_')).toBe(true)
@@ -70,13 +84,41 @@ describe('createApiToken', () => {
     expect(JSON.stringify(doc)).not.toContain(result.token)
 
     const audit = mocks.recordAudit.mock.calls[0][0]
-    expect(audit).toMatchObject({ userId: 'local', acao: 'CRIAR', depois: { nome: 'Script de relatórios', prefixo: result.item.prefixo } })
+    expect(audit).toMatchObject({ userId: 'local', acao: 'CRIAR', depois: { nome: 'Script de relatórios', prefixo: result.item.prefixo, escopos: ['api:v1:*', 'mcp:owner', 'mcp:owner:tool:list_tasks'], expiraEm: null } })
     expect(JSON.stringify(audit)).not.toContain(result.token)
+    expect(doc.escopos).toEqual(['api:v1:*', 'mcp:owner', 'mcp:owner:tool:list_tasks'])
+    expect(result.item).toMatchObject({ legado: false, escopos: ['api:v1:*', 'mcp:owner', 'mcp:owner:tool:list_tasks'], expirado: false })
+    expect(mocks.publish).toHaveBeenCalledWith('api-tokens-updated', { id: '66f0c0ffee0000000000abcd' })
+  })
+
+  it('grava a expiração e recusa ferramenta fora do catálogo', async () => {
+    const expiraEm = '2999-01-01T02:59:59.999Z'
+    const result = await createApiToken('local', { nome: 'Exp', escopos: ['api:v1:*'], expiraEm })
+    expect(result.item.expiraEm).toBe(expiraEm)
+    await expect(createApiToken('local', { nome: 'X1', escopos: ['mcp:owner', 'mcp:owner:tool:nao_existe'] })).rejects.toMatchObject({ status: 400, code: 'API_TOKEN_SCOPE_UNKNOWN' })
+    await expect(createApiToken('local', { nome: 'X2', escopos: ['mcp:owner', 'mcp:owner:group:files'] })).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('recusa escopo de rota da v1 que não está em PUBLIC_TOKEN_ROUTES (sem gravar nem auditar)', async () => {
+    await expect(createApiToken('local', { nome: 'Typo', escopos: ['api:v1:reports'] })).rejects.toMatchObject({ status: 400, code: 'API_TOKEN_SCOPE_UNKNOWN' })
+    mocks.findOneAndUpdate.mockResolvedValue(storedToken())
+    await expect(updateApiTokenScopes('local', '66f0c0ffee0000000000abcd', { escopos: ['api:v1:*', 'api:v1:typo'] })).rejects.toMatchObject({ status: 400, code: 'API_TOKEN_SCOPE_UNKNOWN' })
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).not.toHaveBeenCalled()
+    // O curinga continua aceito.
+    await expect(createApiToken('local', { nome: 'Todas', escopos: ['api:v1:*'] })).resolves.toBeTruthy()
+  })
+
+  it('o schema da API recusa token sem escopo e expiração no passado', () => {
+    expect(apiTokenInputSchema.safeParse({ nome: 'Script', escopos: [] }).success).toBe(false)
+    expect(apiTokenInputSchema.safeParse({ nome: 'Script' }).success).toBe(false)
+    expect(apiTokenInputSchema.safeParse({ nome: 'Script', escopos: ['api:v1:*'], expiraEm: '2000-01-01T00:00:00.000Z' }).success).toBe(false)
+    expect(apiTokenInputSchema.safeParse({ nome: 'Script', escopos: ['api:v1:*'] }).success).toBe(true)
   })
 
   it('cada token gerado é diferente', async () => {
-    const a = await createApiToken('local', { nome: 'A1' })
-    const b = await createApiToken('local', { nome: 'B1' })
+    const a = await createApiToken('local', { nome: 'A1', escopos: ['api:v1:*'] })
+    const b = await createApiToken('local', { nome: 'B1', escopos: ['api:v1:*'] })
     expect(a.token).not.toBe(b.token)
   })
 })
@@ -85,7 +127,38 @@ describe('listApiTokens', () => {
   it('lista só prefixo e metadados, nunca o hash', async () => {
     mocks.find.mockResolvedValue([storedToken()])
     const items = await listApiTokens()
-    expect(items).toEqual([{ id: '66f0c0ffee0000000000abcd', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', criadoEm: '2026-01-01T00:00:00.000Z', ultimoUsoEm: null }])
+    expect(items).toEqual([
+      { id: '66f0c0ffee0000000000abcd', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', criadoEm: '2026-01-01T00:00:00.000Z', ultimoUsoEm: null, escopos: [], legado: true, expiraEm: null, expirado: false },
+    ])
+    expect(JSON.stringify(items)).not.toContain('"hash"')
+  })
+
+  it('marca o token expirado (continua na lista até ser revogado)', async () => {
+    mocks.find.mockResolvedValue([storedToken({ escopos: ['api:v1:*'], expiraEm: new Date('2020-01-01T00:00:00Z') })])
+    const [item] = await listApiTokens()
+    expect(item).toMatchObject({ legado: false, escopos: ['api:v1:*'], expiraEm: '2020-01-01T00:00:00.000Z', expirado: true })
+  })
+})
+
+describe('updateApiTokenScopes', () => {
+  it('troca os escopos e a expiração, audita antes/depois e avisa em tempo real', async () => {
+    mocks.findOneAndUpdate.mockResolvedValue(storedToken())
+    const item = await updateApiTokenScopes('local', '66f0c0ffee0000000000abcd', { escopos: ['mcp:owner', 'mcp:owner:group:tasks'], expiraEm: null })
+    expect(item).toMatchObject({ escopos: ['mcp:owner', 'mcp:owner:group:tasks'], legado: false })
+    const audit = mocks.recordAudit.mock.calls[0][0]
+    expect(audit).toMatchObject({
+      acao: 'ATUALIZAR',
+      antes: { nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', escopos: [], legado: true, expiraEm: null },
+      depois: { escopos: ['mcp:owner', 'mcp:owner:group:tasks'], expiraEm: null },
+    })
+    expect(mocks.publish).toHaveBeenCalledWith('api-tokens-updated', { id: '66f0c0ffee0000000000abcd' })
+  })
+
+  it('token inexistente ou revogado responde 404 sem auditar', async () => {
+    mocks.findOneAndUpdate.mockResolvedValue(null)
+    await expect(updateApiTokenScopes('local', '66f0c0ffee0000000000abcd', { escopos: ['api:v1:*'] })).rejects.toMatchObject({ status: 404 })
+    await expect(updateApiTokenScopes('local', 'xyz', { escopos: ['api:v1:*'] })).rejects.toMatchObject({ status: 404 })
+    expect(mocks.recordAudit).not.toHaveBeenCalled()
   })
 })
 
@@ -93,7 +166,7 @@ describe('revokeApiToken', () => {
   it('revoga e audita', async () => {
     mocks.findOneAndUpdate.mockResolvedValue(storedToken())
     await revokeApiToken('local', '66f0c0ffee0000000000abcd')
-    expect(mocks.recordAudit.mock.calls[0][0]).toMatchObject({ acao: 'EXCLUIR', antes: { nome: 'Script', prefixo: 'mt_sys_AbCdEfGh' } })
+    expect(mocks.recordAudit.mock.calls[0][0]).toMatchObject({ acao: 'EXCLUIR', antes: { nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', escopos: [] } })
   })
 
   it('id inválido ou já revogado responde 404', async () => {
@@ -119,6 +192,15 @@ describe('authenticateApiToken', () => {
     expect(mocks.updateOne).not.toHaveBeenCalled()
   })
 
+  it('token expirado é recusado (401) como um revogado', async () => {
+    const now = new Date('2026-06-01T00:00:00Z')
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['api:v1:*'], expiraEm: new Date('2026-05-31T23:59:59Z') }))
+    expect(await authenticateApiToken('Bearer mt_sys_expirado', now)).toBeNull()
+    expect(mocks.updateOne).not.toHaveBeenCalled()
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['api:v1:*'], expiraEm: new Date('2026-06-02T00:00:00Z') }))
+    expect(await authenticateApiToken('Bearer mt_sys_valendo', now)).not.toBeNull()
+  })
+
   it('token revogado ou inexistente é recusado', async () => {
     mocks.findOne.mockResolvedValue(null)
     expect(await authenticateApiToken('Bearer mt_sys_revogado')).toBeNull()
@@ -141,6 +223,32 @@ describe('requireApiToken', () => {
     expect((error as DomainError).code).toBe('UNAUTHENTICATED')
 
     await expect(requireApiToken(new Request('http://localhost/api/v1/whoami'))).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('403 INSUFFICIENT_SCOPE sem o escopo da rota, com log sem o valor do token', async () => {
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['mcp:owner', 'mcp:owner:tool:*'] }))
+    const request = new Request('http://localhost/api/v1/relatorios', { headers: { authorization: 'Bearer mt_sys_segredo123' } })
+    const error = (await requireApiToken(request, { scope: 'api:v1:relatorios' }).catch((e: unknown) => e)) as DomainError
+    expect(error.status).toBe(403)
+    expect(error.code).toBe('INSUFFICIENT_SCOPE')
+    expect(error.details).toEqual({ required: 'api:v1:relatorios' })
+    const logged = JSON.stringify(mocks.logWarn.mock.calls)
+    expect(logged).toContain('mt_sys_AbCdEfGh')
+    expect(logged).toContain('api:v1:relatorios')
+    expect(logged).not.toContain('segredo123')
+  })
+
+  it('com o escopo (ou api:v1:*) passa; rota livre aceita qualquer token, inclusive legado e só de MCP', async () => {
+    const request = () => new Request('http://localhost/api/v1/x', { headers: { authorization: 'Bearer mt_sys_ok' } })
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['api:v1:relatorios'] }))
+    expect((await requireApiToken(request(), { scope: 'api:v1:relatorios' })).nome).toBe('Script')
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['api:v1:*'] }))
+    expect((await requireApiToken(request(), { scope: 'api:v1:relatorios' })).nome).toBe('Script')
+    mocks.findOne.mockResolvedValue(storedToken())
+    expect((await requireApiToken(request(), { scope: null })).legado).toBe(true)
+    await expect(requireApiToken(request(), { scope: 'api:v1:relatorios' })).rejects.toMatchObject({ status: 403 })
+    mocks.findOne.mockResolvedValue(storedToken({ escopos: ['mcp:owner'] }))
+    expect((await requireApiToken(request())).escopos).toEqual(['mcp:owner'])
   })
 
   it('devolve o token quando válido', async () => {

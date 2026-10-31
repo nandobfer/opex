@@ -81,11 +81,25 @@ URL). Token inválido leva ao `/login` com aviso.
 
 - `/login`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/client-login`;
 - `/cliente` (exato) — entrada do portal (resolve `?t=` e a escolha de cliente);
-- `/api/v1/*` — API pública por token de sistema (`requireApiToken`);
+- `/api/v1/*` — API pública por token de sistema (`requireApiToken`, com escopo por rota);
 - `/api/routines/*` — tick do agendador (token de cron);
 - `/api/maddox/mcp/*` — servidor MCP do Opex chamado pelo OpenCode (Agente Maddox), autenticado pelo
-  segredo derivado da chave das integrações e com o escopo conferido pela sessão (ver `maddox-agent.md`);
+  segredo derivado da chave das integrações e com o escopo conferido pela sessão — ou, no servidor do
+  dono, pelo token de sistema com o escopo `mcp:owner` (ver `maddox-agent.md`);
 - `/api/openapi.json` e `/api/docs` — só o contrato OpenAPI, nenhum dado.
+
+### API pública por token de sistema — escopos
+
+- `requireApiToken(req, { scope })` (`src/features/integrations/api-tokens/service.ts`): token
+  ausente, inválido, revogado ou **expirado** → 401 `UNAUTHENTICATED`; token válido sem o escopo da
+  rota → **403 `INSUFFICIENT_SCOPE`** (`details.required`), com log de aviso (id/nome/prefixo do token
+  e o escopo exigido; nunca o valor). Tudo decidido no servidor.
+- O escopo de cada rota fica em `PUBLIC_TOKEN_ROUTES` (`src/features/public-api/routes.ts`,
+  reexportado por `openapi/spec.ts`), lido pela rota com `publicRouteScope(path)`. `scope: null` =
+  livre para qualquer token válido: é o caso de `GET /api/v1/whoami` (decisão da OPE-102), inclusive
+  para token legado e token só de MCP. Rota nova da v1 **declara** o escopo `api:v1:<recurso>`
+  (coberto também por `api:v1:*`) e documenta o 403.
+- Catálogo dos escopos, legado e expiração: `integrations.md`, "API interna".
 
 `next` é gravado sem o subcaminho público (`normalizePath` remove o `BASE_PATH`), e o formulário
 descarta destino externo (open redirect).

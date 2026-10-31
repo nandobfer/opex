@@ -84,6 +84,14 @@ describe('ferramenta run_host_command', () => {
     expect(host.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'TerminalHost', depois: expect.objectContaining({ comando: 'git status', codigoSaida: 0 }) }))
   })
 
+  it('chamada por token de sistema (sem conversa) audita com a origem do token, nunca o valor', async () => {
+    const tool = findOpexTool('run_host_command')!
+    await tool.execute(tool.input.parse({ command: 'git status', directory: '/home/u/app' }), { sessionId: '', actorId: 'local', origin: { kind: 'api-token', tokenId: 't1', nome: 'Automação', prefixo: 'mt_sys_AbCdEfGh' } })
+    expect(host.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ entidadeId: 'api-token:t1', depois: expect.objectContaining({ via: 'api-token', token: { id: 't1', nome: 'Automação', prefixo: 'mt_sys_AbCdEfGh' } }) }),
+    )
+  })
+
   it('sem diretório: usa o primeiro permitido; limita o tempo ao máximo configurado', async () => {
     host.settings = { allowedDirectories: ['/home/u/app'], maxTimeoutSeconds: 10 }
     await run({ command: 'ls', timeoutSeconds: 600 })

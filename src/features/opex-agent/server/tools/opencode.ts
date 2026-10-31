@@ -4,7 +4,7 @@ import { creatableKindSchema, installableKindSchema, mcpConfigSchema, mcpSecrets
 import type { OpencodeResourceDto } from "@/features/opencode-resources/types"
 import { OPENCODE_LOG_LINES_DEFAULT, OPENCODE_LOG_LINES_MAX } from "@/features/opencode-service/constants"
 import { serviceActionBodySchema } from "@/features/opencode-service/schemas"
-import { defineTool, OpexToolError, type OpexToolContext } from "./define"
+import { contextSessionId, defineTool, OpexToolError, type OpexToolContext } from "./define"
 import { parseJsonObject } from "./json"
 
 /**
@@ -98,7 +98,7 @@ export const opencodeServiceTools = [
         description: "Inicia o serviço do OpenCode no host (por SSH) e espera a API responder.",
         input: z.object({}),
         summarize: () => "Iniciar o serviço do OpenCode",
-        execute: async (_input, context) => (await service()).runServiceAction("start", {}, { ...agentActor(context), opexSessionId: context.sessionId }),
+        execute: async (_input, context) => (await service()).runServiceAction("start", {}, { ...agentActor(context), opexSessionId: contextSessionId(context) }),
     }),
     serviceTool({
         name: "stop_opencode_service",
@@ -107,7 +107,7 @@ export const opencodeServiceTools = [
         description: "Para o serviço do OpenCode no host (por SSH). Interrompe as mesas, refinamentos e gerações em andamento; só volta com start_opencode_service.",
         input: z.object({}),
         summarize: () => "Parar o serviço do OpenCode (interrompe mesas e refinamentos em andamento)",
-        execute: async (_input, context) => (await service()).runServiceAction("stop", {}, { ...agentActor(context), opexSessionId: context.sessionId }),
+        execute: async (_input, context) => (await service()).runServiceAction("stop", {}, { ...agentActor(context), opexSessionId: contextSessionId(context) }),
     }),
     serviceTool({
         name: "restart_opencode_service",
@@ -116,7 +116,7 @@ export const opencodeServiceTools = [
         description: "Reinicia o serviço do OpenCode (por SSH) e espera a API voltar. Necessário para aplicar plugins instalados/atualizados. Interrompe execuções em andamento.",
         input: z.object({}),
         summarize: () => "Reiniciar o serviço do OpenCode (interrompe mesas e refinamentos em andamento)",
-        execute: async (_input, context) => (await service()).runServiceAction("restart", {}, { ...agentActor(context), opexSessionId: context.sessionId }),
+        execute: async (_input, context) => (await service()).runServiceAction("restart", {}, { ...agentActor(context), opexSessionId: contextSessionId(context) }),
     }),
     serviceTool({
         name: "upgrade_opencode",
@@ -127,7 +127,7 @@ export const opencodeServiceTools = [
         input: serviceActionBodySchema,
         summarize: (input) => `Atualizar o OpenCode${input.version ? ` para a ${input.version}` : " para a última 2.x"}${input.allowMajor ? " (major nova permitida)" : ""}`,
         execute: async (input, context) => {
-            const op = await (await service()).runServiceAction("upgrade", input, { ...agentActor(context), opexSessionId: context.sessionId })
+            const op = await (await service()).runServiceAction("upgrade", input, { ...agentActor(context), opexSessionId: contextSessionId(context) })
             return { ...op, nota: "Atualização em andamento: o resultado chega automaticamente nesta conversa." }
         },
     }),

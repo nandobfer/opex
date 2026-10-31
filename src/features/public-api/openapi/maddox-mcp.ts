@@ -1,12 +1,15 @@
 import { MADDOX_MCP_SERVERS, maddoxMcpPath, type MaddoxMcpScope } from "@/features/maddox-agent/constants"
-import { JSON_RPC_ERRORS, MADDOX_MCP_REFUSALS, MCP_DEFAULT_PROTOCOL_VERSION, MCP_SERVER_INFO, MCP_UNAUTHORIZED_CODE, OPENCODE_SESSION_META } from "@/features/maddox-agent/mcp-protocol"
+import { JSON_RPC_ERRORS, MADDOX_MCP_REFUSALS, MCP_DEFAULT_PROTOCOL_VERSION, MCP_FORBIDDEN_CODE, MCP_SERVER_INFO, MCP_UNAUTHORIZED_CODE, OPENCODE_SESSION_META } from "@/features/maddox-agent/mcp-protocol"
+import { MCP_OWNER_DESTRUCTIVE, MCP_OWNER_SCOPE, toolScopeHint } from "@/features/integrations/api-tokens/scopes"
+import { API_TOKEN_SECURITY_SCHEME } from "../routes"
 import type { MaddoxMcpDocsCatalog, MaddoxMcpToolDoc } from "@/features/maddox-agent/server/mcp-catalog"
 import { exampleFromJsonSchema } from "./json-schema-example"
 
 /**
  * Seção OpenAPI do servidor MCP do Opex usado pelo Agente Maddox (módulo PURO). Gerada do MESMO
  * catálogo do `tools/list` (`maddoxMcpDocsCatalog`): ferramenta nova ou alterada aparece sozinha, sem
- * edição manual. Não são rotas por token de sistema: autenticam pelo segredo do MCP (`maddoxMcpSecret`).
+ * edição manual. Autenticam pelo segredo do MCP (`maddoxMcpSecret`); o servidor do dono também aceita o
+ * token de sistema com o escopo `mcp:owner` (esquema `apiToken`), com o `tools/list` filtrado pelo token.
  */
 
 type JsonObject = Record<string, unknown>
@@ -31,10 +34,27 @@ const json = (schema: JsonObject, examples?: Record<string, { summary: string; v
 export const maddoxToolSchemaName = (scope: MaddoxMcpScope, tool: string) => `${SCHEMA_PREFIX[scope]}.${tool}`
 const callSchemaName = (scope: MaddoxMcpScope, tool: string) => `${maddoxToolSchemaName(scope, tool)}.call`
 
-/** Linha de uma ferramenta na lista do texto da operação. */
-export function maddoxToolLine(tool: MaddoxMcpToolDoc): string {
+/** Escopo do token de sistema que libera a ferramenta do dono (texto da documentação). */
+export function maddoxToolTokenScope(tool: MaddoxMcpToolDoc): string {
+    return toolScopeHint({ name: tool.name, group: tool.group, risk: tool.risk, confirmByDefault: tool.confirmsByDefault, alwaysOn: tool.alwaysOn })
+}
+
+/** Linha de uma ferramenta na lista do texto da operação (no dono, com o escopo do token). */
+export function maddoxToolLine(tool: MaddoxMcpToolDoc, scope: MaddoxMcpScope = "portal"): string {
     const flags = [tool.groupLabel, RISK_LABEL[tool.risk], tool.confirmsByDefault ? "pede confirmação" : null, tool.adminOnly ? "só admin" : null].filter(Boolean).join(" · ")
-    return `• ${tool.opencodeName} (${tool.name}) — ${tool.title ?? tool.name} [${flags}]: ${tool.description}`
+    const tokenScope = scope === "owner" ? ` {token: ${maddoxToolTokenScope(tool)}}` : ""
+    return `• ${tool.opencodeName} (${tool.name}) — ${tool.title ?? tool.name} [${flags}]${tokenScope}: ${tool.description}`
+}
+
+const TOKEN_AUTH_LINES: Record<MaddoxMcpScope, string[]> = {
+    owner: [
+        "",
+        `**Token de sistema**: também aceita \`Authorization: Bearer mt_sys_…\` com o escopo \`${MCP_OWNER_SCOPE}\`. Sem sessão do OpenCode (dispensa o _meta): o ator é o dono.`,
+        "O tools/list devolve SOMENTE as ferramentas cobertas pelo token e ligadas na configuração do Maddox; tools/call fora do escopo volta com isError: true (INSUFFICIENT_SCOPE).",
+        `Ferramentas destrutivas ou que pedem confirmação exigem também \`${MCP_OWNER_DESTRUCTIVE}\` (pelo token não há confirmação no chat). Token sem \`${MCP_OWNER_SCOPE}\` → 403; inválido, revogado ou expirado → 401.`,
+        "O escopo de cada ferramenta aparece entre chaves na lista abaixo.",
+    ],
+    portal: ["", "Token de sistema não é aceito aqui (não representa um usuário de cliente): responde 403."],
 }
 
 function operationDescription(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDoc[]): string {
@@ -43,10 +63,11 @@ function operationDescription(scope: MaddoxMcpScope, tools: readonly MaddoxMcpTo
         "JSON-RPC 2.0 no transporte \"Streamable HTTP\" sem estado e com respostas JSON (sem SSE): initialize, ping, tools/list, tools/call e notificações (202). Aceita lote (array).",
         `Cada tools/call precisa de params._meta["${OPENCODE_SESSION_META}"] com a sessão do OpenCode: dela sai a conversa do Maddox e o escopo (${scope === "owner" ? "só conversas do dono" : "só conversas de usuários do portal, com cliente, vínculo, papel e ferramenta conferidos a cada chamada"}).`,
         "Recusas de escopo voltam como resultado com isError: true (veja os exemplos de resposta). Jobs agendados ficam fora do Maddox.",
-        "O segredo não sai do servidor: pelo explorador, a chamada responde 401.",
+        "O segredo não sai do servidor: pelo explorador, a chamada com o segredo responde 401.",
+        ...TOKEN_AUTH_LINES[scope],
         "",
-        `Ferramentas (${tools.length}) — nome no OpenCode (nome no MCP) — título [grupo · risco · confirmação · admin]:`,
-        ...tools.map(maddoxToolLine),
+        `Ferramentas (${tools.length}) — nome no OpenCode (nome no MCP) — título [grupo · risco · confirmação · admin]${scope === "owner" ? " {escopo do token}" : ""}:`,
+        ...tools.map((tool) => maddoxToolLine(tool, scope)),
     ].join("\n")
 }
 
@@ -58,7 +79,8 @@ function toolSchemas(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDoc[]):
             type: "object",
             title: tool.name,
             properties: { name: { const: tool.name }, arguments: ref(maddoxToolSchemaName(scope, tool.name)), _meta: ref("McpCallMeta") },
-            required: ["name", "arguments", "_meta"],
+            // Pelo token de sistema (dono) o _meta não é usado.
+            required: scope === "owner" ? ["name", "arguments"] : ["name", "arguments", "_meta"],
         }
     }
     const callName = `McpToolsCall.${scope}`
@@ -101,10 +123,29 @@ function requestExamples(tools: readonly MaddoxMcpToolDoc[]) {
     return examples
 }
 
+function tokenRequestExamples(tools: readonly MaddoxMcpToolDoc[]) {
+    const first = tools[0]
+    return {
+        "token-tools-list": { summary: "tools/list por token de sistema (lista filtrada pelo token)", value: rpc("tools/list", {}, 2) },
+        ...(first ? { "token-call": { summary: `tools/call por token de sistema · ${first.title ?? first.name} (sem _meta)`, value: rpc("tools/call", { name: first.name, arguments: exampleFromJsonSchema(first.inputSchema) ?? {} }, 4) } } : {}),
+    }
+}
+
+function tokenResponseExamples(tools: readonly MaddoxMcpToolDoc[]) {
+    const destructive = tools.find((tool) => tool.confirmsByDefault)?.name ?? "delete_task"
+    const result = (text: string) => ({ jsonrpc: "2.0", id: 4, result: { content: [{ type: "text", text }], isError: true } })
+    return {
+        "token-out-of-scope": { summary: "Recusa (token): ferramenta fora dos escopos do token", value: result(MADDOX_MCP_REFUSALS.tokenScope("list_tasks")) },
+        "token-destructive": { summary: `Recusa (token): destrutiva sem ${MCP_OWNER_DESTRUCTIVE}`, value: result(MADDOX_MCP_REFUSALS.tokenDestructive(destructive)) },
+        "token-not-grantable": { summary: "Recusa (token): ferramenta que só existe nas conversas do Maddox", value: result(MADDOX_MCP_REFUSALS.tokenNotGrantable("list_chat_files")) },
+    }
+}
+
 function responseExamples(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDoc[]) {
     const first = tools[0]
     const descriptor = first ? { name: first.name, title: first.title, description: first.description, inputSchema: first.inputSchema, annotations: first.annotations } : null
     return {
+        ...(scope === "owner" ? tokenResponseExamples(tools) : {}),
         initialize: { summary: "initialize", value: { jsonrpc: "2.0", id: 1, result: { protocolVersion: MCP_DEFAULT_PROTOCOL_VERSION, capabilities: { tools: { listChanged: false } }, serverInfo: MCP_SERVER_INFO } } },
         "tools-list": { summary: `tools/list (${tools.length} ferramentas; a primeira abaixo)`, value: { jsonrpc: "2.0", id: 2, result: { tools: descriptor ? [descriptor] : [] } } },
         "call-ok": { summary: "tools/call executada (saída da ferramenta em JSON)", value: { jsonrpc: "2.0", id: 4, result: { content: [{ type: "text", text: '{\n  "ok": true\n}' }] } } },
@@ -122,7 +163,11 @@ function responseExamples(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDo
 const errorBody = (code: number, message: string) => json(ref("JsonRpcResponse"), { erro: { summary: message, value: { jsonrpc: "2.0", id: null, error: { code, message } } } })
 
 function operations(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDoc[]): JsonObject {
-    const security = [{ [MADDOX_MCP_SECURITY_SCHEME]: [] }]
+    const security: JsonObject[] = [{ [MADDOX_MCP_SECURITY_SCHEME]: [] }, ...(scope === "owner" ? [{ [API_TOKEN_SECURITY_SCHEME]: [MCP_OWNER_SCOPE] }] : [])]
+    const forbidden =
+        scope === "owner"
+            ? { description: `Token de sistema válido sem o escopo \`${MCP_OWNER_SCOPE}\` (INSUFFICIENT_SCOPE).`, content: errorBody(MCP_FORBIDDEN_CODE, MADDOX_MCP_REFUSALS.tokenNoMcp) }
+            : { description: "Token de sistema não é aceito no portal (INSUFFICIENT_SCOPE).", content: errorBody(MCP_FORBIDDEN_CODE, MADDOX_MCP_REFUSALS.tokenPortal) }
     const notAllowed = (method: string) => ({
         operationId: `maddoxMcp${scope === "owner" ? "Owner" : "Portal"}${method}`,
         tags: [MADDOX_MCP_TAGS[scope]],
@@ -137,12 +182,20 @@ function operations(scope: MaddoxMcpScope, tools: readonly MaddoxMcpToolDoc[]): 
             summary: `Servidor MCP do Opex (${SCOPE_LABEL[scope]}) · ${tools.length} ferramentas`,
             description: operationDescription(scope, tools),
             security,
-            requestBody: { required: true, content: json(ref(`McpRequest.${scope}`), requestExamples(tools)) },
+            "x-opex-required-scope": scope === "owner" ? MCP_OWNER_SCOPE : null,
+            requestBody: { required: true, content: json(ref(`McpRequest.${scope}`), { ...requestExamples(tools), ...(scope === "owner" ? tokenRequestExamples(tools) : {}) }) },
             responses: {
                 "200": { description: "Resposta JSON-RPC (resultado ou erro). Lote responde um array.", content: json(ref("JsonRpcResponse"), responseExamples(scope, tools)) },
                 "202": { description: "Só notificações (sem corpo)." },
                 "400": { description: "Corpo que não é JSON.", content: errorBody(JSON_RPC_ERRORS.parse, MADDOX_MCP_REFUSALS.invalidJson) },
-                "401": { description: "Sem o segredo do MCP (o explorador não o tem).", content: errorBody(MCP_UNAUTHORIZED_CODE, MADDOX_MCP_REFUSALS.unauthorized) },
+                "401": {
+                    description: scope === "owner" ? "Sem o segredo do MCP (o explorador não o tem) ou com token de sistema inválido, revogado ou expirado." : "Sem o segredo do MCP (o explorador não o tem).",
+                    content: json(ref("JsonRpcResponse"), {
+                        segredo: { summary: MADDOX_MCP_REFUSALS.unauthorized, value: { jsonrpc: "2.0", id: null, error: { code: MCP_UNAUTHORIZED_CODE, message: MADDOX_MCP_REFUSALS.unauthorized } } },
+                        token: { summary: MADDOX_MCP_REFUSALS.tokenUnauthorized, value: { jsonrpc: "2.0", id: null, error: { code: MCP_UNAUTHORIZED_CODE, message: MADDOX_MCP_REFUSALS.tokenUnauthorized } } },
+                    }),
+                },
+                "403": forbidden,
                 "404": { description: "Servidor MCP desconhecido (só `owner` e `portal`)." },
             },
         },
@@ -155,7 +208,7 @@ const COMMON_SCHEMAS: Record<string, JsonObject> = {
     JsonRpcId: { oneOf: [{ type: "string" }, { type: "integer" }], description: "Id da mensagem (notificações não têm)" },
     McpCallMeta: {
         type: "object",
-        description: "Metadados que o OpenCode envia em cada chamada",
+        description: "Metadados que o OpenCode envia em cada chamada (dispensados na chamada por token de sistema)",
         properties: { [OPENCODE_SESSION_META]: { type: "string", description: "Sessão do OpenCode que chamou (a conversa do Maddox ou um subagente dela)", examples: [EXAMPLE_SESSION] } },
         required: [OPENCODE_SESSION_META],
     },
@@ -215,7 +268,7 @@ export function buildMaddoxMcpSpecSection(catalog: MaddoxMcpDocsCatalog): Maddox
             [MADDOX_MCP_SECURITY_SCHEME]: {
                 type: "http",
                 scheme: "bearer",
-                description: "Segredo do MCP do Opex, derivado da chave das integrações e registrado sozinho no OpenCode (nunca exibido nem gravado). Não é o token de sistema.",
+                description: "Segredo do MCP do Opex, derivado da chave das integrações e registrado sozinho no OpenCode (nunca exibido nem gravado). Não é o token de sistema — o servidor do dono também aceita o token de sistema com o escopo `mcp:owner` (esquema `apiToken`).",
             },
         },
     }

@@ -10,7 +10,7 @@ import { linkAttachmentsToDraft } from "@/features/tasks/attachments/server/serv
 import { TASK_PRIORITIES } from "@/features/tasks/constants"
 import { chatFilesToAttachments } from "./files"
 import { collectFeatureStream, slimTask } from "./helpers"
-import { defineTool, OpexToolError } from "./define"
+import { contextSessionId, defineTool, OpexToolError } from "./define"
 
 /**
  * Clareza da última geração de cada prévia (a clareza é transitória: só vem no fim da geração). A
@@ -71,7 +71,7 @@ export const previewTools = [
         }),
         summarize: (input) => (input.chatFileIds?.length ? `Criar uma prévia de tarefa com ${input.chatFileIds.length} anexo(s)` : "Criar uma prévia de tarefa"),
         execute: async ({ chatFileIds, ...input }, context) => {
-            const { attached, failed } = chatFileIds?.length ? await chatFilesToAttachments(context.sessionId, chatFileIds, {}) : { attached: [], failed: [] }
+            const { attached, failed } = chatFileIds?.length ? await chatFilesToAttachments(contextSessionId(context), chatFileIds, {}) : { attached: [], failed: [] }
             const description = [input.description.trim(), ...attached.map((item) => item.markdown)].filter(Boolean).join("\n\n")
             const draft = await createOwnerDraft(clienteDraftSchema.parse({ projectId: input.projectId, description }))
             await linkAttachmentsToDraft(ownerAttachmentActor(), attached.map((item) => item.id), draft.id)

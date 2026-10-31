@@ -95,6 +95,11 @@ sem pedido explícito.
 - **Sempre que criar, alterar ou remover um endpoint público**, atualize no mesmo commit a
   especificação OpenAPI (`src/features/public-api/openapi/spec.ts`) e `PUBLIC_TOKEN_ROUTES`:
   caminho, parâmetros, corpo, respostas por status, exemplos e esquema de segurança.
+- Todo endpoint público declara o **escopo** exigido em `PUBLIC_TOKEN_ROUTES`
+  (`src/features/public-api/routes.ts`; `null` = qualquer token válido) e chama
+  `requireApiToken(req, { scope: publicRouteScope(path) })` (403 `INSUFFICIENT_SCOPE`); a especificação
+  documenta o escopo e o 403 (`tokenOperationSecurity`). Catálogo de escopos em
+  `aicontext/modules/integrations.md`, "API interna".
 - Corpos e respostas vêm dos mesmos schemas Zod usados pela rota; nunca duplique o contrato à mão
   quando existir schema.
 - O servidor MCP do Agente Maddox (`/api/maddox/mcp/{owner|portal}`) também está na especificação,
@@ -182,6 +187,8 @@ sem pedido explícito.
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
+- Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
+  escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.

@@ -11,7 +11,7 @@ import { runAfterResponse } from "@/lib/after-response"
 import { getLocalUser } from "@/lib/local-user"
 import { chatFilesToAttachments } from "./files"
 import { clipText, collectFeatureStream, resolveTask, slimTask, taskRefSchema } from "./helpers"
-import { defineTool, OpexToolError } from "./define"
+import { contextSessionId, defineTool, OpexToolError } from "./define"
 
 const LIST_LIMIT_MAX = 200
 
@@ -129,7 +129,7 @@ export const taskTools = [
             const columnId = input.columnId ?? (await firstBoardColumnKey())
             const task = slimTask(await createTaskWithIssue(createTaskSchema.parse({ ...input, columnId }), context.actorId))
             if (!chatFileIds?.length) return task
-            const { attached, failed } = await chatFilesToAttachments(context.sessionId, chatFileIds, { taskId: task.id })
+            const { attached, failed } = await chatFilesToAttachments(contextSessionId(context), chatFileIds, { taskId: task.id })
             return { ...task, attachments: { attached: attached.map((item) => ({ id: item.id, name: item.name })), failed } }
         },
     }),

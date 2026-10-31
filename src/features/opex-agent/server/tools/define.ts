@@ -15,11 +15,19 @@ import type { OpexServerScope } from "../scope"
 export type OpexToolRisk = "read" | "write" | "destructive"
 
 export interface OpexToolContext {
+    /** Sessão do agente; vazia (`""`) na chamada por token de sistema (sem conversa): use `contextSessionId`. */
     sessionId: string
     actorId: string
     signal?: AbortSignal
     /** Escopo do turno (dono ou portal do cliente); ausente = dono (compatibilidade das ferramentas). */
     scope?: OpexServerScope
+    /** Quem chamou fora de uma conversa: token de sistema no MCP do dono (`mcp:owner`). */
+    origin?: { kind: "api-token"; tokenId: string; nome: string; prefixo: string }
+}
+
+/** Sessão do agente da chamada, ou `null` sem conversa (token de sistema). */
+export function contextSessionId(context: Pick<OpexToolContext, "sessionId">): string | null {
+    return context.sessionId ? context.sessionId : null
 }
 
 export interface OpexToolDef<I = unknown> {

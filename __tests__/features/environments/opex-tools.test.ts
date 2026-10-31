@@ -48,7 +48,7 @@ import { toolErrorMessage } from '@/features/opex-agent/server/tools/define'
 import { toolConfirms as needsConfirmation } from '@/features/opex-agent/tool-tree'
 
 const context = { sessionId: 's1', actorId: 'local' }
-type AnyTool = { name: string; risk: string; input: { parse: (value: unknown) => unknown }; summarize?: (input: never) => string; redact?: (input: never) => unknown; execute: (input: unknown, ctx: typeof context) => Promise<unknown> }
+type AnyTool = { name: string; risk: string; input: { parse: (value: unknown) => unknown }; summarize?: (input: never) => string; redact?: (input: never) => unknown; execute: (input: unknown, ctx: typeof context & Record<string, unknown>) => Promise<unknown> }
 const find = (name: string) => environmentTools.find((tool) => tool.name === name) as unknown as AnyTool
 const run = (name: string, input: unknown) => find(name).execute(find(name).input.parse(input), context)
 
@@ -114,5 +114,15 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     const out = await run('clean_environments_registry', {})
     expect(out).toMatchObject({ status: 'running' })
     await vi.waitFor(() => expect(mocks.notifyRegistry).toHaveBeenCalledWith('s1', { ok: true, message: '2 tag(s) apagada(s)' }))
+  })
+
+  it('sem conversa (token de sistema): deploy e limpeza do registry não avisam sessão alguma', async () => {
+    const tokenContext = { sessionId: '', actorId: 'local', origin: { kind: 'api-token', tokenId: 't1', nome: 'Automação', prefixo: 'mt_sys_AbCdEfGh' } }
+    await find('deploy_environment').execute(find('deploy_environment').input.parse({ environment: 'loja' }), tokenContext)
+    expect(mocks.runEnvironmentAction).toHaveBeenCalledWith('e1', { action: 'deploy', ref: '' }, 'local', 'host-runner', { notifyOpexSessionId: null })
+    const out = await find('clean_environments_registry').execute({}, tokenContext)
+    expect(out).toMatchObject({ status: 'running', nota: 'Limpeza em andamento em segundo plano.' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mocks.notifyRegistry).not.toHaveBeenCalled()
   })
 })

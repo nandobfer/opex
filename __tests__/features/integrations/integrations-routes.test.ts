@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   listApiTokens: vi.fn(),
   createApiToken: vi.fn(),
   revokeApiToken: vi.fn(),
+  updateApiTokenScopes: vi.fn(),
   requireApiToken: vi.fn(),
+  apiTokenScopeCatalog: vi.fn(),
 }))
 
 vi.mock('@/features/integrations/services/integration-service', async () => {
@@ -30,8 +32,10 @@ vi.mock('@/features/integrations/api-tokens/service', () => ({
   listApiTokens: mocks.listApiTokens,
   createApiToken: mocks.createApiToken,
   revokeApiToken: mocks.revokeApiToken,
+  updateApiTokenScopes: mocks.updateApiTokenScopes,
   requireApiToken: mocks.requireApiToken,
 }))
+vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
 vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { GET as listGET } from '@/app/api/integrations/route'
@@ -39,7 +43,8 @@ import { GET as detailGET, PATCH } from '@/app/api/integrations/[id]/route'
 import { POST as testPOST } from '@/app/api/integrations/[id]/test/route'
 import { GET as logsGET } from '@/app/api/integrations/[id]/logs/route'
 import { GET as tokensGET, POST as tokensPOST } from '@/app/api/integrations/internal_api/tokens/route'
-import { DELETE as tokenDELETE } from '@/app/api/integrations/internal_api/tokens/[tokenId]/route'
+import { DELETE as tokenDELETE, PATCH as tokenPATCH } from '@/app/api/integrations/internal_api/tokens/[tokenId]/route'
+import { GET as scopesGET } from '@/app/api/integrations/internal_api/scopes/route'
 import { GET as whoamiGET } from '@/app/api/v1/whoami/route'
 import { IntegrationUpdateError } from '@/features/integrations/services/integration-service'
 import { DomainError } from '@/lib/api/route'
@@ -171,15 +176,37 @@ describe('tokens de sistema da API interna', () => {
     expect((await res.json()).data).toEqual([{ id: 't1', prefixo: 'mt_sys_AbCdEfGh' }])
   })
 
-  it('POST valida o nome e gera o token com o usuário local', async () => {
-    const bad = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'a' }) }), noParams)
+  it('POST valida o nome e os escopos e gera o token com o usuário local', async () => {
+    const bad = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'a', escopos: ['api:v1:*'] }) }), noParams)
     expect(bad.status).toBe(400)
+    const noScope = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'Script', escopos: [] }) }), noParams)
+    expect(noScope.status).toBe(400)
+    const toolWithoutMcp = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'Script', escopos: ['mcp:owner:tool:list_tasks'] }) }), noParams)
+    expect(toolWithoutMcp.status).toBe(400)
     expect(mocks.createApiToken).not.toHaveBeenCalled()
 
     mocks.createApiToken.mockResolvedValue({ token: 'mt_sys_x', item: { id: 't1' } })
-    const res = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'Script' }) }), noParams)
+    const res = await tokensPOST(new NextRequest('http://x', { method: 'POST', body: JSON.stringify({ nome: 'Script', escopos: ['api:v1:*'] }) }), noParams)
     expect(res.status).toBe(201)
-    expect(mocks.createApiToken).toHaveBeenCalledWith('local', { nome: 'Script' })
+    expect(mocks.createApiToken).toHaveBeenCalledWith('local', { nome: 'Script', escopos: ['api:v1:*'] })
+  })
+
+  it('PATCH edita os escopos com o usuário local; sem escopo responde 400', async () => {
+    const params = { params: Promise.resolve({ tokenId: 't1' }) }
+    const bad = await tokenPATCH(new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ escopos: [] }) }), params)
+    expect(bad.status).toBe(400)
+    expect(mocks.updateApiTokenScopes).not.toHaveBeenCalled()
+    mocks.updateApiTokenScopes.mockResolvedValue({ id: 't1', escopos: ['mcp:owner'] })
+    const res = await tokenPATCH(new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ escopos: ['mcp:owner'], expiraEm: null }) }), params)
+    expect(res.status).toBe(200)
+    expect(mocks.updateApiTokenScopes).toHaveBeenCalledWith('local', 't1', { escopos: ['mcp:owner'], expiraEm: null })
+  })
+
+  it('GET scopes devolve o catálogo de escopos', async () => {
+    mocks.apiTokenScopeCatalog.mockResolvedValue({ routes: [], groups: [], tools: [] })
+    const res = await scopesGET(new NextRequest('http://x'), noParams)
+    expect(res.status).toBe(200)
+    expect((await res.json()).data).toEqual({ routes: [], groups: [], tools: [] })
   })
 
   it('DELETE revoga; token inexistente responde 404', async () => {
@@ -196,10 +223,12 @@ describe('tokens de sistema da API interna', () => {
 
 describe('GET /api/v1/whoami', () => {
   it('responde o token usado na chamada', async () => {
-    mocks.requireApiToken.mockResolvedValue({ id: 't1', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', criadoEm: '', ultimoUsoEm: null })
+    mocks.requireApiToken.mockResolvedValue({ id: 't1', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', criadoEm: '', ultimoUsoEm: null, escopos: ['mcp:owner'], legado: false, expiraEm: null, expirado: false })
     const res = await whoamiGET(new NextRequest('http://x/api/v1/whoami'), { params: Promise.resolve({}) } as never)
     expect(res.status).toBe(200)
-    expect((await res.json()).data).toEqual({ token: { id: 't1', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh' } })
+    expect((await res.json()).data).toEqual({ token: { id: 't1', nome: 'Script', prefixo: 'mt_sys_AbCdEfGh', escopos: ['mcp:owner'], legado: false, expiraEm: null } })
+    // whoami é livre: exige só um token válido (escopo null), inclusive o só de MCP.
+    expect(mocks.requireApiToken.mock.calls[0][1]).toEqual({ scope: null })
   })
 
   it('401 sem token válido', async () => {

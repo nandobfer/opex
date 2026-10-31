@@ -2,7 +2,7 @@ import { z } from "zod"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import { OPEX_TOOL_GROUP_LABELS, type OpexToolGroup } from "@/features/opex-agent/constants"
 import { OPEX_CLIENT_TOOL_GROUP_LABELS, type OpexClientToolGroup } from "@/features/opex-agent/client-tools"
-import { toolConfirms } from "@/features/opex-agent/tool-tree"
+import { isAlwaysOnGroup, toolConfirms } from "@/features/opex-agent/tool-tree"
 import { MADDOX_CLIENT_TOOL_NAMES, MADDOX_EXCLUDED_GROUPS, maddoxMcpToolName } from "../catalog"
 import type { MaddoxMcpScope } from "../constants"
 import type { McpToolDescriptor } from "../mcp-protocol"
@@ -48,7 +48,11 @@ export function toolDescriptor(tool: OpexTool): McpToolDescriptor {
 export interface MaddoxMcpToolDoc extends McpToolDescriptor {
     /** Nome visto pelo modelo no OpenCode (`opex_app_*` / `opex_portal_*`). */
     opencodeName: string
+    /** Grupo do catálogo (escopo `mcp:owner:group:<grupo>`). */
+    group: string
     groupLabel: string
+    /** Sempre ligada (grupo Contexto do dono): vem com `mcp:owner`. */
+    alwaysOn: boolean
     risk: OpexTool["risk"]
     /** Pede confirmação por padrão (o dono pode trocar por ferramenta). */
     confirmsByDefault: boolean
@@ -69,7 +73,9 @@ export function toolDoc(scope: MaddoxMcpScope, tool: OpexTool): MaddoxMcpToolDoc
     return {
         ...toolDescriptor(tool),
         opencodeName: maddoxMcpToolName(scope, tool.name),
+        group: tool.group,
         groupLabel: group.label,
+        alwaysOn: scope === "owner" && isAlwaysOnGroup(tool.group),
         risk: tool.risk,
         confirmsByDefault: toolConfirms(tool),
         adminOnly: group.adminOnly,

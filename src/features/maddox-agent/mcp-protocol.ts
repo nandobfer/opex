@@ -43,6 +43,8 @@ const isObj = (value: unknown): value is Record<string, unknown> => typeof value
 export const JSON_RPC_ERRORS = { parse: -32700, invalidRequest: -32600, methodNotFound: -32601, invalidParams: -32602, internal: -32603 } as const
 /** Erro JSON-RPC (fora da faixa reservada) da chamada sem o segredo do MCP (HTTP 401). */
 export const MCP_UNAUTHORIZED_CODE = -32001
+/** Erro JSON-RPC do token de sistema sem o escopo do servidor MCP (HTTP 403, `INSUFFICIENT_SCOPE`). */
+export const MCP_FORBIDDEN_CODE = -32003
 
 /**
  * Recusas do servidor MCP do Opex (Agente Maddox). As de escopo voltam como resultado de ferramenta com
@@ -57,6 +59,15 @@ export const MADDOX_MCP_REFUSALS = {
     disabled: "O Agente Maddox está desativado",
     toolDisabled: "Esta ferramenta está desligada para o Agente Maddox.",
     unknownTool: (name: string) => `Ferramenta desconhecida: ${name}`,
+    /** Token de sistema (`mt_sys_…`) inválido, revogado ou expirado (HTTP 401). */
+    tokenUnauthorized: "Token de sistema ausente, inválido, revogado ou expirado",
+    /** Token de sistema sem `mcp:owner` (HTTP 403). */
+    tokenNoMcp: "INSUFFICIENT_SCOPE: este token de sistema não tem o escopo mcp:owner (MCP do dono)",
+    /** Token de sistema no servidor do portal (HTTP 403). */
+    tokenPortal: "INSUFFICIENT_SCOPE: o servidor MCP do portal não aceita token de sistema (o token não representa um usuário de cliente)",
+    tokenScope: (name: string) => `INSUFFICIENT_SCOPE: a ferramenta ${name} não está nos escopos deste token de sistema`,
+    tokenDestructive: (name: string) => `INSUFFICIENT_SCOPE: ${name} é destrutiva (ou pede confirmação) e exige o escopo mcp:owner:destructive; pelo token não há confirmação no chat`,
+    tokenNotGrantable: (name: string) => `A ferramenta ${name} só funciona nas conversas do Agente Maddox (indisponível por token de sistema)`,
 } as const
 
 function failure(id: JsonRpcId, code: number, message: string): JsonRpcResponse {

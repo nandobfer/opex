@@ -3,7 +3,9 @@ import { join } from 'path'
 import { describe, expect, it, vi } from 'vitest'
 import { parseOpenApiSpec } from '@/features/integrations/openapi/parser'
 import { findSpecUrlCandidates } from '@/features/integrations/openapi/spec-source'
-import { buildPublicApiSpec, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES } from '@/features/public-api/openapi/spec'
+import { buildPublicApiSpec, insufficientScopeResponse, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES, tokenOperationSecurity } from '@/features/public-api/openapi/spec'
+import { publicRouteScope } from '@/features/public-api/routes'
+import { whoAmIResponseSchema } from '@/features/public-api/schemas'
 import { renderPublicApiDocsHtml } from '@/features/public-api/openapi/docs-page'
 import { GET as getSpec } from '@/app/api/openapi.json/route'
 
@@ -47,12 +49,40 @@ describe('buildPublicApiSpec', () => {
   })
 
   it('toda rota pública por token está documentada e existe no app', () => {
-    expect(PUBLIC_TOKEN_ROUTES).toEqual([{ path: '/api/v1/whoami' }])
+    expect(PUBLIC_TOKEN_ROUTES).toEqual([{ method: 'GET', path: '/api/v1/whoami', scope: null, summary: 'Confere o token' }])
     const paths = Object.keys((buildPublicApiSpec() as RawSpec).paths)
     for (const route of PUBLIC_TOKEN_ROUTES) {
       expect(paths).toContain(route.path)
       expect(existsSync(join(process.cwd(), 'src/app', route.path, 'route.ts')), route.path).toBe(true)
     }
+  })
+
+  it('o esquema apiToken traz o catálogo de escopos e cada operação o escopo exigido', () => {
+    const raw = buildPublicApiSpec() as RawSpec & { paths: Record<string, Record<string, Record<string, unknown>>> }
+    const description = (raw.components.securitySchemes.apiToken as { description: string }).description
+    for (const scope of ['api:v1:*', 'mcp:owner', 'mcp:owner:tool:*', 'mcp:owner:group:<grupo>', 'mcp:owner:tool:<nome>', 'mcp:owner:destructive']) expect(description).toContain(`\`${scope}\``)
+    const whoami = raw.paths['/api/v1/whoami']!.get!
+    expect(whoami['x-opex-required-scope']).toBeNull()
+    expect(String(whoami.description)).toContain('qualquer token válido')
+    for (const route of PUBLIC_TOKEN_ROUTES) {
+      const op = raw.paths[route.path]![route.method.toLowerCase()]!
+      expect(op['x-opex-required-scope']).toBe(route.scope)
+      // 403 só onde pode acontecer: rota com escopo.
+      expect(Object.keys(op.responses as object).includes('403')).toBe(route.scope !== null)
+    }
+  })
+
+  it('rota com escopo documenta o papel no security e o 403 INSUFFICIENT_SCOPE', () => {
+    expect(tokenOperationSecurity('api:v1:relatorios')).toEqual({ security: [{ apiToken: ['api:v1:relatorios'] }], 'x-opex-required-scope': 'api:v1:relatorios' })
+    expect(tokenOperationSecurity(null)).toEqual({ security: [{ apiToken: [] }], 'x-opex-required-scope': null })
+    expect(insufficientScopeResponse('api:v1:relatorios').content['application/json'].example).toMatchObject({ code: 'INSUFFICIENT_SCOPE', details: { required: 'api:v1:relatorios' } })
+  })
+
+  it('o exemplo do whoami valida no schema da rota (com escopos e expiração)', () => {
+    const raw = buildPublicApiSpec() as unknown as { paths: Record<string, { get: { responses: { '200': { content: { 'application/json': { example: { data: unknown } } } } } } }> }
+    const example = raw.paths['/api/v1/whoami']!.get.responses['200'].content['application/json'].example
+    expect(whoAmIResponseSchema.safeParse(example.data).success).toBe(true)
+    expect(publicRouteScope('/api/v1/whoami')).toBeNull()
   })
 
   it('não documenta rotinas/crons', () => {

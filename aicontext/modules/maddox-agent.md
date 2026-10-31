@@ -104,7 +104,23 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   **sem estado**, com respostas JSON: `initialize`, `ping`, `tools/list`, `tools/call` e notificações.
 - **Autenticação**: `Authorization: Bearer` com um segredo derivado da chave das integrações
   (`deriveSubkey("maddox-mcp:v1")`), registrado no OpenCode no `mcp.add`; nunca gravado nem exposto.
-  As rotas ficam fora do login (`PUBLIC_PREFIXES` de `auth/paths.ts`), não são API pública por token.
+  As rotas ficam fora do login (`PUBLIC_PREFIXES` de `auth/paths.ts`).
+- **Token de sistema (OPE-102)**: o servidor do **dono** também aceita `Authorization: Bearer mt_sys_…`
+  (decidido pelo prefixo) com o escopo `mcp:owner` (ver `integrations.md`, "API interna"). Sem sessão
+  do OpenCode nem `_meta`: o ator é o dono (`OWNER_SCOPE`, agente `maddox`). Token inválido, revogado
+  ou expirado → 401; sem `mcp:owner` → 403 (`MCP_FORBIDDEN_CODE`, `INSUFFICIENT_SCOPE`); no `portal`
+  → 403 (token não representa usuário de cliente). O `tools/list` devolve **só** as ferramentas
+  cobertas pelo token (`mcpOwnerToolDecision`) e ligadas na configuração do Maddox (vazio com o
+  agente desativado); o `tools/call` (`callMaddoxToolAsToken`) recusa com `isError: true` a
+  ferramenta fora do escopo (`tokenScope`), a destrutiva/com confirmação (inclusive a que o dono marcou
+  "pede confirmação" em `confirmationOverrides`) sem `mcp:owner:destructive`
+  (`tokenDestructive`) e a do grupo `files` (`tokenNotGrantable`), e revalida o Maddox ligado e a
+  ferramenta ligada (`authorizeMaddoxTool`) a cada chamada. Recusas viram log de aviso com o token
+  (id/nome/prefixo) e o motivo; nunca o valor.
+- **Contexto sem conversa**: a ferramenta recebe `sessionId: ""` e `origin: { kind: "api-token", … }`;
+  as ferramentas usam `contextSessionId(context)` (`null` sem conversa): anexar arquivos do chat
+  falha por arquivo com mensagem clara, deploy/limpeza de registry/serviço do OpenCode não avisam
+  conversa, e o terminal do host audita com `entidadeId: "api-token:<id>"` e `via: "api-token"`.
 - **Endereço**: o OpenCode chama o Opex pela **origem do navegador** gravada ao salvar a aba do Maddox
   (`mcpBaseUrl`, com o `basePath`); a aba mostra o endereço e a situação dos dois servidores, com
   "Registrar de novo". Salvar com o endereço novo regrava os MCPs.
