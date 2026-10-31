@@ -1,3 +1,4 @@
+import { runAfterResponse } from "@/lib/after-response"
 import { dbConnect, recordAudit, AcaoAuditoria, createAuditContext } from "@/lib/db"
 import { Integration } from "@/lib/db/models/Integration"
 import { IntegrationStatus, type IIntegrationStatus } from "@/lib/db/models/IntegrationStatus"
@@ -167,6 +168,20 @@ export async function getIntegrationDetail(id: IntegrationId): Promise<Integrati
     }
 }
 
+/** Provedores de IA cuja chave pode alimentar o Engramind ("IA do Opex"). */
+const ENGRAMIND_KEY_SOURCE_IDS: readonly IntegrationId[] = ["ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek"]
+
+/**
+ * Chave de um provedor de IA trocada ou apagada: reenvia ao Engramind depois da resposta, sem atrasar
+ * nem derrubar o salvamento (import dinâmico: evita o ciclo integrations ↔ engramind).
+ */
+function scheduleEngramindKeySync(id: IntegrationId): void {
+    runAfterResponse("engramind-ai-key-sync", async () => {
+        const { syncEngramindProviderKey } = await import("@/features/engramind/server/ai-source")
+        await syncEngramindProviderKey(id)
+    })
+}
+
 /**
  * Aplica o PATCH. Segredos: `set` criptografa, `clear` grava `null` (desliga, sem voltar ao
  * `.env`), ausente mantém. A auditoria registra QUAIS segredos mudaram, nunca os valores.
@@ -286,6 +301,8 @@ export async function updateIntegration(
 
         // Integração ativável (campo `active`): a transição desligada → ligada dispara o gancho de ativação.
         if (beforeValues.active !== true && newData.active === true) await runIntegrationEnableHook(id, actorId)
+
+        if (input.secrets?.apiKey && ENGRAMIND_KEY_SOURCE_IDS.includes(id)) scheduleEngramindKeySync(id)
     }
 
     return getIntegrationDetail(id)

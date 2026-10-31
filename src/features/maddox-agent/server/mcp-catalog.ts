@@ -3,7 +3,7 @@ import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import { OPEX_TOOL_GROUP_LABELS, type OpexToolGroup } from "@/features/opex-agent/constants"
 import { OPEX_CLIENT_TOOL_GROUP_LABELS, type OpexClientToolGroup } from "@/features/opex-agent/client-tools"
 import { isAlwaysOnGroup, toolConfirms } from "@/features/opex-agent/tool-tree"
-import { MADDOX_CLIENT_TOOL_NAMES, MADDOX_EXCLUDED_GROUPS, maddoxMcpToolName } from "../catalog"
+import { MADDOX_CLIENT_TOOL_NAMES, maddoxIncludesOwnerTool, maddoxMcpToolName } from "../catalog"
 import type { MaddoxMcpScope } from "../constants"
 import type { McpToolDescriptor } from "../mcp-protocol"
 
@@ -16,7 +16,7 @@ import type { McpToolDescriptor } from "../mcp-protocol"
 export async function maddoxMcpCatalog(scope: MaddoxMcpScope): Promise<OpexTool[]> {
     if (scope === "owner") {
         const { OPEX_TOOLS } = await import("@/features/opex-agent/server/tools/registry")
-        return OPEX_TOOLS.filter((tool) => !MADDOX_EXCLUDED_GROUPS.includes(tool.group))
+        return OPEX_TOOLS.filter(maddoxIncludesOwnerTool)
     }
     const { OPEX_CLIENT_SERVER_TOOLS } = await import("@/features/opex-agent/server/client-tools/registry")
     return OPEX_CLIENT_SERVER_TOOLS.filter((tool) => MADDOX_CLIENT_TOOL_NAMES.includes(tool.name))

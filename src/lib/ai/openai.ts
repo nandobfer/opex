@@ -9,7 +9,9 @@ import { AiProviderError } from "./errors"
  * texto); geração pelo `@ai-sdk/openai` (Vercel AI SDK, API Responses).
  */
 
-export const OPENAI_API_URL = "https://api.openai.com/v1"
+import { OPENAI_API_URL } from "./endpoints"
+
+export { OPENAI_API_URL }
 
 async function getOpenaiApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_openai")
@@ -45,7 +47,7 @@ export function toOpenaiModel(raw: OpenaiModelRaw): AiModelDto {
     }
 }
 
-export async function listOpenaiModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+async function fetchOpenaiModelsRaw(signal?: AbortSignal): Promise<OpenaiModelRaw[]> {
     const apiKey = await getOpenaiApiKey()
     let res: Response
     try {
@@ -56,10 +58,24 @@ export async function listOpenaiModels(signal?: AbortSignal): Promise<AiModelDto
     if (res.status === 401 || res.status === 403) throw new AiProviderError(`A OpenAI recusou a API key (HTTP ${res.status})`)
     if (!res.ok) throw new AiProviderError(`A OpenAI respondeu HTTP ${res.status}`)
     const body = (await res.json()) as { data?: OpenaiModelRaw[] }
-    return (body.data ?? [])
+    return body.data ?? []
+}
+
+const newestFirst = (a: OpenaiModelRaw, b: OpenaiModelRaw) => (b.created ?? 0) - (a.created ?? 0) || a.id.localeCompare(b.id)
+
+export async function listOpenaiModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+    return (await fetchOpenaiModelsRaw(signal))
         .filter((model) => isOpenaiTextModel(model.id))
-        .sort((a, b) => (b.created ?? 0) - (a.created ?? 0) || a.id.localeCompare(b.id))
+        .sort(newestFirst)
         .map(toOpenaiModel)
+}
+
+/** Modelos de embedding (`text-embedding-…`), para o Engramind. Sem variantes. */
+export async function listOpenaiEmbeddingModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+    return (await fetchOpenaiModelsRaw(signal))
+        .filter((model) => /embedding/i.test(model.id))
+        .sort(newestFirst)
+        .map((model) => ({ ...toOpenaiModel(model), variants: [] }))
 }
 
 export async function createOpenaiProvider(): Promise<OpenAIProvider> {

@@ -12,6 +12,8 @@
  *   no servidor do dono, pelo token de sistema com o escopo `mcp:owner`;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
+ * - o **webhook do Engramind** (`/api/engramind/webhook`, exato), autenticado só pela assinatura
+ *   HMAC (`Engramind-Signature`) com o segredo do webhook da integração;
  * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de
  *   cliente do usuário logado ou deixa o middleware decidir. As sub-rotas do portal exigem sessão.
  *
@@ -36,6 +38,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
     // Documentação OpenAPI (contrato público; sem dados). Ver `src/app/api/openapi.json` e `api/docs`.
     "/api/openapi.json",
     "/api/docs",
+    // Webhook do Engramind: autenticado só pela assinatura (ver `src/features/engramind/server/webhook.ts`).
+    "/api/engramind/webhook",
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */

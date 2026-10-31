@@ -16,7 +16,8 @@ export class DomainError extends Error {
     }
 }
 
-export interface RouteArgs<P extends Record<string, string>> {
+/** Parâmetros da rota: `string` (segmento dinâmico) ou `string[]` (rota catch-all, ex.: `[...path]`). */
+export interface RouteArgs<P extends Record<string, string | string[]>> {
     req: NextRequest
     params: P
 }
@@ -25,7 +26,7 @@ export interface RouteArgs<P extends Record<string, string>> {
  * Wrapper das rotas do app. O acesso é barrado pelo `middleware` (sessão de senha única);
  * `DomainError` vira a resposta padronizada; qualquer outro erro é logado e vira 500.
  */
-export function withRoute<P extends Record<string, string> = Record<string, never>>(handler: (args: RouteArgs<P>) => Promise<Response>) {
+export function withRoute<P extends Record<string, string | string[]> = Record<string, never>>(handler: (args: RouteArgs<P>) => Promise<Response>) {
     return async (req: NextRequest, context: { params: Promise<P> }) => {
         try {
             const params = context?.params ? await context.params : ({} as P)

@@ -21,6 +21,7 @@ import { DEFAULT_TASK_TAGS_SETTINGS, taskTagsSettingsSchema, type TaskTagsSettin
 import { useAiProviderStatuses, useSaveTaskTagsSettings, useTaskTagsSettings } from "../../hooks/useAi"
 import { ProviderModelCard } from "../understand-task/ProviderModelCard"
 import { TaxonomyEditor } from "./TaxonomyEditor"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
@@ -136,7 +137,7 @@ export function TaskTagsTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                                         <Controller
                                             control={form.control}
                                             name="temperature"
-                                            render={({ field }) => <Input id="ai-task-tags-temperature" type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value.trim() === "" ? null : Number(event.target.value))} />}
+                                            render={({ field }) => <TemperatureInput id="ai-task-tags-temperature" value={field.value} onChange={field.onChange} />}
                                         />
                                     </Field>
                                     <Field id="ai-task-tags-max-tokens" label="Máximo de tokens na resposta" error={errors.maxOutputTokens?.message}>

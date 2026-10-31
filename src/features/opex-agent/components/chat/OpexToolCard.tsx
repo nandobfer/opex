@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { OpexConfirmationDto, OpexPart } from "../../types"
 import { toolIcon } from "../tool-icons"
+import { resultActionOf } from "../../result-actions"
+import { ToolResultAction } from "./ToolResultAction"
 
 type ToolPart = Extract<OpexPart, { type: "tool" }>
 
@@ -28,6 +30,7 @@ export function OpexToolCard({ part, onDecide, deciding }: OpexToolCardProps) {
     const [open, setOpen] = useState(false)
     const awaiting = part.confirmation?.status === "pending"
     const hasDetails = Boolean(part.input || part.output || part.error)
+    const resultAction = part.state === "done" ? resultActionOf(part.output) : null
 
     return (
         <motion.div
@@ -65,6 +68,7 @@ export function OpexToolCard({ part, onDecide, deciding }: OpexToolCardProps) {
                     </motion.div>
                 )}
             </AnimatePresence>
+            {resultAction && <ToolResultAction action={resultAction} />}
             {part.confirmation && <ConfirmationBlock confirmation={part.confirmation} onDecide={onDecide} deciding={deciding} />}
         </motion.div>
     )

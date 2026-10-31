@@ -28,6 +28,7 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     finance: Wallet,
     clients: Users,
     environments: Boxes,
+    engramind: Network,
     "opencode-service": Bot,
     "opencode-resources": Puzzle,
     mcps: PlugZap,

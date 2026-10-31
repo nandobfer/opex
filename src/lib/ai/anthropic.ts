@@ -9,7 +9,9 @@ import { AiProviderError } from "./errors"
  * `@ai-sdk/anthropic` (Vercel AI SDK).
  */
 
-export const ANTHROPIC_API_URL = "https://api.anthropic.com/v1"
+import { ANTHROPIC_API_URL } from "./endpoints"
+
+export { ANTHROPIC_API_URL }
 const ANTHROPIC_VERSION = "2023-06-01"
 
 async function getAnthropicApiKey(): Promise<string> {

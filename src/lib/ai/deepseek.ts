@@ -9,7 +9,9 @@ import { AiProviderError } from "./errors"
  * `@ai-sdk/deepseek` (Vercel AI SDK).
  */
 
-export const DEEPSEEK_API_URL = "https://api.deepseek.com"
+import { DEEPSEEK_API_URL } from "./endpoints"
+
+export { DEEPSEEK_API_URL }
 
 async function getDeepseekApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_deepseek")

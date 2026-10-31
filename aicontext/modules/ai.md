@@ -59,7 +59,15 @@ e opções na própria aba da página "Inteligência Artificial".
   sem ambos os contadores, total `null`. Retenção continua em **90 dias**; a migração
   `ensure-ai-usage-indexes` garante índices, incluindo `provider + createdAt`, sem depender de autoIndex.
 - Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
-  ignora o cache. Situação do provedor: **configurado** (obrigatórios preenchidos,
+  ignora o cache. `?kind=embedding` lista os modelos de **embedding** (só Gemini — `embedContent` em
+  `supportedGenerationMethods`, `listGeminiEmbeddingModels` — e OpenAI — ids com `embedding`,
+  `listOpenaiEmbeddingModels`), com cache separado; outro provedor ou tipo → `422`. Usado pela "IA do
+  Opex" do Engramind (`useAiModels(provider, true, "embedding")`). As URLs oficiais ficam em
+  `src/lib/ai/endpoints.ts` (puro, reexportadas por cada provedor).
+- **A chave do Gemini, Anthropic, OpenAI e DeepSeek pode alimentar o Engramind** (Redator e
+  embedding, `modules/engramind.md`, "IA do Opex"): gravar ou apagar a chave dessas integrações
+  agenda, depois da resposta, o reenvio ao Engramind (`syncEngramindProviderKey`). Falha no Engramind
+  nunca desfaz nem bloqueia o salvamento no Opex. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
 - **Conexão confirmada na hora** (`confirmAiProviderConnection`, `src/lib/ai/connection.ts`,
   OPE-91): a disponibilidade das features (`availability`/`availabilityOf*`, `agenticAvailability`)
@@ -450,7 +458,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 
 | Rota | Descrição |
 |---|---|
-| `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`); 502 com a mensagem do provedor |
+| `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
 | `GET /api/ai/providers/opencode/accounts` | Providers do OpenCode com as contas (sem segredos) |

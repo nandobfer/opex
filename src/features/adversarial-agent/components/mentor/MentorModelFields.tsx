@@ -4,9 +4,9 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { getAiProvider, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
 import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import type { MentorSettings } from "../../mentor/schemas"
 
@@ -32,19 +32,16 @@ export function MentorModelFields({ form, part, providerIds, providers }: { form
     return (
         <div className="space-y-4">
             <Field id={`${id}-provider`} label="Provedor" error={errors?.provider?.message}>
-                <OptionTabs<string>
+                <AiProviderTabs
                     id={`${id}-provider`}
-                    options={providerIds.map((providerId) => {
-                        const status = providers.find((item) => item.id === providerId)
-                        return { value: providerId, label: getAiProvider(providerId).name, disabled: !status?.connected, title: status?.connected ? undefined : `${getAiProvider(providerId).name}: não conectado` }
-                    })}
-                    value={provider ?? ""}
+                    providers={providers}
+                    allowed={providerIds}
+                    value={provider ?? null}
                     onChange={(next) => {
                         if (next === provider) return
                         form.setValue(names.provider, next as never, options)
                         setModel(null)
                     }}
-                    className="w-full flex-wrap"
                 />
             </Field>
             <AnimatePresence initial={false}>

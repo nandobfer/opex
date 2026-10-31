@@ -4,9 +4,9 @@ import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
 import { listAnthropicModels } from "./anthropic"
 import { listDeepseekModels } from "./deepseek"
-import { listGeminiModels } from "./gemini"
+import { listGeminiEmbeddingModels, listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
-import { listOpenaiModels } from "./openai"
+import { listOpenaiEmbeddingModels, listOpenaiModels } from "./openai"
 import { listOpencodeAgents, listOpencodeModels, listOpencodeSkills } from "./opencode"
 import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiSkillDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
 
@@ -23,6 +23,18 @@ const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiMo
     deepseek: listDeepseekModels,
     jev: listJevModels,
 }
+
+/** Tipo da lista: modelos de texto (padrão) ou de embedding (só Gemini e OpenAI listam). */
+export type AiModelKind = "chat" | "embedding"
+export const AI_MODEL_KINDS = ["chat", "embedding"] as const
+
+const EMBEDDING_MODEL_LISTERS: Partial<Record<AiProviderId, (signal?: AbortSignal) => Promise<AiModelDto[]>>> = {
+    gemini: listGeminiEmbeddingModels,
+    openai: listOpenaiEmbeddingModels,
+}
+
+/** O provedor lista modelos de embedding. */
+export const supportsEmbeddingModels = (providerId: AiProviderId) => providerId in EMBEDDING_MODEL_LISTERS
 
 const CACHE_MS = 2 * 60_000
 const cache = new Map<string, { at: number; value: unknown }>()
@@ -58,8 +70,13 @@ export async function getAiProviderStatuses(): Promise<AiProviderStatusDto[]> {
     )
 }
 
-export async function listAiModels(providerId: AiProviderId, options: { fresh?: boolean; signal?: AbortSignal } = {}): Promise<AiModelDto[]> {
+export async function listAiModels(providerId: AiProviderId, options: { fresh?: boolean; signal?: AbortSignal; kind?: AiModelKind } = {}): Promise<AiModelDto[]> {
     const { version } = await getIntegration(getAiProvider(providerId).integrationId)
+    if (options.kind === "embedding") {
+        const lister = EMBEDDING_MODEL_LISTERS[providerId]
+        if (!lister) return []
+        return cached(`models:embedding:${providerId}:${version}`, () => lister(options.signal), options.fresh === true)
+    }
     return cached(`models:${providerId}:${version}`, () => MODEL_LISTERS[providerId](options.signal), options.fresh === true)
 }
 

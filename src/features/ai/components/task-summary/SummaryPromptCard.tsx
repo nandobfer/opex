@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { getAiProvider } from "@/lib/ai/providers"
 import { DEFAULT_TASK_SUMMARY_INSTRUCTIONS, TASK_SUMMARY_MAX_LENGTH_DEFAULT, TASK_SUMMARY_MAX_LENGTH_MAX, TASK_SUMMARY_MAX_LENGTH_MIN } from "../../constants"
 import type { TaskSummarySettings } from "../../schemas"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
 /** `""` no campo numérico = vazio (usa o padrão do modelo). */
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))
@@ -58,7 +59,7 @@ export function SummaryPromptCard({ form }: { form: UseFormReturn<TaskSummarySet
                                     <Controller
                                         control={form.control}
                                         name="temperature"
-                                        render={({ field }) => <Input id="ai-summary-temperature" type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(toNumberOrNull(event.target.value))} />}
+                                        render={({ field }) => <TemperatureInput id="ai-summary-temperature" value={field.value} onChange={field.onChange} />}
                                     />
                                 </Field>
                                 <Field id="ai-summary-max-tokens" label="Máximo de tokens na resposta" error={errors.maxOutputTokens?.message}>

@@ -3,12 +3,12 @@
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiErrorMessage } from "@/lib/api"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { getAiProvider, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiAgents, useAiModels } from "../../hooks/useAi"
+import { AiProviderTabs } from "../AiProviderTabs"
 import { ModelPickerField, VariantSelectField } from "../ModelFields"
 
 const DEFAULT_OPTION = "__default__"
@@ -41,7 +41,6 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
     const models = useAiModels(provider)
     const agents = useAiAgents(def?.supportsAgent === true)
     const model = models.data?.find((item) => item.id === modelId)
-    const connected = providers.filter((item) => item.connected)
 
     return (
         <Card>
@@ -52,17 +51,14 @@ export function ProviderModelCard<T extends ProviderModelFields>({ form, provide
             <CardContent className="space-y-5">
                 {!fixedProvider && (
                     <Field id="ai-provider" label="Provedor" error={errors.provider?.message}>
-                        {connected.length === 0 ? (
-                            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor conectado: configure e teste um provedor na aba Provedores.</p>
-                        ) : (
-                            <OptionTabs<AiProviderId>
-                                id="ai-provider"
-                                options={providers.map((item) => ({ value: item.id, label: item.name, disabled: !item.connected, title: item.connected ? item.name : `${item.name}: não conectado` }))}
-                                value={provider ?? ("" as AiProviderId)}
-                                onChange={(next) => onProviderChange?.(next)}
-                                className="w-full flex-wrap"
-                            />
-                        )}
+                        <AiProviderTabs
+                            id="ai-provider"
+                            providers={providers}
+                            allowed={providers.map((item) => item.id)}
+                            value={provider}
+                            onChange={(next) => onProviderChange?.(next as AiProviderId)}
+                            emptyText="Nenhum provedor conectado: configure e teste um provedor na aba Provedores."
+                        />
                     </Field>
                 )}
 

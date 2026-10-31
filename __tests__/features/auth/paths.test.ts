@@ -20,6 +20,11 @@ describe("guarda de acesso", () => {
         }
     })
 
+    it("o webhook do Engramind é público (autenticado só pela assinatura); o resto de /api/engramind exige sessão", () => {
+        expect(resolveAuthDecision("/api/engramind/webhook", null).action).toBe("allow")
+        for (const path of ["/api/engramind/settings", "/api/engramind/connection", "/api/engramind/webhook/outra"]) expect(resolveAuthDecision(path, null).action).toBe("unauthorized")
+    })
+
     it("a documentação liberada não abre as APIs internas vizinhas", () => {
         for (const path of ["/api/integrations/internal_api", "/api/ai/providers/opencode/usage", "/api/openapi", "/api/docs/private"]) {
             expect(resolveAuthDecision(path, null).action).toBe("unauthorized")
