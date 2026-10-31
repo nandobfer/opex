@@ -193,6 +193,11 @@ const testBuilderMachine: IntegrationTester = async (context) => {
     return run(context)
 }
 
+const testEngramind: IntegrationTester = async (context) => {
+    const { testEngramind: run } = await import("@/features/engramind/server/tester")
+    return run(context)
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -209,4 +214,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     smtp: testSmtp,
     storage_s3: testStorage,
     builder_machine: testBuilderMachine,
+    engramind: testEngramind,
 }

@@ -1,0 +1,31 @@
+/** Explicação de cada variável do `.env` do Engramind (infraestrutura; o comportamento vive nas Configurações). */
+export const ENV_HELP: Record<string, string> = {
+    APP_ENV: "Ambiente do serviço: development, test, staging ou production.",
+    APP_HOST: "Endereço em que a API escuta. O docker-compose.yml do Engramind fixa 0.0.0.0 no container: o valor do .env não chega ao serviço.",
+    APP_PORT: "Porta da API (no host e no container). Também entra no nome do projeto do compose (engramind-<porta>): trocar recria o serviço noutro projeto e pode exigir ajustar a URL base.",
+    CONTAINER_NAME: "Nome do container da API. Trocar recria o container com outro nome (o antigo é derrubado ao aplicar).",
+    DATABASE_PATH: "Arquivo SQLite do Engramind. O docker-compose.yml fixa /data/engramind.db no container.",
+    MODELS_PATH: "Cache dos modelos locais de embedding (baixados no primeiro uso). O docker-compose.yml fixa /data/models.",
+    ORT_DYLIB_PATH: "Biblioteca do ONNX Runtime do embedding local. A imagem já define e o compose não repassa esta variável.",
+    READ_POOL_SIZE: "Conexões de leitura do SQLite (escritas usam uma só).",
+    REQUEST_TIMEOUT_SECS: "Tempo limite de cada requisição, em segundos (504 REQUEST_TIMEOUT acima disso).",
+    MAX_BODY_BYTES: "Tamanho máximo do corpo das requisições, em bytes (413 PAYLOAD_TOO_LARGE acima disso).",
+    MCP_ALLOWED_HOSTS: "Hosts aceitos no cabeçalho Host do servidor MCP (/mcp), separados por vírgula. Outro host recebe 403 MCP_HOST_FORBIDDEN.",
+    ENGRAMIND_NETWORK: "Rede Docker externa do Engramind (os sistemas que o chamam pelo nome do container ficam nela).",
+    S3_NETWORK: "Rede Docker externa do S3/MinIO usado pelo backup.",
+    LITESTREAM_ENABLED: "Liga a réplica contínua do banco no S3 (Litestream). O status do backup aparece na aba Operação.",
+    ENGRAMIND_S3_BUCKET: "Bucket do S3 que recebe a réplica do banco.",
+    ENGRAMIND_S3_PATH: "Caminho dentro do bucket.",
+    ENGRAMIND_S3_ENDPOINT: "Endereço do S3 (ex.: http://minio:9000).",
+    LITESTREAM_ACCESS_KEY_ID: "Chave de acesso do S3 usada pelo Litestream.",
+    LITESTREAM_SECRET_ACCESS_KEY: "Segredo do S3 do Litestream. Só é gravado: vazio mantém o valor atual, e o valor nunca sai do servidor.",
+    RUST_LOG: "Níveis de log por módulo (ex.: engramind=info,tower_http=warn).",
+    LOG_FORMAT: "Formato dos logs: compact (legível) ou json (estruturado).",
+    LOG_ANSI: "Cores ANSI nos logs (true ou false).",
+    TZ: "Fuso horário do container (IANA, ex.: America/Sao_Paulo).",
+    TOKEN_PEPPER: "Segredo (32+ caracteres) que entra no hash dos tokens. Trocar invalida todos os tokens; por isso o Opex só mostra se está configurado.",
+    SECRETS_KEY: "Chave (base64, 32 bytes) que cifra os segredos das configurações e os segredos de webhook. Trocar torna os segredos gravados ilegíveis; o Opex não edita.",
+    BOOTSTRAP_ADMIN_TOKEN: "Token que cria o primeiro admin (app bootstrap) quando o banco não tem tokens; depois é ignorado. O Opex não lê nem edita.",
+}
+
+export const envHelp = (key: string) => ENV_HELP[key] ?? "Variável fora do catálogo do Engramind: preservada como está no arquivo."

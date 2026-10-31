@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -691,6 +691,23 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         publicFields: [{ key: "active", label: "Integração ativa", description: "Desativada, as prévias ficam no servidor e as rotas da Builder Machine não respondem", kind: "boolean", defaultValue: false }],
         // Chave privada colada em "Inserir chave existente" (aba Preparo do PC); gerada pelo app, fica só no host.
         secretFields: [{ key: "sshPrivateKey", label: "Chave privada do servidor", group: "card" }],
+    },
+    {
+        id: "engramind",
+        name: "Engramind",
+        description: "Rede de memórias para agentes (serviço Rust): configurações, provedores, apps, agentes, tokens, operação e variáveis de ambiente",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        // Tudo é gravado pela aba Conexão (`PUT /api/engramind/connection`), que dispara o bootstrap.
+        publicFields: [
+            { key: "baseUrl", label: "URL base do Engramind", description: "Endereço que o servidor do Opex alcança (ex.: http://engramind-api:8000)", kind: "url", placeholder: "http://engramind-api:8000", required: true },
+            { key: "opexPublicUrl", label: "URL pública do Opex", description: "Endereço do Opex que o Engramind alcança para entregar os webhooks", kind: "url", placeholder: "http://opex:3100", required: true },
+            { key: "environmentId", label: "Ambiente do Engramind", description: "Ambiente (módulo Ambientes) com a instalação, para as variáveis de ambiente", kind: "text", group: "card" },
+        ],
+        secretFields: [
+            { key: "adminToken", label: "Token admin", description: "Token eng.tk_… admin com read+write+delete (o de bootstrap é trocado por um próprio do Opex)", required: true },
+            { key: "webhookSecret", label: "Segredo do webhook", description: "Gerado pelo Opex e registrado no app opex; nunca exibido", group: "card" },
+        ],
     },
 ]
 
