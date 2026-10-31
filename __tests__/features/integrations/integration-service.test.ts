@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   statusFindOne: vi.fn(),
   rescheduleJobs: vi.fn(),
   enableHook: vi.fn(async () => undefined),
+  engramindSync: vi.fn(async (...args: unknown[]) => void args),
 }))
 
 vi.mock('@/lib/integrations/store', () => ({
@@ -40,6 +41,8 @@ vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { find: () => ({ 
 vi.mock('@/lib/db/models/IntegrationLog', () => ({ IntegrationLog: {} }))
 vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({ rescheduleJobs: mocks.rescheduleJobs }))
 vi.mock('@/features/local-docker/server/cleanup', () => ({ onBuilderMachineEnabled: mocks.enableHook }))
+vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.engramindSync }))
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
 
 import { encryptSecret, isEncryptedSecret } from '@/lib/crypto/secretBox'
 import type { CronJobConfig } from '@/lib/integrations/catalog'
@@ -202,6 +205,35 @@ describe('gancho de ativação (Builder Machine)', () => {
     mocks.enableHook.mockRejectedValueOnce(new Error('crons indisponível'))
     await expect(updateIntegration('builder_machine', { publicValues: { active: true } }, actor)).resolves.toBeTruthy()
     expect(mocks.updateOne).toHaveBeenCalled()
+  })
+})
+
+describe('sincronização da chave com o Engramind', () => {
+  const stored = (id: string) => ({ integrationId: id, environment: 'externo', debugMode: false, publicValues: {}, secretValues: {} })
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+  beforeEach(() => mocks.engramindSync.mockClear())
+
+  it('gravar a chave de um provedor de IA agenda o reenvio ao Engramind', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_openai'))
+    await updateIntegration('ai_openai', { secrets: { apiKey: { action: 'set', value: 'sk-nova' } } }, actor)
+    await flush()
+    expect(mocks.engramindSync).toHaveBeenCalledWith('ai_openai')
+  })
+
+  it('apagar a chave também agenda (o Engramind marca a chave como apagada)', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_gemini'))
+    await updateIntegration('ai_gemini', { secrets: { apiKey: { action: 'clear' } } }, actor)
+    await flush()
+    expect(mocks.engramindSync).toHaveBeenCalledWith('ai_gemini')
+  })
+
+  it('mudar só o debug ou outra integração não agenda', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_openai'))
+    await updateIntegration('ai_openai', { debugMode: true }, actor)
+    mocks.loadStoredIntegration.mockResolvedValue(stored('smtp'))
+    await updateIntegration('smtp', { debugMode: true }, actor)
+    await flush()
+    expect(mocks.engramindSync).not.toHaveBeenCalled()
   })
 })
 

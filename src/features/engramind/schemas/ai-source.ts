@@ -46,4 +46,34 @@ export const testAiSourceSchema = z.discriminatedUnion("section", [
 ])
 export type TestAiSourceInput = z.infer<typeof testAiSourceSchema>
 
+const definedOnly = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined))
+
+/**
+ * Entrada da ferramenta do agente: um OBJETO no topo (o JSON Schema das ferramentas exige `type:
+ * object`; a união discriminada viraria `oneOf` e o provedor de IA/MCP veria uma entrada vazia),
+ * validado e convertido pelo `applyAiSourceSchema`.
+ */
+export const applyAiSourceToolSchema = z
+    .object({
+        section: z.enum(AI_SOURCE_SECTIONS).describe("redator ou embedding"),
+        source: z
+            .object({
+                provider: z.enum([...new Set([...REDATOR_SOURCE_PROVIDERS, ...EMBEDDING_SOURCE_PROVIDERS])] as [string, ...string[]]).describe("Redator: gemini, anthropic, openai ou deepseek. Embedding: local, gemini, openai ou off"),
+                model: z.string().nullable().optional().describe("Id do modelo (embedding off: sem modelo)"),
+                fallbackModels: z.array(z.string()).optional().describe(`Só no Redator: até ${MAX_FALLBACK_MODELS} modelos de reserva`),
+                dimensions: z.number().int().nullable().optional().describe("Só no embedding remoto: dimensão (vazia = a do modelo)"),
+            })
+            .strict(),
+    })
+    .strict()
+    .meta({ examples: [{ section: "redator", source: { provider: "openai", model: "gpt-4o-mini", fallbackModels: [] } }] })
+    .transform((value, ctx) => {
+        const parsed = applyAiSourceSchema.safeParse({ section: value.section, source: definedOnly(value.source) })
+        if (!parsed.success) {
+            for (const issue of parsed.error.issues) ctx.addIssue({ code: "custom", path: issue.path.map((part) => (typeof part === "symbol" ? String(part) : part)), message: issue.message })
+            return z.NEVER
+        }
+        return parsed.data
+    })
+
 export const resendAiKeySchema = z.object({ section: z.enum(AI_SOURCE_SECTIONS) }).strict()

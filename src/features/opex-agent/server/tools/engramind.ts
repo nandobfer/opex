@@ -4,7 +4,7 @@ import { ENGRAMIND_OPERATIONS, type EngramindOperation } from "@/features/engram
 import { TOKEN_REVEAL_TTL_MS } from "@/features/engramind/constants"
 import { importInputSchema } from "@/features/engramind/schemas/import"
 import { envUpdateSchema } from "@/features/engramind/schemas/env"
-import { applyAiSourceSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
+import { applyAiSourceToolSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
 import type { IssuedToken } from "@/features/engramind/types"
 
 /**
@@ -73,7 +73,7 @@ export const engramindTools: readonly AnyTool[] = [
         description: "Aplica no Redator (gemini, anthropic, openai ou deepseek; modelo e até 5 reservas) ou no embedding (local, gemini, openai ou off; modelo e dimensão) um provedor configurado no Opex. A URL vem do provedor; a chave é lida no servidor e copiada ao Engramind (nunca passa por aqui). Trocar o embedding reindexa.",
         risk: "write",
         confirmByDefault: true,
-        input: applyAiSourceSchema.meta({ examples: [{ section: "redator", source: { provider: "openai", model: "gpt-4o-mini", fallbackModels: [] } }] }),
+        input: applyAiSourceToolSchema,
         execute: async (input, context) => (await aiSource()).applyOpexAiSource(input, context.actorId),
     }),
     tool({

@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn(),
+  apply: vi.fn(async (...args: unknown[]) => ({ applied: true, keySynced: true, args })),
   reveal: vi.fn(async (_secret: string, options: { title: string; label: string; ttlMs: number }) => ({ kind: 'reveal-secret', id: 'rv_1234567890', label: options.label, title: options.title, expiresAt: '2026-10-31T12:10:00Z' })),
 }))
 
 vi.mock('@/features/engramind/server/operations-runner', () => ({ runEngramindOperation: mocks.run, importEngramindMemories: vi.fn() }))
 vi.mock('@/features/opex-agent/server/secret-reveals', () => ({ createSecretReveal: mocks.reveal }))
+vi.mock('@/features/engramind/server/ai-source', () => ({ applyOpexAiSource: mocks.apply, getOpexAiSourceState: vi.fn(), resendOpexAiKey: vi.fn() }))
 
 import { engramindTools } from '@/features/opex-agent/server/tools/engramind'
 import { OPEX_CLIENT_SERVER_TOOLS } from '@/features/opex-agent/server/client-tools/registry'
@@ -65,6 +67,18 @@ describe('ferramentas do Engramind', () => {
     expect(text).toContain('eng.tk_1')
     expect(mocks.reveal).toHaveBeenCalledWith('eng.tk_1.segredo-de-verdade', expect.objectContaining({ label: 'Ver token', ttlMs: 600_000 }))
     expect(resultActionOf(text)).toMatchObject({ kind: 'reveal-secret', label: 'Ver token' })
+  })
+
+  it('IA do Opex: ler, aplicar (com confirmação por padrão) e reenviar; a chave nunca está na entrada', async () => {
+    expect(find('get_engramind_ai_source').risk).toBe('read')
+    const apply = find('apply_engramind_ai_source')
+    expect(apply.risk).toBe('write')
+    expect(apply.confirmByDefault).toBe(true)
+    expect(find('resend_engramind_ai_key').risk).toBe('write')
+    expect(apply.input.safeParse({ section: 'redator', source: { provider: 'openai', model: 'gpt-4o', apiKey: 'sk' } }).success).toBe(false)
+    const input = { section: 'redator', source: { provider: 'openai', model: 'gpt-4o', fallbackModels: [] } }
+    await apply.execute(input, context)
+    expect(mocks.apply).toHaveBeenCalledWith(input, 'local')
   })
 
   it('as demais chamam o serviço do Opex (nunca o HTTP do app)', async () => {

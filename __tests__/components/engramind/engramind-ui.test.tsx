@@ -56,6 +56,21 @@ describe('SettingField', () => {
   })
 })
 
+describe('SettingField somente leitura (aba Provedores)', () => {
+  it('chaves da IA do Opex mostram o valor e o aviso, sem controle nem "Voltar ao padrão"', async () => {
+    const { readOnlyNoteOf } = await import('@/features/engramind/components/integration/settings/SettingsTab')
+    expect(readOnlyNoteOf('redator.base_url')).toMatch(/Definida pelo provedor/)
+    expect(readOnlyNoteOf('embedding.model')).toMatch(/aba Provedores/)
+    expect(readOnlyNoteOf('limits.rate_per_minute')).toBeUndefined()
+    const onChange = vi.fn()
+    render(<SettingField meta={{ key: 'redator.model', type: 'text', default: null, description: 'x' }} value="gpt-4o" dirty={false} onChange={onChange} readOnlyNote={readOnlyNoteOf('redator.model')} />)
+    expect(screen.getByText('gpt-4o')).toBeTruthy()
+    expect(screen.getByText(/Edite na aba Provedores/)).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Voltar ao padrão/ })).toBeNull()
+  })
+})
+
 describe('ScopePicker', () => {
   it('só as quatro combinações válidas; o token do Opex só aceita read+write+delete', () => {
     render(<ScopePicker id="s" value="read+write+delete" onChange={vi.fn()} allowed={['read+write+delete']} />)
