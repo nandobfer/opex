@@ -6,6 +6,9 @@ import { AI_SOURCE_SECTIONS, EMBEDDING_SOURCE_PROVIDERS, MAX_FALLBACK_MODELS, RE
  * Nenhum aceita URL: o provedor escolhido define o endereço (`.strict()` recusa campos a mais).
  */
 
+/** Temperatura do Redator (Engramind 0.10.0): 0 a 2; vazio (`null`) omite o campo e usa o padrão do modelo. */
+export const temperatureSchema = z.number({ error: "Informe um número" }).min(0, "Mínimo 0").max(2, "Máximo 2").nullable().default(null)
+
 const modelId = z.string().trim().min(1, "Escolha o modelo").max(200, "Até 200 caracteres")
 
 export const redatorSourceSchema = z
@@ -13,6 +16,7 @@ export const redatorSourceSchema = z
         provider: z.enum(REDATOR_SOURCE_PROVIDERS, { error: "Escolha o provedor" }),
         model: modelId,
         fallbackModels: z.array(modelId).max(MAX_FALLBACK_MODELS, `Até ${MAX_FALLBACK_MODELS} modelos de reserva`).default([]),
+        temperature: temperatureSchema,
     })
     .strict()
     .superRefine((value, ctx) => {
@@ -62,6 +66,7 @@ export const applyAiSourceToolSchema = z
                 model: z.string().nullable().optional().describe("Id do modelo (embedding off: sem modelo)"),
                 fallbackModels: z.array(z.string()).optional().describe(`Só no Redator: até ${MAX_FALLBACK_MODELS} modelos de reserva`),
                 dimensions: z.number().int().nullable().optional().describe("Só no embedding remoto: dimensão (vazia = a do modelo)"),
+                temperature: z.number().nullable().optional().describe("Só no Redator: temperatura de 0 a 2; null/ausente = padrão do modelo (obrigatório nos modelos que recusam temperature, como a família 5.5 da Anthropic)"),
             })
             .strict(),
     })

@@ -34,12 +34,13 @@ export async function engramindSend<T>(method: "post" | "put" | "patch" | "delet
 }
 
 /** Consulta simples de uma rota do Engramind. */
-export function useEngramindQuery<T>(path: string | null, params?: Params, options: { enabled?: boolean; refetchInterval?: number | false } = {}) {
+export function useEngramindQuery<T>(path: string | null, params?: Params, options: { enabled?: boolean; /** Número, `false` ou função dos dados atuais (ex.: polling só enquanto algo carrega). */ refetchInterval?: number | false | ((data: T | undefined) => number | false) } = {}) {
+    const interval = options.refetchInterval
     return useQuery({
         queryKey: engramindKey(path ?? "-", params),
         queryFn: () => engramindGet<T>(path!, params),
         enabled: path !== null && options.enabled !== false,
-        refetchInterval: options.refetchInterval,
+        refetchInterval: typeof interval === "function" ? (query) => interval(query.state.data as T | undefined) : interval,
         retry: (count, error) => count < 1 && apiErrorCode(error) !== "ENGRAMIND_NOT_CONFIGURED",
     })
 }

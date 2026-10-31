@@ -1,5 +1,5 @@
 /**
- * Formatos devolvidos pela API do Engramind v0.8.0 (`docs/openapi.json` do repositório
+ * Formatos devolvidos pela API do Engramind v0.10.0 (`docs/openapi.json` do repositório
  * `nandobfer/engramind`). Só os campos que o Opex usa; o resto passa adiante sem tipagem.
  */
 
@@ -225,6 +225,17 @@ export interface AuditEvent {
     after: unknown
 }
 
+/** Estado do modelo local de embedding (download e carga fora da requisição, Engramind 0.10.0). */
+export interface LocalModelStatus {
+    model: string
+    state: "idle" | "downloading" | "loading" | "ready" | "failed"
+    started_at: string | null
+    /** Tempo decorrido; em `ready` e `failed`, quanto levou. */
+    elapsed_ms: number | null
+    /** Motivo da falha (`failed`); nova tentativa 30 s depois, na próxima chamada. */
+    error: string | null
+}
+
 export interface EngramindStatus {
     version: string
     uptime_seconds: number
@@ -233,7 +244,7 @@ export interface EngramindStatus {
     counts: Record<string, number>
     queue: { pending: number; failed: number; by_kind: { kind: string; state: string; count: number }[] }
     redator: { enabled: boolean; configured: boolean; missing: string[]; provider: string | null; model: string | null; last_24h?: { calls: number; failures: number; cost_usd: number | null } }
-    embedding: { enabled?: boolean; configured?: boolean; provider: string | null; model: string | null; model_id: string | null; dimensions: number | null; state: "off" | "ready" | "reindexing" | "failed"; total: number | null; done: number | null; missing?: string[]; reindex_started_at: string | null }
+    embedding: { enabled?: boolean; configured?: boolean; provider: string | null; model: string | null; model_id: string | null; dimensions: number | null; state: "off" | "ready" | "reindexing" | "failed"; total: number | null; done: number | null; missing?: string[]; reindex_started_at: string | null; local?: LocalModelStatus | null }
     webhooks: { enabled: boolean; apps: number; pending: number; delivered_24h: number; failed_24h: number }
     retention: { last_run_at: string; removed?: Record<string, number> } | null
 }
@@ -336,8 +347,10 @@ export interface AiSourceSectionDto {
     model: string | null
     fallbackModels: string[]
     dimensions: number | null
-    /** Configuração em uso no Engramind (provedor e modelo do Engramind). */
-    current: { provider: string | null; model: string | null }
+    /** Temperatura do Redator aplicada (`null` = padrão do modelo). */
+    temperature: number | null
+    /** Configuração em uso no Engramind (provedor, modelo e, no Redator, temperatura). */
+    current: { provider: string | null; model: string | null; temperature: number | null }
     /** Provedor do Opex equivalente à configuração em uso (null: configuração própria). */
     currentOpexProvider: string | null
     keyConfigured: boolean | null
@@ -352,6 +365,8 @@ export interface AiSourceStateDto {
     redator: AiSourceSectionDto
     embedding: AiSourceSectionDto
     reindexing: boolean
+    /** Estado do modelo local de embedding (`get_status.embedding.local`, Engramind 0.10.0). */
+    localModel: LocalModelStatus | null
 }
 
 export interface ApplyAiSourceResult {

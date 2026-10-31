@@ -34,6 +34,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
     "redator.timeout_ms": { label: "Tempo limite do Redator", help: "Tempo limite de cada chamada ao LLM, em milissegundos." },
     "redator.max_attempts": { label: "Tentativas do Redator", help: "Tentativas do job redact (espera 2 s × 2ⁿ, teto de 10 min). Esgotadas, o título fica fallback." },
     "redator.fallback_models": { label: "Modelos reserva", help: "Modelos tentados em ordem quando o principal falha por indisponibilidade, limite (429) ou tempo limite. Até 5." },
+    "redator.temperature": { label: "Temperatura do Redator", help: "Temperatura enviada ao LLM (Redator e consolidação), de 0 a 2. Vazia não envia o campo e usa o padrão do provedor — necessário nos modelos que recusam temperature (ex.: família 5.5 da Anthropic). Editada na aba Provedores (IA do Opex)." },
     "embedding.provider": { label: "Provedor de embedding", help: "Quem gera os vetores da busca por sentido: local (no próprio serviço), openai_compatible, ollama, gemini ou off (só busca textual). Trocar valida o provedor e reindexa." },
     "embedding.model": { label: "Modelo de embedding", help: "Modelo de embedding (nunca de chat). No local, um dos da listagem. Trocar reindexa as memórias." },
     "embedding.base_url": { label: "URL do provedor de embedding", help: "URL base do provedor remoto. Obrigatória no openai_compatible e no ollama; no gemini, vazia usa a oficial." },

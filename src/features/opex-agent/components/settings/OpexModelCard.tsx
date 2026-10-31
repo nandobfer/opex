@@ -12,6 +12,7 @@ import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
 import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import { isOpexProviderId, OPEX_PROVIDER_IDS, type OpexProviderId } from "../../constants"
 import type { OpexAgentSettings } from "../../schemas"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
 const SAME_AS_MAIN = "__same__"
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))
@@ -90,7 +91,7 @@ export function OpexModelCard({ form, target, providers, title, description }: O
                                             <Controller
                                                 control={form.control}
                                                 name="main.temperature"
-                                                render={({ field }) => <Input id={id("temperature")} type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(toNumberOrNull(event.target.value))} />}
+                                                render={({ field }) => <TemperatureInput id={id("temperature")} value={field.value} onChange={field.onChange} />}
                                             />
                                         </Field>
                                         <Field id={id("max-tokens")} label="Máximo de tokens por resposta" error={form.formState.errors.main?.maxOutputTokens?.message}>

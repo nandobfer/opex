@@ -11,7 +11,11 @@ import { engramindKey, engramindSend, useEngramindMutation, useEngramindQuery } 
 
 const FROM_OPEX = "providers/from-opex"
 
-export const useOpexAiSource = () => useEngramindQuery<AiSourceStateDto>(FROM_OPEX)
+/** Intervalo do polling enquanto o modelo local baixa ou carrega (o webhook não avisa o fim do download). */
+export const LOCAL_MODEL_POLL_MS = 3000
+const localModelBusy = (data: AiSourceStateDto | undefined) => data?.localModel?.state === "downloading" || data?.localModel?.state === "loading"
+
+export const useOpexAiSource = () => useEngramindQuery<AiSourceStateDto>(FROM_OPEX, undefined, { refetchInterval: (data) => (localModelBusy(data) ? LOCAL_MODEL_POLL_MS : false) })
 
 export const useApplyOpexAiSource = () =>
     useEngramindMutation((input: ApplyAiSourceInput) => engramindSend<ApplyAiSourceResult>("post", FROM_OPEX, input), { invalidate: ["providers", "settings", "status"], silentError: true })

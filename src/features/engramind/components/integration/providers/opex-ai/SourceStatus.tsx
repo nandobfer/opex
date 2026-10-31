@@ -17,7 +17,7 @@ export const providerLabel = (provider: string | null) =>
 export function SourceStatus({ state, onResend, resending }: { state: AiSourceSectionDto; onResend: () => void; resending: boolean }) {
     const fromOpex = state.origin === "opex"
     const label = fromOpex
-        ? `Vem do Opex · ${providerLabel(state.provider)}${state.model ? ` · ${state.model}` : ""}`
+        ? `Vem do Opex · ${providerLabel(state.provider)}${state.model ? ` · ${state.model}` : ""}${state.temperature !== null && state.temperature !== undefined ? ` · temperatura ${state.temperature}` : ""}`
         : state.origin === "engramind"
           ? `Configurado no Engramind · ${state.current.provider ?? "sem provedor"}${state.current.model ? ` · ${state.current.model}` : ""}`
           : `Ainda não aplicado · em uso: ${state.current.provider ?? "sem provedor"}${state.current.model ? ` · ${state.current.model}` : ""}`

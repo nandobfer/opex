@@ -31,7 +31,7 @@ export function OpexAiCard() {
                 <div className="space-y-6">
                     <RedatorSourceSection key={`redator-${query.data.redator.provider}-${query.data.redator.model}-${query.data.redator.origin}`} state={query.data.redator} providers={statuses.providers} />
                     <Separator />
-                    <EmbeddingSourceSection key={`embedding-${query.data.embedding.provider}-${query.data.embedding.model}-${query.data.embedding.origin}`} state={query.data.embedding} providers={statuses.providers} reindexing={query.data.reindexing} />
+                    <EmbeddingSourceSection key={`embedding-${query.data.embedding.provider}-${query.data.embedding.model}-${query.data.embedding.origin}`} state={query.data.embedding} providers={statuses.providers} reindexing={query.data.reindexing} localModel={query.data.localModel ?? null} />
                 </div>
             )}
         </Section>

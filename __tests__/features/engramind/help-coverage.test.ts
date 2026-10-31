@@ -12,7 +12,7 @@ import { ENGRAMIND_ABOUT_TOPICS, ENGRAMIND_SUMMARY } from '@/features/engramind/
 const SETTING_KEYS = [
   'limits.rate_per_minute', 'limits.max_batch', 'categories.list', 'memory.text_min', 'memory.text_max', 'memory.dedupe_exact', 'memory.similar_threshold',
   'context.budget_tokens', 'context.titles_budget_tokens', 'context.default_format', 'context.token_estimator', 'context.overflow_line',
-  'redator.enabled', 'redator.provider', 'redator.model', 'redator.api_key', 'redator.base_url', 'redator.instructions', 'redator.rewrite_text', 'redator.title_max', 'redator.min_similarity', 'redator.timeout_ms', 'redator.max_attempts', 'redator.fallback_models',
+  'redator.enabled', 'redator.provider', 'redator.model', 'redator.api_key', 'redator.base_url', 'redator.instructions', 'redator.rewrite_text', 'redator.title_max', 'redator.min_similarity', 'redator.timeout_ms', 'redator.max_attempts', 'redator.fallback_models', 'redator.temperature',
   'embedding.provider', 'embedding.model', 'embedding.base_url', 'embedding.api_key', 'embedding.dimensions', 'embedding.query_prefix', 'embedding.document_prefix', 'embedding.batch_size', 'embedding.timeout_ms',
   'search.vector_weight', 'search.text_weight', 'search.rrf_k', 'search.default_limit', 'search.hint_threshold', 'search.hint_limit',
   'webhooks.enabled', 'webhooks.timeout_ms', 'webhooks.max_attempts',

@@ -20,6 +20,7 @@ import { DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_BUDGET_PREVIEW_SETTINGS, budgetPreviewSettingsSchema, type BudgetPreviewSettings } from "../../schemas"
 import { useAiProviderStatuses, useBudgetPreviewSettings, useSaveBudgetPreviewSettings } from "../../hooks/useAi"
 import { ProviderModelCard } from "../understand-task/ProviderModelCard"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
 /** `""` no campo numérico = vazio (usa o padrão do modelo). */
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))
@@ -100,7 +101,7 @@ export function BudgetPreviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                                         <Controller
                                             control={form.control}
                                             name="temperature"
-                                            render={({ field }) => <Input id="ai-budget-temperature" type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(toNumberOrNull(event.target.value))} />}
+                                            render={({ field }) => <TemperatureInput id="ai-budget-temperature" value={field.value} onChange={field.onChange} />}
                                         />
                                     </Field>
                                     <Field id="ai-budget-max-tokens" label="Máximo de tokens na resposta" error={errors.maxOutputTokens?.message}>

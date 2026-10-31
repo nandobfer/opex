@@ -50,6 +50,7 @@ const toSnapshot = (source: IEngramindAiSource | null | undefined): AiSourceSnap
               model: source.model,
               fallbackModels: source.fallbackModels ?? [],
               dimensions: source.dimensions ?? null,
+              temperature: source.temperature ?? null,
               syncedAt: source.syncedAt ? new Date(source.syncedAt).toISOString() : null,
               syncError: source.syncError ?? null,
               appliedAt: new Date(source.appliedAt).toISOString(),
@@ -88,6 +89,7 @@ function sectionDto(section: AiSourceSection, values: Record<string, unknown>, m
         model: snapshot?.model ?? null,
         fallbackModels: snapshot?.fallbackModels ?? [],
         dimensions: snapshot?.dimensions ?? null,
+        temperature: snapshot?.temperature ?? null,
         current: describeCurrent(section, values),
         currentOpexProvider: section === "redator" ? redatorProviderOf(values) : embeddingProviderOf(values),
         keyConfigured: secret ? Boolean(secret.configured) : null,
@@ -109,7 +111,7 @@ export async function getOpexAiSourceState(): Promise<AiSourceStateDto> {
             return sectionDto(section, values, metas, source, missing)
         }),
     )
-    return { redator: sections[0]!, embedding: sections[1]!, reindexing: status?.embedding?.state === "reindexing" }
+    return { redator: sections[0]!, embedding: sections[1]!, reindexing: status?.embedding?.state === "reindexing", localModel: status?.embedding?.local ?? null }
 }
 
 async function putSecret(section: AiSourceSection, apiKey: string): Promise<void> {
@@ -145,6 +147,7 @@ export async function applyOpexAiSource(raw: unknown, actorId: string): Promise<
         model: source.model ?? null,
         fallbackModels: "fallbackModels" in source ? source.fallbackModels : [],
         dimensions: "dimensions" in source ? source.dimensions : null,
+        temperature: "temperature" in source ? source.temperature : null,
         keyVersion: key?.version ?? null,
         syncedAt: null,
         syncError: null,
@@ -174,7 +177,7 @@ export async function applyOpexAiSource(raw: unknown, actorId: string): Promise<
         }
     }
     await saveSource(section, snapshot)
-    await auditEngramind(actorId, "ai_source.apply", AcaoAuditoria.ATUALIZAR, { section, provider: source.provider, model: snapshot.model, fallbackModels: snapshot.fallbackModels, dimensions: snapshot.dimensions, keySynced })
+    await auditEngramind(actorId, "ai_source.apply", AcaoAuditoria.ATUALIZAR, { section, provider: source.provider, model: snapshot.model, fallbackModels: snapshot.fallbackModels, dimensions: snapshot.dimensions, temperature: snapshot.temperature, keySynced })
     engramindLog.info({ section, provider: source.provider, model: snapshot.model, keySynced, actorId }, "[engramind] IA do Opex aplicada")
     await publishEngramind({ type: "settings.updated", keys: Object.keys(settings) })
     return { applied: true, keySynced, state: await getOpexAiSourceState() }

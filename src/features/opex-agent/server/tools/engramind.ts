@@ -62,7 +62,7 @@ export const engramindTools: readonly AnyTool[] = [
     tool({
         name: "get_engramind_ai_source",
         label: "IA do Opex no Engramind",
-        description: "Mostra, para o Redator e o embedding, se a configuração em uso vem do Opex (provedor, modelo, reservas, dimensão) ou foi mudada no Engramind, e o estado da cópia da chave. Sem segredos.",
+        description: "Mostra, para o Redator e o embedding, se a configuração em uso vem do Opex (provedor, modelo, reservas, temperatura, dimensão), o estado do modelo local de embedding ou foi mudada no Engramind, e o estado da cópia da chave. Sem segredos.",
         risk: "read",
         input: z.object({}),
         execute: async () => (await aiSource()).getOpexAiSourceState(),
@@ -70,7 +70,7 @@ export const engramindTools: readonly AnyTool[] = [
     tool({
         name: "apply_engramind_ai_source",
         label: "Usar a IA do Opex no Engramind",
-        description: "Aplica no Redator (gemini, anthropic, openai ou deepseek; modelo e até 5 reservas) ou no embedding (local, gemini, openai ou off; modelo e dimensão) um provedor configurado no Opex. A URL vem do provedor; a chave é lida no servidor e copiada ao Engramind (nunca passa por aqui). Trocar o embedding reindexa.",
+        description: "Aplica no Redator (gemini, anthropic, openai ou deepseek; modelo, até 5 reservas e temperatura de 0 a 2 — null usa o padrão do modelo e é obrigatório nos que recusam temperature) ou no embedding (local, gemini, openai ou off; modelo e dimensão) um provedor configurado no Opex. A URL vem do provedor; a chave é lida no servidor e copiada ao Engramind (nunca passa por aqui). Trocar o embedding reindexa.",
         risk: "write",
         confirmByDefault: true,
         input: applyAiSourceToolSchema,

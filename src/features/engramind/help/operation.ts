@@ -28,8 +28,17 @@ export const LLM_OUTCOME_HELP: Record<string, string> = {
     timeout: "Tempo limite do Redator excedido.",
     rate_limited: "O provedor recusou por limite (429).",
     unavailable: "Provedor indisponível.",
-    rejected: "O provedor recusou a requisição.",
+    rejected: "O provedor recusou a requisição (chave, modelo ou parâmetro inválido); a coluna de erro traz o status e a mensagem do provedor.",
     invalid_response: "Resposta fora do esquema esperado.",
+}
+
+/** Estados do modelo local de embedding (`get_status.embedding.local`). */
+export const LOCAL_MODEL_STATE_HELP: Record<string, string> = {
+    idle: "O modelo local ainda não foi pedido; o download começa na primeira chamada que o usar.",
+    downloading: "Baixando os arquivos do modelo (a primeira vez pode levar mais de um minuto). Nenhuma requisição espera: testar e aplicar respondem 409 até terminar.",
+    loading: "Arquivos baixados; carregando o modelo na memória.",
+    ready: "Modelo carregado e pronto para gerar vetores.",
+    failed: "O download ou a carga falhou; o erro traz o motivo e a próxima chamada, 30 s depois, tenta de novo.",
 }
 
 export const LLM_PURPOSE_HELP: Record<string, string> = {
@@ -50,7 +59,7 @@ export const STATUS_HELP = {
     backup: "Réplica contínua do banco no S3 (Litestream), medida a cada 60 s. skip: backup desligado ou sem o binário.",
     queue: "Jobs pendentes e falhos por tipo e estado.",
     redator: "Redator: ligado, configurado, chaves que faltam e as chamadas das últimas 24 h.",
-    embedding: "Provedor, modelo, dimensão e o estado: ready, reindexing (com o progresso), failed ou off.",
+    embedding: "Provedor, modelo, dimensão e o estado: ready, reindexing (com o progresso), failed ou off. No provedor local, também o download/carga do modelo.",
     webhooks: "Apps com webhook, entregas pendentes e as das últimas 24 h.",
     retention: "Última limpeza horária (uso, chamadas ao LLM, auditoria e jobs antigos).",
     counts: "Apps, agentes e tokens cadastrados.",

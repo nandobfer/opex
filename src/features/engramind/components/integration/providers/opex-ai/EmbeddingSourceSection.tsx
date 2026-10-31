@@ -17,7 +17,8 @@ import { EMBEDDING_REMOTE_PROVIDERS, type EmbeddingRemoteProvider, type Embeddin
 import { AI_SOURCE_HELP, EMBEDDING_EXTRA_HELP, EMBEDDING_EXTRA_LABELS } from "../../../../help/ai-source"
 import { useLocalEmbeddingModels } from "../../../../hooks/useOpexAiSource"
 import { embeddingSourceSchema, type EmbeddingSourceInput } from "../../../../schemas/ai-source"
-import type { AiSourceSectionDto } from "../../../../types"
+import type { AiSourceSectionDto, LocalModelStatus } from "../../../../types"
+import { isLocalModelBusy, LocalModelStatusLine } from "../../../shared/LocalModelStatusLine"
 import { InfoField } from "../../../shared/InfoField"
 import { SourceStatus } from "./SourceStatus"
 import { TestResult } from "./TestResult"
@@ -34,7 +35,7 @@ export function embeddingDefaults(state: AiSourceSectionDto): EmbeddingSourceInp
 }
 
 /** Embedding: Local, Gemini, OpenAI ou Desligado; modelo da lista do provedor; confirma a reindexação. */
-export function EmbeddingSourceSection({ state, providers, reindexing, disabled }: { state: AiSourceSectionDto; providers: AiProviderStatusDto[]; reindexing: boolean; disabled?: boolean }) {
+export function EmbeddingSourceSection({ state, providers, reindexing, localModel = null, disabled }: { state: AiSourceSectionDto; providers: AiProviderStatusDto[]; reindexing: boolean; localModel?: LocalModelStatus | null; disabled?: boolean }) {
     const form = useForm<EmbeddingSourceInput, unknown, EmbeddingValues>({ resolver: zodResolver(embeddingSourceSchema), mode: "onChange", defaultValues: embeddingDefaults(state) })
     const provider = (useWatch({ control: form.control, name: "provider" }) ?? null) as EmbeddingSourceProvider | null
     const modelId = useWatch({ control: form.control, name: "model" }) ?? null
@@ -46,6 +47,8 @@ export function EmbeddingSourceSection({ state, providers, reindexing, disabled 
     const [confirm, setConfirm] = useState<EmbeddingValues | null>(null)
     const errors = form.formState.errors
     const blocked = disabled || reindexing
+    // Download/carga do modelo local: testar e aplicar no Local respondem 409 até terminar.
+    const localBusy = provider === "local" && isLocalModelBusy(localModel)
 
     const apply = async (values: EmbeddingValues) => {
         if (await actions.runApply(values)) form.reset(values)
@@ -100,13 +103,14 @@ export function EmbeddingSourceSection({ state, providers, reindexing, disabled 
                     </motion.div>
                 )}
             </AnimatePresence>
+            {provider === "local" && localModel && <LocalModelStatusLine status={localModel} />}
             {reindexing && <p className="text-xs text-warning">A reindexação está em andamento: aguarde terminar para trocar o embedding.</p>}
             <TestResult outcome={actions.outcome} />
             <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={blocked || provider === "off" || !form.formState.isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
+                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={blocked || localBusy || provider === "off" || !form.formState.isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
                     {actions.testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <FlaskConical className="mr-2 h-4 w-4" aria-hidden />} Testar com esta chave
                 </Button>
-                <Button type="button" title={reindexing ? "Aguarde a reindexação terminar" : undefined} disabled={blocked || !form.formState.isValid || actions.applying} onClick={() => void form.handleSubmit((values) => setConfirm(values))()}>
+                <Button type="button" title={reindexing ? "Aguarde a reindexação terminar" : localBusy ? "Aguarde o modelo local terminar de baixar/carregar" : undefined} disabled={blocked || localBusy || !form.formState.isValid || actions.applying} onClick={() => void form.handleSubmit((values) => setConfirm(values))()}>
                     <Check className="mr-2 h-4 w-4" aria-hidden /> Aplicar no embedding
                 </Button>
             </div>

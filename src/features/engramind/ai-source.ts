@@ -42,7 +42,7 @@ export const SECTION_SECRET_KEY = { redator: "redator.api_key", embedding: "embe
 
 /** Chaves do Engramind controladas pela seção (somente leitura na aba Configurações). */
 export const SECTION_SETTING_KEYS = {
-    redator: ["redator.provider", "redator.model", "redator.base_url", "redator.fallback_models"],
+    redator: ["redator.provider", "redator.model", "redator.base_url", "redator.fallback_models", "redator.temperature"],
     embedding: ["embedding.provider", "embedding.model", "embedding.base_url", "embedding.dimensions"],
 } as const satisfies Record<AiSourceSection, readonly string[]>
 
@@ -54,6 +54,8 @@ export interface RedatorSource {
     provider: RedatorSourceProvider
     model: string
     fallbackModels: string[]
+    /** Temperatura (0 a 2); `null` omite o campo no corpo e usa o padrão do modelo (Engramind 0.10.0). */
+    temperature: number | null
 }
 
 export interface EmbeddingSource {
@@ -82,7 +84,7 @@ export const usesOpexKey = (provider: string): provider is OpexKeyProvider => (R
 /** Mapa de configurações do Redator gravado no Engramind (com a URL implícita). */
 export function redatorSettingsOf(source: RedatorSource): Record<string, unknown> {
     const target = REDATOR_ENGRAMIND[source.provider]
-    return { "redator.provider": target.provider, "redator.model": source.model, "redator.base_url": target.baseUrl, "redator.fallback_models": source.fallbackModels }
+    return { "redator.provider": target.provider, "redator.model": source.model, "redator.base_url": target.baseUrl, "redator.fallback_models": source.fallbackModels, "redator.temperature": source.temperature ?? null }
 }
 
 /** Mapa de configurações do embedding. Desligado não mexe no modelo (o Engramind exige um). */
@@ -117,6 +119,7 @@ export interface AiSourceSnapshot {
     model: string | null
     fallbackModels?: string[]
     dimensions?: number | null
+    temperature?: number | null
     syncedAt: string | null
     syncError: string | null
     appliedAt: string
@@ -136,7 +139,7 @@ const norm = (value: unknown) => JSON.stringify(value ?? null)
 export function deriveOrigin(section: AiSourceSection, current: Record<string, unknown>, snapshot: AiSourceSnapshot | null, secretUpdatedAt: string | null): AiSourceOrigin {
     if (!snapshot) return "none"
     const expected = section === "redator"
-        ? redatorSettingsOf({ provider: snapshot.provider as RedatorSourceProvider, model: snapshot.model ?? "", fallbackModels: snapshot.fallbackModels ?? [] })
+        ? redatorSettingsOf({ provider: snapshot.provider as RedatorSourceProvider, model: snapshot.model ?? "", fallbackModels: snapshot.fallbackModels ?? [], temperature: snapshot.temperature ?? null })
         : embeddingSettingsOf({ provider: snapshot.provider as EmbeddingSourceProvider, model: snapshot.model, dimensions: snapshot.dimensions ?? null })
     for (const [key, value] of Object.entries(expected)) {
         if (key.endsWith(".base_url")) {
@@ -156,6 +159,7 @@ export function deriveOrigin(section: AiSourceSection, current: Record<string, u
 }
 
 /** Resumo legível da configuração atual (quando a origem é o Engramind). */
-export function describeCurrent(section: AiSourceSection, current: Record<string, unknown>): { provider: string | null; model: string | null } {
-    return { provider: asText(current[`${section}.provider`]), model: asText(current[`${section}.model`]) }
+export function describeCurrent(section: AiSourceSection, current: Record<string, unknown>): { provider: string | null; model: string | null; temperature: number | null } {
+    const temperature = section === "redator" && typeof current["redator.temperature"] === "number" ? current["redator.temperature"] : null
+    return { provider: asText(current[`${section}.provider`]), model: asText(current[`${section}.model`]), temperature }
 }

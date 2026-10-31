@@ -16,6 +16,8 @@ export interface IEngramindAiSource {
     model: string | null
     fallbackModels: string[]
     dimensions: number | null
+    /** Temperatura do Redator aplicada (`null` = padrão do modelo). */
+    temperature?: number | null
     /** `version` da integração `ai_*` na última cópia da chave. */
     keyVersion: string | null
     syncedAt: Date | null

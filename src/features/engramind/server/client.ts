@@ -3,7 +3,7 @@ import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { ENGRAMIND_INTEGRATION_ID } from "../constants"
 import type { EngramindMethod, EngramindRequest } from "../operations"
-import { notConfiguredError, toEngramindError, unreachableError, type EngramindErrorBody } from "./errors"
+import { notConfiguredError, proxyMaskedError, toEngramindError, unreachableError, type EngramindErrorBody } from "./errors"
 
 /**
  * Cliente HTTP do Engramind — SOMENTE servidor. Bearer com o token privado da integração,
@@ -75,7 +75,7 @@ export async function engramindCall<T = unknown>(method: EngramindMethod, reques
     }
     if (!res.ok) {
         const body = (json as { error?: EngramindErrorBody } | null)?.error ?? null
-        throw toEngramindError(res.status, body, res.headers.get("retry-after"))
+        throw toEngramindError(res.status, body, res.headers.get("retry-after"), body ? null : proxyMaskedError(text, json))
     }
     return json as T
 }

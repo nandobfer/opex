@@ -7,6 +7,7 @@ import type { EngramindStatus } from "../../../types"
 import { HelpBadge, toneOf } from "../../shared/Badges"
 import { formatBytes, formatDateTime, formatDuration } from "../../shared/format"
 import { Section } from "../../shared/Section"
+import { LocalModelStatusLine } from "../../shared/LocalModelStatusLine"
 
 /** `get_status`: versão, banco, backup (Litestream), contagens, fila, Redator, embeddings, webhooks e retenção. */
 export function StatusCard({ status }: { status: EngramindStatus }) {
@@ -38,6 +39,7 @@ export function StatusCard({ status }: { status: EngramindStatus }) {
                 </Block>
                 <Block label="Embeddings" help={STATUS_HELP.embedding}>
                     <HelpBadge value={status.embedding.state} tone={toneOf(status.embedding.state)} /> <span className="font-mono text-xs">{status.embedding.model_id ?? "—"}</span>
+                    {status.embedding.local && <LocalModelStatusLine status={status.embedding.local} />}
                 </Block>
                 <Block label="Webhooks" help={STATUS_HELP.webhooks}>
                     {status.webhooks.enabled ? `${status.webhooks.apps} app(s) · ${status.webhooks.pending} pendente(s) · 24 h: ${status.webhooks.delivered_24h} entregue(s), ${status.webhooks.failed_24h} falha(s)` : "Desligados"}

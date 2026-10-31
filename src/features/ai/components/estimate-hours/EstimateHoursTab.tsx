@@ -20,6 +20,7 @@ import { DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_ESTIMATE_HOURS_SETTINGS, estimateHoursSettingsSchema, type EstimateHoursSettings } from "../../schemas"
 import { useAiProviderStatuses, useEstimateHoursSettings, useSaveEstimateHoursSettings } from "../../hooks/useAi"
 import { ProviderModelCard } from "../understand-task/ProviderModelCard"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
@@ -109,7 +110,7 @@ export function EstimateHoursTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
                                         <Controller
                                             control={form.control}
                                             name="temperature"
-                                            render={({ field }) => <Input id="ai-estimate-temperature" type="number" step="0.1" min={0} max={2} placeholder="Padrão do modelo" value={field.value ?? ""} onChange={(event) => field.onChange(event.target.value.trim() === "" ? null : Number(event.target.value))} />}
+                                            render={({ field }) => <TemperatureInput id="ai-estimate-temperature" value={field.value} onChange={field.onChange} />}
                                         />
                                     </Field>
                                     <Field id="ai-estimate-max-tokens" label="Máximo de tokens na resposta" error={errors.maxOutputTokens?.message}>

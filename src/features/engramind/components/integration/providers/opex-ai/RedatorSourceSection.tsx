@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { MultiAutocomplete } from "@/components/ui/multi-autocomplete"
 import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
 import { ModelPickerField } from "@/features/ai/components/ModelFields"
+import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 import { useAiModels } from "@/features/ai/hooks/useAi"
 import type { AiProviderStatusDto } from "@/lib/ai/providers"
 import { MAX_FALLBACK_MODELS, REDATOR_SOURCE_PROVIDERS, type RedatorSourceProvider } from "../../../../ai-source"
@@ -26,7 +27,8 @@ type RedatorValues = z.output<typeof redatorSourceSchema>
 export function redatorDefaults(state: AiSourceSectionDto): RedatorSourceInput {
     const provider = (state.provider ?? state.currentOpexProvider) as RedatorSourceProvider | null
     const model = state.provider ? state.model : state.currentOpexProvider ? state.current.model : null
-    return { provider: provider ?? (undefined as unknown as RedatorSourceProvider), model: model ?? "", fallbackModels: state.provider ? state.fallbackModels : [] }
+    const temperature = state.provider ? state.temperature : state.currentOpexProvider ? state.current.temperature : null
+    return { provider: provider ?? (undefined as unknown as RedatorSourceProvider), model: model ?? "", fallbackModels: state.provider ? state.fallbackModels : [], temperature }
 }
 
 /** Redator: provedor do Opex, modelo e reservas da mesma lista; testar e aplicar. */
@@ -35,6 +37,7 @@ export function RedatorSourceSection({ state, providers, disabled }: { state: Ai
     const provider = useWatch({ control: form.control, name: "provider" }) ?? null
     const modelId = useWatch({ control: form.control, name: "model" })
     const fallbacks = useWatch({ control: form.control, name: "fallbackModels" }) ?? []
+    const temperature = useWatch({ control: form.control, name: "temperature" }) ?? null
     const models = useAiModels(provider)
     const actions = useSourceActions("redator")
     const errors = form.formState.errors
@@ -93,6 +96,9 @@ export function RedatorSourceSection({ state, providers, disabled }: { state: Ai
                                 emptyText="Nenhum modelo disponível"
                                 onChange={(next) => form.setValue("fallbackModels", next.slice(0, MAX_FALLBACK_MODELS), { shouldDirty: true, shouldValidate: true })}
                             />
+                        </InfoField>
+                        <InfoField id="redator-source-temperature" label="Temperatura" info={AI_SOURCE_HELP.temperature} error={errors.temperature?.message}>
+                            <TemperatureInput id="redator-source-temperature" value={temperature} disabled={disabled} aria-invalid={Boolean(errors.temperature)} onChange={(next) => form.setValue("temperature", next, { shouldDirty: true, shouldValidate: true })} />
                         </InfoField>
                     </motion.div>
                 )}
