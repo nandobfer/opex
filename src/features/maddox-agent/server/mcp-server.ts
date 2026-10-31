@@ -1,5 +1,3 @@
-import { z } from "zod"
-import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { actorIdOf, sessionScopeOf, type OpexServerScope } from "@/features/opex-agent/server/scope"
@@ -7,12 +5,14 @@ import { getOpencodeClient } from "@/lib/ai/opencode-client"
 import { dbConnect } from "@/lib/db"
 import { OpexSession, type IOpexSession } from "@/lib/db/models/Opex"
 import { loggerFor } from "@/lib/logger"
-import { MADDOX_CLIENT_TOOL_NAMES, MADDOX_EXCLUDED_GROUPS } from "../catalog"
 import type { MaddoxMcpScope } from "../constants"
-import { handleMcpBody, mcpTextResult, OPENCODE_SESSION_META, type McpCallResult, type McpToolDescriptor } from "../mcp-protocol"
+import { JSON_RPC_ERRORS, MADDOX_MCP_REFUSALS, MCP_UNAUTHORIZED_CODE, handleMcpBody, mcpTextResult, OPENCODE_SESSION_META, type McpCallResult } from "../mcp-protocol"
+import { maddoxMcpCatalog, toolDescriptor } from "./mcp-catalog"
 import { isMaddoxMcpAuthorized } from "./opencode-session"
 import { authorizeMaddoxTool } from "./scope-tools"
 import { loadMaddoxSettings } from "./settings"
+
+export { toolDescriptor, toolInputJsonSchema } from "./mcp-catalog"
 
 /**
  * Servidor MCP do Opex para o Agente Maddox (SOMENTE servidor). O OpenCode chama `tools/call` com a
@@ -25,36 +25,7 @@ const log = loggerFor({ module: "maddox-mcp" })
 /** Sessões filhas (subagentes do OpenCode) são resolvidas até a sessão do Maddox, até esta profundidade. */
 const MAX_PARENT_DEPTH = 3
 
-async function catalogOf(scope: MaddoxMcpScope): Promise<OpexTool[]> {
-    if (scope === "owner") {
-        const { OPEX_TOOLS } = await import("@/features/opex-agent/server/tools/registry")
-        return OPEX_TOOLS.filter((tool) => !MADDOX_EXCLUDED_GROUPS.includes(tool.group))
-    }
-    const { OPEX_CLIENT_SERVER_TOOLS } = await import("@/features/opex-agent/server/client-tools/registry")
-    return OPEX_CLIENT_SERVER_TOOLS.filter((tool) => MADDOX_CLIENT_TOOL_NAMES.includes(tool.name))
-}
-
-/** Esquema JSON da entrada (o mesmo Zod usado na execução). */
-export function toolInputJsonSchema(tool: OpexTool): Record<string, unknown> {
-    try {
-        const schema = z.toJSONSchema(tool.input, { io: "input", unrepresentable: "any" }) as Record<string, unknown>
-        const { $schema: _schema, ...rest } = schema
-        void _schema
-        return rest.type === "object" ? rest : { type: "object", properties: {} }
-    } catch {
-        return { type: "object", properties: {}, additionalProperties: true }
-    }
-}
-
-export function toolDescriptor(tool: OpexTool): McpToolDescriptor {
-    return {
-        name: tool.name,
-        title: tool.label,
-        description: tool.description,
-        inputSchema: toolInputJsonSchema(tool),
-        annotations: { readOnlyHint: tool.risk === "read", destructiveHint: tool.risk === "destructive" },
-    }
-}
+const catalogOf = maddoxMcpCatalog
 
 type MaddoxSessionDoc = IOpexSession & { _id: { toString(): string } }
 
@@ -77,11 +48,11 @@ class McpAccessError extends Error {}
 /** Escopo da chamada: a sessão do Maddox existe, é do servidor chamado e o ator continua válido. */
 async function scopeOfCall(scope: MaddoxMcpScope, meta: Record<string, unknown>): Promise<{ scope: OpexServerScope; sessionId: string }> {
     const opencodeSessionId = typeof meta[OPENCODE_SESSION_META] === "string" ? (meta[OPENCODE_SESSION_META] as string) : null
-    if (!opencodeSessionId) throw new McpAccessError("Sessão do OpenCode não identificada: as ferramentas do Opex só funcionam nas conversas do Agente Maddox")
+    if (!opencodeSessionId) throw new McpAccessError(MADDOX_MCP_REFUSALS.noSession)
     const session = await maddoxSessionOfOpencode(opencodeSessionId)
-    if (!session) throw new McpAccessError("Esta sessão do OpenCode não é uma conversa do Agente Maddox: ferramenta recusada")
+    if (!session) throw new McpAccessError(MADDOX_MCP_REFUSALS.notMaddox)
     const isClient = Boolean(session.clientId)
-    if ((scope === "portal") !== isClient) throw new McpAccessError("Ferramenta fora do escopo desta conversa")
+    if ((scope === "portal") !== isClient) throw new McpAccessError(MADDOX_MCP_REFUSALS.wrongScope)
     const resolved = await sessionScopeOf(session)
     return { scope: { ...resolved, agent: "maddox" }, sessionId: session._id.toString() }
 }
@@ -91,11 +62,11 @@ export async function callMaddoxTool(scope: MaddoxMcpScope, name: string, args: 
     let sessionId: string | null = null
     try {
         const tool = (await catalogOf(scope)).find((item) => item.name === name)
-        if (!tool) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
+        if (!tool) return mcpTextResult(MADDOX_MCP_REFUSALS.unknownTool(name), true)
         const call = await scopeOfCall(scope, meta)
         sessionId = call.sessionId
         const { settings } = await loadMaddoxSettings()
-        if (!settings.enabled) throw new McpAccessError("O Agente Maddox está desativado")
+        if (!settings.enabled) throw new McpAccessError(MADDOX_MCP_REFUSALS.disabled)
         const toolScope = await authorizeMaddoxTool(name, call.scope, settings)
         const output = await tool.execute(tool.input.parse(args), { sessionId: call.sessionId, actorId: actorIdOf(toolScope), scope: toolScope })
         log.info({ tool: name, sessionId, scope, durationMs: Date.now() - startedAt, ok: true }, "[maddox] ferramenta do Opex")
@@ -111,13 +82,13 @@ export async function callMaddoxTool(scope: MaddoxMcpScope, name: string, args: 
 export async function handleMaddoxMcpRequest(scope: MaddoxMcpScope, req: Request): Promise<Response> {
     if (!isMaddoxMcpAuthorized(req.headers.get("authorization"))) {
         log.warn({ scope }, "[maddox] chamada ao MCP do Opex sem autorização")
-        return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Não autorizado" } }, { status: 401 })
+        return Response.json({ jsonrpc: "2.0", id: null, error: { code: MCP_UNAUTHORIZED_CODE, message: MADDOX_MCP_REFUSALS.unauthorized } }, { status: 401 })
     }
     let body: unknown
     try {
         body = await req.json()
     } catch {
-        return Response.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON inválido" } }, { status: 400 })
+        return Response.json({ jsonrpc: "2.0", id: null, error: { code: JSON_RPC_ERRORS.parse, message: MADDOX_MCP_REFUSALS.invalidJson } }, { status: 400 })
     }
     const result = await handleMcpBody(body, {
         listTools: async () => (await catalogOf(scope)).map(toolDescriptor),

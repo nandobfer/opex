@@ -1,12 +1,17 @@
 import { z } from "zod"
 import { BASE_PATH } from "@/lib/base-path"
 import packageJson from "../../../../package.json"
+import type { MaddoxMcpDocsCatalog } from "@/features/maddox-agent/server/mcp-catalog"
 import { whoAmIResponseSchema } from "../schemas"
+import { buildMaddoxMcpSpecSection } from "./maddox-mcp"
 
 /**
  * Especificação OpenAPI 3.1 da API interna: os endpoints públicos do app autenticados apenas por
  * token de sistema (Integrações › API interna). Corpos e respostas saem dos MESMOS schemas Zod
  * usados pelas rotas (`z.toJSONSchema`).
+ *
+ * Com o catálogo do MCP do Agente Maddox (`maddoxTools`, carregado pela rota), inclui o servidor MCP
+ * do Opex e todas as ferramentas dele, geradas do mesmo catálogo do `tools/list` (`maddox-mcp.ts`).
  *
  * REGRA (AGENTS.md): toda rota pública por token entra aqui. Criar, alterar ou remover uma rota
  * exige atualizar este arquivo — e `PUBLIC_TOKEN_ROUTES` — no mesmo commit.
@@ -42,10 +47,13 @@ const errorResponse = (description: string, error: string, code?: string) => ({
 export interface PublicApiSpecOptions {
     /** Sobrescreve a versão (testes). Padrão: `version` do `package.json`. */
     version?: string
+    /** Catálogo do MCP do Agente Maddox; ausente = especificação só com as rotas por token. */
+    maddoxTools?: MaddoxMcpDocsCatalog
 }
 
 export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObject {
     const version = options.version ?? packageJson.version
+    const mcp = options.maddoxTools ? buildMaddoxMcpSpecSection(options.maddoxTools) : null
 
     return {
         openapi: "3.1.0",
@@ -57,10 +65,18 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                 "",
                 "`Authorization: Bearer mt_sys_…` com um token gerado em Integrações › API interna. O valor aparece uma única vez,",
                 "ao gerar; token revogado não volta.",
+                ...(mcp
+                    ? [
+                          "",
+                          "**MCP do Agente Maddox**: as ferramentas do Opex que o Maddox usa no OpenCode, nos servidores `opex_app` (dono) e",
+                          "`opex_portal` (portal do cliente). Autenticam pelo segredo do MCP (não pelo token de sistema), que não sai do servidor:",
+                          "pelo explorador, essas chamadas respondem 401. Cada ferramenta tem o esquema de entrada em Schemas.",
+                      ]
+                    : []),
             ].join("\n"),
         },
         servers: [{ url: BASE_PATH || "/", description: "Mesmo host desta documentação (com o subcaminho público do app)" }],
-        tags: [{ name: "Token", description: "Conferência do token de sistema." }],
+        tags: [{ name: "Token", description: "Conferência do token de sistema." }, ...(mcp?.tags ?? [])],
         paths: {
             "/api/v1/whoami": {
                 get: {
@@ -78,6 +94,7 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                     },
                 },
             },
+            ...(mcp?.paths ?? {}),
         },
         components: {
             securitySchemes: {
@@ -86,6 +103,7 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                     scheme: "bearer",
                     description: "Token de sistema (`mt_sys_…`) gerado em Integrações › API interna.",
                 },
+                ...(mcp?.securitySchemes ?? {}),
             },
             schemas: {
                 WhoAmIResponse: {
@@ -98,6 +116,7 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                     properties: { success: { const: false }, error: { type: "string" }, code: { type: "string" }, details: {} },
                     required: ["success", "error"],
                 },
+                ...(mcp?.schemas ?? {}),
             },
         },
     }

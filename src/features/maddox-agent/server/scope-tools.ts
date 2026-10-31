@@ -5,6 +5,7 @@ import { maddoxSessionPermissions, type MaddoxPermissionRule } from "../permissi
 import type { MaddoxAgentSettings } from "../schemas"
 import { assertClientMaddoxToolAllowed, enabledMaddoxClientToolNamesFor } from "./client-config"
 import { maddoxToolMetas } from "./settings"
+import { MADDOX_MCP_REFUSALS } from "../mcp-protocol"
 
 /**
  * Ferramentas do Opex no escopo de uma sessão do Maddox (SOMENTE servidor): as regras de permissão da
@@ -32,6 +33,6 @@ export async function authorizeMaddoxTool(toolName: string, scope: OpexServerSco
         return { ...scope, actor }
     }
     const metas = await maddoxToolMetas()
-    if (!enabledMaddoxOwnerToolNames(metas, settings.disabledTools).includes(toolName)) throw new DomainError(403, "Esta ferramenta está desligada para o Agente Maddox.", "MADDOX_TOOL_DISABLED")
+    if (!enabledMaddoxOwnerToolNames(metas, settings.disabledTools).includes(toolName)) throw new DomainError(403, MADDOX_MCP_REFUSALS.toolDisabled, "MADDOX_TOOL_DISABLED")
     return scope
 }

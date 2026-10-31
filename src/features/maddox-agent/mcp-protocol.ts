@@ -41,6 +41,23 @@ export interface JsonRpcResponse {
 const isObj = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 
 export const JSON_RPC_ERRORS = { parse: -32700, invalidRequest: -32600, methodNotFound: -32601, invalidParams: -32602, internal: -32603 } as const
+/** Erro JSON-RPC (fora da faixa reservada) da chamada sem o segredo do MCP (HTTP 401). */
+export const MCP_UNAUTHORIZED_CODE = -32001
+
+/**
+ * Recusas do servidor MCP do Opex (Agente Maddox). As de escopo voltam como resultado de ferramenta com
+ * `isError: true`; as de transporte, como erro JSON-RPC. Também publicadas na documentação da API interna.
+ */
+export const MADDOX_MCP_REFUSALS = {
+    unauthorized: "Não autorizado",
+    invalidJson: "JSON inválido",
+    noSession: "Sessão do OpenCode não identificada: as ferramentas do Opex só funcionam nas conversas do Agente Maddox",
+    notMaddox: "Esta sessão do OpenCode não é uma conversa do Agente Maddox: ferramenta recusada",
+    wrongScope: "Ferramenta fora do escopo desta conversa",
+    disabled: "O Agente Maddox está desativado",
+    toolDisabled: "Esta ferramenta está desligada para o Agente Maddox.",
+    unknownTool: (name: string) => `Ferramenta desconhecida: ${name}`,
+} as const
 
 function failure(id: JsonRpcId, code: number, message: string): JsonRpcResponse {
     return { jsonrpc: "2.0", id, error: { code, message } }

@@ -108,6 +108,10 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
 - **Endereço**: o OpenCode chama o Opex pela **origem do navegador** gravada ao salvar a aba do Maddox
   (`mcpBaseUrl`, com o `basePath`); a aba mostra o endereço e a situação dos dois servidores, com
   "Registrar de novo". Salvar com o endereço novo regrava os MCPs.
+- **Documentação**: o servidor e todas as ferramentas estão na API interna (`/integracoes/internal_api`,
+  `GET /api/openapi.json`), gerados do mesmo catálogo do `tools/list` (`server/mcp-catalog.ts`); as
+  mensagens de recusa ficam em `MADDOX_MCP_REFUSALS` (`mcp-protocol.ts`), usadas pelo servidor e pela
+  documentação. Ver `integrations.md`, "API interna".
 - **Escopo por chamada**: o OpenCode manda a sessão em `_meta["ai.opencode/sessionID"]`; a sessão do
   Maddox sai de `opex_sessions.opencodeSessionId` (subagentes sobem pela sessão-mãe, até 3 níveis).
   Sessão desconhecida (outra sessão do OpenCode) é recusada; sessão do dono só no `owner`, do cliente

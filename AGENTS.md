@@ -97,6 +97,9 @@ sem pedido explícito.
   caminho, parâmetros, corpo, respostas por status, exemplos e esquema de segurança.
 - Corpos e respostas vêm dos mesmos schemas Zod usados pela rota; nunca duplique o contrato à mão
   quando existir schema.
+- O servidor MCP do Agente Maddox (`/api/maddox/mcp/{owner|portal}`) também está na especificação,
+  gerado do mesmo catálogo do `tools/list` (`maddoxMcpDocsCatalog`, `openapi/maddox-mcp.ts`):
+  ferramenta nova ou alterada aparece sozinha, sem editar a especificação.
 
 ### UI e frontend
 

@@ -267,7 +267,18 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - **Especificação gerada no código** (`src/features/public-api/openapi/spec.ts`,
   `buildPublicApiSpec`): OpenAPI 3.1, versão do `package.json`, `servers: ["/"]`, esquema
   `apiToken` (Bearer). Corpos/respostas vêm dos schemas Zod (`src/features/public-api/schemas.ts`).
-  Hoje documenta `GET /api/v1/whoami` (confere o token; 200/401).
+  Hoje documenta `GET /api/v1/whoami` (confere o token; 200/401) e o **servidor MCP do Opex usado
+  pelo Agente Maddox** (`POST /api/maddox/mcp/owner` e `/portal`, tags "MCP do Agente Maddox · dono/
+  portal", esquema `maddoxMcpSecret`): métodos JSON-RPC, respostas (200/202/400/401/404 e 405 em
+  GET/DELETE), as recusas reais de escopo e **todas as ferramentas** de cada servidor — lista na
+  descrição da operação (nome no OpenCode, grupo, risco, confirmação, só admin), esquema de entrada
+  por ferramenta em Schemas (`MaddoxOwnerTool.*`/`MaddoxPortalTool.*`), `oneOf` do `tools/call` e um
+  exemplo de chamada por ferramenta (`exampleFromJsonSchema`: só os campos obrigatórios). Tudo gerado
+  do mesmo catálogo do `tools/list` (`maddoxMcpDocsCatalog`, `openapi/maddox-mcp.ts`). A rota
+  `GET /api/openapi.json` é dinâmica e carrega o catálogo por import dinâmico (o registro de
+  ferramentas não entra no grafo estático nem roda no build); se o catálogo falhar, a especificação
+  sai sem o MCP, com log de aviso. Pelo explorador, as chamadas ao MCP respondem 401 (o segredo não
+  sai do servidor).
 - **Documentação gerenciada**: `managedSwaggerPath` fixa a `swaggerUrl` em
   `getInternalBaseUrl() + /api/openapi.json`; somente leitura (PATCH → 400).
 - Rotas públicas só de contrato: `GET /api/openapi.json` e `GET /api/docs` (Swagger UI). São

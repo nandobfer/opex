@@ -1,11 +1,14 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parseOpenApiSpec } from '@/features/integrations/openapi/parser'
 import { findSpecUrlCandidates } from '@/features/integrations/openapi/spec-source'
 import { buildPublicApiSpec, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES } from '@/features/public-api/openapi/spec'
 import { renderPublicApiDocsHtml } from '@/features/public-api/openapi/docs-page'
 import { GET as getSpec } from '@/app/api/openapi.json/route'
+
+// O catálogo do MCP do Agente Maddox é coberto em maddox-mcp-spec.test.ts; aqui, a rota sem ele.
+vi.mock('@/features/maddox-agent/server/mcp-catalog', () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('fora deste teste') } }))
 import { GET as getDocs } from '@/app/api/docs/route'
 import { getIntegrationDef } from '@/lib/integrations/catalog'
 import { PUBLIC_API_SPEC_PATH } from '@/lib/public-api/paths'
@@ -60,7 +63,7 @@ describe('buildPublicApiSpec', () => {
 
 describe('rotas públicas da documentação', () => {
   it('GET /api/openapi.json devolve a especificação com cache público', async () => {
-    const res = getSpec()
+    const res = await getSpec()
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toContain('public')
     const body = await res.json()
