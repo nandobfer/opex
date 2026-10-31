@@ -146,6 +146,7 @@ describe('SettingsTab', () => {
       { key: 'limits.rate_per_minute', type: 'integer', min: 1, max: 100000, default: 600, value: rate, description: '', channel_override: false, updated_at: rate === 600 ? null : '2026-10-30T12:00:00Z' },
       { key: 'embedding.query_prefix', type: 'text', default: null, value: prefix, description: '', channel_override: false, updated_at: prefix === null ? null : '2026-10-31T12:00:00Z' },
       { key: 'redator.model', type: 'text', default: null, value: 'gpt-4o', description: '', channel_override: false, updated_at: '2026-10-30T12:00:00Z' },
+      { key: 'redator.temperature', type: 'number', min: 0, max: 2, default: null, value: 0.3, description: '', channel_override: false, updated_at: '2026-10-30T12:00:00Z' },
     ],
   })
   const renderTab = () => render(<SettingsTab onDirtyChange={vi.fn()} onConfigure={vi.fn()} />)
@@ -157,6 +158,7 @@ describe('SettingsTab', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Salvar/ }))
     expect(mocks.mutate).toHaveBeenCalledWith({ 'limits.rate_per_minute': 1200 }, expect.anything())
     expect(document.getElementById('setting-redator-model')!.getAttribute('data-readonly')).toBe('true')
+    expect(document.getElementById('setting-redator-temperature')!.getAttribute('data-readonly')).toBe('true')
   })
 
   it('"Voltar ao padrão" envia null', async () => {

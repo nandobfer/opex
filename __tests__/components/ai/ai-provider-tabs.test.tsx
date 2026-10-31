@@ -49,3 +49,35 @@ describe('AiProviderTabs', () => {
     }
   })
 })
+
+describe('TemperatureInput', () => {
+  it('vazio vira null (padrão do modelo) e número vira número; 0 a 2 com passo 0,1', async () => {
+    const { TemperatureInput, temperatureFromText } = await import('@/features/ai/components/TemperatureInput')
+    expect(temperatureFromText('')).toBeNull()
+    expect(temperatureFromText('  ')).toBeNull()
+    expect(temperatureFromText('0.7')).toBe(0.7)
+    const onChange = vi.fn()
+    render(<TemperatureInput id="t" value={null} onChange={onChange} />)
+    const input = document.getElementById('t') as HTMLInputElement
+    expect([input.min, input.max, input.step, input.placeholder]).toEqual(['0', '2', '0.1', 'Padrão do modelo'])
+    fireEvent.change(input, { target: { value: '1.2' } })
+    expect(onChange).toHaveBeenLastCalledWith(1.2)
+  })
+
+  it('as telas de IA, dos agentes e do Engramind usam o campo compartilhado (sem Input de temperatura próprio)', () => {
+    const files = [
+      'src/features/opex-agent/components/settings/OpexModelCard.tsx',
+      'src/features/ai/components/task-tags/TaskTagsTab.tsx',
+      'src/features/ai/components/task-summary/SummaryPromptCard.tsx',
+      'src/features/ai/components/estimate-hours/EstimateHoursTab.tsx',
+      'src/features/ai/components/budget-preview/BudgetPreviewTab.tsx',
+      'src/features/ai/components/understand-task/ResponseCard.tsx',
+      'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx',
+    ]
+    for (const file of files) {
+      const source = readFileSync(join(process.cwd(), file), 'utf8')
+      expect(source, file).toMatch(/<TemperatureInput/)
+      expect(source, file).not.toMatch(/step="0\.1"/)
+    }
+  })
+})

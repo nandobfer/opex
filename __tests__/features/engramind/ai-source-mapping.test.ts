@@ -14,8 +14,8 @@ describe('mapeamento do Redator', () => {
     ['openai', 'openai_compatible', OPENAI_API_URL],
     ['deepseek', 'openai_compatible', DEEPSEEK_API_URL],
   ] as const)('%s → %s com a URL do provedor', (provider, engramind, url) => {
-    const settings = redatorSettingsOf({ provider, model: 'm1', fallbackModels: ['m2'] })
-    expect(settings).toEqual({ 'redator.provider': engramind, 'redator.model': 'm1', 'redator.base_url': url, 'redator.fallback_models': ['m2'] })
+    const settings = redatorSettingsOf({ provider, model: 'm1', fallbackModels: ['m2'], temperature: null })
+    expect(settings).toEqual({ 'redator.provider': engramind, 'redator.model': 'm1', 'redator.base_url': url, 'redator.fallback_models': ['m2'], 'redator.temperature': null })
     expect(redatorProviderOf(settings)).toBe(provider)
   })
 
@@ -42,7 +42,7 @@ describe('mapeamento do embedding', () => {
 
 describe('origem derivada do valor em uso', () => {
   const snapshot: AiSourceSnapshot = { provider: 'openai', model: 'gpt-4o', fallbackModels: [], dimensions: null, syncedAt: '2026-10-31T12:00:00.000Z', syncError: null, appliedAt: '2026-10-31T12:00:00.000Z' }
-  const current = redatorSettingsOf({ provider: 'openai', model: 'gpt-4o', fallbackModels: [] })
+  const current = redatorSettingsOf({ provider: 'openai', model: 'gpt-4o', fallbackModels: [], temperature: null })
 
   it('bate com o snapshot e a chave não mudou depois → opex', () => {
     expect(deriveOrigin('redator', current, snapshot, '2026-10-31T12:00:01.000Z')).toBe('opex')
@@ -56,6 +56,13 @@ describe('origem derivada do valor em uso', () => {
     expect(deriveOrigin('redator', current, snapshot, '2026-10-31T13:00:00.000Z')).toBe('engramind')
   })
 
+  it('temperatura mudada por fora → engramind; snapshot antigo sem temperatura com o padrão vazio continua opex', () => {
+    expect(deriveOrigin('redator', { ...current, 'redator.temperature': 0.7 }, snapshot, null)).toBe('engramind')
+    expect(deriveOrigin('redator', current, snapshot, null)).toBe('opex')
+    const withTemperature: AiSourceSnapshot = { ...snapshot, temperature: 0.3 }
+    expect(deriveOrigin('redator', { ...current, 'redator.temperature': 0.3 }, withTemperature, null)).toBe('opex')
+  })
+
   it('sem snapshot → none', () => {
     expect(deriveOrigin('redator', current, null, null)).toBe('none')
   })
@@ -67,6 +74,14 @@ describe('schemas', () => {
     expect(redatorSourceSchema.safeParse({ provider: 'openai', model: 'a', fallbackModels: ['b', 'c', 'd', 'e', 'f', 'g'] }).success).toBe(false)
     expect(redatorSourceSchema.safeParse({ provider: 'openai', model: 'a', fallbackModels: ['a'] }).success).toBe(false)
     expect(redatorSourceSchema.safeParse({ provider: 'openai', model: 'a', fallbackModels: ['b', 'b'] }).success).toBe(false)
+  })
+
+  it('temperatura de 0 a 2, vazia = null (padrão do modelo)', () => {
+    expect(redatorSourceSchema.parse({ provider: 'anthropic', model: 'claude' }).temperature).toBeNull()
+    expect(redatorSourceSchema.parse({ provider: 'anthropic', model: 'claude', temperature: 0 }).temperature).toBe(0)
+    expect(redatorSourceSchema.parse({ provider: 'anthropic', model: 'claude', temperature: 2 }).temperature).toBe(2)
+    expect(redatorSourceSchema.safeParse({ provider: 'anthropic', model: 'claude', temperature: -0.1 }).success).toBe(false)
+    expect(redatorSourceSchema.safeParse({ provider: 'anthropic', model: 'claude', temperature: 2.1 }).error?.issues[0]?.message).toBe('Máximo 2')
   })
 
   it('nenhum schema aceita URL nem OpenCode', () => {
@@ -91,5 +106,7 @@ describe('entrada da ferramenta do agente', () => {
     expect(applyAiSourceToolSchema.parse({ section: 'embedding', source: { provider: 'local', model: 'bge-m3' } })).toEqual({ section: 'embedding', source: { provider: 'local', model: 'bge-m3', dimensions: null } })
     expect(applyAiSourceToolSchema.safeParse({ section: 'embedding', source: { provider: 'gemini', model: 'g', fallbackModels: ['x'] } }).success).toBe(false)
     expect(applyAiSourceToolSchema.safeParse({ section: 'redator', source: { provider: 'local', model: 'x' } }).success).toBe(false)
+    expect(applyAiSourceToolSchema.parse({ section: 'redator', source: { provider: 'anthropic', model: 'claude-opus', temperature: null } })).toEqual({ section: 'redator', source: { provider: 'anthropic', model: 'claude-opus', fallbackModels: [], temperature: null } })
+    expect(applyAiSourceToolSchema.safeParse({ section: 'embedding', source: { provider: 'local', model: 'bge-m3', temperature: 0.5 } }).success).toBe(false)
   })
 })

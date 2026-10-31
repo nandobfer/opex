@@ -41,6 +41,8 @@ export function RedatorSourceSection({ state, providers, disabled }: { state: Ai
     const models = useAiModels(provider)
     const actions = useSourceActions("redator")
     const errors = form.formState.errors
+    // Lido sempre (fora de curto-circuito): o react-hook-form só acompanha `isValid` se ele for lido em toda renderização.
+    const isValid = form.formState.isValid
     const options = (models.data ?? []).filter((item) => item.id !== modelId).map((item) => ({ value: item.id, label: item.name, description: item.id === item.name ? undefined : item.id }))
 
     const submit = form.handleSubmit(async (values) => {
@@ -105,10 +107,10 @@ export function RedatorSourceSection({ state, providers, disabled }: { state: Ai
             </AnimatePresence>
             <TestResult outcome={actions.outcome} />
             <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={disabled || !form.formState.isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
+                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={disabled || !isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
                     {actions.testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <FlaskConical className="mr-2 h-4 w-4" aria-hidden />} Testar com esta chave
                 </Button>
-                <Button type="button" disabled={disabled || !form.formState.isValid || actions.applying} onClick={() => void submit()}>
+                <Button type="button" disabled={disabled || !isValid || actions.applying} onClick={() => void submit()}>
                     {actions.applying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <Check className="mr-2 h-4 w-4" aria-hidden />} Aplicar no Redator
                 </Button>
             </div>

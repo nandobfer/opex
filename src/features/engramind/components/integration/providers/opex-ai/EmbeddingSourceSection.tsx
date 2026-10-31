@@ -46,6 +46,8 @@ export function EmbeddingSourceSection({ state, providers, reindexing, localMode
     const actions = useSourceActions("embedding")
     const [confirm, setConfirm] = useState<EmbeddingValues | null>(null)
     const errors = form.formState.errors
+    // Lido sempre (fora de curto-circuito): o react-hook-form só acompanha `isValid` se ele for lido em toda renderização.
+    const isValid = form.formState.isValid
     const blocked = disabled || reindexing
     // Download/carga do modelo local: testar e aplicar no Local respondem 409 até terminar.
     const localBusy = provider === "local" && isLocalModelBusy(localModel)
@@ -107,10 +109,10 @@ export function EmbeddingSourceSection({ state, providers, reindexing, localMode
             {reindexing && <p className="text-xs text-warning">A reindexação está em andamento: aguarde terminar para trocar o embedding.</p>}
             <TestResult outcome={actions.outcome} />
             <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={blocked || localBusy || provider === "off" || !form.formState.isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
+                <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={blocked || localBusy || provider === "off" || !isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>
                     {actions.testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <FlaskConical className="mr-2 h-4 w-4" aria-hidden />} Testar com esta chave
                 </Button>
-                <Button type="button" title={reindexing ? "Aguarde a reindexação terminar" : localBusy ? "Aguarde o modelo local terminar de baixar/carregar" : undefined} disabled={blocked || localBusy || !form.formState.isValid || actions.applying} onClick={() => void form.handleSubmit((values) => setConfirm(values))()}>
+                <Button type="button" title={reindexing ? "Aguarde a reindexação terminar" : localBusy ? "Aguarde o modelo local terminar de baixar/carregar" : undefined} disabled={blocked || localBusy || !isValid || actions.applying} onClick={() => void form.handleSubmit((values) => setConfirm(values))()}>
                     <Check className="mr-2 h-4 w-4" aria-hidden /> Aplicar no embedding
                 </Button>
             </div>

@@ -76,7 +76,10 @@ describe('ferramentas do Engramind', () => {
     expect(apply.confirmByDefault).toBe(true)
     expect(find('resend_engramind_ai_key').risk).toBe('write')
     expect(apply.input.safeParse({ section: 'redator', source: { provider: 'openai', model: 'gpt-4o', apiKey: 'sk' } }).success).toBe(false)
-    const input = { section: 'redator', source: { provider: 'openai', model: 'gpt-4o', fallbackModels: [] } }
+    expect(apply.input.safeParse({ section: 'redator', source: { provider: 'anthropic', model: 'claude-opus', temperature: null } }).success).toBe(true)
+    expect(apply.input.safeParse({ section: 'redator', source: { provider: 'anthropic', model: 'claude-opus', temperature: 2.5 } }).success).toBe(false)
+    expect(apply.input.safeParse({ section: 'embedding', source: { provider: 'local', model: 'bge-m3', temperature: 0.2 } }).success).toBe(false)
+    const input = { section: 'redator', source: { provider: 'openai', model: 'gpt-4o', fallbackModels: [], temperature: null } }
     await apply.execute(input, context)
     expect(mocks.apply).toHaveBeenCalledWith(input, 'local')
   })

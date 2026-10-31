@@ -1,6 +1,6 @@
 # Módulo: Engramind (`src/features/engramind/`)
 
-O **Engramind** (v0.8.0, repositório `nandobfer/engramind`, instalado em `/home/engramind`) é uma rede
+O **Engramind** (v0.10.0, repositório `nandobfer/engramind`, instalado em `/home/engramind`) é uma rede
 de memórias para agentes de IA: um serviço Rust separado do Opex (SQLite + FTS5, backup contínuo
 pelo Litestream, Redator por LLM, embeddings locais ou remotos, webhooks) que guarda fatos curtos em
 **canais** e os entrega por REST, MCP e CLI. O Opex é o **gestor** da rede: configura o serviço,
@@ -24,7 +24,14 @@ Fora de escopo (entrega posterior): usar as memórias do Engramind no lugar das 
   `code`; `LAST_ADMIN_TOKEN` → "Emita outro token admin antes", `CATEGORY_IN_USE` com a contagem,
   `RATE_LIMITED` com `Retry-After`...). O `401` do Engramind vira `409 ENGRAMIND_AUTH_INVALID` no Opex
   (a sessão do dono continua válida); fora do ar → `503 ENGRAMIND_UNREACHABLE`; sem conexão →
-  `409 ENGRAMIND_NOT_CONFIGURED`.
+  `409 ENGRAMIND_NOT_CONFIGURED`. Desde a 0.10.0: `422 PROVIDER_REJECTED` (o provedor recusou: chave,
+  modelo ou parâmetro) mostra `details.reason` — o status e a mensagem do provedor — e, quando o motivo
+  cita `temperature`, a dica "Deixe a Temperatura vazia"; `502 PROVIDER_FAILED` fica só para
+  indisponibilidade/resposta inválida; `409 EMBEDDING_MODEL_LOADING` diz o modelo, se está baixando ou
+  carregando e há quanto tempo. **5xx escondido pelo proxy**: o Engramind fica atrás do Cloudflare,
+  que troca o corpo das respostas 5xx pela própria página; sem o envelope e com a página/JSON do
+  Cloudflare (`ray_id`, `error_name`), o erro vira `502 ENGRAMIND_PROXY_MASKED` apontando Operação ›
+  Chamadas ao LLM (`llm_calls.error` traz o motivo real) em vez de "respondeu HTTP 502".
 - **O navegador nunca chama o Engramind** (CORS fechado): tudo passa por `/api/engramind/**`.
 
 ### Bootstrap (`server/bootstrap.ts`)
@@ -81,7 +88,10 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
 | Embedding | Desligado | `off` (só busca textual; o modelo não muda) | vazia | — |
 
 - **Redator**: provedor (OpenCode e Jev não aparecem), modelo e **até 5 modelos de reserva** da mesma
-  lista (`MultiAutocomplete`; sem repetir nem incluir o principal). **Embedding**: provedor, modelo
+  lista (`MultiAutocomplete`; sem repetir nem incluir o principal) e **Temperatura** (0 a 2, passo 0,1,
+  `TemperatureInput`; vazia = `null`, que o Engramind não envia ao provedor — obrigatório nos modelos
+  que recusam `temperature`, como a família 5.5 da Anthropic; vale para o Redator e a consolidação).
+  `redator.temperature` também é somente leitura em Configurações. **Embedding**: provedor, modelo
   (`?kind=embedding` no Gemini/OpenAI; Local pela lista do Engramind) e dimensão opcional (só remotos).
   Trocar de provedor limpa o modelo. Sem variante/raciocínio (o Engramind não tem).
 - **Testar com esta chave** (`POST /api/engramind/providers/from-opex/test`): a proposta vai ao
@@ -90,13 +100,17 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
   - Redator: grava as configurações (com a URL implícita) e depois `PUT /v1/secrets/redator.api_key`.
     Falha na chave mantém as configurações, grava `syncError` e a tela mostra **Reenviar a chave**.
   - Embedding: pede confirmação ("valida o provedor e reindexa"); recusado com reindexação em
-    andamento (`409 ENGRAMIND_REINDEXING`, botão desabilitado). Como o Engramind valida o provedor ao
+    andamento (`409 ENGRAMIND_REINDEXING`, botão desabilitado). No **Local**, o estado do modelo
+    (`get_status.embedding.local`: `idle|downloading|loading|ready|failed`, com tempo e erro) aparece
+    na seção e na aba Operação; em `downloading`/`loading`, Testar e Aplicar ficam desabilitados e o
+    card relê o estado a cada 3 s até terminar (um 409 `EMBEDDING_MODEL_LOADING` também dispara a
+    releitura e aparece como aviso, não como falha); `failed` mostra o erro (nova tentativa 30 s depois). Como o Engramind valida o provedor ao
     trocar, a proposta é testada com a chave, a chave é gravada e só então as configurações (falha na
     chave aborta sem mudar nada). Local e Desligado não enviam segredo.
   - Sem chave no Opex → `409 ENGRAMIND_AI_KEY_MISSING`. Auditoria `ai_source.apply` com seção,
-    provedor, modelo, reservas e dimensão (nunca a chave); evento `settings.updated`.
+    provedor, modelo, reservas, temperatura e dimensão (nunca a chave); evento `settings.updated`.
 - **Origem derivada do valor em uso** (`deriveOrigin`, nunca por flag): `engramind_state.sources`
-  guarda o último snapshot aplicado por seção (provedor, modelo, reservas, dimensão, `keyVersion`,
+  guarda o último snapshot aplicado por seção (provedor, modelo, reservas, temperatura, dimensão, `keyVersion`,
   `syncedAt`, `syncError`). "Vem do Opex" quando as chaves da seção batem com o snapshot e a chave do
   Engramind não foi trocada depois da última cópia (`updated_at` do segredo); "Configurado no
   Engramind" quando algo mudou por fora (ferramenta `update_engramind_settings`, CLI, outro admin ou

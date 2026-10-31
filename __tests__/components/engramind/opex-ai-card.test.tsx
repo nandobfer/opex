@@ -1,8 +1,10 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { AxiosError } from 'axios'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
@@ -12,7 +14,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 type Section = Record<string, unknown>
 const mocks = vi.hoisted(() => ({
-  data: null as null | { redator: Record<string, unknown>; embedding: Record<string, unknown>; reindexing: boolean },
+  data: null as null | { redator: Record<string, unknown>; embedding: Record<string, unknown>; reindexing: boolean; localModel?: Record<string, unknown> | null },
+  testImpl: (async () => ({ model: 'x', latency_ms: 10 })) as (input: unknown) => Promise<unknown>,
   providers: [] as { id: string; integrationId: string; name: string; configured: boolean; connected: boolean }[],
   applied: [] as unknown[],
   tested: [] as unknown[],
@@ -38,13 +41,20 @@ vi.mock('@/features/engramind/hooks/useOpexAiSource', () => ({
   useTestOpexAiSource: () => ({
     mutateAsync: async (input: unknown) => {
       mocks.tested.push(input)
-      return { model: 'x', latency_ms: 10 }
+      return mocks.testImpl(input)
     },
     isPending: false,
   }),
   useResendOpexAiKey: () => ({ mutate: (section: unknown) => mocks.resent.push(section), isPending: false }),
   useLocalEmbeddingModels: () => ({ data: [{ id: 'multilingual-e5-small', name: 'multilingual-e5-small', variants: [], group: '384 dimensões', contextWindow: null, free: true }], isLoading: false, isError: false, error: null }),
 }))
+
+const render = (ui: React.ReactElement) => {
+  const client = new QueryClient()
+  const wrap = (node: React.ReactElement) => <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  const result = rtlRender(wrap(ui))
+  return { ...result, rerender: (next: React.ReactElement) => result.rerender(wrap(next)) }
+}
 
 import { OpexAiCard } from '@/features/engramind/components/integration/providers/opex-ai/OpexAiCard'
 
@@ -54,7 +64,8 @@ const section = (over: Section): Section => ({
   model: null,
   fallbackModels: [],
   dimensions: null,
-  current: { provider: null, model: null },
+  temperature: null,
+  current: { provider: null, model: null, temperature: null },
   currentOpexProvider: null,
   keyConfigured: true,
   keyUpdatedAt: null,
@@ -82,6 +93,7 @@ beforeEach(() => {
   mocks.tested = []
   mocks.resent = []
   mocks.applyImpl = async () => ({ applied: true, keySynced: true })
+  mocks.testImpl = async () => ({ model: 'x', latency_ms: 10 })
 })
 
 describe('OpexAiCard', () => {
@@ -114,7 +126,45 @@ describe('OpexAiCard', () => {
     expect(within(screen.getByTestId('redator-source')).getByText('gpt-4o-mini')).toBeTruthy()
     await clickWhenEnabled(screen.getByRole('button', { name: /Aplicar no Redator/ }))
     await waitFor(() => expect(mocks.applied).toHaveLength(1))
-    expect(mocks.applied[0]).toEqual({ section: 'redator', source: { provider: 'openai', model: 'openai-m1', fallbackModels: ['gpt-4o-mini'] } })
+    expect(mocks.applied[0]).toEqual({ section: 'redator', source: { provider: 'openai', model: 'openai-m1', fallbackModels: ['gpt-4o-mini'], temperature: null } })
+  })
+
+  it('temperatura: vazia envia null, 0,7 envia 0.7 e fora de 0 a 2 mostra o erro e bloqueia', async () => {
+    render(<OpexAiCard />)
+    const input = document.getElementById('redator-source-temperature') as HTMLInputElement
+    expect(input.getAttribute('placeholder')).toBe('Padrão do modelo')
+    fireEvent.change(input, { target: { value: '0.7' } })
+    await clickWhenEnabled(screen.getByRole('button', { name: /Aplicar no Redator/ }))
+    await waitFor(() => expect(mocks.applied.at(-1)).toMatchObject({ source: { temperature: 0.7 } }))
+    fireEvent.change(input, { target: { value: '3' } })
+    expect(await screen.findByText('Máximo 2')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Aplicar no Redator/ }).hasAttribute('disabled')).toBe(true)
+    fireEvent.change(input, { target: { value: '' } })
+    await clickWhenEnabled(screen.getByRole('button', { name: /Aplicar no Redator/ }))
+    await waitFor(() => expect(mocks.applied.at(-1)).toMatchObject({ source: { temperature: null } }))
+  })
+
+  it('recusa do provedor (422) aparece na própria seção com o motivo', async () => {
+    mocks.testImpl = async () => {
+      throw new AxiosError('x', '422', undefined, undefined, { status: 422, statusText: 'Unprocessable', headers: {}, config: {} as never, data: { success: false, error: 'O provedor recusou a requisição: HTTP 400: `temperature` is deprecated for this model. Deixe a Temperatura vazia (padrão do modelo).', code: 'ENGRAMIND_PROVIDER_REJECTED' } })
+    }
+    render(<OpexAiCard />)
+    await clickWhenEnabled(within(screen.getByTestId('redator-source')).getByRole('button', { name: /Testar com esta chave/ }))
+    expect(await within(screen.getByTestId('redator-source')).findByText(/temperature` is deprecated/)).toBeTruthy()
+  })
+
+  it('modelo local baixando: mostra o estado e o tempo e desabilita Testar e Aplicar; falha mostra o erro', async () => {
+    mocks.data = { ...mocks.data!, localModel: { model: 'multilingual-e5-small', state: 'downloading', started_at: '2026-10-31T12:00:00Z', elapsed_ms: 42000, error: null } }
+    const { rerender } = render(<OpexAiCard />)
+    const embedding = screen.getByTestId('embedding-source')
+    expect(within(embedding).getByTestId('local-model-status').getAttribute('data-state')).toBe('downloading')
+    expect(within(embedding).getByText(/modelo local baixando/)).toBeTruthy()
+    expect(within(embedding).getByRole('button', { name: /Aplicar no embedding/ }).hasAttribute('disabled')).toBe(true)
+    expect(within(embedding).getByRole('button', { name: /Testar com esta chave/ }).hasAttribute('disabled')).toBe(true)
+    mocks.data = { ...mocks.data!, localModel: { model: 'multilingual-e5-small', state: 'failed', started_at: null, elapsed_ms: 3000, error: 'sem espaço em disco' } }
+    rerender(<OpexAiCard />)
+    expect(await screen.findByText(/sem espaço em disco/)).toBeTruthy()
+    await waitFor(() => expect(within(screen.getByTestId('embedding-source')).getByRole('button', { name: /Aplicar no embedding/ }).hasAttribute('disabled')).toBe(false))
   })
 
   it('trocar de provedor limpa modelo e reservas', async () => {

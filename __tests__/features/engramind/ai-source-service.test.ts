@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   secretUpdatedAt: null as string | null,
   failSecret: false,
   reindexing: false,
+  local: null as null | Record<string, unknown>,
   audits: [] as Record<string, unknown>[],
   published: [] as unknown[],
   warn: vi.fn(),
@@ -60,7 +61,7 @@ vi.mock('@/features/engramind/server/client', () => ({
       Object.assign(mocks.settings, request.body)
       return null
     }
-    if (request.path === '/v1/status') return { embedding: { state: mocks.reindexing ? 'reindexing' : 'ready' } }
+    if (request.path === '/v1/status') return { embedding: { state: mocks.reindexing ? 'reindexing' : 'ready', local: mocks.local } }
     if (request.path.startsWith('/v1/secrets/')) {
       if (mocks.failSecret) throw new Error('Engramind fora do ar')
       mocks.secretUpdatedAt = new Date().toISOString()
@@ -83,6 +84,7 @@ beforeEach(() => {
   mocks.secretUpdatedAt = null
   mocks.failSecret = false
   mocks.reindexing = false
+  mocks.local = null
   mocks.audits = []
   mocks.published = []
   mocks.warn.mockClear()
@@ -90,13 +92,15 @@ beforeEach(() => {
 
 describe('applyOpexAiSource', () => {
   it('Redator: grava as configurações com a URL implícita e depois a chave (corpo sensível); auditoria sem segredo', async () => {
-    const result = await applyOpexAiSource({ section: 'redator', source: { provider: 'openai', model: 'gpt-4o', fallbackModels: ['gpt-4o-mini'] } }, 'local')
+    const result = await applyOpexAiSource({ section: 'redator', source: { provider: 'openai', model: 'gpt-4o', fallbackModels: ['gpt-4o-mini'], temperature: 0.4 } }, 'local')
     expect(result.keySynced).toBe(true)
     const put = mocks.calls.find((call) => call.path === '/v1/settings' && call.method === 'PUT')
-    expect(put?.body).toEqual({ 'redator.provider': 'openai_compatible', 'redator.model': 'gpt-4o', 'redator.base_url': 'https://api.openai.com/v1', 'redator.fallback_models': ['gpt-4o-mini'] })
+    expect(put?.body).toEqual({ 'redator.provider': 'openai_compatible', 'redator.model': 'gpt-4o', 'redator.base_url': 'https://api.openai.com/v1', 'redator.fallback_models': ['gpt-4o-mini'], 'redator.temperature': 0.4 })
     expect(secretPuts()).toEqual([{ method: 'PUT', path: '/v1/secrets/redator.api_key', body: { value: KEY }, sensitive: true }])
     expect(mocks.calls.indexOf(put!)).toBeLessThan(mocks.calls.indexOf(secretPuts()[0]!))
     expect(JSON.stringify(mocks.audits)).not.toContain(KEY)
+    expect(mocks.audits[0]).toMatchObject({ temperature: 0.4 })
+    expect(result.state.redator.temperature).toBe(0.4)
     expect(JSON.stringify(result)).not.toContain(KEY)
     expect(result.state.redator.origin).toBe('opex')
     expect(mocks.published).toContainEqual(expect.objectContaining({ type: 'settings.updated' }))
@@ -135,6 +139,37 @@ describe('applyOpexAiSource', () => {
     const result = await applyOpexAiSource({ section: 'embedding', source: { provider: 'local', model: 'multilingual-e5-small' } }, 'local')
     expect(result.keySynced).toBe(true)
     expect(secretPuts()).toEqual([])
+  })
+})
+
+describe('temperatura', () => {
+  it('sem temperatura: grava null (o Engramind omite o campo) e o teste manda null', async () => {
+    await applyOpexAiSource({ section: 'redator', source: { provider: 'anthropic', model: 'claude-haiku-5-5' } }, 'local').catch(() => null)
+    mocks.keys.ai_anthropic = 'ant-key-0001'
+    await applyOpexAiSource({ section: 'redator', source: { provider: 'anthropic', model: 'claude-haiku-5-5' } }, 'local')
+    expect(mocks.settings['redator.temperature']).toBeNull()
+    await testOpexAiSource({ section: 'redator', source: { provider: 'anthropic', model: 'claude-haiku-5-5', temperature: 0.2 } })
+    expect(mocks.calls.at(-1)?.body).toMatchObject({ settings: { 'redator.temperature': 0.2 } })
+  })
+
+  it('temperatura trocada por fora vira "Configurado no Engramind"', async () => {
+    await applyOpexAiSource({ section: 'redator', source: { provider: 'openai', model: 'gpt-4o', temperature: null } }, 'local')
+    mocks.settings['redator.temperature'] = 1
+    const state = await getOpexAiSourceState()
+    expect(state.redator.origin).toBe('engramind')
+    expect(state.redator.current.temperature).toBe(1)
+  })
+})
+
+describe('modelo local', () => {
+  it('o estado traz get_status.embedding.local', async () => {
+    mocks.local = { model: 'multilingual-e5-large', state: 'downloading', started_at: '2026-10-31T12:00:00Z', elapsed_ms: 42000, error: null }
+    const state = await getOpexAiSourceState()
+    expect(state.localModel).toEqual(mocks.local)
+  })
+
+  it('sem o campo (Engramind antigo) → null', async () => {
+    expect((await getOpexAiSourceState()).localModel).toBeNull()
   })
 })
 

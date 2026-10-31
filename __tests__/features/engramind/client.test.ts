@@ -62,6 +62,36 @@ describe('engramindCall', () => {
     await expect(engramindCall('POST', { path: '/v1/settings/redator/test', body: {} })).rejects.toMatchObject({ message: expect.stringContaining('redator.model, redator.api_key') })
   })
 
+  it('0.10.0: 422 PROVIDER_REJECTED traz o motivo do provedor (e a dica da temperatura quando ele a cita)', async () => {
+    mocks.fetch.mockResolvedValueOnce(error(422, 'PROVIDER_REJECTED', { reason: 'HTTP 400: `temperature` is deprecated for this model.' }))
+    const failure = await engramindCall('POST', { path: '/v1/settings/redator/test', body: {} }).catch((caught: unknown) => caught)
+    expect(failure).toMatchObject({ status: 422, code: 'ENGRAMIND_PROVIDER_REJECTED', details: { reason: 'HTTP 400: `temperature` is deprecated for this model.' } })
+    expect((failure as Error).message).toContain('HTTP 400: `temperature` is deprecated for this model.')
+    expect((failure as Error).message).toContain('Deixe a Temperatura vazia')
+    mocks.fetch.mockResolvedValueOnce(error(422, 'PROVIDER_REJECTED', { reason: 'HTTP 401: invalid x-api-key' }))
+    const other = (await engramindCall('POST', { path: '/v1/settings/redator/test', body: {} }).catch((caught: unknown) => caught)) as Error
+    expect(other.message).toContain('invalid x-api-key')
+    expect(other.message).not.toContain('Temperatura')
+  })
+
+  it('0.10.0: 409 EMBEDDING_MODEL_LOADING mostra o modelo, o estado e o tempo', async () => {
+    mocks.fetch.mockResolvedValueOnce(error(409, 'EMBEDDING_MODEL_LOADING', { model: 'multilingual-e5-large', state: 'downloading', started_at: '2026-10-31T12:00:00Z', elapsed_ms: 42400 }))
+    await expect(engramindCall('POST', { path: '/v1/settings/embedding/test', body: {} })).rejects.toMatchObject({
+      status: 409,
+      code: 'ENGRAMIND_EMBEDDING_MODEL_LOADING',
+      message: 'O modelo local multilingual-e5-large ainda está sendo baixado (há 42 s). Tente de novo quando ficar pronto.',
+    })
+  })
+
+  it('5xx com o corpo trocado pelo Cloudflare vira ENGRAMIND_PROXY_MASKED (não "respondeu HTTP 502")', async () => {
+    mocks.fetch.mockResolvedValueOnce(json(502, { title: 'Bad gateway', error_name: 'origin_bad_gateway', ray_id: '8f00aa', cloudflare_error: true }))
+    await expect(engramindCall('POST', { path: '/v1/settings/redator/test', body: {} })).rejects.toMatchObject({ status: 502, code: 'ENGRAMIND_PROXY_MASKED', message: expect.stringContaining('origin_bad_gateway') })
+    mocks.fetch.mockResolvedValueOnce(new Response('<html><title>502 Bad gateway</title>Cloudflare Ray ID: 8f00aa</html>', { status: 502, headers: { 'Content-Type': 'text/html' } }))
+    await expect(engramindCall('GET', { path: '/v1/status' })).rejects.toMatchObject({ code: 'ENGRAMIND_PROXY_MASKED', message: expect.stringContaining('Operação › Chamadas ao LLM') })
+    mocks.fetch.mockResolvedValueOnce(new Response('upstream error', { status: 502 }))
+    await expect(engramindCall('GET', { path: '/v1/status' })).rejects.toMatchObject({ code: 'ENGRAMIND_HTTP_502' })
+  })
+
   it('401 do Engramind não vira 401 do Opex (a sessão do dono continua válida)', async () => {
     mocks.fetch.mockResolvedValueOnce(error(401, 'AUTH_INVALID'))
     const failure = await engramindCall('GET', { path: '/v1/whoami' }).catch((caught: unknown) => caught)
