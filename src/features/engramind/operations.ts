@@ -93,6 +93,30 @@ const settingsProposal = z.record(z.string().trim().min(1).max(100), z.unknown()
 const redactSettings = (settings: Record<string, unknown> | undefined) =>
     settings ? Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, key.endsWith("api_key") && value ? SECRET_OMITTED : value])) : settings
 
+/** Entradas reaproveitadas pelos formulários da tela (mesmo contrato da rota e do agente). */
+export const createAppInput = z.object({ slug: identitySlug, name, description, webhook_url: webhookUrl, webhook_secret: webhookSecret })
+export const updateAppInput = z.object({ app: appRef, name: name.optional(), description, webhook_url: webhookUrl, webhook_secret: webhookSecret, disabled: z.boolean().optional() })
+export const createAgentInput = z.object({ app: appRef, slug: identitySlug, name, description })
+export const updateAgentInput = z.object({ agent: agentRef, name: name.optional(), description, disabled: z.boolean().optional() })
+export const updateTokenInput = z.object({ token: tokenRef, label: z.string().trim().max(120).nullable().optional(), scopes: scopesSchema.optional(), expires_at: isoDate.nullable().optional() })
+export const createChannelInput = z.object({ slug: channelSlugSchema, name, description, priority: priority.optional() })
+export const updateChannelInput = z.object({ channel: channelRef, name: name.optional(), description, priority: priority.optional() })
+export const subscribeInput = z.object({ agent: agentRef, target: subscriptionTarget, mode: z.enum(SUBSCRIPTION_MODES), access: scopesSchema.nullable().optional(), priority: priority.nullable().optional() })
+export const updateSubscriptionInput = z.object({ subscription: z.string().trim().min(1).max(40), mode: z.enum(SUBSCRIPTION_MODES).optional(), access: scopesSchema.nullable().optional(), priority: priority.nullable().optional() })
+export const issueTokenInput = z
+.object({
+    kind: z.enum(TOKEN_KINDS),
+    app: appRef.optional(),
+    agent: agentRef.optional(),
+    scopes: scopesSchema,
+    label: z.string().trim().max(120).optional(),
+    expires_at: isoDate.optional(),
+})
+.superRefine((value, ctx) => {
+    if (value.kind === "agent" && !value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token agent exige o agente" })
+    if (value.kind === "admin" && !value.app && !value.agent) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token admin" })
+})
+
 /** Tipagem por entrada na definição; no catálogo, a entrada fica apagada (validada por `input` na execução). */
 function op<I>(def: EngramindOperation<I>): EngramindOperation {
     return def as unknown as EngramindOperation
@@ -267,7 +291,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "create_engramind_app",
         label: "Criar app no Engramind",
         description: "Cria um app (slug único na rede) e, opcionalmente, o webhook dele (URL e segredo de 32 a 256 caracteres).",
-        input: z.object({ slug: identitySlug, name, description, webhook_url: webhookUrl, webhook_secret: webhookSecret }),
+        input: createAppInput,
         request: (input) => ({ path: "/v1/apps", body: input }),
         redact: (input) => ({ ...input, webhook_secret: input.webhook_secret ? SECRET_OMITTED : input.webhook_secret }),
         event: "identities.updated",
@@ -281,7 +305,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_app",
         label: "Editar app do Engramind",
         description: "Altera nome, descrição, webhook (URL e segredo; null remove) ou desativa/reativa o app (disabled). Desativar faz os tokens dele pararem de autenticar.",
-        input: z.object({ app: appRef, name: name.optional(), description, webhook_url: webhookUrl, webhook_secret: webhookSecret, disabled: z.boolean().optional() }),
+        input: updateAppInput,
         request: ({ app, ...body }) => ({ path: `/v1/apps/${enc(app)}`, body }),
         redact: (input) => ({ ...input, webhook_secret: input.webhook_secret ? SECRET_OMITTED : input.webhook_secret }),
         event: "identities.updated",
@@ -322,7 +346,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "create_engramind_agent",
         label: "Criar agente no Engramind",
         description: "Cria um agente num app (slug único dentro do app; o endereço completo é app/agente).",
-        input: z.object({ app: appRef, slug: identitySlug, name, description }),
+        input: createAgentInput,
         request: (input) => ({ path: "/v1/agents", body: input }),
         event: "identities.updated",
     }),
@@ -335,7 +359,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_agent",
         label: "Editar agente do Engramind",
         description: "Altera nome e descrição ou desativa/reativa o agente (disabled). Desativado, os tokens dele param de autenticar.",
-        input: z.object({ agent: agentRef, name: name.optional(), description, disabled: z.boolean().optional() }),
+        input: updateAgentInput,
         request: ({ agent, ...body }) => ({ path: `/v1/agents/${enc(agent)}`, body }),
         event: "identities.updated",
     }),
@@ -375,19 +399,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "issue_engramind_token",
         label: "Emitir token do Engramind",
         description: "Emite um token (admin: gestão da rede; agent: memórias dos canais assinados) com escopos read, read+write, read+delete ou read+write+delete. O segredo aparece uma única vez.",
-        input: z
-            .object({
-                kind: z.enum(TOKEN_KINDS),
-                app: appRef.optional(),
-                agent: agentRef.optional(),
-                scopes: scopesSchema,
-                label: z.string().trim().max(120).optional(),
-                expires_at: isoDate.optional(),
-            })
-            .superRefine((value, ctx) => {
-                if (value.kind === "agent" && !value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token agent exige o agente" })
-                if (value.kind === "admin" && !value.app && !value.agent) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token admin" })
-            }),
+        input: issueTokenInput,
         request: (input) => ({ path: "/v1/tokens", body: input }),
         event: "identities.updated",
     }),
@@ -400,7 +412,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_token",
         label: "Editar token do Engramind",
         description: "Altera rótulo, escopos (sem escalada) e expiração (null remove) de um token. O token do próprio Opex não pode ser rebaixado.",
-        input: z.object({ token: tokenRef, label: z.string().trim().max(120).nullable().optional(), scopes: scopesSchema.optional(), expires_at: isoDate.nullable().optional() }),
+        input: updateTokenInput,
         request: ({ token, ...body }) => ({ path: `/v1/tokens/${enc(token)}`, body }),
         event: "identities.updated",
     }),
@@ -464,7 +476,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "create_engramind_channel",
         label: "Criar canal no Engramind",
         description: "Cria um canal (slug hierárquico e imutável, ex.: eng/global) com nome, descrição e prioridade (-1000 a 1000).",
-        input: z.object({ slug: channelSlugSchema, name, description, priority: priority.optional() }),
+        input: createChannelInput,
         request: (input) => ({ path: "/v1/channels", body: input }),
         event: "channel.updated",
     }),
@@ -477,7 +489,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_channel",
         label: "Editar canal do Engramind",
         description: "Altera nome, descrição e prioridade de um canal (o slug não muda).",
-        input: z.object({ channel: channelRef, name: name.optional(), description, priority: priority.optional() }),
+        input: updateChannelInput,
         request: ({ channel, ...body }) => ({ path: `/v1/channels/${enc(channel)}`, body }),
         event: "channel.updated",
     }),
@@ -544,7 +556,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "subscribe_engramind_agent",
         label: "Assinar canal para um agente",
         description: "Faz um agente assinar um canal exato ou um prefixo (eng/*), com modo inject (contexto e busca), search (só busca) ou manage (só citado pelo slug), acesso (restringe os escopos) e prioridade.",
-        input: z.object({ agent: agentRef, target: subscriptionTarget, mode: z.enum(SUBSCRIPTION_MODES), access: scopesSchema.nullable().optional(), priority: priority.nullable().optional() }),
+        input: subscribeInput,
         request: (input) => ({ path: "/v1/subscriptions", body: input }),
         event: "subscription.updated",
     }),
@@ -557,7 +569,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_subscription",
         label: "Editar assinatura do Engramind",
         description: "Altera modo, acesso (null volta aos escopos do token) e prioridade (null volta à do canal) de uma assinatura.",
-        input: z.object({ subscription: z.string().trim().min(1).max(40), mode: z.enum(SUBSCRIPTION_MODES).optional(), access: scopesSchema.nullable().optional(), priority: priority.nullable().optional() }),
+        input: updateSubscriptionInput,
         request: ({ subscription, ...body }) => ({ path: `/v1/subscriptions/${enc(subscription)}`, body }),
         event: "subscription.updated",
     }),

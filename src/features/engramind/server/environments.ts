@@ -1,13 +1,6 @@
 import { Environment, environmentsDb, type IEnvironment } from "@/features/environments/server/models"
+import type { EnvironmentOptionDto } from "../types"
 
-export interface EnvironmentOptionDto {
-    id: string
-    name: string
-    slug: string
-    /** Pasta (adotado) ou origem central. */
-    location: string
-    machine: string
-}
 
 /** Opções leves do seletor de Ambiente (sem os snapshots do Docker da lista de Ambientes). */
 export async function listEnvironmentOptions(): Promise<EnvironmentOptionDto[]> {

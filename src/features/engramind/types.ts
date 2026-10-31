@@ -317,3 +317,12 @@ export interface ApplyStateDto {
 }
 
 export type ApplyEvent = { type: "log"; text: string } | { type: "status"; status: ApplyStateDto["status"]; error: string | null } | { type: "ping" }
+
+export interface EnvironmentOptionDto {
+    id: string
+    name: string
+    slug: string
+    /** Pasta (adotado) ou origem central. */
+    location: string
+    machine: string
+}
