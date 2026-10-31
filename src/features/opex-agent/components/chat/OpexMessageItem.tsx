@@ -2,13 +2,15 @@
 
 import { memo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlarmClock, AlertTriangle, Bell, Bot, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck } from "lucide-react"
+import { AlarmClock, AlertTriangle, Bell, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
 import type { OpexMessageDto, OpexPart } from "../../types"
 import { OpexMessageFiles } from "./OpexMessageFiles"
 import { OpexToolCard } from "./OpexToolCard"
+import { OpexFormPart } from "./OpexFormPart"
+import { useOpexScope } from "../OpexScopeProvider"
 
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
 
@@ -51,16 +53,18 @@ interface AssistantMessageProps {
 
 function AssistantMessageView({ parts, streaming, thinking, message, onDecide, deciding, onRetry }: AssistantMessageProps) {
     const empty = parts.length === 0
+    const AgentIcon = useOpexScope().agent.icon
     return (
         <motion.div {...bubble} className="flex gap-2.5 pb-4">
             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary ring-1 ring-primary/40" aria-hidden>
-                <Bot className="h-4 w-4" />
+                <AgentIcon className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1 space-y-2">
                 {parts.map((part, index) => {
                     const last = index === parts.length - 1
                     if (part.type === "text") return <StreamingText key={index} text={part.text} cursor={Boolean(streaming && last && !thinking)} />
                     if (part.type === "reasoning") return <Reasoning key={index} text={part.text} active={Boolean(streaming && last && thinking)} />
+                    if (part.type === "form") return <OpexFormPart key={part.id} part={part} live={Boolean(streaming)} />
                     return <OpexToolCard key={part.id} part={part} onDecide={onDecide} deciding={deciding} />
                 })}
                 <AnimatePresence>{streaming && (empty || (thinking && parts.at(-1)?.type !== "reasoning")) && <ThinkingIndicator key="thinking" />}</AnimatePresence>

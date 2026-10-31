@@ -15,6 +15,8 @@ export interface ClientePortalSession {
     clients: ClienteSelectableDto[]
     /** Agente Opex liberado para este cliente (configuração do dono; padrão ativado). */
     opexEnabled: boolean
+    /** Agente Maddox liberado para este cliente (configuração do dono; padrão desligado). */
+    maddoxEnabled: boolean
 }
 
 interface ClientePortalContextValue extends ClientePortalSession {

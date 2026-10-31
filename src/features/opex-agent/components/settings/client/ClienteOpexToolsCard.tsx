@@ -6,12 +6,19 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckTree } from "@/components/ui/check-tree/CheckTree"
 import { cn } from "@/lib/utils"
+import type { CheckBranch } from "@/lib/check-tree"
 import { buildOpexClientToolTree, findOpexClientTool, OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_TOOL_GROUP_LABELS, type OpexClientToolGroup, type OpexClientToolRisk } from "../../../client-tools"
 
 interface ClienteOpexToolsCardProps {
     value: readonly string[]
     onChange: (next: string[]) => void
+    /** Árvore (padrão: o catálogo do portal do Agente Opex; o Maddox passa o dele, sem jobs). */
+    tree?: CheckBranch[]
+    description?: string
 }
+
+const DEFAULT_DESCRIPTION =
+    "Escolha o que o agente pode usar no portal. Toda consulta e ação continua limitada ao cliente e ao papel do usuário no servidor, mesmo com a ferramenta ligada. As destrutivas sempre pedem Confirmar/Cancelar no chat."
 
 const RISK_BADGES: Record<OpexClientToolRisk, { label: string; className: string }> = {
     read: { label: "Leitura", className: "bg-muted text-muted-foreground" },
@@ -42,8 +49,8 @@ function OptInBadge() {
  * seleção do dono (`CheckTree`). Contexto fica sempre ligado; as de admin só chegam ao admin do
  * cliente, mesmo marcadas. Destrutivas sempre pedem confirmação no portal.
  */
-export function ClienteOpexToolsCard({ value, onChange }: ClienteOpexToolsCardProps) {
-    const tree = useMemo(() => buildOpexClientToolTree(), [])
+export function ClienteOpexToolsCard({ value, onChange, tree: customTree, description = DEFAULT_DESCRIPTION }: ClienteOpexToolsCardProps) {
+    const tree = useMemo(() => customTree ?? buildOpexClientToolTree(), [customTree])
     const selected = useMemo(() => new Set([...value, OPEX_CLIENT_CONTEXT_TOOL]), [value])
 
     const renderLeafMeta = (key: string) => {
@@ -64,10 +71,7 @@ export function ClienteOpexToolsCard({ value, onChange }: ClienteOpexToolsCardPr
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Ferramentas do cliente</CardTitle>
-                <CardDescription>
-                    Escolha o que o agente pode usar no portal. Toda consulta e ação continua limitada ao cliente e ao papel do usuário no servidor, mesmo com a ferramenta ligada. As destrutivas sempre
-                    pedem Confirmar/Cancelar no chat.
-                </CardDescription>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent>
                 <CheckTree

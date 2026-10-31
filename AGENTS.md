@@ -97,6 +97,9 @@ sem pedido explícito.
   caminho, parâmetros, corpo, respostas por status, exemplos e esquema de segurança.
 - Corpos e respostas vêm dos mesmos schemas Zod usados pela rota; nunca duplique o contrato à mão
   quando existir schema.
+- O servidor MCP do Agente Maddox (`/api/maddox/mcp/{owner|portal}`) também está na especificação,
+  gerado do mesmo catálogo do `tools/list` (`maddoxMcpDocsCatalog`, `openapi/maddox-mcp.ts`):
+  ferramenta nova ou alterada aparece sozinha, sem editar a especificação.
 
 ### UI e frontend
 
@@ -175,6 +178,10 @@ sem pedido explícito.
   `private-opex-{clientId}-{userId}` (payload `{ id }`); a resposta ao vivo do chat vai por NDJSON
   (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher. MCPs do agente: `opex-mcp-updated`
   (`{ id }`) em `private-app`.
+- Agente Maddox: `maddox-session-updated` / `maddox-session-deleted` nos mesmos canais das sessões do
+  Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
+  `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
+  `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.

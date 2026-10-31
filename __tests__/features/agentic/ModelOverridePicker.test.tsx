@@ -13,7 +13,7 @@ const MODELS = [
 
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
 /** Busca simplificada: o gatilho, um botão por modelo e o rodapé (o popover real não roda no DOM de teste). */
-vi.mock('@/features/agentic/components/settings/ModelSearchPicker', () => ({
+vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick, footer }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void; footer?: React.ReactNode }) => (
     <div>
       {trigger}
@@ -48,7 +48,7 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
 })
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useSetWorkbenchModel: () => ({ mutate: mocks.setWorkbenchModel, isPending: false }) }))
 
-import { ModelOverridePicker } from '@/features/agentic/components/workbench/ModelOverridePicker'
+import { ModelOverridePicker } from '@/features/ai/components/model-picker/ModelOverridePicker'
 import { WorkbenchModelPicker } from '@/features/agentic/components/workbench/WorkbenchModelPicker'
 import type { WorkbenchDto } from '@/features/agentic/types'
 

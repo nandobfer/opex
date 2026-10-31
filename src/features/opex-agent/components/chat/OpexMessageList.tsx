@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import type { OpexLiveMessage, OpexMessageDto } from "../../types"
 import { VirtualStack } from "../VirtualStack"
 import { AssistantMessage, UserMessage } from "./OpexMessageItem"
+import { useOpexScope } from "../OpexScopeProvider"
 
 export type ChatItem = { kind: "message"; message: OpexMessageDto } | { kind: "live"; live: OpexLiveMessage; streaming: boolean }
 
@@ -34,6 +35,7 @@ interface OpexMessageListProps {
 
 /** Conversa com rolagem que acompanha o fim enquanto o usuário não sobe; botão "Ir para o fim". */
 export function OpexMessageList({ items, onDecide, deciding, onRetry, busy }: OpexMessageListProps) {
+    const { agent } = useOpexScope()
     const scrollRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [showJump, setShowJump] = useState(false)
@@ -81,7 +83,7 @@ export function OpexMessageList({ items, onDecide, deciding, onRetry, busy }: Op
 
     return (
         <div className="relative min-h-0 flex-1">
-            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live="polite" aria-label="Conversa com o Agente Opex">
+            <div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pb-2 pt-4" role="log" aria-live="polite" aria-label={`Conversa com o ${agent.label}`}>
                 <VirtualStack count={items.length} scrollRef={scrollRef} estimateSize={140} getKey={(index) => chatItemKey(items[index]!)} renderItem={renderItem} />
             </div>
             <AnimatePresence>

@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { OpexNavItem } from "@/features/opex-agent/components/OpexNavItem"
+import { AgentChatNavItem } from "@/features/opex-agent/components/agents/AgentChatNavItem"
 import { AppShell } from "./AppShell"
 import { APP_NAV, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
 
@@ -11,8 +11,8 @@ interface AppLayoutShellProps {
     children: ReactNode
 }
 
-/** Agente Opex no rodapé do menu (só no app do dono; o portal do cliente não tem). */
-const ownerFooterItems = (collapsed: boolean) => <OpexNavItem collapsed={collapsed} />
+/** Item único dos agentes de chat (Agente Opex e Agente Maddox) no rodapé do menu do dono. */
+const ownerFooterItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} />
 
 /** Casca do app: marca, menu e dono (uso pessoal; acesso protegido por login). */
 export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellProps) {

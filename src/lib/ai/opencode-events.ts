@@ -42,11 +42,13 @@ export interface OpencodePermissionDto {
     action: string
     resources: string[]
     message: string | null
+    /** Chamada de ferramenta que pediu a permissão (`source.id`), quando o OpenCode informa. */
+    toolCallId?: string | null
 }
 
 export type OpencodeSessionEvent =
     | { kind: "text"; delta: string }
-    | { kind: "reasoning" }
+    | { kind: "reasoning"; delta?: string }
     | { kind: "tool-start"; id: string; name: string }
     | { kind: "tool-called"; id: string; input: Record<string, unknown> }
     | { kind: "tool-progress"; id: string; output: string | null }
@@ -133,11 +135,13 @@ export function toOpencodeForm(raw: unknown): OpencodeFormDto | null {
 
 export function toOpencodePermission(raw: unknown): OpencodePermissionDto | null {
     if (!isObj(raw) || typeof raw.id !== "string") return null
+    const source = isObj(raw.source) ? raw.source : null
     return {
         id: raw.id,
         action: str(raw.action) ?? "ferramenta",
         resources: Array.isArray(raw.resources) ? raw.resources.filter((item): item is string => typeof item === "string") : [],
         message: str(raw.message),
+        ...(source && source.type === "tool" && str(source.id) ? { toolCallId: str(source.id) } : {}),
     }
 }
 
@@ -153,8 +157,11 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
             return delta ? { kind: "text", delta } : null
         }
         case "session.reasoning.started":
-        case "session.reasoning.delta":
             return { kind: "reasoning" }
+        case "session.reasoning.delta": {
+            const delta = str(data.delta)
+            return delta ? { kind: "reasoning", delta } : { kind: "reasoning" }
+        }
         case "session.tool.input.started":
             return id ? { kind: "tool-start", id, name: str(data.name) ?? "ferramenta" } : null
         case "session.tool.called":

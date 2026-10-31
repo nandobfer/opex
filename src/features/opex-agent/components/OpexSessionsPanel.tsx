@@ -19,6 +19,7 @@ import { useDeleteOpexSession, useOpexSessions, useUpdateOpexSession } from "../
 import type { OpexSessionDto } from "../types"
 import { OPEX_STATUS_LABELS, OpexStatusDot } from "./OpexStatusDot"
 import { VirtualStack } from "./VirtualStack"
+import { useOpexScope } from "./OpexScopeProvider"
 
 /** Busca tolerante a erro de digitação por título e resumo. */
 export function searchSessions(sessions: readonly OpexSessionDto[], query: string, showArchived: boolean): OpexSessionDto[] {
@@ -38,6 +39,7 @@ interface OpexSessionsPanelProps {
 /** Todas as sessões (abertas ou não): busca, arquivadas, renomear, arquivar e excluir. */
 export function OpexSessionsPanel({ activeId, onOpen, onNew, onClose }: OpexSessionsPanelProps) {
     const query = useOpexSessions()
+    const { agent } = useOpexScope()
     const [search, setSearch] = useState("")
     const [showArchived, setShowArchived] = useState(false)
     const [deleting, setDeleting] = useState<OpexSessionDto | null>(null)
@@ -55,7 +57,7 @@ export function OpexSessionsPanel({ activeId, onOpen, onNew, onClose }: OpexSess
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="absolute inset-0 z-10 flex flex-col bg-popover"
             role="region"
-            aria-label="Sessões do Agente Opex"
+            aria-label={`Sessões do ${agent.label}`}
         >
             <div className="flex items-center gap-2 border-b px-3 py-2">
                 <div className="relative flex-1">

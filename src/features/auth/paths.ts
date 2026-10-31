@@ -7,6 +7,8 @@
  *   `/api/auth/client-login` — a entrada do portal por token);
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
  * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`;
+ * - o **servidor MCP do Opex para o OpenCode** (`/api/maddox/mcp/*`, Agente Maddox), autenticado pelo
+ *   segredo derivado da chave das integrações e com o escopo conferido pela sessão do Maddox;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
  * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de
@@ -36,7 +38,7 @@ export const PUBLIC_ROUTES: readonly string[] = [
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */
-export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines"]
+export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/maddox/mcp"]
 
 /**
  * Caminho sem o subcaminho público (`BASE_PATH`), com barra inicial e sem barra final.

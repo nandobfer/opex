@@ -22,7 +22,7 @@ import type { ForkDto } from "../../types"
 import { ForkComposer } from "./ForkComposer"
 import { ForkModeSelect } from "./ForkModeSelect"
 import { LiveMessageComposer } from "./LiveMessageComposer"
-import { ModelOverridePicker } from "./ModelOverridePicker"
+import { ModelOverridePicker } from "@/features/ai/components/model-picker/ModelOverridePicker"
 
 /**
  * Conversa e ciclo de vida do fork: enviar, pausar a conversa, parar, tentar de novo, retomar, integrar,

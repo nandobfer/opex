@@ -42,6 +42,12 @@ export interface TurnRequest {
     startedAt?: number
     /** Contexto do painel de consumo: origem (ex.: `agentic`, `refinement`) e referência. */
     consumption?: { origin: string; subject?: string | null }
+    /**
+     * Inclui a entrada completa das ferramentas (`rawInput`) nos eventos `tool`. Só para quem trata a
+     * entrada antes de exibir ou gravar (Agente Maddox, que aplica o `redact` das ferramentas do Opex);
+     * os demais (mesas, forks, revisões) recebem só o resumo cortado.
+     */
+    exposeRawToolInput?: boolean
     /** Arquivos anexados à mensagem (`uri` pode ser `data:<mime>;base64,…`), enviados junto do texto. */
     files?: readonly { uri: string; name: string }[]
 }
@@ -50,8 +56,18 @@ export interface TurnRequest {
 export type TurnEvent =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     | { type: "text"; text: string }
-    | { type: "reasoning" }
-    | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }
+    | { type: "reasoning"; text?: string }
+    | {
+          type: "tool"
+          id: string
+          name: string
+          state: "running" | "done" | "error"
+          input?: string | null
+          output?: string | null
+          error?: string | null
+          /** Entrada completa da chamada (quem publica decide o que exibir; pode conter segredos). */
+          rawInput?: Record<string, unknown> | null
+      }
     | { type: "tool-progress"; id: string; output: string }
     | { type: "notice"; level: "info" | "warn" | "error" | "success"; message: string }
     | { type: "permission"; permission: OpencodePermissionDto }
@@ -200,6 +216,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
+    const toolRawInputs = new Map<string, Record<string, unknown>>()
+    const rawOf = (id: string) => (request.exposeRawToolInput ? { rawInput: toolRawInputs.get(id) ?? null } : {})
     // Pendências vivas NESTE acompanhamento (dedupe por id): nem o evento ao vivo nem a releitura do
     // estado (reconexão) publicam duas vezes a mesma pergunta/permissão.
     const liveForms = new Map<string, OpencodeFormDto>()
@@ -302,7 +320,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 await hooks.onText?.(event.delta)
                 break
             case "reasoning":
-                publish({ type: "reasoning" })
+                publish(event.delta ? { type: "reasoning", text: event.delta } : { type: "reasoning" })
                 break
             case "tool-start":
                 toolNames.set(event.id, event.name)
@@ -311,17 +329,18 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             case "tool-called": {
                 const input = describeToolInput(event.input)
                 toolInputs.set(event.id, input)
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "running", input })
+                if (request.exposeRawToolInput) toolRawInputs.set(event.id, event.input)
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "running", input, ...rawOf(event.id) })
                 break
             }
             case "tool-progress":
                 if (event.output) publish({ type: "tool-progress", id: event.id, output: event.output.slice(-20_000) })
                 break
             case "tool-done":
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "done", input: toolInputs.get(event.id) ?? null, output: event.output })
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "done", input: toolInputs.get(event.id) ?? null, ...rawOf(event.id), output: event.output })
                 break
             case "tool-error":
-                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "error", input: toolInputs.get(event.id) ?? null, output: event.output || null, error: event.message })
+                publish({ type: "tool", id: event.id, name: toolNames.get(event.id) ?? "ferramenta", state: "error", input: toolInputs.get(event.id) ?? null, ...rawOf(event.id), output: event.output || null, error: event.message })
                 break
             case "step":
                 costUsd += event.costUsd

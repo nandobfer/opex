@@ -25,7 +25,8 @@ function childrenOf(node: SchemaNode | undefined): { label: string; node: Schema
     }
     if (node.items) return [{ label: "[item]", node: node.items }]
     const alternatives = node.oneOf ?? node.anyOf
-    if (alternatives) return alternatives.map((alt, index) => ({ label: `${node.oneOf ? "oneOf" : "anyOf"} ${index + 1}`, node: alt }))
+    // Alternativa com título ou `$ref` aparece pelo nome (ex.: cada ferramenta do MCP do Agente Maddox).
+    if (alternatives) return alternatives.map((alt, index) => ({ label: alt.title ?? alt.ref ?? `${node.oneOf ? "oneOf" : "anyOf"} ${index + 1}`, node: alt }))
     if (node.additionalProperties && typeof node.additionalProperties === "object") {
         return [{ label: "[chave]", node: node.additionalProperties }]
     }

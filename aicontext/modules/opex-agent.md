@@ -6,19 +6,34 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 
 ## Onde fica e como abre
 
-- Item **"Agente Opex"** (ícone `Bot`) no rodapé da barra lateral do **dono** (`AppLayoutShell`
-  passa `sidebarFooterItems` ao `AppShell`) e no **portal do cliente** quando o dono ativa o agente
-  para aquele cliente (`ClientePortalShell`; ver "Agente no portal do cliente").
+- **Item único dos agentes de chat** (`AgentChatNavItem`, `components/agents/`), no rodapé da barra
+  lateral do **dono** (`AppLayoutShell` passa `sidebarFooterItems` ao `AppShell`) e do **portal do
+  cliente** (`ClientePortalShell`) quando o Agente Opex ou o Agente Maddox está ligado para o cliente
+  (ver "Agente no portal do cliente" e `modules/maddox-agent.md`). O item abre o **último agente
+  escolhido** (guardado no navegador) e mostra o nome, o ícone e a cor do agente ativo.
 - Clicar abre um **popover** ancorado no item, com abertura animada (spring de escala a partir da
   âncora, Framer Motion, respeitando movimento reduzido). O botão **Maximizar** amplia o painel.
+- **Cabeçalho com troca de agente** (`AgentSwitcherHeader`): à esquerda o agente ativo (avatar, nome e
+  `Provedor · modelo`; no Maddox, o seletor de modelo da sessão); ao lado, o **outro agente**, menor,
+  apagado e em tons de cinza, que acende com a cor dele no hover/foco e troca o agente do popover e do
+  item ao clicar. Depois: Sessões, Nova sessão, **engrenagem** (só no dono: leva à configuração do
+  agente ativo e fecha o popover), Maximizar e Fechar.
+- O popover é o componente compartilhado `AgentChatPanel`: o agente vem do escopo
+  (`OpexScopeProvider` com o descritor do agente — rotas, eventos, abas, rótulo, ícone, atalho e
+  seletor de modelo — em `components/agents/agent-descriptors.ts`). Os painéis já abertos ficam
+  montados ao trocar de agente (rascunho, abas e envios preservados).
 - No celular (< 768 px) abre em painel de tela cheia (Dialog do Radix).
-- Atalho global **Ctrl+Shift+O** (⌘+Shift+O no Mac) abre e fecha (`isOpexShortcut`).
-- Um ponto pulsando no ícone avisa que alguma sessão está respondendo ou aguarda confirmação.
+- Atalho global **Ctrl+Shift+O** (⌘+Shift+O no Mac) abre e fecha no Agente Opex (`isOpexShortcut`);
+  **Ctrl+Shift+M** é do Agente Maddox.
+- Um ponto pulsando no ícone avisa que alguma sessão (de qualquer agente) está respondendo ou aguarda
+  confirmação; o botão do outro agente tem o próprio ponto.
 
 ## Sessões
 
 - **Sessões em abas**, sem limite; cada aba tem o próprio contexto. Fechar a aba não exclui a sessão.
 - As abas abertas ficam no `localStorage` (`opex:opex-agent:tabs:v1`, `usePersistentState` + Zod).
+- As sessões guardam o agente (`opex_sessions.agent`; ausente = Agente Opex): o Agente Opex nunca vê as
+  sessões do Maddox (404) e os jobs não usam sessão do Maddox.
 - **Sessões** abre a lista de todas: busca tolerante (fuse.js) por título e resumo, filtro das
   arquivadas, renomear, arquivar e excluir (com `AlertDialog`) e lista virtualizada acima de 50.
 - A primeira mensagem de uma "Nova sessão" cria a sessão.
@@ -117,7 +132,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   selo de risco em cada ferramenta e "Só admin do cliente" nos grupos/ferramentas de admin. Salvar é auditado (`ClienteOrcamentoOpexAgent`) e publica
   `opex-client-config-updated` em `private-app` e `private-client-{clientId}`.
 - **Ativação**: `orçamento_clients.opexAgent.enabled`. Desativado, o item **não aparece** no portal
-  (o layout calcula `opexEnabled` e o `OpexNavItem` também consulta `GET /api/cliente/opex/status`)
+  (o layout calcula `opexEnabled` e o `AgentChatNavItem` também consulta `GET /api/cliente/opex/status`)
   e todas as rotas do agente respondem 403 `OPEX_CLIENT_DISABLED`.
 - **Sessões privadas**: cada usuário só vê as próprias sessões naquele cliente
   (`opex_sessions.clientId` + `userId`); o dono (app interno) só vê `clientId: null`, e na
@@ -490,7 +505,7 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   nem fila (reinício do servidor) → `error` "O turno do job foi perdido…".
 - **Tempo real**: `opex-job-updated` (`{ id, status }`) e `opex-job-finished` (`{ id, title, status,
   sessionId, error, origin }`) sempre em `private-app`; job do portal também em
-  `private-opex-{clientId}-{userId}`. O `OpexNavItem` (app e portal) mostra o toast do job terminado
+  `private-opex-{clientId}-{userId}`. O `AgentChatNavItem` (app e portal) mostra o toast do job terminado
   com "Abrir sessão" (o do dono ignora os jobs do portal); a aba Jobs só invalida e relê.
 - **Aba "Jobs"** em `/integracoes/crons?aba=jobs` (sempre presente, só no app do dono): filtros
   Agendados/Executados/Todos e origem (Todas/Do dono/Do portal, com o cliente), lista ao vivo,
@@ -551,7 +566,7 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `POST /api/opex/sessions/[id]/files` | Reserva `{ name, size, mediaType? }` → URL assinada do PUT (413 `OPEX_FILE_TOO_LARGE`) |
 | `POST /api/opex/files/[id]/complete` | Confirma o envio (HeadObject + tamanho; idempotente; 502 preserva a reserva) |
 | `GET/DELETE /api/opex/files/[id]` | Conteúdo (`?download=1` baixa; `Range`); remove pendente (409 `OPEX_FILE_SENT`) |
-| `GET /api/opex/sessions/[id]/stream` | NDJSON: `snapshot`, `turn-start`, `text-delta`, `reasoning-delta`, `tool-start`, `tool-input`, `tool-end`, `turn-end`, `ping` |
+| `GET /api/opex/sessions/[id]/stream` | NDJSON: `snapshot`, `turn-start`, `text-delta`, `reasoning-delta`, `tool-start`, `tool-input`, `tool-end`, `turn-end`, `ping` (o Agente Maddox usa também `tool-confirmation`, `form` e `form-status`) |
 | `POST /api/opex/sessions/[id]/interrupt` | Para a resposta |
 | `POST /api/opex/actions/[id]` | `{ decision: "confirm" \| "cancel" }` |
 | `GET /api/opex/jobs?filter=scheduled\|finished\|all&origin=all\|owner\|client&clientId=&userId=` | Jobs do dono e do portal (agendados por horário; demais do mais recente) |
@@ -601,7 +616,8 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
   `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`, `useOpexMcpServers`.
-- `components/`: `OpexNavItem`, `OpexPanel`, `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
+- `components/`: `agents/` (`AgentChatNavItem`, `AgentChatPanel`, `AgentSwitcherHeader`,
+  `AgentSwitchProvider`, `agent-descriptors`), `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
   `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` (com `settings/mcp/` e `ToolConfirmMeta`) e `settings/client/` (com
   `ClienteOpexMcpCard`). O campo secreto somente-escrita é `SecretValueInput`
   (`src/components/ui/secret-value-input.tsx`), compartilhado com `SecretField` das Integrações.

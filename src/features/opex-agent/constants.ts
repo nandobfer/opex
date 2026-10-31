@@ -83,8 +83,22 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */
 export const OPEX_SESSION_UPDATED_EVENT = "opex-session-updated"
 export const OPEX_SESSION_DELETED_EVENT = "opex-session-deleted"
+/** Agente Maddox: mesmos canais, eventos próprios (as sessões dos dois agentes não se misturam). */
+export const MADDOX_SESSION_UPDATED_EVENT = "maddox-session-updated"
+export const MADDOX_SESSION_DELETED_EVENT = "maddox-session-deleted"
+
+/** Eventos de sessão do agente (ausente = Agente Opex). */
+export function agentSessionEvents(agent: "opex" | "maddox" | null | undefined): { updated: string; deleted: string } {
+    return agent === "maddox" ? { updated: MADDOX_SESSION_UPDATED_EVENT, deleted: MADDOX_SESSION_DELETED_EVENT } : { updated: OPEX_SESSION_UPDATED_EVENT, deleted: OPEX_SESSION_DELETED_EVENT }
+}
 
 export const OPEX_AUDIT_ENTITY = "AgenteOpex"
+export const MADDOX_AUDIT_ENTITY = "AgenteMaddox"
+
+/** Entidade de auditoria das sessões do agente. */
+export function agentAuditEntity(agent: "opex" | "maddox" | null | undefined): string {
+    return agent === "maddox" ? MADDOX_AUDIT_ENTITY : OPEX_AUDIT_ENTITY
+}
 /**
  * Terminal do host: comandos rodam na máquina do OpenCode pelo shell dele. Diretórios permitidos e
  * tempo máximo são configuráveis; saída devolvida ao modelo cortada no fim.

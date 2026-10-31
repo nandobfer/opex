@@ -6,10 +6,22 @@ import { Brain, ChevronDown, Cpu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import type { AiModelDto } from "@/lib/ai/providers"
 import { cn } from "@/lib/utils"
-import type { ModelOverrideInput } from "../../schemas"
-import type { ModelChoiceDto } from "../../types"
-import { ModelSearchPicker } from "../settings/ModelSearchPicker"
+import { ModelSearchPicker } from "./ModelSearchPicker"
+
+/** Escolha atual: `model: null` = padrão do agente; `overridden` = trocada só aqui. */
+export interface ModelChoice {
+    model: string | null
+    variant: string | null
+    overridden: boolean
+}
+
+/** Troca pedida (`model: null` = voltar ao padrão). */
+export interface ModelChoiceInput {
+    model: string | null
+    variant: string | null
+}
 
 const DEFAULT_VARIANT = "__default__"
 
@@ -17,9 +29,12 @@ interface ModelOverridePickerProps {
     id: string
     /** Contexto do seletor para leitores de tela e dica: "Modelo do Plano" na mesa, "Modelo" no fork. */
     label: string
-    choice: ModelChoiceDto
+    choice: ModelChoice
     disabled?: boolean
-    onChange: (input: ModelOverrideInput) => void
+    onChange: (input: ModelChoiceInput) => void
+    /** Catálogo já carregado (ex.: pela rota do portal); ausente = `useAiModels("opencode")`. */
+    models?: { data?: AiModelDto[]; isLoading: boolean }
+    className?: string
 }
 
 /** Gatilho compacto: só o ícone e o nome do modelo (trocado = destaque na cor primária). */
@@ -33,18 +48,20 @@ const ModelTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<type
 ModelTrigger.displayName = "ModelTrigger"
 
 /**
- * Troca do modelo (e da variante) na mesa ou no fork: busca de modelos do OpenCode, variante quando
+ * Troca do modelo (e da variante) na mesa, no fork e no chat do Agente Maddox (componente compartilhado): busca de modelos do OpenCode, variante quando
  * o modelo tem variantes e "Voltar ao padrão". Vale a partir do próximo turno.
  */
-export function ModelOverridePicker({ id, label, choice, disabled = false, onChange }: ModelOverridePickerProps) {
-    const models = useAiModels("opencode")
+export function ModelOverridePicker({ id, label, choice, disabled = false, onChange, models: provided, className }: ModelOverridePickerProps) {
+    // Sem `models`, lê o catálogo do OpenCode pela rota do dono (o portal passa o próprio catálogo).
+    const own = useAiModels("opencode", !provided)
+    const models = provided ?? own
     const model = models.data?.find((item) => item.id === choice.model)
     const name = model?.name ?? choice.model ?? "Padrão do agente"
     const state = choice.overridden ? "trocado" : "padrão"
     const description = `${label}: ${name} (${state})`
     const variantText = choice.variant ?? "padrão do modelo"
     return (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className={cn("flex min-w-0 items-center gap-1.5", className)}>
             <ModelSearchPicker
                 trigger={<ModelTrigger id={id} name={name} overridden={choice.overridden} aria-label={`${description} — trocar o modelo`} title={`${description}. Trocar o modelo: vale a partir do próximo turno`} />}
                 models={models}

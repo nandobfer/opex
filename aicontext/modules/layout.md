@@ -52,9 +52,13 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   a sessão e volta para `/login`; a versão fica na linha inferior da barra. Na gaveta do mobile
   (expandida) o rodapé mantém o dono, a versão e o "Sair" inline.
 - Acima do rodapé, o `AppSidebar` aceita `footerItems` (repassado pelo `AppShell` como
-  `sidebarFooterItems`): só o `AppLayoutShell` (menu do dono) usa, com o item **"Agente Opex"**
-  (`OpexNavItem`, ícone `Bot`, Ctrl+Shift+O) que abre o chat num popover — ver
-  `modules/opex-agent.md`. O portal do cliente não tem o item.
+  `sidebarFooterItems`): o `AppLayoutShell` (menu do dono) e o `ClientePortalShell` usam, com o
+  **item único dos agentes de chat** (`AgentChatNavItem`): abre o último agente escolhido (Agente
+  Opex ou Agente Maddox) num popover, com a troca no cabeçalho; nome, ícone e cor acompanham o agente
+  ativo (Ctrl+Shift+O / Ctrl+Shift+M) — ver `modules/opex-agent.md` e `modules/maddox-agent.md`. No
+  portal, o item fica sempre montado e aparece quando algum dos dois está ligado para o cliente, inclusive
+  quando o dono liga em tempo real (sem recarregar); sem nenhum, o rodapé vazio com o divisor some
+  (`empty:hidden` na lista do rodapé).
 - `navigation.ts`: `APP_NAV` (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento — ícone `</>` `CodeXml` —, Ambientes; **Agentes** › Agente Revisor, Agente Adversário, Agente Mentor; Sistema › Integrações), `HOME_HREF` (`/dashboard`),
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 

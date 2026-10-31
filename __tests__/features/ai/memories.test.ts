@@ -139,7 +139,7 @@ describe('memórias do Agente Opex', () => {
     await run('create_agent_memory', { agent: 'opex-global', text: 'Liste antes de alterar.' })
     const all = (await run('list_agent_memories', {})) as { total: number; agents: { agent: string; items: unknown[] }[] }
     expect(all.total).toBe(2)
-    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1], ['adversarial', 0], ['developer-global', 0]])
+    expect(all.agents.map((list) => [list.agent, list.items.length])).toEqual([['opex-global', 1], ['opex-owner', 0], ['opex-client', 1], ['maddox-global', 0], ['maddox-owner', 0], ['maddox-client', 0], ['adversarial', 0], ['developer-global', 0]])
     const id = created.id as string
     expect(await run('get_agent_memory', { agent: 'opex-client', memoryId: id })).toMatchObject({ text: 'Seja cordial com o cliente.' })
     expect(await run('update_agent_memory', { agent: 'opex-client', memoryId: id, text: 'Seja cordial e objetivo.' })).toMatchObject({ text: 'Seja cordial e objetivo.' })
@@ -173,6 +173,7 @@ describe('memórias do Agente Adversário', () => {
 
   it('regressão: a aba do Agente Opex não lista a memória do adversário (cada aba mostra as suas listas)', () => {
     expect(aiAgentsOfTab('agente-opex')).toEqual(['opex-global', 'opex-owner', 'opex-client'])
+    expect(aiAgentsOfTab('agente-maddox')).toEqual(['maddox-global', 'maddox-owner', 'maddox-client'])
     expect(aiAgentsOfTab('agente-adversario')).toEqual(['adversarial'])
   })
 })
@@ -241,7 +242,7 @@ describe('memórias do agente desenvolvedor (OPE-97)', () => {
     expect(one.total).toBe(1)
     const all = (await run('list_agent_memories', {})) as { total: number; agents: { agent: string }[] }
     expect(all.total).toBe(2)
-    expect(all.agents.map((list) => list.agent)).toEqual(['opex-global', 'opex-owner', 'opex-client', 'adversarial', 'developer-global', 'developer-central', 'developer-central'])
+    expect(all.agents.map((list) => list.agent)).toEqual(['opex-global', 'opex-owner', 'opex-client', 'maddox-global', 'maddox-owner', 'maddox-client', 'adversarial', 'developer-global', 'developer-central', 'developer-central'])
     const id = created.id as string
     expect(await run('update_agent_memory', { agent: 'developer-central', centralId: C1, memoryId: id, text: 'Siga o AGENTS.md sempre.' })).toMatchObject({ text: 'Siga o AGENTS.md sempre.' })
     await expect(run('get_agent_memory', { agent: 'developer-central', memoryId: id })).rejects.toMatchObject({ code: 'CENTRAL_REQUIRED' })

@@ -8,14 +8,14 @@ import { apiErrorMessage, unwrapApi } from "@/lib/api"
 import { randomId } from "@/lib/random-id"
 import type { ApiResponse } from "@/lib/types/api"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { OPEX_SESSION_DELETED_EVENT, OPEX_SESSION_UPDATED_EVENT } from "../constants"
 import type { OpexConfirmationDto, OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { useOpexScope } from "../components/OpexScopeProvider"
 
 /**
- * Consultas e mutações das sessões do Agente Opex. Tudo passa pelo escopo da interface: o dono usa
- * `/opex` e `private-app`; o portal usa `/cliente/opex` (axios com `x-client-id`) e o canal privado
- * do próprio usuário. As chaves do cache também são separadas por escopo.
+ * Consultas e mutações das sessões dos agentes de chat (Opex e Maddox). Tudo passa pelo escopo da
+ * interface: o dono usa `/opex` ou `/maddox` e `private-app`; o portal usa `/cliente/opex` ou
+ * `/cliente/maddox` (axios com `x-client-id`) e o canal privado do próprio usuário. As chaves do cache
+ * e os eventos do Pusher também são separados por agente e escopo.
  */
 
 export const OPEX_QUERY_KEY = "opex-agent"
@@ -46,12 +46,21 @@ function patchSessionInList(list: OpexSessionDto[] | undefined, session: OpexSes
     return [...next].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt))
 }
 
+/** Nova sessão: texto da primeira mensagem e, no Agente Maddox, o modelo escolhido na "Nova sessão". */
+export interface OpexCreateSessionInput {
+    text?: string
+    model?: { model: string; variant: string | null } | null
+}
+
 export function useCreateOpexSession() {
     const queryClient = useQueryClient()
     const { http, apiBase, queryPrefix } = useOpexScope()
     return useMutation({
-        mutationFn: async (text?: string) =>
-            unwrapApi((await http.post<ApiResponse<{ session: OpexSessionDto; message: OpexMessageDto | null }>>(`${apiBase}/sessions`, text ? { text } : {})).data),
+        mutationFn: async (input?: string | OpexCreateSessionInput) => {
+            const { text, model } = typeof input === "string" ? { text: input, model: null } : (input ?? {})
+            const body = { ...(text ? { text } : {}), ...(model ? { model: model.model, variant: model.variant } : {}) }
+            return unwrapApi((await http.post<ApiResponse<{ session: OpexSessionDto; message: OpexMessageDto | null }>>(`${apiBase}/sessions`, body)).data)
+        },
         onSuccess: ({ session, message }) => {
             queryClient.setQueryData<OpexSessionDto[]>(opexSessionsKey(queryPrefix), (list) => patchSessionInList(list, message ? { ...session, status: "running", messageCount: 2 } : session))
             queryClient.setQueryData<OpexSessionDetailDto>(opexSessionKey(queryPrefix, session.id), { session: message ? { ...session, status: "running" } : session, messages: message ? [message] : [] })
@@ -112,13 +121,18 @@ export function useUpdateOpexSession() {
     const queryClient = useQueryClient()
     const { http, apiBase, queryPrefix } = useOpexScope()
     return useMutation({
-        mutationFn: async ({ id, ...input }: { id: string; title?: string; archived?: boolean }) =>
+        mutationFn: async ({ id, ...input }: { id: string; title?: string; archived?: boolean; model?: string | null; variant?: string | null }) =>
             unwrapApi((await http.patch<ApiResponse<OpexSessionDto>>(`${apiBase}/sessions/${id}`, input)).data),
         onMutate: async ({ id, ...input }) => {
             await queryClient.cancelQueries({ queryKey: opexSessionsKey(queryPrefix) })
             const previous = queryClient.getQueryData<OpexSessionDto[]>(opexSessionsKey(queryPrefix))
             queryClient.setQueryData<OpexSessionDto[]>(opexSessionsKey(queryPrefix), (list) =>
-                list?.map((item) => (item.id === id ? { ...item, ...input, titleSource: input.title !== undefined ? "manual" : item.titleSource } : item)),
+                list?.map((item) => {
+                    if (item.id !== id) return item
+                    const { model, variant, ...rest } = input
+                    const next = { ...item, ...rest, titleSource: input.title !== undefined ? ("manual" as const) : item.titleSource }
+                    return model === undefined ? next : { ...next, modelOverride: model ? { model, variant: variant ?? null } : null }
+                }),
             )
             return { previous }
         },
@@ -202,7 +216,8 @@ export function useDecideOpexAction(sessionId: string) {
 /** Título, resumo e situação das sessões ao vivo (Pusher), no canal do escopo. */
 export function useOpexRealtime(enabled: boolean): void {
     const queryClient = useQueryClient()
-    const { channel: name, queryPrefix } = useOpexScope()
+    const { channel: name, queryPrefix, agent } = useOpexScope()
+    const { updated: updatedEvent, deleted: deletedEvent } = agent.events
     useEffect(() => {
         if (!enabled || !isPusherClientAvailable()) return
         const channel = acquireChannel(name)
@@ -214,12 +229,22 @@ export function useOpexRealtime(enabled: boolean): void {
             queryClient.setQueryData<OpexSessionDto[]>(opexSessionsKey(queryPrefix), (list) => list?.filter((item) => item.id !== payload?.id))
             if (payload?.id) queryClient.removeQueries({ queryKey: opexSessionKey(queryPrefix, payload.id) })
         }
-        channel.bind(OPEX_SESSION_UPDATED_EVENT, onUpdated)
-        channel.bind(OPEX_SESSION_DELETED_EVENT, onDeleted)
+        channel.bind(updatedEvent, onUpdated)
+        channel.bind(deletedEvent, onDeleted)
         return () => {
-            channel.unbind(OPEX_SESSION_UPDATED_EVENT, onUpdated)
-            channel.unbind(OPEX_SESSION_DELETED_EVENT, onDeleted)
+            channel.unbind(updatedEvent, onUpdated)
+            channel.unbind(deletedEvent, onDeleted)
             releaseChannel(name)
         }
-    }, [enabled, queryClient, name, queryPrefix])
+    }, [enabled, queryClient, name, queryPrefix, updatedEvent, deletedEvent])
+}
+
+/** Responde (ou dispensa) a pergunta do OpenCode no chat do Agente Maddox; a situação chega pelo stream. */
+export function useReplyAgentForm() {
+    const { http, apiBase } = useOpexScope()
+    return useMutation({
+        mutationFn: async ({ formId, answer, cancel }: { formId: string; answer?: Record<string, string | number | boolean | string[]>; cancel?: boolean }) =>
+            unwrapApi((await http.post<ApiResponse<{ id: string; status: string }>>(`${apiBase}/forms/${formId}`, cancel ? { cancel: true } : { answer: answer ?? {} })).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível responder a pergunta")),
+    })
 }

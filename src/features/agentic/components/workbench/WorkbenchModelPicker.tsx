@@ -3,7 +3,7 @@
 import { STAGE_MODEL_ROLE, WORKBENCH_MODEL_ROLE_LABELS } from "../../constants"
 import { useSetWorkbenchModel } from "../../hooks/useAgentic"
 import type { WorkbenchDto } from "../../types"
-import { ModelOverridePicker } from "./ModelOverridePicker"
+import { ModelOverridePicker } from "@/features/ai/components/model-picker/ModelOverridePicker"
 
 /**
  * Seletor "Modelo do <etapa>" da barra da mesa: troca o modelo do papel da etapa atual (só nesta mesa).

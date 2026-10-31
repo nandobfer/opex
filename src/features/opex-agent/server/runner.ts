@@ -21,7 +21,7 @@ import { refreshSessionTitle } from "./titler"
 import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
 import { opexMemoryAgentsFor } from "@/features/ai/agents"
 import type { McpTurnTools } from "./mcp/tools"
-import { buildToolRuntime, stringifyForDisplay } from "./tool-runtime"
+import { buildToolRuntime, redactToolInput, stringifyForDisplay } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
 import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
@@ -70,12 +70,7 @@ function turnContext(notices: readonly string[] = []): string {
     return [`Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`, ...notices].join(" ")
 }
 
-const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => {
-    const tool = findTool(scope, toolName, extra)
-    if (!tool?.redact) return input
-    const parsed = tool.input.safeParse(input)
-    return parsed.success ? tool.redact(parsed.data) : input
-}
+const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => redactToolInput(findTool(scope, toolName, extra), input)
 
 const numberOrNull = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null)
 
@@ -149,6 +144,12 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
     const session = await loadSessionRaw(sessionId).catch(() => null)
     if (!session) {
         await failJob("A sessão escolhida para o job foi excluída")
+        return
+    }
+    // Sessão do Agente Maddox (ex.: aviso de fim de deploy pedido por ele): o turno roda no OpenCode.
+    if (session.agent === "maddox") {
+        const { queueMaddoxFollowUp } = await import("@/features/maddox-agent/server/runner")
+        await queueMaddoxFollowUp(sessionId, followUp)
         return
     }
     const scope = await sessionScopeOf(session).catch((error: unknown) => {

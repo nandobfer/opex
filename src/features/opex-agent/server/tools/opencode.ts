@@ -22,7 +22,8 @@ const agentActor = (context: OpexToolContext) => ({ id: context.actorId, origin:
 
 const kind = z.enum(OPENCODE_RESOURCE_KINDS).describe("skill, agent (agente), command (comando), plugin ou mcp")
 const resourceId = z.string().trim().min(1).max(500).describe("Id do item (de list_opencode_resources)")
-const scope = scopeIdSchema.describe("'global' (usuário) ou o id de um projeto (list_opencode_scopes)")
+// O exemplo entra no JSON Schema (MCP do Agente Maddox e a documentação da API interna).
+const scope = scopeIdSchema.describe("'global' (usuário) ou o id de um projeto (list_opencode_scopes)").meta({ examples: ["global"] })
 
 const SECRET_REDACTED = "[segredo omitido]"
 type SecretList = { key: string; value?: string | null }[] | undefined

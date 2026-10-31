@@ -1,5 +1,6 @@
 import { OPEX_CLIENT_TOOL_GROUPS } from "./client-tools"
 import { isOpexToolGroup } from "./constants"
+import { MADDOX_NATIVE_TOOL_GROUP } from "@/features/maddox-agent/constants"
 import type { OpexLiveMessage, OpexPart, OpexStreamLine } from "./types"
 
 /**
@@ -51,9 +52,26 @@ export function applyLiveLine(live: OpexLiveMessage | null, line: OpexStreamLine
         case "tool-end":
             return {
                 ...live,
-                parts: updateTool(live.parts, line.id, (part) => ({ ...part, state: line.state, output: line.output, error: line.error, confirmation: line.confirmation, durationMs: line.durationMs })),
+                // Sem confirmação na linha, mantém a que chegou no meio do turno (permissão do OpenCode).
+                parts: updateTool(live.parts, line.id, (part) => ({ ...part, state: line.state, output: line.output, error: line.error, confirmation: line.confirmation ?? part.confirmation, durationMs: line.durationMs })),
             }
+        case "tool-confirmation":
+            return { ...live, parts: updateTool(live.parts, line.id, (part) => ({ ...part, confirmation: line.confirmation })) }
+        case "form":
+            if (live.parts.some((part) => part.type === "form" && part.id === line.form.id)) return live
+            return { ...live, thinking: false, parts: [...live.parts, { type: "form", id: line.form.id, form: line.form, status: "pending" }] }
+        case "form-status":
+            return { ...live, parts: live.parts.map((part) => (part.type === "form" && part.id === line.id ? { ...part, status: line.status } : part)) }
     }
+}
+
+/** Confirmações e perguntas ainda abertas quando o turno termina não podem mais ser respondidas. */
+export function closePendingRequests(parts: OpexPart[]): OpexPart[] {
+    return parts.map((part) => {
+        if (part.type === "tool" && part.confirmation?.status === "pending") return { ...part, confirmation: { ...part.confirmation, status: "expired" } }
+        if (part.type === "form" && part.status === "pending") return { ...part, status: "cancelled" }
+        return part
+    })
 }
 
 /** Ferramentas ainda rodando viram erro (turno interrompido ou falho). */
@@ -66,7 +84,7 @@ export function closeRunningTools(parts: OpexPart[], reason: string): OpexPart[]
  * fica com `group: null`, para a interface usar o ícone genérico. O resto da parte é mantido.
  */
 export function normalizeOpexParts(parts: readonly OpexPart[]): OpexPart[] {
-    const known = (group: string) => isOpexToolGroup(group) || (OPEX_CLIENT_TOOL_GROUPS as readonly string[]).includes(group)
+    const known = (group: string) => isOpexToolGroup(group) || (OPEX_CLIENT_TOOL_GROUPS as readonly string[]).includes(group) || group === MADDOX_NATIVE_TOOL_GROUP
     return parts.map((part) => (part.type === "tool" && part.group !== null && !known(part.group) ? { ...part, group: null } : part))
 }
 

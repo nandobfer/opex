@@ -69,6 +69,9 @@ Logins e sessões: `aicontext/modules/auth.md`.
   - **Configurações** — dados do cliente (custo/hora, fator, repositórios, situação), **Editar**
     (`ClienteDialog`) e a **zona de risco** com **Excluir** (`RemoveClienteDialog`);
   - **Usuários** — lista + criação/edição/exclusão/copiar URL/regenerar (mesmos componentes do portal);
+  - **Agente Maddox** — liga o Agente Maddox no portal (padrão **desligado**) e escolhe as ferramentas
+    do portal que ele recebe (sem jobs). Salvar é auditado e publica `maddox-client-config-updated`.
+    Detalhes em `maddox-agent.md`, "Por cliente";
   - **Agente Opex** — ativa/desativa o agente no portal (padrão **ativado**) e escolhe, ferramenta a
     ferramenta, o que ele pode usar; ferramentas de admin (Financeiro e Usuários) só chegam ao admin
     do cliente. Também liga os **MCPs** do Agente Opex que o cliente pode usar (desligados por
