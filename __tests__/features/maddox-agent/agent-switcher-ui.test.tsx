@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => '/cliente/dashboard' }))
+vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: ReactNode; href: string } & Record<string, unknown>) => <a href={href} {...props}>{children}</a> }))
 vi.mock('@/features/opex-agent/hooks/useOpexSessions', async () => {
   const { useOpexScope } = await import('@/features/opex-agent/components/OpexScopeProvider')
   return {
@@ -62,6 +63,7 @@ vi.mock('@/features/opex-agent/components/OpexSessionTabs', () => ({ OpexSession
 vi.mock('@/features/opex-agent/components/OpexSessionsPanel', () => ({ OpexSessionsPanel: () => null }))
 
 import { AgentChatNavItem } from '@/features/opex-agent/components/agents/AgentChatNavItem'
+import { AppSidebar } from '@/features/layout/components/AppSidebar'
 import type { OpexClientUiScope } from '@/features/opex-agent/components/OpexScopeProvider'
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -186,5 +188,51 @@ describe('item único dos agentes de chat', () => {
     const client: OpexClientUiScope = { clientId: 'c1', clientName: 'ACME', userId: 'u1', userName: 'ana', isAdmin: false, http: { get: vi.fn(async () => new Promise(() => {})) } as never }
     renderItem({ client, initial: { opex: false, maddox: false } })
     expect(screen.queryByTestId('agent-nav-item')).toBeNull()
+  })
+})
+
+describe('rodapé do portal em tempo real', () => {
+  /** Portal com a situação dos agentes vinda do servidor; `refresh` simula o evento de configuração do cliente. */
+  function renderPortalSidebar(initial: { opex: boolean; maddox: boolean }) {
+    const status = { ...initial }
+    const http = {
+      get: vi.fn(async (url: string) => {
+        const enabled = url.includes('maddox') ? status.maddox : status.opex
+        return { data: { success: true, data: { enabled, available: enabled, reason: null, modelLabel: null, model: null, variant: null, color: null, files: null } } }
+      }),
+    }
+    const client: OpexClientUiScope = { clientId: 'c1', clientName: 'ACME', userId: 'u1', userName: 'ana', isAdmin: false, http: http as never }
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AppSidebar brand={{ name: 'Opex', homeHref: '/cliente' }} sections={[]} navLabel="Menu do portal" collapsed={false} ownerName="ana" footerItems={(collapsed) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} />} />
+      </QueryClientProvider>,
+    )
+    const refresh = async (next: { opex: boolean; maddox: boolean }) => {
+      // A leitura da carga termina antes do evento (senão a nova leitura é a mesma em andamento).
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0))
+      Object.assign(status, next)
+      await queryClient.invalidateQueries()
+    }
+    return { refresh }
+  }
+  const footer = () => screen.getByTestId('sidebar-footer-items')
+
+  it('tudo desligado na carga: rodapé vazio (oculto); ligar o Maddox faz o item e o divisor aparecerem sem recarregar', async () => {
+    const { refresh } = renderPortalSidebar({ opex: false, maddox: false })
+    expect(footer().matches(':empty')).toBe(true)
+    expect(footer().classList.contains('empty:hidden')).toBe(true)
+    await refresh({ opex: false, maddox: true })
+    await waitFor(() => expect(screen.getByTestId('agent-nav-item').textContent).toContain('Agente Maddox'))
+    expect(footer().matches(':empty')).toBe(false)
+    expect(footer().classList.contains('border-t')).toBe(true)
+  })
+
+  it('ligado na carga e depois desligado: o item some e o rodapé volta a ficar vazio', async () => {
+    const { refresh } = renderPortalSidebar({ opex: true, maddox: false })
+    expect(screen.getByTestId('agent-nav-item').textContent).toContain('Agente Opex')
+    await refresh({ opex: false, maddox: false })
+    await waitFor(() => expect(screen.queryByTestId('agent-nav-item')).toBeNull())
+    expect(footer().matches(':empty')).toBe(true)
   })
 })

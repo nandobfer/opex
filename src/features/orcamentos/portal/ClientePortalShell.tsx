@@ -24,8 +24,9 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
         [portal.clientId, portal.clientName, portal.user.id, portal.user.username, portal.isAdmin, portal.api],
     )
     const initial = useMemo(() => ({ opex: session.opexEnabled, maddox: session.maddoxEnabled }), [session.opexEnabled, session.maddoxEnabled])
-    // Sem nenhum agente ligado, nem o rodapé (com o divisor) aparece.
-    const footerItems = session.opexEnabled || session.maddoxEnabled ? (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} /> : undefined
+    // Sempre montado: o item acompanha em tempo real o liga/desliga dos agentes do cliente. Sem nenhum
+    // agente ele não renderiza nada e o rodapé vazio (com o divisor) some (`empty:hidden` no AppSidebar).
+    const footerItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} />
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: `Portal · ${session.clientName}`, homeHref: clienteDashboardPath() }}

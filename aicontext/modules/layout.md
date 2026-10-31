@@ -56,7 +56,9 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   **item único dos agentes de chat** (`AgentChatNavItem`): abre o último agente escolhido (Agente
   Opex ou Agente Maddox) num popover, com a troca no cabeçalho; nome, ícone e cor acompanham o agente
   ativo (Ctrl+Shift+O / Ctrl+Shift+M) — ver `modules/opex-agent.md` e `modules/maddox-agent.md`. No
-  portal, o item aparece quando algum dos dois está ligado para o cliente.
+  portal, o item fica sempre montado e aparece quando algum dos dois está ligado para o cliente, inclusive
+  quando o dono liga em tempo real (sem recarregar); sem nenhum, o rodapé vazio com o divisor some
+  (`empty:hidden` na lista do rodapé).
 - `navigation.ts`: `APP_NAV` (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento — ícone `</>` `CodeXml` —, Ambientes; **Agentes** › Agente Revisor, Agente Adversário, Agente Mentor; Sistema › Integrações), `HOME_HREF` (`/dashboard`),
   `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
 

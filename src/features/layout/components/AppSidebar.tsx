@@ -123,7 +123,8 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
                 ))}
             </nav>
 
-            {footerItems && <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-2">{footerItems(collapsed)}</ul>}
+            {/* `empty:hidden`: um item que decide sozinho não aparecer (ex.: agentes do portal desligados) não deixa um rodapé vazio com divisor, e volta a aparecer quando o item se liga em tempo real. */}
+            {footerItems && <ul className="shrink-0 space-y-1 border-t border-sidebar-border px-2 py-2 empty:hidden" data-testid="sidebar-footer-items">{footerItems(collapsed)}</ul>}
 
             {collapsed && version && (
                 <div className="flex justify-center border-t border-sidebar-border p-2">
