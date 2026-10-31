@@ -290,11 +290,59 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   **públicas sem sessão** (`PUBLIC_ROUTES` em `src/features/auth/paths.ts`): expõem só o contrato,
   nenhum dado. É o que permite o tester da API interna chamá-las pelo servidor sem cookie.
 - **Tokens de sistema** (`src/features/integrations/api-tokens/`, coleção `api_tokens`): card
-  `ApiTokensCard` gera (nome; o valor `mt_sys_…` aparece **uma única vez**, `ApiTokenDialog`) e
-  revoga (confirmação; não volta). Banco guarda só o hash SHA-256 e o prefixo visível; "último uso"
-  atualizado no máximo a cada 5 min. Criar/revogar são auditados (`TokenApiInterna`).
-- Endpoint público novo: rota com `withRoute` + `requireApiToken(req)` (401
-  `UNAUTHENTICATED`), documentada na especificação e em `PUBLIC_TOKEN_ROUTES` **no mesmo commit**.
+  `ApiTokensCard` gera (o valor `mt_sys_…` aparece **uma única vez**, `ApiTokenDialog`), edita os
+  escopos e revoga (confirmação; não volta). Banco guarda só o hash SHA-256, o prefixo visível, os
+  `escopos` e a `expiraEm` opcional; "último uso" atualizado no máximo a cada 5 min.
+- **Escopos (OPE-102)** — módulo puro `api-tokens/scopes.ts`, verificados SEMPRE no servidor:
+
+  | Escopo | Libera |
+  |---|---|
+  | `api:v1:*` | Todas as rotas da v1 que exigem escopo (atuais e futuras) |
+  | `api:v1:<recurso>` | Uma rota (declarada em `PUBLIC_TOKEN_ROUTES`) |
+  | `mcp:owner` | O MCP do dono (`initialize`/`ping`/`tools/list`) e o grupo Contexto |
+  | `mcp:owner:tool:*` | Todas as ferramentas do dono (dinâmico: ferramenta nova entra sozinha) |
+  | `mcp:owner:group:<grupo>` | Um grupo (dinâmico) |
+  | `mcp:owner:tool:<nome>` | Uma ferramenta (lista explícita, fixa) |
+  | `mcp:owner:destructive` | Entre as concedidas, as destrutivas e as que pedem confirmação por padrão |
+
+  - Pelo menos um escopo por token (Zod `apiTokenScopesSchema`, o mesmo na API e no formulário);
+    escopo `mcp:owner:*` exige `mcp:owner`; ferramenta ou grupo fora do catálogo → 400
+    `API_TOKEN_SCOPE_UNKNOWN` (`assertKnownScopes`).
+  - **Destrutivas**: `defaultToolConfirms` (risco `destructive` ou `confirmByDefault`) exige
+    `mcp:owner:destructive`, mesmo coberta por curinga/grupo/lista; sem ele, a chamada é recusada
+    (pelo token não existe confirmação no chat; os ajustes de confirmação do dono não afrouxam a regra).
+  - **Fora do token**: o grupo `files` (arquivos do chat dependem de uma conversa do Maddox,
+    `MADDOX_TOKEN_EXCLUDED_GROUPS`), além dos jobs (já fora do Maddox).
+  - **Legado**: token sem `escopos` gravado não tem escopo e acessa só as rotas livres (`whoami`),
+    exatamente como antes; não ganha rotas futuras nem o MCP. A lista mostra "Legado · só whoami".
+  - **Expiração** opcional (`expiraEm`, fim do dia escolhido no fuso do navegador): expirado → 401,
+    como revogado; continua na lista com o badge "Expirado" até ser revogado ou editado.
+  - **Edição** (`PATCH …/tokens/[tokenId]`, `updateApiTokenScopes`): troca escopos e expiração com
+    efeito imediato (próxima chamada); o valor não muda. Lista com resposta otimista e reversão.
+- **Auditoria** (`TokenApiInterna`): `CRIAR` (nome, prefixo, escopos, expiração), `ATUALIZAR` (antes e
+  depois dos escopos e da expiração) e `EXCLUIR` (revogação, com os escopos). Nunca o valor.
+- **Tela** (`components/internal-api/`): o diálogo tem as etapas formulário → resumo (`ApiTokenSummary`,
+  badges + frases de `describeScopes`) → valor (`ApiTokenReveal`). Formulário (`ApiTokenScopeForm`):
+  API v1 (`api:v1:*` e as rotas com escopo; as livres aparecem como "sempre liberado"), switch do MCP
+  do dono, concessão de ferramentas (`ApiTokenToolsPicker`: `OptionTabs` Todas / Por grupo /
+  Ferramentas sobre o `CheckTree`, com busca, "todas" por grupo e "Selecionar tudo"), switch das
+  destrutivas e o aviso `ApiTokenDestructiveNotice` (alerta destacado quando liberadas; aviso das que
+  serão recusadas quando não), e expiração (`DatePicker`). Lista (`ApiTokenRow`): nome, prefixo,
+  badges (`ApiTokenScopeBadges`, inclusive Expirado/Expira), último uso, criado em, Editar escopos e
+  Revogar. Skeleton `ApiTokenListSkeleton` com as classes da linha (`api-token-row-layout.ts`).
+- **Tempo real**: `api-tokens-updated` (`{ id }`) em `private-app` depois de gerar, editar ou revogar;
+  `useApiTokensRealtime` invalida a lista.
+- Catálogo do formulário: `GET /api/integrations/internal_api/scopes` (`apiTokenScopeCatalog`: rotas
+  de `PUBLIC_TOKEN_ROUTES` e as ferramentas do Maddox que o token pode receber).
+- Endpoint público novo: rota com `withRoute` + `requireApiToken(req, { scope: publicRouteScope(path) })`
+  (401 `UNAUTHENTICATED` / 403 `INSUFFICIENT_SCOPE`), documentada na especificação (`tokenOperationSecurity`,
+  `insufficientScopeResponse`) e em `PUBLIC_TOKEN_ROUTES` **no mesmo commit**.
+- **OpenAPI dos escopos**: a descrição do esquema `apiToken` traz o catálogo; cada operação declara
+  `security: [{ apiToken: [<escopo>] }]` (papéis do OpenAPI 3.1) e `x-opex-required-scope`, com a
+  frase "Escopo exigido". O 403 é documentado onde pode ocorrer (o `whoami` é livre e não tem 403). O
+  MCP do dono lista as duas autenticações (`maddoxMcpSecret` e `apiToken: ["mcp:owner"]`), o 403, os
+  exemplos por token e o escopo de cada ferramenta (`{token: …}` na lista); o do portal só o segredo
+  (token → 403). `GET /api/v1/whoami` responde também `escopos`, `legado` e `expiraEm`.
 
 ### Serviços do core: SMTP e Storage S3
 
@@ -345,11 +393,13 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 | `GET /api/integrations/[id]/openapi` | Especificação normalizada; `?refresh=1`; 422 se não for OpenAPI 3.x |
 | `POST /api/integrations/[id]/explore` | Executa `{operation, path, query, headers, body}` |
 | `GET/POST /api/integrations/internal_api/tokens` | Lista / gera token de sistema (valor só na resposta do POST) |
+| `PATCH /api/integrations/internal_api/tokens/[tokenId]` | Edita escopos e expiração (efeito imediato; auditado antes/depois) |
 | `DELETE /api/integrations/internal_api/tokens/[tokenId]` | Revoga token de sistema |
+| `GET /api/integrations/internal_api/scopes` | Catálogo de escopos do formulário (rotas e ferramentas do MCP do dono) |
 | `GET /api/openapi.json` · `GET /api/docs` | Especificação e Swagger UI da API interna (públicas) |
 | `/api/integrations/orcamentos/clients*` | Clientes do portal (ver `modules/orcamentos.md`) |
 | `/api/cliente/*` | Portal do cliente, autenticado pelo token do cliente (ver `modules/orcamentos.md`) |
-| `GET /api/v1/whoami` | Pública por token de sistema |
+| `GET /api/v1/whoami` | Pública por token de sistema (livre para qualquer token válido) |
 | `/api/integrations/github/*` | Vínculos, mapeamento, sincronização e opções (ver `modules/github.md`) |
 | `GET/POST /api/routines/scheduler-tick` | Tick do agendador (Bearer `CRON_SECRET` ou cron secret) |
 | `POST /api/pusher/auth` | Autoriza os canais privados do tipo de sessão (`private-app`, `private-integration-{id}`, `private-client-{clientId}`, `private-repo-recents-{ator}`) |

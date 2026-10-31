@@ -51,6 +51,15 @@ describe('create_task', () => {
     expect(result.attachments.failed).toEqual([{ fileId: 'f2', error: 'Arquivo não encontrado' }])
   })
 
+  it('sem conversa (token de sistema): os arquivos do chat falham um a um com mensagem clara', async () => {
+    mocks.chatFilesToAttachments.mockResolvedValue({ attached: [], failed: [] })
+    const tool = findOpexTool('create_task')!
+    await tool.execute(tool.input.parse({ projectId: PROJECT_ID, title: 'Corrigir login', chatFileIds: ['f1'] }), { sessionId: '', actorId: 'local' })
+    expect(mocks.chatFilesToAttachments).toHaveBeenCalledWith(null, ['f1'], { taskId: 't1' })
+    const actual = await vi.importActual<typeof import('@/features/opex-agent/server/tools/files')>('@/features/opex-agent/server/tools/files')
+    expect(await actual.chatFilesToAttachments(null, ['f1', 'f2'], { taskId: 't1' })).toEqual({ attached: [], failed: [{ fileId: 'f1', error: actual.NO_CHAT_SESSION }, { fileId: 'f2', error: actual.NO_CHAT_SESSION }] })
+  })
+
   it('é o caminho principal: não manda preferir a prévia', () => {
     const tool = findOpexTool('create_task')!
     expect(tool.description).not.toContain('Prefira')

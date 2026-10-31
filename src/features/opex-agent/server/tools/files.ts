@@ -9,12 +9,16 @@ import { copyChatFileToAttachments, decodeText, listSessionFiles, loadSessionFil
 import { defineTool, OpexToolError, toolErrorMessage } from "./define"
 import { resolveTask, taskRefSchema } from "./helpers"
 
+/** Chamada sem conversa (token de sistema): não existem arquivos do chat. */
+export const NO_CHAT_SESSION = "Arquivos do chat só existem nas conversas do agente (chamada por token de sistema)"
+
 const fileIds = z.array(z.string()).min(1).max(50).describe("fileIds dos arquivos do chat (de list_chat_files ou das referências nas mensagens)")
 
 /** Copia os arquivos do chat para os anexos (tarefa ou rascunho de prévia), sem novo envio pelo navegador. */
-export async function chatFilesToAttachments(sessionId: string, ids: readonly string[], target: { taskId?: string; draftId?: string }, actor?: AttachmentActor) {
-    const attached = []
+export async function chatFilesToAttachments(sessionId: string | null, ids: readonly string[], target: { taskId?: string; draftId?: string }, actor?: AttachmentActor) {
+    const attached: Awaited<ReturnType<typeof copyChatFileToAttachments>>[] = []
     const failed: { fileId: string; error: string }[] = []
+    if (!sessionId) return { attached, failed: ids.map((fileId) => ({ fileId, error: NO_CHAT_SESSION })) }
     for (const id of ids) {
         try {
             attached.push(await copyChatFileToAttachments(sessionId, id, target, actor))

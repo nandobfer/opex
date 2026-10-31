@@ -8,7 +8,8 @@
  * - a **API pública por token de sistema** (`/api/v1/*`), autenticada por `requireApiToken`;
  * - o **tick do agendador de crons** (`/api/routines/*`), autenticado por `CRON_SECRET`;
  * - o **servidor MCP do Opex para o OpenCode** (`/api/maddox/mcp/*`, Agente Maddox), autenticado pelo
- *   segredo derivado da chave das integrações e com o escopo conferido pela sessão do Maddox;
+ *   segredo derivado da chave das integrações e com o escopo conferido pela sessão do Maddox — ou,
+ *   no servidor do dono, pelo token de sistema com o escopo `mcp:owner`;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
  * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de

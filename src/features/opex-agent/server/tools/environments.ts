@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineTool } from "./define"
+import { contextSessionId, defineTool } from "./define"
 import {
     adoptInputSchema,
     environmentInputSchema,
@@ -189,7 +189,7 @@ export const environmentTools = [
             if (input.ref && env.source.kind !== "central") throw new Error("Ambiente adotado não aceita outra ref: o redeploy refaz o build da pasta do projeto (com git pull, se ligado). Chame sem `ref`.")
             const { runEnvironmentAction } = await deploys()
             const { runEnvHost } = await settingsModule()
-            const result = await runEnvironmentAction(String(env._id), { action: "deploy", ref: input.ref ?? "" }, context.actorId, runEnvHost, { notifyOpexSessionId: context.sessionId })
+            const result = await runEnvironmentAction(String(env._id), { action: "deploy", ref: input.ref ?? "" }, context.actorId, runEnvHost, { notifyOpexSessionId: contextSessionId(context) })
             const ref = input.ref ?? (env.source.kind === "central" ? env.source.ref : null)
             return { deployId: result.deployId, status: "running", ref, nota: "Deploy em andamento: o resultado chega automaticamente nesta conversa quando terminar." }
         },
@@ -206,7 +206,7 @@ export const environmentTools = [
             const env = await resolve(input.environment)
             const { runEnvironmentAction } = await deploys()
             const { runEnvHost } = await settingsModule()
-            const result = await runEnvironmentAction(String(env._id), { action: "move", buildOn: input.buildOn, runOn: input.runOn }, context.actorId, runEnvHost, { notifyOpexSessionId: context.sessionId })
+            const result = await runEnvironmentAction(String(env._id), { action: "move", buildOn: input.buildOn, runOn: input.runOn }, context.actorId, runEnvHost, { notifyOpexSessionId: contextSessionId(context) })
             return { deployId: result.deployId, status: "running", aviso: moveWarning(env, input.runOn), nota: "Mudança em andamento: o resultado chega automaticamente nesta conversa quando terminar." }
         },
     }),
@@ -329,11 +329,12 @@ export const environmentTools = [
         summarize: () => "Limpar o registry dos ambientes (tags antigas + garbage-collect)",
         execute: async (_input, context) => {
             const [{ runRegistryCleanup }, { notifyOpexRegistryCleanup }, { envLog }] = await Promise.all([import("@/features/environments/server/registry"), import("@/features/environments/server/opex-notice"), settingsModule()])
+            const sessionId = contextSessionId(context)
             void runRegistryCleanup()
-                .then((message) => notifyOpexRegistryCleanup(context.sessionId, { ok: true, message }))
-                .catch((error: unknown) => notifyOpexRegistryCleanup(context.sessionId, { ok: false, error: error instanceof Error ? error.message : String(error) }))
+                .then((message) => (sessionId ? notifyOpexRegistryCleanup(sessionId, { ok: true, message }) : undefined))
+                .catch((error: unknown) => (sessionId ? notifyOpexRegistryCleanup(sessionId, { ok: false, error: error instanceof Error ? error.message : String(error) }) : undefined))
                 .catch((error: unknown) => envLog.warn({ err: error instanceof Error ? error.message : error }, "[environments] Falha ao avisar o Agente Opex da limpeza do registry"))
-            return { status: "running", nota: "Limpeza em andamento: o resultado chega automaticamente nesta conversa." }
+            return { status: "running", nota: sessionId ? "Limpeza em andamento: o resultado chega automaticamente nesta conversa." : "Limpeza em andamento em segundo plano." }
         },
     }),
 ]

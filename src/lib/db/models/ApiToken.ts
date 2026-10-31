@@ -4,13 +4,15 @@ import { auditPlugin } from "../plugins/audit.plugin"
 /**
  * Token de sistema da API interna (Integrações › API interna). Guarda só o HASH (SHA-256) — o
  * valor aparece uma única vez, ao gerar — e o prefixo visível para reconhecer o token na tela.
- * Revogado não volta.
+ * Revogado não volta. `escopos` ausente = token legado (só as rotas livres); `expiraEm` opcional.
  */
 const apiTokenSchema = new Schema(
     {
         nome: { type: String, trim: true, required: true, maxlength: 60 },
         prefixo: { type: String, required: true },
         hash: { type: String, required: true },
+        escopos: { type: [String], default: undefined },
+        expiraEm: { type: Date, default: null },
         ultimoUsoEm: { type: Date, default: null },
         revogadoEm: { type: Date, default: null },
     },

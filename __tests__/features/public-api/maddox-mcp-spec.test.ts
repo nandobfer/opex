@@ -63,8 +63,8 @@ describe('seção MCP da especificação', () => {
     for (const [path, scope] of [['/api/maddox/mcp/owner', 'owner'], ['/api/maddox/mcp/portal', 'portal']] as const) {
       const op = raw.paths[path]!.post!
       expect(op.tags).toEqual([MADDOX_MCP_TAGS[scope]])
-      expect(op.security).toEqual([{ [MADDOX_MCP_SECURITY_SCHEME]: [] }])
-      expect(Object.keys(op.responses)).toEqual(['200', '202', '400', '401', '404'])
+      expect(op.security).toEqual(scope === 'owner' ? [{ [MADDOX_MCP_SECURITY_SCHEME]: [] }, { apiToken: ['mcp:owner'] }] : [{ [MADDOX_MCP_SECURITY_SCHEME]: [] }])
+      expect(Object.keys(op.responses)).toEqual(['200', '202', '400', '401', '403', '404'])
       expect(raw.paths[path]!.get!.responses).toHaveProperty('405')
     }
     expect(raw.components.securitySchemes[MADDOX_MCP_SECURITY_SCHEME]).toMatchObject({ type: 'http', scheme: 'bearer' })
@@ -89,6 +89,26 @@ describe('seção MCP da especificação', () => {
     expect(json).not.toContain('schedule_job"')
     expect(op.description).toContain('[Integrações · destrutiva · pede confirmação]')
     expect(raw.paths['/api/maddox/mcp/portal']!.post!.description).toContain('só admin')
+  })
+
+  it('o MCP do dono documenta o token de sistema: escopo por ferramenta, lista filtrada, 401/403 e recusas reais', async () => {
+    const raw = buildPublicApiSpec({ maddoxTools: await maddoxMcpDocsCatalog() }) as unknown as Raw
+    const owner = raw.paths['/api/maddox/mcp/owner']!.post!
+    expect(owner.description).toContain('Token de sistema')
+    expect(owner.description).toContain('SOMENTE as ferramentas cobertas pelo token')
+    expect(owner.description).toContain('{token: mcp:owner:tool:list_tasks | mcp:owner:group:tasks | mcp:owner:tool:*}')
+    expect(owner.description).toContain('mcp:owner:tool:update_integration | mcp:owner:group:integrations | mcp:owner:tool:* + mcp:owner:destructive')
+    expect((owner as unknown as Record<string, unknown>)['x-opex-required-scope']).toBe('mcp:owner')
+    const responses = JSON.stringify(owner.responses)
+    for (const message of [MADDOX_MCP_REFUSALS.tokenUnauthorized, MADDOX_MCP_REFUSALS.tokenNoMcp, MADDOX_MCP_REFUSALS.tokenScope('list_tasks'), MADDOX_MCP_REFUSALS.tokenDestructive('update_integration')]) expect(responses).toContain(JSON.stringify(message).slice(1, -1))
+    const examples = owner.requestBody.content['application/json']!.examples
+    expect(examples['token-call']!.value.params).not.toHaveProperty('_meta')
+    const portal = raw.paths['/api/maddox/mcp/portal']!.post!
+    expect(portal.description).toContain('Token de sistema não é aceito aqui')
+    expect(portal.description).not.toContain('{token:')
+    expect(JSON.stringify(portal.responses['403'])).toContain(JSON.stringify(MADDOX_MCP_REFUSALS.tokenPortal).slice(1, -1))
+    const desc = (raw.components.securitySchemes.apiToken as { description: string }).description
+    expect(desc).toContain('mcp:owner:destructive')
   })
 
   it('exemplos de tools/call trazem argumentos que validam no Zod da ferramenta e a sessão do OpenCode', async () => {

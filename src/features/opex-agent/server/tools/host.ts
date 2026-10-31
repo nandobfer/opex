@@ -6,7 +6,7 @@ import { OPEX_HOST_AUDIT_ENTITY, OPEX_HOST_COMMAND_MAX, OPEX_HOST_MAX_TIMEOUT_LI
 import { normalizeHostDirectory, resolveHostDirectory } from "../../host-terminal"
 import { runHostCommand } from "../host-shell"
 import { loadOpexSettings } from "../settings"
-import { defineTool, OpexToolError } from "./define"
+import { contextSessionId, defineTool, OpexToolError } from "./define"
 
 const log = loggerFor({ module: "opex-agent" })
 
@@ -66,9 +66,9 @@ export const hostTools = [
             await recordAudit({
                 userId: context.actorId,
                 entidade: OPEX_HOST_AUDIT_ENTITY,
-                entidadeId: context.sessionId,
+                entidadeId: contextSessionId(context) ?? `api-token:${context.origin?.tokenId ?? "desconhecido"}`,
                 acao: AcaoAuditoria.EXECUTAR,
-                depois: { comando: input.command, diretorio: result.cwd, situacao: result.status, codigoSaida: result.exitCode, duracaoMs: result.durationMs, via: "opex" },
+                depois: { comando: input.command, diretorio: result.cwd, situacao: result.status, codigoSaida: result.exitCode, duracaoMs: result.durationMs, via: context.origin ? "api-token" : "opex", ...(context.origin ? { token: { id: context.origin.tokenId, nome: context.origin.nome, prefixo: context.origin.prefixo } } : {}) },
             })
             return {
                 ...result,
