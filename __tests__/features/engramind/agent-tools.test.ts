@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/features/engramind/server/operations-runner', () => ({ runEngramindOperation: mocks.run, importEngramindMemories: vi.fn() }))
 vi.mock('@/features/opex-agent/server/secret-reveals', () => ({ createSecretReveal: mocks.reveal }))
+vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ applyOpexAiSource: mocks.apply, getOpexAiSourceState: vi.fn(), resendOpexAiKey: vi.fn() }))
 
 import { engramindTools } from '@/features/opex-agent/server/tools/engramind'
@@ -67,6 +68,31 @@ describe('ferramentas do Engramind', () => {
     expect(text).toContain('eng.tk_1')
     expect(mocks.reveal).toHaveBeenCalledWith('eng.tk_1.segredo-de-verdade', expect.objectContaining({ label: 'Ver token', ttlMs: 600_000 }))
     expect(resultActionOf(text)).toMatchObject({ kind: 'reveal-secret', label: 'Ver token' })
+  })
+
+  it('cofre do "Ver token" falhou: revoga o token recém-emitido e pede para emitir de novo (sem segredo na saída)', async () => {
+    const issued = { token: { id: 'tk_2', prefix: 'eng.tk_2', kind: 'admin', scopes: ['read'], app: { slug: 'app-a' }, agent: null, label: null, expires_at: null }, secret: 'eng.tk_2.segredo' }
+    mocks.run.mockImplementation(async (id: string) => (id === 'issue_token' ? issued : { revoked: true }))
+    mocks.reveal.mockImplementationOnce(async () => {
+      throw new Error('mongo fora')
+    })
+    const failure = (await find('issue_engramind_token').execute({ kind: 'admin', app: 'app-a', scopes: ['read'] }, context).catch((caught: unknown) => caught)) as Error & { code?: string }
+    expect(failure.code).toBe('ENGRAMIND_TOKEN_REVEAL_FAILED')
+    expect(failure.message).toContain('revogado')
+    expect(failure.message).not.toContain('eng.tk_2.segredo')
+    expect(mocks.run).toHaveBeenCalledWith('revoke_token', { token: 'tk_2' }, 'local')
+  })
+
+  it('se nem a revogação der certo, o erro diz qual token revogar', async () => {
+    const issued = { token: { id: 'tk_3', prefix: 'eng.tk_3', kind: 'admin', scopes: ['read'], app: { slug: 'app-a' }, agent: null, label: null, expires_at: null }, secret: 'eng.tk_3.segredo' }
+    mocks.run.mockImplementation(async (id: string) => {
+      if (id === 'issue_token') return issued
+      throw new Error('engramind fora')
+    })
+    mocks.reveal.mockImplementationOnce(async () => {
+      throw new Error('mongo fora')
+    })
+    await expect(find('issue_engramind_token').execute({ kind: 'admin', app: 'app-a', scopes: ['read'] }, context)).rejects.toMatchObject({ code: 'ENGRAMIND_TOKEN_ORPHAN', message: expect.stringContaining('Revogue eng.tk_3') })
   })
 
   it('IA do Opex: ler, aplicar (com confirmação por padrão) e reenviar; a chave nunca está na entrada', async () => {

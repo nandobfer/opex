@@ -6,7 +6,7 @@ import { batchLimitError, importInputSchema, type ImportInput } from "../schemas
 import { buildSettingsSchema } from "../schemas/settings"
 import type { AuditEvent, ChannelSettingsView, ImportResult, IssuedToken, SettingMeta } from "../types"
 import { engramindCall } from "./client"
-import { ownTokenId, resetWhoamiCache } from "./connection"
+import { fetchWhoami, resetWhoamiCache } from "./connection"
 import { AcaoAuditoria, auditEngramind, engramindLog, publishEngramind } from "./shared"
 
 /**
@@ -59,13 +59,31 @@ async function validateChannelSettings(channel: string, map: Record<string, unkn
     }
 }
 
-/** O token do próprio Opex não é revogado nem rebaixado pela tela nem pelo agente. */
-async function guardOwnToken(operation: EngramindOperation, input: { token?: string; scopes?: string[] }): Promise<void> {
-    if (operation.id !== "revoke_token" && !(operation.id === "update_token" && input.scopes)) return
-    const own = await ownTokenId()
-    if (!own || input.token !== own) return
+type GuardInput = { token?: string; scopes?: string[]; expires_at?: string | null; app?: string; disabled?: boolean }
+
+/** A operação pode cortar o acesso do próprio Opex (decide se vale consultar o `whoami`). */
+function touchesOwnAccess(operation: EngramindOperation, input: GuardInput): boolean {
+    if (operation.id === "revoke_token" || operation.id === "delete_app") return true
+    if (operation.id === "update_token") return Boolean(input.scopes) || (input.expires_at !== undefined && input.expires_at !== null)
+    return operation.id === "update_app" && input.disabled === true
+}
+
+/**
+ * O acesso do próprio Opex não é cortado pela tela, pelo proxy nem pelo agente: o token dele não é
+ * revogado, rebaixado nem ganha validade, e o app dele não é desativado nem excluído.
+ */
+async function guardOwnToken(operation: EngramindOperation, input: GuardInput): Promise<void> {
+    if (!touchesOwnAccess(operation, input)) return
+    const whoami = await fetchWhoami().catch(() => null)
+    if (!whoami) return
+    if (operation.id === "delete_app" || operation.id === "update_app") {
+        if (input.app !== whoami.app.slug && input.app !== whoami.app.id) return
+        throw new DomainError(409, `Este é o app que o Opex usa no Engramind: troque o token na aba Conexão por um de outro app antes de ${operation.id === "delete_app" ? "excluí-lo" : "desativá-lo"}.`, "ENGRAMIND_OWN_TOKEN")
+    }
+    if (input.token !== whoami.token_id) return
     if (operation.id === "revoke_token") throw new DomainError(409, "Este é o token que o Opex usa no Engramind: troque o token na aba Conexão antes de revogá-lo.", "ENGRAMIND_OWN_TOKEN")
-    if (!["read", "write", "delete"].every((scope) => input.scopes!.includes(scope))) throw new DomainError(409, "Este é o token que o Opex usa no Engramind: ele precisa continuar com read+write+delete.", "ENGRAMIND_OWN_TOKEN")
+    if (input.scopes && !["read", "write", "delete"].every((scope) => input.scopes!.includes(scope))) throw new DomainError(409, "Este é o token que o Opex usa no Engramind: ele precisa continuar com read+write+delete.", "ENGRAMIND_OWN_TOKEN")
+    if (input.expires_at) throw new DomainError(409, "Este é o token que o Opex usa no Engramind: ele não pode ganhar validade (o Opex perderia o acesso ao vencer).", "ENGRAMIND_OWN_TOKEN")
 }
 
 /** Auditoria do Engramind com o recorte por período feito no Opex (o Engramind só pagina por cursor). */
@@ -100,7 +118,7 @@ export async function runEngramindOperation(id: string, rawInput: unknown, actor
     if (operation.id === "get_audit") return auditWithPeriod(input)
     if (operation.id === "update_settings") await validateSettings(input.settings as Record<string, unknown>)
     if (operation.id === "update_channel_settings") await validateChannelSettings(String(input.channel), input.settings as Record<string, unknown>)
-    await guardOwnToken(operation, input as { token?: string; scopes?: string[] })
+    await guardOwnToken(operation, input as GuardInput)
 
     const result = await engramindCall(operation.method, operation.request(input), { sensitiveBody: Boolean(operation.redact) })
     if (operation.risk === "read") return result

@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   hash: 'a'.repeat(64),
   writeExit: 0,
   applyExit: 0,
+  hang: false,
+  logError: vi.fn(),
+  publish: vi.fn(async () => undefined) as (...args: unknown[]) => Promise<unknown>,
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
@@ -38,19 +41,22 @@ vi.mock('@/features/engramind/server/shared', () => ({
   auditEngramind: async (_actor: string, id: string, _acao: string, depois: Record<string, unknown>) => {
     mocks.audits.push({ id, ...depois })
   },
-  engramindLog: { info: vi.fn(), warn: vi.fn() },
-  publishEngramind: vi.fn(),
+  engramindLog: { info: vi.fn(), warn: vi.fn(), error: mocks.logError },
+  publishEngramind: (...args: unknown[]) => mocks.publish(...args),
 }))
 vi.mock('@/features/engramind/server/client', () => ({ engramindReady: async () => ({ ready: true, detail: 'ready' }) }))
 
-import { applyEngramindEnv, readEngramindEnv, setEngramindHostRunner, updateEngramindEnv } from '@/features/engramind/server/host-env'
-import { resetApplyHub } from '@/features/engramind/server/apply-hub'
+import { applyEngramindEnv, readEngramindEnv, setEngramindApplyDeadline, setEngramindHostRunner, updateEngramindEnv } from '@/features/engramind/server/host-env'
+import { applyState, resetApplyHub } from '@/features/engramind/server/apply-hub'
 
 const runner = vi.fn(async (command: string, _timeout?: number, options: Record<string, unknown> = {}) => {
   mocks.commands.push({ command, options })
   if (command.includes('base64 -w0')) return { exitCode: 0, output: `HASH:${mocks.hash}\n${Buffer.from(mocks.masked).toString('base64')}` }
   if (command.includes('mktemp')) return { exitCode: mocks.writeExit, output: `HASH:${'b'.repeat(64)}` }
-  if (command.includes('docker compose')) return { exitCode: mocks.applyExit, output: 'recriado' }
+  if (command.includes('docker compose')) {
+    if (mocks.hang) return new Promise<never>(() => {})
+    return { exitCode: mocks.applyExit, output: 'recriado' }
+  }
   return { exitCode: 0, output: '' }
 })
 
@@ -63,6 +69,10 @@ describe('variáveis de ambiente do Engramind', () => {
     mocks.masked = `APP_PORT=8000\nCONTAINER_NAME=engramind-api\nTOKEN_PEPPER=${ENV_MASK_SET}\nLITESTREAM_SECRET_ACCESS_KEY=${ENV_MASK_SET}\n`
     mocks.writeExit = 0
     mocks.applyExit = 0
+    mocks.hang = false
+    mocks.logError.mockClear()
+    mocks.publish = vi.fn(async () => undefined)
+    setEngramindApplyDeadline(null)
     runner.mockClear()
     setEngramindHostRunner(runner)
     resetApplyHub()
@@ -115,5 +125,34 @@ describe('variáveis de ambiente do Engramind', () => {
     await vi.waitFor(() => expect(mocks.audits.some((audit) => audit.id === 'env-apply')).toBe(true))
     expect(mocks.state?.pendingApply).not.toBeNull()
     expect(String(mocks.audits.at(-1)!.erro)).toContain('código 1')
+  })
+
+  it('segunda aplicação com a primeira em andamento: 409 ENGRAMIND_APPLY_BUSY (um docker compose por vez)', async () => {
+    mocks.hang = true
+    setEngramindApplyDeadline(60_000)
+    await applyEngramindEnv('local')
+    await expect(applyEngramindEnv('local')).rejects.toMatchObject({ status: 409, code: 'ENGRAMIND_APPLY_BUSY' })
+    expect(mocks.commands.filter((item) => item.command.includes('docker compose'))).toHaveLength(1)
+  })
+
+  it('executor que nunca responde: termina em failed no prazo e libera a trava para a próxima execução', async () => {
+    mocks.hang = true
+    setEngramindApplyDeadline(50)
+    await applyEngramindEnv('local')
+    await vi.waitFor(() => expect(applyState()?.status).toBe('failed'))
+    expect(applyState()?.error).toContain('não respondeu')
+    mocks.hang = false
+    setEngramindApplyDeadline(null)
+    await expect(applyEngramindEnv('local')).resolves.toMatchObject({ id: expect.any(String) })
+    await vi.waitFor(() => expect(applyState()?.status).toBe('success'))
+  })
+
+  it('falha no Pusher depois do aplicar não vira rejeição não tratada: é registrada no log', async () => {
+    mocks.publish = vi.fn(async () => {
+      throw new Error('pusher fora')
+    })
+    await applyEngramindEnv('local')
+    await vi.waitFor(() => expect(mocks.logError).toHaveBeenCalled())
+    expect(applyState()?.status).toBe('success')
   })
 })

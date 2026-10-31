@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/engramind/server/client', () => ({ engramindCall: mocks.call }))
-vi.mock('@/features/engramind/server/connection', () => ({ ownTokenId: async () => 'tk_0e000001', resetWhoamiCache: vi.fn() }))
+vi.mock('@/features/engramind/server/connection', () => ({ fetchWhoami: async () => ({ token_id: 'tk_0e000001', kind: 'admin', scopes: ['read', 'write', 'delete'], app: { id: 'app_0e000001', slug: 'opex' }, agent: null }), resetWhoamiCache: vi.fn() }))
 vi.mock('@/features/engramind/server/shared', () => ({
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR', MOVER: 'MOVER', IMPORTAR: 'IMPORTAR' },
   auditEngramind: async (_actor: string, id: string, acao: string, depois: Record<string, unknown>) => {
@@ -67,6 +67,22 @@ describe('runEngramindOperation', () => {
     await runEngramindOperation('update_token', { token: 'tk_0e000001', label: 'Opex (servidor)' }, 'local')
     await runEngramindOperation('revoke_token', { token: 'tk_0ther001' }, 'local')
     expect(mocks.audits.map((audit) => audit.acao)).toEqual(['ATUALIZAR', 'EXCLUIR'])
+  })
+
+  it('o acesso do Opex não é cortado: token próprio sem validade nova, app do Opex sem desativar nem excluir', async () => {
+    mocks.call.mockReset()
+    mocks.call.mockResolvedValue({})
+    await expect(runEngramindOperation('update_token', { token: 'tk_0e000001', expires_at: '2026-11-01T00:00:00Z' }, 'local')).rejects.toMatchObject({ status: 409, code: 'ENGRAMIND_OWN_TOKEN' })
+    await expect(runEngramindOperation('update_app', { app: 'opex', disabled: true }, 'local')).rejects.toMatchObject({ code: 'ENGRAMIND_OWN_TOKEN' })
+    await expect(runEngramindOperation('update_app', { app: 'app_0e000001', disabled: true }, 'local')).rejects.toMatchObject({ code: 'ENGRAMIND_OWN_TOKEN' })
+    await expect(runEngramindOperation('delete_app', { app: 'opex' }, 'local')).rejects.toMatchObject({ code: 'ENGRAMIND_OWN_TOKEN' })
+    expect(mocks.call).not.toHaveBeenCalled()
+    await runEngramindOperation('update_token', { token: 'tk_0e000001', expires_at: null }, 'local')
+    await runEngramindOperation('update_app', { app: 'opex', name: 'Opex (servidor)' }, 'local')
+    await runEngramindOperation('update_app', { app: 'outro', disabled: true }, 'local')
+    await runEngramindOperation('delete_app', { app: 'outro' }, 'local')
+    await runEngramindOperation('update_token', { token: 'tk_0ther001', expires_at: '2026-11-01T00:00:00Z' }, 'local')
+    expect(mocks.call).toHaveBeenCalledTimes(5)
   })
 
   it('entrada inválida dá 400 com a mensagem do schema', async () => {

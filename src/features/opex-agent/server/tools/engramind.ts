@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { DomainError } from "@/lib/api/route"
 import { defineTool, type OpexToolDef } from "./define"
 import { ENGRAMIND_OPERATIONS, type EngramindOperation } from "@/features/engramind/operations"
 import { TOKEN_REVEAL_TTL_MS } from "@/features/engramind/constants"
@@ -31,7 +32,21 @@ async function issueToken(input: unknown, actorId: string): Promise<unknown> {
     const { token } = issued
     const view = { id: token.id, prefix: token.prefix, kind: token.kind, scopes: token.scopes, app: token.app.slug, agent: token.agent?.slug ?? null, label: token.label, expiresAt: token.expires_at }
     if (!issued.secret) return { token: view, note: "Emissão repetida: o Engramind não devolve o segredo de novo. Revogue e emita outro se ele se perdeu." }
-    const resultAction = await (await reveals()).createSecretReveal(issued.secret, { title: `Token ${token.prefix}`, label: "Ver token", ttlMs: TOKEN_REVEAL_TTL_MS })
+    let resultAction: Awaited<ReturnType<Awaited<ReturnType<typeof reveals>>["createSecretReveal"]>>
+    try {
+        resultAction = await (await reveals()).createSecretReveal(issued.secret, { title: `Token ${token.prefix}`, label: "Ver token", ttlMs: TOKEN_REVEAL_TTL_MS })
+    } catch (error) {
+        // Sem o cofre, o segredo se perderia e o token ficaria ativo e inalcançável: revoga na hora.
+        const { engramindLog } = await import("@/features/engramind/server/shared")
+        engramindLog.warn({ err: error, tokenId: token.id }, "[engramind] cofre do Ver token falhou; revogando o token recém-emitido")
+        try {
+            await (await runner()).runEngramindOperation("revoke_token", { token: token.id }, actorId)
+        } catch (revokeError) {
+            engramindLog.error({ err: revokeError, tokenId: token.id }, "[engramind] não foi possível revogar o token órfão")
+            throw new DomainError(502, `O token ${token.prefix} foi emitido, mas o Opex não conseguiu guardar o segredo nem revogá-lo. Revogue ${token.prefix} em Integrações › Engramind › Identidades e emita outro.`, "ENGRAMIND_TOKEN_ORPHAN")
+        }
+        throw new DomainError(502, `Não foi possível guardar o segredo do token para o botão "Ver token"; o token ${token.prefix} foi revogado. Peça para emitir de novo.`, "ENGRAMIND_TOKEN_REVEAL_FAILED")
+    }
     return { token: view, note: "O segredo NÃO está aqui: o dono vê pelo botão \"Ver token\" do card, uma única vez, nos próximos 10 minutos.", resultAction }
 }
 

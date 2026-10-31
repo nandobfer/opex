@@ -28,6 +28,32 @@ let runnerOverride: HostRunner | null = null
 export function setEngramindHostRunner(runner: HostRunner | null): void {
     runnerOverride = runner
 }
+/** Margem além do tempo limite do executor: se ele nunca responder, a execução falha e a trava é liberada. */
+const APPLY_DEADLINE_GRACE_MS = 30_000
+let applyDeadlineOverride: number | null = null
+/** Testes: prazo curto para o executor do "Aplicar e reiniciar". */
+export function setEngramindApplyDeadline(ms: number | null): void {
+    applyDeadlineOverride = ms
+}
+
+/** Rejeita quando a promessa não termina no prazo (o executor do host travou). */
+function withDeadline<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms)
+    })
+    return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
+}
+
+/** Efeito final (auditoria/evento) que não pode derrubar a execução em segundo plano. */
+async function safely(label: string, task: () => Promise<unknown>): Promise<void> {
+    try {
+        await task()
+    } catch (error) {
+        engramindLog.error({ err: error }, `[engramind] ${label} falhou depois do aplicar`)
+    }
+}
+
 const hostRunner = (): HostRunner => runnerOverride ?? createHostRunner(integrationDebug(ENGRAMIND_INTEGRATION_ID))
 
 export interface EngramindInstall {
@@ -123,7 +149,12 @@ export async function applyEngramindEnv(actorId: string): Promise<{ id: string }
     const keys = state?.pendingApply?.keys ?? []
     void (async () => {
         try {
-            const result = await hostRunner()(command, APPLY_TIMEOUT_MS, { detached: true, jobId: id, redactedAs: "aplicar .env e recriar o serviço api do Engramind", onOutput: (text) => emitApply(run, { type: "log", text }) })
+            const deadlineMs = applyDeadlineOverride ?? APPLY_TIMEOUT_MS + APPLY_DEADLINE_GRACE_MS
+            const result = await withDeadline(
+                hostRunner()(command, APPLY_TIMEOUT_MS, { detached: true, jobId: id, redactedAs: "aplicar .env e recriar o serviço api do Engramind", onOutput: (text) => emitApply(run, { type: "log", text }) }),
+                deadlineMs,
+                `o executor do host não respondeu em ${Math.round(deadlineMs / 1000)} s`,
+            )
             if (result.exitCode !== 0) throw new Error(`docker compose terminou com código ${result.exitCode ?? "?"}`)
             emitApply(run, { type: "log", text: "\r\nConferindo /health/ready…\r\n" })
             const config = await getIntegrationConfig(ENGRAMIND_INTEGRATION_ID)
@@ -139,16 +170,19 @@ export async function applyEngramindEnv(actorId: string): Promise<{ id: string }
             if (projectChanged && install.adopted && values.APP_PORT) await renameAdoptedProject(install.environmentId, `engramind-${values.APP_PORT}`)
             emitApply(run, { type: "log", text: "Engramind pronto.\r\n" })
             emitApply(run, { type: "status", status: "success", error: null })
-            await auditEngramind(actorId, "env-apply", AcaoAuditoria.EXECUTAR, { chaves: keys, projetoRecriado: projectChanged })
+            await safely("auditoria", () => auditEngramind(actorId, "env-apply", AcaoAuditoria.EXECUTAR, { chaves: keys, projetoRecriado: projectChanged }))
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
             engramindLog.warn({ err: message }, "[engramind] aplicar .env falhou")
             emitApply(run, { type: "log", text: `\r\nFalhou: ${message}\r\n` })
             emitApply(run, { type: "status", status: "failed", error: message })
-            await auditEngramind(actorId, "env-apply", AcaoAuditoria.EXECUTAR, { chaves: keys, erro: message })
+            await safely("auditoria", () => auditEngramind(actorId, "env-apply", AcaoAuditoria.EXECUTAR, { chaves: keys, erro: message }))
         }
-        await publishEngramind({ type: "env.applied" })
-    })()
+        await safely("evento env.applied", () => publishEngramind({ type: "env.applied" }))
+    })().catch((error: unknown) => {
+        engramindLog.error({ err: error }, "[engramind] aplicar .env terminou com erro inesperado")
+        if (currentApply()?.id === id && currentApply()?.status === "running") emitApply(run, { type: "status", status: "failed", error: error instanceof Error ? error.message : String(error) })
+    })
     return { id }
 }
 

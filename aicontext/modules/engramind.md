@@ -68,7 +68,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card Geral (debug). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
-| Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex") e não podem ser revogados/rebaixados/desativados pela tela. |
+| Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex"). A proteção vale também no servidor (proxy e agente, `guardOwnToken` com o `whoami` atual): o token não é revogado, rebaixado nem ganha validade (`expires_at`), e o app não é desativado nem excluído (`409 ENGRAMIND_OWN_TOKEN`). |
 | Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed`), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
 | Variáveis de ambiente | Ver abaixo. |
 
@@ -172,7 +172,9 @@ Um teste confere a cobertura de todas as chaves e variáveis.
   docker compose --env-file .env -f <arquivos do Ambiente> up -d --no-build --pull never api` (a
   instalação não tem código-fonte: build quebraria). Com a porta ou o container trocados, antes
   `docker compose -p <projeto antigo> down`, e o Ambiente adotado passa a `engramind-<porta>`. No fim,
-  confere `GET /health/ready` por até 60 s. Um por vez (`409 ENGRAMIND_APPLY_BUSY`).
+  confere `GET /health/ready` por até 60 s. Um por vez (`409 ENGRAMIND_APPLY_BUSY`). Se o executor do
+  host não responder até o tempo limite + 30 s, a execução termina em `failed` e libera a trava; falha
+  na auditoria ou no evento final só vai para o log (nunca derruba o processo).
 - Gravar e aplicar são auditados só com os **nomes** das chaves.
 
 ## Página `/engramind`
@@ -220,7 +222,9 @@ Grupo `engramind` (`server/tools/engramind.ts`): uma ferramenta por operação d
 chamam o serviço (`runEngramindOperation`, `importEngramindMemories`, `host-env.ts`), nunca o HTTP do
 app. Não existem no Agente Opex do portal. No MCP do Agente Maddox (`mcp:owner`) o grupo entra, **menos
 `issue_engramind_token`** (`MADDOX_EXCLUDED_TOOLS` em `src/features/maddox-agent/catalog.ts`): lá não há
-o card com "Ver token" e o token emitido ficaria inalcançável.
+o card com "Ver token" e o token emitido ficaria inalcançável. Se o cofre do "Ver token" falhar logo
+depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pede para emitir de novo
+(`ENGRAMIND_TOKEN_REVEAL_FAILED`; sem conseguir revogar, `ENGRAMIND_TOKEN_ORPHAN` diz qual revogar).
 
 - IA do Opex: `get_engramind_ai_source`, `apply_engramind_ai_source` (`write` com confirmação por
   padrão; entrada objeto `applyAiSourceToolSchema`, a chave nunca passa pelo modelo) e
