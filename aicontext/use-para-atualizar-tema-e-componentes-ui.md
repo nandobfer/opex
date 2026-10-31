@@ -289,6 +289,11 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   e nome acessível), para o seletor e o campo (`h-8`) caberem na mesma linha do item. Os rótulos usam
   `whitespace-nowrap` (nunca quebram dentro do botão); num cabeçalho, mantenha o grupo com `shrink-0`
   para ele passar inteiro à linha seguinte em vez de espremer as opções.
+- **Provedor e modelo de IA** usam sempre os componentes de `src/features/ai/components`: `AiProviderTabs`
+  (só os conectados; desconectado desabilitado com "X: não conectado"; `allowed`, `extraOptions` como
+  "Local"/"Desligado" e `emptyText`) + `ModelPickerField` (+ `VariantSelectField`). Usados em
+  `/integracoes/ia`, Agente Opex, Agente Mentor e na "IA do Opex" do Engramind — nunca um `OptionTabs`
+  de provedores próprio. Escolha múltipla de modelos (ex.: reservas) usa `MultiAutocomplete`.
 - Escolha de **um** item numa lista grande ou rica (ex.: tarefa) usa
   `SearchPicker` (`ui/search-picker.tsx`) em vez de `Select`: popover com busca (local fuse.js por
   `searchKeys` ou no servidor por `onSearchChange`), opções ricas via `renderItem`, ↑/↓ +

@@ -386,7 +386,10 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 Integração `engramind` (externo, sem `env`): campos gravados pela aba Conexão (`PUT
 /api/engramind/connection`, que chama `updateIntegration` e roda o bootstrap do token), tester em
 `src/features/engramind/server/tester.ts` (`/health/ready` + `whoami`) e um proxy administrativo em
-`/api/engramind/**`. O **webhook** `POST /api/engramind/webhook` é público e autenticado só pela
+`/api/engramind/**` (mais `/api/engramind/providers/from-opex[/test|/resend]`, a "IA do Opex"). Gravar
+ou apagar a chave de `ai_gemini`, `ai_anthropic`, `ai_openai` ou `ai_deepseek` em `updateIntegration`
+agenda (`runAfterResponse` + import dinâmico, sem ciclo) o reenvio da chave ao Engramind
+(`syncEngramindProviderKey`), que nunca derruba o salvamento. O **webhook** `POST /api/engramind/webhook` é público e autenticado só pela
 assinatura HMAC (não é token de sistema). Componentes compartilhados nascidos aqui: `InfoTooltip`
 (`src/components/ui/info-tooltip.tsx`) e `SecretReveal` (`src/components/ui/secret-reveal.tsx`, usado
 também pelo `ApiTokenReveal`). Detalhes em `modules/engramind.md`.

@@ -59,11 +59,56 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 |---|---|
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
 | Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card Geral (debug). |
-| Configurações | Todas as chaves de `GET /v1/settings` (menos segredos), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
-| Provedores | `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
+| Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
+| Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
 | Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex") e não podem ser revogados/rebaixados/desativados pela tela. |
 | Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed`), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
 | Variáveis de ambiente | Ver abaixo. |
+
+### IA do Opex (aba Provedores)
+
+O Redator e o embedding usam os provedores de IA já configurados no Opex, escolhidos **como em
+`/integracoes/ia` e nos agentes** (`AiProviderTabs` + `ModelPickerField`, `useAiProviderStatuses` +
+`useAiModels`). **Escolher o provedor já define a URL — não há campo de URL em lugar nenhum**
+(nem na lista de modelos de embedding). Mapeamento puro em `src/features/engramind/ai-source.ts`:
+
+| Seção | Opção | Engramind | `base_url` | Chave |
+|---|---|---|---|---|
+| Redator | Gemini / Anthropic | `gemini` / `anthropic` | vazia (oficial) | do Opex |
+| Redator | OpenAI / DeepSeek | `openai_compatible` | `OPENAI_API_URL` / `DEEPSEEK_API_URL` (`src/lib/ai/endpoints.ts`) | do Opex |
+| Embedding | Local | `local` (lista do próprio Engramind) | vazia | — |
+| Embedding | Gemini / OpenAI | `gemini` / `openai_compatible` | vazia / `OPENAI_API_URL` | do Opex |
+| Embedding | Desligado | `off` (só busca textual; o modelo não muda) | vazia | — |
+
+- **Redator**: provedor (OpenCode e Jev não aparecem), modelo e **até 5 modelos de reserva** da mesma
+  lista (`MultiAutocomplete`; sem repetir nem incluir o principal). **Embedding**: provedor, modelo
+  (`?kind=embedding` no Gemini/OpenAI; Local pela lista do Engramind) e dimensão opcional (só remotos).
+  Trocar de provedor limpa o modelo. Sem variante/raciocínio (o Engramind não tem).
+- **Testar com esta chave** (`POST /api/engramind/providers/from-opex/test`): a proposta vai ao
+  `redator/test` ou `embedding/test` do Engramind com a chave lida **no servidor**; nada é gravado.
+- **Aplicar** (`POST /api/engramind/providers/from-opex`, `applyOpexAiSource`):
+  - Redator: grava as configurações (com a URL implícita) e depois `PUT /v1/secrets/redator.api_key`.
+    Falha na chave mantém as configurações, grava `syncError` e a tela mostra **Reenviar a chave**.
+  - Embedding: pede confirmação ("valida o provedor e reindexa"); recusado com reindexação em
+    andamento (`409 ENGRAMIND_REINDEXING`, botão desabilitado). Como o Engramind valida o provedor ao
+    trocar, a proposta é testada com a chave, a chave é gravada e só então as configurações (falha na
+    chave aborta sem mudar nada). Local e Desligado não enviam segredo.
+  - Sem chave no Opex → `409 ENGRAMIND_AI_KEY_MISSING`. Auditoria `ai_source.apply` com seção,
+    provedor, modelo, reservas e dimensão (nunca a chave); evento `settings.updated`.
+- **Origem derivada do valor em uso** (`deriveOrigin`, nunca por flag): `engramind_state.sources`
+  guarda o último snapshot aplicado por seção (provedor, modelo, reservas, dimensão, `keyVersion`,
+  `syncedAt`, `syncError`). "Vem do Opex" quando as chaves da seção batem com o snapshot e a chave do
+  Engramind não foi trocada depois da última cópia (`updated_at` do segredo); "Configurado no
+  Engramind" quando algo mudou por fora (ferramenta `update_engramind_settings`, CLI, outro admin ou
+  chave gravada à mão no card Chaves); "Ainda não aplicado" sem snapshot. Aplicar de novo volta ao Opex.
+- **Sincronização automática**: gravar ou apagar a chave de `ai_gemini|ai_anthropic|ai_openai|ai_deepseek`
+  agenda `syncEngramindProviderKey` (depois da resposta, import dinâmico): reenvia a chave a **toda
+  seção** que usa o provedor; outro provedor, Engramind não configurado ou nenhuma seção → nada (log
+  informativo). Chave apagada no Opex → nada é enviado e o card avisa ("A chave do X foi apagada no
+  Opex"). Falha no Engramind nunca propaga: vira `syncError` + log de aviso + "Reenviar a chave"
+  (`POST /api/engramind/providers/from-opex/resend`). Mudar o modelo no Opex não altera o Redator.
+- O container do Engramind precisa alcançar os provedores oficiais (`ollama` e endpoints próprios não
+  são configuráveis pela tela). A chave fica cifrada no Engramind (`SECRETS_KEY`).
 
 Os formulários validam com os **mesmos schemas Zod** da rota e do agente (`operations.ts`,
 `schemas/*`) em tempo real (`useSchemaForm`).
@@ -156,6 +201,9 @@ app. Não existem no Agente Opex do portal. No MCP do Agente Maddox (`mcp:owner`
 `issue_engramind_token`** (`MADDOX_EXCLUDED_TOOLS` em `src/features/maddox-agent/catalog.ts`): lá não há
 o card com "Ver token" e o token emitido ficaria inalcançável.
 
+- IA do Opex: `get_engramind_ai_source`, `apply_engramind_ai_source` (`write` com confirmação por
+  padrão; entrada objeto `applyAiSourceToolSchema`, a chave nunca passa pelo modelo) e
+  `resend_engramind_ai_key`. Também no MCP do Maddox.
 - `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
   memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.
 - Segredos fora do histórico e dos cards (`redact` em `set_engramind_secret`, webhooks, propostas de
@@ -173,6 +221,8 @@ o card com "Ver token" e o token emitido ficaria inalcançável.
 | `GET /api/engramind/environments` | Opções do seletor de Ambiente |
 | `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]`, `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
 | `POST /api/engramind/memories/import` | Importação com a chave derivada |
+| `GET/POST /api/engramind/providers/from-opex` | IA do Opex: estado das seções / aplicar (`applyAiSourceSchema`) |
+| `POST /api/engramind/providers/from-opex/test` e `/resend` | Testar a proposta com a chave do Opex / reenviar a chave |
 | `GET/PUT /api/engramind/env` | `.env` no host |
 | `POST /api/engramind/env/apply` e `/env/apply/events` | Aplicar e reiniciar e o log NDJSON |
 | `POST /api/engramind/webhook` | Webhook (público, assinado) |
@@ -183,11 +233,13 @@ segredos) e logada (Pino, `feature: "engramind"`).
 ## Dados
 
 - `engramind_webhook_events` (`_id` = id do evento, TTL 24 h) e `engramind_state` (singleton
-  `pendingApply`) — `server/models.ts`.
+  `pendingApply` e `sources` da IA do Opex) — `server/models.ts`.
 - `opex_secret_reveals` (Agente Opex) — `src/features/opex-agent/server/secret-reveals.ts`.
 
 ## Testes
 
 `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
-operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips) e
-`__tests__/components/engramind/engramind-ui.test.tsx`. O Engramind e o host são sempre mockados.
+operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
+Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
+`opex-ai-card.test.tsx`, `__tests__/components/ai/ai-provider-tabs.test.tsx` e
+`__tests__/lib/ai/embedding-models.test.ts`. O Engramind e o host são sempre mockados.
