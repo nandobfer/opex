@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ListTree, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { apiErrorMessage } from "@/lib/api"
 import { EMBEDDING_PROVIDERS, NO_LISTING_PROVIDERS } from "../../../constants"
@@ -30,13 +29,12 @@ interface ModelEntry {
 /** "Listar modelos de embedding" por provedor (local, ollama, openai_compatible). */
 export function EmbeddingModelsCard({ currentProvider }: { currentProvider: string | null }) {
     const [provider, setProvider] = useState<string>(currentProvider && !NO_LISTING_PROVIDERS.includes(currentProvider) ? currentProvider : "local")
-    const [baseUrl, setBaseUrl] = useState("")
     const [models, setModels] = useState<ModelEntry[] | null>(null)
     const [pending, setPending] = useState(false)
     const list = async () => {
         setPending(true)
         try {
-            const result = await engramindSend<{ models: ModelEntry[] }>("post", "providers/embedding/models", { provider, ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) })
+            const result = await engramindSend<{ models: ModelEntry[] }>("post", "providers/embedding/models", { provider })
             setModels(result.models)
         } catch (error) {
             toast.error(apiErrorMessage(error, "Não foi possível listar os modelos"))
@@ -45,8 +43,8 @@ export function EmbeddingModelsCard({ currentProvider }: { currentProvider: stri
         }
     }
     return (
-        <Section title="Modelos de embedding" info="Lista os modelos de embedding (nunca de chat) do provedor. Sem URL, vale a configurada.">
-            <div className="grid gap-4 sm:grid-cols-2">
+        <Section title="Modelos de embedding" info="Lista os modelos de embedding (nunca de chat) do provedor, com a URL e a chave configuradas no Engramind.">
+            <div className="grid gap-4">
                 <InfoField id="models-provider" label="Provedor" info={PROVIDER_HELP[provider]}>
                     <OptionTabs
                         id="models-provider"
@@ -59,9 +57,6 @@ export function EmbeddingModelsCard({ currentProvider }: { currentProvider: stri
                             setModels(null)
                         }}
                     />
-                </InfoField>
-                <InfoField id="models-url" label="URL do provedor (opcional)" info="Ex.: http://127.0.0.1:11434 no Ollama. Vazia usa a configurada.">
-                    <Input id="models-url" value={baseUrl} placeholder="Configurada" onChange={(event) => setBaseUrl(event.target.value)} disabled={provider === "local"} />
                 </InfoField>
             </div>
             <Button type="button" variant="outline" onClick={() => void list()} disabled={pending}>

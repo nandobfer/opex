@@ -6,9 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { getAiProvider, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
 import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import { isOpexProviderId, OPEX_PROVIDER_IDS, type OpexProviderId } from "../../constants"
 import type { OpexAgentSettings } from "../../schemas"
@@ -33,7 +33,6 @@ export function OpexModelCard({ form, target, providers, title, description }: O
     const model = models.data?.find((item) => item.id === modelId)
     const def = provider ? getAiProvider(provider) : null
     const options = providers.filter((item) => isOpexProviderId(item.id))
-    const anyConnected = options.some((item) => item.connected)
     const id = (field: string) => `opex-${target}-${field}`
 
     const changeProvider = (next: string) => {
@@ -52,23 +51,15 @@ export function OpexModelCard({ form, target, providers, title, description }: O
             </CardHeader>
             <CardContent className="space-y-5">
                 <Field id={id("provider")} label="Provedor" error={errors?.provider?.message}>
-                    {!anyConnected && target === "main" ? (
-                        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Nenhum provedor conectado: configure e teste Gemini, Anthropic, OpenAI ou DeepSeek na aba Provedores.</p>
-                    ) : (
-                        <OptionTabs<string>
-                            id={id("provider")}
-                            options={[
-                                ...(target === "title" ? [{ value: SAME_AS_MAIN, label: "Mesmo do agente" }] : []),
-                                ...OPEX_PROVIDER_IDS.map((providerId) => {
-                                    const status = options.find((item) => item.id === providerId)
-                                    return { value: providerId, label: getAiProvider(providerId).name, disabled: !status?.connected, title: status?.connected ? undefined : `${getAiProvider(providerId).name}: não conectado` }
-                                }),
-                            ]}
-                            value={provider ?? (target === "title" ? SAME_AS_MAIN : "")}
-                            onChange={changeProvider}
-                            className="w-full flex-wrap"
-                        />
-                    )}
+                    <AiProviderTabs
+                        id={id("provider")}
+                        providers={options}
+                        allowed={OPEX_PROVIDER_IDS}
+                        extraOptions={target === "title" ? [{ value: SAME_AS_MAIN, label: "Mesmo do agente" }] : []}
+                        value={provider ?? (target === "title" ? SAME_AS_MAIN : "")}
+                        onChange={changeProvider}
+                        emptyText="Nenhum provedor conectado: configure e teste Gemini, Anthropic, OpenAI ou DeepSeek na aba Provedores."
+                    />
                     <p className="text-xs text-muted-foreground">O OpenCode não aparece: ele não aceita as ferramentas do app.</p>
                 </Field>
 

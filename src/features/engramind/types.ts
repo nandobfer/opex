@@ -326,3 +326,36 @@ export interface EnvironmentOptionDto {
     location: string
     machine: string
 }
+
+/** "IA do Opex" (aba Provedores): origem derivada do valor em uso e estado da cópia da chave. */
+export interface AiSourceSectionDto {
+    section: "redator" | "embedding"
+    origin: "opex" | "engramind" | "none"
+    /** Provedor/modelo da origem do Opex (snapshot), quando há. */
+    provider: string | null
+    model: string | null
+    fallbackModels: string[]
+    dimensions: number | null
+    /** Configuração em uso no Engramind (provedor e modelo do Engramind). */
+    current: { provider: string | null; model: string | null }
+    /** Provedor do Opex equivalente à configuração em uso (null: configuração própria). */
+    currentOpexProvider: string | null
+    keyConfigured: boolean | null
+    keyUpdatedAt: string | null
+    syncedAt: string | null
+    syncError: string | null
+    /** A chave da origem foi apagada no Opex. */
+    sourceKeyMissing: boolean
+}
+
+export interface AiSourceStateDto {
+    redator: AiSourceSectionDto
+    embedding: AiSourceSectionDto
+    reindexing: boolean
+}
+
+export interface ApplyAiSourceResult {
+    applied: true
+    keySynced: boolean
+    state: AiSourceStateDto
+}

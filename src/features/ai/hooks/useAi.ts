@@ -41,8 +41,15 @@ export function useAiProviderStatuses(includeAll = false) {
     return { ...query, providers: toProviderStatuses(query.data ?? [], includeAll) }
 }
 
-export const useAiModels = (provider: AiProviderId | null, enabled = true) =>
-    useQuery({ queryKey: key("models", provider), queryFn: () => get<AiModelDto[]>(`/ai/providers/${provider}/models`), enabled: enabled && provider !== null, staleTime: 2 * 60_000, retry: false })
+/** Modelos do provedor. `kind: "embedding"` lista os de embedding (Gemini e OpenAI; usado pelo Engramind). */
+export const useAiModels = (provider: AiProviderId | null, enabled = true, kind: "chat" | "embedding" = "chat") =>
+    useQuery({
+        queryKey: kind === "chat" ? key("models", provider) : key("models", provider, kind),
+        queryFn: () => get<AiModelDto[]>(`/ai/providers/${provider}/models${kind === "chat" ? "" : `?kind=${kind}`}`),
+        enabled: enabled && provider !== null,
+        staleTime: 2 * 60_000,
+        retry: false,
+    })
 
 /** Recarrega a lista ignorando o cache do servidor. */
 export function useRefreshAiModels(provider: AiProviderId) {

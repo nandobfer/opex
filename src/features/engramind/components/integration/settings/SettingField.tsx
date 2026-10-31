@@ -23,10 +23,12 @@ interface SettingFieldProps {
     defaultLabel?: string
     /** Esconde "Alterada em … por …" (configurações do canal). */
     hideHistory?: boolean
+    /** Somente leitura: mostra o valor e este aviso no lugar do controle (ex.: "Edite na aba Provedores"). */
+    readOnlyNote?: string
 }
 
 /** Uma configuração: rótulo com tooltip, controle, padrão, intervalo, última alteração e "Voltar ao padrão". */
-export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão", defaultLabel = "Padrão", hideHistory = false }: SettingFieldProps) {
+export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão", defaultLabel = "Padrão", hideHistory = false, readOnlyNote }: SettingFieldProps) {
     const help = settingHelp(meta.key, meta.description)
     const id = `setting-${meta.key.replace(/\W/g, "-")}`
     const error = value === null ? null : settingValueSchema(meta).safeParse(value).error?.issues[0]?.message ?? null
@@ -41,7 +43,14 @@ export function SettingField({ meta, value, dirty, onChange, extra, resetLabel =
                 <InfoTooltip text={help.help} label={help.label} />
                 <code className="ml-auto truncate font-mono text-[10px] text-muted-foreground">{meta.key}</code>
             </div>
-            <SettingControl id={id} meta={meta} value={value === null ? meta.default : value} onChange={onChange} />
+            {readOnlyNote ? (
+                <div id={id} data-readonly="true" className="space-y-1 rounded-md bg-muted/40 px-3 py-2">
+                    <p className="break-words font-mono text-xs">{formatSettingValue(value === null ? meta.default : value)}</p>
+                    <p className="text-[11px] text-muted-foreground">{readOnlyNote}</p>
+                </div>
+            ) : (
+                <SettingControl id={id} meta={meta} value={value === null ? meta.default : value} onChange={onChange} />
+            )}
             <AnimatePresence initial={false}>
                 {error && (
                     <motion.p key="error" role="alert" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="text-xs text-destructive">
@@ -54,9 +63,11 @@ export function SettingField({ meta, value, dirty, onChange, extra, resetLabel =
                 {range && <span>Intervalo: {range}</span>}
                 {!hideHistory && (meta.updated_at ? <span>Alterada em {formatDateTime(meta.updated_at)}{meta.updated_by_app ? ` por ${meta.updated_by_app}` : ""}</span> : <span>Valendo o padrão</span>)}
                 {extra && <span>{extra}</span>}
-                <Button type="button" variant="link" size="sm" className="ml-auto h-auto p-0 text-[11px]" onClick={() => onChange(null)} disabled={value === null}>
-                    <RotateCcw className="mr-1 h-3 w-3" aria-hidden /> {resetLabel}
-                </Button>
+                {!readOnlyNote && (
+                    <Button type="button" variant="link" size="sm" className="ml-auto h-auto p-0 text-[11px]" onClick={() => onChange(null)} disabled={value === null}>
+                        <RotateCcw className="mr-1 h-3 w-3" aria-hidden /> {resetLabel}
+                    </Button>
+                )}
             </div>
         </div>
     )

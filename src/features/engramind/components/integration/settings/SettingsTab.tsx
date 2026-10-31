@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { Skeleton } from "@/components/ui/skeleton"
 import { REINDEX_SETTING_KEYS, SETTING_GROUP_LABELS, SETTING_GROUPS } from "../../../constants"
+import { IMPLICIT_URL_SETTING_KEYS, PROVIDER_MANAGED_SETTING_KEYS } from "../../../ai-source"
 import { buildSettingsSchema, changedSettings, settingGroupOf } from "../../../schemas/settings"
 import type { SettingMeta } from "../../../types"
 import { engramindSend, useEngramindMutation, useEngramindQuery } from "../../../hooks/useEngramind"
@@ -20,11 +21,18 @@ const GROUP_HELP: Record<string, string> = {
     categories: "Categorias das memórias e a ordem delas no contexto.",
     memory: "Regras de escrita das memórias.",
     context: "Bloco de contexto entregue aos agentes (orçamento e formato).",
-    redator: "LLM que dá título e revisa o texto das memórias.",
-    embedding: "Vetores da busca por sentido. Trocar provedor, modelo, URL, dimensão ou prefixo valida o provedor e reindexa.",
+    redator: "LLM que dá título e revisa o texto das memórias. Provedor, modelo e reservas são escolhidos na aba Provedores (IA do Opex).",
+    embedding: "Vetores da busca por sentido. Provedor, modelo e dimensão são escolhidos na aba Provedores (IA do Opex); trocar o prefixo valida o provedor e reindexa.",
     search: "Fusão da busca por sentido e por texto e as dicas.",
     webhooks: "Entrega dos eventos aos apps (inclusive ao Opex).",
     retention: "Limpeza horária dos registros antigos.",
+}
+
+/** Chaves que só a aba Provedores edita (a URL é definida pelo provedor escolhido). */
+export function readOnlyNoteOf(key: string): string | undefined {
+    if (IMPLICIT_URL_SETTING_KEYS.includes(key)) return "Definida pelo provedor escolhido na aba Provedores."
+    if (PROVIDER_MANAGED_SETTING_KEYS.includes(key)) return "Edite na aba Provedores (IA do Opex)."
+    return undefined
 }
 
 /** Valor inicial do rascunho: o salvo quando foi alterado; `null` quando vale o padrão. */
@@ -44,7 +52,7 @@ function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyC
     const saved = useMemo(() => Object.fromEntries(metas.map((meta) => [meta.key, initialOf(meta)])), [metas])
     const [draft, setDraft] = useState<Record<string, unknown>>(saved)
     const [confirmReindex, setConfirmReindex] = useState(false)
-    const changes = useMemo(() => changedSettings(saved, draft), [saved, draft])
+    const changes = useMemo(() => Object.fromEntries(Object.entries(changedSettings(saved, draft)).filter(([key]) => !PROVIDER_MANAGED_SETTING_KEYS.includes(key))), [saved, draft])
     const dirty = Object.keys(changes).length > 0
     useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange])
     const validation = useMemo(() => buildSettingsSchema(metas).safeParse(changes), [metas, changes])
@@ -61,7 +69,7 @@ function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyC
                 <Section key={group} title={SETTING_GROUP_LABELS[group as keyof typeof SETTING_GROUP_LABELS] ?? "Outras"} info={GROUP_HELP[group]}>
                     <div className={FORM_GRID}>
                         {items.map((meta) => (
-                            <SettingField key={meta.key} meta={meta} value={draft[meta.key] ?? null} dirty={meta.key in changes} onChange={(value) => setDraft((prev) => ({ ...prev, [meta.key]: value }))} />
+                            <SettingField key={meta.key} meta={meta} value={draft[meta.key] ?? null} dirty={meta.key in changes} readOnlyNote={readOnlyNoteOf(meta.key)} onChange={(value) => setDraft((prev) => ({ ...prev, [meta.key]: value }))} />
                         ))}
                     </div>
                 </Section>

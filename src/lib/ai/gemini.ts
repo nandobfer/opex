@@ -9,7 +9,9 @@ import { AiProviderError } from "./errors"
  * `v1beta/models`; geração pelo `@ai-sdk/google` (Vercel AI SDK).
  */
 
-export const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta"
+import { GEMINI_API_URL } from "./endpoints"
+
+export { GEMINI_API_URL }
 
 async function getGeminiApiKey(): Promise<string> {
     const { apiKey } = await getIntegrationConfig("ai_gemini")
@@ -37,7 +39,7 @@ export function toGeminiModel(raw: GeminiModelRaw): AiModelDto {
 }
 
 /** Modelos que geram texto (`generateContent`), sem embeddings, imagem ou áudio. */
-export async function listGeminiModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+async function fetchGeminiModelsRaw(signal?: AbortSignal): Promise<GeminiModelRaw[]> {
     const apiKey = await getGeminiApiKey()
     const models: GeminiModelRaw[] = []
     let pageToken: string | undefined
@@ -56,8 +58,20 @@ export async function listGeminiModels(signal?: AbortSignal): Promise<AiModelDto
         pageToken = body.nextPageToken
     } while (pageToken)
     return models
+}
+
+export async function listGeminiModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+    return (await fetchGeminiModelsRaw(signal))
         .filter((model) => model.supportedGenerationMethods?.includes("generateContent") && /gemini|gemma/i.test(model.name) && !/(embedding|image|tts|audio|live)/i.test(model.name))
         .map(toGeminiModel)
+        .sort((a, b) => b.id.localeCompare(a.id))
+}
+
+/** Modelos de embedding (`embedContent`), para o Engramind. Sem variantes. */
+export async function listGeminiEmbeddingModels(signal?: AbortSignal): Promise<AiModelDto[]> {
+    return (await fetchGeminiModelsRaw(signal))
+        .filter((model) => model.supportedGenerationMethods?.includes("embedContent"))
+        .map((model) => ({ ...toGeminiModel(model), variants: [] }))
         .sort((a, b) => b.id.localeCompare(a.id))
 }
 

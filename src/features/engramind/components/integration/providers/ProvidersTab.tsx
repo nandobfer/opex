@@ -9,11 +9,12 @@ import { useEngramindQuery } from "../../../hooks/useEngramind"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { Section } from "../../shared/Section"
 import { EmbeddingModelsCard } from "./EmbeddingModelsCard"
+import { OpexAiCard, OpexAiCardSkeleton } from "./opex-ai/OpexAiCard"
 import { ProviderTestDialog } from "./ProviderTestDialog"
 import { ReembedCard } from "./ReembedCard"
 import { SecretsCard } from "./SecretsCard"
 
-/** Aba Provedores: chaves de API, testers, modelos de embedding e reindexação. */
+/** Aba Provedores: IA do Opex (Redator e embedding), chaves de API, testers, modelos de embedding e reindexação. */
 export function ProvidersTab({ onConfigure }: { onDirtyChange: (dirty: boolean) => void; onConfigure: () => void }) {
     const settings = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     const status = useEngramindQuery<EngramindStatus>("status", undefined, { refetchInterval: 5_000 })
@@ -22,6 +23,7 @@ export function ProvidersTab({ onConfigure }: { onDirtyChange: (dirty: boolean) 
     return (
         <QueryBoundary isLoading={settings.isLoading} error={settings.error} onRetry={() => void settings.refetch()} skeleton={<ProvidersSkeleton />} onConfigure={onConfigure}>
             <div className="flex flex-col gap-6">
+                <OpexAiCard />
                 <SecretsCard metas={settings.data?.settings ?? []} />
                 <Section title="Testar provedores" info="Chama o provedor de verdade com um texto de exemplo, sem gravar memória nem configuração (o teste do Redator entra nas chamadas ao LLM com finalidade test).">
                     <div className="flex flex-wrap gap-2">
@@ -44,6 +46,10 @@ export function ProvidersTab({ onConfigure }: { onDirtyChange: (dirty: boolean) 
 function ProvidersSkeleton() {
     return (
         <div className="flex flex-col gap-6" aria-busy="true">
+            <div className="space-y-4 rounded-xl border p-6">
+                <Skeleton className="h-5 w-32" />
+                <OpexAiCardSkeleton />
+            </div>
             <Skeleton className="h-44 w-full rounded-xl" />
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-40 w-full rounded-xl" />

@@ -97,7 +97,7 @@ export function areasForEvent(type: string): string[] {
     if (type.startsWith("memory.")) return ["memories", "channels"]
     if (type === "channel.updated") return ["channels", "memories"]
     if (type === "subscription.updated") return ["subscriptions", "agents"]
-    if (type === "settings.updated") return ["settings", "channels", "status"]
+    if (type === "settings.updated") return ["settings", "channels", "status", "providers"]
     if (type === "identities.updated") return ["apps", "agents", "tokens", "connection"]
     if (type === "jobs.updated" || type === "status.updated") return ["jobs", "status"]
     if (type.startsWith("env.")) return ["env", "status", "connection"]

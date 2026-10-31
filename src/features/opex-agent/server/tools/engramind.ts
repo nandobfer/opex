@@ -4,6 +4,7 @@ import { ENGRAMIND_OPERATIONS, type EngramindOperation } from "@/features/engram
 import { TOKEN_REVEAL_TTL_MS } from "@/features/engramind/constants"
 import { importInputSchema } from "@/features/engramind/schemas/import"
 import { envUpdateSchema } from "@/features/engramind/schemas/env"
+import { applyAiSourceSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
 import type { IssuedToken } from "@/features/engramind/types"
 
 /**
@@ -19,6 +20,7 @@ const hostEnv = () => import("@/features/engramind/server/host-env")
 const bootstrap = () => import("@/features/engramind/server/bootstrap")
 const connection = () => import("@/features/engramind/server/connection")
 const reveals = () => import("@/features/opex-agent/server/secret-reveals")
+const aiSource = () => import("@/features/engramind/server/ai-source")
 
 type AnyTool = OpexToolDef<unknown>
 const tool = <I>(def: Omit<OpexToolDef<I>, "group">) => defineTool<I>({ ...def, group: "engramind" }) as unknown as AnyTool
@@ -56,6 +58,31 @@ export const engramindTools: readonly AnyTool[] = [
         risk: "read",
         input: z.object({}),
         execute: async () => (await connection()).getConnection(),
+    }),
+    tool({
+        name: "get_engramind_ai_source",
+        label: "IA do Opex no Engramind",
+        description: "Mostra, para o Redator e o embedding, se a configuração em uso vem do Opex (provedor, modelo, reservas, dimensão) ou foi mudada no Engramind, e o estado da cópia da chave. Sem segredos.",
+        risk: "read",
+        input: z.object({}),
+        execute: async () => (await aiSource()).getOpexAiSourceState(),
+    }),
+    tool({
+        name: "apply_engramind_ai_source",
+        label: "Usar a IA do Opex no Engramind",
+        description: "Aplica no Redator (gemini, anthropic, openai ou deepseek; modelo e até 5 reservas) ou no embedding (local, gemini, openai ou off; modelo e dimensão) um provedor configurado no Opex. A URL vem do provedor; a chave é lida no servidor e copiada ao Engramind (nunca passa por aqui). Trocar o embedding reindexa.",
+        risk: "write",
+        confirmByDefault: true,
+        input: applyAiSourceSchema.meta({ examples: [{ section: "redator", source: { provider: "openai", model: "gpt-4o-mini", fallbackModels: [] } }] }),
+        execute: async (input, context) => (await aiSource()).applyOpexAiSource(input, context.actorId),
+    }),
+    tool({
+        name: "resend_engramind_ai_key",
+        label: "Reenviar a chave do Opex ao Engramind",
+        description: "Reenvia ao Engramind só a chave do provedor do Opex usado pelo Redator ou pelo embedding (quando a cópia falhou).",
+        risk: "write",
+        input: resendAiKeySchema,
+        execute: async (input, context) => (await aiSource()).resendOpexAiKey(input, context.actorId),
     }),
     tool({
         name: "run_engramind_bootstrap",
