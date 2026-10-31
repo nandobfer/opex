@@ -16,7 +16,7 @@ import { Section } from "../../shared/Section"
 /** Chaves de API do Redator e do embedding: Gravar e Apagar; a tela só mostra "Configurada em …". */
 export function SecretsCard({ metas }: { metas: SettingMeta[] }) {
     return (
-        <Section title="Chaves de API" info="Gravadas cifradas no Engramind (AES-256-GCM com SECRETS_KEY). O valor nunca volta: nem nesta tela, nem nos logs, nem na auditoria.">
+        <Section title="Chaves de API" info="Gravadas cifradas no Engramind (AES-256-GCM com SECRETS_KEY). O valor nunca volta: nem nesta tela, nem nos logs, nem na auditoria." description="Prefira a IA do Opex acima: ela copia e mantém a chave do Opex. Gravar uma chave à mão faz a seção passar a &quot;Configurado no Engramind&quot;.">
             <div className="grid gap-4 sm:grid-cols-2">
                 {SECRET_KEYS.map((key) => (
                     <SecretRow key={key} secretKey={key} meta={metas.find((meta) => meta.key === key)} />
