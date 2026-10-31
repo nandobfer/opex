@@ -116,6 +116,7 @@ export const issueTokenInput = z
     if (value.kind === "agent" && !value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token agent exige o agente" })
     if (value.kind === "admin" && !value.app && !value.agent) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token admin" })
 })
+    .meta({ examples: [{ kind: "agent", agent: "app-a/curador", scopes: ["read", "write"] }] })
 
 /** Tipagem por entrada na definição; no catálogo, a entrada fica apagada (validada por `input` na execução). */
 function op<I>(def: EngramindOperation<I>): EngramindOperation {
@@ -168,7 +169,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_settings",
         label: "Alterar configurações do Engramind",
         description: "Grava um mapa parcial chave → valor nas configurações do Engramind (tudo ou nada; null volta ao padrão). Trocar provedor, modelo, URL, dimensão ou prefixo do embedding valida o provedor e reindexa. Segredos não passam aqui (use set_engramind_secret).",
-        input: z.object({ settings: settingsMap.refine((value) => Object.keys(value).length > 0, "Informe ao menos uma chave") }),
+        input: z.object({ settings: settingsMap.refine((value) => Object.keys(value).length > 0, "Informe ao menos uma chave") }).meta({ examples: [{ settings: { "limits.rate_per_minute": 1200 } }] }),
         request: (input) => ({ path: "/v1/settings", body: input.settings }),
         event: "settings.updated",
     }),
@@ -193,7 +194,7 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         tool: "update_engramind_channel_settings",
         label: "Alterar configurações de um canal",
         description: "Grava sobreposições de configuração num canal (mapa parcial; null remove a sobreposição e volta ao global).",
-        input: z.object({ channel: channelRef, settings: settingsMap.refine((value) => Object.keys(value).length > 0, "Informe ao menos uma chave") }),
+        input: z.object({ channel: channelRef, settings: settingsMap.refine((value) => Object.keys(value).length > 0, "Informe ao menos uma chave") }).meta({ examples: [{ channel: "eng/global", settings: { "memory.text_max": 2000 } }] }),
         request: (input) => ({ path: `/v1/channels/${enc(input.channel)}/settings`, body: input.settings }),
         event: "settings.updated",
     }),

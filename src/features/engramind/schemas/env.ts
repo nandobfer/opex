@@ -51,6 +51,7 @@ export const envUpdateSchema = z
         }
         if (Object.keys(value.changes).length === 0 && !value.litestreamSecret) ctx.addIssue({ code: "custom", path: ["changes"], message: "Nenhuma alteração para salvar" })
     })
+    .meta({ examples: [{ hash: "0".repeat(64), changes: { RUST_LOG: "engramind=debug,tower_http=warn" } }] })
 export type EnvUpdateInput = z.infer<typeof envUpdateSchema>
 
 export const envApplySchema = z.object({ confirm: z.literal(true, { error: "Confirme a reinicialização" }) })
