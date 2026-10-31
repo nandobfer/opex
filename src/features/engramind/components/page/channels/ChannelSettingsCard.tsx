@@ -44,13 +44,15 @@ export function ChannelSettingsCard({ channel }: { channel: string }) {
         onRetry={() => void query.refetch()}
         skeleton={<ListSkeleton rows={3} rowClassName="h-24" />}
       >
-        <StaleFormNotice stale={snapshot.stale} onReload={snapshot.reload} />
+        <StaleFormNotice stale={snapshot.stale} onReload={() => snapshot.adopt()} />
         <ChannelSettingsForm
           key={snapshot.key}
           channel={channel}
           metas={snapshot.data ?? []}
           onDirtyChange={setDirty}
-          onSaved={snapshot.reload}
+          onSaved={async () =>
+            snapshot.adopt((await query.refetch()).data?.settings)
+          }
         />
       </QueryBoundary>
     </Section>
@@ -66,7 +68,7 @@ function ChannelSettingsForm({
   channel: string;
   metas: ChannelSettingsView["settings"];
   onDirtyChange: (dirty: boolean) => void;
-  onSaved: () => void;
+  onSaved: () => Promise<void>;
 }) {
   const saved = useMemo(
     () =>
@@ -109,7 +111,7 @@ function ChannelSettingsForm({
       <div className="flex justify-end">
         <Button
           type="button"
-          onClick={() => save.mutate(changes, { onSuccess: onSaved })}
+          onClick={() => save.mutate(changes, { onSuccess: () => void onSaved() })}
           disabled={
             Object.keys(changes).length === 0 || !valid || save.isPending
           }

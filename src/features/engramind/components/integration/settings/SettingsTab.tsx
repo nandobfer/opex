@@ -37,6 +37,8 @@ export function readOnlyNoteOf(key: string): string | undefined {
     return undefined
 }
 
+const visibleMetas = (data: { settings: SettingMeta[] } | undefined) => data?.settings.filter((meta) => !meta.secret)
+
 /** Valor inicial do rascunho: o salvo quando foi alterado; `null` quando vale o padrão. */
 const initialOf = (meta: SettingMeta) => (meta.updated_at ? meta.value : null)
 
@@ -44,7 +46,7 @@ const initialOf = (meta: SettingMeta) => (meta.updated_at ? meta.value : null)
 export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (dirty: boolean) => void; onConfigure: () => void }) {
     const query = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     const [dirty, setDirty] = useState(false)
-    const metas = useMemo(() => query.data?.settings.filter((meta) => !meta.secret), [query.data])
+    const metas = useMemo(() => visibleMetas(query.data), [query.data])
     // Refazer a consulta (tempo real, reconexão) não descarta o rascunho: só remonta quando o conteúdo muda sem alterações pendentes.
     const snapshot = useFormSnapshot(metas, dirty)
     const changeDirty = useCallback(
@@ -57,14 +59,14 @@ export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (di
     return (
         <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} skeleton={<SettingsSkeleton />} onConfigure={onConfigure}>
             <div className="flex flex-col gap-4">
-                <StaleFormNotice stale={snapshot.stale} onReload={snapshot.reload} />
-                {snapshot.data && <SettingsForm key={snapshot.key} metas={snapshot.data} onDirtyChange={changeDirty} onSaved={snapshot.reload} />}
+                <StaleFormNotice stale={snapshot.stale} onReload={() => snapshot.adopt()} />
+                {snapshot.data && <SettingsForm key={snapshot.key} metas={snapshot.data} onDirtyChange={changeDirty} onSaved={async () => snapshot.adopt(visibleMetas((await query.refetch()).data))} />}
             </div>
         </QueryBoundary>
     )
 }
 
-function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[]; onDirtyChange: (dirty: boolean) => void; onSaved: () => void }) {
+function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[]; onDirtyChange: (dirty: boolean) => void; onSaved: () => Promise<void> }) {
     const saved = useMemo(() => Object.fromEntries(metas.map((meta) => [meta.key, initialOf(meta)])), [metas])
     const [draft, setDraft] = useState<Record<string, unknown>>(saved)
     const [confirmReindex, setConfirmReindex] = useState(false)
@@ -77,7 +79,7 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
 
     const groups = SETTING_GROUPS.map((group) => ({ group, items: metas.filter((meta) => settingGroupOf(meta.key) === group) })).filter((entry) => entry.items.length > 0)
     const others = metas.filter((meta) => !(SETTING_GROUPS as readonly string[]).includes(settingGroupOf(meta.key)))
-    const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes, { onSuccess: onSaved }))
+    const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes, { onSuccess: () => void onSaved() }))
 
     return (
         <div className="flex flex-col gap-6">
@@ -119,7 +121,7 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
                 items={Object.keys(changes).filter((key) => REINDEX_SETTING_KEYS.includes(key))}
                 confirmLabel="Salvar e reindexar"
                 pending={save.isPending}
-                onConfirm={() => save.mutate(changes, { onSuccess: onSaved, onSettled: () => setConfirmReindex(false) })}
+                onConfirm={() => save.mutate(changes, { onSuccess: () => void onSaved(), onSettled: () => setConfirmReindex(false) })}
             />
         </div>
     )

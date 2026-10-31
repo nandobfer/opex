@@ -81,6 +81,7 @@ import { useFormSnapshot } from '@/features/engramind/components/shared/useFormS
 import { SettingsTab } from '@/features/engramind/components/integration/settings/SettingsTab'
 import { JobsCard } from '@/features/engramind/components/integration/operation/JobsCard'
 import { SubscribersCard } from '@/features/engramind/components/page/channels/SubscribersCard'
+import { ChannelSettingsCard } from '@/features/engramind/components/page/channels/ChannelSettingsCard'
 import { ConnectionTab } from '@/features/engramind/components/integration/ConnectionTab'
 import { ImportMemoriesDialog } from '@/features/engramind/components/page/memories/ImportMemoriesDialog'
 import { EnvTab } from '@/features/engramind/components/integration/env/EnvTab'
@@ -125,11 +126,17 @@ describe('useFormSnapshot', () => {
     rerender({ data: { a: 2 }, dirty: true })
     expect(result.current.stale).toBe(true)
     expect(result.current.data).toEqual({ a: 1 })
-    act(() => result.current.reload())
+    act(() => result.current.adopt())
     expect(result.current.data).toEqual({ a: 2 })
     rerender({ data: { a: 3 }, dirty: false })
     expect(result.current.data).toEqual({ a: 3 })
     expect(result.current.stale).toBe(false)
+  })
+
+  it('adopt(valor) adota o valor informado (resultado do refetch), não o da renderização', () => {
+    const { result } = renderHook(() => useFormSnapshot({ a: 1 }, true))
+    act(() => result.current.adopt({ a: 9 }))
+    expect(result.current.data).toEqual({ a: 9 })
   })
 })
 
@@ -183,6 +190,51 @@ describe('SettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Recarregar/ }))
     await waitFor(() => expect(input().value).toBe('600'))
     expect((document.getElementById('setting-embedding-query_prefix') as HTMLInputElement).value).toBe('mudado por fora')
+  })
+})
+
+describe('salvar limpa o rascunho (adota o refetch aguardado)', () => {
+  const settingsData = (rate: number) => ({
+    settings: [{ key: 'limits.rate_per_minute', type: 'integer', min: 1, max: 100000, default: 600, value: rate, description: '', channel_override: false, updated_at: rate === 600 ? null : '2026-10-31T12:00:00Z' }],
+  })
+
+  it('Configurações: depois de salvar, sem barra, sem aviso e onDirtyChange(false)', async () => {
+    const onDirtyChange = vi.fn()
+    mocks.queries.settings = { ...query(settingsData(600)), refetch: async () => {
+      mocks.queries.settings = { ...mocks.queries.settings!, data: settingsData(1200) }
+      return { data: settingsData(1200) }
+    } } as never
+    mocks.mutate.mockImplementation((_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.())
+    render(<SettingsTab onDirtyChange={onDirtyChange} onConfigure={vi.fn()} />)
+    const input = () => document.getElementById('setting-limits-rate_per_minute') as HTMLInputElement
+    fireEvent.change(input(), { target: { value: '1200' } })
+    fireEvent.click(await screen.findByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Salvar/ })).toBeNull())
+    expect(screen.queryByText(/mudaram fora daqui/)).toBeNull()
+    expect(input().value).toBe('1200')
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    mocks.mutate.mockReset()
+  })
+
+  it('Configurações do canal: depois de salvar, o Salvar volta a ficar desabilitado e sem aviso', async () => {
+    const view = (override: number | null) => ({ channel: 'eng/global', channel_id: 'ch_1', settings: [{ key: 'memory.text_max', type: 'integer', description: '', value: override ?? 1000, global: 1000, override, min: 1, max: 100000 }] })
+    const path = 'channels/eng%2Fglobal/settings'
+    mocks.queries[path] = { ...query(view(null)), refetch: async () => {
+      mocks.queries[path] = { ...mocks.queries[path]!, data: view(2000) }
+      return { data: view(2000) }
+    } } as never
+    mocks.mutate.mockImplementation((_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.())
+    render(<ChannelSettingsCard channel="eng/global" />)
+    const input = () => document.getElementById('setting-memory-text_max') as HTMLInputElement
+    fireEvent.change(input(), { target: { value: '2000' } })
+    const save = screen.getByRole('button', { name: /Salvar/ })
+    expect(save.hasAttribute('disabled')).toBe(false)
+    fireEvent.click(save)
+    expect(mocks.mutate).toHaveBeenCalledWith({ 'memory.text_max': 2000 }, expect.anything())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Salvar/ }).hasAttribute('disabled')).toBe(true))
+    expect(screen.queryByText(/mudaram fora daqui/)).toBeNull()
+    expect(input().value).toBe('2000')
+    mocks.mutate.mockReset()
   })
 })
 
