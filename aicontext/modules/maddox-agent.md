@@ -148,7 +148,7 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   recusado com mensagem); subagente de título e resumo (também pelo OpenCode; vazio = o do agente);
   instruções e as do título, com **Restaurar padrão**; card **Arquivos no chat**; card das
   **Ferramentas do Opex no OpenCode** (endereço e situação dos MCPs).
-- **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs**), com seleção e
+- **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs** e sem `issue_engramind_token` — `MADDOX_EXCLUDED_TOOLS`, que depende do "Ver token" do card do Agente Opex), com seleção e
   **"Pede confirmação"** próprios, independentes do Agente Opex.
 - **Memórias**: **Memórias globais**, **Memórias do dono** e **Memórias do cliente** do Maddox
   (`maddox-global`, `maddox-owner`, `maddox-client`), que salvam sozinhas.
