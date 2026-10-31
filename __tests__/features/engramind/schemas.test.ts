@@ -46,6 +46,12 @@ describe('importação', () => {
     expect(parseImportFile('{"text":"um"}\n{"text":"dois"}\n').items).toHaveLength(2)
   })
 
+  it('regressão: JSONL com uma única linha é aceito como um item', () => {
+    const result = parseImportFile('{"text":"Rode só os testes afetados."}\n')
+    expect(result.fatal).toBeNull()
+    expect(result.items).toEqual([expect.objectContaining({ text: 'Rode só os testes afetados.' })])
+  })
+
   it('aponta o erro pelo índice e recusa formato desconhecido', () => {
     const result = parseImportFile('[{"text":"ok"},{"text":""},{"texto":"x"}]')
     expect(result.items).toHaveLength(1)

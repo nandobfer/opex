@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Loader2, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,8 @@ import type { SettingMeta } from "../../../types"
 import { engramindSend, useEngramindMutation, useEngramindQuery } from "../../../hooks/useEngramind"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { Section } from "../../shared/Section"
+import { StaleFormNotice } from "../../shared/StaleFormNotice"
+import { useFormSnapshot } from "../../shared/useFormSnapshot"
 import { SettingField } from "./SettingField"
 
 const GROUP_HELP: Record<string, string> = {
@@ -41,14 +43,28 @@ const initialOf = (meta: SettingMeta) => (meta.updated_at ? meta.value : null)
 /** Aba Configurações: todas as chaves de `GET /v1/settings`, agrupadas, gravadas só as alteradas (tudo ou nada). */
 export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (dirty: boolean) => void; onConfigure: () => void }) {
     const query = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
+    const [dirty, setDirty] = useState(false)
+    const metas = useMemo(() => query.data?.settings.filter((meta) => !meta.secret), [query.data])
+    // Refazer a consulta (tempo real, reconexão) não descarta o rascunho: só remonta quando o conteúdo muda sem alterações pendentes.
+    const snapshot = useFormSnapshot(metas, dirty)
+    const changeDirty = useCallback(
+        (next: boolean) => {
+            setDirty(next)
+            onDirtyChange(next)
+        },
+        [onDirtyChange],
+    )
     return (
         <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} skeleton={<SettingsSkeleton />} onConfigure={onConfigure}>
-            {query.data && <SettingsForm key={query.dataUpdatedAt} metas={query.data.settings.filter((meta) => !meta.secret)} onDirtyChange={onDirtyChange} />}
+            <div className="flex flex-col gap-4">
+                <StaleFormNotice stale={snapshot.stale} onReload={snapshot.reload} />
+                {snapshot.data && <SettingsForm key={snapshot.key} metas={snapshot.data} onDirtyChange={changeDirty} onSaved={snapshot.reload} />}
+            </div>
         </QueryBoundary>
     )
 }
 
-function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyChange: (dirty: boolean) => void }) {
+function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[]; onDirtyChange: (dirty: boolean) => void; onSaved: () => void }) {
     const saved = useMemo(() => Object.fromEntries(metas.map((meta) => [meta.key, initialOf(meta)])), [metas])
     const [draft, setDraft] = useState<Record<string, unknown>>(saved)
     const [confirmReindex, setConfirmReindex] = useState(false)
@@ -61,7 +77,7 @@ function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyC
 
     const groups = SETTING_GROUPS.map((group) => ({ group, items: metas.filter((meta) => settingGroupOf(meta.key) === group) })).filter((entry) => entry.items.length > 0)
     const others = metas.filter((meta) => !(SETTING_GROUPS as readonly string[]).includes(settingGroupOf(meta.key)))
-    const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes))
+    const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes, { onSuccess: onSaved }))
 
     return (
         <div className="flex flex-col gap-6">
@@ -103,7 +119,7 @@ function SettingsForm({ metas, onDirtyChange }: { metas: SettingMeta[]; onDirtyC
                 items={Object.keys(changes).filter((key) => REINDEX_SETTING_KEYS.includes(key))}
                 confirmLabel="Salvar e reindexar"
                 pending={save.isPending}
-                onConfirm={() => save.mutate(changes, { onSettled: () => setConfirmReindex(false) })}
+                onConfirm={() => save.mutate(changes, { onSuccess: onSaved, onSettled: () => setConfirmReindex(false) })}
             />
         </div>
     )

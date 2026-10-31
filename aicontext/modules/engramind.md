@@ -110,6 +110,13 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
 - O container do Engramind precisa alcançar os provedores oficiais (`ollama` e endpoints próprios não
   são configuráveis pela tela). A chave fica cifrada no Engramind (`SECRETS_KEY`).
 
+Listas (jobs, chamadas ao LLM, auditoria, assinantes, histórico da memória) e as configurações do
+canal passam pela `QueryBoundary` com skeleton da lista (`ListSkeleton`): um erro do Engramind nunca
+aparece como lista vazia — mostra a mensagem com "Tentar novamente" (ou "Reconfigure o token"). Os
+formulários de Configurações e de configurações do canal usam `useFormSnapshot`: refazer a consulta
+(webhook, reconexão, foco) não descarta o rascunho; só remonta quando o conteúdo muda e não há
+alterações pendentes. Com rascunho, aparece "As configurações mudaram fora daqui" com **Recarregar**.
+
 Os formulários validam com os **mesmos schemas Zod** da rota e do agente (`operations.ts`,
 `schemas/*`) em tempo real (`useSchemaForm`).
 
@@ -169,7 +176,7 @@ com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba ma
 - **Memórias**: filtros (canal, status, categoria de `categories.list`, autor, desde), busca
   (`/v1/memories/search`; `mode: "text"` mostra "Busca só textual"), histórico com **Reverter**,
   fixar/desafixar, arquivar/restaurar, mover de canal e excluir de vez (confirmação nas destrutivas).
-  **Importar**: canal ativo + arquivo JSON (lista ou `{ memories }`) ou JSONL; prévia com a contagem e
+  **Importar**: canal ativo + arquivo JSON (lista ou `{ memories }`) ou JSONL (inclusive de uma linha só); prévia com a contagem e
   os erros por índice (`parseImportFile`); acima de `limits.max_batch` recusa antes do envio (também
   no servidor); `Idempotency-Key = opex-import-<sha256(canal + conteúdo)>` (o mesmo arquivo não
   duplica); resultado com as criadas e as duplicadas (`existing_id`).

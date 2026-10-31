@@ -37,6 +37,8 @@ export function parseImportFile(content: string): ImportParseResult {
         const parsed: unknown = JSON.parse(text)
         if (Array.isArray(parsed)) raw = parsed
         else if (parsed && typeof parsed === "object" && Array.isArray((parsed as { memories?: unknown }).memories)) raw = (parsed as { memories: unknown[] }).memories
+        // JSONL de uma linha só: o arquivo inteiro é um item (objeto com `text`).
+        else if (parsed && typeof parsed === "object" && "text" in parsed) raw = [parsed]
         else return { items: [], errors: [], fatal: "Use uma lista JSON, { \"memories\": [...] } ou JSONL" }
     } catch {
         raw = []

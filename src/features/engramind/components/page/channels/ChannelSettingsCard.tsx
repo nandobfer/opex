@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FORM_GRID } from "@/components/ui/form-grid";
@@ -18,6 +18,10 @@ import {
 } from "../../../hooks/useEngramind";
 import { formatSettingValue } from "../../shared/format";
 import { Section } from "../../shared/Section";
+import { QueryBoundary } from "../../shared/QueryBoundary";
+import { ListSkeleton } from "../../shared/ListSkeleton";
+import { StaleFormNotice } from "../../shared/StaleFormNotice";
+import { useFormSnapshot } from "../../shared/useFormSnapshot";
 import { SettingField } from "../../integration/settings/SettingField";
 
 /** Configurações do canal: só as chaves que aceitam sobreposição (efetivo, global e sobreposição). */
@@ -25,25 +29,30 @@ export function ChannelSettingsCard({ channel }: { channel: string }) {
   const query = useEngramindQuery<ChannelSettingsView>(
     route("channels", channel, "settings"),
   );
+  const [dirty, setDirty] = useState(false);
+  // Refazer a consulta não descarta o rascunho (remonta só com conteúdo novo e sem alterações pendentes).
+  const snapshot = useFormSnapshot(query.data?.settings, dirty);
   return (
     <Section
       title="Configurações do canal"
       info={CHANNEL_HELP.override}
       description="Sem sobreposição, vale o valor global."
     >
-      {query.isLoading ? (
-        <p className="text-sm text-muted-foreground">Carregando…</p>
-      ) : query.error ? (
-        <p className="text-sm text-destructive">
-          Não foi possível carregar as configurações do canal.
-        </p>
-      ) : (
+      <QueryBoundary
+        isLoading={query.isLoading}
+        error={query.error}
+        onRetry={() => void query.refetch()}
+        skeleton={<ListSkeleton rows={3} rowClassName="h-24" />}
+      >
+        <StaleFormNotice stale={snapshot.stale} onReload={snapshot.reload} />
         <ChannelSettingsForm
-          key={query.dataUpdatedAt}
+          key={snapshot.key}
           channel={channel}
-          metas={query.data?.settings ?? []}
+          metas={snapshot.data ?? []}
+          onDirtyChange={setDirty}
+          onSaved={snapshot.reload}
         />
-      )}
+      </QueryBoundary>
     </Section>
   );
 }
@@ -51,9 +60,13 @@ export function ChannelSettingsCard({ channel }: { channel: string }) {
 function ChannelSettingsForm({
   channel,
   metas,
+  onDirtyChange,
+  onSaved,
 }: {
   channel: string;
   metas: ChannelSettingsView["settings"];
+  onDirtyChange: (dirty: boolean) => void;
+  onSaved: () => void;
 }) {
   const saved = useMemo(
     () =>
@@ -65,6 +78,8 @@ function ChannelSettingsForm({
   const [draft, setDraft] = useState<Record<string, unknown>>(saved);
   const changes = changedSettings(saved, draft);
   const valid = buildSettingsSchema(metas).safeParse(changes).success;
+  const dirty = Object.keys(changes).length > 0;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const save = useEngramindMutation(
     (settings: Record<string, unknown>) =>
       engramindSend("put", route("channels", channel, "settings"), {
@@ -94,7 +109,7 @@ function ChannelSettingsForm({
       <div className="flex justify-end">
         <Button
           type="button"
-          onClick={() => save.mutate(changes)}
+          onClick={() => save.mutate(changes, { onSuccess: onSaved })}
           disabled={
             Object.keys(changes).length === 0 || !valid || save.isPending
           }

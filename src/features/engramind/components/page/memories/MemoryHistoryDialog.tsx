@@ -8,6 +8,8 @@ import type { EngramindMemory, MemoryRevision } from "../../../types"
 import { engramindSend, route, useEngramindList, useEngramindMutation } from "../../../hooks/useEngramind"
 import { formatDateTime } from "../../shared/format"
 import { LoadMore } from "../../shared/LoadMore"
+import { QueryBoundary } from "../../shared/QueryBoundary"
+import { ListSkeleton } from "../../shared/ListSkeleton"
 
 /** Histórico de versões da memória, com "Reverter" (cria uma revisão nova com o texto antigo). */
 export function MemoryHistoryDialog({ memory, onOpenChange }: { memory: EngramindMemory; onOpenChange: (open: boolean) => void }) {
@@ -20,29 +22,29 @@ export function MemoryHistoryDialog({ memory, onOpenChange }: { memory: Engramin
                     <DialogTitle>Histórico de {memory.id}</DialogTitle>
                     <DialogDescription>Cada edição cria uma versão. Reverter devolve texto, título e categoria numa versão nova.</DialogDescription>
                 </DialogHeader>
-                {history.isLoading ? (
-                    <p className="text-sm text-muted-foreground">Carregando…</p>
-                ) : history.items.length === 0 ? (
-                    <EmptyState icon={History} title="Sem histórico" />
-                ) : (
-                    <ol className="space-y-3">
-                        {history.items.map((revision) => (
-                            <li key={revision.version} className="space-y-1 rounded-lg border p-3 text-sm">
-                                <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="font-semibold text-foreground">v{revision.version}</span>
-                                    {formatDateTime(revision.created_at)} · {revision.author.agent ? `${revision.author.app}/${revision.author.agent}` : revision.author.app} {revision.reason ? `· ${revision.reason}` : ""} · {revision.category}
-                                    {revision.version !== memory.version && (
-                                        <Button type="button" size="sm" variant="outline" className="ml-auto h-7" onClick={() => revert.mutate(revision.version, { onSuccess: () => onOpenChange(false) })} disabled={revert.isPending}>
-                                            {revert.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden /> : <Undo2 className="mr-1 h-3 w-3" aria-hidden />} Reverter
-                                        </Button>
-                                    )}
-                                </p>
-                                {revision.title && <p className="font-medium">{revision.title}</p>}
-                                <p className="whitespace-pre-wrap">{revision.text}</p>
-                            </li>
-                        ))}
-                    </ol>
-                )}
+                <QueryBoundary isLoading={history.isLoading} error={history.error} onRetry={() => void history.refetch()} skeleton={<ListSkeleton rows={3} rowClassName="h-20" />}>
+                    {history.items.length === 0 ? (
+                        <EmptyState icon={History} title="Sem histórico" />
+                    ) : (
+                        <ol className="space-y-3">
+                            {history.items.map((revision) => (
+                                <li key={revision.version} className="space-y-1 rounded-lg border p-3 text-sm">
+                                    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                        <span className="font-semibold text-foreground">v{revision.version}</span>
+                                        {formatDateTime(revision.created_at)} · {revision.author.agent ? `${revision.author.app}/${revision.author.agent}` : revision.author.app} {revision.reason ? `· ${revision.reason}` : ""} · {revision.category}
+                                        {revision.version !== memory.version && (
+                                            <Button type="button" size="sm" variant="outline" className="ml-auto h-7" onClick={() => revert.mutate(revision.version, { onSuccess: () => onOpenChange(false) })} disabled={revert.isPending}>
+                                                {revert.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden /> : <Undo2 className="mr-1 h-3 w-3" aria-hidden />} Reverter
+                                            </Button>
+                                        )}
+                                    </p>
+                                    {revision.title && <p className="font-medium">{revision.title}</p>}
+                                    <p className="whitespace-pre-wrap">{revision.text}</p>
+                                </li>
+                            ))}
+                        </ol>
+                    )}
+                </QueryBoundary>
                 <LoadMore hasNextPage={Boolean(history.hasNextPage)} isFetchingNextPage={history.isFetchingNextPage} fetchNextPage={history.fetchNextPage} />
             </DialogContent>
         </Dialog>
