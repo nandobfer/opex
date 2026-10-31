@@ -92,11 +92,14 @@ describe('controle de horas agêntico', () => {
 
   it('apontamentos: filtra por período, pagina e soma os minutos e o custo', async () => {
     const taskId = await seedTask()
+    // Período em volta de "agora": datas fixas quebravam o teste quando o mês virava.
+    const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const log = await beginWorkPeriod({ taskId, workbenchId: 'wb-1', stage: 'planning', agent: 'plan', model: null }, 'local')
     await accumulateWorkPeriodUsage('wb-1', { costUsd: 0.5, inputTokens: 1, outputTokens: 0, reasoningTokens: 0 })
     await endWorkPeriod('wb-1', 'local')
+    const to = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     mocks.models.timeLog.aggregate = async () => [{ totalMinutes: 60, totalCostUsd: 0.5 }]
-    const page = await listTimeLogs({ from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T00:00:00.000Z', page: 1 })
+    const page = await listTimeLogs({ from, to, page: 1 })
     expect(page).toMatchObject({ page: 1, totalPages: 1, total: 1, totalMinutes: 60, totalCostUsd: 0.5 })
     expect(page.logs[0]).toMatchObject({ id: log.id, taskId, taskCode: 'OPX-7', costUsd: 0.5 })
   })
