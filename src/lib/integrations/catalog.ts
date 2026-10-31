@@ -700,8 +700,8 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         // Tudo é gravado pela aba Conexão (`PUT /api/engramind/connection`), que dispara o bootstrap.
         publicFields: [
-            { key: "baseUrl", label: "URL base do Engramind", description: "Endereço que o servidor do Opex alcança (ex.: http://engramind-api:8000)", kind: "url", placeholder: "http://engramind-api:8000", required: true },
-            { key: "opexPublicUrl", label: "URL pública do Opex", description: "Endereço do Opex que o Engramind alcança para entregar os webhooks", kind: "url", placeholder: "http://opex:3100", required: true },
+            { key: "baseUrl", label: "URL base do Engramind", description: "Endereço que o servidor do Opex alcança (ex.: http://engramind-api:8000)", kind: "url", placeholder: "http://engramind-api:8000", required: true, group: "card" },
+            { key: "opexPublicUrl", label: "URL pública do Opex", description: "Endereço do Opex que o Engramind alcança para entregar os webhooks", kind: "url", placeholder: "http://opex:3100", required: true, group: "card" },
             { key: "environmentId", label: "Ambiente do Engramind", description: "Ambiente (módulo Ambientes) com a instalação, para as variáveis de ambiente", kind: "text", group: "card" },
         ],
         secretFields: [

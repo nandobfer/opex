@@ -37,6 +37,15 @@ describe('ferramentas do Engramind', () => {
     for (const tool of engramindTools.filter((item) => item.risk === 'destructive')) expect(typeof tool.summarize).toBe('function')
   })
 
+  it('emitir token fica fora do MCP do Maddox (lá não há o botão "Ver token"); o resto do grupo segue', async () => {
+    const { maddoxMcpCatalog } = await import('@/features/maddox-agent/server/mcp-catalog')
+    const { maddoxOwnerToolMetas } = await import('@/features/maddox-agent/catalog')
+    const names = (await maddoxMcpCatalog('owner')).map((tool) => tool.name)
+    expect(names).not.toContain('issue_engramind_token')
+    expect(names).toContain('revoke_engramind_token')
+    expect(maddoxOwnerToolMetas(engramindTools.map((tool) => ({ name: tool.name, group: tool.group }) as never)).map((tool) => tool.name)).not.toContain('issue_engramind_token')
+  })
+
   it('não existem no Agente Opex do portal', () => {
     expect(OPEX_CLIENT_SERVER_TOOLS.some((tool) => tool.name.includes('engramind'))).toBe(false)
   })

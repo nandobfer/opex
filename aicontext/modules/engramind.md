@@ -11,8 +11,10 @@ Fora de escopo (entrega posterior): usar as memórias do Engramind no lugar das 
 ## Integração `engramind` (`/integracoes/engramind`)
 
 - **Catálogo** (`src/lib/integrations/catalog.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
-  `env`. Públicos: `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
-  Engramind alcança para os webhooks) e `environmentId` (`group: "card"`). Privados: `adminToken` e
+  `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o card Geral não
+  regravar URLs antigas): `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
+  Engramind alcança para os webhooks) e `environmentId`. Salvar a conexão ou repetir o bootstrap
+  invalida também o detalhe e a lista de `/integracoes`. Privados: `adminToken` e
   `webhookSecret` (`group: "card"`, gerado pelo Opex, nunca exibido). Tudo é gravado pela aba Conexão
   (`PUT /api/engramind/connection`), que chama o `updateIntegration` central (cifra e audita).
 - **Cliente HTTP** (`server/client.ts`, só servidor): Bearer com o token privado, `User-Agent:
@@ -150,7 +152,9 @@ Grupo `engramind` (`server/tools/engramind.ts`): uma ferramenta por operação d
 (`operations.ts`), mais `get_engramind_connection`, `run_engramind_bootstrap`,
 `import_engramind_memories`, `get_engramind_env`, `update_engramind_env` e `apply_engramind_env`. Todas
 chamam o serviço (`runEngramindOperation`, `importEngramindMemories`, `host-env.ts`), nunca o HTTP do
-app. Não existem no Agente Opex do portal.
+app. Não existem no Agente Opex do portal. No MCP do Agente Maddox (`mcp:owner`) o grupo entra, **menos
+`issue_engramind_token`** (`MADDOX_EXCLUDED_TOOLS` em `src/features/maddox-agent/catalog.ts`): lá não há
+o card com "Ver token" e o token emitido ficaria inalcançável.
 
 - `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
   memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.

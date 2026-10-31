@@ -71,6 +71,8 @@ interface MutationOptions<V> {
     success?: string | ((variables: V) => string)
     /** Não mostra o toast de erro (o chamador mostra no formulário). */
     silentError?: boolean
+    /** Outras chaves a invalidar (ex.: o detalhe da integração). */
+    alsoInvalidate?: readonly QueryKey[]
 }
 
 /** Mutação numa rota do Engramind, com toast pt-BR e invalidação das áreas afetadas. */
@@ -80,6 +82,7 @@ export function useEngramindMutation<V, T = unknown>(request: (variables: V) => 
         mutationFn: request,
         onSuccess: (_data, variables) => {
             for (const area of options.invalidate) void queryClient.invalidateQueries({ queryKey: areaKey(area) })
+            for (const queryKey of options.alsoInvalidate ?? []) void queryClient.invalidateQueries({ queryKey })
             const message = typeof options.success === "function" ? options.success(variables) : options.success
             if (message) toast.success(message)
         },

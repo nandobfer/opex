@@ -13,11 +13,20 @@ import { MADDOX_MCP_SERVERS, type MaddoxMcpScope } from "./constants"
 
 export const MADDOX_EXCLUDED_GROUPS: readonly string[] = ["jobs"]
 
+/**
+ * Ferramentas do dono fora do Maddox: dependem de um botão do card do Agente Opex que o MCP não tem
+ * (`issue_engramind_token` guarda o segredo para o "Ver token"; pelo MCP o token ficaria inalcançável).
+ */
+export const MADDOX_EXCLUDED_TOOLS: readonly string[] = ["issue_engramind_token"]
+
 const included = (group: string) => !MADDOX_EXCLUDED_GROUPS.includes(group)
+
+/** Ferramenta do dono disponível ao Maddox (grupo e nome). */
+export const maddoxIncludesOwnerTool = (tool: { group: string; name: string }) => included(tool.group) && !MADDOX_EXCLUDED_TOOLS.includes(tool.name)
 
 /** Ferramentas do dono disponíveis ao Maddox (metadados do registro do Agente Opex). */
 export function maddoxOwnerToolMetas(metas: readonly OpexToolMetaDto[]): OpexToolMetaDto[] {
-    return metas.filter((tool) => included(tool.group))
+    return metas.filter(maddoxIncludesOwnerTool)
 }
 
 /** Ferramentas do portal disponíveis ao Maddox. */
