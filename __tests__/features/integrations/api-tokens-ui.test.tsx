@@ -147,6 +147,23 @@ describe('ApiTokenDialog (gerar)', () => {
     expect((document.getElementById('scope-api-all') as HTMLInputElement).checked).toBe(true)
   })
 
+  it('Voltar do resumo com MCP e nenhum grupo marcado não vira "Todas"', async () => {
+    mocks.create.mockResolvedValue({ token: 'mt_sys_x', item: token() })
+    render(<ApiTokenDialog open onOpenChange={() => {}} />)
+    typeName('Só contexto')
+    clickSwitch('scope-mcp-owner')
+    fireEvent.click(screen.getByRole('radio', { name: /Grupos inteiros/ }))
+    await review()
+    fireEvent.click(await screen.findByRole('button', { name: 'Voltar' }))
+    expect(screen.getByRole('radio', { name: /Todas as ferramentas/ }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByText(/inclusive as que forem adicionadas depois/)).toBeNull()
+    await review()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Gerar token' }))
+    })
+    expect(mocks.create.mock.calls[0][0].escopos).toEqual(['mcp:owner'])
+  })
+
   it('carregando mostra o skeleton; erro do catálogo tem "Tentar novamente"', () => {
     mocks.scopes = { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }
     const { unmount } = render(<ApiTokenDialog open onOpenChange={() => {}} />)

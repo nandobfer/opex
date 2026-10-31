@@ -10,6 +10,7 @@ import { z } from 'zod'
 const mocks = vi.hoisted(() => ({
   enabled: true,
   disabledTools: [] as string[],
+  overrides: {} as Record<string, boolean>,
   token: null as null | Record<string, unknown>,
   execute: vi.fn(async (input: unknown) => ({ ok: true, input })),
   warn: vi.fn(),
@@ -38,7 +39,7 @@ vi.mock('@/features/integrations/api-tokens/service', () => ({
   tokenLogRef: (token: { id: string; nome: string; prefixo: string }) => ({ tokenId: token.id, tokenNome: token.nome, tokenPrefixo: token.prefixo }),
 }))
 vi.mock('@/features/maddox-agent/server/settings', () => ({
-  loadMaddoxSettings: async () => ({ settings: { enabled: mocks.enabled, disabledTools: mocks.disabledTools, confirmationOverrides: {} } }),
+  loadMaddoxSettings: async () => ({ settings: { enabled: mocks.enabled, disabledTools: mocks.disabledTools, confirmationOverrides: mocks.overrides } }),
   maddoxToolMetas: async () => TOOLS.map((tool) => ({ ...tool, alwaysOn: tool.group === 'context' })),
 }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
@@ -72,6 +73,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.enabled = true
   mocks.disabledTools = []
+  mocks.overrides = {}
   mocks.token = null
 })
 
@@ -120,6 +122,19 @@ describe('MCP do dono por token de sistema', () => {
     const allowed = await callMaddoxToolAsToken(tokenWith(['mcp:owner', 'mcp:owner:tool:delete_task', 'mcp:owner:destructive']), 'delete_task', { id: 't' })
     expect(allowed.isError).toBeUndefined()
     expect(mocks.execute).toHaveBeenCalledTimes(1)
+  })
+
+  it('"pede confirmação" ligado pelo dono numa ferramenta de escrita/leitura exige o escopo destrutivo (call e list)', async () => {
+    mocks.overrides = { list_tasks: true }
+    const denied = await callMaddoxToolAsToken(tokenWith(['mcp:owner', 'mcp:owner:tool:list_tasks']), 'list_tasks', {})
+    expect(denied.isError).toBe(true)
+    expect(textOf(denied)).toBe(MADDOX_MCP_REFUSALS.tokenDestructive('list_tasks'))
+    expect(mocks.execute).not.toHaveBeenCalled()
+    expect(await listNames(['mcp:owner', 'mcp:owner:tool:list_tasks'])).toEqual(['get_app_overview'])
+    expect(await listNames(['mcp:owner', 'mcp:owner:tool:list_tasks', 'mcp:owner:destructive'])).toEqual(['get_app_overview', 'list_tasks'])
+    // Desligar a confirmação de uma destrutiva no chat não a libera para o token.
+    mocks.overrides = { delete_task: false }
+    expect(textOf(await callMaddoxToolAsToken(tokenWith(['mcp:owner', 'mcp:owner:tool:*']), 'delete_task', {}))).toBe(MADDOX_MCP_REFUSALS.tokenDestructive('delete_task'))
   })
 
   it('arquivos do chat e jobs não são executáveis por token', async () => {

@@ -9,7 +9,8 @@ import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { API_TOKENS_UPDATED_EVENT } from "./events"
 import type { ApiTokenInput, ApiTokenUpdateInput } from "./schemas"
-import { effectiveScopes, groupOfScope, isGroupScope, isToolScope, routeAllowed, toolOfScope } from "./scopes"
+import { PUBLIC_TOKEN_ROUTES } from "@/features/public-api/routes"
+import { API_SCOPE_ALL, effectiveScopes, groupOfScope, isApiScope, isGroupScope, isToolScope, routeAllowed, toolOfScope } from "./scopes"
 import type { ApiTokenDto, CreatedApiTokenDto } from "./types"
 
 /**
@@ -54,8 +55,11 @@ function toDto(token: IApiToken, now: Date = new Date()): ApiTokenDto {
 const notFound = () => new DomainError(404, "Token não encontrado")
 const expiryOf = (value: string | null | undefined) => (value ? new Date(value) : null)
 
-/** Ferramenta ou grupo fora do catálogo do MCP do dono → 400 (curinga e grupo seguem dinâmicos). */
+/** Rota da v1 fora de `PUBLIC_TOKEN_ROUTES`, ferramenta ou grupo fora do catálogo do MCP do dono → 400 (curingas seguem dinâmicos). */
 export async function assertKnownScopes(scopes: readonly string[]): Promise<void> {
+    const routeScopes = new Set<string>(PUBLIC_TOKEN_ROUTES.flatMap((route) => (route.scope ? [route.scope] : [])))
+    const unknownRoute = scopes.find((scope) => isApiScope(scope) && scope !== API_SCOPE_ALL && !routeScopes.has(scope))
+    if (unknownRoute) throw new DomainError(400, `Escopo de rota desconhecido: ${unknownRoute}`, "API_TOKEN_SCOPE_UNKNOWN")
     const tools = scopes.filter(isToolScope).map(toolOfScope)
     const groups = scopes.filter(isGroupScope).map(groupOfScope)
     if (!tools.length && !groups.length) return

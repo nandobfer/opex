@@ -99,6 +99,16 @@ describe('createApiToken', () => {
     await expect(createApiToken('local', { nome: 'X2', escopos: ['mcp:owner', 'mcp:owner:group:files'] })).rejects.toMatchObject({ status: 400 })
   })
 
+  it('recusa escopo de rota da v1 que não está em PUBLIC_TOKEN_ROUTES (sem gravar nem auditar)', async () => {
+    await expect(createApiToken('local', { nome: 'Typo', escopos: ['api:v1:reports'] })).rejects.toMatchObject({ status: 400, code: 'API_TOKEN_SCOPE_UNKNOWN' })
+    mocks.findOneAndUpdate.mockResolvedValue(storedToken())
+    await expect(updateApiTokenScopes('local', '66f0c0ffee0000000000abcd', { escopos: ['api:v1:*', 'api:v1:typo'] })).rejects.toMatchObject({ status: 400, code: 'API_TOKEN_SCOPE_UNKNOWN' })
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).not.toHaveBeenCalled()
+    // O curinga continua aceito.
+    await expect(createApiToken('local', { nome: 'Todas', escopos: ['api:v1:*'] })).resolves.toBeTruthy()
+  })
+
   it('o schema da API recusa token sem escopo e expiração no passado', () => {
     expect(apiTokenInputSchema.safeParse({ nome: 'Script', escopos: [] }).success).toBe(false)
     expect(apiTokenInputSchema.safeParse({ nome: 'Script' }).success).toBe(false)

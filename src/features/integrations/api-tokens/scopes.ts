@@ -73,8 +73,13 @@ export interface ScopeToolMeta {
 
 export const isTokenGrantableTool = (meta: Pick<ScopeToolMeta, "group">) => !MADDOX_TOKEN_EXCLUDED_GROUPS.includes(meta.group)
 
-/** Pelo token, exige `mcp:owner:destructive`: tudo o que pediria confirmação no chat por padrão. */
-export const toolNeedsDestructiveScope = (meta: Pick<ScopeToolMeta, "risk" | "confirmByDefault">) => defaultToolConfirms(meta)
+/**
+ * Pelo token, exige `mcp:owner:destructive`: tudo o que pediria confirmação no chat por padrão e também
+ * o que o dono marcou "pede confirmação" nas configurações do Maddox (`overrides`). Desligar a
+ * confirmação de uma destrutiva no chat não a libera para o token.
+ */
+export const toolNeedsDestructiveScope = (meta: Pick<ScopeToolMeta, "name" | "risk" | "confirmByDefault">, overrides: Readonly<Record<string, boolean>> = {}) =>
+    defaultToolConfirms(meta) || overrides[meta.name] === true
 
 export type ToolScopeRefusal = "no_mcp" | "not_grantable" | "not_granted" | "destructive"
 export type ToolScopeDecision = { ok: true } | { ok: false; reason: ToolScopeRefusal }
@@ -86,11 +91,11 @@ export function toolGranted(scopes: readonly string[], meta: ScopeToolMeta): boo
 }
 
 /** Decisão do token para uma ferramenta do MCP do dono (verificada SEMPRE no servidor). */
-export function mcpOwnerToolDecision(scopes: readonly string[], meta: ScopeToolMeta): ToolScopeDecision {
+export function mcpOwnerToolDecision(scopes: readonly string[], meta: ScopeToolMeta, overrides: Readonly<Record<string, boolean>> = {}): ToolScopeDecision {
     if (!scopes.includes(MCP_OWNER_SCOPE)) return { ok: false, reason: "no_mcp" }
     if (!isTokenGrantableTool(meta)) return { ok: false, reason: "not_grantable" }
     if (!toolGranted(scopes, meta)) return { ok: false, reason: "not_granted" }
-    if (toolNeedsDestructiveScope(meta) && !scopes.includes(MCP_OWNER_DESTRUCTIVE)) return { ok: false, reason: "destructive" }
+    if (toolNeedsDestructiveScope(meta, overrides) && !scopes.includes(MCP_OWNER_DESTRUCTIVE)) return { ok: false, reason: "destructive" }
     return { ok: true }
 }
 
@@ -141,7 +146,8 @@ export function selectionToScopes(selection: ApiTokenScopeSelection): string[] {
 export function scopesToSelection(scopes: readonly string[]): ApiTokenScopeSelection {
     const groups = scopes.filter(isGroupScope).map(groupOfScope)
     const tools = scopes.filter(isToolScope).map(toolOfScope)
-    const toolMode: ToolGrantMode = scopes.includes(MCP_OWNER_ALL_TOOLS) ? "all" : groups.length ? "groups" : tools.length ? "tools" : "all"
+    // MCP sem curinga, grupo nem ferramenta = nenhuma além do Contexto: lista explícita vazia (nunca "Todas").
+    const toolMode: ToolGrantMode = scopes.includes(MCP_OWNER_ALL_TOOLS) ? "all" : groups.length ? "groups" : tools.length || scopes.includes(MCP_OWNER_SCOPE) ? "tools" : "all"
     return {
         apiAll: scopes.includes(API_SCOPE_ALL),
         apiRoutes: scopes.filter((scope) => isApiScope(scope) && scope !== API_SCOPE_ALL),

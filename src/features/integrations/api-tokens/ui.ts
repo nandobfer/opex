@@ -29,7 +29,7 @@ export function buildTokenGroupTree(catalog: Pick<ApiTokenScopeCatalogDto, "grou
             id: "token-groups",
             label: "Grupos de ferramentas",
             description: "Ferramentas novas de um grupo marcado entram sozinhas",
-            ...(catalog.tools.some(toolNeedsDestructiveScope) ? { sensitive: true } : {}),
+            ...(catalog.tools.some((tool) => toolNeedsDestructiveScope(tool)) ? { sensitive: true } : {}),
             children: catalog.groups.map((group) => ({
                 key: group.id,
                 label: `${group.label} (${count(group.id)})`,

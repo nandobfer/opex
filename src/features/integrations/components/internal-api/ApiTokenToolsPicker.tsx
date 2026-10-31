@@ -31,7 +31,7 @@ export function ApiTokenToolsPicker({ catalog, selection, onChange }: ApiTokenTo
     const groupTree = useMemo(() => buildTokenGroupTree(catalog), [catalog])
     const alwaysOn = useMemo(() => new Set(catalog.tools.filter((tool) => tool.alwaysOn).map((tool) => tool.name)), [catalog.tools])
     const byName = useMemo(() => new Map(catalog.tools.map((tool) => [tool.name, tool])), [catalog.tools])
-    const sensitiveGroups = useMemo(() => new Set<string>(catalog.tools.filter(toolNeedsDestructiveScope).map((tool) => tool.group)), [catalog.tools])
+    const sensitiveGroups = useMemo(() => new Set<string>(catalog.tools.filter((tool) => toolNeedsDestructiveScope(tool)).map((tool) => tool.group)), [catalog.tools])
     const selectedTools = useMemo(() => new Set([...selection.tools, ...alwaysOn]), [selection.tools, alwaysOn])
 
     return (

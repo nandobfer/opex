@@ -112,7 +112,8 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   → 403 (token não representa usuário de cliente). O `tools/list` devolve **só** as ferramentas
   cobertas pelo token (`mcpOwnerToolDecision`) e ligadas na configuração do Maddox (vazio com o
   agente desativado); o `tools/call` (`callMaddoxToolAsToken`) recusa com `isError: true` a
-  ferramenta fora do escopo (`tokenScope`), a destrutiva/com confirmação sem `mcp:owner:destructive`
+  ferramenta fora do escopo (`tokenScope`), a destrutiva/com confirmação (inclusive a que o dono marcou
+  "pede confirmação" em `confirmationOverrides`) sem `mcp:owner:destructive`
   (`tokenDestructive`) e a do grupo `files` (`tokenNotGrantable`), e revalida o Maddox ligado e a
   ferramenta ligada (`authorizeMaddoxTool`) a cada chamada. Recusas viram log de aviso com o token
   (id/nome/prefixo) e o motivo; nunca o valor.

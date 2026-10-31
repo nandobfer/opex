@@ -306,11 +306,15 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   | `mcp:owner:destructive` | Entre as concedidas, as destrutivas e as que pedem confirmação por padrão |
 
   - Pelo menos um escopo por token (Zod `apiTokenScopesSchema`, o mesmo na API e no formulário);
-    escopo `mcp:owner:*` exige `mcp:owner`; ferramenta ou grupo fora do catálogo → 400
-    `API_TOKEN_SCOPE_UNKNOWN` (`assertKnownScopes`).
+    escopo `mcp:owner:*` exige `mcp:owner`; rota `api:v1:<recurso>` fora de `PUBLIC_TOKEN_ROUTES`,
+    ferramenta ou grupo fora do catálogo → 400 `API_TOKEN_SCOPE_UNKNOWN` (`assertKnownScopes`).
+  - MCP ligado sem curinga, grupo nem ferramenta (só `mcp:owner`, grupo Contexto) reabre no modo
+    "Ferramentas" com a lista vazia — nunca como "Todas".
   - **Destrutivas**: `defaultToolConfirms` (risco `destructive` ou `confirmByDefault`) exige
     `mcp:owner:destructive`, mesmo coberta por curinga/grupo/lista; sem ele, a chamada é recusada
-    (pelo token não existe confirmação no chat; os ajustes de confirmação do dono não afrouxam a regra).
+    (pelo token não existe confirmação no chat). O "pede confirmação" que o dono **ligou** numa
+    ferramenta nas configurações do Maddox (`confirmationOverrides`) também passa a exigir o escopo
+    destrutivo (no `tools/list` e no `tools/call`); desligar a confirmação de uma destrutiva não a libera.
   - **Fora do token**: o grupo `files` (arquivos do chat dependem de uma conversa do Maddox,
     `MADDOX_TOKEN_EXCLUDED_GROUPS`), além dos jobs (já fora do Maddox).
   - **Legado**: token sem `escopos` gravado não tem escopo e acessa só as rotas livres (`whoami`),

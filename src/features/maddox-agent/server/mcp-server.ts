@@ -97,16 +97,17 @@ const TOKEN_REFUSAL: Record<Exclude<ToolScopeRefusal, "no_mcp">, (name: string) 
 }
 
 /** Ferramentas ligadas no Maddox agora (vazio com o agente desativado). */
-async function enabledOwnerTools(): Promise<{ enabled: boolean; names: Set<string> }> {
+async function enabledOwnerTools(): Promise<{ enabled: boolean; names: Set<string>; overrides: Readonly<Record<string, boolean>> }> {
     const { settings } = await loadMaddoxSettings()
-    if (!settings.enabled) return { enabled: false, names: new Set() }
-    return { enabled: true, names: new Set(enabledMaddoxOwnerToolNames(await maddoxToolMetas(), settings.disabledTools)) }
+    const overrides = settings.confirmationOverrides ?? {}
+    if (!settings.enabled) return { enabled: false, names: new Set(), overrides }
+    return { enabled: true, names: new Set(enabledMaddoxOwnerToolNames(await maddoxToolMetas(), settings.disabledTools)), overrides }
 }
 
 /** `tools/list` de um token: só as ferramentas cobertas pelos escopos e ligadas no Maddox. */
 export async function listMaddoxToolsForToken(token: ApiTokenDto) {
-    const { names } = await enabledOwnerTools()
-    return (await catalogOf("owner")).filter((tool) => names.has(tool.name) && mcpOwnerToolDecision(token.escopos, tokenMetaOf(tool)).ok).map(toolDescriptor)
+    const { names, overrides } = await enabledOwnerTools()
+    return (await catalogOf("owner")).filter((tool) => names.has(tool.name) && mcpOwnerToolDecision(token.escopos, tokenMetaOf(tool), overrides).ok).map(toolDescriptor)
 }
 
 /** `tools/call` de um token de sistema no MCP do dono: escopo do token, configuração do Maddox e execução como dono. */
@@ -116,12 +117,13 @@ export async function callMaddoxToolAsToken(token: ApiTokenDto, name: string, ar
     try {
         const tool = (await catalogOf("owner")).find((item) => item.name === name)
         if (!tool) return mcpTextResult(MADDOX_MCP_REFUSALS.unknownTool(name), true)
-        const decision = mcpOwnerToolDecision(token.escopos, tokenMetaOf(tool))
+        const { settings } = await loadMaddoxSettings()
+        // O "pede confirmação" que o dono ligou numa ferramenta também exige o escopo destrutivo pelo token.
+        const decision = mcpOwnerToolDecision(token.escopos, tokenMetaOf(tool), settings.confirmationOverrides ?? {})
         if (!decision.ok) {
             log.warn({ ...ref, tool: name, deniedScope: decision.reason }, "[maddox] token de sistema sem escopo para a ferramenta")
             return mcpTextResult(decision.reason === "no_mcp" ? MADDOX_MCP_REFUSALS.tokenNoMcp : TOKEN_REFUSAL[decision.reason](name), true)
         }
-        const { settings } = await loadMaddoxSettings()
         if (!settings.enabled) throw new McpAccessError(MADDOX_MCP_REFUSALS.disabled)
         const scope = await authorizeMaddoxTool(name, { ...OWNER_SCOPE, agent: "maddox" }, settings)
         const output = await tool.execute(tool.input.parse(args), {

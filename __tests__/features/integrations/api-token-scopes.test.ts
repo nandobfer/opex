@@ -47,6 +47,12 @@ describe('mcpOwnerToolDecision', () => {
     expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:group:github'], list).ok).toBe(false)
   })
 
+  it('ajuste "pede confirmação" do dono exige o escopo destrutivo; desligar numa destrutiva não libera', () => {
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*'], list, { list_tasks: true })).toEqual({ ok: false, reason: 'destructive' })
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*', 'mcp:owner:destructive'], list, { list_tasks: true }).ok).toBe(true)
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*'], del, { delete_task: false })).toEqual({ ok: false, reason: 'destructive' })
+  })
+
   it('destrutivas e com confirmação padrão exigem mcp:owner:destructive, mesmo concedidas', () => {
     for (const tool of [del, write]) {
       expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*'], tool)).toEqual({ ok: false, reason: 'destructive' })
@@ -102,8 +108,14 @@ describe('seleção da tela ⇄ escopos', () => {
     expect(selectionToScopes({ ...base, mcpOwner: false })).toEqual(['api:v1:*'])
   })
 
+  it('MCP sem curinga, grupo nem ferramenta volta como lista vazia, nunca "Todas"', () => {
+    expect(scopesToSelection(['mcp:owner'])).toMatchObject({ mcpOwner: true, toolMode: 'tools', tools: [], groups: [] })
+    expect(selectionToScopes({ ...base, toolMode: 'groups', groups: [], destructive: false, apiAll: false })).toEqual(['mcp:owner'])
+    expect(scopesToSelection(['api:v1:*']).toolMode).toBe('all')
+  })
+
   it('ida e volta preserva a seleção', () => {
-    for (const scopes of [['api:v1:*', 'mcp:owner', 'mcp:owner:group:tasks'], ['mcp:owner', 'mcp:owner:tool:list_tasks', 'mcp:owner:destructive'], ['mcp:owner', 'mcp:owner:tool:*'], ['api:v1:relatorios']]) {
+    for (const scopes of [['mcp:owner'], ['api:v1:*', 'mcp:owner'], ['api:v1:*', 'mcp:owner', 'mcp:owner:group:tasks'], ['mcp:owner', 'mcp:owner:tool:list_tasks', 'mcp:owner:destructive'], ['mcp:owner', 'mcp:owner:tool:*'], ['api:v1:relatorios']]) {
       expect(selectionToScopes(scopesToSelection(scopes))).toEqual(scopes)
     }
   })
