@@ -115,6 +115,11 @@
     --popover-foreground: 260 20% 96%;
     --primary: 270 100% 50%;
     --primary-foreground: 0 0% 100%;
+    /* Primária do tema guardada para os agentes de cor padrão: resolvida aqui, continua roxa dentro de
+       um contêiner de agente que sobrescreveu --primary (ex.: botão do Opex dentro do popover do Maddox). */
+    --agent-primary: var(--primary);
+    --agent-primary-foreground: var(--primary-foreground);
+    --agent-ring: var(--ring);
     /* Cores dos agentes de chat (paleta das colunas, tom 500) e o texto legível sobre cada uma. */
     --agent-violet: 258 90% 66%;
     --agent-violet-foreground: 240 10% 4%;

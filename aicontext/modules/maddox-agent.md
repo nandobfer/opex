@@ -48,6 +48,10 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   contêiner do agente com os tokens do tema `--agent-{cor}` e `--agent-{cor}-foreground`
   (`globals.css`), então ícone, ponto, cabeçalho, destaques e bolhas usam a cor sem markup novo nem
   valor fixo em código; o token `-foreground` traz o texto legível (contraste) de cada cor.
+  A cor padrão (`null`) também é aplicada explicitamente, com `--agent-primary`/`--agent-primary-foreground`/
+  `--agent-ring` (a primária do tema resolvida no `:root`): sem isso, um elemento do Agente Opex dentro
+  do contêiner do Maddox (o botão de troca no cabeçalho, o ponto da barra lateral) herdaria a cor do
+  Maddox.
 - **Ferramentas** viram cards como no Agente Opex: as do Opex (`opex_app_*` no dono, `opex_portal_*`
   no portal) com o rótulo e o ícone do grupo do catálogo; as nativas do OpenCode com o próprio nome e o
   ícone de terminal (grupo `opencode-native`).

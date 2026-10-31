@@ -12,8 +12,12 @@ import type { ColumnColor } from "@/features/tasks/board"
 /** Nome do token do tema de uma cor de agente. */
 export const agentColorToken = (color: ColumnColor) => `--agent-${color}`
 
+/**
+ * Cor padrão (`null`) também é aplicada explicitamente: um contêiner sem estilo herdaria o `--primary`
+ * de um agente de outra cor em volta (ex.: o botão do Opex dentro do popover do Maddox).
+ */
 export function agentColorStyle(color: ColumnColor | null | undefined): CSSProperties {
-    if (!color) return {}
+    if (!color) return { "--primary": "var(--agent-primary)", "--primary-foreground": "var(--agent-primary-foreground)", "--ring": "var(--agent-ring)" } as CSSProperties
     const token = agentColorToken(color)
     return { "--primary": `var(${token})`, "--primary-foreground": `var(${token}-foreground)`, "--ring": `var(${token})` } as CSSProperties
 }

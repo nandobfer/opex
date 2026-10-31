@@ -66,8 +66,10 @@ describe('catálogo do Maddox', () => {
 })
 
 describe('cor do agente', () => {
-  it('sem cor (primária) não sobrescreve o tema', () => {
-    expect(agentColorStyle(null)).toEqual({})
+  it('sem cor (primária) volta explicitamente à primária do tema, mesmo dentro de outro agente', () => {
+    const primary = { '--primary': 'var(--agent-primary)', '--primary-foreground': 'var(--agent-primary-foreground)', '--ring': 'var(--agent-ring)' }
+    expect(agentColorStyle(null)).toEqual(primary)
+    expect(agentColorStyle(undefined)).toEqual(primary)
   })
 
   it('a cor vira os tokens do tema (cor e texto legível), sem valores fixos', () => {
@@ -76,6 +78,7 @@ describe('cor do agente', () => {
 
   it('o tema declara a cor e o texto de cada cor da paleta', () => {
     const css = readFileSync('src/app/globals.css', 'utf8')
+    for (const token of ['--agent-primary: var(--primary)', '--agent-primary-foreground: var(--primary-foreground)', '--agent-ring: var(--ring)']) expect(css).toContain(token)
     for (const color of COLUMN_COLORS) {
       expect(css).toMatch(new RegExp(`--agent-${color}: [0-9]`))
       expect(css).toMatch(new RegExp(`--agent-${color}-foreground: [0-9]`))

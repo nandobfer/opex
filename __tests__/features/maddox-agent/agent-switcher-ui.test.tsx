@@ -109,6 +109,26 @@ describe('item único dos agentes de chat', () => {
     expect(within(screen.getByTestId('agent-panel-maddox')).getByTestId('agent-switch-other').getAttribute('data-agent')).toBe('opex')
   })
 
+  it('com o Maddox ativo (azul), o botão do Opex acende com a primária do tema, não com a cor do Maddox', async () => {
+    window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('maddox'))
+    renderItem()
+    fireEvent.click(screen.getByTestId('agent-nav-item'))
+    const panel = await screen.findByTestId('agent-panel-maddox')
+    expect(panel.style.getPropertyValue('--primary')).toBe('var(--agent-sky)')
+    const other = within(panel).getByTestId('agent-switch-other')
+    expect(other.getAttribute('data-agent')).toBe('opex')
+    expect(other.style.getPropertyValue('--primary')).toBe('var(--agent-primary)')
+    expect(other.style.getPropertyValue('--ring')).toBe('var(--agent-ring)')
+  })
+
+  it('ponto de atividade da barra lateral usa a cor de quem responde (Opex respondendo com o Maddox ativo)', async () => {
+    window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('maddox'))
+    mocks.sessions.opex = [{ id: 's2', status: 'running', title: 'y' }]
+    renderItem()
+    const dot = await screen.findByTestId('agent-nav-busy')
+    expect(dot.style.getPropertyValue('--primary')).toBe('var(--agent-primary)')
+  })
+
   it('o seletor de modelo da sessão só aparece no Maddox; na "Nova sessão" a escolha vale para a sessão criada', async () => {
     window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('opex'))
     renderItem()
