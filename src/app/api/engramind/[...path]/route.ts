@@ -34,9 +34,9 @@ async function bodyOf(req: NextRequest): Promise<Record<string, unknown>> {
     throw new DomainError(400, "Corpo da requisição inválido", "INVALID_JSON")
 }
 
-const handler = withRoute<Record<string, string>>(async ({ req, params }) => {
+const handler = withRoute<{ path: string[] }>(async ({ req, params }) => {
     await requireAdminSession(req)
-    const match = matchEngramindRoute(req.method, ((params as unknown as { path?: string[] }).path ?? []).map(decode))
+    const match = matchEngramindRoute(req.method, (params.path ?? []).map(decode))
     if (!match) throw new DomainError(404, "Operação do Engramind não encontrada", "ENGRAMIND_ROUTE_NOT_FOUND")
     const query = normalizeEngramindQuery(Object.fromEntries(req.nextUrl.searchParams.entries()))
     const body = req.method === "GET" || req.method === "DELETE" ? {} : await bodyOf(req)
