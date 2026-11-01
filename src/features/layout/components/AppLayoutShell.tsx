@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import { AgentChatNavItem } from "@/features/opex-agent/components/agents/AgentChatNavItem"
 import { AppShell } from "./AppShell"
-import { APP_NAV, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
+import { APP_NAV, EVEN_PADDING_PAGE_HREFS, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
 
 interface AppLayoutShellProps {
     ownerName: string
@@ -22,6 +22,7 @@ export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellP
             sections={APP_NAV}
             navLabel="Menu principal"
             persistentHrefs={PERSISTENT_PAGE_HREFS}
+            evenPaddingHrefs={EVEN_PADDING_PAGE_HREFS}
             ownerName={ownerName}
             version={version}
             sidebarFooterItems={ownerFooterItems}

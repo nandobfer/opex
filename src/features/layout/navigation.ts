@@ -55,6 +55,9 @@ export const HOME_HREF = "/dashboard"
 /** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL). */
 export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
 
+/** Telas com espaçamento horizontal igual ao vertical também no desktop (Central de desenvolvimento, OPE-112). */
+export const EVEN_PADDING_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
+
 /** Todos os itens navegáveis, inclusive os de dentro dos grupos (na ordem do menu). */
 export function flattenNav(sections: readonly NavSectionDef[]): readonly NavItemDef[] {
     return sections.flatMap((section) => section.items.flatMap((entry) => (isNavGroup(entry) ? entry.items : [entry])))

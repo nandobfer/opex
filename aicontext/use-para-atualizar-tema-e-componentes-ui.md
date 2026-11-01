@@ -92,7 +92,9 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 
 - Toda página renderiza **dentro do shell** (`AppShell`: sidebar + cabeçalho), montado no layout
   do grupo `src/app/(app)/` por `AppLayoutShell`. O shell define o espaçamento externo único:
-  `<main>` com `px-4 py-6 md:px-6 lg:px-8`.
+  `<main>` com `px-4 py-6 md:px-6 lg:px-8`. Exceção da própria casca: nas rotas de
+  `EVEN_PADDING_PAGE_HREFS` (Central de desenvolvimento) o horizontal acompanha o vertical no desktop
+  (`px-4 py-6 md:px-6`, `CONTENT_PADDING_X_EVEN`) — a página continua sem padding próprio.
 - **Nenhuma página define margem, padding ou largura máxima externos** (`mx-auto`, `max-w-*xl`,
   `p-*` na raiz). A raiz da página é só `flex flex-col gap-6` (ou `space-y-6`); cartões e tabelas
   ocupam a largura.
