@@ -100,6 +100,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - Espaçamento horizontal do conteúdo: `CONTENT_PADDING_X` (`px-4 md:px-6 lg:px-8`, em
   `src/features/layout/content-padding.ts`), usado pelo `AppShell`. Para um bloco ir até a borda do
   conteúdo (ex.: kanban rolando para os lados), use `CONTENT_BLEED_X` — nunca repita os valores.
+- Na **Central de desenvolvimento** (`/desenvolvimento` e sub-rotas, lista `EVEN_PADDING_PAGE_HREFS`
+  de `navigation.ts`, opção `evenPaddingHrefs` do `AppShell`) o horizontal é igual ao vertical também
+  no desktop: `CONTENT_PADDING_X_EVEN` (`px-4 md:px-6`, 24px a partir de 768px, igual ao `py-6`). As
+  demais telas e o portal do cliente seguem `CONTENT_PADDING_X` (OPE-112).
 - Quem rola as páginas é o `<main id="main-content">` (`APP_SCROLL_CONTAINER_ID`), não a janela.
   Listas longas rolam com a página (sem container com altura máxima) e, se virtualizadas, usam
   `usePageVirtualizer` (`src/hooks/`); elementos fixos (`sticky top-0`) não podem ter ancestral
@@ -107,5 +111,5 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 ## Testes
 
-`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,sidebar-nav-group}.test.*` e
+`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,app-shell-padding,sidebar-nav-group}.test.*` e
 `__tests__/app/in-development-pages.test.tsx`.
