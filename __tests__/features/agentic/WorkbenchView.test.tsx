@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0 }))
+const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0, diagrams: 0 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
@@ -29,6 +29,11 @@ vi.mock('@/features/adversarial-agent/components/workbench/AdversarialRoundsView
   useAdversarialTab: () => ({ visible: mocks.rounds > 0, count: mocks.rounds }),
   AdversarialTabNavProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   AdversarialRoundsView: () => <p>rodadas do adversário</p>,
+}))
+
+vi.mock('@/features/architect-agent/components/workbench/ArchitectTab', () => ({
+  useArchitectTab: () => ({ visible: mocks.diagrams > 0, count: mocks.diagrams }),
+  ArchitectTab: () => <p>diagrama do arquiteto</p>,
 }))
 
 import { WorkbenchView } from '@/features/agentic/components/workbench/WorkbenchView'
@@ -55,6 +60,7 @@ beforeEach(() => {
   mocks.forks = []
   mocks.builds = []
   mocks.rounds = 0
+  mocks.diagrams = 0
   mocks.useTaskDetail.mockReturnValue(taskQuery())
 })
 
@@ -122,5 +128,14 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
     expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano', 'Adversário (2)'])
     fireEvent.click(tab('Adversário (2)'))
     expect(screen.getByText('rodadas do adversário')).toBeTruthy()
+  })
+
+  it('Agente Arquiteto: a aba "Arquitetura (N)" aparece depois do Adversário e abre o diagrama', () => {
+    mocks.rounds = 1
+    mocks.diagrams = 3
+    render(<WorkbenchView workbench={workbench()} central={central} />)
+    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano', 'Adversário (1)', 'Arquitetura (3)'])
+    fireEvent.click(tab('Arquitetura (3)'))
+    expect(screen.getByText('diagrama do arquiteto')).toBeTruthy()
   })
 })

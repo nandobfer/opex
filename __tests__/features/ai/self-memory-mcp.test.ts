@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   workbench: null as Record<string, unknown> | null,
   review: null as Record<string, unknown> | null,
+  diagram: null as Record<string, unknown> | null,
   parents: {} as Record<string, string>,
   enabled: true,
   create: vi.fn(async (_agent: string, texto: string) => ({ memoria: { id: 'm_1', texto, resumo: texto, categoria: 'PROJECT_RULES', fixada: false, ativa: true, doDono: false, autor: null, versao: 1 } })),
@@ -23,6 +24,7 @@ vi.mock('@/lib/db/models/Agentic', () => ({
   AgenticFork: { findOne: () => lean(null) },
 }))
 vi.mock('@/features/adversarial-agent/server/models', () => ({ AdversarialReview: { findOne: (query: { sessionId: string }) => lean(mocks.review && mocks.review.sessionId === query.sessionId ? mocks.review : null) } }))
+vi.mock('@/features/architect-agent/server/models', () => ({ ArchitectDiagram: { findOne: (query: { sessionId: string }) => lean(mocks.diagram && mocks.diagram.sessionId === query.sessionId ? mocks.diagram : null) } }))
 vi.mock('@/lib/db/models/Opex', () => ({ OpexSession: { findOne: () => lean(null) } }))
 vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async ({ sessionID }: { sessionID: string }) => ({ parentID: mocks.parents[sessionID] ?? null }) } }) }))
 vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: async () => mocks.enabled }))
@@ -82,6 +84,16 @@ describe('MCP de memórias', () => {
     expect(refused.isError).toBe(true)
     await callSelfMemoryTool('remember', { lista: 'adversarial', texto: 'F2 é intencional neste repositório.' }, meta('ses_rev'))
     expect(mocks.create).toHaveBeenCalledWith('adversarial', 'F2 é intencional neste repositório.', 'local', expect.objectContaining({ agent: expect.objectContaining({ consumer: 'adversario' }) }))
+  })
+
+  it('a sessão do diagrama identifica o Agente Arquiteto: grava só na lista dele', async () => {
+    mocks.workbench = null
+    mocks.diagram = { _id: 'd1', sessionId: 'ses_arch', workbenchId: 'w1', taskCode: 'OPE-1' }
+    const refused = await callSelfMemoryTool('remember', { lista: 'adversarial', texto: 'x' }, meta('ses_arch'))
+    expect(refused.isError).toBe(true)
+    await callSelfMemoryTool('remember', { lista: 'architect', texto: 'As camadas do Opex são app, features e lib.' }, meta('ses_arch'))
+    expect(mocks.create).toHaveBeenCalledWith('architect', 'As camadas do Opex são app, features e lib.', 'local', expect.objectContaining({ agent: { consumer: 'arquiteto', label: 'Agente Arquiteto · OPE-1' }, auditContext: { mesa: 'w1', arquitetura: 'd1', tarefa: 'OPE-1' } }))
+    mocks.diagram = null
   })
 
   it('sessão desconhecida, sem sessão ou com o aprendizado desligado: recusa com o motivo', async () => {
