@@ -122,18 +122,36 @@ function decryptToken(stored: IEngramindAgentToken | undefined): string | null {
 const sameScopes = (current: readonly string[] | undefined, expected: readonly string[]) =>
     Array.isArray(current) && current.length === expected.length && expected.every((scope) => current.includes(scope))
 
-/** Token válido do agente (reemite quando falta, não decifra, foi revogado ou expirou). Devolve se emitiu. */
+/** Páginas da listagem de tokens percorridas (cada reemissão deixa um revogado na lista do agente). */
+const TOKEN_LIST_MAX_PAGES = 10
+
+/**
+ * Token gravado do agente, achado pela listagem `GET /v1/tokens?agent=opex/<identidade>` (o contrato
+ * do Engramind não lê token por id). `null` = não está na lista (excluído, ou além das páginas lidas).
+ */
+async function findAgentToken(consumer: MemoryIdentity, tokenId: string, target: EngramindTarget): Promise<EngramindToken | null> {
+    let cursor: string | null = null
+    for (let page = 0; page < TOKEN_LIST_MAX_PAGES; page++) {
+        const query: Record<string, string | number> = { agent: agentRef(consumer), limit: 200 }
+        if (cursor) query.cursor = cursor
+        const list: { tokens?: EngramindToken[]; next_cursor?: string | null } | null = await engramindCall("GET", { path: "/v1/tokens", query }, { target })
+        const found = (list?.tokens ?? []).find((token) => token.id === tokenId)
+        if (found) return found
+        cursor = list?.next_cursor ?? null
+        if (!cursor) return null
+    }
+    return null
+}
+
+/** Token válido do agente (reemite quando falta, não decifra, foi revogado, expirou ou tem outros escopos). Devolve se emitiu. */
 async function ensureToken(consumer: MemoryIdentity, target: EngramindTarget, actorId: string): Promise<boolean> {
     const stored = (await loadAgentTokens())[consumer]
     const secret = decryptToken(stored)
     if (stored && secret) {
-        try {
-            const token = await engramindCall<EngramindToken>("GET", { path: `/v1/tokens/${enc(stored.tokenId)}` }, { target })
-            // Ativo e com os escopos esperados: nada a fazer; escopos diferentes reemitem (e revogam o anterior).
-            if (token.status === "active" && sameScopes(token.scopes, MEMORY_TOKEN_SCOPES[consumer])) return false
-        } catch (error) {
-            if (engramindCodeOf(error) !== "TOKEN_NOT_FOUND") throw error
-        }
+        const token = await findAgentToken(consumer, stored.tokenId, target)
+        // Ativo e com os escopos esperados: nada a fazer; fora da lista, expirado, revogado ou com escopos
+        // diferentes reemite (e revoga o anterior).
+        if (token && token.status === "active" && sameScopes(token.scopes, MEMORY_TOKEN_SCOPES[consumer])) return false
     }
     const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: agentRef(consumer), scopes: MEMORY_TOKEN_SCOPES[consumer], label: `Opex · memórias (${consumer})` } }, { target })
     if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token")

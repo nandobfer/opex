@@ -36,6 +36,40 @@ export interface FakeCall {
 
 const fail = (status: number, code: string, details?: Record<string, unknown>) => toEngramindError(status, { code, message: code, details } as never)
 
+/**
+ * Rotas do contrato publicado pelo Engramind (`~/code/engramind/docs/openapi.json`, v0.10.0) que este fake
+ * implementa. Chamada fora da lista responde 405 `METHOD_NOT_ALLOWED`, como o serviço real: o fake nunca
+ * aceita rota inventada. Rota nova aqui exige conferir método e caminho no contrato antes.
+ */
+export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
+  ['GET', '/v1/settings'],
+  ['GET', '/v1/context'],
+  ['POST', '/v1/channels'],
+  ['GET', '/v1/channels/{channel}'],
+  ['GET', '/v1/channels/{channel}/settings'],
+  ['POST', '/v1/channels/{channel}/archive'],
+  ['POST', '/v1/channels/{channel}/restore'],
+  ['GET', '/v1/memories'],
+  ['POST', '/v1/memories'],
+  ['POST', '/v1/memories/import'],
+  ['GET', '/v1/memories/{memory}'],
+  ['PATCH', '/v1/memories/{memory}'],
+  ['DELETE', '/v1/memories/{memory}'],
+  ['POST', '/v1/memories/{memory}/pin'],
+  ['POST', '/v1/memories/{memory}/unpin'],
+  ['POST', '/v1/memories/{memory}/archive'],
+  ['POST', '/v1/memories/{memory}/restore'],
+  ['POST', '/v1/agents'],
+  ['GET', '/v1/agents/{agent}'],
+  ['GET', '/v1/subscriptions'],
+  ['POST', '/v1/subscriptions'],
+  ['GET', '/v1/tokens'],
+  ['POST', '/v1/tokens'],
+  ['POST', '/v1/tokens/{token}/revoke'],
+]
+const CONTRACT_PATTERNS = CONTRACT_ROUTES.map(([method, template]) => ({ method, pattern: new RegExp(`^${template.replace(/\{[^}]+\}/g, '[^/]+')}$`) }))
+const inContract = (method: string, path: string) => CONTRACT_PATTERNS.some((route) => route.method === method && route.pattern.test(path))
+
 export function createFakeEngramind() {
   const state = {
     seq: 0,
@@ -45,7 +79,7 @@ export function createFakeEngramind() {
     memories: new Map<string, FakeMemory>(),
     agents: new Map<string, { slug: string; disabled_at: string | null }>(),
     subscriptions: [] as { agent: string; target: string; mode: string }[],
-    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'revoked'; agent: string | null; scopes: string[] }>(),
+    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'expired' | 'revoked'; agent: string | null; scopes: string[] }>(),
     imports: new Map<string, unknown>(),
     context: { content: '', version: 'cv_1', counts: { full: 0, titles: 0, overflow: 0 } },
     contextFails: false,
@@ -101,6 +135,7 @@ export function createFakeEngramind() {
     const token = options.target?.token ?? null
     state.calls.push({ method, path: request.path, query: request.query, body: request.body, token: tokenOf(token), idempotencyKey: options.idempotencyKey })
     const path = request.path
+    if (!inContract(method, path)) throw fail(405, 'METHOD_NOT_ALLOWED', { method, path })
     const body = (request.body ?? {}) as Record<string, unknown>
     const seg = (prefix: string) => decodeURIComponent(path.slice(prefix.length))
 
@@ -196,10 +231,17 @@ export function createFakeEngramind() {
       state.tokens.set(id, { id, prefix: `eng.${id}`, status: 'active', agent: String(body.agent ?? '').split('/').pop() ?? null, scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : [] })
       return { token: { id, prefix: `eng.${id}`, status: 'active' }, secret: `eng.${id}.segredo` }
     }
-    if (method === 'GET' && path.startsWith('/v1/tokens/')) {
-      const tokenRow = state.tokens.get(seg('/v1/tokens/'))
-      if (!tokenRow) throw fail(404, 'TOKEN_NOT_FOUND')
-      return { ...tokenRow }
+    if (method === 'GET' && path === '/v1/tokens') {
+      // Contrato: lista paginada (`{ tokens, next_cursor }`), filtrada por `agent` (`app/agente`); não há leitura por id.
+      const agent = request.query?.agent ? String(request.query.agent).split('/').pop() : null
+      const rows = [...state.tokens.values()].filter((item) => !agent || item.agent === agent)
+      const limit = Math.min(Number(request.query?.limit ?? 50), 200)
+      const start = request.query?.cursor ? Number(request.query.cursor) : 0
+      const page = rows.slice(start, start + limit)
+      return {
+        tokens: page.map((item) => ({ id: item.id, prefix: item.prefix, kind: 'agent', scopes: [...item.scopes], status: item.status, app: { slug: 'opex' }, agent: item.agent ? { slug: item.agent } : null, label: null, created_at: '2026-11-01T10:00:00.000Z', expires_at: null, revoked_at: item.status === 'revoked' ? '2026-11-01T10:00:00.000Z' : null, last_used_at: null })),
+        next_cursor: start + limit < rows.length ? String(start + limit) : null,
+      }
     }
     if (method === 'POST' && /^\/v1\/tokens\/.+\/revoke$/.test(path)) {
       const tokenRow = state.tokens.get(decodeURIComponent(path.slice('/v1/tokens/'.length, -'/revoke'.length)))

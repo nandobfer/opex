@@ -255,13 +255,16 @@ reaproveitado e arquivado é restaurado), os **cinco** agentes
 contexto e o Agente Mentor, que só escreve e não tem canal, contexto nem aprendizado autônomo), um token
 `agent` por agente com `MEMORY_TOKEN_SCOPES` (**`read+write+delete`**; o Mentor **`read+write`**,
 porque só cria e edita), cifrado em `engramind_state.agentTokens[<identidade>]` (nunca em DTO, log,
-auditoria ou resposta; reemitido quando falta, foi revogado, expirou ou tem escopos diferentes dos
-esperados, revogando o anterior), e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` +
+auditoria ou resposta; conferido pela listagem `GET /v1/tokens?agent=opex/<identidade>` — o contrato
+não lê token por id —, seguindo o `next_cursor` por até 10 páginas; reemitido quando falta na lista, foi
+revogado, expirou ou tem escopos diferentes dos esperados, revogando o anterior), e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` +
 `agentes/<agente>/*`; o Adversário assina exato `agentes/adversario`; o Mentor assina só onde grava,
 `agentes/adversario` e `agentes/desenvolvedor/*` — o token de agente só escreve nos canais que assina).
 A aba Identidades marca os cinco com "Memórias do Opex" (`isOpexMemoryAgent`). Sem token gravado, `agentTokenFor` dispara o provisionamento sob demanda (uma vez a cada 5 min) e o
 turno espera no máximo 3 s (`LAZY_WAIT_MS`): com o Engramind lento, o turno segue sem o token (cache ou
-sem memórias) e o provisionamento termina em segundo plano. Os canais por central/cliente nascem na primeira gravação
+sem memórias) e o provisionamento termina em segundo plano. Nos testes, o Engramind falso
+(`__tests__/helpers/fake-engramind.ts`) só aceita as rotas do contrato (`CONTRACT_ROUTES`, copiadas do
+`openapi.json`): qualquer outra responde 405, como o serviço real; rota nova no fake exige conferir o contrato. Os canais por central/cliente nascem na primeira gravação
 (`ensureMemoryChannel`); excluir a central arquiva o canal dela (melhor esforço, auditado como
 `canalMemoriasArquivado`).
 

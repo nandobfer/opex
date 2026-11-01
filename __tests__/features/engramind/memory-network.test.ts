@@ -108,4 +108,64 @@ describe('rede das memórias dos agentes', () => {
   it('sem token e Engramind rápido: provisiona e devolve o token no mesmo turno', async () => {
     expect(await agentTokenFor('desenvolvedor')).toMatch(/^eng\.tk_/)
   })
+
+  it('regressão do 405: rodar duas vezes seguidas conclui sem reemitir e nunca lê token por id', async () => {
+    await ensureAgentMemoryNetwork('local')
+    const tokens = holder.fake.state.tokens.size
+    const { step } = await ensureAgentMemoryNetwork('local')
+    expect(step).toMatchObject({ status: 'skipped' })
+    expect(holder.fake.state.tokens.size).toBe(tokens)
+    expect(holder.fake.state.calls.some((call) => call.method === 'GET' && /^\/v1\/tokens\/.+/.test(call.path))).toBe(false)
+    expect(holder.fake.state.calls.filter((call) => call.method === 'GET' && call.path === '/v1/tokens').map((call) => call.query)).toContainEqual({ agent: 'opex/mentor', limit: 200 })
+  })
+
+  it('estado de antes do Mentor (quatro tokens gravados, sem opex/mentor): cria só o Mentor e não reemite os outros', async () => {
+    await ensureAgentMemoryNetwork('local')
+    holder.fake.state.agents.delete('opex/mentor')
+    holder.fake.state.subscriptions = holder.fake.state.subscriptions.filter((item) => item.agent !== 'opex/mentor')
+    for (const row of tokenOf('mentor')) holder.fake.state.tokens.delete(row.id)
+    delete holder.tokens.mentor
+    const before = new Map(['opex', 'maddox', 'adversario', 'desenvolvedor'].map((consumer) => [consumer, (holder.tokens[consumer] as { tokenId: string }).tokenId]))
+    const { step, summary } = await ensureAgentMemoryNetwork('local')
+    expect(step.status).toBe('ok')
+    expect(summary.agentsCreated).toEqual(['mentor'])
+    expect(summary.tokensIssued).toEqual(['mentor'])
+    expect(subscriptionsOf('mentor').sort()).toEqual(['agentes/adversario', 'agentes/desenvolvedor/*'])
+    expect(tokenOf('mentor')[0]!.scopes).toEqual(['read', 'write'])
+    for (const [consumer, tokenId] of before) expect((holder.tokens[consumer] as { tokenId: string }).tokenId).toBe(tokenId)
+  })
+
+  it('token gravado que sumiu da lista é reemitido; revogado ou expirado também', async () => {
+    await ensureAgentMemoryNetwork('local')
+    const gone = (holder.tokens.opex as { tokenId: string }).tokenId
+    holder.fake.state.tokens.delete(gone)
+    tokenOf('maddox')[0]!.status = 'revoked'
+    tokenOf('adversario')[0]!.status = 'expired'
+    const { summary } = await ensureAgentMemoryNetwork('local')
+    expect(summary.tokensIssued.sort()).toEqual(['adversario', 'maddox', 'opex'])
+    expect((holder.tokens.opex as { tokenId: string }).tokenId).not.toBe(gone)
+  })
+
+  it('paginação: o token ativo na segunda página é achado e não reemite', async () => {
+    await ensureAgentMemoryNetwork('local')
+    const active = tokenOf('desenvolvedor')[0]!
+    holder.fake.state.tokens.delete(active.id)
+    for (let index = 0; index < 200; index++) holder.fake.state.tokens.set(`tk_old${index}`, { id: `tk_old${index}`, prefix: `eng.tk_old${index}`, status: 'revoked', agent: 'desenvolvedor', scopes: ['read', 'write', 'delete'] })
+    holder.fake.state.tokens.set(active.id, active)
+    const { summary } = await ensureAgentMemoryNetwork('local')
+    expect(summary.tokensIssued).toEqual([])
+    expect(holder.fake.state.calls.filter((call) => call.path === '/v1/tokens' && call.method === 'GET' && (call.query as { agent: string }).agent === 'opex/desenvolvedor').map((call) => (call.query as { cursor?: string }).cursor ?? null)).toEqual([null, '200'])
+  })
+
+  it('sob demanda: com os outros tokens gravados, o Mentor sem token provisiona e recebe o token no turno', async () => {
+    await ensureAgentMemoryNetwork('local')
+    for (const row of tokenOf('mentor')) holder.fake.state.tokens.delete(row.id)
+    delete holder.tokens.mentor
+    resetMemoryNetworkForTests()
+    expect(await agentTokenFor('mentor')).toMatch(/^eng\.tk_/)
+  })
+
+  it('o fake recusa com 405 rota fora do contrato (não existe leitura de token por id)', async () => {
+    await expect(holder.fake.engramindCall('GET', { path: '/v1/tokens/tk_x' })).rejects.toMatchObject({ status: 405, code: 'ENGRAMIND_METHOD_NOT_ALLOWED' })
+  })
 })
