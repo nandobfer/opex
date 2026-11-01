@@ -93,7 +93,7 @@ Só o servidor escreve. Funções usadas pela mesa (não há rotas de escrita):
   Dashboards e Horas agênticas) no **celular** o contêiner **e o botão** ocupam a linha inteira
   (conteúdo centralizado); no desktop e nos demais consumidores (página da tarefa) segue compacto.
 
-## Horas agênticas (`/tarefas/horas`, item próprio no menu)
+## Horas agênticas (`/tarefas/horas`, no grupo Contábil do menu)
 
 - Período na URL (`from`/`to`, padrão: última semana) com `PresetDateRangeFilter`; totais do período
   (tempo, quantidade e custo) em números animados.

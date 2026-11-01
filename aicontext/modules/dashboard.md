@@ -1,7 +1,7 @@
 # Módulo: Dashboards (`/dashboard`)
 
-Página inicial dO Opex (`/` redireciona para `HOME_HREF = "/dashboard"`), **acima de "Tarefas"** no
-menu. Reúne KPIs e gráficos de quatro blocos — **Visão geral de tarefas**, **Financeiro**, **Horas
+Página inicial dO Opex (`/` redireciona para `HOME_HREF = "/dashboard"`). Não tem item no menu: a
+**logo** no topo da barra lateral leva a ela. Reúne KPIs e gráficos de quatro blocos — **Visão geral de tarefas**, **Financeiro**, **Horas
 agênticas** e **Central de desenvolvimento** — num **único período global** e atualizados em tempo
 real pelo Pusher. Os **indicadores são somente leitura** (nenhuma escrita nem auditoria); o cabeçalho
 traz **atalhos globais** de criação e o indicador **Trabalhos em andamento** (ver “Cabeçalho e
