@@ -190,6 +190,8 @@ sem pedido explícito.
 - Engramind: `engramind-updated` (`{ type, channel?, keys? }`) e o consumo de memórias pelos agentes do
   Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds }`, só ids e slugs) em
   `private-app` (ver `aicontext/modules/engramind.md`, "Webhook e tempo real").
+- Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
+  avançar, concluir ou falhar uma versão do diagrama (ver `aicontext/modules/architect-agent.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
@@ -299,7 +301,10 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Preferências/filtros persistentes no navegador: `usePersistentState` (`src/hooks/`, Zod)
 - Redes de nodes (rede de agentes, canais e memórias do Engramind): React Flow (`@xyflow/react`),
   com nodes não arrastáveis e pulsos/partículas pelas arestas animados com Framer Motion
-  (`aicontext/modules/engramind.md`, "Página `/engramind`")
+  (`aicontext/modules/engramind.md`, "Página `/engramind`"); diagramas do Agente Arquiteto também em
+  React Flow (nodes arrastáveis), com layout calculado por `@dagrejs/dagre` (camadas) e `d3-hierarchy`
+  (mapa mental radial) — só posições, a animação continua com Framer Motion — e exportação em PNG com
+  `html-to-image` (`aicontext/modules/architect-agent.md`)
 - Gráficos: recharts pelo componente Chart do shadcn/ui (`src/components/ui/chart.tsx`), com
   tooltip padronizado e cores por variáveis `--chart-1..6`
 - Utilitários de estilo: `clsx` + `tailwind-merge` (`cn()`), `class-variance-authority`

@@ -459,6 +459,14 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
   chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
   adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
+- **Agente Arquiteto (OPE-105)**: o **Implementar** grava `approvedPlanVersion` (a versão do plano
+  aprovado vale na hora, mesmo com a mesa aguardando vaga) e, depois da resposta
+  (`runAfterResponse`), chama `onPlanApproved` do arquiteto, que desenha a arquitetura do plano numa
+  sessão própria do OpenCode, só leitura. **Não é etapa**: não entra na trilha, não ocupa vaga, não
+  publica na Saída da IA e nunca muda a etapa da mesa; a exclusão da mesa aborta a geração
+  (`cleanupWorkbenchDiagrams`). Aba **Arquitetura (N)** depois de "Adversário (N)" e campo
+  `WorkbenchDto.architect` (`applies`, `approvedPlanVersion`). Mesas antigas derivam a versão aprovada
+  do estado (`approvedPlanVersionOf`). Ver `modules/architect-agent.md`.
 - **Agente Mentor (OPE-92 · OPE-104)**: o fim de cada cadeia de turnos (com a ação que a originou, o
   texto do usuário, a rodada do Adversário quando houver e o início da cadeia) e o chat ao vivo vão ao
   Mentor (sem o antigo bloco ` ```opex-lesson `: o agente consolida as próprias memórias)

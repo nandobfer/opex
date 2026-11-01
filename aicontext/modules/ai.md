@@ -139,7 +139,8 @@ e opções na própria aba da página "Inteligência Artificial".
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
   `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
   transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
-  "Agente Mentor". O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
+  "Agente Mentor" —, a aba **Agente Arquiteto** (`agente-arquiteto`, ícone `Network`): diagrama da
+  arquitetura do plano aprovado da mesa, em paralelo ao desenvolvimento — ver `modules/architect-agent.md`. O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
@@ -396,7 +397,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   `opex`, lidas por todos os agentes), `opex-global` (**Memórias globais**, dono e portal), `opex-owner`
   (**Memórias do dono**), `opex-client` (**Memórias do cliente**, no portal, para todos os clientes),
   `opex-client-specific` (**Memórias de um cliente**, `scope: "client"`, só no portal daquele cliente),
-  as mesmas quatro do Agente Maddox (`maddox-*`), `adversarial`, `developer-global` e `developer-central`
+  as mesmas quatro do Agente Maddox (`maddox-*`), `adversarial`, `architect` (Agente Arquiteto), `developer-global` e `developer-central`
   (`scope: "central"`). Cada lista tem a aba onde aparece (`tab`); as por central aparecem na página da
   central e as por cliente no card "Memórias de um cliente" (seletor de cliente).
 - **Escopo**: lista por central exige `centralId` (400 `CENTRAL_REQUIRED`, 404 `CENTRAL_NOT_FOUND`,
