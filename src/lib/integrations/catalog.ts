@@ -177,6 +177,8 @@ export interface CronJobConfig {
     enabled: boolean
     /** Somente rotinas que aceitam escolher o escopo (`jobSupportsScope`). `pending` = só o que falta/está desatualizado. */
     scope?: CronJobScope
+    /** Somente rotinas de limpeza de sessões (`jobSupportsRetentionDays`): dias sem interação (X). */
+    retentionDays?: number
 }
 
 export const HEALTH_CHECK_JOB_ID = "integrations-health-check"
@@ -196,6 +198,29 @@ export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
 export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
 /** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
 export const ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID = "environments-registry-cleanup"
+/** Exclui as sessões do servidor OpenCode sem interação há X dias (nunca as vinculadas ao Opex nem as em execução). */
+export const OPENCODE_SESSIONS_CLEANUP_JOB_ID = "opencode-sessions-cleanup"
+/** Agente Opex: arquiva as sessões sem interação há X dias e exclui as arquivadas há X dias. */
+export const OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID = "opex-agent-sessions-cleanup"
+/** Agente Maddox: arquiva as sessões sem interação há X dias e exclui as arquivadas há X dias. */
+export const MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID = "maddox-agent-sessions-cleanup"
+
+/** Rotinas de limpeza de sessões: aceitam `retentionDays`. */
+export const SESSION_CLEANUP_JOB_IDS: readonly string[] = [OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID]
+/** Dias sem interação padrão das rotinas de limpeza de sessões. */
+export const DEFAULT_SESSION_RETENTION_DAYS = 30
+export const SESSION_RETENTION_DAYS_MIN = 1
+export const SESSION_RETENTION_DAYS_MAX = 3650
+
+export function jobSupportsRetentionDays(jobId: string): boolean {
+    return SESSION_CLEANUP_JOB_IDS.includes(jobId)
+}
+
+/** Dias efetivos da rotina (`retentionDays` salvo ou o padrão). */
+export function jobRetentionDays(job: Pick<CronJobConfig, "retentionDays">): number {
+    const days = job.retentionDays
+    return typeof days === "number" && Number.isInteger(days) && days >= SESSION_RETENTION_DAYS_MIN && days <= SESSION_RETENTION_DAYS_MAX ? days : DEFAULT_SESSION_RETENTION_DAYS
+}
 
 /** Rotinas internas de uma integração ativável (id da rotina → id da integração): somem de Crons com ela desativada. */
 export const INTEGRATION_CRON_JOBS: Readonly<Record<string, IntegrationId>> = { [BUILDER_MACHINE_CLEANUP_JOB_ID]: "builder_machine" }
@@ -302,6 +327,31 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         kind: "internal",
         schedule: { type: "daily", time: "04:00" },
         enabled: false,
+    },
+    // Limpezas de sessões: nascem desligadas (ação destrutiva); o dono liga e ajusta os dias.
+    {
+        id: OPENCODE_SESSIONS_CLEANUP_JOB_ID,
+        label: "Limpar sessões do OpenCode sem interação",
+        kind: "internal",
+        schedule: { type: "daily", time: "05:00" },
+        enabled: false,
+        retentionDays: DEFAULT_SESSION_RETENTION_DAYS,
+    },
+    {
+        id: OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
+        label: "Limpar sessões do Agente Opex sem interação",
+        kind: "internal",
+        schedule: { type: "daily", time: "05:00" },
+        enabled: false,
+        retentionDays: DEFAULT_SESSION_RETENTION_DAYS,
+    },
+    {
+        id: MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
+        label: "Limpar sessões do Agente Maddox sem interação",
+        kind: "internal",
+        schedule: { type: "daily", time: "05:00" },
+        enabled: false,
+        retentionDays: DEFAULT_SESSION_RETENTION_DAYS,
     },
 ]
 

@@ -19,13 +19,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { CRON_JOB_SCOPE_OPTIONS, jobSupportsScope, type CronJobConfig, type CronJobScope } from "@/lib/integrations/catalog"
+import type { CronJobConfig } from "@/lib/integrations/catalog"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
 import { integrationErrorMessage, useRunCronJob } from "../hooks/useIntegrations"
 import type { CronJobStateDto } from "../types"
+import { CronJobExtraFields } from "./CronJobExtraFields"
 import { ScheduleEditor } from "./ScheduleEditor"
 
 interface CronJobsEditorProps {
@@ -310,21 +310,7 @@ export function CronJobsEditor({ value, onChange, states = [], disabled, savedJo
                                                 )}
 
                                                 <ScheduleEditor value={job.schedule} onChange={(schedule) => updateJob(job, { schedule })} disabled={disabled} />
-                                                {jobSupportsScope(job.id) && (
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-xs">Escopo</Label>
-                                                        <OptionTabs<CronJobScope>
-                                                            aria-label={`Escopo de ${job.label}`}
-                                                            options={CRON_JOB_SCOPE_OPTIONS}
-                                                            value={job.scope ?? "pending"}
-                                                            onChange={(scope) => updateJob(job, { scope })}
-                                                            disabled={disabled}
-                                                        />
-                                                        <p className="text-xs text-muted-foreground">
-                                                            “Só pendentes” marca apenas as tarefas sem tags ou com título/descrição alterados; “Todas” regenera as tags de todo o escopo.
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                <CronJobExtraFields job={job} onChange={(patch) => updateJob(job, patch)} disabled={disabled} />
 
                                                 {job.kind === "http" && (
                                                     <div className="flex justify-end">

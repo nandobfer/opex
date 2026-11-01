@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { isCardManagedField, type IntegrationDef, type PublicFieldDef } from "@/lib/integrations/catalog"
+import { SESSION_RETENTION_DAYS_MAX, SESSION_RETENTION_DAYS_MIN, isCardManagedField, type IntegrationDef, type PublicFieldDef } from "@/lib/integrations/catalog"
 import { validateSchedule, type Schedule } from "@/lib/integrations/schedule"
 import { isValidPusherClientUrls, isValidPusherUrl } from "@/lib/pusher/url"
 
@@ -38,6 +38,12 @@ export const cronJobSchema = z
         schedule: scheduleSchema,
         enabled: z.boolean(),
         scope: z.enum(["pending", "all"]).optional(),
+        retentionDays: z
+            .number({ message: "Dias sem interação: informe um número" })
+            .int("Dias sem interação: use um número inteiro")
+            .min(SESSION_RETENTION_DAYS_MIN, `Dias sem interação: mínimo ${SESSION_RETENTION_DAYS_MIN}`)
+            .max(SESSION_RETENTION_DAYS_MAX, `Dias sem interação: máximo ${SESSION_RETENTION_DAYS_MAX}`)
+            .optional(),
     })
     .superRefine((job, ctx) => {
         if (job.kind === "http" && (!job.path || !job.path.startsWith("/api/"))) {

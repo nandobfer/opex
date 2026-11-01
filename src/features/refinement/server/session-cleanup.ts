@@ -1,5 +1,5 @@
-import { isSessionNotFoundError } from "@opencode/client"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { TaskRefinement } from "@/lib/db/models/Refinement"
 import { loggerFor } from "@/lib/logger"
@@ -15,19 +15,8 @@ import { loggerFor } from "@/lib/logger"
  */
 
 const log = loggerFor({ module: "refinement-session" })
-const DELETE_TIMEOUT_MS = 15_000
-
 /** Exclui uma sessão no OpenCode; `true` quando ela já não existe (idempotente). */
-async function removeSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
-    try {
-        await client.session.remove({ sessionID: sessionId }, { signal: AbortSignal.timeout(DELETE_TIMEOUT_MS) })
-        return true
-    } catch (error) {
-        if (isSessionNotFoundError(error)) return true
-        log.warn({ err: error, sessionId }, "[refinement-session] Falha ao excluir a sessão do OpenCode")
-        return false
-    }
-}
+const removeSession = (client: OpencodeClient, sessionId: string) => removeOpencodeSessionSafe(client, sessionId, log, "refinement-session")
 
 /**
  * Tenta excluir agora uma sessão recém-desvinculada e, só em caso de sucesso, a remove da lista de

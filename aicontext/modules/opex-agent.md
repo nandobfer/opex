@@ -38,6 +38,27 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
   arquivadas, renomear, arquivar e excluir (com `AlertDialog`) e lista virtualizada acima de 50.
 - A primeira mensagem de uma "Nova sessão" cria a sessão.
 
+### Limpeza automática das sessões (OPE-106)
+
+- Rotinas `opex-agent-sessions-cleanup` (Agente Opex, inclusive as sessões antigas sem `agent`) e
+  `maddox-agent-sessions-cleanup` (Agente Maddox), em Integrações › Crons, com **X dias** configurável
+  ("Dias sem interação", padrão 30; nascem desligadas). Valem para as sessões do dono e do portal.
+  Lógica única em `server/session-retention.ts` (`cleanupIdleAgentSessions(agent, dias)`).
+- Sessão **não arquivada** com `lastMessageAt` anterior ao corte → **arquivada** (`archived: true`,
+  `archivedAt` = agora), auditada (`ATUALIZAR`, `motivo: "inatividade"`) e avisada no canal da sessão
+  (`private-app` ou `private-opex-{clientId}-{userId}`). No Maddox, arquivar **mantém** a sessão do
+  OpenCode vinculada (`opencodeSessionId`, protegida da limpeza do OpenCode).
+- Sessão **arquivada** cuja última atividade — o maior entre `lastMessageAt` e `archivedAt` (sem
+  `archivedAt`, arquivada antes do campo: `updatedAt`) — é anterior ao corte → **excluída** de vez pelo
+  mesmo caminho do botão Excluir (`purgeSession`: arquivos, mensagens, ações, sessão do OpenCode do
+  Maddox, auditoria `EXCLUIR` com `motivo` e evento de exclusão). Assim, a sessão fica **pelo menos X
+  dias arquivada** antes de sumir.
+- `archivedAt` também é gravado ao arquivar pela tela (`updateSession`) e zerado ao desarquivar.
+- Nunca entram: sessão respondendo ou aguardando confirmação (só `idle`/`error`), com turno vivo neste
+  processo ou vinculada a um job ativo (`scheduled`, `running` ou `awaiting_confirmation`, por
+  `sessionId`, `originSessionId` ou `resultSessionId`). A condição de arquivar é reconferida na
+  gravação. Teto de 200 por etapa e execução; falha numa sessão não interrompe as demais.
+
 ## Chat
 
 - Streaming de texto com cursor e raciocínio recolhível ("Pensando…").
@@ -662,6 +683,6 @@ escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agen
 indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
 conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar
-MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente) e `session-retention` (arquivar/excluir por inatividade, carência do arquivamento, proteções e `archivedAt`). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memories-realtime`, `agent-memory-mapping`, `self-memory-tools`, `self-memory-mcp` e
 `agent-settings-tabs`; `__tests__/features/opex-agent/memory-tools.test.ts` cobre `list_agent_memories`.

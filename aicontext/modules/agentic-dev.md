@@ -650,7 +650,17 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   concluem sem chamar o OpenCode, e ao excluir uma mesa as pendências são tentadas antes de apagar o
   registro. A **mesma rotina** também retoma as exclusões pendentes dos **refinamentos de tarefa**
   (`features/refinement/server/session-cleanup.ts`; ver `modules/refinement.md`). Lógica em
-  `server/session-cleanup.ts`.
+  `server/session-cleanup.ts`. A remoção idempotente (`removeOpencodeSessionSafe`, `src/lib/ai/opencode-sessions.ts`)
+  é compartilhada pelas mesas, refinamentos, revisões de PR e Agente Adversário.
+- **Limpeza das sessões do OpenCode sem interação** (OPE-106, rotina `opencode-sessions-cleanup`,
+  `features/opencode-service/server/session-retention.ts`): lê **todas** as sessões do servidor
+  OpenCode (listagem paginada por `cursor`, mais a de cada projeto de `project.list`, deduplicadas; teto
+  de 5.000 lidas) e exclui as paradas há X dias (`max(time.updated, time.created)`), no máximo 200 por
+  execução. **Nunca** exclui as protegidas: vinculadas a mesa (`sessionId`), fork, refinamento (e a skill
+  ativa), revisão de PR, rodada do Agente Adversário, sessão do Agente Maddox (arquivada ou não) ou em
+  execução (`session.active()`). A decisão é por **árvore** (raiz + subsessões `parentID`): sai só a
+  árvore inteira parada e sem nenhuma sessão protegida, pela raiz. OpenCode indisponível vira erro da
+  rotina; falha numa exclusão só conta como falha.
 - **Reabrir mesa** (`done` → planejamento): a tarefa é movida para a coluna de desenvolvimento (a
   mesma "Ao abrir a mesa (implementação)"; sem ela, a coluna de entrada do vínculo) e a issue é
   **reaberta** (mesma sincronização). Como a sessão anterior foi excluída, a mesa ganha uma **sessão

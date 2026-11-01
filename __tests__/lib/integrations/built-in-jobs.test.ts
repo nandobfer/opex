@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
 import { withBuiltInJobs } from '@/lib/integrations/config'
 
 describe('rotinas internas nos Crons salvos', () => {
@@ -13,7 +13,7 @@ describe('rotinas internas nos Crons salvos', () => {
     ]
     const jobs = withBuiltInJobs(saved)
     expect(jobs[0]).toEqual(saved[0])
-    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID])
+    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID])
     expect(jobs[1]).toEqual(DEFAULT_CRON_JOBS[0])
     expect(jobs[2]).toEqual(DEFAULT_CRON_JOBS[1])
     expect(jobs[3]).toEqual(DEFAULT_CRON_JOBS[2])
@@ -44,6 +44,9 @@ describe('rotinas internas nos Crons salvos', () => {
       { id: OPENCODE_QUOTA_JOB_ID, label: 'Quota', kind: 'internal', schedule: { type: 'interval', minutes: 10 }, enabled: false },
       { id: BUILDER_MACHINE_CLEANUP_JOB_ID, label: 'Limpeza do PC', kind: 'internal', schedule: { type: 'daily', time: '04:00' }, enabled: true },
       { id: ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, label: 'Registry', kind: 'internal', schedule: { type: 'daily', time: '05:00' }, enabled: true },
+      { id: OPENCODE_SESSIONS_CLEANUP_JOB_ID, label: 'Sessões OpenCode', kind: 'internal', schedule: { type: 'daily', time: '06:00' }, enabled: true, retentionDays: 10 },
+      { id: OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, label: 'Sessões Opex', kind: 'internal', schedule: { type: 'daily', time: '06:00' }, enabled: true, retentionDays: 15 },
+      { id: MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, label: 'Sessões Maddox', kind: 'internal', schedule: { type: 'daily', time: '06:00' }, enabled: false, retentionDays: 60 },
     ]
     expect(withBuiltInJobs(saved)).toBe(saved)
   })
