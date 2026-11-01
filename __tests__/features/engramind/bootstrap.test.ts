@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   whoamiApp: 'bootstrap',
   failSave: false,
   audits: [] as Record<string, unknown>[],
+  networkTargets: [] as string[],
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ ...mocks.config }), getIntegration: async () => ({ values: { ...mocks.config }, secretSources: { adminToken: mocks.config.adminToken ? 'db' : 'none', webhookSecret: mocks.config.webhookSecret ? 'db' : 'none' }, secretErrors: [] }) }))
@@ -34,6 +35,12 @@ vi.mock('@/features/engramind/server/shared', () => ({
   },
   engramindLog: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
   publishEngramind: vi.fn(),
+}))
+vi.mock('@/features/engramind/server/memory-network', () => ({
+  ensureAgentMemoryNetwork: vi.fn(async (_actor: string, target: { token: string }) => {
+    mocks.networkTargets.push(target.token)
+    return { step: { id: 'agent-memories', status: 'skipped', message: 'Memórias dos agentes: já estavam prontos' }, summary: {} }
+  }),
 }))
 vi.mock('@/features/engramind/server/client', () => ({
   engramindTarget: async () => ({ baseUrl: mocks.config.baseUrl, token: mocks.config.adminToken }),
@@ -79,11 +86,12 @@ describe('bootstrap do Engramind', () => {
     mocks.whoamiApp = 'bootstrap'
     mocks.failSave = false
     mocks.audits = []
+    mocks.networkTargets = []
   })
 
   it('com o token de bootstrap: cria o app opex, emite e grava o token próprio, só depois revoga o bootstrap e registra o webhook', async () => {
     const result = await saveConnection({ baseUrl: 'http://engramind:8000', opexPublicUrl: 'http://opex:3100', environmentId: null, adminToken: BOOT }, 'local')
-    expect(result.steps.map((step) => `${step.id}:${step.status}`)).toEqual(['whoami:ok', 'app:ok', 'token:ok', 'save:ok', 'revoke:ok', 'webhook:ok'])
+    expect(result.steps.map((step) => `${step.id}:${step.status}`)).toEqual(['whoami:ok', 'app:ok', 'token:ok', 'save:ok', 'revoke:ok', 'webhook:ok', 'agent-memories:skipped'])
     expect(mocks.config.adminToken).toBe(`eng.tk_novo0001.${'n'.repeat(40)}`)
     const sequence = order(mocks.calls)
     expect(sequence.indexOf('POST /v1/tokens')).toBeLessThan(sequence.indexOf('POST /v1/tokens/tk_b0000001/revoke'))
@@ -98,6 +106,8 @@ describe('bootstrap do Engramind', () => {
     expect(Buffer.from(mocks.config.webhookSecret!, 'base64')).toHaveLength(48)
     expect(JSON.stringify(mocks.audits)).not.toContain(mocks.config.webhookSecret)
     expect(JSON.stringify(mocks.audits)).not.toContain('nnnnnnnn')
+    // OPE-104: o passo "Memórias dos agentes" roda por último, com o token próprio já gravado.
+    expect(mocks.networkTargets).toEqual([`eng.tk_novo0001.${'n'.repeat(40)}`])
   })
 
   it('repetir reaproveita o app opex existente (não cria outro)', async () => {
@@ -121,10 +131,10 @@ describe('bootstrap do Engramind', () => {
     mocks.apps.set('opex', { slug: 'opex', webhook: { url: 'http://opex:3100/api/engramind/webhook', secret: { configured: true, updated_at: null } } })
     mocks.config.adminToken = `eng.tk_opex0001.${'o'.repeat(40)}`
     mocks.config.webhookSecret = 'x'.repeat(64)
-    expect((await runBootstrap('local')).map((step) => `${step.id}:${step.status}`)).toEqual(['whoami:ok', 'webhook:skipped'])
+    expect((await runBootstrap('local')).map((step) => `${step.id}:${step.status}`)).toEqual(['whoami:ok', 'webhook:skipped', 'agent-memories:skipped'])
     mocks.config.opexPublicUrl = 'https://opex.novo'
     const steps = await runBootstrap('local')
-    expect(steps.at(-1)).toMatchObject({ id: 'webhook', status: 'ok' })
+    expect(steps.find((step) => step.id === 'webhook')).toMatchObject({ status: 'ok' })
     expect(mocks.apps.get('opex')!.webhook!.url).toBe('https://opex.novo/api/engramind/webhook')
   })
 })

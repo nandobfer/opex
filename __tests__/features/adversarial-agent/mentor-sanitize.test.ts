@@ -23,10 +23,10 @@ describe('sanitizador do Agente Mentor', () => {
     expect(sanitizeMemoryText(text, context)).toContain(reason)
   })
 
-  it('recusa a regra acima do tamanho máximo de uma memória (2.000 caracteres)', () => {
+  it('recusa a regra acima do tamanho máximo de uma memória (4.000 caracteres, o padrão do Engramind)', () => {
     const rule = 'Confira se componentes que exigem provider são renderizados abaixo dele. '
-    expect(sanitizeMemoryText(rule.repeat(40).slice(0, 2000), context)).toBeNull()
-    expect(sanitizeMemoryText(rule.repeat(40).slice(0, 2001), context)).toBe('A regra tem 2.001 caracteres: reescreva em até 2.000')
+    expect(sanitizeMemoryText(rule.repeat(80).slice(0, 4000), context)).toBeNull()
+    expect(sanitizeMemoryText(rule.repeat(80).slice(0, 4001), context)).toBe('A regra tem 4.001 caracteres: reescreva em até 4.000')
   })
 
   it('não confunde termos curtos do caso com palavras comuns', () => {

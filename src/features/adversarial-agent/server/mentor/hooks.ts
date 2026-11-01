@@ -100,9 +100,10 @@ export interface MentorAfterTurnsInput {
  * cadeia (auditoria `MemoriaAgente` com `ator: agente:*`): o Mentor não repete o que já foi aprendido.
  */
 async function selfLearnedMemories(workbenchId: string, since: Date | null): Promise<string[]> {
+    if (!since) return []
     try {
         const { AuditLog } = await import("@/lib/db/models/AuditLog")
-        const rows = await AuditLog.find({ entidade: "MemoriaAgente", "dadosNovos.mesa": workbenchId, "dadosNovos.ator": { $regex: "^agente:" }, ...(since ? { timestamp: { $gte: since } } : {}) })
+        const rows = await AuditLog.find({ entidade: "MemoriaAgente", "dadosNovos.mesa": workbenchId, "dadosNovos.ator": { $regex: "^agente:" }, timestamp: { $gte: since } })
             .sort({ timestamp: 1 })
             .limit(20)
             .select({ dadosNovos: 1 })

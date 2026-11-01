@@ -120,17 +120,17 @@ describe('aba Agente Mentor com a configuração salva', () => {
   })
 
   it('salvar envia os valores salvos intactos e, com a resposta, volta ao estado limpo mostrando os mesmos valores', async () => {
-    const next = { ...SAVED, triggers: { ...SAVED.triggers, developer: { ...SAVED.triggers.developer, skipDecider: true } } }
+    const next = { ...SAVED, triggers: { ...SAVED.triggers, ai: { ...SAVED.triggers.ai, adversarial_review: true } } }
     mocks.mutateAsync.mockResolvedValue(dto(next))
     const { onDirtyChange } = renderTab()
-    const skip = screen.getByLabelText(/Pedidos do desenvolvedor pulam o decisor/) as HTMLInputElement
-    fireEvent.click(skip)
-    expect(skip.checked).toBe(true)
+    const reviews = screen.getByLabelText(/^Revisões do adversário$/) as HTMLInputElement
+    fireEvent.click(reviews)
+    expect(reviews.checked).toBe(true)
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
     await act(async () => {
       fireEvent.click(saveButton())
     })
-    expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ decider: SAVED.decider, writer: SAVED.writer, level: 'selective', triggers: expect.objectContaining({ developer: expect.objectContaining({ skipDecider: true }) }) }))
+    expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ decider: SAVED.decider, writer: SAVED.writer, level: 'selective', triggers: expect.objectContaining({ ai: expect.objectContaining({ adversarial_review: true }) }) }))
     expect(onDirtyChange.mock.calls.at(-1)).toEqual([false])
     expect(saveButton().disabled).toBe(true)
     expectSavedValuesShown()

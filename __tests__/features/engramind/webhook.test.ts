@@ -18,7 +18,7 @@ vi.mock('@/features/engramind/server/models', () => ({
     },
   },
 }))
-vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn() }, publishEngramind: mocks.publish }))
+vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }, publishEngramind: mocks.publish }))
 
 import { authenticateWebhook, processWebhookEvent, signPayload, verifySignature } from '@/features/engramind/server/webhook'
 

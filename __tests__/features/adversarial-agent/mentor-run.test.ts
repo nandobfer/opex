@@ -65,7 +65,7 @@ const input = (overrides: Partial<MentorRunInput['case']> = {}): MentorRunInput 
   projectName: 'SmartDesk',
   repo: 'org/smart-desk',
   approvedPlan: null,
-  case: { sources: ['user'], trigger: 'preview_correction', userMessage: 'Salvar derrubou o app', responses: [{ stage: 'implementing', text: 'Faltava o provider' }], lessons: [], ...overrides },
+  case: { sources: ['user'], trigger: 'preview_correction', userMessage: 'Salvar derrubou o app', responses: [{ stage: 'implementing', text: 'Faltava o provider' }], ...overrides },
 })
 
 const RULE = 'Confira se componentes que exigem provider são renderizados abaixo dele e se há teste de render da tela.'
@@ -133,25 +133,25 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
-  it('regra acima de 2.000 caracteres: o redator reescreve mais curto e a memória é gravada', async () => {
-    const long = `${RULE} `.repeat(30)
+  it('regra acima de 4.000 caracteres: o redator reescreve mais curto e a memória é gravada', async () => {
+    const long = `${RULE} `.repeat(80)
     mocks.streamAi
       .mockReturnValueOnce(reply({ score: 0.9 }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
       .mockReturnValueOnce(reply({ action: 'create', text: RULE }))
     expect(await run(settings())).toMatchObject({ status: 'created' })
-    expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 2.000')
+    expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 4.000')
     expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.any(Object))
   })
 
   it('regra longa de novo, mesmo em Sugerir: descartada (nunca vira sugestão que não pode ser aprovada)', async () => {
-    const long = `${RULE} `.repeat(30)
+    const long = `${RULE} `.repeat(80)
     mocks.streamAi
       .mockReturnValueOnce(reply({ score: 0.9 }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
-    expect(await run(settings({ saveMode: 'suggest' }))).toMatchObject({ status: 'discarded', sanitizerReason: expect.stringContaining('reescreva em até 2.000') })
+    expect(await run(settings({ saveMode: 'suggest' }))).toMatchObject({ status: 'discarded', sanitizerReason: expect.stringContaining('reescreva em até 4.000') })
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
@@ -177,16 +177,6 @@ describe('pipeline do Agente Mentor', () => {
     const doc = await run(settings({ decider: { provider: 'jev', model: 'jev-latest', variant: null } }))
     expect(doc).toMatchObject({ status: 'created', score: 0.7 })
     expect(mocks.askJev).toHaveBeenCalledWith(expect.objectContaining({ model: 'jev-latest', tracking: { feature: 'adversarial-mentor-decision', subject: 'OPE-746' } }))
-  })
-
-  it('pedido do desenvolvedor com "pular o decisor" vai direto ao redator', async () => {
-    mocks.streamAi.mockReturnValueOnce(reply({ action: 'create', text: RULE }))
-    const s = settings()
-    s.triggers.developer.skipDecider = true
-    const doc = await run(s, input({ sources: ['developer'], trigger: null, userMessage: null, lessons: [{ problem: 'Crash', shouldHaveCaught: 'Provider', why: 'Genérico' }] }))
-    expect(doc).toMatchObject({ status: 'created' })
-    expect(doc.score ?? null).toBeNull()
-    expect(mocks.streamAi).toHaveBeenCalledTimes(1)
   })
 
   it('falha do provedor: execução falha com o erro visível', async () => {

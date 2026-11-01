@@ -71,7 +71,8 @@ vi.mock('@/lib/db/models/User', () => {
   store.users = memoryModel()
   return { User: store.users }
 })
-vi.mock('@/features/ai/server/agent-memory-service', () => ({ agentMemoryTexts: async () => [], memoriesSection: () => '' }))
+vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('../../helpers/memory-context')).memoryContextModule())
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 vi.mock('@/features/opex-agent/server/settings', () => ({
   loadOpexSettings: async () => ({
     settings: { enabled: true, main: { provider: 'anthropic', model: 'claude-x', variant: null, temperature: null, maxOutputTokens: null }, title: { provider: null, model: null, variant: null }, instructions: 'Seja útil', titleInstructions: 'T', disabledTools: [], confirmationOverrides: {}, files: { maxPerMessage: 5, maxSizeMb: 10 } },

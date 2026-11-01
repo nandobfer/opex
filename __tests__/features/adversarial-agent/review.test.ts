@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   getTask: vi.fn(),
   loadFiles: vi.fn(async () => []),
   listAttachments: vi.fn(async () => [] as { name: string }[]),
-  memories: vi.fn(async () => ['Validação X é intencional']),
+  memories: vi.fn(async () => ({ block: '- Validação X é intencional', source: 'live', cachedAt: null, counts: { full: 1, titles: 0, overflow: 0 }, reason: null })),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
@@ -39,7 +39,8 @@ vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.p
 vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))
 vi.mock('@/features/adversarial-agent/server/settings', () => ({ loadAdversarialSettings: async () => ({ settings: mocks.settings }) }))
-vi.mock('@/features/ai/server/agent-memory-service', () => ({ agentMemoryTexts: mocks.memories }))
+vi.mock('@/features/ai/server/agent-memory-context', () => ({ adversarialMemoryContext: mocks.memories }))
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 vi.mock('@/features/ai/server/settings', () => ({ loadTaskTagsSettings: async () => ({ settings: { taxonomy: [{ id: 'relatorios', label: 'Relatórios' }] } }) }))
 vi.mock('@/features/adversarial-agent/server/attachments', () => ({ loadPromptFiles: mocks.loadFiles, listTaskAttachments: mocks.listAttachments }))
 
@@ -87,7 +88,7 @@ describe('runAdversaryRound', () => {
     expect(outcome).toMatchObject({ kind: 'proceed', level: 'success' })
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: '/repo/worktrees/opx-1' }, permissions: expect.arrayContaining([{ action: 'edit', resource: '*', effect: 'deny' }]) }))
     expect(mocks.instructionsPut).toHaveBeenCalledWith(expect.objectContaining({ sessionID: 'adv-1', value: expect.stringContaining('Validação X é intencional') }))
-    expect(mocks.memories).toHaveBeenCalledWith(['adversarial'])
+    expect(mocks.memories).toHaveBeenCalled()
     expect(mocks.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ app: 'opex', kind: 'adversarial-review' }) }))
     const [, request] = mocks.runTurn.mock.calls[0]!
     expect(request).toMatchObject({ id: 'w1', sessionId: 'adv-1', agent: { model: 'anthropic/opus' }, consumption: { origin: 'adversarial-agent' } })
