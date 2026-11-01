@@ -102,3 +102,14 @@ describe('createGraphAssembler', () => {
     expect(screenGraph.notes).toEqual([{ kind: 'risk', text: 'Risco' }])
   })
 })
+
+describe('cortes de texto ao vivo', () => {
+  it('o corte acima do teto de proteção vira aviso no fim, uma vez por linha recebida', () => {
+    const assembler = createGraphAssembler({ depth: 5 })
+    const long = 'x'.repeat(9_000)
+    assembler.push(block({ op: 'node', id: 'a', label: 'A', detail: long }, { op: 'node', id: 'a', status: 'changed' }, { op: 'note', kind: 'risk', text: 'r'.repeat(1_200) }))
+    assembler.finish()
+    expect(assembler.draft.nodes[0]!.detail).toHaveLength(8_000)
+    expect(assembler.warnings).toEqual(expect.arrayContaining(['descrição de nó: 1 corte(s) no teto de proteção de 8.000 caracteres', 'nota: 1 corte(s) no teto de proteção de 1.000 caracteres']))
+  })
+})

@@ -1,4 +1,4 @@
-import { isValidObjectId } from "mongoose"
+import { isValidObjectId, Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
@@ -13,7 +13,9 @@ import type { ArchitectDiagramDto, WorkbenchArchitectDto } from "../types"
 import { retryPendingDeletions, runDiagram } from "./generate"
 import { ArchitectDiagram, architectDb, type IArchitectDiagram } from "./models"
 import { publishDiagrams } from "./publish"
-import { abortWorkbenchDiagrams, isDiagramLive, liveDiagramIds, registerDiagram } from "./registry"
+import { abortWorkbenchDiagrams, isDiagramLive, liveDiagramIds, registerDiagram, releaseDiagram, withWorkbenchLock } from "./registry"
+import { closeLive, openLive } from "./live-hub"
+import { emptyDraft } from "../stream-parser"
 import { architectAvailability, loadArchitectSettings, settingsApply } from "./settings"
 
 /**
@@ -109,8 +111,23 @@ async function assertReady(centralId: string): Promise<void> {
     if (!availability.available) throw new DomainError(409, availability.reason ?? 'O "Agente Arquiteto" está indisponível', "ARCHITECT_UNAVAILABLE")
 }
 
-function start(diagramId: string, workbenchId: string): void {
+/**
+ * Registra a geração (e abre o diagrama vivo) ANTES de a versão ser gravada como "gerando": quem
+ * listar ou abrir o stream logo depois do evento já a encontra viva — nunca como órfã ("o app
+ * reiniciou") nem com um stream que fecha sem dados. Se a gravação falhar, `abandon` desfaz.
+ */
+function begin(diagramId: string, workbenchId: string): AbortController {
     const controller = registerDiagram(diagramId, workbenchId)
+    openLive(diagramId, emptyDraft())
+    return controller
+}
+
+function abandon(diagramId: string, controller: AbortController): void {
+    releaseDiagram(diagramId, controller)
+    closeLive(diagramId, "failed")
+}
+
+function launch(diagramId: string, controller: AbortController): void {
     runAfterResponse("architect-diagram", () => runDiagram(diagramId, controller))
 }
 
@@ -119,6 +136,10 @@ function start(diagramId: string, workbenchId: string): void {
  * geração em curso de um plano anterior; pedido manual ou ajuste com geração em curso é recusado.
  */
 export async function requestDiagram(workbenchId: string, input: ArchitectGenerateInput, origin: ArchitectOrigin): Promise<ArchitectDiagramDto> {
+    return withWorkbenchLock(workbenchId, () => createDiagram(workbenchId, input, origin))
+}
+
+async function createDiagram(workbenchId: string, input: ArchitectGenerateInput, origin: ArchitectOrigin): Promise<ArchitectDiagramDto> {
     const workbench = await loadWorkbench(workbenchId)
     if (origin !== "auto") await assertReady(workbench.centralId)
     const planVersion = approvedPlanVersionOf(workbench)
@@ -143,33 +164,47 @@ export async function requestDiagram(workbenchId: string, input: ArchitectGenera
         ArchitectDiagram.findOne({ workbenchId }, { version: 1 }).sort({ version: -1 }).lean(),
         ArchitectDiagram.countDocuments({ workbenchId, planVersion, state: { $ne: "superseded" } }),
     ])
-    const created = await ArchitectDiagram.create({
-        workbenchId,
-        centralId: workbench.centralId,
-        taskId: workbench.taskId,
-        taskCode: workbench.taskCode,
-        taskTitle: workbench.taskTitle,
-        version: (last?.version ?? 0) + 1,
-        planVersion,
-        planSeq: samePlan + 1,
-        depth,
-        origin: input.feedback ? "adjust" : origin,
-        feedback: input.feedback ?? null,
-        baseDiagramId,
-        state: "running",
-        progress: { phase: "starting", tools: 0, lastTool: null },
-        startedAt: new Date(),
-    })
-    const id = String(created._id)
-    await recordAudit({
-        userId: getLocalUser().id,
-        entidade: ARCHITECT_AUDIT_ENTITY,
-        entidadeId: id,
-        acao: AcaoAuditoria.CRIAR,
-        depois: { tarefa: workbench.taskCode, versao: created.version, plano: planVersion, profundidade: depth, origem: created.origin },
-    })
-    await publishDiagrams(workbenchId, id)
-    start(id, workbenchId)
+    const id = new Types.ObjectId().toHexString()
+    const controller = begin(id, workbenchId)
+    let created
+    try {
+        created = await ArchitectDiagram.create({
+            _id: id,
+            workbenchId,
+            centralId: workbench.centralId,
+            taskId: workbench.taskId,
+            taskCode: workbench.taskCode,
+            taskTitle: workbench.taskTitle,
+            version: (last?.version ?? 0) + 1,
+            planVersion,
+            planSeq: samePlan + 1,
+            depth,
+            origin: input.feedback ? "adjust" : origin,
+            feedback: input.feedback ?? null,
+            baseDiagramId,
+            state: "running",
+            progress: { phase: "starting", tools: 0, lastTool: null },
+            startedAt: new Date(),
+        })
+    } catch (error) {
+        abandon(id, controller)
+        throw error
+    }
+    try {
+        await recordAudit({
+            userId: getLocalUser().id,
+            entidade: ARCHITECT_AUDIT_ENTITY,
+            entidadeId: id,
+            acao: AcaoAuditoria.CRIAR,
+            depois: { tarefa: workbench.taskCode, versao: created.version, plano: planVersion, profundidade: depth, origem: created.origin },
+        })
+        await publishDiagrams(workbenchId, id)
+    } catch (error) {
+        // Sem a geração, a versão gravada vira órfã e a próxima listagem a marca como interrompida.
+        abandon(id, controller)
+        throw error
+    }
+    launch(id, controller)
     return toDiagramDto(created.toObject())
 }
 
@@ -180,16 +215,37 @@ export async function retryDiagram(id: string): Promise<ArchitectDiagramDto> {
     const doc = await ArchitectDiagram.findById(id).lean()
     if (!doc) throw new DomainError(404, "Versão do diagrama não encontrada", "ARCHITECT_DIAGRAM_NOT_FOUND")
     await loadWorkbench(doc.workbenchId)
+    return withWorkbenchLock(doc.workbenchId, () => restartDiagram(id, doc))
+}
+
+async function restartDiagram(id: string, doc: IArchitectDiagram & { _id: unknown }): Promise<ArchitectDiagramDto> {
     if (doc.state !== "failed" && doc.state !== "interrupted") throw new DomainError(409, "Só uma versão que falhou pode ser gerada de novo", "ARCHITECT_NOT_FAILED")
     // A execução anterior desta versão ainda está encerrando (limpeza da sessão): espera ela sair do registro.
     if (isDiagramLive(id)) throw new DomainError(409, "A geração anterior desta versão ainda está encerrando; tente novamente em alguns segundos.", "ARCHITECT_BUSY")
     await assertReady(doc.centralId)
     await reconcileOrphans({ workbenchId: doc.workbenchId })
     if (await ArchitectDiagram.exists({ workbenchId: doc.workbenchId, state: "running" })) throw new DomainError(409, "O Agente Arquiteto já está gerando um diagrama nesta mesa; aguarde terminar.", "ARCHITECT_BUSY")
-    await ArchitectDiagram.updateOne({ _id: doc._id }, { $set: { state: "running", error: null, graph: null, draft: null, warnings: [], trimmed: { nodes: 0, edges: 0 }, repaired: false, progress: { phase: "starting", tools: 0, lastTool: null }, startedAt: new Date(), finishedAt: null } })
-    await recordAudit({ userId: getLocalUser().id, entidade: ARCHITECT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { estado: doc.state }, depois: { estado: "running", acao: "tentar-novamente" } })
-    await publishDiagrams(doc.workbenchId, id)
-    start(id, doc.workbenchId)
+    const controller = begin(id, doc.workbenchId)
+    // Transição atômica: só uma versão que AINDA está falhou/interrompida volta a gerar.
+    const updated = await ArchitectDiagram.updateOne(
+        { _id: doc._id, state: { $in: ["failed", "interrupted"] } },
+        { $set: { state: "running", error: null, graph: null, draft: null, warnings: [], trimmed: { nodes: 0, edges: 0 }, repaired: false, progress: { phase: "starting", tools: 0, lastTool: null }, startedAt: new Date(), finishedAt: null } },
+    ).catch((error: unknown) => {
+        abandon(id, controller)
+        throw error
+    })
+    if (updated.modifiedCount !== 1) {
+        abandon(id, controller)
+        throw new DomainError(409, "Esta versão já está sendo gerada de novo.", "ARCHITECT_BUSY")
+    }
+    try {
+        await recordAudit({ userId: getLocalUser().id, entidade: ARCHITECT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { estado: doc.state }, depois: { estado: "running", acao: "tentar-novamente" } })
+        await publishDiagrams(doc.workbenchId, id)
+    } catch (error) {
+        abandon(id, controller)
+        throw error
+    }
+    launch(id, controller)
     return getDiagram(id)
 }
 

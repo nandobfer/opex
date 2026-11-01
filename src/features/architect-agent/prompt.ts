@@ -1,6 +1,6 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
-import { ARCHITECT_STREAM_FENCE, ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_STREAM_FENCE, ARCHITECT_TEXT_LIMITS, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import type { ArchitectGraph } from "./graph"
 
 /**
@@ -25,6 +25,11 @@ const FORMAT_LINES = [
 
 const FENCE = "```" + ARCHITECT_STREAM_FENCE
 
+/** Tamanhos pedidos ao modelo (bem abaixo do teto de proteção do saneamento). */
+const TEXT_GUIDANCE = (["title", "summary", "nodeLabel", "detail", "groupLabel", "groupDetail", "edgeLabel", "note"] as const)
+    .map((field) => `${ARCHITECT_TEXT_LIMITS[field].label} até ${ARCHITECT_TEXT_LIMITS[field].prompt.toLocaleString("pt-BR")}`)
+    .join("; ")
+
 export function depthDirective(depth: ArchitectDepth): string {
     const def = ARCHITECT_DEPTH_DEFS[depth]
     return [`## Profundidade: nível ${depth} — ${def.label} (${def.content})`, def.directive, `- No máximo ${def.maxNodes} nós e ${def.maxEdges} arestas (o excedente é cortado pelo sistema).`].join("\n")
@@ -47,7 +52,7 @@ export function buildArchitectInstructions(input: { instructions: string; memori
         "- `files`: caminhos REAIS do repositório (confirme lendo o código); para arquivos que o plano cria, use o caminho previsto no plano.",
         "- Agrupe os nós em camadas (`groups`, ex.: UI, Rotas/API, Features, Lib, Banco, Externo) e ligue-os com arestas tipadas (`contains`, `uses`, `flow`, `event`, `data`).",
         "- Registre em `notes` as decisões, os riscos e as dúvidas do plano.",
-        `- \`detail\` de cada nó: no máximo ${ARCHITECT_NODE_DETAIL_MAX.toLocaleString("pt-BR")} caracteres (o excedente é cortado).`,
+        `- Tamanho dos textos (em caracteres): ${TEXT_GUIDANCE}.`,
         "- Ids curtos, únicos e estáveis (letras, números e hífen). Toda aresta liga dois ids existentes.",
         "",
         "## Formato da resposta: o diagrama é desenhado AO VIVO",

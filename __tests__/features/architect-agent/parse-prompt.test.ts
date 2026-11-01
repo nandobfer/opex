@@ -30,7 +30,9 @@ describe('prompts do arquiteto', () => {
     expect(text).toContain('- Camadas X')
     expect(text).not.toContain('Memória própria')
     // O limite do detalhe do nó é informado ao modelo (o excedente é cortado no saneamento).
-    expect(text).toContain('`detail` de cada nó: no máximo 4.000 caracteres')
+    expect(text).toContain('descrição de nó até 4.000')
+    expect(text).toContain('nota até 500')
+    expect(text).toContain('resumo até 600')
     // Formato ao vivo: uma operação por linha, escrita aos poucos, terminando com done.
     expect(text).toContain('```architect')
     expect(text).toContain('{"op":"node","id":"objective"')

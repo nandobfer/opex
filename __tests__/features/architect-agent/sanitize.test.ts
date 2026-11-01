@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ARCHITECT_DEPTH_DEFS, ARCHITECT_NODE_DETAIL_MAX } from '@/features/architect-agent/constants'
+import { ARCHITECT_DEPTH_DEFS, ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_TEXT_LIMITS } from '@/features/architect-agent/constants'
 import { architectGraphSchema } from '@/features/architect-agent/graph'
 import { sanitizeGraph } from '@/features/architect-agent/sanitize'
 
@@ -85,7 +85,44 @@ describe('sanitizeGraph', () => {
     const { graph, warnings } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), node('a', { detail: long }), node('b', { detail: fits })] }, 5)
     expect(graph.nodes.find((item) => item.id === 'a')!.detail).toHaveLength(ARCHITECT_NODE_DETAIL_MAX)
     expect(graph.nodes.find((item) => item.id === 'b')!.detail).toBe(fits.trim())
-    expect(warnings).toContain(`1 descrição(ões) de nó cortada(s) no limite de ${ARCHITECT_NODE_DETAIL_MAX} caracteres`)
+    expect(warnings).toContain('descrição de nó: 1 corte(s) no teto de proteção de 8.000 caracteres')
     expect(architectGraphSchema.safeParse(graph).success).toBe(true)
+  })
+
+  it('o teto de proteção fica bem acima do tamanho pedido no prompt, e o que o prompt pede nunca é cortado', () => {
+    for (const limit of Object.values(ARCHITECT_TEXT_LIMITS)) expect(limit.max).toBeGreaterThanOrEqual(limit.prompt * 1.5)
+    const asked = 'y'.repeat(ARCHITECT_TEXT_LIMITS.detail.prompt)
+    const { graph, warnings } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), node('a', { detail: asked })] }, 5)
+    expect(graph.nodes.find((item) => item.id === 'a')!.detail).toBe(asked)
+    expect(warnings.some((warning) => warning.includes('corte(s)'))).toBe(false)
+  })
+
+  it('resposta acima do maior teto: resumo, nota, grupo e rótulos são cortados e cada corte vira aviso', () => {
+    const over = (field: keyof typeof ARCHITECT_TEXT_LIMITS) => 'z'.repeat(ARCHITECT_TEXT_LIMITS[field].max + 10)
+    const { graph, warnings } = sanitizeGraph(
+      {
+        title: over('title'),
+        summary: over('summary'),
+        groups: [{ id: 'g', label: over('groupLabel'), layer: 'ui', detail: over('groupDetail') }],
+        nodes: [node('objective', { kind: 'objective' }), node('a', { label: over('nodeLabel'), groupId: 'g' })],
+        edges: [{ source: 'objective', target: 'a', label: over('edgeLabel') }],
+        notes: [{ kind: 'risk', text: over('note') }, { kind: 'decision', text: over('note') }],
+      },
+      5,
+    )
+    expect(graph.summary).toHaveLength(ARCHITECT_TEXT_LIMITS.summary.max)
+    expect(graph.notes[0]!.text).toHaveLength(ARCHITECT_TEXT_LIMITS.note.max)
+    expect(architectGraphSchema.safeParse(graph).success).toBe(true)
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        'título: 1 corte(s) no teto de proteção de 160 caracteres',
+        'resumo: 1 corte(s) no teto de proteção de 2.000 caracteres',
+        'rótulo de grupo: 1 corte(s) no teto de proteção de 80 caracteres',
+        'descrição de grupo: 1 corte(s) no teto de proteção de 600 caracteres',
+        'rótulo de nó: 1 corte(s) no teto de proteção de 120 caracteres',
+        'rótulo de aresta: 1 corte(s) no teto de proteção de 80 caracteres',
+        'nota: 2 corte(s) no teto de proteção de 1.000 caracteres',
+      ]),
+    )
   })
 })

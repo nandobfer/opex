@@ -1,6 +1,6 @@
 import { ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_LIVE_CAP_FACTOR, ARCHITECT_STREAM_FENCE, type ArchitectDepth } from "./constants"
 import type { ArchitectEdge, ArchitectGraph, ArchitectGroup, ArchitectNode, ArchitectNote } from "./graph"
-import { detailTooLong, isRec, oneOf, str, longStr, toGroup, toNode, toNote, type Rec } from "./sanitize"
+import { clip, cutWarnings, isRec, nodeLabelOf, oneOf, str, toGroup, toNode, toNote, type Rec, type TextCuts } from "./sanitize"
 
 /**
  * Diagrama ao vivo (módulo PURO, servidor e tela). O agente escreve o grafo como operações, uma linha
@@ -99,7 +99,8 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
     let edgeSeq = 0
     const warnings: string[] = []
     let invalid = 0
-    let longDetails = 0
+    /** Cortes de texto do modelo (o mesmo campo repetido num nó conta uma vez por linha recebida). */
+    let cuts: TextCuts = new Map()
     /** Campos brutos acumulados por nó (o mesmo id mescla). */
     let rawNodes = new Map<string, Rec>()
     /** Nós que pediram um grupo que ainda não chegou. */
@@ -131,7 +132,7 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
         const ids = new Set(draft.edges.map((edge) => edge.id))
         let id = str(item.id, 80) || `e${++edgeSeq}`
         while (ids.has(id)) id = `${id}_`
-        apply(ops, { op: "edge", edge: { id, source, target, label: str(item.label, 80) || null, kind } })
+        apply(ops, { op: "edge", edge: { id, source, target, label: clip(item.label, "edgeLabel", cuts, true) || null, kind } })
         return "added"
     }
 
@@ -144,11 +145,11 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
     const handle = (item: Rec, ops: AppliedOp[]) => {
         const op = item.op
         if (op === "done") return
-        if (op === "meta") return apply(ops, { op: "meta", title: str(item.title, 160), summary: longStr(item.summary, 2000) })
+        if (op === "meta") return apply(ops, { op: "meta", title: clip(item.title, "title", cuts, true), summary: clip(item.summary, "summary", cuts) })
         if (op === "group") {
             const id = str(item.id, 80) || str(item.label, 80)
             if (!id) return void invalid++
-            apply(ops, { op: "group", group: toGroup(item, id) })
+            apply(ops, { op: "group", group: toGroup(item, id, cuts) })
             for (const [nodeId, groupId] of wantsGroup) {
                 if (groupId !== id) continue
                 wantsGroup.delete(nodeId)
@@ -161,13 +162,15 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
             const id = str(item.id, 80)
             const previous = id ? rawNodes.get(id) : undefined
             const merged: Rec = { ...(previous ?? {}), ...Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined && value !== null)) }
-            const label = str(merged.label, 120) || id
+            const nodeCuts: TextCuts = new Map()
+            const label = nodeLabelOf(merged, id, nodeCuts)
             if (!id || !label) return void invalid++
             if (!previous && draft.nodes.length >= maxNodes) return void overflow++
-            if (detailTooLong(merged)) longDetails++
             rawNodes.set(id, merged)
             const groupId = str(merged.groupId, 80)
-            const node = toNode(merged, id, label, groupIds())
+            const node = toNode(merged, id, label, groupIds(), nodeCuts)
+            // Só conta o corte do que chegou nesta linha (a mescla repete os campos anteriores).
+            for (const [field, count] of nodeCuts) if ((field === "nodeLabel" && "label" in item) || (field === "detail" && "detail" in item)) cuts.set(field, (cuts.get(field) ?? 0) + count)
             if (groupId && !node.groupId) wantsGroup.set(id, groupId)
             else wantsGroup.delete(id)
             apply(ops, { op: "node", node })
@@ -179,7 +182,7 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
             return
         }
         if (op === "note") {
-            const note = toNote(item)
+            const note = toNote(item, cuts)
             if (!note) return void invalid++
             return apply(ops, { op: "note", note })
         }
@@ -235,10 +238,10 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
             if (pendingEdges.length) warnings.push(`${pendingEdges.length} aresta(s) com nó inexistente descartada(s)`)
             pendingEdges = []
             if (invalid) warnings.push(`${invalid} linha(s) inválida(s) do diagrama ao vivo descartada(s)`)
-            if (longDetails) warnings.push(`${longDetails} descrição(ões) de nó cortada(s) no limite`)
+            warnings.push(...cutWarnings(cuts))
+            cuts = new Map()
             if (overflow) warnings.push(`${overflow} nó(s) acima do teto ignorado(s) durante a geração`)
             invalid = 0
-            longDetails = 0
             return ops
         },
         reset() {

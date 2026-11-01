@@ -47,7 +47,9 @@ export function reduceLiveLine(state: LiveDiagramState, line: ArchitectStreamLin
         return { ...state, graph: applyOps(state.graph, line.ops), seq: line.seq, progress: state.progress }
     }
     if (line.type === "progress") return { ...state, progress: line.progress }
-    if (line.type === "end") return { ...state, ended: true }
+    // `end` com a versão ainda "gerando": o servidor não tinha a geração viva no momento (ela está
+    // começando); não é o fim — o cliente reconecta e recebe o retrato vivo.
+    if (line.type === "end") return line.state === "running" ? state : { ...state, ended: true }
     return state
 }
 
@@ -93,7 +95,7 @@ export function useLiveDiagram(workbenchId: string, diagramId: string | null): L
                     buffer = parsed.rest
                     if (!parsed.lines.length) continue
                     update((current) => parsed.lines.reduce(reduceLiveLine, current))
-                    if (parsed.lines.some((line) => line.type === "end")) ended = true
+                    if (parsed.lines.some((line) => line.type === "end" && line.state !== "running")) ended = true
                 }
             } catch {
                 // queda ou aborto: tenta de novo abaixo

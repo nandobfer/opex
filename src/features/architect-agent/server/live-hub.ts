@@ -23,7 +23,9 @@ const hub = (globalHub.__architectLiveHub ??= new Map())
 
 const countsOf = (graph: ArchitectGraph) => ({ nodes: graph.nodes.length, edges: graph.edges.length })
 
+/** Abre o diagrama vivo (já aberto, quando a geração foi registrada antes de gravar a versão: mantém). */
 export function openLive(diagramId: string, draft: ArchitectGraph): void {
+    if (hub.has(diagramId)) return
     hub.set(diagramId, { seq: 0, draft, progress: { phase: "starting", tools: 0, ...countsOf(draft) }, listeners: new Set() })
 }
 

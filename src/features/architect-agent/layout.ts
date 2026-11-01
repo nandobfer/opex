@@ -97,6 +97,33 @@ function rootOf(view: ViewGraph): ViewNode | undefined {
     return view.nodes.find((node) => node.node?.kind === "objective") ?? view.nodes[0]
 }
 
+/** Distância mínima entre os centros de dois nós vizinhos no mesmo anel (o cartão deitado e uma folga). */
+const RING_NODE_SPACING = NODE_WIDTH + 24
+
+/**
+ * Raio de cada anel do mapa mental: no mínimo um `RING_GAP` além do anel anterior e grande o bastante
+ * para que os dois vizinhos mais próximos do anel (menor diferença de ângulo, contando a volta) fiquem a
+ * `RING_NODE_SPACING` um do outro — um anel com muitos nós cresce em vez de sobrepor os cartões.
+ */
+export function ringRadii(points: readonly { depth: number; x: number }[]): number[] {
+    const byDepth = new Map<number, number[]>()
+    for (const point of points) byDepth.set(point.depth, [...(byDepth.get(point.depth) ?? []), point.x])
+    const maxDepth = Math.max(0, ...byDepth.keys())
+    const radii = [0]
+    for (let depth = 1; depth <= maxDepth; depth++) {
+        const angles = [...(byDepth.get(depth) ?? [])].sort((a, b) => a - b)
+        let minGap = 2 * Math.PI
+        for (let index = 0; index < angles.length; index++) {
+            const next = index + 1 < angles.length ? angles[index + 1]! : angles[0]! + 2 * Math.PI
+            if (angles.length > 1) minGap = Math.min(minGap, next - angles[index]!)
+        }
+        // Corda entre os vizinhos mais próximos: 2·r·sen(Δ/2) ≥ espaçamento.
+        const crowded = angles.length > 1 && minGap > 0 ? RING_NODE_SPACING / (2 * Math.sin(Math.min(minGap, Math.PI) / 2)) : 0
+        radii.push(Math.max(radii[depth - 1]! + RING_GAP, crowded))
+    }
+    return radii
+}
+
 export function layoutMindMap(view: ViewGraph): LayoutResult {
     const root = rootOf(view)
     if (!root) return { items: [], edges: [] }
@@ -131,16 +158,17 @@ export function layoutMindMap(view: ViewGraph): LayoutResult {
         visit()
     }
     const hier = hierarchy(data.get(root.id)!, (datum) => datum.children)
-    const radius = Math.max(1, hier.height) * RING_GAP
     const laid = tree<TreeDatum>()
-        .size([2 * Math.PI, radius])
+        .size([2 * Math.PI, Math.max(1, hier.height) * RING_GAP])
         .separation((a, b) => (a.parent === b.parent ? 1 : 2) / Math.max(1, a.depth))(hier)
+    const radii = ringRadii(laid.descendants())
     const depths = new Map<string, number>()
     const items: LayoutItem[] = laid.descendants().map((point: HierarchyPointNode<TreeDatum>) => {
         depths.set(point.data.id, point.depth)
         const angle = point.x - Math.PI / 2
-        const cx = point.depth === 0 ? 0 : point.y * Math.cos(angle)
-        const cy = point.depth === 0 ? 0 : point.y * Math.sin(angle)
+        const radius = radii[point.depth] ?? 0
+        const cx = point.depth === 0 ? 0 : radius * Math.cos(angle)
+        const cy = point.depth === 0 ? 0 : radius * Math.sin(angle)
         const viewNode = view.nodes.find((node) => node.id === point.data.id)!
         return { id: point.data.id, kind: viewNode.collapsed ? "collapsed" : "node", x: cx - NODE_WIDTH / 2, y: cy - NODE_HEIGHT / 2, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: null, rank: point.depth }
     })

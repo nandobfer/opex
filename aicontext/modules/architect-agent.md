@@ -32,6 +32,14 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
   central e disponível (409 `ARCHITECT_DISABLED`/`ARCHITECT_UNAVAILABLE`), um plano aprovado (409
   `ARCHITECT_NO_PLAN`) e nenhuma geração em curso na mesa (409 `ARCHITECT_BUSY`). O botão manual também
   serve para mesas antigas, que já passaram da aprovação.
+- **Sem corrida**: a conferência "há geração em curso?" e a gravação da versão como gerando rodam sob uma
+  trava por mesa (`withWorkbenchLock`, processo único): dois cliques ou duas abas criam UMA versão (o
+  outro recebe 409). O "Tentar novamente" ainda grava a transição de forma atômica (só uma versão que
+  continua `failed`/`interrupted` volta a `running`; senão 409 `ARCHITECT_BUSY`).
+- **Registro antes da gravação**: a geração é registrada (e o diagrama vivo aberto) ANTES de a versão
+  ser gravada como "gerando"; a listagem disparada pelo evento nunca a toma por órfã ("o app
+  reiniciou") e o stream já a encontra viva. Se a gravação, a auditoria ou o evento falharem, o
+  registro é desfeito.
 - Versão aprovada de mesas antigas (sem `approvedPlanVersion`): `approvedPlanVersionOf`
   (`plan-version.ts`): fora do planejamento, o último plano; em `planning` com worktree, o último
   plano; em `plan_review` com worktree e mais de um plano, o anterior; senão nenhuma.
@@ -106,6 +114,8 @@ O diagrama é construído na tela enquanto o agente trabalha.
 - **Cliente** (`useLiveDiagram`): abre o stream da versão gerando; aplica o retrato e as operações
   (`seq` repetido ou antigo é ignorado); caiu, reconecta (novo retrato, nada se perde) e a faixa mostra
   "Reconectando…"; no `end`, relê as versões da mesa.
+  Um `end` com a versão ainda `running` (o stream abriu antes de a geração estar viva) não é fim: o
+  cliente reconecta.
 
 ## Grafo (`graph.ts`, `sanitize.ts`, `parse.ts`)
 
@@ -123,8 +133,10 @@ inexistente por nenhum, valores fora da enumeração caem no padrão (`module`, 
 `other`), descarta arestas com ponta inexistente, laços e duplicadas, garante o nó do **objetivo**
 (criado a partir do título), corta acima do teto do nível — prioridade: objetivo, depois o que o plano
 cria, altera e o contexto existente; nas arestas, as relações antes do "contém" — e remove grupos
-vazios. O `detail` de cada nó tem até 4.000 caracteres (`ARCHITECT_NODE_DETAIL_MAX`, informado no
-prompt); o excedente é cortado com aviso. O texto bruto guardado em `report` são os últimos 50.000
+vazios. Textos do modelo (`ARCHITECT_TEXT_LIMITS`): o prompt pede um tamanho (ex.: descrição do nó até
+4.000, nota até 500, resumo até 600) e o schema tem um **teto de proteção** separado e folgado (8.000,
+1.000, 2.000…); só o que passa do teto é cortado, e todo corte — título, resumo, rótulos, descrições,
+notas — vira aviso da versão ("nota: 2 corte(s) no teto de proteção de 1.000 caracteres"). O texto bruto guardado em `report` são os últimos 50.000
 caracteres da resposta (`ARCHITECT_REPORT_MAX_CHARS`). Os cortes ficam em `trimmed` e `warnings` ("N nó(s) cortado(s) pelo teto do nível").
 
 ## Profundidade
@@ -171,7 +183,9 @@ vale só para aquele pedido.
   - **Arquitetura**: `@dagrejs/dagre` composto, da esquerda para a direita, grupos como caixas
     (`layoutArchitecture`);
   - **Mapa mental**: árvore radial do `d3-hierarchy` a partir do objetivo (BFS sem direção; nós soltos
-    viram filhos da raiz; arestas fora da árvore ficam mais apagadas) (`layoutMindMap`);
+    viram filhos da raiz; arestas fora da árvore ficam mais apagadas) (`layoutMindMap`); o raio de
+    cada anel cresce com a quantidade de nós dele (`ringRadii`: os vizinhos mais próximos ficam a pelo
+    menos a largura de um cartão), então os cartões nunca se sobrepõem — nem em estrela de 120 nós;
   - nós com ícone por tipo e selo **Novo**/**Alterado**; hover destaca o nó, os vizinhos e as arestas
     dele e esmaece o resto; clique abre o **painel lateral** (descrição, arquivos com copiar, vizinhos
     clicáveis e "Recolher o grupo"), numa camada fora do viewport transformado; grupos recolhem pelo
@@ -192,6 +206,8 @@ vale só para aquele pedido.
   `#lt;`/`#gt;` e sem quebras de linha (o GitHub renderiza em issue/PR).
 - `toMarkdown`: título, resumo, a cerca ` ```mermaid `, notas e a tabela de nós com arquivos.
 - PNG do diagrama inteiro com `html-to-image` (`getNodesBounds` + `getViewportForBounds`), fundo do token.
+  A seta de cada aresta é um `<marker>` dentro do SVG da própria aresta (dentro do viewport que o PNG
+  clona), então a imagem leva as setas.
 - Cópia por `copyText` (`src/lib/clipboard.ts`), com alternativa fora de contexto seguro.
 
 ## Configuração (`/integracoes/ia?aba=agente-arquiteto`)

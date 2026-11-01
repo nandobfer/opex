@@ -13,10 +13,11 @@ const mocks = vi.hoisted(() => ({
   tasks: [] as Promise<unknown>[],
   info: vi.fn(),
   warn: vi.fn(),
+  onPublish: null as null | (() => Promise<void>),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: vi.fn(async () => undefined) }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: vi.fn(async () => mocks.onPublish?.()) }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: mocks.info, warn: mocks.warn, error: vi.fn() }) }))
 vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void mocks.tasks.push(task()) }))
@@ -43,6 +44,7 @@ import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
 import { isDiagramLive, registerDiagram, releaseDiagram, liveDiagramIds, abortReasonOf } from '@/features/architect-agent/server/registry'
+import { subscribeLive } from '@/features/architect-agent/server/live-hub'
 
 /** Limpa o registro entre os casos (cada entrada é liberada pelo próprio controlador). */
 const live = (globalThis as unknown as { __architectLiveDiagrams: Map<string, unknown> }).__architectLiveDiagrams
@@ -69,6 +71,7 @@ beforeEach(() => {
   workbenches.docs.length = 0
   mocks.tasks.length = 0
   mocks.available = true
+  mocks.onPublish = null
   for (const id of liveDiagramIds()) releaseAll(id)
   use()
 })
@@ -209,5 +212,66 @@ describe('mesa', () => {
     expect(await workbenchArchitect({ centralId: 'c1', stage: 'implementing', plans: [1, 2], branch: 'b', approvedPlanVersion: 2 })).toEqual({ applies: true, approvedPlanVersion: 2 })
     use({ enabled: false })
     expect(await workbenchArchitect({ centralId: 'c1', stage: 'plan_review', plans: [1], branch: null })).toEqual({ applies: false, approvedPlanVersion: null })
+  })
+})
+
+describe('corridas entre a gravação da versão e o início da geração', () => {
+  it('versão recém-criada e ainda não lançada: a listagem disparada pelo evento não a marca como interrompida e o stream já está vivo', async () => {
+    seedWorkbench()
+    const seen: { state: string; live: boolean }[] = []
+    // O navegador recebe o evento e relê a mesa (e abre o stream) antes de o servidor lançar a geração.
+    mocks.onPublish = async () => {
+      mocks.onPublish = null
+      const [item] = await listWorkbenchDiagrams(WB)
+      const subscription = subscribeLive(item!.id, () => undefined)
+      seen.push({ state: item!.state, live: subscription !== null })
+      subscription?.unsubscribe()
+    }
+    await requestDiagram(WB, {}, 'manual')
+    expect(seen).toEqual([{ state: 'running', live: true }])
+    expect(diagrams.docs[0]!.state).toBe('running')
+    expect(mocks.runDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('o mesmo vale para o "Tentar novamente"', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })
+    const seen: string[] = []
+    mocks.onPublish = async () => {
+      mocks.onPublish = null
+      seen.push((await listWorkbenchDiagrams(WB))[0]!.state)
+    }
+    await retryDiagram('c'.repeat(24))
+    expect(seen).toEqual(['running'])
+  })
+
+  it('falha ao gravar a versão: o registro e o diagrama vivo são desfeitos', async () => {
+    seedWorkbench()
+    const create = ArchitectDiagram.create
+    ;(ArchitectDiagram as unknown as { create: () => Promise<never> }).create = async () => {
+      throw new Error('banco fora do ar')
+    }
+    await expect(requestDiagram(WB, {}, 'manual')).rejects.toThrow('banco fora do ar')
+    ;(ArchitectDiagram as unknown as { create: typeof create }).create = create
+    expect(liveDiagramIds()).toEqual([])
+  })
+
+  it('dois "Tentar novamente" ao mesmo tempo: só um volta a gerar, o outro recebe 409', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })
+    const results = await Promise.allSettled([retryDiagram('c'.repeat(24)), retryDiagram('c'.repeat(24))])
+    expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected'])
+    expect((results.find((result) => result.status === 'rejected') as PromiseRejectedResult).reason).toMatchObject({ status: 409 })
+    await flush()
+    expect(mocks.runDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('dois "Gerar arquitetura" ao mesmo tempo: só uma versão é criada', async () => {
+    seedWorkbench()
+    const results = await Promise.allSettled([requestDiagram(WB, {}, 'manual'), requestDiagram(WB, {}, 'manual')])
+    expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected'])
+    expect(diagrams.docs).toHaveLength(1)
+    await flush()
+    expect(mocks.runDiagram).toHaveBeenCalledTimes(1)
   })
 })

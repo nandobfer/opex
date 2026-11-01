@@ -20,10 +20,23 @@ export const ARCHITECT_HISTORY_LIMIT = 50
 /** Arquivos guardados por nó (o resto é cortado no saneamento). */
 export const ARCHITECT_NODE_FILES_MAX = 20
 /**
- * Teto do `detail` de um nó. O prompt informa o limite (o nível Minucioso pede campos, validações e
- * riscos por nó, que cabem com folga); o que passar é cortado no saneamento, com aviso em `warnings`.
+ * Textos do grafo vindos do modelo: `prompt` é o tamanho PEDIDO nas instruções; `max` é o teto de
+ * PROTEÇÃO do schema, bem acima do pedido (o nível Minucioso pede campos, validações e riscos por nó).
+ * Só o que passa do teto é cortado, sempre com aviso em `warnings` da versão.
  */
-export const ARCHITECT_NODE_DETAIL_MAX = 4000
+export const ARCHITECT_TEXT_LIMITS = {
+    title: { label: "título", prompt: 100, max: 160 },
+    summary: { label: "resumo", prompt: 600, max: 2_000 },
+    nodeLabel: { label: "rótulo de nó", prompt: 60, max: 120 },
+    detail: { label: "descrição de nó", prompt: 4_000, max: 8_000 },
+    groupLabel: { label: "rótulo de grupo", prompt: 40, max: 80 },
+    groupDetail: { label: "descrição de grupo", prompt: 300, max: 600 },
+    edgeLabel: { label: "rótulo de aresta", prompt: 40, max: 80 },
+    note: { label: "nota", prompt: 500, max: 1_000 },
+} as const
+export type ArchitectTextField = keyof typeof ARCHITECT_TEXT_LIMITS
+/** Teto de proteção do `detail` de um nó (o prompt pede até `ARCHITECT_TEXT_LIMITS.detail.prompt`). */
+export const ARCHITECT_NODE_DETAIL_MAX = ARCHITECT_TEXT_LIMITS.detail.max
 /** Texto bruto da resposta guardado em `report` (o final, onde fica o bloco JSON). */
 export const ARCHITECT_REPORT_MAX_CHARS = 50_000
 /** Bloco do formato ao vivo: uma operação JSON por linha dentro de ` ```architect `. */

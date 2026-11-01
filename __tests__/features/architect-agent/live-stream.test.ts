@@ -106,4 +106,10 @@ describe('cliente do stream', () => {
     expect(state.seq).toBe(4)
     expect(reduceLiveLine(state, { type: 'end', state: 'done' }).ended).toBe(true)
   })
+
+  it('`end` com a versão ainda gerando (a geração está começando) não encerra: o cliente reconecta', () => {
+    const progress = { phase: 'starting' as const, tools: 0, nodes: 0, edges: 0 }
+    const state = reduceLiveLine(LIVE_INITIAL, { type: 'snapshot', seq: 0, live: false, graph: emptyDraft(), progress })
+    expect(reduceLiveLine(state, { type: 'end', state: 'running' }).ended).toBe(false)
+  })
 })

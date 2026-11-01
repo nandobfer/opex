@@ -8,7 +8,7 @@ import "@xyflow/react/dist/style.css"
 import type { ViewGraph } from "../../filters"
 import type { LayoutResult } from "../../layout"
 import type { DiagramPositions } from "../../hooks/useDiagramLayout"
-import { ARCHITECT_EDGE_TYPES, ArchitectEdgeMarkers, type DiagramEdge } from "./ArchitectEdge"
+import { ARCHITECT_EDGE_TYPES, type DiagramEdge } from "./ArchitectEdge"
 import { ARCHITECT_NODE_TYPES, type DiagramNode } from "./ArchitectNodes"
 
 /**
@@ -82,7 +82,6 @@ export function ArchitectCanvas({ layout, view, positions, live, reducedMotion, 
     const edges = useMemo(() => buildEdges(layout, view), [layout, view])
     return (
         <div className="relative h-full w-full" data-testid="architect-canvas">
-            <ArchitectEdgeMarkers />
             <ReactFlow<DiagramNode, DiagramEdge>
                 className="bg-transparent"
                 colorMode="dark"

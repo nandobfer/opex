@@ -95,3 +95,33 @@ describe('approvedPlanVersionOf', () => {
     expect(approvedPlanVersionOf({ stage: 'planning', plans: [], branch: null })).toBeNull()
   })
 })
+
+describe('layoutMindMap sem sobreposição', () => {
+  const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+  const star = (leaves: number, grandchildren = 0) => {
+    const graph = sampleGraph()
+    type GraphNode = (typeof graph.nodes)[number]
+    type GraphEdge = (typeof graph.edges)[number]
+    const node = (id: string, kind: GraphNode['kind'] = 'module'): GraphNode => ({ id, label: id.toUpperCase(), groupId: null, kind, detail: '', files: [], status: 'new' })
+    const nodes: GraphNode[] = [node('objective', 'objective')]
+    const edges: GraphEdge[] = []
+    for (let index = 0; index < leaves; index++) {
+      nodes.push(node(`n${index}`))
+      edges.push({ id: `e${index}`, source: 'objective', target: `n${index}`, label: null, kind: 'contains' })
+    }
+    for (let index = 0; index < grandchildren; index++) {
+      nodes.push(node(`g${index}`))
+      edges.push({ id: `eg${index}`, source: `n${index % leaves}`, target: `g${index}`, label: null, kind: 'uses' })
+    }
+    return { ...graph, groups: [], nodes, edges }
+  }
+
+  it.each([
+    ['estrela de 35 nós (Equilibrado)', 35, 0],
+    ['120 nós em dois anéis (Minucioso)', 40, 79],
+  ])('%s: nenhum cartão cobre outro', (_label, leaves, grandchildren) => {
+    const { items } = layoutMindMap(toViewGraph(star(leaves, grandchildren)))
+    expect(items).toHaveLength(1 + leaves + grandchildren)
+    for (let a = 0; a < items.length; a++) for (let b = a + 1; b < items.length; b++) expect(overlap(items[a]!, items[b]!), `${items[a]!.id} × ${items[b]!.id}`).toBe(false)
+  })
+})

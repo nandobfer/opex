@@ -142,3 +142,30 @@ describe('ArchitectDiagramView ao vivo', () => {
     expect(JSON.parse(screen.getByTestId('rf').getAttribute('data-style')!)).toEqual(FLOW_THEME_STYLE)
   })
 })
+
+describe('setas das arestas na exportação', () => {
+  it('cada seta referenciada pelas arestas está dentro do viewport que o PNG clona', () => {
+    render(view())
+    const viewport = screen.getByTestId('rf-viewport')
+    const paths = [...viewport.querySelectorAll('path[marker-end]')]
+    expect(paths.length).toBeGreaterThan(0)
+    for (const path of paths) {
+      const id = /^url\(#(.+)\)$/.exec(path.getAttribute('marker-end')!)![1]!
+      expect(viewport.querySelector(`marker[id="${id}"]`), id).toBeTruthy()
+    }
+  })
+
+  it('"Baixar imagem" entrega ao html-to-image o viewport com as setas', async () => {
+    const toPng = vi.fn(async (element: HTMLElement) => {
+      expect(element.querySelectorAll('marker').length).toBeGreaterThan(0)
+      return 'data:image/png;base64,'
+    })
+    vi.doMock('html-to-image', () => ({ toPng }))
+    const { downloadDiagramImage } = await import('@/features/architect-agent/components/workbench/export-image')
+    const { container } = render(view())
+    HTMLAnchorElement.prototype.click = vi.fn()
+    await downloadDiagramImage(container as HTMLElement, [{ id: 'objective', position: { x: 0, y: 0 }, data: {}, width: 220, height: 68 }], 'arquitetura.png')
+    expect(toPng).toHaveBeenCalledWith(screen.getByTestId('rf-viewport'), expect.anything())
+    vi.doUnmock('html-to-image')
+  })
+})

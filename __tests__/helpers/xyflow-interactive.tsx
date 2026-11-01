@@ -6,6 +6,7 @@ import { vi } from 'vitest'
  * que o happy-dom não tem. Este `ReactFlow` renderiza os nós e as arestas com os MESMOS componentes
  * de `nodeTypes`/`edgeTypes` e repassa hover, clique, arrasto (botão `rf-drag-<id>`), clique no fundo e o
  * movimento da visão pelo usuário (botão `rf-user-move`); expõe `nodesDraggable` e o `style` do tema.
+ * Nós e arestas ficam num `.react-flow__viewport`, como no React Flow (é o que a exportação PNG clona).
  *
  * Uso: `vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interactive')).xyflowMock())` (a rede do Engramind usa o mock leve de `xyflow.tsx`)
  */
@@ -37,6 +38,7 @@ export function xyflowMock() {
       <div data-testid="rf" className={props.className} data-draggable={String(props.nodesDraggable ?? true)} data-style={JSON.stringify(props.style ?? {})}>
         <button type="button" data-testid="rf-pane" onClick={() => props.onPaneClick?.()} />
         <button type="button" data-testid="rf-user-move" onClick={(event) => props.onMoveStart?.(event)} />
+        <div className="react-flow__viewport" data-testid="rf-viewport">
         {props.nodes.map((node) => {
           const Comp = props.nodeTypes[node.type ?? 'default']!
           return (
@@ -62,6 +64,7 @@ export function xyflowMock() {
             return <Comp key={edge.id} id={edge.id} source={edge.source} target={edge.target} sourceX={0} sourceY={0} targetX={10} targetY={10} data={edge.data} />
           })}
         </svg>
+        </div>
         {props.children}
       </div>
     )

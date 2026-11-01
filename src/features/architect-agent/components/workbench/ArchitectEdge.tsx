@@ -23,8 +23,10 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
     const dimmed = Boolean(highlight.focusedId) && !focused
     const kind = data?.kind ?? "uses"
     const label = data?.count && data.count > 1 ? `×${data.count}` : data?.label
+    const arrow = kind === "contains" ? null : arrowIdFor(id)
     return (
         <>
+            {arrow && <ArrowMarker id={arrow} />}
             <motion.path
                 d={path}
                 fill="none"
@@ -36,7 +38,7 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
                 initial={highlight.reducedMotion ? false : { pathLength: 0, opacity: 0 }}
                 animate={{ pathLength: 1, opacity: dimmed ? 0.12 : data?.secondary ? 0.35 : 0.8 }}
                 transition={{ duration: highlight.live ? 0.45 : 0.3, delay: highlight.live ? 0 : enterDelay((data?.rank ?? 0) + 1, highlight.reducedMotion) }}
-                markerEnd={kind === "contains" ? undefined : "url(#architect-arrow)"}
+                markerEnd={arrow ? `url(#${arrow})` : undefined}
             />
             {pulse && <PathTraveler path={path} durationMs={700} radius={3.5} testId={`architect-edge-pulse-${id}`} onDone={() => setPulse(false)} />}
             {label && !dimmed && (
@@ -55,15 +57,19 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
 
 export const ARCHITECT_EDGE_TYPES = { architect: memo(ArchitectEdgeView) }
 
-/** Marcador de seta compartilhado pelas arestas (cor pelo token). */
-export function ArchitectEdgeMarkers() {
+/** Id do marcador de seta da aresta (só caracteres válidos num `url(#…)`). */
+export const arrowIdFor = (edgeId: string) => `architect-arrow-${edgeId.replace(/[^\w-]/g, "_")}`
+
+/**
+ * Marcador de seta DENTRO do SVG da própria aresta (cor pelo token). Fica no viewport do React Flow,
+ * então a exportação em PNG (que clona só o viewport) leva as setas junto.
+ */
+function ArrowMarker({ id }: { id: string }) {
     return (
-        <svg className="absolute h-0 w-0" aria-hidden>
-            <defs>
-                <marker id="architect-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground" />
-                </marker>
-            </defs>
-        </svg>
+        <defs>
+            <marker id={id} data-testid={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground" />
+            </marker>
+        </defs>
     )
 }

@@ -26,6 +26,26 @@ export function releaseDiagram(diagramId: string, controller: AbortController): 
     if (live.get(diagramId)?.controller === controller) live.delete(diagramId)
 }
 
+/**
+ * Serializa, por mesa, o trecho "conferir se há geração e gravar a versão como gerando" (pedido novo e
+ * Tentar novamente): dois cliques ou duas abas não passam juntos pela conferência. O Opex roda num
+ * processo só (o próprio registro de gerações é em memória).
+ */
+const globalLocks = globalThis as unknown as { __architectWorkbenchLocks?: Map<string, Promise<unknown>> }
+const locks = (globalLocks.__architectWorkbenchLocks ??= new Map())
+
+export async function withWorkbenchLock<T>(workbenchId: string, task: () => Promise<T>): Promise<T> {
+    const previous = locks.get(workbenchId) ?? Promise.resolve()
+    const run = previous.catch(() => undefined).then(task)
+    const tail = run.catch(() => undefined)
+    locks.set(workbenchId, tail)
+    try {
+        return await run
+    } finally {
+        if (locks.get(workbenchId) === tail) locks.delete(workbenchId)
+    }
+}
+
 export const isDiagramLive = (diagramId: string): boolean => live.has(diagramId)
 
 export const liveDiagramIds = (): string[] => [...live.keys()]
