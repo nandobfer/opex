@@ -25,9 +25,19 @@ const mount = (centralId?: string) =>
     </QueryClientProvider>,
   )
 
+const META = {
+  textMin: 3,
+  textMax: 4000,
+  categories: [{ key: 'PROJECT_RULES', label: 'Regras do projeto' }],
+  migrationPending: false,
+  availability: { unavailable: false, reason: null, lastOkAt: null },
+  outside: [],
+  autonomy: { desenvolvedor: true },
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  net.get.mockResolvedValue({ data: { data: [] } })
+  net.get.mockImplementation(async (url: string) => ({ data: { data: url === '/ai/memories/meta' ? META : [] } }))
 })
 afterEach(cleanup)
 
@@ -36,13 +46,16 @@ describe('memórias do agente desenvolvedor (tela)', () => {
     mount(CENTRAL)
     const titles = screen.getAllByText(/^Memórias (da central|globais do agente desenvolvedor)$/).map((node) => node.textContent)
     expect(titles).toEqual(['Memórias da central', 'Memórias globais do agente desenvolvedor'])
-    await waitFor(() => expect(screen.getAllByText('Nenhuma memória')).toHaveLength(2))
-    expect(net.get.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining([`/agentic/centrals/${CENTRAL}/memories`, '/ai/agents/developer-global/memories']))
+    // Três cards desde a OPE-104: as da central, as globais e as Memórias do Opex (de todos os agentes).
+    await waitFor(() => expect(screen.getAllByText('Nenhuma memória')).toHaveLength(3))
+    expect(screen.getByText('Memórias do Opex')).toBeTruthy()
+    expect(net.get.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining([`/agentic/centrals/${CENTRAL}/memories`, '/ai/agents/developer-global/memories', '/ai/agents/app-global/memories']))
   })
 
   it('sem central (aba Desenvolvimento agêntico): só as globais', async () => {
     mount()
     expect(screen.getByText('Memórias globais do agente desenvolvedor')).toBeTruthy()
+    expect(screen.getByText('Memórias do Opex')).toBeTruthy()
     expect(screen.queryByText('Memórias da central')).toBeNull()
     await waitFor(() => expect(net.get).toHaveBeenCalledWith('/ai/agents/developer-global/memories'))
     expect(net.get.mock.calls.some((call) => String(call[0]).startsWith('/agentic/'))).toBe(false)
