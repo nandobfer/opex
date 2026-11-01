@@ -235,8 +235,8 @@ na tela e na API; `withMentorDefaults`).
 - **Sanitizador** (`sanitizeMemoryText`, determinístico): recusa código de tarefa, `#N`, URL, rota
   (`/api/…`, `/app/…`; aceita caminhos e rotas na lista da central — `allowPaths`, convenções do
   projeto), nome do projeto, do repositório e o título da tarefa (termos de 4+ caracteres),
-  a regra acima do tamanho máximo de uma memória (`text_max` do Engramind, padrão 4.000 caracteres: "reescreva em
-  até 2.000"), e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
+  a regra acima do tamanho máximo de uma memória (`MEMORY_TEXT_MAX`, o padrão 4.000 do `text_max` do Engramind: "reescreva em
+  até 4.000"; o serviço de memórias ainda recusa acima do `text_max` efetivo do canal), e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
   pontuação, `copiedExcerpt`) à mensagem do usuário, às respostas do agente ou aos pedidos do
   desenvolvedor. Recusa → nova tentativa do redator com o motivo; recusada de novo → `discarded`.
 - **Gravação**: **Gravar direto** (padrão) ou **Sugerir e aguardar aprovação**. Gravar usa o serviço

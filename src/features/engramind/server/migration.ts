@@ -8,6 +8,7 @@ import type { AiProviderId } from "@/lib/ai/providers"
 import {
     CURATOR_CHUNK,
     CURATOR_CONSUMPTION_ORIGIN,
+    CURATOR_TIMEOUT_MS,
     CURATOR_DECISIONS,
     applyCuratorRules,
     budgetCombinations,
@@ -218,22 +219,48 @@ const sourceOf = (item: IMigrationItem): CuratorSourceItem => ({
 
 const groupKey = (item: Pick<IMigrationItem, "list" | "centralId">) => `${item.list}|${item.centralId ?? ""}`
 
-async function askCurator(input: CuratorRunInput, instructions: string, prompt: string, subject: string): Promise<string> {
+/**
+ * Uma chamada ao curador com tempo máximo (`CURATOR_TIMEOUT_MS`): o stream é abortado e a chamada falha
+ * com mensagem acionável, para a etapa nunca ficar "em andamento" para sempre.
+ */
+async function askCurator(input: CuratorRunInput, instructions: string, prompt: string, subject: string, timeoutMs = CURATOR_TIMEOUT_MS): Promise<string> {
     const { streamAi } = await import("@/lib/ai/stream")
-    let text = ""
-    for await (const event of streamAi({
-        provider: input.provider as AiProviderId,
-        model: input.model,
-        variant: input.variant ?? null,
-        instructions,
-        prompt,
-        title: `Curador de memórias · ${subject}`,
-        consumption: { origin: CURATOR_CONSUMPTION_ORIGIN, subject },
-    })) {
-        if (event.type === "delta") text += event.text
-        if (event.type === "error") throw new Error(event.message)
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort()
+            reject(new Error(`O curador não respondeu em ${Math.round(timeoutMs / 60_000)} min: tente novamente ou escolha outro modelo`))
+        }, timeoutMs)
+    })
+    const read = async () => {
+        let text = ""
+        for await (const event of streamAi({
+            provider: input.provider as AiProviderId,
+            model: input.model,
+            variant: input.variant ?? null,
+            instructions,
+            prompt,
+            title: `Curador de memórias · ${subject}`,
+            signal: controller.signal,
+            consumption: { origin: CURATOR_CONSUMPTION_ORIGIN, subject },
+        })) {
+            if (event.type === "delta") text += event.text
+            if (event.type === "error") throw new Error(event.message)
+        }
+        return text
     }
-    return text
+    try {
+        return await Promise.race([read(), timeout])
+    } finally {
+        clearTimeout(timer)
+    }
+}
+
+/** Testes: tempo máximo do curador (padrão `CURATOR_TIMEOUT_MS`). */
+let curatorTimeoutMs = CURATOR_TIMEOUT_MS
+export function setCuratorTimeoutForTests(ms: number | null): void {
+    curatorTimeoutMs = ms ?? CURATOR_TIMEOUT_MS
 }
 
 export async function runCurator(input: CuratorRunInput, actorId: string): Promise<MemoryMigrationDto> {
@@ -258,7 +285,7 @@ export async function runCurator(input: CuratorRunInput, actorId: string): Promi
                 const chunk = sources.slice(start, start + CURATOR_CHUNK)
                 let answers: ReturnType<typeof parseCuratorAnswer> = []
                 try {
-                    answers = parseCuratorAnswer(await askCurator(input, instructions, buildCuratorPrompt(chunk[0].list, chunk, summaries, channel), chunk[0].list))
+                    answers = parseCuratorAnswer(await askCurator(input, instructions, buildCuratorPrompt(chunk[0].list, chunk, summaries, channel), chunk[0].list, curatorTimeoutMs))
                 } catch (error) {
                     // Uma chamada que falha não para a triagem: as memórias dela vão para a revisão do dono.
                     engramindLog.warn({ list: chunk[0].list, err: messageOf(error) }, "[engramind] curador falhou num bloco: memórias vão para a revisão do dono")
@@ -297,7 +324,7 @@ export async function compactCombination(combinationKey: string, actorId: string
         const current = await loadState()
         const items = current.items.filter((item) => !item.imported && item.channel && combo.channels.includes(item.channel) && included(item))
         const sources = items.map((item) => ({ ...sourceOf(item), texto: finalOf(item).texto }))
-        const answers = parseCuratorAnswer(await askCurator(curator, buildCompactInstructions(combo.budget), buildCuratorPrompt("compactacao", sources, [], combo.channels.join(", ")), `compactar ${combo.key}`))
+        const answers = parseCuratorAnswer(await askCurator(curator, buildCompactInstructions(combo.budget), buildCuratorPrompt("compactacao", sources, [], combo.channels.join(", ")), `compactar ${combo.key}`, curatorTimeoutMs))
         const decisions = applyCuratorRules(sources, answers, { categories: settings.categories, textMax: settings.textMax })
         const latest = await loadState()
         const next = latest.items.map((item) => {

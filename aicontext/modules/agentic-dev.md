@@ -101,8 +101,9 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   diretório da central confere `git rev-parse --show-toplevel`, `git ls-remote` das branches base e
   de destino, `gh auth status`, `docker compose version`, o arquivo do compose e a pasta dos
   worktrees; mais feature/OpenCode e o vínculo do repositório (aviso). Grava `lastTest`.
-- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas e as **memórias
-  da central**, com a quantidade na auditoria da central — `deleteCentralMemories`).
+- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas e **arquiva o canal
+  das memórias da central** no Engramind — `archiveCentralMemories`, recuperável, melhor esforço que
+  nunca bloqueia a exclusão; a auditoria da central traz `canalMemoriasArquivado`).
 
 ### Memórias do agente desenvolvedor (OPE-97 · Engramind OPE-104)
 

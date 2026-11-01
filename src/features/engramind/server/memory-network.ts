@@ -206,16 +206,29 @@ async function runNetwork(actorId: string, explicit?: EngramindTarget): Promise<
 const LAZY_RETRY_MS = 5 * 60_000
 let lastLazyAttempt = 0
 
+/** Quanto o turno espera o provisionamento sob demanda antes de seguir sem o token. */
+const LAZY_WAIT_MS = 3_000
+let lazyWaitMs = LAZY_WAIT_MS
+
 /**
- * Segredo do token do agente (`null` sem token). Sem token gravado, roda o provisionamento uma vez a
- * cada 5 minutos (a conexão já configurada antes da OPE-104 não passa pelo bootstrap de novo).
+ * Segredo do token do agente (`null` sem token). Sem token gravado, dispara o provisionamento uma vez a
+ * cada 5 minutos (a conexão já configurada antes da OPE-104 não passa pelo bootstrap de novo) e espera
+ * no máximo `LAZY_WAIT_MS`: com o Engramind lento, o turno segue sem o token (cache ou sem memórias) e o
+ * provisionamento termina em segundo plano, valendo a partir do próximo turno.
  */
 export async function agentTokenFor(consumer: MemoryIdentity): Promise<string | null> {
     const current = decryptToken((await loadAgentTokens())[consumer])
     if (current) return current
     if (Date.now() - lastLazyAttempt < LAZY_RETRY_MS) return null
     lastLazyAttempt = Date.now()
-    await ensureAgentMemoryNetwork("local")
+    const network = ensureAgentMemoryNetwork("local")
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const waited = await Promise.race([network.then(() => true), new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), lazyWaitMs)))])
+    clearTimeout(timer)
+    if (!waited) {
+        engramindLog.info({ consumer, waitMs: lazyWaitMs }, "[engramind] provisionamento das memórias ainda em andamento: o turno segue sem o token do agente")
+        return null
+    }
     return decryptToken((await loadAgentTokens())[consumer])
 }
 
@@ -234,7 +247,8 @@ export async function agentTokenPrefixes(): Promise<string[]> {
 }
 
 /** Testes: zera o throttle do provisionamento sob demanda. */
-export function resetMemoryNetworkForTests(): void {
+export function resetMemoryNetworkForTests(options: { lazyWaitMs?: number } = {}): void {
     lastLazyAttempt = 0
     inFlight = null
+    lazyWaitMs = options.lazyWaitMs ?? LAZY_WAIT_MS
 }

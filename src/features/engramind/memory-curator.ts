@@ -20,6 +20,8 @@ export const CURATOR_DECISION_LABELS: Record<CuratorDecision, string> = {
 
 /** Memórias por chamada do curador (listas maiores vão em blocos, com os resumos da lista inteira). */
 export const CURATOR_CHUNK = 80
+/** Tempo máximo de uma chamada ao curador (um bloco da triagem ou uma compactação). */
+export const CURATOR_TIMEOUT_MS = 8 * 60_000
 export const CURATOR_CONSUMPTION_ORIGIN = "memory-curator"
 export const INVALID_CLASSIFICATION_REASON = "Sem classificação válida do curador"
 

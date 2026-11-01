@@ -259,7 +259,9 @@ auditoria ou resposta; reemitido quando falta, foi revogado, expirou ou tem esco
 esperados, revogando o anterior), e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` +
 `agentes/<agente>/*`; o Adversário assina exato `agentes/adversario`; o Mentor assina só onde grava,
 `agentes/adversario` e `agentes/desenvolvedor/*` — o token de agente só escreve nos canais que assina).
-A aba Identidades marca os cinco com "Memórias do Opex" (`isOpexMemoryAgent`). Os canais por central/cliente nascem na primeira gravação
+A aba Identidades marca os cinco com "Memórias do Opex" (`isOpexMemoryAgent`). Sem token gravado, `agentTokenFor` dispara o provisionamento sob demanda (uma vez a cada 5 min) e o
+turno espera no máximo 3 s (`LAZY_WAIT_MS`): com o Engramind lento, o turno segue sem o token (cache ou
+sem memórias) e o provisionamento termina em segundo plano. Os canais por central/cliente nascem na primeira gravação
 (`ensureMemoryChannel`); excluir a central arquiva o canal dela (melhor esforço, auditado como
 `canalMemoriasArquivado`).
 
@@ -309,7 +311,9 @@ etapa em andamento num reinício vira falha "Interrompida pelo reinício do Opex
    classificação válida → `revisar_dono` ("Sem classificação válida do curador"); `descartar` em memória
    do dono (`createdBy` local sem `origin`) → `revisar_dono`; acima de `text_max` → `revisar_dono`;
    categoria inválida → a primeira; **o destino é sempre o canal da lista de origem** (troca sugerida
-   pelo modelo só aparece no motivo).
+   pelo modelo só aparece no motivo). Cada chamada tem tempo máximo (`CURATOR_TIMEOUT_MS`, 8 min; o
+   stream é abortado): na triagem o bloco que não responde vai para `revisar_dono`; na compactação a
+   etapa vira falha com "Tentar novamente" — nenhuma etapa fica "em andamento" para sempre.
 3. **Orçamento**: estimativa (~4 caracteres/token) por combinação de turno contra `context.budget_tokens`;
    estourou → "Compactar com o curador" (reescritas e fusões, de volta à revisão).
 4. **Revisão**: original × proposta, Aprovar/Rejeitar/Editar por item ou por lista. Em `descartar`, os

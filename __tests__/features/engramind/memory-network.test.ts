@@ -36,7 +36,7 @@ vi.mock('@/lib/crypto/secretBox', () => ({
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { find: () => ({ select: () => ({ lean: async () => [] }) }) } }))
 
 import { MEMORY_IDENTITIES, MEMORY_TOKEN_SCOPES, isOpexMemoryAgent } from '@/features/ai/agents'
-import { agentTokenFor, ensureAgentMemoryNetwork } from '@/features/engramind/server/memory-network'
+import { agentTokenFor, ensureAgentMemoryNetwork, resetMemoryNetworkForTests } from '@/features/engramind/server/memory-network'
 
 const tokenOf = (agent: string) => [...holder.fake.state.tokens.values()].filter((item) => item.agent === agent)
 const subscriptionsOf = (agent: string) => holder.fake.state.subscriptions.filter((item) => item.agent === `opex/${agent}`).map((item) => item.target)
@@ -44,6 +44,7 @@ const subscriptionsOf = (agent: string) => holder.fake.state.subscriptions.filte
 beforeEach(() => {
   holder.fake = createFakeEngramind()
   holder.tokens = {}
+  resetMemoryNetworkForTests()
 })
 
 describe('rede das memórias dos agentes', () => {
@@ -85,5 +86,26 @@ describe('rede das memórias dos agentes', () => {
   it('a aba Identidades marca o agente opex/mentor como das Memórias do Opex', () => {
     expect(isOpexMemoryAgent('opex', 'mentor')).toBe(true)
     expect(isOpexMemoryAgent('opex', 'curador')).toBe(false)
+  })
+
+  it('sem token: o turno espera o provisionamento sob demanda só até o limite; ele termina em segundo plano', async () => {
+    resetMemoryNetworkForTests({ lazyWaitMs: 20 })
+    const original = holder.fake.engramindCall
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    holder.fake.engramindCall = (async (...args: Parameters<FakeEngramind['engramindCall']>) => {
+      await gate
+      return original(...args)
+    }) as FakeEngramind['engramindCall']
+    const started = Date.now()
+    expect(await agentTokenFor('opex')).toBeNull()
+    expect(Date.now() - started).toBeLessThan(1000)
+    release()
+    await vi.waitFor(() => expect(holder.tokens.opex).toBeTruthy())
+    holder.fake.engramindCall = original
+  })
+
+  it('sem token e Engramind rápido: provisiona e devolve o token no mesmo turno', async () => {
+    expect(await agentTokenFor('desenvolvedor')).toMatch(/^eng\.tk_/)
   })
 })

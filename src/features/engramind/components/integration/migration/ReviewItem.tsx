@@ -27,6 +27,12 @@ export function ReviewItem({ item, categories, textMax, disabled, onDecide }: Re
     const [editing, setEditing] = useState(false)
     const [texto, setTexto] = useState(item.final.texto)
     const [categoria, setCategoria] = useState(item.final.categoria ?? categories[0]?.key ?? "")
+    // Abrir o editor relê a proposta atual (a compactação ou uma nova triagem podem tê-la trocado).
+    const openEditor = () => {
+        setTexto(item.final.texto)
+        setCategoria(item.final.categoria ?? categories[0]?.key ?? "")
+        setEditing(true)
+    }
     const decision = item.decision
     const proposed = decision?.textoProposto && decision.textoProposto !== item.texto ? decision.textoProposto : null
     const tooLong = texto.length > textMax
@@ -118,7 +124,7 @@ export function ReviewItem({ item, categories, textMax, disabled, onDecide }: Re
                         </>
                     ) : (
                         <>
-                            <Button type="button" size="sm" variant="ghost" disabled={locked} onClick={() => setEditing(true)}>
+                            <Button type="button" size="sm" variant="ghost" disabled={locked} onClick={openEditor}>
                                 <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Editar
                             </Button>
                             <Button type="button" size="sm" variant="outline" disabled={locked || item.review.status === "rejeitada"} onClick={() => onDecide({ status: "rejeitada" })}>

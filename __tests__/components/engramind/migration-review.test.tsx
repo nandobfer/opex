@@ -55,4 +55,25 @@ describe('item da revisão', () => {
     expect(screen.getByRole('button', { name: /^Rejeitar$/ })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Migrar mesmo assim/ })).toBeNull()
   })
+
+  it('editar depois da compactação mostra e grava a proposta nova, não a da montagem', () => {
+    const onDecide = vi.fn()
+    const categories = [{ key: 'PROJECT_RULES', label: 'Regras' }]
+    const first = item('migrar')
+    const { rerender } = render(
+      <ul>
+        <ReviewItem item={first} categories={categories} textMax={4000} onDecide={onDecide} />
+      </ul>,
+    )
+    const compacted = { ...first, final: { texto: 'Regra compactada.', categoria: 'PROJECT_RULES' } }
+    rerender(
+      <ul>
+        <ReviewItem item={compacted} categories={categories} textMax={4000} onDecide={onDecide} />
+      </ul>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Editar/ }))
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('Regra compactada.')
+    fireEvent.click(screen.getByRole('button', { name: /Salvar e aprovar/ }))
+    expect(onDecide).toHaveBeenLastCalledWith({ texto: 'Regra compactada.', categoria: 'PROJECT_RULES', status: 'aprovada' })
+  })
 })
