@@ -64,7 +64,8 @@ export async function publishSearchConsumption(input: unknown, result: unknown, 
     await publishConsumption({
         agent: context.origin?.kind === "api-token" ? "opex/maddox" : "opex/opex",
         kind: "search",
-        channels: requested.length ? requested : delivered,
+        // Só slugs reais: prefixos (`agentes/opex/*`) não casam com nenhum link da rede.
+        channels: [...new Set([...requested.filter((slug) => typeof slug === "string" && !slug.endsWith("*")), ...delivered])],
         delivered,
         memoryIds: hits.map((hit) => hit.memory.id),
     })

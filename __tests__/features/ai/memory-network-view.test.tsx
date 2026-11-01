@@ -22,7 +22,7 @@ const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put
 vi.mock('@/lib/api', () => ({
   api: net,
   unwrapApi: (response: { data: unknown }) => response.data,
-  apiErrorCode: () => null,
+  apiErrorCode: (error: unknown) => (error as { code?: string } | null)?.code ?? null,
   apiErrorMessage: (error: unknown, fallback: string) => (error as { message?: string })?.message ?? fallback,
 }))
 vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: () => false, acquireChannel: vi.fn(), releaseChannel: vi.fn() }))
@@ -137,6 +137,23 @@ describe('universo de uma lista de memórias', () => {
     await waitFor(() => expect(net.patch).toHaveBeenCalledWith('/ai/agents/opex-global/memories/m_aaa', { texto: 'Responda em pt-BR sempre.', categoria: 'PROJECT_RULES', versao: 3 }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Esta memória mudou enquanto você editava. Confira a versão atual.'))
     expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Responda em pt-BR sempre.')
+  })
+
+  it('regressão: depois do conflito de versão a lista é relida e o próximo Salvar envia a versão atual', async () => {
+    const conflict = Object.assign(new Error('Esta memória mudou enquanto você editava. Confira a versão atual.'), { code: 'MEMORY_VERSION_CONFLICT' })
+    net.patch.mockRejectedValueOnce(conflict).mockResolvedValueOnce({ data: { data: { memoria: { ...memory, versao: 4 } } } })
+    mount()
+    await openCard('m_aaa')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    fireEvent.change(await screen.findByLabelText('Texto da memória'), { target: { value: 'Responda em pt-BR sempre.' } })
+    rows = [{ ...memory, versao: 4, texto: 'Mudou fora' }]
+    await waitFor(() => expect((screen.getByRole('button', { name: /Salvar/ }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Esta memória mudou enquanto você editava. Confira a versão atual.'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Responda em pt-BR sempre.')
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(net.patch).toHaveBeenLastCalledWith('/ai/agents/opex-global/memories/m_aaa', { texto: 'Responda em pt-BR sempre.', categoria: 'PROJECT_RULES', versao: 4 }))
   })
 
   it('fixar envia fixada; excluir pede confirmação; sem edição o card é somente leitura', async () => {

@@ -20,7 +20,7 @@ const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put
 vi.mock('@/lib/api', () => ({
   api: net,
   unwrapApi: (response: { data: unknown }) => response.data,
-  apiErrorCode: () => null,
+  apiErrorCode: (error: unknown) => (error as { code?: string } | null)?.code ?? null,
   apiErrorMessage: (error: unknown, fallback?: string) => (error as { message?: string })?.message ?? fallback ?? 'erro',
 }))
 const pusher = vi.hoisted(() => ({ handlers: new Map<string, ((payload: unknown) => void)[]>() }))
@@ -71,6 +71,7 @@ const respond = (url: string) => {
   if (url === '/engramind/memories') return { memories, next_cursor: null }
   if (url === '/engramind/settings') return { settings: [{ key: 'consolidation.stale_after_days', value: 30 }, { key: 'categories.list', value: [{ key: 'PROJECT_RULES', label: 'Regras', priority: 1 }] }, { key: 'memory.text_min', value: 3 }, { key: 'memory.text_max', value: 200 }] }
   if (url === '/engramind/memory-usage') return {}
+  if (url.startsWith('/engramind/memories/')) return memories.find((item) => item.id === decodeURIComponent(url.slice('/engramind/memories/'.length)))
   return {}
 }
 
@@ -197,6 +198,55 @@ describe('universos', () => {
     await waitFor(() => expect(net.patch).toHaveBeenCalledWith('/engramind/memories/m_1', { text: 'Texto novo', category: 'PROJECT_RULES', expected_version: 2 }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Esta memória mudou enquanto você editava. Confira a versão atual.'))
     expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Texto novo')
+  })
+
+  it('regressão: sair da partícula e entrar no card mantém o card aberto; sair de vez fecha depois do atraso', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    const node = await screen.findByTestId('memory-node-m_1')
+    fireEvent.mouseEnter(node)
+    const card = await screen.findByTestId('memory-card-m_1')
+    expect(card.classList.contains('pl-3')).toBe(true)
+    expect(card.classList.contains('ml-3')).toBe(false)
+    fireEvent.mouseLeave(node)
+    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
+    fireEvent.mouseEnter(node)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
+    fireEvent.mouseLeave(node)
+    await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+  })
+
+  it('regressão: Ativa é otimista (muda antes da resposta) e volta com toast na falha', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    let reject: (error: unknown) => void = () => undefined
+    net.post.mockReturnValueOnce(new Promise((_resolve, fail) => (reject = fail)))
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    fireEvent.click(within(await screen.findByTestId('memory-card-m_1')).getByRole('checkbox', { name: 'Ativa' }))
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-archived')).toBe('true'))
+    await act(async () => reject(new Error('Engramind fora do ar')))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Engramind fora do ar'))
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-archived')).toBeNull())
+  })
+
+  it('regressão: depois do conflito de versão, o próximo Salvar envia a versão atual', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    const conflict = Object.assign(new Error('Esta memória mudou enquanto você editava. Confira a versão atual.'), { code: 'MEMORY_VERSION_CONFLICT' })
+    net.patch.mockRejectedValueOnce(conflict).mockResolvedValueOnce({ data: { data: {} } })
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    fireEvent.click(within(await screen.findByTestId('memory-card-m_1')).getByRole('button', { name: 'Editar' }))
+    fireEvent.change(await screen.findByLabelText('Texto da memória'), { target: { value: 'Texto novo' } })
+    memories = memories.map((item) => (item.id === 'm_1' ? { ...item, version: 5 } : item))
+    await waitFor(() => expect((screen.getByRole('button', { name: /Salvar/ }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(net.patch).toHaveBeenCalledWith('/engramind/memories/m_1', { text: 'Texto novo', category: 'PROJECT_RULES', expected_version: 2 }))
+    await waitFor(() => expect(net.get).toHaveBeenCalledWith('/engramind/memories/m_1', expect.anything()))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(net.patch).toHaveBeenLastCalledWith('/engramind/memories/m_1', { text: 'Texto novo', category: 'PROJECT_RULES', expected_version: 5 }))
+    await waitFor(() => expect(screen.queryByLabelText('Texto da memória')).toBeNull())
   })
 
   it('busca destaca sem remover: as que casam ficam em destaque e as demais apagadas', async () => {

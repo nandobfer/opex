@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { ErrorState } from "@/components/feedback/ErrorState"
+import { apiErrorCode } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import type { MemoryCardActions } from "@/features/engramind/components/network/MemoryCard"
 import { MemoryEditorDialog, type MemoryEditorTarget } from "@/features/engramind/components/network/MemoryEditorDialog"
@@ -107,8 +108,22 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
                         }
                         const memory = editor.memory
                         if (!memory) return resolve(false)
-                        // O editor só fecha no sucesso: num conflito de versão o texto digitado fica.
-                        mutate({ type: "update", id: memory.id, texto: values.texto, categoria: values.categoria, versao: memory.versao }, { onSuccess: () => resolve(true), onError: () => resolve(false) })
+                        // O editor só fecha no sucesso: num conflito de versão o texto digitado fica, a lista é
+                        // relida e o próximo Salvar usa a versão atual.
+                        mutate(
+                            { type: "update", id: memory.id, texto: values.texto, categoria: values.categoria, versao: memory.versao },
+                            {
+                                onSuccess: () => resolve(true),
+                                onError: (error) => {
+                                    resolve(false)
+                                    if (apiErrorCode(error) !== "MEMORY_VERSION_CONFLICT") return
+                                    void query.refetch().then((result) => {
+                                        const current = result.data?.find((item) => item.id === memory.id)
+                                        if (current) setEditor((target) => (target?.memory?.id === memory.id ? { ...target, memory: current } : target))
+                                    })
+                                },
+                            },
+                        )
                     })
                 }
             />

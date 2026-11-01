@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 export const LEAVE_MS = 260
 
@@ -25,6 +25,10 @@ export function useLeavingItems<T extends { id: string }>(items: readonly T[], o
         const timer = setTimeout(() => setLeaving((map) => new Map([...map].filter(([id]) => !gone.some((item) => item.id === id)))), LEAVE_MS)
         return () => clearTimeout(timer)
     }, [items])
-    const present = new Set(items.map((item) => item.id))
-    return [...items, ...[...leaving.values()].filter((item) => !present.has(item.id)).map((item) => ({ ...item, leaving: true }))]
+    // Mesma referência enquanto nada sai: o layout e os nodes só recalculam quando os dados mudam.
+    return useMemo(() => {
+        if (!leaving.size) return items as (T & { leaving?: boolean })[]
+        const present = new Set(items.map((item) => item.id))
+        return [...items, ...[...leaving.values()].filter((item) => !present.has(item.id)).map((item) => ({ ...item, leaving: true }))]
+    }, [items, leaving])
 }

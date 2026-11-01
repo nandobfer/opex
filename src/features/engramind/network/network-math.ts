@@ -28,15 +28,18 @@ export function agentDisplayName(name: string): string {
 /** Relevância: consultas + injeções somadas. */
 export const memoryUses = (memory: Pick<NetworkMemory, "retrievals" | "injections">): number => Math.max(0, memory.retrievals) + Math.max(0, memory.injections)
 
-/** Último uso: o maior entre a última busca, a verificação, o consumo registrado pelo Opex e a criação. */
-export function lastUseOf(memory: Pick<NetworkMemory, "id" | "lastRetrievedAt" | "verifiedAt" | "createdAt">, usage?: MemoryUsageMap): string {
-    const candidates = [memory.lastRetrievedAt, memory.verifiedAt, usage?.[memory.id]?.lastUsedAt ?? null, memory.createdAt].filter((value): value is string => Boolean(value) && !Number.isNaN(time(value)))
+/**
+ * Último uso: o maior entre a última busca, o consumo registrado pelo Opex e a criação. A verificação
+ * do consolidador (`verified_at`) não é consumo e não conta.
+ */
+export function lastUseOf(memory: Pick<NetworkMemory, "id" | "lastRetrievedAt" | "createdAt">, usage?: MemoryUsageMap): string {
+    const candidates = [memory.lastRetrievedAt, usage?.[memory.id]?.lastUsedAt ?? null, memory.createdAt].filter((value): value is string => Boolean(value) && !Number.isNaN(time(value)))
     return candidates.reduce((best, value) => (time(value) > time(best) ? value : best), memory.createdAt)
 }
 
 /** Data de uso real (sem cair na criação): `null` = "nunca usada". */
-export function lastRealUseOf(memory: Pick<NetworkMemory, "id" | "lastRetrievedAt" | "verifiedAt">, usage?: MemoryUsageMap): string | null {
-    const candidates = [memory.lastRetrievedAt, memory.verifiedAt, usage?.[memory.id]?.lastUsedAt ?? null].filter((value): value is string => Boolean(value) && !Number.isNaN(time(value)))
+export function lastRealUseOf(memory: Pick<NetworkMemory, "id" | "lastRetrievedAt">, usage?: MemoryUsageMap): string | null {
+    const candidates = [memory.lastRetrievedAt, usage?.[memory.id]?.lastUsedAt ?? null].filter((value): value is string => Boolean(value) && !Number.isNaN(time(value)))
     if (!candidates.length) return null
     return candidates.reduce((best, value) => (time(value) > time(best) ? value : best))
 }

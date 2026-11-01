@@ -24,6 +24,8 @@ import { useLeavingItems } from "./useLeavingItems"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
 const CENTER_ID = "center"
+/** Atraso para fechar o card ao sair da partícula. */
+export const HOVER_CLOSE_DELAY_MS = 300
 
 export interface UniverseCenter {
     kind: "channel" | "agent"
@@ -59,7 +61,21 @@ export interface MemoryUniverseProps {
  * órbitas (mais usadas mais perto), com cor pela idade, tamanho pelo uso e brilho pelo último uso.
  * Hover ou toque abre o card; o consumo ao vivo pulsa a memória e manda uma partícula ao centro.
  */
-export function MemoryUniverse({ center, memories, usage, staleAfterDays, channelColors, isMatch = null, actions, subscribers, dataVersion, onCreate, createLabel, emptyTitle = "Nenhuma memória neste universo", className }: MemoryUniverseProps) {
+export function MemoryUniverse({
+    center,
+    memories,
+    usage,
+    staleAfterDays,
+    channelColors,
+    isMatch = null,
+    actions,
+    subscribers,
+    dataVersion,
+    onCreate,
+    createLabel,
+    emptyTitle = "Nenhuma memória neste universo",
+    className,
+}: MemoryUniverseProps) {
     const live = useLiveEffects(dataVersion)
     const [hovered, setHovered] = useState<string | null>(null)
     const [pinned, setPinned] = useState<string | null>(null)
@@ -111,7 +127,13 @@ export function MemoryUniverse({ center, memories, usage, staleAfterDays, channe
     )
 
     const nodes = useMemo<Node[]>(() => {
-        const centerData: CenterNodeData = { label: center.label, detail: `${memories.length} ${memories.length === 1 ? "memória" : "memórias"}`, icon: center.kind === "agent" ? agentIcon(center.id) : (Hash as LucideIcon), pulseKey: `${center.kind}:${center.id}`, archived: center.archived }
+        const centerData: CenterNodeData = {
+            label: center.label,
+            detail: `${memories.length} ${memories.length === 1 ? "memória" : "memórias"}`,
+            icon: center.kind === "agent" ? agentIcon(center.id) : (Hash as LucideIcon),
+            pulseKey: `${center.kind}:${center.id}`,
+            archived: center.archived,
+        }
         const list: Node[] = [{ id: CENTER_ID, type: "center", position: { x: 0, y: 0 }, data: centerData, zIndex: 5 }]
         for (const memory of items) {
             const visual = visuals.get(memory.id) ?? buildParticles([memory], { usage, staleAfterDays }).get(memory.id)
@@ -141,7 +163,17 @@ export function MemoryUniverse({ center, memories, usage, staleAfterDays, channe
         ...(live.liveCount ? [{ label: "Consumos ao vivo", value: live.liveCount, testId: "stat-live" }] : []),
     ]
 
-    const focus = useMemo(() => ({ activeId, activePoint: activeId ? (positions.get(activeId) ?? null) : null, hover: setHovered, actions: wrapped }), [activeId, positions, wrapped])
+    // Sair da partícula fecha o card com atraso: dá tempo de o cursor cruzar o vão até o card
+    // (entrar nele, que é filho da partícula, cancela o fechamento).
+    const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => () => void (leaveTimer.current && clearTimeout(leaveTimer.current)), [])
+    const hover = useCallback((id: string | null) => {
+        if (leaveTimer.current) clearTimeout(leaveTimer.current)
+        leaveTimer.current = null
+        if (id !== null) return setHovered(id)
+        leaveTimer.current = setTimeout(() => setHovered(null), HOVER_CLOSE_DELAY_MS)
+    }, [])
+    const focus = useMemo(() => ({ activeId, activePoint: activeId ? (positions.get(activeId) ?? null) : null, hover, actions: wrapped }), [activeId, positions, hover, wrapped])
     const liveValue = useMemo(() => ({ pulses: live.pulses, travels: live.travels, finish: live.finish }), [live.pulses, live.travels, live.finish])
 
     return (

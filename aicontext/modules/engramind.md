@@ -219,7 +219,7 @@ layout automático e **Centralizar** reenquadra (`RecenterButton`).
 |---|---|
 | Cor | Relativa ao universo: a mais nova verde (`--color-success`), a mais antiga o roxo primário, gradiente pela criação (`color-mix`). Uma só ou datas iguais: verde. |
 | Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
-| Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at`, `verified_at`, o registro do Opex (`engramind_memory_usage`) e a criação (nunca usada conta da criação). `stale_candidate` → 0. |
+| Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at` e o registro do Opex (`engramind_memory_usage`), ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação). `stale_candidate` → 0. |
 | Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
 | Inativa | Contorno tracejado, sem brilho nem cor; o switch Ativa muda na hora. |
 
@@ -228,11 +228,11 @@ agentes (`server/memory-usage.ts`); consumo de apps de fora só conta por `last_
 
 ### Card da memória (`MemoryCard`)
 
-Hover (ou toque/clique, que fixa o card; clicar fora fecha) afasta levemente as vizinhas
+Hover (ou toque/clique, que fixa o card; clicar fora fecha; sair da partícula fecha só depois de 300 ms, e o card é colado à partícula por uma ponte de `pl-3`, para o cursor chegar às ações) afasta levemente as vizinhas
 (`repelOffset`) e abre o card com título, texto, categoria, canal, idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
-enquanto você editava. Confira a versão atual." e mantém o rascunho), **Mover de canal**, **Histórico**
+enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
 (com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
 zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
 partícula sai animada (`useLeavingItems`); a criada entra animada.

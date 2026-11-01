@@ -142,6 +142,13 @@ describe('busca de memórias pelo agente (OPE-109)', () => {
     expect(consumption.publishConsumption.mock.calls[0]![0]).toMatchObject({ agent: 'opex/maddox', channels: ['opex', 'agentes/maddox/dono'], delivered: ['opex'] })
   })
 
+  it('regressão: busca por prefixo publica os slugs entregues, não o prefixo', async () => {
+    mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'agentes/opex/global'), hit('m_2', 'agentes/opex/dono')] })
+    await find('search_engramind_memories').execute({ query: 'x', channels: ['agentes/opex/*', 'opex'] }, context)
+    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
+    expect((consumption.publishConsumption.mock.calls[0]![0] as { channels: string[] }).channels).toEqual(['opex', 'agentes/opex/global', 'agentes/opex/dono'])
+  })
+
   it('sem resultados não publica; outras operações também não; falha na publicação não derruba a ferramenta', async () => {
     mocks.run.mockResolvedValue({ mode: 'hybrid', results: [] })
     await find('search_engramind_memories').execute({ query: 'nada' }, context)
