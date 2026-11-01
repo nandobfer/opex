@@ -33,11 +33,11 @@ const GROUP: NavGroupDef = {
     ],
 }
 
-function renderGroup(options: { activeHref?: string | null; onNavigate?: () => void } = {}) {
+function renderGroup(options: { activeHref?: string | null; onNavigate?: () => void; collapsed?: boolean } = {}) {
     return render(
         <nav aria-label="Menu principal">
             <ul>
-                <SidebarNavGroup group={GROUP} activeHref={options.activeHref ?? null} collapsed reduceMotion onNavigate={options.onNavigate} />
+                <SidebarNavGroup group={GROUP} activeHref={options.activeHref ?? null} collapsed={options.collapsed ?? true} reduceMotion onNavigate={options.onNavigate} />
             </ul>
         </nav>,
     )
@@ -71,13 +71,26 @@ describe("SidebarNavGroup — grupo do menu com painel à direita", () => {
         expect(opened).toBeTruthy()
         // Portal: o painel não fica dentro do menu (não é cortado pela rolagem da barra).
         expect(screen.getByRole("navigation").contains(opened)).toBe(false)
-        expect(opened!.closest("[data-side]")?.getAttribute("data-side") ?? "right").toBe("right")
+        const placed = opened!.closest("[data-side]")
+        expect(placed).not.toBeNull()
+        expect(placed!.getAttribute("data-side")).toBe("right")
         const links = Array.from(opened!.querySelectorAll("a")).map((a) => [a.textContent, a.getAttribute("href")])
         expect(links).toEqual([
             ["Horas agênticas", "/tarefas/horas"],
             ["Financeiro", "/financeiro"],
         ])
         expect(trigger().getAttribute("aria-expanded")).toBe("true")
+    })
+
+    it("gaveta do celular (expandida): o toque abre o painel abaixo do gatilho, limitado à largura disponível", () => {
+        renderGroup({ collapsed: false })
+        fireEvent.pointerEnter(trigger(), { pointerType: "touch" })
+        fireEvent.click(trigger())
+        const placed = panel()!.closest("[data-side]")
+        expect(placed).not.toBeNull()
+        expect(placed!.getAttribute("data-side")).toBe("bottom")
+        expect(panel()!.className).toContain("w-56")
+        expect(panel()!.className).toContain("max-w-[var(--radix-popover-content-available-width)]")
     })
 
     it("regressão: entrar no painel ANTES de sair do gatilho mantém aberto; sair do painel fecha após o atraso", () => {

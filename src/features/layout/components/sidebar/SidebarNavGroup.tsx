@@ -7,6 +7,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { AnimatePresence, motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { navGroupActive } from "../../navigation"
 import type { NavGroupDef } from "../../types"
 import { useHoverPopover } from "../../hooks/useHoverPopover"
 import { SidebarItemSurface } from "./SidebarItemSurface"
@@ -21,8 +22,9 @@ interface SidebarNavGroupProps {
     onNavigate?: () => void
 }
 
-/** Distância do painel até o gatilho e margem mínima até a borda da janela (px). */
+/** Distância do painel até o gatilho (barra recolhida e gaveta) e margem mínima até a borda da janela (px). */
 export const NAV_GROUP_PANEL_OFFSET = 12
+export const NAV_GROUP_PANEL_DRAWER_OFFSET = 4
 export const NAV_GROUP_PANEL_COLLISION_PADDING = 12
 
 /** Setas ↑/↓ (e Home/End) percorrem os links do painel. */
@@ -38,7 +40,8 @@ function moveFocus(event: KeyboardEvent<HTMLElement>) {
 
 /**
  * Grupo do menu (Agentes, Contábil, Configurações): um item na barra que abre um painel **à direita**,
- * fora da barra (portal, ancorado ao próprio gatilho e limitado à janela), com os itens do grupo.
+ * fora da barra (portal, ancorado ao próprio gatilho e limitado à janela), com os itens do grupo. Na
+ * gaveta do celular (expandida) o painel abre abaixo do gatilho, para caber em telas estreitas.
  * Abre ao passar o mouse (`useHoverPopover`) e também por clique, toque e teclado (Enter/Espaço
  * focam o primeiro link; setas percorrem; Esc fecha e devolve o foco ao gatilho).
  */
@@ -46,7 +49,10 @@ export function SidebarNavGroup({ group, activeHref, collapsed, reduceMotion, on
     const pathname = usePathname()
     const { open, setOpen, toggle, triggerHandlers, panelHandlers, openedByHover } = useHoverPopover()
     const Icon = group.icon
-    const active = group.items.some((item) => item.href === activeHref)
+    const active = navGroupActive(group, activeHref)
+    // Barra recolhida (desktop): painel à direita, fora da barra. Gaveta do celular (expandida, 240px):
+    // à direita não caberia na janela, então abre logo abaixo do gatilho, na largura da gaveta.
+    const side = collapsed ? "right" : "bottom"
 
     useEffect(() => {
         setOpen(false)
@@ -83,9 +89,9 @@ export function SidebarNavGroup({ group, activeHref, collapsed, reduceMotion, on
                             <PopoverPrimitive.Content
                                 forceMount
                                 asChild
-                                side="right"
+                                side={side}
                                 align="start"
-                                sideOffset={NAV_GROUP_PANEL_OFFSET}
+                                sideOffset={collapsed ? NAV_GROUP_PANEL_OFFSET : NAV_GROUP_PANEL_DRAWER_OFFSET}
                                 collisionPadding={NAV_GROUP_PANEL_COLLISION_PADDING}
                                 aria-label={group.label}
                                 onOpenAutoFocus={(event) => {
@@ -100,12 +106,12 @@ export function SidebarNavGroup({ group, activeHref, collapsed, reduceMotion, on
                                 onEscapeKeyDown={(event) => event.stopPropagation()}
                             >
                                 <motion.div
-                                    initial={{ opacity: 0, x: -8, scale: 0.96 }}
-                                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                                    exit={{ opacity: 0, x: -6, scale: 0.97, transition: { duration: reduceMotion ? 0 : 0.15 } }}
+                                    initial={collapsed ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: -6, scale: 0.97 }}
+                                    animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, ...(collapsed ? { x: -6 } : { y: -4 }), scale: 0.97, transition: { duration: reduceMotion ? 0 : 0.15 } }}
                                     transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
                                     style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
-                                    className="z-50 w-56 rounded-lg border border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-2xl shadow-primary/10"
+                                    className="z-50 w-56 max-w-[var(--radix-popover-content-available-width)] rounded-lg border border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-2xl shadow-primary/10"
                                     onKeyDown={moveFocus}
                                     data-testid={`sidebar-group-panel-${group.id}`}
                                     {...panelHandlers}

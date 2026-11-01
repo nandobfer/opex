@@ -78,8 +78,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
     só o painel (não a gaveta do celular) e devolve o foco ao gatilho.
 
   Escolher um item ou mudar de rota fecha o painel. O gatilho fica ativo (fundo e barra primária)
-  quando a rota atual é de um item do grupo, e o link ativo tem `aria-current="page"`. No celular,
-  o comportamento é o mesmo, por toque.
+  quando a rota atual é de um item do grupo (`navGroupActive`), e o link ativo tem `aria-current="page"`.
+  Na gaveta do celular (expandida, 240px), o painel abre por toque **abaixo do gatilho** (`side="bottom"`),
+  porque à direita da gaveta não caberia em telas de 360–430px; a largura fica limitada ao espaço
+  disponível (`--radix-popover-content-available-width`).
 - `sidebar/SidebarItemSurface`: superfície visual comum dos itens (link, grupo e o item do agente de
   chat): entrada, `whileHover x:4`, `whileTap`, estado ativo e barra primária com `layoutId`.
 
