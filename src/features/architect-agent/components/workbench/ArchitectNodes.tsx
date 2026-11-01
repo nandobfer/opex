@@ -88,7 +88,7 @@ function GroupNodeView({ data }: NodeProps<GroupNode>) {
             initial={highlight.reducedMotion ? false : { opacity: 0 }}
             animate={{ opacity: highlight.focusedId ? 0.6 : 1 }}
             transition={{ duration: 0.2, delay: enterDelay(data.rank, highlight.reducedMotion) }}
-            className="h-full w-full rounded-xl border border-dashed border-border bg-muted/20"
+            className="h-full w-full rounded-xl border border-dashed border-primary/25 bg-primary/[0.03]"
         >
             <div className="flex items-center gap-1.5 px-3 pt-2">
                 <button
@@ -117,7 +117,7 @@ function CollapsedNodeView({ id, data }: NodeProps<CollapsedNode>) {
             initial={highlight.reducedMotion ? false : { opacity: 0, scale: 0.92 }}
             animate={{ opacity: dimmed ? 0.25 : 1, scale: 1 }}
             transition={{ duration: 0.2, delay: enterDelay(data.rank, highlight.reducedMotion) }}
-            className="flex h-[68px] w-[220px] items-center gap-2 rounded-xl border border-dashed border-primary/50 bg-muted/40 px-3"
+            className="flex h-[68px] w-[220px] items-center gap-2 rounded-xl border border-dashed border-primary/50 bg-primary/5 px-3"
         >
             <Handles />
             <button type="button" className="nodrag flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-medium" onClick={() => highlight.onToggleGroup(data.groupId)} aria-label={`Expandir o grupo ${data.label}`}>

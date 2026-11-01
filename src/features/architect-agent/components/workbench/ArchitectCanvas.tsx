@@ -86,7 +86,7 @@ export function ArchitectCanvas({ layout, view, positions, onSavePosition, onFoc
             >
                 <Background gap={20} size={1} />
                 <Controls showFitView={false} showInteractive={false} position="bottom-left" />
-                <MiniMap pannable zoomable position="bottom-right" nodeClassName={(node) => (node.type === "group" ? "fill-muted/40" : "fill-primary/60")} ariaLabel="Minimapa do diagrama" />
+                <MiniMap pannable zoomable position="bottom-right" nodeClassName={(node) => (node.type === "group" ? "fill-primary/15" : "fill-primary/60")} ariaLabel="Minimapa do diagrama" />
             </ReactFlow>
         </div>
     )

@@ -1,6 +1,6 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
-import { ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_STREAM_FENCE, ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import type { ArchitectGraph } from "./graph"
 
 /**
@@ -11,17 +11,19 @@ import type { ArchitectGraph } from "./graph"
 /** Prefixo das ferramentas do MCP "Memória própria" no OpenCode (`opex_memorias_<ferramenta>`). */
 const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
-const FORMAT_EXAMPLE = {
-    title: "título curto do diagrama",
-    summary: "leitura arquitetural de 1 a 3 frases",
-    groups: [{ id: "g-ui", label: "UI", layer: ARCHITECT_GROUP_LAYERS.join("|"), detail: "opcional" }],
-    nodes: [
-        { id: "objective", label: "objetivo do plano", groupId: null, kind: "objective", detail: "o que o plano entrega", files: [], status: "new" },
-        { id: "n-tab", label: "Aba X da mesa", groupId: "g-ui", kind: ARCHITECT_NODE_KINDS.join("|"), detail: "o que muda e por quê", files: ["src/caminho/real/Arquivo.tsx"], status: ARCHITECT_NODE_STATUSES.join("|") },
-    ],
-    edges: [{ id: "e1", source: "objective", target: "n-tab", label: "opcional", kind: ARCHITECT_EDGE_KINDS.join("|") }],
-    notes: [{ kind: ARCHITECT_NOTE_KINDS.join("|"), text: "decisão, risco ou dúvida do plano" }],
-}
+/** Uma linha de exemplo por operação do formato ao vivo (`stream-parser.ts`). */
+const FORMAT_LINES = [
+    { op: "meta", title: "título curto do diagrama", summary: "leitura arquitetural de 1 a 3 frases" },
+    { op: "node", id: "objective", label: "objetivo do plano", kind: "objective", status: "new", detail: "o que o plano entrega" },
+    { op: "group", id: "g-ui", label: "UI", layer: ARCHITECT_GROUP_LAYERS.join("|") },
+    { op: "node", id: "n-tab", label: "Aba X da mesa", groupId: "g-ui", kind: ARCHITECT_NODE_KINDS.join("|"), status: ARCHITECT_NODE_STATUSES.join("|"), detail: "o que muda e por quê", files: ["src/caminho/real/Arquivo.tsx"] },
+    { op: "edge", source: "objective", target: "n-tab", kind: ARCHITECT_EDGE_KINDS.join("|"), label: "opcional" },
+    { op: "note", kind: ARCHITECT_NOTE_KINDS.join("|"), text: "decisão, risco ou dúvida do plano" },
+    { op: "remove", id: "id de um nó, aresta ou grupo emitido antes (só para corrigir)" },
+    { op: "done" },
+]
+
+const FENCE = "```" + ARCHITECT_STREAM_FENCE
 
 export function depthDirective(depth: ArchitectDepth): string {
     const def = ARCHITECT_DEPTH_DEFS[depth]
@@ -48,11 +50,14 @@ export function buildArchitectInstructions(input: { instructions: string; memori
         `- \`detail\` de cada nó: no máximo ${ARCHITECT_NODE_DETAIL_MAX.toLocaleString("pt-BR")} caracteres (o excedente é cortado).`,
         "- Ids curtos, únicos e estáveis (letras, números e hífen). Toda aresta liga dois ids existentes.",
         "",
-        "## Formato da resposta",
-        "Termine a resposta com um bloco ```json``` contendo SOMENTE este objeto (sem comentários):",
-        "```json",
-        JSON.stringify(FORMAT_EXAMPLE, null, 2),
+        "## Formato da resposta: o diagrama é desenhado AO VIVO",
+        `O dono acompanha o diagrama sendo construído na tela enquanto você trabalha. Escreva o grafo como OPERAÇÕES, uma linha JSON por operação (sem quebrar a linha), dentro de blocos ${FENCE}:`,
+        FENCE,
+        ...FORMAT_LINES.map((line) => JSON.stringify(line)),
         "```",
+        "- Escreva aos POUCOS: logo depois de ler o plano, um primeiro bloco com `meta`, o objetivo, as camadas e os módulos principais; depois, conforme confirmar os caminhos no código, novos blocos acrescentando ou refinando nós e arestas. Vários blocos ao longo da resposta são esperados.",
+        "- Repetir um `node` com o mesmo id ATUALIZA os campos enviados (ex.: trocar `status` ou acrescentar `files`). Uma aresta pode vir antes do nó de destino.",
+        "- Termine o último bloco com `{\"op\":\"done\"}`. Não escreva o grafo de outra forma (nada de JSON único no fim).",
         extra ? `\n## Instruções adicionais\n${extra}` : "",
         memoriesSection(input.memories),
         input.selfMemory ? selfMemoryInstructions("arquiteto", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX }) : "",
@@ -97,7 +102,7 @@ export function buildDiagramPrompt(input: DiagramPromptInput): string {
             ? [
                   "",
                   "## Ajuste pedido",
-                  "Gere uma NOVA versão do diagrama a partir do grafo anterior, aplicando o pedido abaixo. Mantenha os ids dos nós que continuam.",
+                  "O grafo anterior (abaixo) JÁ ESTÁ desenhado na tela como ponto de partida. Aplique o pedido emitindo só as DIFERENÇAS: `node` para criar ou atualizar (mesmo id), `edge` para ligações novas e `remove` para o que sai. Mantenha os ids dos nós que continuam.",
                   `### Pedido\n${input.adjust.feedback.trim()}`,
                   "### Grafo anterior",
                   "```json",
@@ -106,17 +111,17 @@ export function buildDiagramPrompt(input: DiagramPromptInput): string {
               ].join("\n")
             : "",
         "",
-        "Responda com o bloco ```json``` do grafo no formato das instruções.",
+        `Escreva o diagrama em blocos ${FENCE}, aos poucos, no formato das instruções.`,
     ]
         .filter((line) => line !== "")
         .join("\n")
 }
 
-/** Segunda (e última) tentativa: a resposta anterior veio inválida. */
+/** Segunda (e última) tentativa: a resposta anterior veio sem diagrama legível; o rascunho recomeça. */
 export function buildRepairPrompt(error: string, depth: ArchitectDepth): string {
     const def = ARCHITECT_DEPTH_DEFS[depth]
     return [
         `A sua resposta não pôde ser lida: ${error}.`,
-        `Responda de novo SOMENTE com o bloco \`\`\`json\`\`\` do grafo, no formato das instruções (no máximo ${def.maxNodes} nós; \`nodes\` não pode ser vazio). Não leia mais nada do repositório.`,
+        `Reescreva o diagrama COMPLETO de novo, em blocos ${FENCE} com uma operação JSON por linha, no formato das instruções (no máximo ${def.maxNodes} nós, ao menos o objetivo, e termine com {"op":"done"}). Não leia mais nada do repositório.`,
     ].join("\n")
 }

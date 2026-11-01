@@ -1,6 +1,7 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import type { ArchitectDiagramState, ArchitectOrigin, ArchitectPhase } from "./constants"
 import type { ArchitectGraph } from "./graph"
+import type { AppliedOp } from "./stream-parser"
 import type { ArchitectSettings } from "./schemas"
 
 export interface ArchitectSettingsDto {
@@ -30,6 +31,8 @@ export interface ArchitectDiagramDto {
     phase: ArchitectPhase | null
     tools: number
     graph: ArchitectGraph | null
+    /** Rascunho ao vivo gravado (só gerando, falhou ou interrompida; o ao vivo chega pelo stream). */
+    draft: ArchitectGraph | null
     trimmed: { nodes: number; edges: number }
     warnings: string[]
     repaired: boolean
@@ -46,3 +49,19 @@ export interface WorkbenchArchitectDto {
     applies: boolean
     approvedPlanVersion: number | null
 }
+
+/** Progresso da geração ao vivo (stream NDJSON). */
+export interface ArchitectLiveProgress {
+    phase: ArchitectPhase | null
+    tools: number
+    nodes: number
+    edges: number
+}
+
+/** Linhas do stream `GET /api/architect/diagrams/[id]/stream` (NDJSON). */
+export type ArchitectStreamLine =
+    | { type: "snapshot"; seq: number; live: boolean; graph: ArchitectGraph; progress: ArchitectLiveProgress }
+    | { type: "ops"; seq: number; ops: AppliedOp[] }
+    | { type: "progress"; progress: ArchitectLiveProgress }
+    | { type: "end"; state: ArchitectDiagramState }
+    | { type: "ping" }

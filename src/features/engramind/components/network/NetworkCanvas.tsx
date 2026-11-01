@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect } from "react"
-import { Background, BackgroundVariant, ReactFlow, useReactFlow, useStore, type Edge, type Node, type NodeMouseHandler, type NodeTypes, type ReactFlowInstance } from "@xyflow/react"
+import { Background, ReactFlow, useReactFlow, useStore, type Edge, type Node, type NodeMouseHandler, type NodeTypes, type ReactFlowInstance } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -9,6 +9,7 @@ import { NETWORK_EDGE_TYPES } from "./edges"
 import { useIsMobile } from "@/hooks/useMediaQuery"
 import { MOBILE_FIT_MIN_ZOOM, minZoomCenter, type Rect } from "../../network/network-math"
 import { NETWORK_CANVAS_CLASS, NETWORK_FLOW_THEME } from "./layout-classes"
+import { FLOW_BACKGROUND_PROPS } from "@/components/flow/flow-theme"
 
 export const FIT_DURATION_MS = 300
 const FIT_PADDING = 0.15
@@ -96,7 +97,7 @@ export function NetworkCanvas({
                 proOptions={{ hideAttribution: true }}
                 className="bg-transparent"
             >
-                <Background variant={BackgroundVariant.Dots} gap={28} size={1} />
+                <Background {...FLOW_BACKGROUND_PROPS} />
                 <FitBoundsContext.Provider value={initialBounds}>
                     <FitOnChange fitKey={fitKey} />
                     {children}

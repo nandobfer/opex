@@ -26,6 +26,8 @@ export interface IArchitectDiagram {
     state: ArchitectDiagramState
     progress: { phase: ArchitectPhase | null; tools: number; lastTool: string | null }
     graph: ArchitectGraph | null
+    /** Rascunho ao vivo (gravado com intervalo durante a geração; fica como contexto se ela falhar). */
+    draft: ArchitectGraph | null
     trimmed: { nodes: number; edges: number }
     warnings: string[]
     repaired: boolean
@@ -64,6 +66,7 @@ const ArchitectDiagramSchema = new Schema<IArchitectDiagram>(
             lastTool: { type: String, default: null },
         },
         graph: { type: Schema.Types.Mixed, default: null },
+        draft: { type: Schema.Types.Mixed, default: null },
         trimmed: {
             nodes: { type: Number, default: 0 },
             edges: { type: Number, default: 0 },

@@ -14,11 +14,11 @@ export interface SanitizedGraph {
     warnings: string[]
 }
 
-type Rec = Record<string, unknown>
-const isRec = (value: unknown): value is Rec => Boolean(value) && typeof value === "object" && !Array.isArray(value)
-const str = (value: unknown, max: number): string => (typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, max) : "")
-const longStr = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "")
-const oneOf = <T extends string>(value: unknown, list: readonly T[], fallback: T): T => (typeof value === "string" && (list as readonly string[]).includes(value) ? (value as T) : fallback)
+export type Rec = Record<string, unknown>
+export const isRec = (value: unknown): value is Rec => Boolean(value) && typeof value === "object" && !Array.isArray(value)
+export const str = (value: unknown, max: number): string => (typeof value === "string" || typeof value === "number" ? String(value).replace(/\s+/g, " ").trim().slice(0, max) : "")
+export const longStr = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "")
+export const oneOf = <T extends string>(value: unknown, list: readonly T[], fallback: T): T => (typeof value === "string" && (list as readonly string[]).includes(value) ? (value as T) : fallback)
 
 const OBJECTIVE_ID = "objective"
 const STATUS_RANK = { new: 1, changed: 2, existing: 3 } as const
@@ -29,6 +29,34 @@ function cleanFiles(value: unknown): string[] {
     return [...new Set(files)].slice(0, ARCHITECT_NODE_FILES_MAX)
 }
 
+/** Normaliza um grupo do modelo (o id já resolvido). */
+export function toGroup(item: Rec, id: string): ArchitectGroup {
+    return { id, label: str(item.label, 80) || id, layer: oneOf(item.layer, ARCHITECT_GROUP_LAYERS, "other"), detail: longStr(item.detail, 600) }
+}
+
+/** Normaliza um nó do modelo (id e rótulo já resolvidos); grupo inexistente vira nenhum. */
+export function toNode(item: Rec, id: string, label: string, groupIds: ReadonlySet<string>): ArchitectNode {
+    const groupId = str(item.groupId, 80)
+    return {
+        id,
+        label,
+        groupId: groupId && groupIds.has(groupId) ? groupId : null,
+        kind: oneOf(item.kind, ARCHITECT_NODE_KINDS, "module"),
+        detail: longStr(item.detail, ARCHITECT_NODE_DETAIL_MAX),
+        files: cleanFiles(item.files),
+        status: oneOf(item.status, ARCHITECT_NODE_STATUSES, "existing"),
+    }
+}
+
+/** O detalhe do nó passa do limite (o saneamento corta e avisa). */
+export const detailTooLong = (item: Rec) => typeof item.detail === "string" && item.detail.trim().length > ARCHITECT_NODE_DETAIL_MAX
+
+/** Normaliza uma nota do modelo (`null` sem texto). */
+export function toNote(item: Rec): ArchitectNote | null {
+    const text = longStr(item.text, 1000)
+    return text ? { kind: oneOf(item.kind, ARCHITECT_NOTE_KINDS, "decision"), text } : null
+}
+
 function cleanGroups(raw: readonly unknown[]): ArchitectGroup[] {
     const seen = new Set<string>()
     const groups: ArchitectGroup[] = []
@@ -37,7 +65,7 @@ function cleanGroups(raw: readonly unknown[]): ArchitectGroup[] {
         const id = str(item.id, 80) || str(item.label, 80)
         if (!id || seen.has(id)) continue
         seen.add(id)
-        groups.push({ id, label: str(item.label, 80) || id, layer: oneOf(item.layer, ARCHITECT_GROUP_LAYERS, "other"), detail: longStr(item.detail, 600) })
+        groups.push(toGroup(item, id))
     }
     return groups
 }
@@ -57,17 +85,8 @@ function cleanNodes(raw: readonly unknown[], groupIds: ReadonlySet<string>, warn
             return
         }
         seen.add(id)
-        const groupId = str(item.groupId, 80)
-        if (typeof item.detail === "string" && item.detail.trim().length > ARCHITECT_NODE_DETAIL_MAX) longDetails++
-        nodes.push({
-            id,
-            label,
-            groupId: groupId && groupIds.has(groupId) ? groupId : null,
-            kind: oneOf(item.kind, ARCHITECT_NODE_KINDS, "module"),
-            detail: longStr(item.detail, ARCHITECT_NODE_DETAIL_MAX),
-            files: cleanFiles(item.files),
-            status: oneOf(item.status, ARCHITECT_NODE_STATUSES, "existing"),
-        })
+        if (detailTooLong(item)) longDetails++
+        nodes.push(toNode(item, id, label, groupIds))
     })
     if (duplicates) warnings.push(`${duplicates} nó(s) com id repetido descartado(s)`)
     if (longDetails) warnings.push(`${longDetails} descrição(ões) de nó cortada(s) no limite de ${ARCHITECT_NODE_DETAIL_MAX} caracteres`)
@@ -125,8 +144,8 @@ function capEdges(edges: ArchitectEdge[], max: number): { kept: ArchitectEdge[];
 function cleanNotes(raw: readonly unknown[]): ArchitectNote[] {
     return raw
         .filter(isRec)
-        .map((item) => ({ kind: oneOf(item.kind, ARCHITECT_NOTE_KINDS, "decision"), text: longStr(item.text, 1000) }))
-        .filter((note) => note.text)
+        .map(toNote)
+        .filter((note): note is ArchitectNote => note !== null)
         .slice(0, 40)
 }
 

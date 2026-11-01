@@ -26,6 +26,20 @@ export const ARCHITECT_NODE_FILES_MAX = 20
 export const ARCHITECT_NODE_DETAIL_MAX = 4000
 /** Texto bruto da resposta guardado em `report` (o final, onde fica o bloco JSON). */
 export const ARCHITECT_REPORT_MAX_CHARS = 50_000
+/** Bloco do formato ao vivo: uma operação JSON por linha dentro de ` ```architect `. */
+export const ARCHITECT_STREAM_FENCE = "architect"
+/**
+ * Folga do teto durante a geração ao vivo: o rascunho aceita até o teto do nível × 1,25 para não
+ * cortar cedo um nó "novo" importante; o teto exato (com a prioridade de sempre) vale no fim.
+ */
+export const ARCHITECT_LIVE_CAP_FACTOR = 1.25
+/** Intervalo mínimo entre as gravações do rascunho no banco (reconexão e abertura no meio da geração). */
+export const ARCHITECT_DRAFT_SAVE_MS = 1_500
+/** Agrupamento das operações enviadas ao navegador e espera do layout ao vivo. */
+export const ARCHITECT_LIVE_BATCH_MS = 150
+export const ARCHITECT_LIVE_LAYOUT_DEBOUNCE_MS = 250
+/** Duração do deslize dos nós quando o layout ao vivo se reorganiza. */
+export const ARCHITECT_LIVE_TWEEN_MS = 300
 /** Prazo de cada chamada de preparo da geração (cliente, central, tarefa, sessão, instruções, memórias). */
 export const ARCHITECT_SETUP_STEP_TIMEOUT_MS = 60_000
 
@@ -103,5 +117,5 @@ export const ARCHITECT_PHASE_LABELS: Record<ArchitectPhase, string> = {
     starting: "Abrindo a sessão do arquiteto…",
     reading: "Lendo o plano e o código…",
     writing: "Desenhando o diagrama…",
-    retrying: "A resposta veio inválida: pedindo a correção ao agente…",
+    retrying: "A resposta veio sem diagrama legível: refazendo o diagrama…",
 }

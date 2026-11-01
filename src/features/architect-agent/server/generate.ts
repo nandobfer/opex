@@ -12,11 +12,13 @@ import { loadCentral } from "@/features/agentic/server/centrals"
 import { worktreePathFor } from "@/features/agentic/prompts"
 import { getTask } from "@/features/tasks/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
-import { architectGraphSchema } from "../graph"
+import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_DRAFT_SAVE_MS, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
+import { architectGraphSchema, type ArchitectGraph, type RawGraph } from "../graph"
 import { parseArchitectOutput } from "../parse"
 import { buildArchitectInstructions, buildDiagramPrompt, buildRepairPrompt } from "../prompt"
 import { sanitizeGraph } from "../sanitize"
+import { createGraphAssembler, emptyDraft, type AppliedOp, type GraphAssembler } from "../stream-parser"
+import { closeLive, emitOps, emitProgress, openLive } from "./live-hub"
 import { approvedPlanVersionOf } from "../plan-version"
 import { publishDiagrams } from "./publish"
 import { abortReasonOf, releaseDiagram } from "./registry"
@@ -26,15 +28,15 @@ import { loadArchitectSettings } from "./settings"
 /**
  * Geração de uma versão do diagrama (SOMENTE servidor). Abre uma sessão NOVA do OpenCode, só leitura,
  * no worktree da mesa (ou na base do repositório, se o worktree ainda não existe), lê o plano, a
- * tarefa e o código e grava o grafo saneado. Roda em paralelo à mesa: nunca toca no estado dela, não
+ * tarefa e o código e grava o grafo saneado. O diagrama é montado AO VIVO: cada pedaço do texto do
+ * modelo passa pelo montador (`stream-parser.ts`), as operações vão ao hub do stream NDJSON
+ * (`live-hub.ts`) e o rascunho é gravado com intervalo (reconexão e abertura no meio). Roda em paralelo à mesa: nunca toca no estado dela, não
  * publica no barramento da mesa e nunca lança (falhas viram `failed` na própria versão).
  */
 
 const log = loggerFor({ module: "architect-agent" })
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const DELETE_TIMEOUT_MS = 15_000
-/** Intervalo mínimo entre os eventos de progresso no Pusher. */
-const PROGRESS_THROTTLE_MS = 3_000
 const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`
 
 /**
@@ -143,18 +145,29 @@ export async function runDiagram(diagramId: string, controller: AbortController)
     let client: OpencodeClient | null = null
     let sessionId: string | null = null
     let doc: IArchitectDiagram | null = null
-    let lastPublish = 0
+    let assembler: GraphAssembler | null = null
+    let lastDraftSave = 0
+    let endState: IArchitectDiagram["state"] = "interrupted"
     const filter = { _id: diagramId }
-    const publish = (force = false) => {
-        if (!doc) return
-        const now = Date.now()
-        if (!force && now - lastPublish < PROGRESS_THROTTLE_MS) return
-        lastPublish = now
-        void publishDiagrams(doc.workbenchId, diagramId)
-    }
+    // O stream já atende desde o início (rascunho vazio): quem abre a aba agora vê o progresso.
+    openLive(diagramId, emptyDraft())
+    /** Mudança de fase: progresso no stream e na versão (Pusher, para quem não está com o stream aberto). */
     const setPhase = async (phase: ArchitectPhase) => {
+        emitProgress(diagramId, { phase })
         await ArchitectDiagram.updateOne(filter, { $set: { "progress.phase": phase } })
-        publish(true)
+        if (doc) void publishDiagrams(doc.workbenchId, diagramId)
+    }
+    const saveDraft = async (force = false) => {
+        if (!assembler) return
+        const now = Date.now()
+        if (!force && now - lastDraftSave < ARCHITECT_DRAFT_SAVE_MS) return
+        lastDraftSave = now
+        await ArchitectDiagram.updateOne(filter, { $set: { draft: assembler.draft } }).catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar o rascunho"))
+    }
+    const live = (ops: AppliedOp[]) => {
+        if (!ops.length) return
+        emitOps(diagramId, ops)
+        void saveDraft()
     }
     /** Exclui a sessão ANTES de gravar o desfecho: com a versão já "falhou", o Tentar novamente não pode cruzar com esta limpeza. */
     const cleanupSession = async () => {
@@ -166,7 +179,10 @@ export async function runDiagram(diagramId: string, controller: AbortController)
     }
     const finish = async (set: Partial<IArchitectDiagram>) => {
         await cleanupSession()
-        await ArchitectDiagram.updateOne(filter, { $set: { ...set, "progress.phase": null, finishedAt: new Date() } })
+        // O rascunho fica como contexto de uma versão que falhou; pronta ou descartada, ele sai.
+        const draft = set.state === "done" || set.state === "superseded" ? null : (assembler?.draft ?? null)
+        await ArchitectDiagram.updateOne(filter, { $set: { ...set, draft, "progress.phase": null, finishedAt: new Date() } })
+        endState = set.state ?? endState
         if (doc) {
             await recordAudit({
                 userId: getLocalUser().id,
@@ -202,6 +218,11 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         const task = await withTimeout(loadTaskSafe(doc.taskId), "A leitura da tarefa", signal)
         const base = doc.baseDiagramId ? await ArchitectDiagram.findById(doc.baseDiagramId, { graph: 1 }).lean() : null
         const adjust = doc.feedback && base?.graph ? { graph: base.graph, feedback: doc.feedback } : null
+        const startGraph: ArchitectGraph | null = adjust?.graph ?? null
+        const graphAssembler = createGraphAssembler({ depth: doc.depth as ArchitectDepth, base: startGraph })
+        assembler = graphAssembler
+        // Ajuste: o grafo anterior já é o ponto de partida desenhado na tela.
+        if (startGraph) live([{ op: "reset", graph: graphAssembler.draft }])
         const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId), "As memórias do agente", signal)
         if (memory.notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${memory.notice}`)
         const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory })
@@ -227,12 +248,30 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         const opencode = client
         const sid = sessionId
         const current = doc
+        let tools = 0
+        let writing = false
         const onEvent = (event: TurnEvent) => {
             if (event.type === "tool" && event.state === "running") {
-                void ArchitectDiagram.updateOne(filter, { $inc: { "progress.tools": 1 }, $set: { "progress.lastTool": event.name.slice(0, 80) } }).then(() => publish())
+                emitProgress(diagramId, { tools: ++tools })
+                void ArchitectDiagram.updateOne(filter, { $inc: { "progress.tools": 1 }, $set: { "progress.lastTool": event.name.slice(0, 80) } })
             } else if (event.type === "text") {
-                void ArchitectDiagram.updateOne(filter, { $set: { "progress.phase": "writing" } }).then(() => publish())
+                live(graphAssembler.push(event.text))
+                if (!writing && graphAssembler.draft.nodes.length > (startGraph?.nodes.length ?? 0)) {
+                    writing = true
+                    void setPhase("writing")
+                }
             }
+        }
+        /** Diagrama legível do turno: o rascunho ao vivo; sem bloco ao vivo, o formato antigo (um JSON). */
+        const readGraph = (text: string): { ok: true; raw: RawGraph } | { ok: false; error: string } => {
+            live(graphAssembler.finish())
+            if (graphAssembler.sawBlock) {
+                if (graphAssembler.draft.nodes.length) return { ok: true, raw: graphAssembler.draft }
+                return { ok: false, error: "os blocos do diagrama não trouxeram nenhum nó válido" }
+            }
+            const legacy = parseArchitectOutput(text)
+            if (!legacy.ok) return { ok: false, error: "a resposta não trouxe blocos ```architect``` com o diagrama" }
+            return legacy
         }
         const turn = (text: string, title: string): Promise<TurnResult> =>
             runWithFallback(
@@ -262,19 +301,23 @@ export async function runDiagram(diagramId: string, controller: AbortController)
 
         let result = await turn(applied ? prompt : `${instructions}\n\n---\n${prompt}`, `Agente Arquiteto · v${doc.version}`)
         if (result.outcome !== "succeeded") return void (await fail(result.message ?? "o agente não concluiu o diagrama"))
-        let parsed = parseArchitectOutput(result.text)
+        let parsed = readGraph(result.text)
         let repaired = false
         if (!parsed.ok) {
-            log.info({ diagramId, err: parsed.error }, "[architect] resposta inválida: pedindo a correção uma vez")
+            log.info({ diagramId, err: parsed.error }, "[architect] resposta sem diagrama legível: pedindo a correção uma vez")
             await setPhase("retrying")
+            // O agente reescreve o diagrama completo: o rascunho recomeça do ponto de partida.
+            live(graphAssembler.reset())
             result = await turn(buildRepairPrompt(parsed.error, depth), `Agente Arquiteto · v${doc.version} (correção)`)
             if (result.outcome !== "succeeded") return void (await fail(result.message ?? "o agente não concluiu a correção do diagrama"))
-            parsed = parseArchitectOutput(result.text)
+            parsed = readGraph(result.text)
             repaired = true
         }
+        await saveDraft(true)
         if (!parsed.ok) return void (await finish({ state: "failed", error: `Resposta inválida depois de uma nova tentativa: ${parsed.error}`, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
         const sanitized = sanitizeGraph(parsed.raw, depth)
         architectGraphSchema.parse(sanitized.graph)
+        const warnings = [...graphAssembler.warnings, ...sanitized.warnings]
 
         // Resultado atrasado: um plano mais novo foi aprovado enquanto o agente trabalhava.
         const latest = await AgenticWorkbench.findById(doc.workbenchId, { stage: 1, plans: 1, branch: 1, approvedPlanVersion: 1 }).lean()
@@ -283,13 +326,16 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             log.info({ diagramId, planVersion: doc.planVersion, approved }, "[architect] resultado de um plano antigo descartado")
             return void (await finish({ state: "superseded", error: "Descartada: um plano mais novo foi aprovado", report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
         }
-        await finish({ state: "done", graph: sanitized.graph, trimmed: sanitized.trimmed, warnings: sanitized.warnings, repaired, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS), error: null })
+        // Quem está com o stream aberto passa direto ao grafo final (os cortes saem animados).
+        live([{ op: "reset", graph: sanitized.graph }])
+        await finish({ state: "done", graph: sanitized.graph, trimmed: sanitized.trimmed, warnings, repaired, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS), error: null })
         log.info({ diagramId, workbenchId: doc.workbenchId, nodes: sanitized.graph.nodes.length, edges: sanitized.graph.edges.length, trimmed: sanitized.trimmed }, `[architect] ${doc.taskCode} arquitetura v${doc.version} pronta`)
     } catch (error) {
         log.error({ err: errorText(error), diagramId }, "[architect] falha na geração")
         await fail(errorText(error)).catch(() => undefined)
     } finally {
         await cleanupSession().catch(() => undefined)
+        closeLive(diagramId, endState)
         releaseDiagram(diagramId, controller)
     }
 }

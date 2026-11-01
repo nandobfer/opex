@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { AlertTriangle, Loader2, Network, RotateCcw, Sparkles, ZoomIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FLOW_SURFACE_CLASS } from "@/components/flow/flow-theme"
 import { ARCHITECT_PHASE_LABELS, type ArchitectDepth } from "../../constants"
 import type { ArchitectDiagramDto } from "../../types"
 import { DepthControl } from "./DepthControl"
@@ -13,7 +14,7 @@ import { DepthControl } from "./DepthControl"
 
 /** Classes do contêiner da aba (o skeleton usa as mesmas do resultado final). */
 export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-3 p-4"
-export const ARCHITECT_CANVAS_CLASS = "relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-background"
+export const ARCHITECT_CANVAS_CLASS = `${FLOW_SURFACE_CLASS} min-h-0 flex-1`
 
 /** Colunas de cartões no formato das camadas do diagrama (nunca um grafo parcial). */
 export function ArchitectCanvasSkeleton({ label }: { label?: string }) {

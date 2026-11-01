@@ -1,7 +1,8 @@
 "use client"
 
-import { createContext, useContext, useEffect, useMemo, useRef } from "react"
-import { animate, motion, useMotionValue, useTransform } from "framer-motion"
+import { createContext, useContext, useMemo } from "react"
+import { motion } from "framer-motion"
+import { PathTraveler } from "@/components/flow/path-traveler"
 import type { Travel } from "../../hooks/useEngramindConsumption"
 
 /** Pulsos e partículas em viagem da rede (OPE-109), lidos pelos nodes e arestas do React Flow. */
@@ -50,27 +51,5 @@ export function TravelDots({ edgeId, path }: { edgeId: string; path: string }) {
 }
 
 function TravelDot({ travel, path, onDone }: { travel: Travel; path: string; onDone: () => void }) {
-    const ref = useRef<SVGPathElement>(null)
-    const progress = useMotionValue(0)
-    const point = (value: number) => {
-        const element = ref.current
-        if (!element || typeof element.getTotalLength !== "function") return { x: 0, y: 0 }
-        const length = element.getTotalLength()
-        const at = element.getPointAtLength((travel.reverse ? 1 - value : value) * length)
-        return { x: at.x, y: at.y }
-    }
-    const cx = useTransform(progress, (value) => point(value).x)
-    const cy = useTransform(progress, (value) => point(value).y)
-    useEffect(() => {
-        const controls = animate(progress, 1, { duration: 0.9, delay: travel.delayMs / 1000, ease: "easeInOut", onComplete: onDone })
-        return () => controls.stop()
-        // A viagem roda uma vez por partícula.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-    return (
-        <g data-testid="travel-dot">
-            <path ref={ref} d={path} fill="none" stroke="none" />
-            <motion.circle cx={cx} cy={cy} r={travel.tone === "white" ? 2.5 : 4} className={travel.tone === "white" ? "fill-foreground" : "fill-primary"} />
-        </g>
-    )
+    return <PathTraveler path={path} reverse={travel.reverse} delayMs={travel.delayMs} radius={travel.tone === "white" ? 2.5 : 4} className={travel.tone === "white" ? "fill-foreground" : "fill-primary"} onDone={onDone} />
 }

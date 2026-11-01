@@ -44,6 +44,7 @@ export function toDiagramDto(doc: IArchitectDiagram, options: { graph?: boolean 
         phase: (doc.progress?.phase as ArchitectPhase | null) ?? null,
         tools: doc.progress?.tools ?? 0,
         graph: options.graph === false ? null : (doc.graph ?? null),
+        draft: options.graph === false || doc.state === "done" || doc.state === "superseded" ? null : (doc.draft ?? null),
         trimmed: { nodes: doc.trimmed?.nodes ?? 0, edges: doc.trimmed?.edges ?? 0 },
         warnings: doc.warnings ?? [],
         repaired: Boolean(doc.repaired),
@@ -185,7 +186,7 @@ export async function retryDiagram(id: string): Promise<ArchitectDiagramDto> {
     await assertReady(doc.centralId)
     await reconcileOrphans({ workbenchId: doc.workbenchId })
     if (await ArchitectDiagram.exists({ workbenchId: doc.workbenchId, state: "running" })) throw new DomainError(409, "O Agente Arquiteto já está gerando um diagrama nesta mesa; aguarde terminar.", "ARCHITECT_BUSY")
-    await ArchitectDiagram.updateOne({ _id: doc._id }, { $set: { state: "running", error: null, graph: null, warnings: [], trimmed: { nodes: 0, edges: 0 }, repaired: false, progress: { phase: "starting", tools: 0, lastTool: null }, startedAt: new Date(), finishedAt: null } })
+    await ArchitectDiagram.updateOne({ _id: doc._id }, { $set: { state: "running", error: null, graph: null, draft: null, warnings: [], trimmed: { nodes: 0, edges: 0 }, repaired: false, progress: { phase: "starting", tools: 0, lastTool: null }, startedAt: new Date(), finishedAt: null } })
     await recordAudit({ userId: getLocalUser().id, entidade: ARCHITECT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { estado: doc.state }, depois: { estado: "running", acao: "tentar-novamente" } })
     await publishDiagrams(doc.workbenchId, id)
     start(id, doc.workbenchId)
