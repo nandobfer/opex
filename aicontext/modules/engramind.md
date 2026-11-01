@@ -70,7 +70,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Aba | Conteúdo |
 |---|---|
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
-| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card Geral (debug). |
+| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data), o card Geral (debug) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
 | Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex"). A proteção vale também no servidor (proxy e agente, `guardOwnToken` com o `whoami` atual): o token não é revogado, rebaixado nem ganha validade (`expires_at`), e o app não é desativado nem excluído (`409 ENGRAMIND_OWN_TOKEN`). |
@@ -182,25 +182,160 @@ Um teste confere a cobertura de todas as chaves e variáveis.
   na auditoria ou no evento final só vai para o log (nunca derruba o processo).
 - Gravar e aplicar são auditados só com os **nomes** das chaves.
 
-## Página `/engramind`
+## Página `/engramind` — rede "universo de partículas" (OPE-109)
 
 Item "Engramind" em `APP_NAV`, logo abaixo de "Ambientes". Sem a integração configurada: estado vazio
-com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba mais") e abas (`?aba=`):
+com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba mais") e a **rede**
+(`components/network/EngramindNetwork.tsx`), que **substitui as antigas abas Canais e Memórias**: toda a
+gestão delas acontece dentro da rede. Renderização com **React Flow** (`@xyflow/react`): agentes,
+canais e memórias são nodes; pulsos e partículas que viajam pelos links usam Framer Motion sobre as
+arestas SVG. **Não** se arrasta node individual: arrastar move a rede inteira, scroll/pinça dão zoom,
+layout automático e **Centralizar** reenquadra (`RecenterButton`; volta ao enquadramento da visão).
+**Fundo no padrão do tema**: o canvas usa `bg-background` (o fundo das páginas) com um brilho violeta
+bem suave no centro (`NETWORK_CANVAS_CLASS`), e o React Flow recebe `NETWORK_FLOW_THEME` (variáveis
+`--xy-*` por tokens: fundo transparente, pontos da grade em `--muted-foreground`). O `colorMode="dark"`
+da biblioteca sozinho pintava o canvas de cinza neutro, fora do padrão. Nada de cor fixa na pasta da
+rede (teste estático).
 
-- **Canais**: lista (`CadastroTableCard`, busca local, "Mostrar arquivados") com `channel_stats` por
-  linha; criar/editar (slug imutável), arquivar, restaurar e excluir de vez (só arquivado), com
-  confirmação. O nome leva ao detalhe `/engramind/canais/<slug codificado>`:
-  - **Assinantes**: listar (`?channel=`), assinar agente (alvo exato ou prefixo, modo
-    `inject`/`search`/`manage`, acesso = escopos do token ou restrito, prioridade), editar e remover.
-  - **Configurações do canal**: só as chaves com sobreposição, com efetivo, global e "Remover
-    sobreposição" (`null`).
-- **Memórias**: filtros (canal, status, categoria de `categories.list`, autor, desde), busca
-  (`/v1/memories/search`; `mode: "text"` mostra "Busca só textual"), histórico com **Reverter**,
-  fixar/desafixar, arquivar/restaurar, mover de canal e excluir de vez (confirmação nas destrutivas).
-  **Importar**: canal ativo + arquivo JSON (lista ou `{ memories }`) ou JSONL (inclusive de uma linha só); prévia com a contagem e
-  os erros por índice (`parseImportFile`); acima de `limits.max_batch` recusa antes do envio (também
-  no servidor); `Idempotency-Key = opex-import-<sha256(canal + conteúdo)>` (o mesmo arquivo não
-  duplica); resultado com as criadas e as duplicadas (`existing_id`).
+### Visões
+
+- **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
+  ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
+  `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`), **na horizontal**: os agentes
+  numa linha em cima (agrupados por app) e os canais ativos numa linha embaixo, as duas centralizadas
+  (`layoutOverview`; links saem por baixo do agente e chegam por cima do canal). O enquadramento
+  inicial (`overviewInitialBounds` + `fitBounds`) pega a largura da linha de agentes com 15% de folga
+  de cada lado e a altura até a linha de canais; canais além dessa largura ficam a um arrastar. O
+  Centralizar volta a esse enquadramento. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
+  `reaches` do Engramind para os ativos; com **Mostrar arquivados**, os arquivados casados localmente
+  por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
+  mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos).
+  Clicar no agente/canal abre o universo; menu "⋯" ou botão direito no canal abre o `ChannelPanel`.
+- **Nome do canal** (`ChannelName`, nos canais da visão inicial, no centro do universo do canal e na
+  legenda "Por canal"): o prefixo até a última `/` numa linha discreta em cima (`splitChannelSlug`) e
+  a ponta final como título destacado; o slug inteiro aparece ao passar o mouse. O card do canal tem
+  até 288 px (`max-w-72`), para o prefixo caber numa linha (corta no fim só se não couber). Canal por
+  central (`agentes/desenvolvedor/central/<centralId>`): o título é a **sigla do repositório** (ex.:
+  `OPE`) e a dica mostra o nome do repositório (`ChannelLabelsProvider` lê as centrais com
+  `useCentrals`; `centralChannelLabels` em `network/channel-labels.ts`); central desconhecida mostra
+  o id.
+- **Universo do canal** (`MemoryUniverse`): o canal no centro e uma partícula por memória (ativas,
+  fixadas e inativas) em órbitas (`layoutUniverse`: as mais usadas mais perto), com links fracos ao
+  centro. Anéis concêntricos a partir do raio 150 (+58 por anel, ~46 px entre vizinhas): o número de
+  anéis é o mínimo que comporta todas, e elas são distribuídas proporcionalmente às vagas de cada anel
+  (`universeRingCounts`; 15 → 1 anel, 50 → 12/17/21, 100 → 4 anéis), então o universo cresce para fora
+  com densidade constante e o último anel não fica quase vazio. Canal arquivado abre apagado e somente leitura, sem Nova memória.
+- **Universo do agente**: as memórias de todos os canais que ele assina; o link de cada partícula tem
+  a **cor do canal** (`channelColors` calculado sobre **todos** os canais e lido por universo com
+  `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais que caem na mesma base ganham
+  variação de tom, e o mesmo canal tem a mesma cor em qualquer universo) e a legenda "Por canal" mostra cor e total.
+- **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
+  link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
+  **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
+  histórico, e o voltar do navegador não fica preso nele).
+  A troca de visão anima (escala/opacidade + `fitView` com duração; 0 com movimento reduzido).
+
+### Partículas (`network/network-math.ts` + `network/particles.ts`, puros)
+
+| Atributo | Regra |
+|---|---|
+| Cor | Relativa ao universo: a mais nova verde (`--color-success`), a mais antiga o roxo primário, gradiente pela criação (`color-mix`). Uma só ou datas iguais: verde. |
+| Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
+| Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at` e o registro do Opex (`engramind_memory_usage`), ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação). `stale_candidate` → 0, exceto se consumida ao vivo desde a última leitura (volta ao brilho cheio na hora; a releitura traz o estado do Engramind). |
+| Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
+| Inativa | Contorno tracejado, sem brilho nem cor; o switch Ativa muda na hora. |
+
+O Engramind não expõe `last_injected_at` no DTO: por isso o Opex registra o último consumo dos seus
+agentes (`server/memory-usage.ts`); consumo de apps de fora só conta por `last_retrieved_at`.
+
+### Card da memória (`MemoryCardLayer` + `MemoryCard`)
+
+A **partícula vira o card**: no hover (ou toque/clique, que fixa o card; clicar fora fecha) o card
+nasce no lugar, no tamanho e na cor da partícula na tela e se expande até o retângulo final (~220 ms),
+com o conteúdo entrando em fade; ao fechar, encolhe de volta para ela. A partícula fica invisível
+(`data-expanded`) enquanto o card está aberto. O card fica numa **camada fora da área com zoom**
+(filho do React Flow, irmão do viewport): tamanho e fonte fixos (`w-72`) em qualquer zoom, posição
+convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **inteiro dentro do
+quadro** (`clampCardRect`, 8 px de margem). Hover com **dois sinais de presença** (cursor na partícula e no card,
+ambos por eventos de ponteiro): o fechamento (300 ms) só é agendado quando os dois estão desligados e
+é cancelado quando qualquer um liga, então a ordem dos eventos não importa (o navegador avisa "entrei
+no card" antes de "saí da partícula"). Sair do card fecha depois do atraso. Esc dentro do card (ele não é modal, `data-network-card`) volta à visão inicial como em qualquer
+ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. As
+vizinhas se afastam levemente (`repelOffset`). O card tem título, texto, categoria, canal, idade, relevância (consultas +
+injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
+`MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
+enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
+(com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
+zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
+partícula sai animada (`useLeavingItems`: um timer por item que sai, independente de novas leituras da
+lista, então o node e o link somem depois de `LEAVE_MS` mesmo com a lista relida no meio). Excluir ou
+mover **daqui** não avisa: a remoção é marcada só na confirmação do diálogo (`useLocalRemovals`; cancelar
+não marca, falha desmarca, a marca é esquecida quando o item sai). As listas do Engramind
+(`useEngramindList().items`) e os dados da rede (`useEngramindNetwork`) mantêm a referência enquanto os
+dados não mudam, para o layout e os nodes não recalcularem a cada render.
+
+**Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
+`useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
+crescendo de 0 (mola), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
+órbita mudou com o recálculo deslizam da posição antiga para a nova (~450 ms). A animação de entrada
+espera o React Flow medir e mostrar o node (dois quadros). Na lista otimista de `/integracoes/ia`, a
+provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento reduzido: aparece direto.
+
+### Estatísticas (`StatsCard`, números com `AnimatedNumber`)
+
+- Inicial: agentes, canais, memórias ativas/inativas, consumos ao vivo desde que a tela abriu, filtro
+  por app, total por canal e por agente (alcance = soma das memórias dos canais ligados). Respeita o
+  filtro por app.
+- Universos: ativas, inativas, fixadas, consultas + injeções, última consulta, assinantes (canal),
+  esquecidas (cinza) e consumos ao vivo; no do agente, a legenda por canal.
+
+### Barra e gestão
+
+`NetworkToolbar`: busca (`/v1/memories/search`; "Busca só textual" quando `mode: text`), filtros
+(canal, status, categoria, autor, desde), **Mostrar arquivados**, **Importar** (o mesmo
+`ImportMemoriesDialog`: prévia, erros por índice, `limits.max_batch`, sem duplicar) e **Novo canal**.
+**Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
+destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na
+busca" e os sem resultado ficam apagados. **Nova memória** (`create_memory`) no universo de canal
+ativo. `ChannelPanel` (Sheet): Editar (slug imutável), Arquivar / Restaurar / Excluir de vez (só
+arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard`
+(sobreposições com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar
+leva ao universo do canal).
+
+Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
+`layout-classes.ts`; linha de agentes em cima e de canais embaixo), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
+(`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
+
+### Celular (`useIsMobile`, até 767 px)
+
+As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela estreita; no computador
+nada muda.
+
+- **Estatísticas recolhidas:** o `StatsCard` começa como um botão no canto com o resumo ("N agentes ·
+  M canais" na visão inicial, "N memórias" no universo); o toque abre o card por cima do quadro (largura
+  toda menos a margem) e "Recolher estatísticas" fecha. O filtro por app fica dentro do card aberto.
+- **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha (Buscar e Limpar só com ícone); embaixo,
+  **Filtros** (com quantos estão ativos) abre os cinco filtros numa gaveta de baixo para cima
+  (`NetworkFiltersSheet`, com Limpar e Ver rede), Arquivados e Importar/Novo canal só com ícone e dica.
+- **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a linha de
+  agentes não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
+  Centralizar volta a esse enquadramento. Os universos continuam enquadrando tudo.
+- **Toque na partícula:** os sinais de "passar o mouse" ignoram ponteiro de toque; tocar fixa o card,
+  tocar fora fecha, tocar em outra troca. Com o zoom abaixo de 0,6 (celular ou computador), o clique ou
+  toque aproxima até 0,6 centralizado na partícula e o card abre.
+- **Card limitado ao quadro** (vale em qualquer tela, `memoryCardSize`): largura e altura cabem no quadro
+  menos 8 px de cada lado; texto longo rola dentro do card.
+- **Link:** no toque, o modo da assinatura aparece por 1,5 s (`LINK_TOUCH_LABEL_MS`).
+- **Quadro e botões:** altura dinâmica da tela (`70dvh` na rede, `60dvh` nos cards de `/integracoes/ia`),
+  sobrando margem para rolar a página fora do quadro; Centralizar, Nova memória e o menu "⋯" do canal
+  com área de toque de 40 px; a trilha mostra só Voltar e o nome atual. O skeleton acompanha (card
+  recolhido no canto).
+
+### Dados (`hooks/useEngramindNetwork.ts`)
+
+Canais (com arquivados), apps, agentes, assinaturas e memórias (`status=active,permanent,archived`,
+todas as páginas) pelo proxy, `settings` (prazo, categorias, limites, `max_batch`) e
+`GET /api/engramind/memory-usage`. Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 
 ## Webhook e tempo real
 
@@ -218,6 +353,21 @@ com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba ma
   `private-integration-ai` (os cards de memórias atualizam, inclusive com o que o agente gravou
   sozinho). Canal fora do mapeamento é ignorado (log `debug`). A migração publica
   `engramind-updated` `{ type: "migration.updated" }`.
+- **Consumo ao vivo** (OPE-109): `engramind-consumption` em `private-app` (só o dono vê, inclusive o
+  consumo dos agentes do portal), publicado **só pelo servidor** por `publishConsumption`
+  (`server/consumption.ts`, nunca lança) depois do consumo bem-sucedido, com payload
+  `{ agent: "app/agente", kind: "context" | "search", channels, delivered, memoryIds }` — **só ids e
+  slugs**, nunca textos ou títulos (`delivered` = canais que entregaram ao menos uma memória: a
+  partícula volta ao agente). Origens: o contexto do turno (`getAgentMemoryContext`, faixa 1 do bloco
+  `tagged`; a resposta `304` usa os ids do cache e anima do mesmo jeito; cache por indisponibilidade
+  ou turno sem memórias não publica) e a ferramenta `search_engramind_memories` do Agente Opex
+  (consumidor pelo escopo da sessão, `searchConsumer`: `opex/opex` no chat do Agente Opex,
+  `opex/maddox` na sessão do Agente Maddox; chamada por **token de sistema** no MCP do dono não é um
+  agente do Opex e não publica, só log informativo; sem resultados não publica). As buscas do
+  dono na tela não contam. Também grava `engramind_memory_usage`. No cliente,
+  `useEngramindConsumption` marca o uso no cache, anima localmente (`useLiveEffects`: pulso, partícula,
+  +tamanho) e relê memórias e uso 6 s depois (o Engramind grava contadores em lote a cada 5 s); id de
+  memória que a tela não carregou é ignorado.
 - `useEngramindRealtime` invalida por área: `memory.*` → memórias e canais; `channel.updated` →
   canais; `subscription.updated` → assinaturas e agentes; `settings.updated` → configurações, canais
   e status; `identities.updated` → apps, agentes, tokens e conexão; `env.*` → env, status e conexão.
@@ -271,8 +421,11 @@ sem memórias) e o provisionamento termina em segundo plano. Nos testes, o Engra
 ### Contexto com cache (`server/memory-context.ts`)
 
 `getAgentMemoryContext(consumer, channels)` → `{ block, source: live|cache|none, cachedAt, counts, reason }`:
-`GET /v1/context?channels=…&format=markdown` com o token do agente e `If-None-Match` (a `version` do
-cache; `304` reaproveita). Sucesso grava `engramind_context_cache` (`_id` = sha256 do consumidor + canais)
+`GET /v1/context?channels=…&format=tagged` (desde a OPE-109; o `markdown` não traz ids) com o token do
+agente e `If-None-Match` (a `version` do cache, só quando o cache já é `tagged` — a `version` muda
+com o formato; `304` reaproveita). `parseTaggedContext` (`context-tagged.ts`, puro) lê os ids da
+faixa 1 (com o canal) e da faixa 2; o cache guarda `format`, `memoryIds` (faixa 1) e `delivered`, e o
+consumo é publicado fora do caminho do turno. Sucesso grava `engramind_context_cache` (`_id` = sha256 do consumidor + canais)
 e `engramind_state.memoryContext.lastOkAt`; falha (fora do ar, sem token, `AUTH_INVALID`) loga `warn`,
 grava `unavailableSince` e usa o cache (ou nenhum bloco) — **nunca lança**. O bloco entra **sem
 alteração** depois do cabeçalho curto (`memoriesSection`); `memoryCacheNotice` gera o aviso do turno
@@ -350,6 +503,9 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
 - IA do Opex: `get_engramind_ai_source`, `apply_engramind_ai_source` (`write` com confirmação por
   padrão; entrada objeto `applyAiSourceToolSchema`, a chave nunca passa pelo modelo) e
   `resend_engramind_ai_key`. Também no MCP do Maddox.
+- Memórias brutas (OPE-109): `create_engramind_memory` e `update_engramind_memory` (texto/categoria com
+  `expected_version`), `write`. A busca `search_engramind_memories` publica o consumo na rede
+  (`engramind-consumption`, só ids).
 - `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
   memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.
 - Segredos fora do histórico e dos cards (`redact` em `set_engramind_secret`, webhooks, propostas de
@@ -365,8 +521,9 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
 | `GET/PUT /api/engramind/connection` | Estado da conexão / gravar + bootstrap |
 | `POST /api/engramind/connection/bootstrap` | Repetir o bootstrap |
 | `GET /api/engramind/environments` | Opções do seletor de Ambiente |
-| `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]`, `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
+| `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]` (`POST memories` = `create_memory` e `PATCH memories/:memory` = `update_memory` com `expected_version`, OPE-109; `status` da listagem aceita vários separados por vírgula), `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
 | `POST /api/engramind/memories/import` | Importação com a chave derivada |
+| `GET /api/engramind/memory-usage` | Último consumo de cada memória pelos agentes do Opex (rede, OPE-109) |
 | `GET/POST /api/engramind/providers/from-opex` | IA do Opex: estado das seções / aplicar (`applyAiSourceSchema`) |
 | `POST /api/engramind/providers/from-opex/test` e `/resend` | Testar a proposta com a chave do Opex / reenviar a chave |
 | `GET/PUT /api/engramind/env` | `.env` no host |
@@ -380,13 +537,21 @@ segredos) e logada (Pino, `feature: "engramind"`).
 
 - `engramind_webhook_events` (`_id` = id do evento, TTL 24 h), `engramind_state` (singleton
   `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados e `memoryContext`) e
-  `engramind_context_cache` (último contexto por consumidor + canais) — `server/models.ts`.
+  `engramind_context_cache` (último contexto por consumidor + canais, com `format`, `memoryIds` e
+  `delivered`) — `server/models.ts`.
+- `engramind_memory_usage` (`_id` = id da memória, `lastUsedAt` com `$max`, `liveCount`; TTL de 365 d
+  pelo último uso) — `server/memory-usage.ts`.
 - `engramind_memory_backups` e `engramind_memory_migration` — `server/migration-models.ts`.
 - `opex_secret_reveals` (Agente Opex) — `src/features/opex-agent/server/secret-reveals.ts`.
 
 ## Testes
 
-`__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
+Rede (OPE-109): `__tests__/features/engramind/network-math.test.ts` (cor, tamanho, brilho, cores dos
+canais, links, layout, filtros, estatísticas e o parser `tagged`), `consumption.test.ts`,
+`memory-context.test.ts` (formato `tagged`, ids no cache e consumo), `agent-tools.test.ts` (busca
+publica o consumo), `__tests__/components/engramind/network.test.tsx` e
+`__tests__/features/ai/memory-network-view.test.tsx` (React Flow mockado por
+`__tests__/helpers/xyflow.tsx`: o happy-dom não mede o canvas). Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
 `opex-ai-card.test.tsx`, memórias dos agentes (`memory-context`, `memory-curator`, `migration`,

@@ -130,6 +130,15 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect(integration.swaggerUrl).toMatch(/\/api\/openapi\.json$/)
   })
 
+  it('Engramind: sem URL salva, a documentação é <URL base>/openapi.json; a URL salva vence', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue(stored({ integrationId: 'engramind', environment: 'externo', publicValues: { baseUrl: 'http://engramind-api:8000' } }))
+    expect((await getIntegration('engramind')).swaggerUrl).toBe('http://engramind-api:8000/openapi.json')
+    mocks.loadStoredIntegration.mockResolvedValue(stored({ integrationId: 'engramind', environment: 'externo', publicValues: { baseUrl: 'http://engramind-api:8000' }, swaggerUrl: 'http://outro/docs' }))
+    expect((await getIntegration('engramind')).swaggerUrl).toBe('http://outro/docs')
+    mocks.loadStoredIntegration.mockResolvedValue(null)
+    expect((await getIntegration('engramind')).swaggerUrl).toBeFalsy()
+  })
+
   it('converte booleanos salvos como texto', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(stored({ integrationId: 'crons', publicValues: { schedulerEnabled: 'false' } }))
     expect((await getIntegrationConfig('crons')).schedulerEnabled).toBe(false)

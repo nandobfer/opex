@@ -187,6 +187,9 @@ sem pedido explícito.
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
+- Engramind: `engramind-updated` (`{ type, channel?, keys? }`) e o consumo de memórias pelos agentes do
+  Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds }`, só ids e slugs) em
+  `private-app` (ver `aicontext/modules/engramind.md`, "Webhook e tempo real").
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
@@ -294,6 +297,9 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Busca local: fuse.js
 - Markdown: `react-markdown` + `remark-gfm` (componente `src/components/ui/markdown.tsx`)
 - Preferências/filtros persistentes no navegador: `usePersistentState` (`src/hooks/`, Zod)
+- Redes de nodes (rede de agentes, canais e memórias do Engramind): React Flow (`@xyflow/react`),
+  com nodes não arrastáveis e pulsos/partículas pelas arestas animados com Framer Motion
+  (`aicontext/modules/engramind.md`, "Página `/engramind`")
 - Gráficos: recharts pelo componente Chart do shadcn/ui (`src/components/ui/chart.tsx`), com
   tooltip padronizado e cores por variáveis `--chart-1..6`
 - Utilitários de estilo: `clsx` + `tailwind-merge` (`cn()`), `class-variance-authority`

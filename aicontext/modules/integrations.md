@@ -272,6 +272,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   explorador mostra o campo "Token de sistema" (`ClientTokenField`, não é salvo) e o servidor
   repassa esse `Authorization` — só para a origem do adaptador; nos demais casos o cliente nunca
   define `Authorization`. Sem adaptador, a base é o `servers` da especificação, sem credenciais.
+  `engramind` usa a URL base do campo `baseUrl` e injeta `Authorization: Bearer` com o token admin
+  (campo privado), só no servidor.
+- **Documentação padrão do serviço** (`defaultSwagger` no catálogo: campo público com a URL base +
+  caminho, via `defaultSwaggerUrl`): vale enquanto o dono não salvar outra URL e o campo continua
+  editável (Engramind: `<baseUrl>/openapi.json`).
 
 ### API interna — documentação e tokens de sistema
 

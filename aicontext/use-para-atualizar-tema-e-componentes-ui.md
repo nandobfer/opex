@@ -128,11 +128,16 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
   (240px) e mantém dono, versão e "Sair" inline. Animações em Framer Motion
   (entrada dos itens, `whileHover x:4`, `whileTap 0.98`, largura, gaveta).
 - **Seções** (`NavSectionDef { id, label?, items }` em `src/features/layout/navigation.ts`,
-  `APP_NAV`): Início (sem título) · Agentes (Revisor, Adversário, Mentor) · Sistema (Integrações). Até 7 itens por seção. Título em
+  `APP_NAV`): uma seção sem título com Tarefas, Central de desenvolvimento, Engramind e os grupos
+  Agentes (Revisor, Adversário, Mentor), Contábil (Horas agênticas, Financeiro) e Configurações
+  (Integrações, Ambientes). Até 7 entradas por seção. Título em
   caixa-alta é um botão com `aria-expanded` que abre/fecha a lista; fechadas ficam no
   `localStorage` (`opex-sidebar-closed-sections`); a seção da página atual sempre abre ao
   navegar para ela. Recolhido, o título vira divisor. `APP_NAV_ITEMS` (`flattenNav`) serve o
   título do cabeçalho. Novo item de menu = nova entrada em `APP_NAV` + página em `src/app/(app)/`.
+- **Grupos** (`NavGroupDef`, `SidebarNavGroup`): um item da barra que abre um painel à direita
+  (portal, fora da barra) ao passar o mouse, por clique, toque ou teclado. Detalhes em
+  `modules/layout.md`. Use grupo, e não seção com título, para juntar itens na barra recolhida.
 - **Itens**: ícone 20px, rótulo 14px, `aria-current="page"` no ativo; recolhido, nome acessível
   (`aria-label`) e Tooltip à direita.
 - **Contadores** (`SidebarBadge`, `NavItemDef.badge`): número pt-BR com "99+" (`formatBadge`), texto
@@ -144,7 +149,7 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 - **Gaveta (< 1024px)**: botão de menu com `aria-expanded`/`aria-controls`; ao abrir, foco no
   primeiro link e resto da tela `inert`; fecha com Esc, fundo, "Fechar menu" (foco volta ao botão)
   ou ao escolher um link (`useDrawerFocus`).
-- Testes: `__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer}.test.*`.
+- Testes: `__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,sidebar-nav-group}.test.*`.
 
 ## Estados obrigatórios
 
@@ -232,6 +237,14 @@ vi.mock('framer-motion', () => {
 
 (`stripMotionProps` remove `initial`, `animate`, `exit`, `transition`, `layout` etc. antes de
 repassar ao elemento DOM.)
+
+## Redes (React Flow)
+
+- O canvas das redes (`src/features/engramind/components/network`) usa o fundo das páginas
+  (`bg-background`) e passa o tema ao React Flow por `NETWORK_FLOW_THEME` (variáveis `--xy-*` por
+  tokens). Nunca dependa do fundo do `colorMode` da biblioteca (cinza neutro fora do padrão).
+- Card ou painel sobre a rede fica numa camada fora da área com zoom (filho do React Flow), com
+  tamanho fixo e preso às bordas do quadro (`MemoryCardLayer`).
 
 ## Gráficos (recharts via Chart do shadcn)
 

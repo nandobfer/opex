@@ -94,6 +94,17 @@ export interface AgentMemoryOrigin {
     label: string
 }
 
+export interface MemoryUsageDto {
+    /** `retrieval_count` (buscas). */
+    consultas: number
+    /** `injected_count` (entradas no contexto). */
+    injecoes: number
+    ultimaConsulta: string | null
+    verificadaEm: string | null
+    /** `stale_candidate`: candidata a esquecimento pelo consolidador. */
+    esquecida: boolean
+}
+
 export interface MemoryDto {
     /** Central da memória, nas listas por central (`developer-central`). */
     centralId?: string
@@ -120,6 +131,8 @@ export interface MemoryDto {
     origin?: AgentMemoryOrigin | null
     criadaEm: string
     atualizadaEm: string
+    /** Uso no Engramind (rede de memórias, OPE-109); os contadores chegam em lote e podem atrasar. */
+    uso?: MemoryUsageDto
 }
 
 export interface MemoryMutationResult {

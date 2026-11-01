@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { CodeXml, GraduationCap, Swords } from "lucide-react"
-import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { Bot, CodeXml, GraduationCap, Landmark, Settings, Swords } from "lucide-react"
+import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, navGroupActive, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
+import { isNavGroup } from "@/features/layout/types"
 
 describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
     it("toda seção tem id único e no máximo 7 itens", () => {
@@ -9,26 +12,61 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("seções Início (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento, Ambientes, Engramind), Agentes (Revisor, Adversário, Mentor) e Sistema (Integrações)", () => {
-        expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([
-            ["inicio", undefined],
-            ["agentes", "Agentes"],
-            ["sistema", "Sistema"],
-        ])
-        expect(APP_NAV_ITEMS.map((item) => [item.label, item.href])).toEqual([
-            ["Dashboards", "/dashboard"],
+    it("itens soltos (Tarefas, Central de desenvolvimento, Engramind) e grupos Agentes, Contábil e Configurações, nesta ordem", () => {
+        expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([["inicio", undefined]])
+        const entries = APP_NAV[0]!.items.map((entry) => (isNavGroup(entry) ? [entry.label, entry.items.map((item) => [item.label, item.href])] : [entry.label, entry.href]))
+        expect(entries).toEqual([
             ["Tarefas", "/tarefas"],
-            ["Horas agênticas", "/tarefas/horas"],
-            ["Financeiro", "/financeiro"],
             ["Central de desenvolvimento", "/desenvolvimento"],
-            ["Ambientes", "/ambientes"],
             ["Engramind", "/engramind"],
-            ["Agente Revisor", "/agente-revisor"],
-            ["Agente Adversário", "/agente-adversario"],
-            ["Agente Mentor", "/agente-mentor"],
-            ["Integrações", "/integracoes"],
+            [
+                "Agentes",
+                [
+                    ["Agente Revisor", "/agente-revisor"],
+                    ["Agente Adversário", "/agente-adversario"],
+                    ["Agente Mentor", "/agente-mentor"],
+                ],
+            ],
+            [
+                "Contábil",
+                [
+                    ["Horas agênticas", "/tarefas/horas"],
+                    ["Financeiro", "/financeiro"],
+                ],
+            ],
+            [
+                "Configurações",
+                [
+                    ["Integrações", "/integracoes"],
+                    ["Ambientes", "/ambientes"],
+                ],
+            ],
+        ])
+    })
+
+    it("APP_NAV_ITEMS (flattenNav) inclui os itens de dentro dos grupos, na ordem do menu", () => {
+        expect(APP_NAV_ITEMS.map((item) => item.href)).toEqual([
+            "/tarefas",
+            "/desenvolvimento",
+            "/engramind",
+            "/agente-revisor",
+            "/agente-adversario",
+            "/agente-mentor",
+            "/tarefas/horas",
+            "/financeiro",
+            "/integracoes",
+            "/ambientes",
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)
+    })
+
+    it("grupos usam os ícones Bot, Landmark e Settings", () => {
+        const groups = APP_NAV[0]!.items.filter(isNavGroup)
+        expect(groups.map((group) => [group.id, group.icon])).toEqual([
+            ["agentes", Bot],
+            ["contabil", Landmark],
+            ["configuracoes", Settings],
+        ])
     })
 
     it("Central de desenvolvimento usa o ícone </> (CodeXml); os agentes usam os ícones das abas de configuração", () => {
@@ -40,18 +78,28 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         expect(activeNavHref("/agente-mentor", APP_NAV_ITEMS)).toBe("/agente-mentor")
     })
 
-    it("item ativo é o mais específico: Horas agênticas em /tarefas/horas, Tarefas em /tarefas/123", () => {
-        expect(activeNavHref("/dashboard", APP_NAV_ITEMS)).toBe("/dashboard")
+    it("item ativo é o mais específico, inclusive dentro dos grupos", () => {
         expect(activeNavHref("/tarefas/horas", APP_NAV_ITEMS)).toBe("/tarefas/horas")
         expect(activeNavHref("/tarefas/abc123", APP_NAV_ITEMS)).toBe("/tarefas")
         expect(activeNavHref("/tarefas", APP_NAV_ITEMS)).toBe("/tarefas")
         expect(activeNavHref("/financeiro", APP_NAV_ITEMS)).toBe("/financeiro")
+        expect(activeNavHref("/integracoes/crons", APP_NAV_ITEMS)).toBe("/integracoes")
         expect(activeNavHref("/outra", APP_NAV_ITEMS)).toBeNull()
     })
 
-    it("a página inicial é Dashboards e está no menu", () => {
+    it("navGroupActive: o grupo fica ativo quando contém o item ativo", () => {
+        const [agentes, contabil, configuracoes] = APP_NAV[0]!.items.filter(isNavGroup)
+        expect(navGroupActive(contabil!, activeNavHref("/tarefas/horas", APP_NAV_ITEMS))).toBe(true)
+        expect(navGroupActive(agentes!, activeNavHref("/tarefas/horas", APP_NAV_ITEMS))).toBe(false)
+        expect(navGroupActive(configuracoes!, activeNavHref("/ambientes/x", APP_NAV_ITEMS))).toBe(true)
+        expect(navGroupActive(configuracoes!, null)).toBe(false)
+    })
+
+    it("Dashboards saiu do menu, mas segue como página inicial (a logo leva a ela) e a rota existe", () => {
         expect(HOME_HREF).toBe("/dashboard")
-        expect(APP_NAV_ITEMS.some((item) => item.href === HOME_HREF)).toBe(true)
+        expect(APP_NAV_ITEMS.some((item) => item.href === "/dashboard")).toBe(false)
+        expect(activeNavHref("/dashboard", APP_NAV_ITEMS)).toBeNull()
+        expect(existsSync(join(process.cwd(), "src/app/(app)/dashboard/page.tsx"))).toBe(true)
     })
 
     it("item ativo pela rota exata ou por subrota", () => {

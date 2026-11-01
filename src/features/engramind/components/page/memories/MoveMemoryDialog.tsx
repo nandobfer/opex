@@ -10,7 +10,21 @@ import { engramindSend, route, useEngramindMutation } from "../../../hooks/useEn
 import { InfoField } from "../../shared/InfoField"
 
 /** Mover a memória para outro canal ativo. */
-export function MoveMemoryDialog({ memory, channels, onOpenChange }: { memory: EngramindMemory; channels: EngramindChannel[]; onOpenChange: (open: boolean) => void }) {
+export function MoveMemoryDialog({
+    memory,
+    channels,
+    onOpenChange,
+    onConfirm,
+    onFailed,
+}: {
+    memory: EngramindMemory
+    channels: EngramindChannel[]
+    onOpenChange: (open: boolean) => void
+    /** Clicou em Mover (antes da resposta). */
+    onConfirm?: () => void
+    /** A movimentação falhou. */
+    onFailed?: () => void
+}) {
     const options = channels.filter((channel) => !channel.archived_at && channel.slug !== memory.channel)
     const [to, setTo] = useState(options[0]?.slug ?? "")
     const move = useEngramindMutation((target: string) => engramindSend("post", route("memories", memory.id, "move"), { to: target }), { invalidate: ["memories", "channels"], success: (target) => `Memória movida para ${target}` })
@@ -36,7 +50,10 @@ export function MoveMemoryDialog({ memory, channels, onOpenChange }: { memory: E
                     </Select>
                 </InfoField>
                 <DialogFooter>
-                    <Button type="button" disabled={!to || move.isPending} onClick={() => move.mutate(to, { onSuccess: () => onOpenChange(false) })}>
+                    <Button type="button" disabled={!to || move.isPending} onClick={() => {
+                            onConfirm?.()
+                            move.mutate(to, { onSuccess: () => onOpenChange(false), onError: () => onFailed?.() })
+                        }}>
                         {move.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />} Mover
                     </Button>
                 </DialogFooter>

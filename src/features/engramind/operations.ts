@@ -127,7 +127,12 @@ const listChannelsInput = z.object({ include_archived: z.boolean().optional(), .
 const memoryListInput = z.object({
     channels: z.string().trim().max(2000).optional().describe("Slugs e prefixos separados por vírgula"),
     categories: z.string().trim().max(1000).optional().describe("Categorias separadas por vírgula"),
-    status: z.enum(MEMORY_STATUSES).optional(),
+    status: z
+        .string()
+        .trim()
+        .regex(new RegExp(`^(${MEMORY_STATUSES.join("|")})(,(${MEMORY_STATUSES.join("|")}))*$`), `Use ${MEMORY_STATUSES.join(", ")} (um ou mais, separados por vírgula)`)
+        .optional()
+        .describe("active, permanent e/ou archived separados por vírgula (padrão active,permanent)"),
     author: z.string().trim().max(160).optional().describe("App ou app/agente que escreveu"),
     since: isoDate.optional(),
     ...page,
@@ -706,6 +711,32 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         description: "Devolve uma memória arquivada ao uso.",
         input: z.object({ memory: memoryRef }),
         request: (input) => ({ path: `/v1/memories/${enc(input.memory)}/restore`, body: {} }),
+        event: "memory.updated",
+    }),
+    op({
+        id: "create_memory",
+        method: "POST",
+        route: "memories",
+        area: "memories",
+        risk: "write",
+        tool: "create_engramind_memory",
+        label: "Gravar memória no Engramind",
+        description: "Grava uma memória num canal ativo (texto entre memory.text_min e memory.text_max; categoria de categories.list, omitida = a primeira).",
+        input: z.object({ channel: channelRef, text: z.string().trim().min(1, "Digite o texto da memória").max(20_000), category: z.string().trim().min(1).max(40).optional() }),
+        request: (input) => ({ path: "/v1/memories", body: input }),
+        event: "memory.created",
+    }),
+    op({
+        id: "update_memory",
+        method: "PATCH",
+        route: "memories/:memory",
+        area: "memories",
+        risk: "write",
+        tool: "update_engramind_memory",
+        label: "Editar memória do Engramind",
+        description: "Edita o texto e/ou a categoria de uma memória. Com expected_version (a versão lida), uma edição concorrente devolve conflito em vez de sobrescrever.",
+        input: z.object({ memory: memoryRef, text: z.string().trim().min(1).max(20_000).optional(), category: z.string().trim().min(1).max(40).optional(), expected_version: z.number().int().min(1).optional() }),
+        request: ({ memory, ...body }) => ({ path: `/v1/memories/${enc(memory)}`, body }),
         event: "memory.updated",
     }),
     op({

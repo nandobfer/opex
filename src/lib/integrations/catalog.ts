@@ -132,6 +132,11 @@ export interface IntegrationDef {
      * presente, a `swaggerUrl` é derivada automaticamente e não pode ser editada.
      */
     readonly managedSwaggerPath?: string
+    /**
+     * Documentação padrão publicada pelo próprio serviço externo: campo público com a URL base +
+     * caminho. Vale enquanto o dono não salvar outra URL (o campo continua editável).
+     */
+    readonly defaultSwagger?: { readonly baseUrlField: string; readonly path: string }
     /** Variáveis legadas que ligavam o debug antes desta tela. */
     readonly debugEnv?: readonly string[]
     /** Pusher não retransmite os próprios logs de debug (recursão). */
@@ -747,6 +752,9 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         name: "Engramind",
         description: "Rede de memórias para agentes (serviço Rust): configurações, provedores, apps, agentes, tokens, operação e variáveis de ambiente",
         defaultEnvironment: "externo",
+        // O Engramind publica o contrato da versão em execução em `GET /openapi.json` (sem token).
+        explorer: { baseUrlField: "baseUrl", authLabel: "Bearer com o token admin do Opex (guardado cifrado; nunca vai ao navegador)" },
+        defaultSwagger: { baseUrlField: "baseUrl", path: "/openapi.json" },
         streamsDebugOverPusher: true,
         // Tudo é gravado pela aba Conexão (`PUT /api/engramind/connection`), que dispara o bootstrap.
         publicFields: [
@@ -771,6 +779,14 @@ export function getIntegrationDef(id: IntegrationId): IntegrationDef
 export function getIntegrationDef(id: string): IntegrationDef | undefined
 export function getIntegrationDef(id: string): IntegrationDef | undefined {
     return BY_ID.get(id)
+}
+
+/** URL da documentação padrão (`defaultSwagger`) a partir dos valores públicos; `undefined` sem a URL base. */
+export function defaultSwaggerUrl(def: IntegrationDef, values: Record<string, unknown>): string | undefined {
+    if (!def.defaultSwagger) return undefined
+    const base = values[def.defaultSwagger.baseUrlField]
+    if (typeof base !== "string" || !base.trim()) return undefined
+    return `${base.trim().replace(/\/+$/, "")}${def.defaultSwagger.path}`
 }
 
 /** Descrição do campo "Documentação Swagger (OpenAPI)", comum a todas as integrações. */

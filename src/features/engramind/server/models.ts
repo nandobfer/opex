@@ -63,6 +63,12 @@ export interface IEngramindContextCache {
     content: string
     version: string
     counts: { full: number; titles: number; overflow: number }
+    /** Formato do bloco (`tagged` desde a OPE-109; cache antigo sem o campo = `markdown`). */
+    format?: string
+    /** Ids da faixa 1 do bloco (a resposta `304` também anima o consumo). */
+    memoryIds?: string[]
+    /** Canais que entregaram ao menos uma memória. */
+    delivered?: string[]
     fetchedAt: Date
 }
 
@@ -91,6 +97,9 @@ const contextCacheSchema = new Schema<IEngramindContextCache>(
         content: { type: String, default: "" },
         version: { type: String, default: "" },
         counts: { type: Schema.Types.Mixed, default: () => ({ full: 0, titles: 0, overflow: 0 }) },
+        format: { type: String, default: "markdown" },
+        memoryIds: { type: [String], default: [] },
+        delivered: { type: [String], default: [] },
         fetchedAt: { type: Date, required: true },
     },
     { collection: "engramind_context_cache", versionKey: false },

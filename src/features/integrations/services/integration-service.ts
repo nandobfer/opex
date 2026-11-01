@@ -11,6 +11,7 @@ import {
     type EncryptedSecret,
 } from "@/lib/crypto/secretBox"
 import {
+    defaultSwaggerUrl,
     findMissingConditionalField,
     getIntegrationDef,
     INTEGRATIONS,
@@ -161,7 +162,7 @@ export async function getIntegrationDetail(id: IntegrationId): Promise<Integrati
         updatedAt: stored?.updatedAt ? new Date(stored.updatedAt).toISOString() : undefined,
         updatedBy: stored?.updatedBy,
         health: toHealth(status),
-        swaggerUrl: (await managedSwaggerUrl(def)) ?? resolved.swaggerUrl ?? null,
+        swaggerUrl: (await managedSwaggerUrl(def)) ?? resolved.swaggerUrl ?? defaultSwaggerUrl(def, resolved.values as unknown as Record<string, unknown>) ?? null,
         swaggerUrlManaged: Boolean(def.managedSwaggerPath),
         explorerAuth: def.explorer?.authLabel ?? null,
         cronStates,

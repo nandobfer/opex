@@ -1,7 +1,7 @@
 # Módulo: Financeiro (`/financeiro`)
 
 Visão de **faturamento por cliente**, por período: **tarefas concluídas** e **serviços** criados
-manualmente. Item próprio no menu (seção "início", ícone `Banknote`, logo após "Horas agênticas").
+manualmente. No menu, fica no grupo **Contábil** (ícone `Banknote`, logo após "Horas agênticas").
 É **somente leitura**, exceto o atalho **"Novo serviço"** no cabeçalho (ver `modules/services.md`), e
 é complementar a Horas agênticas (`/tarefas/horas`, que trata do tempo de execução das mesas). Código
 em `src/features/finance/`.
