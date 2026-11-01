@@ -40,6 +40,27 @@ export const MEMORY_CONSUMER_DEFS: Record<MemoryConsumer, { name: string; descri
     desenvolvedor: { name: "Agente desenvolvedor", label: "Agente desenvolvedor", description: "Agente das mesas e forks das centrais de desenvolvimento" },
 }
 
+/**
+ * Identidades de memória no Engramind (agente + token próprios): os consumidores de contexto e o
+ * Agente Mentor, que só escreve (não tem lista, contexto nem aprendizado autônomo).
+ */
+export const MEMORY_IDENTITIES = [...MEMORY_CONSUMERS, "mentor"] as const
+export type MemoryIdentity = (typeof MEMORY_IDENTITIES)[number]
+
+export const MEMORY_IDENTITY_DEFS: Record<MemoryIdentity, { name: string; description: string; label: string }> = {
+    ...MEMORY_CONSUMER_DEFS,
+    mentor: { name: "Agente Mentor", label: "Agente Mentor", description: "Transforma lições das mesas em memórias do Adversário e do agente desenvolvedor" },
+}
+
+/** Escopos do token de cada identidade: o Mentor só cria e edita (sem `delete`). */
+export const MEMORY_TOKEN_SCOPES: Record<MemoryIdentity, string[]> = {
+    opex: ["read", "write", "delete"],
+    maddox: ["read", "write", "delete"],
+    adversario: ["read", "write", "delete"],
+    desenvolvedor: ["read", "write", "delete"],
+    mentor: ["read", "write"],
+}
+
 /** Canal das memórias globais do app, assinado por todos os agentes. */
 export const APP_MEMORY_CHANNEL = "opex"
 
@@ -254,11 +275,13 @@ export function writableListsFor(consumer: MemoryConsumer, turn: MemoryTurn): Ai
 }
 
 /** Alvos das assinaturas `inject` de cada agente no Engramind (o canal `opex` é exato). */
-export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryConsumer, string[]> = {
+export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryIdentity, string[]> = {
     opex: [APP_MEMORY_CHANNEL, "agentes/opex/*"],
     maddox: [APP_MEMORY_CHANNEL, "agentes/maddox/*"],
     adversario: [APP_MEMORY_CHANNEL, "agentes/adversario"],
     desenvolvedor: [APP_MEMORY_CHANNEL, "agentes/desenvolvedor/*"],
+    // Só onde o Mentor grava (o token de agente só escreve nos canais que assina).
+    mentor: ["agentes/adversario", "agentes/desenvolvedor/*"],
 }
 
 /** Nome do canal no Engramind ("Memórias globais · Agente Opex (global)"). */
@@ -285,5 +308,5 @@ export function maddoxMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
 
 /** Agente (`app/agente`) de memórias do Opex no Engramind (aba Identidades marca "Memórias do Opex"). */
 export function isOpexMemoryAgent(appSlug: string | null | undefined, agentSlug: string | null | undefined): boolean {
-    return appSlug === "opex" && Boolean(agentSlug) && (MEMORY_CONSUMERS as readonly string[]).includes(agentSlug!.split("/").pop()!)
+    return appSlug === "opex" && Boolean(agentSlug) && (MEMORY_IDENTITIES as readonly string[]).includes(agentSlug!.split("/").pop()!)
 }

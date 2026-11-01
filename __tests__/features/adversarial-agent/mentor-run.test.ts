@@ -93,12 +93,12 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
-  it('acima do limiar: cria a memória com a origem do Mentor, avisa a mesa e soma o custo', async () => {
+  it('acima do limiar: cria a memória como o agente Mentor (token próprio, origem do Mentor), avisa a mesa e soma o custo', async () => {
     mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'create', text: RULE, reason: 'novo' }, 0.02))
     const doc = await run(settings())
     expect(doc).toMatchObject({ status: 'created', memoryId: 'new', writerAction: 'create' })
     expect(doc.costUsd).toBeCloseTo(0.03)
-    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ origin: { source: 'mentor', label: 'Mentor · OPE-746' }, auditContext: expect.objectContaining({ mesa: 'w1', tarefa: 'OPE-746' }) }))
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ agent: { consumer: 'mentor', label: 'Mentor · OPE-746' }, auditContext: expect.objectContaining({ mesa: 'w1', tarefa: 'OPE-746' }) }))
     expect(mocks.streamAi.mock.calls[1]![0]).toMatchObject({ provider: 'anthropic', consumption: { origin: 'adversarial-mentor-writer', subject: 'OPE-746' } })
     expect(mocks.streamAi.mock.calls[1]![0].prompt).toContain('id m1 · Providers')
     expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'notice', message: expect.stringContaining('memória nova') }))
@@ -108,7 +108,7 @@ describe('pipeline do Agente Mentor', () => {
   it('duplicata: funde com a memória existente (update)', async () => {
     mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'update', memoryId: 'm1', text: RULE }))
     expect(await run(settings())).toMatchObject({ status: 'updated', memoryId: 'm1' })
-    expect(mocks.update).toHaveBeenCalledWith('adversarial', 'm1', RULE, 'local', expect.any(Object))
+    expect(mocks.update).toHaveBeenCalledWith('adversarial', 'm1', RULE, 'local', expect.objectContaining({ agent: { consumer: 'mentor', label: 'Mentor · OPE-746' } }))
   })
 
   it('update de memória inexistente vira create', async () => {

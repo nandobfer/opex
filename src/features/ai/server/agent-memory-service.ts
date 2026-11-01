@@ -8,7 +8,7 @@ import { publishToChannels } from "@/lib/pusher/channels"
 import { engramindCall, type EngramindTarget } from "@/features/engramind/server/client"
 import { engramindCodeOf } from "@/features/engramind/server/errors"
 import type { EngramindMemory, MemoryWrite } from "@/features/engramind/types"
-import { AI_AGENTS, MEMORY_CONSUMER_DEFS, MEMORY_CONSUMERS, isAiAgentId, memoryChannelName, memoryChannelOf, type AiAgentId, type MemoryConsumer, type MemoryListScope } from "../agents"
+import { AI_AGENTS, MEMORY_CONSUMER_DEFS, MEMORY_CONSUMERS, isAiAgentId, memoryChannelName, memoryChannelOf, type AiAgentId, type MemoryConsumer, type MemoryIdentity, type MemoryListScope } from "../agents"
 import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
 import { firstSentence, memoryTextSchema } from "../memory-text"
 import { sortMemories } from "../memory-list"
@@ -43,7 +43,8 @@ export function assertAgentId(agentId: string): AiAgentId {
 
 /** Agente que grava sozinho (aprendizado autônomo). */
 export interface MemoryAgentActor {
-    consumer: MemoryConsumer
+    /** Consumidor (aprendizado autônomo) ou o Agente Mentor, cada um com o próprio token. */
+    consumer: MemoryIdentity
     /** Rótulo da origem ("Agente desenvolvedor · OPE-12"). */
     label: string
 }

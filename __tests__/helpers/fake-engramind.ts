@@ -45,7 +45,7 @@ export function createFakeEngramind() {
     memories: new Map<string, FakeMemory>(),
     agents: new Map<string, { slug: string; disabled_at: string | null }>(),
     subscriptions: [] as { agent: string; target: string; mode: string }[],
-    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'revoked'; agent: string | null }>(),
+    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'revoked'; agent: string | null; scopes: string[] }>(),
     imports: new Map<string, unknown>(),
     context: { content: '', version: 'cv_1', counts: { full: 0, titles: 0, overflow: 0 } },
     contextFails: false,
@@ -193,7 +193,7 @@ export function createFakeEngramind() {
     }
     if (method === 'POST' && path === '/v1/tokens') {
       const id = `tk_${(++state.seq).toString(16).padStart(6, '0')}`
-      state.tokens.set(id, { id, prefix: `eng.${id}`, status: 'active', agent: String(body.agent ?? '').split('/').pop() ?? null })
+      state.tokens.set(id, { id, prefix: `eng.${id}`, status: 'active', agent: String(body.agent ?? '').split('/').pop() ?? null, scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : [] })
       return { token: { id, prefix: `eng.${id}`, status: 'active' }, secret: `eng.${id}.segredo` }
     }
     if (method === 'GET' && path.startsWith('/v1/tokens/')) {

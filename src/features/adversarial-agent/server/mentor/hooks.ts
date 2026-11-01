@@ -95,15 +95,18 @@ export interface MentorAfterTurnsInput {
     since?: Date | null
 }
 
+/** Atores do aprendizado autônomo nas mesas (o próprio Mentor, `agente:mentor`, fica de fora). */
+const SELF_LEARNING_ACTORS = ["agente:desenvolvedor", "agente:adversario"]
+
 /**
  * Memórias que o agente desenvolvedor ou o Adversário gravaram sozinhos nesta mesa desde o início da
- * cadeia (auditoria `MemoriaAgente` com `ator: agente:*`): o Mentor não repete o que já foi aprendido.
+ * cadeia (auditoria `MemoriaAgente` com `ator` agente:desenvolvedor/adversario): o Mentor não repete o que já foi aprendido.
  */
 async function selfLearnedMemories(workbenchId: string, since: Date | null): Promise<string[]> {
     if (!since) return []
     try {
         const { AuditLog } = await import("@/lib/db/models/AuditLog")
-        const rows = await AuditLog.find({ entidade: "MemoriaAgente", "dadosNovos.mesa": workbenchId, "dadosNovos.ator": { $regex: "^agente:" }, timestamp: { $gte: since } })
+        const rows = await AuditLog.find({ entidade: "MemoriaAgente", "dadosNovos.mesa": workbenchId, "dadosNovos.ator": { $in: SELF_LEARNING_ACTORS }, timestamp: { $gte: since } })
             .sort({ timestamp: 1 })
             .limit(20)
             .select({ dadosNovos: 1 })

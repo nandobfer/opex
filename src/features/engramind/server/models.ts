@@ -1,7 +1,7 @@
 import { Schema, model, models, type Model } from "mongoose"
 import { dbConnect } from "@/lib/db"
 import type { EncryptedSecret } from "@/lib/crypto/secretBox"
-import type { MemoryConsumer } from "@/features/ai/agents"
+import type { MemoryIdentity } from "@/features/ai/agents"
 
 /** Coleções da integração Engramind (índices garantidos no primeiro uso). Ver `aicontext/modules/engramind.md`. */
 
@@ -51,7 +51,7 @@ export interface IEngramindState {
     _id: string
     pendingApply: { keys: string[]; at: Date; previous: Record<string, string> } | null
     sources?: { redator?: IEngramindAiSource | null; embedding?: IEngramindAiSource | null } | null
-    agentTokens?: Partial<Record<MemoryConsumer, IEngramindAgentToken>> | null
+    agentTokens?: Partial<Record<MemoryIdentity, IEngramindAgentToken>> | null
     memoryContext?: IEngramindMemoryContextState | null
 }
 

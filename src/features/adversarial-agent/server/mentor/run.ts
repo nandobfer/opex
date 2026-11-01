@@ -56,7 +56,7 @@ const log = loggerFor({ module: "adversarial-agent", feature: "mentor" })
 /** Central da lista: só `developer-central` tem (a da mesa). */
 const centralOf = (target: MentorTarget, centralId: string | null) => (target === "developer-central" ? centralId : null)
 
-/** Memórias de uma lista (`agent_memories`), no formato que o redator lê. */
+/** Memórias de uma lista (Engramind), no formato que o redator lê. */
 async function listTargetMemories(target: MentorTarget, centralId: string | null): Promise<{ id: string; summary: string; text: string }[]> {
     return (await listAgentMemories(target, centralOf(target, centralId))).map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto }))
 }
@@ -213,11 +213,15 @@ function notice(workbenchId: string, level: "info" | "warn", message: string): P
     })().catch(() => undefined)
 }
 
-/** Cria ou atualiza a memória na lista de destino com a origem do Mentor (auditoria com a mesa, a tarefa e o destino). */
+/**
+ * Cria ou atualiza a memória na lista de destino como o agente `opex/mentor` (token próprio, `read+write`):
+ * origem `{ source: "mentor", label: "Mentor · <tarefa>" }` e auditoria com `ator: agente:mentor`, a
+ * mesa, a tarefa e o destino.
+ */
 async function applyProposal(run: Pick<IMentorRun, "_id" | "workbenchId" | "taskCode">, proposal: MentorProposal, actorId: string) {
-    const origin = { source: MENTOR_MEMORY_SOURCE, label: `Mentor · ${run.taskCode}` }
+    const agent = { consumer: MENTOR_MEMORY_SOURCE, label: `Mentor · ${run.taskCode}` }
     const auditContext = { origem: "Agente Mentor", execucao: String(run._id), mesa: run.workbenchId, tarefa: run.taskCode, destino: proposal.target }
-    const options = { origin, auditContext, centralId: proposal.centralId }
+    const options: AgentMemoryWriteOptions = { agent, auditContext, centralId: proposal.centralId }
     const update = proposal.action === "update" && proposal.memoryId
     const result = update ? await updateTargetMemory(proposal.target, proposal.memoryId!, proposal.text, actorId, options) : await createTargetMemory(proposal.target, proposal.text, actorId, options)
     return { status: (update ? "updated" : "created") as MentorRunStatus, memoryId: result.memory.id }

@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ settingsFor: vi.fn(), enqueue: vi.fn(async () => 'run-1'), recordFailed: vi.fn(async () => 'run-f'), audits: [] as { dadosNovos: Record<string, unknown>; timestamp: Date }[], reviews: [] as Record<string, unknown>[] }))
 vi.mock('@/lib/db/models/AuditLog', () => ({
   AuditLog: {
-    find: (filter: { 'dadosNovos.mesa': string; timestamp: { $gte: Date } }) => {
-      const rows = mocks.audits.filter((row) => row.dadosNovos.mesa === filter['dadosNovos.mesa'] && String(row.dadosNovos.ator ?? '').startsWith('agente:') && row.timestamp >= filter.timestamp.$gte)
+    // Aplica o filtro de ator que o serviço manda (`$in`), para o teste pegar um filtro aberto demais.
+    find: (filter: { 'dadosNovos.mesa': string; 'dadosNovos.ator': { $in: string[] }; timestamp: { $gte: Date } }) => {
+      const rows = mocks.audits.filter((row) => row.dadosNovos.mesa === filter['dadosNovos.mesa'] && filter['dadosNovos.ator'].$in.includes(String(row.dadosNovos.ator ?? '')) && row.timestamp >= filter.timestamp.$gte)
       const chain = { sort: () => chain, limit: () => chain, select: () => chain, lean: async () => rows }
       return chain
     },
@@ -124,9 +125,12 @@ describe('gatilhos do Agente Mentor', () => {
       { dadosNovos: { mesa: 'w1', ator: 'agente:desenvolvedor', texto: 'Use pnpm' }, timestamp: new Date('2026-11-01T10:05:00Z') },
       { dadosNovos: { mesa: 'w1', ator: 'agente:desenvolvedor', texto: 'Antiga' }, timestamp: new Date('2026-11-01T09:00:00Z') },
       { dadosNovos: { mesa: 'w2', ator: 'agente:desenvolvedor', texto: 'Outra mesa' }, timestamp: new Date('2026-11-01T10:05:00Z') },
+      { dadosNovos: { mesa: 'w1', ator: 'agente:adversario', texto: 'Confira o skeleton' }, timestamp: new Date('2026-11-01T10:06:00Z') },
+      // O próprio Mentor também grava como agente (token próprio), mas não conta como aprendizado do agente.
+      { dadosNovos: { mesa: 'w1', ator: 'agente:mentor', texto: 'Lição do Mentor' }, timestamp: new Date('2026-11-01T10:07:00Z') },
     )
     await mentorAfterTurns(base({ since }))
-    expect(enqueued().case).toMatchObject({ selfLearned: ['Use pnpm'] })
+    expect(enqueued().case).toMatchObject({ selfLearned: ['Use pnpm', 'Confira o skeleton'] })
   })
 
   it('falha ao enfileirar não lança', async () => {

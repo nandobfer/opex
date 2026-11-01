@@ -437,6 +437,9 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   ou pedindo ao Agente Opex (`delete_agent_memory`, com o card de confirmação).
 - Até 5 mutações por turno (`SELF_MEMORY_TURN_LIMIT`); as respostas trazem
   `similares` e `foraDoContexto` para o agente consolidar; cada mutação gera um aviso no turno.
+- O **Agente Mentor** também grava como agente (`opex/mentor`, token `read+write`, ator `agente:mentor`),
+  mas não é consumidor: não tem lista, contexto, aprendizado autônomo nem chave na tela; o card mostra o
+  rótulo da origem ("Mentor · OPE-xx"). Ver `modules/adversarial-agent.md`, "Agente Mentor".
 - Acesso: Agente Opex nativo (ferramentas do turno); Maddox, mesas/forks e revisões do Adversário pelo
   MCP `opex_memorias` (`POST /api/agent-memory/mcp`, Bearer = segredo derivado da chave das integrações;
   o agente e o turno saem da sessão do OpenCode, subindo à sessão-mãe; sessão desconhecida é recusada),

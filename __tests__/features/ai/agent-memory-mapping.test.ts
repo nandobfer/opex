@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MEMORY_SUBSCRIPTION_TARGETS, contextChannelsFor, fixedMemoryChannels, isOpexMemoryAgent, listOfChannel, memoryChannelOf, writableListsFor } from '@/features/ai/agents'
+import { MEMORY_CONSUMERS, MEMORY_SUBSCRIPTION_TARGETS, contextChannelsFor, fixedMemoryChannels, isOpexMemoryAgent, listOfChannel, memoryChannelOf, writableListsFor } from '@/features/ai/agents'
 import { memoriesSection, memoryCacheNotice } from '@/features/ai/memories-prompt'
 
 /** OPE-104: listas de memórias ↔ canais do Engramind e o que cada agente lê e grava em cada turno. */
@@ -28,15 +28,17 @@ describe('mapeamento lista ↔ canal', () => {
     expect(listOfChannel(null)).toBeNull()
   })
 
-  it('canais fixos: o "opex" de todos e as listas sem escopo; todo agente assina o "opex"', () => {
+  it('canais fixos: o "opex" de todos e as listas sem escopo; todo consumidor assina o "opex" (o Mentor só onde grava)', () => {
     expect(fixedMemoryChannels().map((item) => item.slug)).toEqual(['opex', 'agentes/opex/global', 'agentes/opex/dono', 'agentes/opex/cliente', 'agentes/maddox/global', 'agentes/maddox/dono', 'agentes/maddox/cliente', 'agentes/adversario', 'agentes/desenvolvedor/global'])
-    for (const targets of Object.values(MEMORY_SUBSCRIPTION_TARGETS)) expect(targets[0]).toBe('opex')
+    for (const consumer of MEMORY_CONSUMERS) expect(MEMORY_SUBSCRIPTION_TARGETS[consumer][0]).toBe('opex')
+    expect(MEMORY_SUBSCRIPTION_TARGETS.mentor).toEqual(['agentes/adversario', 'agentes/desenvolvedor/*'])
     expect(MEMORY_SUBSCRIPTION_TARGETS.adversario).toEqual(['opex', 'agentes/adversario'])
     expect(MEMORY_SUBSCRIPTION_TARGETS.desenvolvedor).toEqual(['opex', 'agentes/desenvolvedor/*'])
   })
 
   it('agente de memórias do Opex (selo da aba Identidades)', () => {
     expect(isOpexMemoryAgent('opex', 'opex/desenvolvedor')).toBe(true)
+    expect(isOpexMemoryAgent('opex', 'opex/mentor')).toBe(true)
     expect(isOpexMemoryAgent('opex', 'outro')).toBe(false)
     expect(isOpexMemoryAgent('crm', 'opex/maddox')).toBe(false)
   })

@@ -250,11 +250,16 @@ com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba ma
 ### Rede (`server/memory-network.ts`)
 
 `ensureAgentMemoryNetwork` (idempotente): os 9 canais fixos (`fixedMemoryChannels`; existente é
-reaproveitado e arquivado é restaurado), os agentes `opex/{opex,maddox,adversario,desenvolvedor}`, um
-token `agent` **`read+write+delete`** por agente (cifrado em `engramind_state.agentTokens[consumer]`;
-nunca em DTO, log, auditoria ou resposta; reemitido quando falta, foi revogado ou expirou, revogando o
-anterior) e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` + `agentes/<agente>/*`; o
-Adversário assina exato `agentes/adversario`). Os canais por central/cliente nascem na primeira gravação
+reaproveitado e arquivado é restaurado), os **cinco** agentes
+`opex/{opex,maddox,adversario,desenvolvedor,mentor}` (`MEMORY_IDENTITIES`: os quatro consumidores de
+contexto e o Agente Mentor, que só escreve e não tem canal, contexto nem aprendizado autônomo), um token
+`agent` por agente com `MEMORY_TOKEN_SCOPES` (**`read+write+delete`**; o Mentor **`read+write`**,
+porque só cria e edita), cifrado em `engramind_state.agentTokens[<identidade>]` (nunca em DTO, log,
+auditoria ou resposta; reemitido quando falta, foi revogado, expirou ou tem escopos diferentes dos
+esperados, revogando o anterior), e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` +
+`agentes/<agente>/*`; o Adversário assina exato `agentes/adversario`; o Mentor assina só onde grava,
+`agentes/adversario` e `agentes/desenvolvedor/*` — o token de agente só escreve nos canais que assina).
+A aba Identidades marca os cinco com "Memórias do Opex" (`isOpexMemoryAgent`). Os canais por central/cliente nascem na primeira gravação
 (`ensureMemoryChannel`); excluir a central arquiva o canal dela (melhor esforço, auditado como
 `canalMemoriasArquivado`).
 
@@ -280,7 +285,9 @@ a primeira de `categories.list`, `duplicate` → `duplicada`), editar com `expec
 fixar/desafixar (`pin`/`unpin`), inativar (`archive`; fixada é desafixada antes)/reativar (`restore`) e
 excluir de vez. Limites e categorias vêm de `GET /v1/settings` (+ sobreposição do canal; cache 60 s,
 `memory-settings.ts`). Ator: dono (token admin, origem `{source:"dono"}`), agente (token do agente,
-origem `{source:<consumidor>}`) ou Mentor. **Memória do dono**: o agente edita, mas não exclui nem
+origem `{source:<consumidor>}`) ou Mentor (token do agente `opex/mentor`, origem
+`{source:"mentor", label:"Mentor · <tarefa>"}`, auditoria `ator: agente:mentor`; o autor no Engramind é
+`opex/mentor` nas memórias novas — as gravadas antes ficam com o autor `opex`). **Memória do dono**: o agente edita, mas não exclui nem
 inativa (`403 OWNER_MEMORY_PROTECTED`). Auditoria `MemoriaAgente` com texto, origem, escopo e ator
 (`agente:<consumidor>`), sem segredos; `GET /api/ai/memories/meta` dá limites, categorias, migração
 pendente, disponibilidade e memórias fora do contexto. O resumo é o título do Redator (primeira frase

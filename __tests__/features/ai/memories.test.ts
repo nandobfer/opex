@@ -158,6 +158,19 @@ describe('memórias dos agentes no Engramind', () => {
     expect(holder.fake.state.memories.has(own.memoria.id)).toBe(false)
   })
 
+  it('Mentor com token próprio: grava como agente mentor, audita agente:mentor, mostra o rótulo do Mentor e edita a do dono', async () => {
+    const mentor = { consumer: 'mentor' as const, label: 'Mentor · OPE-12' }
+    const { memoria } = await createAgentMemory('adversarial', 'Confira o skeleton.', 'local', { agent: mentor, auditContext: { mesa: 'w1' } })
+    const call = calls('POST', '/v1/memories')[0]!
+    expect(call.token).toBe('agent-token-mentor')
+    expect(call.body).toMatchObject({ origin: { source: 'mentor', label: 'Mentor · OPE-12' } })
+    expect(memoria).toMatchObject({ origin: { source: 'mentor' }, doDono: false, autor: 'Mentor · OPE-12' })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ ator: 'agente:mentor', origem: 'Mentor · OPE-12', mesa: 'w1' }) }))
+
+    const owner = await createAgentMemory('adversarial', 'Regra do dono.', 'local')
+    await expect(updateAgentMemory('adversarial', owner.memoria.id, { texto: 'Regra do dono, fundida pelo Mentor.' }, 'local', { agent: mentor })).resolves.toMatchObject({ memoria: { texto: 'Regra do dono, fundida pelo Mentor.' } })
+  })
+
   it('Mentor: origem preservada, sem selo do dono', async () => {
     const { memoria } = await createAgentMemory('adversarial', 'Confira os providers.', 'local', { origin: { source: 'mentor', label: 'Mentor · OPE-12' }, auditContext: { execucao: 'r1' } })
     expect(memoria).toMatchObject({ origin: { source: 'mentor', label: 'Mentor · OPE-12' }, doDono: false, autor: 'Mentor · OPE-12' })

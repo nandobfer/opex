@@ -153,7 +153,7 @@ export const MENTOR_TARGET_LABELS: Record<MentorTarget, { label: string; short: 
     },
 }
 /** Origem gravada nas memórias criadas ou atualizadas pelo Mentor. */
-export const MENTOR_MEMORY_SOURCE = "mentor"
+export const MENTOR_MEMORY_SOURCE = "mentor" as const
 
 export const DEFAULT_MENTOR_WRITER_INSTRUCTIONS = [
     "Prefira regras curtas e acionáveis, escritas como instrução direta ao revisor.",

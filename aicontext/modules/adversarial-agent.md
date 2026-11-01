@@ -242,8 +242,12 @@ na tela e na API; `withMentorDefaults`).
 - **Gravação**: **Gravar direto** (padrão) ou **Sugerir e aguardar aprovação**. Gravar usa o serviço
   de memórias dos agentes (`createAgentMemory`/`updateAgentMemory(<destino>, …)`, com o `centralId` da
   mesa em `developer-central`; o Redator do Engramind gera o título), com
-  `origin { source: "mentor", label: "Mentor · <tarefa>" }` e a auditoria `MemoriaAgente` com origem,
-  execução, mesa, tarefa e destino. A mesa recebe um aviso discreto (`notice` info) na Saída da IA,
+  o ator `agent: { consumer: "mentor", label: "Mentor · <tarefa>" }`: grava com o **token próprio** do
+  agente `opex/mentor` no Engramind (`read+write`, sem `delete`; sem token ainda, cai no token admin),
+  origem `{ source: "mentor", label: "Mentor · <tarefa>" }` (selo do card inalterado) e a auditoria
+  `MemoriaAgente` com `ator: agente:mentor`, origem, execução, mesa, tarefa e destino. Pode editar uma
+  memória do dono (fusão), nunca excluir nem inativar. As gravações do Mentor **não** contam como
+  aprendizado do agente (`selfLearned` lê só `agente:desenvolvedor` e `agente:adversario`). A mesa recebe um aviso discreto (`notice` info) na Saída da IA,
   citando a lista. O desenvolvedor segue a memória nova a partir do próximo turno.
 - **Execução** (`adversarial_mentor_runs`, `server/mentor/models.ts`): fila em memória por mesa
   (`globalThis.__opexMentorQueue`, uma por vez), status
