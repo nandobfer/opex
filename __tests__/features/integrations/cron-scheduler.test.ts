@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   findOneAndUpdate: vi.fn(),
   concludedTags: vi.fn(),
   runDueOpexJobs: vi.fn(async () => [] as string[]),
+  opencodeCleanup: vi.fn(async () => ({ scanned: 3, deleted: 2, protected: 1, failed: 0 })),
+  agentCleanup: vi.fn(async () => ({ archived: 1, deleted: 0, failed: 0 })),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({
@@ -20,6 +22,8 @@ vi.mock('@/lib/db/models/CronJobState', () => ({
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/features/ai/server/task-tags', () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
 vi.mock('@/features/opex-agent/server/jobs', () => ({ runDueOpexJobs: mocks.runDueOpexJobs }))
+vi.mock('@/features/opencode-service/server/session-retention', () => ({ cleanupIdleOpencodeSessions: mocks.opencodeCleanup, describeOpencodeSessionCleanup: () => 'OC ok' }))
+vi.mock('@/features/opex-agent/server/session-retention', () => ({ cleanupIdleAgentSessions: mocks.agentCleanup, describeAgentSessionCleanup: () => 'agente ok' }))
 
 import {
   CronJobRunError,
@@ -29,7 +33,7 @@ import {
   runSchedulerTick,
   tickReference,
 } from '@/features/integrations/scheduler/cron-scheduler'
-import { DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
 
 const httpJob: CronJobConfig = {
   id: 'cancel',
@@ -162,6 +166,26 @@ describe('runSchedulerTick (issue #604)', () => {
     const recalc = mocks.updateOne.mock.calls.find(([filter]) => filter.scheduleSignature)!
     // Vencido já neste tick: a reivindicação (nextRunAt <= agora) o executa.
     expect(recalc[1].$set.nextRunAt.toISOString()).toBe('2026-09-23T11:51:00.000Z')
+  })
+})
+
+describe('rotinas de limpeza de sessões (OPE-106)', () => {
+  it('nascem desligadas, diárias às 05:00 e com 30 dias', () => {
+    for (const id of SESSION_CLEANUP_JOB_IDS) {
+      expect(DEFAULT_CRON_JOBS.find((job) => job.id === id)).toMatchObject({ kind: 'internal', enabled: false, schedule: { type: 'daily', time: '05:00' }, retentionDays: 30 })
+    }
+  })
+
+  it('"Executar agora" repassa os dias salvos a cada rotina (padrão 30 quando o campo falta)', async () => {
+    const jobs = DEFAULT_CRON_JOBS.filter((job) => SESSION_CLEANUP_JOB_IDS.includes(job.id)).map((job) => (job.id === OPENCODE_SESSIONS_CLEANUP_JOB_ID ? { ...job, retentionDays: 7 } : job.id === MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID ? { ...job, retentionDays: undefined } : { ...job, retentionDays: 12 }))
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs })
+    mocks.findOneAndUpdate.mockResolvedValue({ jobId: 'x' })
+    expect(await runJobNow(OPENCODE_SESSIONS_CLEANUP_JOB_ID)).toMatchObject({ ok: true, message: 'OC ok' })
+    expect(mocks.opencodeCleanup).toHaveBeenCalledWith(7)
+    expect(await runJobNow(OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID)).toMatchObject({ ok: true, message: 'agente ok' })
+    expect(mocks.agentCleanup).toHaveBeenCalledWith('opex', 12)
+    await runJobNow(MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID)
+    expect(mocks.agentCleanup).toHaveBeenCalledWith('maddox', 30)
   })
 })
 

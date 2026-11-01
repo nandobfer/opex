@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, getIntegrationDef } from '@/lib/integrations/catalog'
+import { DEFAULT_CRON_JOBS, OPENCODE_SESSIONS_CLEANUP_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, getIntegrationDef } from '@/lib/integrations/catalog'
 
 describe('buildIntegrationUpdateSchema', () => {
   it('aceita somente os campos da própria integração', () => {
@@ -51,6 +51,18 @@ describe('buildIntegrationUpdateSchema', () => {
     expect(schema.safeParse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).success).toBe(true)
     expect(schema.parse({ publicValues: { jobs: [{ ...concluded, scope: 'all' }] } }).publicValues?.jobs).toEqual([{ ...concluded, scope: 'all' }])
     expect(schema.safeParse({ publicValues: { jobs: [{ ...concluded, scope: 'outro' }] } }).success).toBe(false)
+  })
+
+  it('valida os dias sem interação das rotinas de limpeza de sessões (OPE-106)', () => {
+    const schema = buildIntegrationUpdateSchema(getIntegrationDef('crons'))
+    const cleanup = DEFAULT_CRON_JOBS.find((job) => job.id === OPENCODE_SESSIONS_CLEANUP_JOB_ID)!
+    expect(cleanup.retentionDays).toBe(30)
+    expect(schema.parse({ publicValues: { jobs: [{ ...cleanup, retentionDays: 7 }] } }).publicValues?.jobs).toEqual([{ ...cleanup, retentionDays: 7 }])
+    for (const retentionDays of [0, -1, 2.5, 4000]) {
+      const result = schema.safeParse({ publicValues: { jobs: [{ ...cleanup, retentionDays }] } })
+      expect(result.success).toBe(false)
+      expect(result.error?.issues[0].message).toMatch(/^Dias sem interação: /)
+    }
   })
 
   it('API interna não aceita campos públicos nem segredos', () => {

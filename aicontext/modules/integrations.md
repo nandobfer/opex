@@ -213,7 +213,12 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
   ao ativar a Builder Machine — ver `modules/builder-machine.md`) e `environments-registry-cleanup`
   (diária às 04:00, **nasce desligada** — mantém as últimas tags de cada ambiente no registry; ver
-  `modules/environments.md`). O tick do agendador também chama `runEnvironmentsTick` (retoma deploys
+  `modules/environments.md`) e as **limpezas de sessões sem interação** (OPE-106; diárias às 05:00,
+  **nascem desligadas**, X = 30 dias): `opencode-sessions-cleanup` (exclui do servidor OpenCode as
+  sessões paradas há X dias — inclusive as pessoais do dono —, nunca as vinculadas ao Opex nem as em
+  execução; ver `modules/agentic-dev.md`), `opex-agent-sessions-cleanup` e
+  `maddox-agent-sessions-cleanup` (arquivam as sessões do agente paradas há X dias e excluem as
+  arquivadas há X dias; ver `modules/opex-agent.md`, "Limpeza automática das sessões"). O tick do agendador também chama `runEnvironmentsTick` (retoma deploys
   interrompidos e reabre os repasses das portas dos ambientes no PC).
 - **Rotinas de integração ativável** (`INTEGRATION_CRON_JOBS`, `cronJobIntegration`): com a
   integração dona desativada (campo `active`), a rotina some da aba Rotinas (`hiddenJobIds` em
@@ -223,6 +228,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
   de concluídas não arquivadas. O escopo salvo vale tanto para "Executar agora" quanto para o
   agendamento; editar exige salvar antes de executar. Rotinas desativadas não rodam no tick,
   mas podem ser executadas manualmente, inclusive com o agendador desligado.
+- As rotinas de limpeza de sessões (`SESSION_CLEANUP_JOB_IDS`, `jobSupportsRetentionDays`) persistem
+  `retentionDays` (inteiro de 1 a 3650; mensagens "Dias sem interação: …" no PATCH) no campo
+  **"Dias sem interação"** do card (`CronJobExtraFields`, com texto de ajuda da regra de cada rotina).
+  O runner lê `jobRetentionDays(job)` (valor salvo válido ou o padrão de 30). Vale para "Executar agora"
+  e para o agendamento; editar exige salvar antes de executar.
 - Cada rotina é reivindicada atomicamente em `integration_cron_jobs` (lease de 15 min); a
   reivindicação já avança `nextRunAt`. ⚠️ Nunca combine upsert com filtro
   `scheduleSignature: { $ne }` em `syncJobState`.

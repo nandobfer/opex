@@ -1,5 +1,5 @@
-import { isSessionNotFoundError } from "@opencode/client"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { logger } from "@/lib/logger"
@@ -14,19 +14,8 @@ import { logger } from "@/lib/logger"
  * e a retomada de uma pendência antiga nunca toca a sessão nova criada ao reabrir a mesa.
  */
 
-const DELETE_TIMEOUT_MS = 15_000
-
 /** Exclui uma sessão no OpenCode; `true` quando ela já não existe (idempotente). */
-async function removeSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
-    try {
-        await client.session.remove({ sessionID: sessionId }, { signal: AbortSignal.timeout(DELETE_TIMEOUT_MS) })
-        return true
-    } catch (error) {
-        if (isSessionNotFoundError(error)) return true
-        logger.warn({ err: error, sessionId }, "[agentic-session] Falha ao excluir a sessão do OpenCode")
-        return false
-    }
-}
+const removeSession = (client: OpencodeClient, sessionId: string) => removeOpencodeSessionSafe(client, sessionId, logger, "agentic-session")
 
 /**
  * Tenta excluir agora uma sessão recém-desvinculada e, só em caso de sucesso, a remove da lista de
