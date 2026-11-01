@@ -152,6 +152,13 @@ export interface EngramindMemory {
     origin?: { source: string; label?: string | null } | null
     embedding_state: "pending" | "ready" | "failed" | "off"
     retrieval_count: number
+    /** Entradas no contexto (gravado em lote; pode atrasar alguns segundos). */
+    injected_count?: number
+    last_retrieved_at?: string | null
+    verified_at?: string | null
+    /** Sem uso há mais de `consolidation.stale_after_days` (candidata a esquecimento). */
+    stale_candidate?: boolean
+    importance?: number | null
     created_at: string
     updated_at: string
     archived_at: string | null

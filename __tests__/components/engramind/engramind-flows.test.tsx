@@ -267,7 +267,19 @@ describe('listas com erro', () => {
 
 describe('ConnectionTab', () => {
   const connection = { baseUrl: 'http://engramind:8000', opexPublicUrl: 'http://opex:3100', environmentId: null, environmentName: null, tokenConfigured: true, webhookSecretConfigured: true, webhookUrl: null, configured: true, whoami: null, error: null, bootstrapPending: false, tokenSufficient: true, webhook: null }
-  const props = { onDirtyChange: vi.fn(), draft: { environment: 'externo', debugMode: false, swaggerUrl: '', publicValues: {}, secrets: {} }, setDraft: vi.fn(), dirty: false, pending: false, onSave: async () => true, onUndo: vi.fn() } as never
+  const onExplore = vi.fn()
+  const data = { swaggerUrl: 'http://engramind:8000/openapi.json', swaggerUrlManaged: false, explorerAuth: 'Bearer com o token admin do Opex (guardado cifrado; nunca vai ao navegador)' }
+  const props = { onDirtyChange: vi.fn(), data, draft: { environment: 'externo', debugMode: false, swaggerUrl: 'http://engramind:8000/openapi.json', publicValues: {}, secrets: {} }, setDraft: vi.fn(), dirty: false, pending: false, onSave: async () => true, onUndo: vi.fn(), onExplore } as never
+
+  it('card Documentação da API: a URL do contrato do Engramind e o explorador', async () => {
+    mocks.connection = connection
+    render(<ConnectionTab {...(props as object)} />)
+    expect(await screen.findByText('Documentação da API')).toBeTruthy()
+    expect(screen.getByText(/token admin do Opex/)).toBeTruthy()
+    expect((screen.getByDisplayValue('http://engramind:8000/openapi.json') as HTMLInputElement).value).toBe('http://engramind:8000/openapi.json')
+    fireEvent.click(screen.getByRole('button', { name: /Explorar/ }))
+    expect(onExplore).toHaveBeenCalled()
+  })
 
   it('salvar mostra os passos do bootstrap e avisa o passo que falhou', async () => {
     mocks.connection = connection

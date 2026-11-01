@@ -146,6 +146,7 @@ export function toMemoryDto(memory: EngramindMemory, list: Pick<ResolvedList, "c
         origin: !owner && memory.origin?.source ? { source: memory.origin.source, label: memory.origin.label ?? memory.origin.source } : null,
         criadaEm: memory.created_at,
         atualizadaEm: memory.updated_at,
+        uso: { consultas: memory.retrieval_count ?? 0, injecoes: memory.injected_count ?? 0, ultimaConsulta: memory.last_retrieved_at ?? null, verificadaEm: memory.verified_at ?? null, esquecida: memory.stale_candidate === true },
     }
 }
 

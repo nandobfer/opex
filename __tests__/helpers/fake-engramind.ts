@@ -250,7 +250,7 @@ export function createFakeEngramind() {
     }
     if (method === 'GET' && path === '/v1/context') {
       if (state.contextFails) throw toEngramindError(503, null)
-      return { ...state.context, rendered_tokens: 10, format: 'markdown' }
+      return { ...state.context, rendered_tokens: 10, format: (request.query as { format?: string } | undefined)?.format ?? 'markdown' }
     }
     throw fail(404, 'ROUTE_NOT_FOUND', { method, path })
   }

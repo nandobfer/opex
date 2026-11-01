@@ -6,6 +6,7 @@ import {
     DEFAULT_CRON_JOBS,
     getIntegrationDef,
     isPublicFieldVisible,
+    defaultSwaggerUrl,
     type CronJobConfig,
     type IntegrationDef,
     type IntegrationEnvironment,
@@ -234,7 +235,12 @@ export async function getIntegration<Id extends IntegrationId>(id: Id): Promise<
     const def = getIntegrationDef(id)
     const resolved = buildResolvedIntegration<Id>(def, await safeLoad(id))
     const managed = await managedSwaggerUrl(def)
-    return managed ? { ...resolved, swaggerUrl: managed } : resolved
+    if (managed) return { ...resolved, swaggerUrl: managed }
+    if (!resolved.swaggerUrl) {
+        const fallback = defaultSwaggerUrl(def, resolved.values as unknown as Record<string, unknown>)
+        if (fallback) return { ...resolved, swaggerUrl: fallback }
+    }
+    return resolved
 }
 
 /**

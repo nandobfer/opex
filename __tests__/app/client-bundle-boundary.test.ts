@@ -23,7 +23,17 @@ function walk(dir: string): string[] {
   })
 }
 
+const resolveCache = new Map<string, string | null>()
 function resolveLocal(from: string, spec: string): string | null {
+  const key = `${from}\u0000${spec}`
+  const cached = resolveCache.get(key)
+  if (cached !== undefined) return cached
+  const resolved = resolveUncached(from, spec)
+  resolveCache.set(key, resolved)
+  return resolved
+}
+
+function resolveUncached(from: string, spec: string): string | null {
   const base = spec.startsWith('@/') ? join(SRC, spec.slice(2)) : spec.startsWith('.') ? resolve(dirname(from), spec) : null
   if (!base) return null
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]) {
@@ -32,7 +42,12 @@ function resolveLocal(from: string, spec: string): string | null {
   return null
 }
 
+// O grafo é varrido uma vez por arquivo cliente (~700): ler e analisar cada arquivo uma vez só,
+// senão o teste cresce sem limite com o tamanho do app e estoura o tempo no runner do CI.
+const importsCache = new Map<string, string[]>()
 function importsOf(file: string): string[] {
+  const cached = importsCache.get(file)
+  if (cached) return cached
   const source = readFileSync(file, 'utf8')
   const specs: string[] = []
   for (const line of source.split('\n')) {
@@ -44,6 +59,7 @@ function importsOf(file: string): string[] {
     const start = source.lastIndexOf('import', match.index)
     if (!/^import\s+type\s/.test(source.slice(start))) specs.push(match[1]!)
   }
+  importsCache.set(file, specs)
   return specs
 }
 
@@ -51,9 +67,38 @@ const isServerPackage = (spec: string) => SERVER_PACKAGES.some((pkg) => spec ===
 const isServerPath = (file: string) => SERVER_PATHS.some((path) => relative(ROOT, file).startsWith(path))
 
 describe('fronteira cliente/servidor', () => {
-  it('nenhum componente/hook "use client" alcança código de servidor', () => {
+  /**
+   * Duas passadas: a primeira descarta em uma varredura só (o grafo inteiro alcançado pelos
+   * arquivos cliente); se algo for encontrado, a segunda refaz por arquivo para montar a cadeia.
+   * Assim o teste — que já passa de 700 arquivos cliente — não custa uma varredura por arquivo no
+   * caminho normal.
+   */
+  function scan(): string[] {
     const clientFiles = walk(SRC).filter((file) => /^\s*['"]use client['"]/.test(readFileSync(file, 'utf8')))
     expect(clientFiles.length).toBeGreaterThan(20)
+    const seenGlobal = new Set<string>()
+    let suspicious: string | null = null
+    const stackGlobal = [...clientFiles]
+    while (stackGlobal.length) {
+      const file = stackGlobal.pop()!
+      if (seenGlobal.has(file)) continue
+      seenGlobal.add(file)
+      for (const spec of importsOf(file)) {
+        if (isServerPackage(spec)) {
+          suspicious = `${relative(ROOT, file)} → ${spec}`
+          break
+        }
+        const next = resolveLocal(file, spec)
+        if (!next) continue
+        if (isServerPath(next)) {
+          suspicious = `${relative(ROOT, file)} → ${relative(ROOT, next)}`
+          break
+        }
+        stackGlobal.push(next)
+      }
+      if (suspicious) break
+    }
+    if (!suspicious) return []
     const offenders = new Set<string>()
     for (const entry of clientFiles) {
       const seen = new Set<string>()
@@ -77,6 +122,14 @@ describe('fronteira cliente/servidor', () => {
         }
       }
     }
-    expect([...offenders]).toEqual([])
-  })
+    return [...offenders]
+  }
+
+  it(
+    'nenhum componente/hook "use client" alcança código de servidor',
+    () => {
+      expect(scan()).toEqual([])
+    },
+    30_000,
+  )
 })
