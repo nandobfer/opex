@@ -59,7 +59,7 @@ export function memoryTurnOf(scope: OpexServerScope): MemoryTurn {
 }
 
 /** Memórias do turno (contexto do Engramind) e as ferramentas "Memória própria" quando ligadas. */
-async function memoriesForTurn(scope: OpexServerScope, sessionId: string, turnKey: string, actorId: string): Promise<{ block: string; notice: string | null; selfTools: OpexTool[] }> {
+async function memoriesForTurn(scope: OpexServerScope, sessionId: string, turnKey: string, actorId: string, disabledTools: readonly string[] = []): Promise<{ block: string; notice: string | null; selfTools: OpexTool[] }> {
     const turn = memoryTurnOf(scope)
     const [{ agentMemoryContext }, { selfMemoryEnabled }] = await Promise.all([import("@/features/ai/server/agent-memory-context"), import("@/features/ai/server/self-memory/settings")])
     const context = await agentMemoryContext("opex", turn)
@@ -67,7 +67,9 @@ async function memoriesForTurn(scope: OpexServerScope, sessionId: string, turnKe
     if (await selfMemoryEnabled("opex")) {
         const { selfMemoryTools } = await import("@/features/ai/server/self-memory/tools")
         const label = scope.kind === "client" ? `Agente Opex · ${scope.actor.client.name}` : "Agente Opex"
-        selfTools = selfMemoryTools({ consumer: "opex", turn, label, turnKey, actorId, auditContext: { sessao: sessionId } })
+        // Desligadas pelo dono (Ferramentas do Agente Opex) ficam de fora; a confirmação segue os ajustes do dono.
+        const disabled = new Set(scope.kind === "owner" ? disabledTools : [])
+        selfTools = selfMemoryTools({ consumer: "opex", turn, label, turnKey, actorId, auditContext: { sessao: sessionId } }).filter((tool) => !disabled.has(tool.name))
     }
     return { block: context.block, notice: memoryCacheNotice(context), selfTools }
 }
@@ -275,7 +277,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
         mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
         const mcpTools = new Map(mcp.tools.map((tool) => [tool.name, tool]))
-        const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId)
+        const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId, settings.disabledTools)
         const selfNames = new Set(memory.selfTools.map((tool) => tool.name))
         const appNames = new Set([...appTools.map((tool) => tool.name), ...selfNames])
         const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]

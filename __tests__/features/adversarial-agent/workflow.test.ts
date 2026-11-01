@@ -214,6 +214,25 @@ describe('Agente Mentor no fluxo da mesa', () => {
     })
   })
 
+  it('OPE-104: o Mentor recebe o início da CADEIA (antes do primeiro turno), não o do último turno', async () => {
+    mocks.round.mockResolvedValue({ kind: 'proceed', level: 'success', message: 'Aprovado' })
+    let firstTurnAt = 0
+    mocks.runTurn.mockImplementation(async () => {
+      if (!firstTurnAt) firstTurnAt = Date.now()
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return succeeded('Implementado.')
+    })
+    const before = Date.now()
+    const wb = await workbench()
+    await implement(wb._id)
+    await waitFor('build_queued')
+    await vi.waitFor(() => expect(mocks.mentorAfterTurns).toHaveBeenCalled())
+    const since = (mocks.mentorAfterTurns.mock.calls[0]![0] as { since: Date }).since
+    expect(since).toBeInstanceOf(Date)
+    expect(since.getTime()).toBeGreaterThanOrEqual(before)
+    expect(since.getTime()).toBeLessThanOrEqual(firstTurnAt)
+  })
+
   it('OPE-104: a rodada do Agente Adversário entra na cadeia avaliada pelo Mentor ("Revisões do adversário")', async () => {
     mocks.round.mockResolvedValue({ kind: 'proceed', level: 'success', message: 'Aprovado' })
     mocks.runTurn.mockResolvedValue(succeeded('Implementado.'))

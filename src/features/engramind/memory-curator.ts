@@ -132,7 +132,8 @@ export interface CuratorRuleContext {
  * - sem classificação válida → `revisar_dono` ("Sem classificação válida do curador");
  * - memória do dono nunca recebe `descartar` → `revisar_dono`;
  * - texto acima do `text_max` → sempre `revisar_dono` (com a reescrita proposta);
- * - canal fora do mapeamento (ou de outra central) → o canal da lista; categoria fora da lista → a primeira;
+ * - o destino é sempre o canal da própria lista: uma troca de lista sugerida pelo modelo não é aplicada
+ *   (só entra no motivo, para o dono ver); categoria fora da lista → a primeira;
  * - `duplicataDe` só vale para outra memória da mesma lista.
  */
 export function applyCuratorRules(items: readonly CuratorSourceItem[], answers: readonly CuratorAnswerItem[], context: CuratorRuleContext): Map<string, CuratorDecisionRecord> {
@@ -160,9 +161,10 @@ export function applyCuratorRules(items: readonly CuratorSourceItem[], answers: 
             decisao = "revisar_dono"
             motivo = `Acima de ${context.textMax} caracteres: reescreva antes de importar. ${answer.motivo}`
         }
-        const target = answer.canalDestino ? listOfChannel(answer.canalDestino) : null
-        const sameCentral = target && (!target.centralId || target.centralId === item.centralId)
-        const canalDestino = target && sameCentral && !target.clientId ? answer.canalDestino! : channel
+        if (answer.canalDestino && answer.canalDestino !== channel && listOfChannel(answer.canalDestino)) {
+            motivo = `${motivo} (o curador sugeriu mover para ${answer.canalDestino}; a memória fica na lista de origem)`
+        }
+        const canalDestino = channel
         const duplicataDe = answer.duplicataDe && answer.duplicataDe !== item.id && ids.has(answer.duplicataDe) ? answer.duplicataDe : null
         result.set(item.id, {
             decisao,

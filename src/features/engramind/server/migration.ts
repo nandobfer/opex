@@ -24,6 +24,7 @@ import {
 import type { CuratorRunInput, MigrationBulkInput, MigrationItemPatch } from "../schemas/migration"
 import type { ImportResult, MemoryMigrationDto, MigrationItemDto, MigrationStepDto } from "../types"
 import { engramindCall } from "./client"
+import { importIdempotencyKey } from "./operations-runner"
 import { LEGACY_MEMORIES_COLLECTION, MIGRATION_ID, MemoryBackup, MemoryMigration, type IMemoryMigration, type IMigrationItem, type IMigrationStep } from "./migration-models"
 import { AcaoAuditoria, auditEngramind, engramindLog, publishEngramind } from "./shared"
 
@@ -34,7 +35,7 @@ import { AcaoAuditoria, auditEngramind, engramindLog, publishEngramind } from ".
  *    com as regras do Opex por cima (`applyCuratorRules`). Exige o backup.
  * 3. **Revisão do dono**: aprovar, rejeitar ou editar (uma a uma ou em lote por lista).
  * 4. **Importação**: só as aprovadas, por canal, em lotes de `limits.max_batch`, com
- *    `Idempotency-Key = opex-import-<sha256(canal + conteúdo)>` — repetir não duplica.
+ *    `Idempotency-Key` de `importIdempotencyKey` (a mesma da importação manual) — repetir não duplica.
  * As etapas longas rodam no servidor (sobrevivem a fechar a tela) com o estado persistido; uma etapa
  * ainda "em andamento" de antes de um reinício vira falha com "Tentar novamente".
  */
@@ -302,7 +303,7 @@ export async function compactCombination(combinationKey: string, actorId: string
         const next = latest.items.map((item) => {
             const decision = decisions.get(item.sourceId)
             if (!decision || item.imported) return item
-            return { ...item, decision: { ...decision, canalDestino: item.decision?.canalDestino ?? decision.canalDestino }, review: { status: "pendente" as const, texto: null, categoria: null, at: null } }
+            return { ...item, decision, review: { status: "pendente" as const, texto: null, categoria: null, at: null } }
         })
         await MemoryMigration.updateOne({ _id: MIGRATION_ID }, { $set: { items: next } })
         await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "compactar", combinacao: combo.key, memorias: decisions.size })
@@ -359,19 +360,25 @@ export async function reviewItems(input: MigrationItemPatch, actorId: string): P
     return getMigration()
 }
 
+/**
+ * Decisão em lote de uma lista. Sem `includeAttention`, só as que o curador mandou migrar; com ele, também
+ * as de revisão do dono. `descartar` nunca é aprovada em lote: migrar uma descartada é ação item a item
+ * ("Migrar mesmo assim").
+ */
 export async function reviewBulk(input: MigrationBulkInput, actorId: string): Promise<MemoryMigrationDto> {
     const state = await loadState()
-    const targets = state.items.filter((item) => item.list === input.list && (item.centralId ?? null) === (input.centralId ?? null) && item.decision && !item.imported && (input.includeAttention || !needsAttention(item)))
+    const eligible = (item: IMigrationItem) => {
+        if (!needsAttention(item)) return true
+        if (input.status === "aprovada" && item.decision?.decisao === "descartar") return false
+        return Boolean(input.includeAttention)
+    }
+    const targets = state.items.filter((item) => item.list === input.list && (item.centralId ?? null) === (input.centralId ?? null) && item.decision && !item.imported && eligible(item))
     if (!targets.length) return getMigration()
     return reviewItems({ items: targets.map((item) => ({ id: item.sourceId, status: input.status })) }, actorId)
 }
 
 // ── Etapa 4: importação ─────────────────────────────────────────────────────
 
-/** Chave de idempotência do lote: o mesmo canal com o mesmo conteúdo nunca duplica. */
-export function importKey(channel: string, payload: unknown): string {
-    return `opex-import-${sha256(`${channel}\n${JSON.stringify(payload)}`)}`
-}
 
 export async function importApproved(actorId: string): Promise<MemoryMigrationDto> {
     const state = await loadState()
@@ -386,7 +393,8 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
         const settings = await memorySettings()
         const byChannel = new Map<string, IMigrationItem[]>()
         for (const item of approved) {
-            const channel = item.decision?.canalDestino || item.channel
+            // Sempre o canal da lista de origem (o curador não move memórias de lista).
+            const channel = item.channel
             if (!channel) continue
             byChannel.set(channel, [...(byChannel.get(channel) ?? []), item])
         }
@@ -409,7 +417,7 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
                         origin: item.origin ?? { source: "dono", label: "Dono" },
                     }
                 })
-                const key = importKey(channel, memories)
+                const key = importIdempotencyKey({ channel, memories })
                 const result = await engramindCall<ImportResult>("POST", { path: "/v1/memories/import", body: { channel, memories } }, { idempotencyKey: key })
                 const ids = new Map<number, { id: string; duplicate: boolean }>()
                 for (const item of result?.created ?? []) ids.set(item.index, { id: item.id, duplicate: false })
@@ -438,7 +446,7 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
 // ── Leitura ─────────────────────────────────────────────────────────────────
 
 async function budgetOf(state: IMemoryMigration) {
-    const entries = state.items.filter((item) => item.channel && included(item)).map((item) => ({ channel: item.decision?.canalDestino || item.channel!, text: finalOf(item).texto }))
+    const entries = state.items.filter((item) => item.channel && included(item)).map((item) => ({ channel: item.channel!, text: finalOf(item).texto }))
     const centrals = [...new Set(state.items.map((item) => item.centralId).filter((value): value is string => Boolean(value)))]
     let budget = 4000
     try {

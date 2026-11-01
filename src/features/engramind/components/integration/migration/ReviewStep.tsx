@@ -49,6 +49,7 @@ export function ReviewStep({ state }: { state: MemoryMigrationDto }) {
             ) : (
                 groups.map((group) => {
                     const attention = group.items.filter((item) => item.needsAttention && item.review.status === "pendente" && !item.imported).length
+                    const ownerReview = group.items.filter((item) => item.decision?.decisao === "revisar_dono" && item.review.status === "pendente" && !item.imported).length
                     const decide = (status: "aprovada" | "rejeitada", includeAttention = false) => bulk.mutate({ list: group.list, centralId: group.centralId, status, includeAttention })
                     return (
                         <div key={group.key} className="space-y-2" data-testid="migration-review-list">
@@ -66,9 +67,9 @@ export function ReviewStep({ state }: { state: MemoryMigrationDto }) {
                                 <Button type="button" size="sm" disabled={busy || bulk.isPending} onClick={() => decide("aprovada")}>
                                     <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Aprovar lista
                                 </Button>
-                                {attention > 0 && (
+                                {ownerReview > 0 && (
                                     <Button type="button" size="sm" variant="ghost" disabled={busy || bulk.isPending} onClick={() => decide("aprovada", true)}>
-                                        Aprovar incluindo as que pedem atenção
+                                        Aprovar incluindo as de revisão do dono
                                     </Button>
                                 )}
                             </div>

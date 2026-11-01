@@ -8,6 +8,7 @@ import { JSON_RPC_ERRORS, MCP_UNAUTHORIZED_CODE, OPENCODE_SESSION_META, handleMc
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { AI_AGENT_IDS, MEMORY_CONSUMER_DEFS } from "../../agents"
+import { SELF_MEMORY_TOOL_NAMES, selfMemoryToolConfirms, type SelfMemoryToolName } from "../../self-memory"
 import { selfMemoryEnabled } from "./settings"
 import { selfMemoryTools, type SelfMemoryContext } from "./tools"
 
@@ -41,6 +42,30 @@ export function isAgentMemoryMcpAuthorized(authorization: string | null): boolea
 }
 
 class SessionRefusal extends Error {}
+
+/** Ajustes de confirmação e ferramentas desligadas pelo dono (Integrações › Agente Opex › Ferramentas). */
+export async function selfMemoryToolPolicy(): Promise<{ overrides: Record<string, boolean>; disabled: Set<string> }> {
+    const { loadOpexSettings } = await import("@/features/opex-agent/server/settings")
+    const { settings } = await loadOpexSettings()
+    return { overrides: settings.confirmationOverrides, disabled: new Set(settings.disabledTools) }
+}
+
+const isSelfMemoryTool = (name: string): name is SelfMemoryToolName => (SELF_MEMORY_TOOL_NAMES as readonly string[]).includes(name)
+
+/**
+ * Regras da sessão do Maddox para as ferramentas de memória própria: desligada → `deny`; pede confirmação →
+ * `ask` (Confirmar/Cancelar no chat); demais → `allow`.
+ */
+export function selfMemorySessionPermissions(policy: { overrides: Readonly<Record<string, boolean>>; disabled: ReadonlySet<string> }): { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] {
+    return [
+        { action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}*`, resource: "*", effect: "allow" },
+        ...SELF_MEMORY_TOOL_NAMES.map((name) => ({
+            action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}${name}`,
+            resource: "*",
+            effect: policy.disabled.has(name) ? ("deny" as const) : selfMemoryToolConfirms(name, policy.overrides) ? ("ask" as const) : ("allow" as const),
+        })),
+    ]
+}
 
 type Resolver = (opencodeSessionId: string) => Promise<Omit<SelfMemoryContext, "onChange"> & { notify?: (message: string) => void } | null>
 
@@ -143,7 +168,14 @@ export async function callSelfMemoryTool(name: string, args: Record<string, unkn
         if (!context) throw new SessionRefusal("Esta sessão do OpenCode não é de um agente do Opex (mesa, fork, revisão do Adversário ou Agente Maddox).")
         if (!(await selfMemoryEnabled(context.consumer))) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado.`)
         const tool = selfMemoryTools(context).find((item) => item.name === name)
-        if (!tool) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
+        if (!tool || !isSelfMemoryTool(name)) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
+        const policy = await selfMemoryToolPolicy()
+        if (policy.disabled.has(name)) throw new SessionRefusal(`A ferramenta ${name} está desligada pelo dono.`)
+        // Mesas e revisões não têm chat para Confirmar/Cancelar: com a confirmação ligada, a ação é recusada.
+        // (No Maddox, a sessão do OpenCode já pediu a confirmação antes de chegar aqui.)
+        if (context.consumer !== "maddox" && selfMemoryToolConfirms(name, policy.overrides)) {
+            throw new SessionRefusal(`${name} pede a confirmação do dono e aqui não há chat para confirmar: edite a memória com update_my_memory em vez de inativar/excluir. O dono pode liberar em Integrações › Inteligência Artificial › Agente Opex › Ferramentas.`)
+        }
         const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: context.actorId })
         log.info({ tool: name, consumer: context.consumer, durationMs: Date.now() - startedAt, ok: true }, "[ai] memória própria do agente")
         return mcpTextResult(compactToolOutput(output))

@@ -18,7 +18,7 @@ import { objectIdSchema } from "./helpers"
 const scopeHint = (id: AiAgentId) => (isCentralScopedAgent(id) ? " (exige centralId)" : isClientScopedAgent(id) ? " (exige clientId)" : "")
 const AGENT_LIST = AI_AGENT_IDS.map((id) => `${id} = ${AI_AGENTS[id].title}${scopeHint(id)}`).join("; ")
 const agent = z.enum(AI_AGENT_IDS).describe(`Lista de memórias: ${AGENT_LIST}`)
-const memoryId = z.string().trim().regex(/^m_[A-Za-z0-9]+$/, "Use o id da memória (m_…) de list_agent_memories").describe("Id da memória (de list_agent_memories)")
+const memoryId = z.string().trim().regex(/^m_[A-Za-z0-9]+$/, "Use o id da memória (m_…) de list_agent_memories").describe("Id da memória (de list_agent_memories)").meta({ examples: ["m_01hx7k2q9w"] })
 const centralId = objectIdSchema.optional().describe("Id da central (de list_centrals); obrigatório na lista developer-central e recusado nas demais")
 const clientId = objectIdSchema.optional().describe("Id do cliente (de list_clients); obrigatório nas listas *-client-specific e recusado nas demais")
 const text = z.string().trim().min(1, "Escreva a memória").max(MEMORY_TEXT_ABSOLUTE_MAX).describe("Texto livre da memória (instrução ou fato permanente; os limites são os do Engramind)")
@@ -56,22 +56,28 @@ interface MemoryListView {
     items: ReturnType<typeof view>[]
 }
 
-/** Listas de um agente: nas por central/cliente, uma por central/cliente (o pedido ou todos). */
-async function listsOf(agentId: AiAgentId, scope: MemoryListScope): Promise<MemoryListView[]> {
+/**
+ * Uma lista de um agente. Nas por central/cliente o id é obrigatório (sem rajada por todas as centrais e
+ * todos os clientes); `list_centrals`/`list_clients` dão os ids.
+ */
+async function listOf(agentId: AiAgentId, scope: MemoryListScope): Promise<MemoryListView> {
     const base = { agent: agentId, agentLabel: AI_AGENTS[agentId].title }
-    if (isCentralScopedAgent(agentId)) {
-        const { listCentrals } = await import("@/features/agentic/server/centrals")
-        const centrals = (await listCentrals()).filter((item) => !scope.centralId || item.id === scope.centralId)
-        if (scope.centralId && !centrals.length) throw new DomainError(404, "Central não encontrada", "CENTRAL_NOT_FOUND")
-        return Promise.all(centrals.map(async (item) => ({ ...base, centralId: item.id, centralName: item.projectName, items: (await listAgentMemories(agentId, { centralId: item.id })).map((memory) => view(agentId, memory)) })))
+    if (isCentralScopedAgent(agentId) && !scope.centralId) throw new DomainError(400, `A lista ${agentId} é por central: informe o centralId (de list_centrals)`, "CENTRAL_REQUIRED")
+    if (isClientScopedAgent(agentId) && !scope.clientId) throw new DomainError(400, `A lista ${agentId} é por cliente: informe o clientId (de list_clients)`, "CLIENT_REQUIRED")
+    const items = (await listAgentMemories(agentId, scope)).map((memory) => view(agentId, memory))
+    return { ...base, ...(scope.centralId ? { centralId: scope.centralId } : {}), ...(scope.clientId ? { clientId: scope.clientId } : {}), items }
+}
+
+/** Sem `agent`: só a contagem das listas sem escopo (uma chamada por vez) e como abrir as por central/cliente. */
+async function overview() {
+    const lists: { agent: AiAgentId; agentLabel: string; active: number; inactive: number }[] = []
+    for (const id of AI_AGENT_IDS) {
+        if (isCentralScopedAgent(id) || isClientScopedAgent(id)) continue
+        const memories = await listAgentMemories(id)
+        lists.push({ agent: id, agentLabel: AI_AGENTS[id].title, active: memories.filter((memory) => memory.ativa).length, inactive: memories.filter((memory) => !memory.ativa).length })
     }
-    if (isClientScopedAgent(agentId)) {
-        const { OrcamentoClient } = await import("@/lib/db/models/Orcamento")
-        const clients = await OrcamentoClient.find(scope.clientId ? { _id: scope.clientId } : {}).select({ _id: 1, name: 1 }).lean<{ _id: unknown; name?: string }[]>()
-        if (scope.clientId && !clients.length) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
-        return Promise.all(clients.map(async (item) => ({ ...base, clientId: String(item._id), clientName: item.name, items: (await listAgentMemories(agentId, { clientId: String(item._id) })).map((memory) => view(agentId, memory)) })))
-    }
-    return [{ ...base, items: (await listAgentMemories(agentId)).map((memory) => view(agentId, memory)) }]
+    const scoped = AI_AGENT_IDS.filter((id) => isCentralScopedAgent(id) || isClientScopedAgent(id)).map((id) => ({ agent: id, agentLabel: AI_AGENTS[id].title, requires: isCentralScopedAgent(id) ? "centralId" : "clientId" }))
+    return { lists, scoped, hint: "Para ver os textos, chame de novo com agent (e centralId/clientId nas listas por central/cliente)." }
 }
 
 const scopeOf = (input: { centralId?: string; clientId?: string }): MemoryListScope => ({ ...(input.centralId ? { centralId: input.centralId } : {}), ...(input.clientId ? { clientId: input.clientId } : {}) })
@@ -82,12 +88,12 @@ export const memoryTools = [
         group: "memories",
         label: "Listar memórias",
         risk: "read",
-        description: `Memórias (instruções permanentes, no Engramind) dos agentes do Opex (${AGENT_LIST}), com id, resumo, texto, categoria, fixada, ativa, versão, autor e datas. Sem agent, lista as de todas as listas; as da central e as do cliente vêm agrupadas (centralId/clientId filtram uma).`,
+        description: `Memórias (instruções permanentes, no Engramind) de uma lista dos agentes do Opex (${AGENT_LIST}), com id, resumo, texto, categoria, fixada, ativa, versão, autor e datas. Sem agent, devolve só a contagem de cada lista sem escopo; nas listas por central/cliente informe o centralId/clientId.`,
         input: z.object({ agent: agent.optional(), centralId, clientId }),
         async execute(input) {
-            const agents = input.agent ? [input.agent] : [...AI_AGENT_IDS]
-            const lists = (await Promise.all(agents.map((id) => listsOf(id, { centralId: isCentralScopedAgent(id) ? input.centralId : undefined, clientId: isClientScopedAgent(id) ? input.clientId : undefined })))).flat()
-            return { agents: lists, total: lists.reduce((sum, list) => sum + list.items.length, 0) }
+            if (!input.agent) return overview()
+            const list = await listOf(input.agent, { centralId: isCentralScopedAgent(input.agent) ? input.centralId : undefined, clientId: isClientScopedAgent(input.agent) ? input.clientId : undefined })
+            return { agents: [list], total: list.items.length }
         },
     }),
     defineTool({

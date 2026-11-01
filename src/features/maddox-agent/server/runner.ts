@@ -281,15 +281,19 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         if (cacheNotice) publishLine(sessionId, { type: "text-delta", text: `> ${cacheNotice}\n\n` })
         const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
         let selfMemory = await selfMemoryEnabled("maddox")
+        let selfRules: { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] = []
         if (selfMemory) {
-            const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+            const { ensureAgentMemoryMcp, selfMemorySessionPermissions, selfMemoryToolPolicy } = await import("@/features/ai/server/self-memory/mcp")
             const registered = await ensureAgentMemoryMcp(client, [directory])
             if (!registered.ok) {
                 selfMemory = false
                 notices.push(`Aviso: o aprendizado autônomo (memória própria) está indisponível neste turno (${registered.error}).`)
+            } else {
+                // Inativar/excluir pedem Confirmar/Cancelar no chat (padrão das destrutivas; o dono ajusta no Agente Opex).
+                selfRules = selfMemorySessionPermissions(await selfMemoryToolPolicy())
             }
         }
-        const sessionPermissions = selfMemory ? [...permissions, { action: "opex_memorias_*", resource: "*", effect: "allow" as const }] : permissions
+        const sessionPermissions = selfMemory ? [...permissions, ...selfRules] : permissions
         await applySessionSetup(client, ocSessionId, { permissions: sessionPermissions, instructions: maddoxInstructionsFor(settings, scope, memories.block, notices, { selfMemory }) })
         const { uris, references } = await turnFiles(args.files)
         const prompt = references.length ? `${args.text}${args.text ? "\n\n" : ""}Arquivos enviados nesta mensagem:\n${references.join("\n")}` : args.text

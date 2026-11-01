@@ -6,7 +6,9 @@ pelo Litestream, Redator por LLM, embeddings locais ou remotos, webhooks) que gu
 **canais** e os entrega por REST, MCP e CLI. O Opex é o **gestor** da rede: configura o serviço,
 administra apps, agentes, tokens, canais, assinaturas e memórias e acompanha a operação.
 
-Fora de escopo (entrega posterior): usar as memórias do Engramind no lugar das memórias do Agente Opex.
+Desde a OPE-104 o Engramind é a **fonte única das memórias dos agentes** do Opex (Agente Opex, Agente
+Maddox, Agente Adversário e agente desenvolvedor das centrais): ver "Memórias dos agentes" abaixo. A
+coleção antiga `agent_memories` fica intacta, lida só pelo backup da migração.
 
 ## Integração `engramind` (`/integracoes/engramind`)
 
@@ -45,7 +47,10 @@ Ao salvar a conexão (token novo, URL trocada ou sem segredo de webhook):
    avisa (revogue o emitido e repita).
 3. Webhook: gera o segredo (48 bytes aleatórios, base64), grava cifrado e faz `PATCH /v1/apps/<app do
    token>` com `webhook_url = <URL pública>/api/engramind/webhook`. Já registrado e igual → `skipped`.
-4. Cada passo é auditado (`entidade: "Engramind"`, `entidadeId: "bootstrap"`, sem segredos) e
+4. **Memórias dos agentes** (passo `agent-memories`, `ensureAgentMemoryNetwork` em
+   `server/memory-network.ts`), por último, com o token próprio: cria só o que falta (ver "Memórias dos
+   agentes › Rede"). Já pronto → `skipped`; falha não desfaz os passos anteriores.
+5. Cada passo é auditado (`entidade: "Engramind"`, `entidadeId: "bootstrap"`, sem segredos) e
    logado. A resposta traz os passos (`BootstrapStepDto[]`), mostrados na aba; "Repetir configuração
    automática" (`POST /api/engramind/connection/bootstrap`) é seguro.
 
@@ -208,11 +213,108 @@ com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba ma
   `private-app` com `{ type, channel?, keys? }` (sem textos nem valores).
 - As mutações feitas pelo próprio Opex também publicam (`identities.updated`, `jobs.updated`,
   `status.updated`, `env.updated`, `env.applied` e os tipos do Engramind).
+- **Memórias dos agentes**: em `memory.*`, `listOfChannel(event.channel)` (`src/features/ai/agents.ts`)
+  acha a lista; mapeada → publica também `ai-memories-updated` `{ agentId, centralId?, clientId? }` em
+  `private-integration-ai` (os cards de memórias atualizam, inclusive com o que o agente gravou
+  sozinho). Canal fora do mapeamento é ignorado (log `debug`). A migração publica
+  `engramind-updated` `{ type: "migration.updated" }`.
 - `useEngramindRealtime` invalida por área: `memory.*` → memórias e canais; `channel.updated` →
   canais; `subscription.updated` → assinaturas e agentes; `settings.updated` → configurações, canais
   e status; `identities.updated` → apps, agentes, tokens e conexão; `env.*` → env, status e conexão.
   Eventos fora de ordem não importam (a tela relê). Ao reconectar, o `RealtimeStatusBanner` refaz as
   consultas ativas.
+
+## Memórias dos agentes (OPE-104)
+
+### Listas e canais (`src/features/ai/agents.ts`, puro)
+
+| Lista (`agentId`) | Canal | Consumidor |
+|---|---|---|
+| `app-global` (Memórias do Opex) | `opex` | todos (assinado por todos os agentes) |
+| `opex-global` / `opex-owner` / `opex-client` | `agentes/opex/global` / `dono` / `cliente` | `opex` |
+| `opex-client-specific` (por cliente) | `agentes/opex/clientes/<clientId>` | `opex` |
+| `maddox-global` / `maddox-owner` / `maddox-client` | `agentes/maddox/global` / `dono` / `cliente` | `maddox` |
+| `maddox-client-specific` (por cliente) | `agentes/maddox/clientes/<clientId>` | `maddox` |
+| `adversarial` | `agentes/adversario` | `adversario` |
+| `developer-global` | `agentes/desenvolvedor/global` | `desenvolvedor` |
+| `developer-central` (por central) | `agentes/desenvolvedor/central/<centralId>` | `desenvolvedor` |
+
+- `memoryChannelOf(agentId, scope)` e `listOfChannel(slug)` (canal desconhecido → `null`).
+- `contextChannelsFor(consumer, turn)`: sempre `opex` primeiro; Opex/Maddox com o dono → global e dono;
+  no portal → global, cliente (todos) e `clientes/<clientId>` da sessão; Adversário → o canal dele;
+  desenvolvedor → global e a central (sem central, só as globais).
+- `writableListsFor(consumer, turn)`: com o dono, todas as listas do agente (e `app-global`); **no
+  portal, só `*-client-specific` do cliente da sessão** (o cliente é forçado pelo servidor). O dono
+  cria memórias globais, só dele, de todos os clientes ou de um cliente específico.
+
+### Rede (`server/memory-network.ts`)
+
+`ensureAgentMemoryNetwork` (idempotente): os 9 canais fixos (`fixedMemoryChannels`; existente é
+reaproveitado e arquivado é restaurado), os agentes `opex/{opex,maddox,adversario,desenvolvedor}`, um
+token `agent` **`read+write+delete`** por agente (cifrado em `engramind_state.agentTokens[consumer]`;
+nunca em DTO, log, auditoria ou resposta; reemitido quando falta, foi revogado ou expirou, revogando o
+anterior) e as assinaturas `inject` (`MEMORY_SUBSCRIPTION_TARGETS`: `opex` + `agentes/<agente>/*`; o
+Adversário assina exato `agentes/adversario`). Os canais por central/cliente nascem na primeira gravação
+(`ensureMemoryChannel`); excluir a central arquiva o canal dela (melhor esforço, auditado como
+`canalMemoriasArquivado`).
+
+### Contexto com cache (`server/memory-context.ts`)
+
+`getAgentMemoryContext(consumer, channels)` → `{ block, source: live|cache|none, cachedAt, counts, reason }`:
+`GET /v1/context?channels=…&format=markdown` com o token do agente e `If-None-Match` (a `version` do
+cache; `304` reaproveita). Sucesso grava `engramind_context_cache` (`_id` = sha256 do consumidor + canais)
+e `engramind_state.memoryContext.lastOkAt`; falha (fora do ar, sem token, `AUTH_INVALID`) loga `warn`,
+grava `unavailableSince` e usa o cache (ou nenhum bloco) — **nunca lança**. O bloco entra **sem
+alteração** depois do cabeçalho curto (`memoriesSection`); `memoryCacheNotice` gera o aviso do turno
+("Memórias carregadas do cache de <data> (Engramind indisponível)" / "Engramind indisponível: turno sem
+memórias"). Quem monta: `src/features/ai/server/agent-memory-context.ts` (`agentMemoryContext`,
+`adversarialMemoryContext`, `developerMemoryContext`). O orçamento global não muda sozinho: os cards
+mostram as memórias fora do texto completo (`counts`) com link às configurações.
+
+### Serviço (`src/features/ai/server/agent-memory-service.ts`)
+
+Mesmo contrato das rotas antigas, sobre o Engramind: listar (todas as páginas, `status=active,permanent,archived`;
+ativas, fixadas primeiro, depois inativas), ler (canal divergente → 404), criar (origem, categoria padrão =
+a primeira de `categories.list`, `duplicate` → `duplicada`), editar com `expected_version`
+(`409 MEMORY_VERSION_CONFLICT`: "Esta memória mudou enquanto você editava. Confira a versão atual."),
+fixar/desafixar (`pin`/`unpin`), inativar (`archive`; fixada é desafixada antes)/reativar (`restore`) e
+excluir de vez. Limites e categorias vêm de `GET /v1/settings` (+ sobreposição do canal; cache 60 s,
+`memory-settings.ts`). Ator: dono (token admin, origem `{source:"dono"}`), agente (token do agente,
+origem `{source:<consumidor>}`) ou Mentor. **Memória do dono**: o agente edita, mas não exclui nem
+inativa (`403 OWNER_MEMORY_PROTECTED`). Auditoria `MemoriaAgente` com texto, origem, escopo e ator
+(`agente:<consumidor>`), sem segredos; `GET /api/ai/memories/meta` dá limites, categorias, migração
+pendente, disponibilidade e memórias fora do contexto. O resumo é o título do Redator (primeira frase
+enquanto `title_state = pending`).
+
+### Aprendizado autônomo ("Memória própria")
+
+Ver `aicontext/modules/ai.md`, "Aprendizado autônomo".
+
+### Migração (`?aba=migracao`, `server/migration.ts`)
+
+Etapas no servidor (estado no singleton `engramind_memory_migration`, progresso por `migration.updated`;
+etapa em andamento num reinício vira falha "Interrompida pelo reinício do Opex"):
+
+1. **Backup**: lê `agent_memories` crua (somente leitura) → JSON com SHA-256 em `engramind_memory_backups`,
+   para download.
+2. **Curador** (`memory-curator.ts` + `server/memory-curator.ts`): modelo escolhido (`OpexAiModelPicker`,
+   Gemini/Anthropic/OpenAI/DeepSeek, por `streamAi`), uma chamada por lista. `applyCuratorRules`: sem
+   classificação válida → `revisar_dono` ("Sem classificação válida do curador"); `descartar` em memória
+   do dono (`createdBy` local sem `origin`) → `revisar_dono`; acima de `text_max` → `revisar_dono`;
+   categoria inválida → a primeira; **o destino é sempre o canal da lista de origem** (troca sugerida
+   pelo modelo só aparece no motivo).
+3. **Orçamento**: estimativa (~4 caracteres/token) por combinação de turno contra `context.budget_tokens`;
+   estourou → "Compactar com o curador" (reescritas e fusões, de volta à revisão).
+4. **Revisão**: original × proposta, Aprovar/Rejeitar/Editar por item ou por lista. Em `descartar`, os
+   botões são **"Aceitar descarte"** (não importa) e **"Migrar mesmo assim"** (ação explícita); o lote
+   nunca aprova uma descartada ("Aprovar incluindo as de revisão do dono" aprova só as `revisar_dono`).
+5. **Importação** (com confirmação): só as aprovadas, no canal da lista, em lotes de `limits.max_batch`,
+   com `importIdempotencyKey` (a mesma da importação manual da página `/engramind`): repetir não duplica,
+   falha no meio retoma do que faltou, `duplicates` guardam o id existente. `firstCompletedAt` encerra
+   o aviso "Migração de memórias pendente".
+
+Rotas (`/api/engramind/migration/**`): `GET /` (estado), `POST provision`, `GET|POST backup`,
+`POST triage`, `POST compact`, `PATCH items`, `POST review/bulk`, `POST import`.
 
 ## Agente Opex (só o dono)
 
@@ -257,8 +359,10 @@ segredos) e logada (Pino, `feature: "engramind"`).
 
 ## Dados
 
-- `engramind_webhook_events` (`_id` = id do evento, TTL 24 h) e `engramind_state` (singleton
-  `pendingApply` e `sources` da IA do Opex) — `server/models.ts`.
+- `engramind_webhook_events` (`_id` = id do evento, TTL 24 h), `engramind_state` (singleton
+  `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados e `memoryContext`) e
+  `engramind_context_cache` (último contexto por consumidor + canais) — `server/models.ts`.
+- `engramind_memory_backups` e `engramind_memory_migration` — `server/migration-models.ts`.
 - `opex_secret_reveals` (Agente Opex) — `src/features/opex-agent/server/secret-reveals.ts`.
 
 ## Testes
@@ -266,5 +370,6 @@ segredos) e logada (Pino, `feature: "engramind"`).
 `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
-`opex-ai-card.test.tsx`, `__tests__/components/ai/ai-provider-tabs.test.tsx` e
+`opex-ai-card.test.tsx`, memórias dos agentes (`memory-context`, `memory-curator`, `migration`,
+`migration-review.test.tsx`, com o Engramind falso de `__tests__/helpers/fake-engramind.ts`), `__tests__/components/ai/ai-provider-tabs.test.tsx` e
 `__tests__/lib/ai/embedding-models.test.ts`. O Engramind e o host são sempre mockados.

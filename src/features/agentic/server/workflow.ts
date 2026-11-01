@@ -587,7 +587,7 @@ interface LaunchOptions {
 type MentorTurns = Parameters<Awaited<ReturnType<typeof adversaryModule>>["mentorAfterTurns"]>[0]["turns"]
 
 /** Agente Mentor: fim da cadeia de turnos → avalia em segundo plano (nunca bloqueia a mesa). */
-async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns): Promise<void> {
+async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns, chainStartedAt: Date | null): Promise<void> {
     if (turn.attach || turn.stage === "finishing") {
         // Sem avaliação nesta cadeia: as mensagens ao vivo dela não podem ficar para a próxima.
         const adversary = await adversaryModule()
@@ -609,7 +609,9 @@ async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, 
         approvedPlan: doc.plans?.at(-1)?.text ?? null,
         origin: { action: options.action ?? null, userText: options.userText ?? null, feedback: options.feedback ?? null },
         turns,
-        since: doc.turnStartedAt ?? null,
+        // Início da cadeia, capturado no launchTurn: o `turnStartedAt` do documento pode já ser de outra cadeia
+        // (ex.: o build disparado pela fila logo depois).
+        since: chainStartedAt,
     })
 }
 
@@ -626,6 +628,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
     const mentorTurns: MentorTurns = []
+    const chainStartedAt = new Date()
     markWorkbenchActive(id, controller)
     try {
         await update(loaded.doc, {
@@ -635,7 +638,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             heartbeatAt: new Date(),
             // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam
             // válidos) e a causa da parada; um turno novo começa um episódio novo (limpa o desfecho).
-            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: chainStartedAt, stopRequestedAt: null, reconnect: null }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -649,7 +652,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             clearWorkbenchActive(id, controller)
             // Terminou um build (liberou a vaga) ou uma implementação/revisão adversária (entrou na fila): avalia a fila do build.
             if (turn.stage === "building" || turn.stage === "implementing" || turn.stage === "adversarial_review") pumpBuildQueue()
-            void notifyMentor(id, turn, options, mentorTurns).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
+            void notifyMentor(id, turn, options, mentorTurns, chainStartedAt).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
         })
 }
 

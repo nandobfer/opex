@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/api/route"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
 import { AI_AGENTS, contextChannelsFor, contextListsFor, writableListsFor, type AiAgentId, type MemoryConsumer, type MemoryListScope, type MemoryTurn } from "../../agents"
 import { firstSentence } from "../../memory-text"
-import { SELF_MEMORY_TURN_LIMIT } from "../../self-memory"
+import { SELF_MEMORY_TOOL_METAS, SELF_MEMORY_TURN_LIMIT } from "../../self-memory"
 import type { MemoryDto, MemoryMutationResult } from "../../types"
 import { createAgentMemory, deleteAgentMemory, listAgentMemories, updateAgentMemory } from "../agent-memory-service"
 
@@ -116,9 +116,7 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
         defineTool({
             name: "list_my_memories",
             group: "memories",
-            label: "Minhas memórias",
-            risk: "read",
-            description: "Memórias que você segue neste turno (ativas e inativas), por lista, com id, resumo, texto, categoria, fixada, ativa, doDono e versão; e quantas ficaram fora do contexto (consolide quando houver).",
+            ...SELF_MEMORY_TOOL_METAS.list_my_memories,
             input: z.object({ lista: z.string().optional().describe("Filtra uma lista") }),
             async execute(input) {
                 const lists = readable.filter((item) => !input.lista || item.agentId === input.lista)
@@ -129,9 +127,7 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
         defineTool({
             name: "remember",
             group: "memories",
-            label: "Gravar memória",
-            risk: "write",
-            description: "Grava uma memória durável numa das suas listas (a mais específica que couber).",
+            ...SELF_MEMORY_TOOL_METAS.remember,
             input: z.object({
                 lista: writableEnum,
                 texto: z.string().trim().min(1).describe("Um fato ou regra durável, autossuficiente"),
@@ -150,9 +146,7 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
         defineTool({
             name: "update_my_memory",
             group: "memories",
-            label: "Editar memória",
-            risk: "write",
-            description: "Edita o texto e/ou a categoria de uma memória sua (inclusive as do dono). Envie a versão lida para não sobrescrever uma edição concorrente.",
+            ...SELF_MEMORY_TOOL_METAS.update_my_memory,
             input: z.object({ lista: writableEnum, memoryId, texto: z.string().trim().min(1).optional(), categoria: z.string().trim().optional(), versao: z.number().int().positive().optional(), ...(needsClient ? { clientId: clientIdField } : {}) }),
             async execute(input: { lista: AiAgentId; memoryId: string; texto?: string; categoria?: string; versao?: number; clientId?: string }) {
                 const list = assertWritable(context, input.lista)
@@ -166,9 +160,7 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
         defineTool({
             name: "pin_my_memory",
             group: "memories",
-            label: "Fixar memória",
-            risk: "write",
-            description: "Fixa (entra primeiro no contexto) ou desafixa uma memória sua.",
+            ...SELF_MEMORY_TOOL_METAS.pin_my_memory,
             input: z.object({ lista: writableEnum, memoryId, fixada: z.boolean(), ...(needsClient ? { clientId: clientIdField } : {}) }),
             async execute(input: { lista: AiAgentId; memoryId: string; fixada: boolean; clientId?: string }) {
                 const list = assertWritable(context, input.lista)
@@ -181,9 +173,7 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
         defineTool({
             name: "set_my_memory_active",
             group: "memories",
-            label: "Ativar/inativar memória",
-            risk: "write",
-            description: "Inativa (sai do contexto, recuperável) ou reativa uma memória sua. As do dono você não inativa.",
+            ...SELF_MEMORY_TOOL_METAS.set_my_memory_active,
             input: z.object({ lista: writableEnum, memoryId, ativa: z.boolean(), ...(needsClient ? { clientId: clientIdField } : {}) }),
             async execute(input: { lista: AiAgentId; memoryId: string; ativa: boolean; clientId?: string }) {
                 const list = assertWritable(context, input.lista)
@@ -193,13 +183,10 @@ export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAge
                 return resultView(list, result)
             },
         }),
-        // `write` (sem confirmação): o aprendizado é autônomo por decisão do dono; a memória do dono é recusada no serviço.
         defineTool({
             name: "forget_my_memory",
             group: "memories",
-            label: "Excluir memória",
-            risk: "write",
-            description: "Exclui de vez uma memória sua que ficou errada ou superada (prefira inativar quando houver dúvida). As do dono você não exclui.",
+            ...SELF_MEMORY_TOOL_METAS.forget_my_memory,
             input: z.object({ lista: writableEnum, memoryId, ...(needsClient ? { clientId: clientIdField } : {}) }),
             async execute(input: { lista: AiAgentId; memoryId: string; clientId?: string }) {
                 const list = assertWritable(context, input.lista)

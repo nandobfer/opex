@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   enabled: true,
   create: vi.fn(async (_agent: string, texto: string) => ({ memoria: { id: 'm_1', texto, resumo: texto, categoria: 'PROJECT_RULES', fixada: false, ativa: true, doDono: false, autor: null, versao: 1 } })),
   publish: vi.fn(),
+  overrides: {} as Record<string, boolean>,
+  disabled: [] as string[],
+  remove: vi.fn(async () => ({ id: 'm_1', texto: 'x', resumo: 'x', categoria: 'PROJECT_RULES', fixada: false, ativa: true, doDono: false, autor: null, versao: 1 })),
 }))
 const lean = (value: unknown) => ({ select: () => ({ lean: async () => value }), lean: async () => value })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
@@ -23,10 +26,11 @@ vi.mock('@/features/adversarial-agent/server/models', () => ({ AdversarialReview
 vi.mock('@/lib/db/models/Opex', () => ({ OpexSession: { findOne: () => lean(null) } }))
 vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async ({ sessionID }: { sessionID: string }) => ({ parentID: mocks.parents[sessionID] ?? null }) } }) }))
 vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: async () => mocks.enabled }))
-vi.mock('@/features/ai/server/agent-memory-service', () => ({ createAgentMemory: mocks.create, updateAgentMemory: vi.fn(), deleteAgentMemory: vi.fn(), listAgentMemories: vi.fn(async () => []) }))
+vi.mock('@/features/ai/server/agent-memory-service', () => ({ createAgentMemory: mocks.create, updateAgentMemory: vi.fn(), deleteAgentMemory: mocks.remove, listAgentMemories: vi.fn(async () => []) }))
+vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: { confirmationOverrides: mocks.overrides, disabledTools: mocks.disabled } }) }))
 vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
 
-import { agentMemoryMcpSecret, callSelfMemoryTool, ensureAgentMemoryMcp, handleAgentMemoryMcpRequest, isAgentMemoryMcpAuthorized } from '@/features/ai/server/self-memory/mcp'
+import { agentMemoryMcpSecret, callSelfMemoryTool, ensureAgentMemoryMcp, handleAgentMemoryMcpRequest, isAgentMemoryMcpAuthorized, selfMemorySessionPermissions } from '@/features/ai/server/self-memory/mcp'
 import { resetSelfMemoryCounters } from '@/features/ai/server/self-memory/tools'
 
 const C = 'a'.repeat(24)
@@ -40,6 +44,8 @@ beforeEach(() => {
   mocks.review = null
   mocks.parents = {}
   mocks.enabled = true
+  mocks.overrides = {}
+  mocks.disabled = []
 })
 
 describe('MCP de memórias', () => {
@@ -98,5 +104,32 @@ describe('MCP de memórias', () => {
     expect(add).toHaveBeenCalledTimes(1)
     const failing = { mcp: { add: vi.fn(async () => Promise.reject(new Error('OpenCode fora'))), list: vi.fn(async () => ({ data: [] })), remove: vi.fn() } } as never
     expect(await ensureAgentMemoryMcp(failing, ['/outro'])).toEqual({ ok: false, error: 'OpenCode fora' })
+  })
+
+  it('excluir/inativar pedem a confirmação do dono: na mesa (sem chat) a chamada é recusada e nada muda', async () => {
+    const refused = await callSelfMemoryTool('forget_my_memory', { lista: 'developer-global', memoryId: 'm_1' }, meta('ses_mesa'))
+    expect(refused.isError).toBe(true)
+    expect(text(refused as never)).toContain('pede a confirmação do dono')
+    expect(mocks.remove).not.toHaveBeenCalled()
+    // O dono desliga a confirmação da ferramenta (Integrações › Agente Opex › Ferramentas): a mesa exclui.
+    mocks.overrides = { forget_my_memory: false }
+    expect((await callSelfMemoryTool('forget_my_memory', { lista: 'developer-global', memoryId: 'm_1' }, meta('ses_mesa'))).isError).toBeFalsy()
+    expect(mocks.remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('ferramenta desligada pelo dono é recusada', async () => {
+    mocks.disabled = ['remember']
+    expect(text((await callSelfMemoryTool('remember', { lista: 'developer-global', texto: 'x' }, meta('ses_mesa'))) as never)).toContain('desligada pelo dono')
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('Maddox: a sessão do OpenCode pergunta antes de inativar/excluir; desligada vira deny; ajuste do dono vale', () => {
+    const rules = selfMemorySessionPermissions({ overrides: { set_my_memory_active: false }, disabled: new Set(['pin_my_memory']) })
+    const effect = (name: string) => rules.findLast((rule) => rule.action === `opex_memorias_${name}`)?.effect
+    expect(rules[0]).toEqual({ action: 'opex_memorias_*', resource: '*', effect: 'allow' })
+    expect(effect('forget_my_memory')).toBe('ask')
+    expect(effect('set_my_memory_active')).toBe('allow')
+    expect(effect('pin_my_memory')).toBe('deny')
+    expect(effect('remember')).toBe('allow')
   })
 })

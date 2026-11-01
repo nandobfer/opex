@@ -194,9 +194,11 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     (`maxTimeoutSeconds`, 5–1800, padrão 300). Configuração antiga sem `host` recebe o padrão.
   - **MCPs** (`OpexMcpSection`, `?secao=mcps`): lista, cadastra, edita, habilita/desabilita e exclui
     os servidores MCP do agente; salva sozinha (cada ação grava na hora). Detalhes em "MCPs".
-  - **Memórias** (`OpexMemoriesSection`): três cards do Ciliar (`AgentMemoriesCard`) — **Memórias
-    globais**, **Memórias do dono** e **Memórias do cliente** (só as listas com `tab: "agente-opex"`,
-    `aiAgentsOfTab`; a lista do Agente Adversário fica na aba dele); salvam sozinhos (ver
+  - **Memórias** (`OpexMemoriesSection`): chave **Aprendizado autônomo** do Agente Opex
+    (`SelfMemorySwitch`), **Memórias do Opex** (`app-global`, de todos os agentes) e os cards
+    (`AgentMemoriesCard`) **Memórias globais**, **Memórias do dono** e **Memórias do cliente** (só as
+    listas com `tab: "agente-opex"`, `aiAgentsOfTab`), mais **Memórias de um cliente**
+    (`ClientMemoriesCard`, seletor de cliente, lista `opex-client-specific`); salvam sozinhos (ver
     `aicontext/modules/ai.md`, "Memórias dos agentes").
 - Configuração salva: `disabledTools` (as **desligadas**; ferramenta nova nasce ligada; Contexto
   nunca fica desligado) e `confirmationOverrides` (`{ [ferramenta]: boolean }`; ausente = padrão pelo
@@ -538,10 +540,16 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   caracteres; as antigas dão lugar ao resumo da sessão. No envio, o raciocínio dos turnos gravados
   sai (`stripPastReasoning`): a Anthropic assina cada bloco e recusa o que volta com outro prompt
   de sistema ou outro modelo. As mensagens do assistente que ficariam vazias saem do histórico.
-- **Memórias no prompt**: ao fim das instruções entra a seção "Memórias e instruções permanentes"
-  (`memoriesSection`): no dono, as **globais** e as **do dono**; no portal, as **globais** e as **do
-  cliente** (todos os clientes), nessa ordem. Sem memórias, nada é acrescentado. A lista do Agente
-  Adversário (`adversarial`) nunca entra no prompt do Agente Opex.
+- **Memórias no prompt** (Engramind, OPE-104): ao fim das instruções entra a seção "Memórias e
+  instruções permanentes" (`memoriesSection`) com o bloco do Engramind (`agentMemoryContext`): no dono,
+  Memórias do Opex, **globais** e **do dono**; no portal, Memórias do Opex, **globais**, **do cliente**
+  (todos) e as **do cliente da sessão**. Engramind fora do ar → cache de reserva com aviso no chat. Sem
+  memórias, nada é acrescentado. A lista do Agente Adversário nunca entra no prompt do Agente Opex.
+- **Memória própria** (aprendizado autônomo, OPE-104): com a chave ligada, o turno ganha as ferramentas
+  `list_my_memories`, `remember`, `update_my_memory`, `pin_my_memory`, `set_my_memory_active` e
+  `forget_my_memory` (as duas últimas `destructive`, com Confirmar/Cancelar pelo padrão; aparecem na
+  árvore de Ferramentas para o dono desligar ou trocar a confirmação) e a instrução de quando gravar;
+  no portal só gravam na lista do cliente da sessão. Ver `modules/ai.md`, "Aprendizado autônomo".
 - **Ferramentas de memórias** (`tools/memories.ts`, grupo "Memórias do agente"): o enum `agent` cobre
   todas as listas do catálogo — as três do Agente Opex **e a do Agente Adversário** (`adversarial`) —,
   então o Agente Opex lista, lê, cria, edita e exclui também as memórias do adversário (excluir é
@@ -550,10 +558,12 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   adversário na mesa.
   - **Agente desenvolvedor** (OPE-97): o enum também cobre `developer-global` (em todas as centrais) e
     `developer-central` (por central). Todas as ferramentas aceitam `centralId` (de `list_centrals`),
-    obrigatório em `developer-central` e recusado nas demais listas (erro do serviço). Sem `agent`, ou
-    com `developer-central` sem `centralId`, `list_agent_memories` devolve uma lista por central
-    (`centralId`, `centralName`); `centralId` filtra uma (inexistente = 404). As mudanças valem a partir
-    do próximo turno das mesas e forks.
+    obrigatório em `developer-central` e recusado nas demais listas (erro do serviço); as listas por
+    cliente (`*-client-specific`) exigem `clientId` (de `list_clients`). Sem `agent`,
+    `list_agent_memories` devolve só a contagem de ativas/inativas das listas sem escopo (sem rajada por
+    centrais e clientes); nas listas por central/cliente o id é obrigatório (`CENTRAL_REQUIRED`/
+    `CLIENT_REQUIRED`). As mudanças valem a partir do próximo turno das mesas e forks. Novos campos:
+    `categoria`, `fixada`, `ativa`, `version`; o id é `m_…` do Engramind.
 - **Prompt de sistema estável**: instruções + dono do app (+ memórias). A data e a hora do turno vão como uma
   parte de texto ao fim da última mensagem do usuário, só no envio (`withTurnContext`), para o
   prompt de sistema não mudar entre os turnos e o cache do provedor ser reaproveitado.

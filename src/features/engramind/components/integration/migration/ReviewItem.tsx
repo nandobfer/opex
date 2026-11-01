@@ -31,6 +31,8 @@ export function ReviewItem({ item, categories, textMax, disabled, onDecide }: Re
     const proposed = decision?.textoProposto && decision.textoProposto !== item.texto ? decision.textoProposto : null
     const tooLong = texto.length > textMax
     const locked = disabled || Boolean(item.imported)
+    // Descartar: aceitar a decisão NÃO importa; migrar contraria o curador e é uma ação explícita à parte.
+    const discard = decision?.decisao === "descartar"
     return (
         <li className={cn("space-y-2 px-3 py-3", item.review.status === "rejeitada" && "opacity-60")} data-testid="migration-item" data-status={item.review.status}>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -120,10 +122,10 @@ export function ReviewItem({ item, categories, textMax, disabled, onDecide }: Re
                                 <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Editar
                             </Button>
                             <Button type="button" size="sm" variant="outline" disabled={locked || item.review.status === "rejeitada"} onClick={() => onDecide({ status: "rejeitada" })}>
-                                <X className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Rejeitar
+                                <X className="mr-1.5 h-3.5 w-3.5" aria-hidden /> {discard ? "Aceitar descarte" : "Rejeitar"}
                             </Button>
-                            <Button type="button" size="sm" disabled={locked || item.review.status === "aprovada" || item.final.texto.length > textMax} onClick={() => onDecide({ status: "aprovada" })}>
-                                <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden /> Aprovar
+                            <Button type="button" size="sm" variant={discard ? "outline" : "default"} disabled={locked || item.review.status === "aprovada" || item.final.texto.length > textMax} onClick={() => onDecide({ status: "aprovada" })}>
+                                <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden /> {discard ? "Migrar mesmo assim" : "Aprovar"}
                             </Button>
                         </>
                     )}

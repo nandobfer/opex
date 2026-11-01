@@ -9,6 +9,11 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(async () => [] as unknown[]),
 }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ createAgentMemory: mocks.create, updateAgentMemory: mocks.update, deleteAgentMemory: mocks.remove, listAgentMemories: mocks.list }))
+// O registro completo do Agente Opex é pesado: a regra de confirmação é a mesma do tool-tree.
+vi.mock('@/features/opex-agent/server/tools/registry', async () => {
+  const { toolConfirms } = await import('@/features/opex-agent/tool-tree')
+  return { needsConfirmation: (tool: Parameters<typeof toolConfirms>[0], overrides?: Record<string, boolean>) => toolConfirms(tool, overrides) }
+})
 vi.mock('@/features/engramind/server/memory-context', () => ({ contextCacheKey: () => 'k' }))
 vi.mock('@/features/engramind/server/models', () => ({ EngramindContextCache: { findById: () => ({ select: () => ({ lean: async () => ({ counts: { full: 10, titles: 2, overflow: 1 } }) }) }) } }))
 
@@ -88,5 +93,24 @@ describe('memória própria', () => {
     expect(text).toContain('Pode registrar códigos de tarefa, URLs, rotas, nomes, tokens e chaves')
     expect(text).toContain('não excluir nem inativar')
     expect(selfMemoryInstructions('maddox', { kind: 'owner' }, { toolPrefix: 'opex_memorias_' })).toContain('`opex_memorias_remember`')
+  })
+
+  it('inativar e excluir são destrutivas (pedem Confirmar/Cancelar no Agente Opex); as demais não', () => {
+    const risks = Object.fromEntries(selfMemoryTools(ctx()).map((item) => [item.name, item.risk]))
+    expect(risks).toEqual({ list_my_memories: 'read', remember: 'write', update_my_memory: 'write', pin_my_memory: 'write', set_my_memory_active: 'destructive', forget_my_memory: 'destructive' })
+  })
+
+  it('no Agente Opex, excluir pede Confirmar/Cancelar e não toca na memória até o dono confirmar', async () => {
+    const { buildToolRuntime } = await import('@/features/opex-agent/server/tool-runtime')
+    const requestConfirmation = vi.fn(async () => ({ actionId: 'a1', summary: 'Excluir memória', toolName: 'forget_my_memory' }) as never)
+    const runtime = buildToolRuntime(selfMemoryTools(ctx()), { sessionId: 's', actorId: 'local' } as never, {}, { requestConfirmation })
+    const execute = (runtime.tools.forget_my_memory as unknown as { execute: (input: unknown, options: { toolCallId: string }) => Promise<{ status: string }> }).execute
+    expect(await execute({ lista: 'opex-owner', memoryId: 'm_1' }, { toolCallId: 'c1' })).toMatchObject({ status: 'confirmation_required' })
+    expect(requestConfirmation).toHaveBeenCalled()
+    expect(mocks.remove).not.toHaveBeenCalled()
+    // Com a confirmação desligada pelo dono, executa direto.
+    const free = buildToolRuntime(selfMemoryTools(ctx()), { sessionId: 's', actorId: 'local' } as never, { forget_my_memory: false }, { requestConfirmation })
+    await (free.tools.forget_my_memory as unknown as { execute: (input: unknown, options: { toolCallId: string }) => Promise<unknown> }).execute({ lista: 'opex-owner', memoryId: 'm_1' }, { toolCallId: 'c2' })
+    expect(mocks.remove).toHaveBeenCalledTimes(1)
   })
 })
