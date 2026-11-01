@@ -391,4 +391,19 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     expect(mocks.runTurn).toHaveBeenCalledTimes(1)
     expect(mocks.invalidateRemote).toHaveBeenCalled()
   })
+
+  it('falha de uma tentativa antiga não invalida a reserva de uma tentativa mais nova', async () => {
+    // A preparação da tentativa "a1" falha DEPOIS de a mesa já ter reservado outra tentativa (a2).
+    mocks.runTurn.mockImplementationOnce(async () => {
+      await AgenticWorkbench.updateOne({ _id: doc()._id as never }, { $set: { previewBuild: { method: 'github', attempt: 'a2', statePath: '/srv/backups/remote-preview-a2.json', dumpRequired: false } } })
+      return { outcome: 'failed', text: '', message: 'O agente não concluiu a etapa', costUsd: 0, durationMs: 5 }
+    })
+    const wb = await workbench({ stage: 'building', runState: 'failed', buildQueuedAt: null, lastStage: 'building', lastPrompt: { stage: 'building', text: 'x' }, previewBuild: { method: 'github', attempt: 'a1', statePath: '/srv/backups/remote-preview-a1.json', dumpRequired: false } })
+    await retry(String(wb._id))
+    await vi.waitFor(() => expect(doc().runState).toBe('failed'))
+    expect(mocks.invalidateRemote).toHaveBeenCalledTimes(1)
+    // Só a tentativa que falhou (a1) é invalidada; o estado da a2 fica.
+    expect(mocks.invalidateRemote.mock.calls[0]).toEqual([expect.anything(), expect.objectContaining({ previewBuild: expect.objectContaining({ attempt: 'a2' }) }), expect.any(String), { attempt: 'a1' }])
+    expect(doc().previewBuild).toMatchObject({ attempt: 'a2' })
+  })
 })

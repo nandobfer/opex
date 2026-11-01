@@ -664,6 +664,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
 /** Executa o turno e os encadeados (implementação → build), mantendo a mesa ativa entre eles. */
 async function executeTurns(id: string, first: TurnPlan, controller: AbortController, mentorTurns: MentorTurns = []): Promise<void> {
     let turn: TurnPlan | null = first
+    /** Tentativa remota desta rodada de build (a falha dela não invalida uma reserva mais nova). */
+    const failedAttempt: { attempt: string | null } = { attempt: null }
     while (turn) {
         const loaded = await loadAll(id)
         const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
@@ -703,7 +705,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                   })
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
-                next = await buildTurn(client, loaded, turn, sessionId, controller, memories)
+                next = await buildTurn(client, loaded, turn, sessionId, controller, memories, failedAttempt)
                 turn = controller.signal.aborted ? null : next
                 continue
             }
@@ -728,7 +730,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (stage === "building") {
                 await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
                 const current = await AgenticWorkbench.findById(id).lean()
-                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory).catch(() => undefined)
+                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory, failedAttempt).catch(() => undefined)
             }
             log.error(`${WORKBENCH_STAGE_LABELS[stage]}: falhou`, error, { workbenchId: id })
             await prepareHub(id)
@@ -810,7 +812,7 @@ type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
  * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
  * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
  */
-async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null): Promise<TurnPlan | null> {
+async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null, failedAttempt: { attempt: string | null } = { attempt: null }): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
     const ctx = contextOf(loaded)
@@ -822,6 +824,8 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
     if (port === null) throw new Error("A mesa ficou sem porta reservada")
     const docker = method === "local" ? ((turn.build ? turn.build.docker : saved?.docker) ?? undefined) : undefined
     const remote = method === "github"
+    // Tentativa desta rodada: uma falha dela não pode apagar a reserva de uma tentativa mais nova.
+    failedAttempt.attempt = saved?.attempt ?? null
     // O dump só entra quando a central o exige nesta tentativa (OPE-72); o servidor confere o arquivo.
     const backup = saved?.dumpRequired !== false ? (doc.previewBackup ?? null) : null
     const hooks = turnHooks(doc)
@@ -846,7 +850,7 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
             if (result.outcome !== "succeeded") {
                 const status = result.outcome === "interrupted" ? "interrupted" : "failed"
                 await trackBuild(id, () => settleBuild(id, status, result.message ?? null))
-                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory).catch(() => undefined)
+                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory, failedAttempt).catch(() => undefined)
                 await update(doc, { runState: status, error: result.message ?? "O agente não concluiu a etapa" })
                 return null
             }
@@ -866,7 +870,8 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
                 if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
                 if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
                 await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
-                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
+                const reserved = await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
+                failedAttempt.attempt = reserved.attempt
                 await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
             }
             step = null

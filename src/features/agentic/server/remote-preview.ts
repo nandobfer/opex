@@ -23,8 +23,14 @@ export async function reserveRemotePreview(client: OpencodeClient, doc: IAgentic
     return build
 }
 
-export async function invalidateRemotePreview(client: OpencodeClient, doc: IAgenticWorkbench, directory: string): Promise<void> {
+/**
+ * Apaga a reserva da tentativa (o script passa a recusá-la). `expected` limita a invalidação à
+ * tentativa que falhou: a falha de um turno pode chegar depois de a mesa já ter reservado outra
+ * tentativa, e apagar o estado da NOVA derrubava o script dela (`ENOENT` no meio da espera).
+ */
+export async function invalidateRemotePreview(client: OpencodeClient, doc: IAgenticWorkbench, directory: string, expected?: { attempt?: string | null }): Promise<void> {
     if (doc.previewBuild?.method !== "github" || !doc.previewBuild.statePath) return
+    if (expected && expected.attempt !== undefined && doc.previewBuild.attempt !== expected.attempt) return
     const result = await runOpencodeShell(client, directory, `test ! -e ${shellQuote(doc.previewBuild.statePath)} || flock ${shellQuote(`${dirname(doc.previewBuild.statePath)}/preview-publish.lock`)} rm -f ${shellQuote(doc.previewBuild.statePath)}`, { timeoutMs: 150_000 })
     if (result.exitCode !== 0) throw new Error("Não foi possível invalidar a tentativa remota; publicação não cancelada")
 }

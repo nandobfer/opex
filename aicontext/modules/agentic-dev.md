@@ -210,7 +210,12 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   para build local.
 - Cancelamento, exclusão, correção e nova tentativa invalidam o estado antigo; o runner verifica
   a reserva lógica durante a espera e imediatamente antes da publicação. Timeout/falha também
-  invalidam a tentativa. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
+  invalidam a tentativa — **só a da própria rodada**: a falha de um turno pode chegar depois de a mesa
+  já ter reservado outra tentativa, e apagar o estado da nova derrubava o script dela no meio da
+  espera (`ENOENT`); o turno registra a tentativa com que trabalha e a invalidação recebe essa
+  tentativa (`invalidateRemotePreview(..., { attempt })`), saindo sem apagar quando ela já mudou. Se o
+  estado sumir durante a execução, o script falha com "Tentativa cancelada ou substituída" em vez de
+  `ENOENT` cru. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
   A reserva/invalidação e o Compose compartilham `flock` por mesa, evitando corrida entre uma
   execução antiga e uma nova publicação. Host Linux precisa de `flock` (util-linux).
 - Credenciais de GitHub vêm do `gh` autenticado no host do OpenCode (mesmo requisito dos PRs).
