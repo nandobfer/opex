@@ -1,11 +1,17 @@
+import { z } from "zod"
 import type { MemoryConsumer } from "../../agents"
 import { DEFAULT_SELF_MEMORY_SETTINGS, SELF_MEMORY_FEATURE, selfMemorySettingsSchema, type SelfMemorySettings } from "../../self-memory"
 import { loadFeature, persistFeature } from "../settings"
 
 /** Chave "Aprendizado autônomo" por agente (`ai_feature_settings`, auditada como as demais). */
 
+/** Configuração salva antes de um agente novo existir recebe o padrão dele (os demais continuam). */
+export function withSelfMemoryDefaults(saved: unknown): unknown {
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? { ...DEFAULT_SELF_MEMORY_SETTINGS, ...saved } : saved
+}
+
 export function loadSelfMemorySettings() {
-    return loadFeature<SelfMemorySettings>(SELF_MEMORY_FEATURE, selfMemorySettingsSchema, DEFAULT_SELF_MEMORY_SETTINGS)
+    return loadFeature<SelfMemorySettings>(SELF_MEMORY_FEATURE, z.preprocess(withSelfMemoryDefaults, selfMemorySettingsSchema), DEFAULT_SELF_MEMORY_SETTINGS)
 }
 
 export async function getSelfMemorySettings(): Promise<{ settings: SelfMemorySettings; updatedAt: string | null }> {

@@ -173,6 +173,8 @@ export interface IAgenticWorkbench {
      */
     deletionRequestedAt: Date | null
     plans: IPlanVersion[]
+    /** Versão do plano aprovado no último "Implementar" (Agente Arquiteto); ausente em mesas antigas. */
+    approvedPlanVersion?: number | null
     pendingFeedback: string | null
     /** Turno aguardando vaga no limite de mesas da central (`null` quando não há espera). */
     pendingTurn: IPendingTurn | null
@@ -229,6 +231,7 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         previewBackup: { type: Schema.Types.Mixed, default: null },
         deletionRequestedAt: { type: Date, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },
+        approvedPlanVersion: { type: Number, default: null },
         pendingFeedback: { type: String, default: null },
         pendingTurn: { type: Schema.Types.Mixed, default: null },
         forkSeq: { type: Number, default: 0 },

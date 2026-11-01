@@ -205,6 +205,7 @@ export function budgetCombinations(centralIds: readonly string[]): BudgetCombina
         { key: "maddox-owner", label: "Agente Maddox · dono", channels: [app, channel("maddox-global"), channel("maddox-owner")] },
         { key: "maddox-client", label: "Agente Maddox · portal", channels: [app, channel("maddox-global"), channel("maddox-client")] },
         { key: "adversario", label: "Agente Adversário", channels: [app, channel("adversarial")] },
+        { key: "arquiteto", label: "Agente Arquiteto", channels: [app, channel("architect")] },
         { key: "desenvolvedor", label: "Agente desenvolvedor · globais", channels: [app, channel("developer-global")] },
     ]
     for (const centralId of centralIds) combos.push({ key: `desenvolvedor:${centralId}`, label: `Agente desenvolvedor · central ${centralId}`, channels: [app, channel("developer-global"), memoryChannelOf("developer-central", { centralId })!] })

@@ -11,7 +11,7 @@ import { AcaoAuditoria, auditEngramind, engramindLog } from "./shared"
  * Rede das memórias dos agentes no Engramind (OPE-104): passo "Memórias dos agentes" do bootstrap,
  * idempotente — cria só o que falta:
  * - os canais fixos (`opex` e `agentes/...`, um por lista sem escopo; os das centrais existentes);
- * - um agente por identidade no app `opex` (`opex`, `maddox`, `adversario`, `desenvolvedor` e `mentor`,
+ * - um agente por identidade no app `opex` (`opex`, `maddox`, `adversario`, `arquiteto`, `desenvolvedor` e `mentor`,
  *   que só escreve e não tem canal próprio);
  * - as assinaturas `inject` de cada agente (`MEMORY_SUBSCRIPTION_TARGETS`: o token de agente só
  *   escreve onde assina);

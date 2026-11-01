@@ -9,6 +9,7 @@
  *   cliente (portal, todos os clientes) e de um cliente específico (`scope: "client"`, um canal por
  *   cliente; é onde o agente do portal grava o que aprende).
  * - **Agente Adversário**: uma lista própria, nas instruções de toda revisão da mesa.
+ * - **Agente Arquiteto**: uma lista própria, nas instruções de toda geração do diagrama do plano.
  * - **agente desenvolvedor** (mesas e forks): as globais, que valem em todas as centrais, e uma lista
  *   por central (`scope: "central"`).
  */
@@ -24,19 +25,21 @@ export const AI_AGENT_IDS = [
     "maddox-client",
     "maddox-client-specific",
     "adversarial",
+    "architect",
     "developer-global",
     "developer-central",
 ] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
 /** Agentes do Opex que consomem memórias (um agente no app `opex` do Engramind, com token próprio). */
-export const MEMORY_CONSUMERS = ["opex", "maddox", "adversario", "desenvolvedor"] as const
+export const MEMORY_CONSUMERS = ["opex", "maddox", "adversario", "arquiteto", "desenvolvedor"] as const
 export type MemoryConsumer = (typeof MEMORY_CONSUMERS)[number]
 
 export const MEMORY_CONSUMER_DEFS: Record<MemoryConsumer, { name: string; description: string; label: string }> = {
     opex: { name: "Agente Opex", label: "Agente Opex", description: "Agente nativo do Opex (dono e portal do cliente)" },
     maddox: { name: "Agente Maddox", label: "Agente Maddox", description: "Agente do Opex no OpenCode (dono e portal do cliente)" },
     adversario: { name: "Agente Adversário", label: "Agente Adversário", description: "Revisor adversário das mesas de desenvolvimento" },
+    arquiteto: { name: "Agente Arquiteto", label: "Agente Arquiteto", description: "Desenha a arquitetura do plano aprovado das mesas de desenvolvimento" },
     desenvolvedor: { name: "Agente desenvolvedor", label: "Agente desenvolvedor", description: "Agente das mesas e forks das centrais de desenvolvimento" },
 }
 
@@ -57,6 +60,7 @@ export const MEMORY_TOKEN_SCOPES: Record<MemoryIdentity, string[]> = {
     opex: ["read", "write", "delete"],
     maddox: ["read", "write", "delete"],
     adversario: ["read", "write", "delete"],
+    arquiteto: ["read", "write", "delete"],
     desenvolvedor: ["read", "write", "delete"],
     mentor: ["read", "write"],
 }
@@ -81,7 +85,7 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
     "app-global": {
         label: "todos os agentes do Opex",
         title: "Memórias do Opex",
-        description: "Instruções e fatos permanentes que valem para todos os agentes do app (Agente Opex, Agente Maddox, Agente Adversário e agente desenvolvedor).",
+        description: "Instruções e fatos permanentes que valem para todos os agentes do app (Agente Opex, Agente Maddox, Agente Adversário, Agente Arquiteto e agente desenvolvedor).",
         tab: "todos",
         channel: APP_MEMORY_CHANNEL,
         consumer: null,
@@ -159,6 +163,14 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
         tab: "agente-adversario",
         channel: "agentes/adversario",
         consumer: "adversario",
+    },
+    architect: {
+        label: "Agente Arquiteto",
+        title: "Memórias do Agente Arquiteto",
+        description: "Instruções permanentes que o Agente Arquiteto segue em todo diagrama do plano (ex.: \"neste repositório, as camadas são X\").",
+        tab: "agente-arquiteto",
+        channel: "agentes/arquiteto",
+        consumer: "arquiteto",
     },
     "developer-global": {
         label: "agente desenvolvedor",
@@ -249,6 +261,7 @@ export function contextListsFor(consumer: MemoryConsumer, turn: MemoryTurn): { a
         return [app, { agentId: `${prefix}-global` }, { agentId: `${prefix}-owner` }]
     }
     if (consumer === "adversario") return [app, { agentId: "adversarial" }]
+    if (consumer === "arquiteto") return [app, { agentId: "architect" }]
     const central = turn.kind === "central" && turn.centralId ? [{ agentId: "developer-central" as const, scope: { centralId: turn.centralId } }] : []
     return [app, { agentId: "developer-global" }, ...central]
 }
@@ -271,6 +284,7 @@ export function writableListsFor(consumer: MemoryConsumer, turn: MemoryTurn): Ai
         return ["app-global", `${prefix}-global`, `${prefix}-owner`, `${prefix}-client`, `${prefix}-client-specific`]
     }
     if (consumer === "adversario") return ["app-global", "adversarial"]
+    if (consumer === "arquiteto") return ["app-global", "architect"]
     return turn.kind === "central" && turn.centralId ? ["app-global", "developer-global", "developer-central"] : ["app-global", "developer-global"]
 }
 
@@ -279,6 +293,7 @@ export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryIdentity, string[]> = {
     opex: [APP_MEMORY_CHANNEL, "agentes/opex/*"],
     maddox: [APP_MEMORY_CHANNEL, "agentes/maddox/*"],
     adversario: [APP_MEMORY_CHANNEL, "agentes/adversario"],
+    arquiteto: [APP_MEMORY_CHANNEL, "agentes/arquiteto"],
     desenvolvedor: [APP_MEMORY_CHANNEL, "agentes/desenvolvedor/*"],
     // Só onde o Mentor grava (o token de agente só escreve nos canais que assina).
     mentor: ["agentes/adversario", "agentes/desenvolvedor/*"],

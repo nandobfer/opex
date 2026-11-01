@@ -40,6 +40,7 @@ import type { CiFailure } from "../ci"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
+import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
 import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
@@ -116,14 +117,14 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -221,6 +222,10 @@ const forksModule = () => import("./forks")
 /** Agente Adversário (import dinâmico: só carrega quando a mesa chega ao fim da implementação; uma vez por processo). */
 let adversaryImport: Promise<typeof import("@/features/adversarial-agent/server/workflow-hook")> | null = null
 const adversaryModule = () => (adversaryImport ??= import("@/features/adversarial-agent/server/workflow-hook"))
+
+/** Agente Arquiteto (import dinâmico, uma vez por processo): paralelo à mesa, nunca muda o estado dela. */
+let architectImport: Promise<typeof import("@/features/architect-agent/server/workflow-hook")> | null = null
+const architectModule = () => (architectImport ??= import("@/features/architect-agent/server/workflow-hook"))
 
 /** Builder Machine (import dinâmico, uma vez por processo): só com a integração ativa. Ver aicontext/modules/builder-machine.md. */
 let localDockerImport: Promise<typeof import("@/features/local-docker/server/agentic-hooks")> | null = null
@@ -1431,13 +1436,18 @@ export async function implement(id: string, additionalInfo?: string, fileIds?: s
     // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
     const info = additionalInfo?.trim() || null
     const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
+    const approvedPlanVersion = loaded.doc.plans?.length ?? 1
     await launchOrQueue(
         loaded,
         "implement",
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info), ...fileIdsOf(files) },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, approvedPlanVersion, info), ...fileIdsOf(files) },
         { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
+    // A versão aprovada vale na hora, mesmo com a mesa aguardando vaga (o Agente Arquiteto lê dela).
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { approvedPlanVersion } })
     await claimAgenticFiles(files, { workbenchId: id })
+    // Agente Arquiteto: diagrama do plano aprovado em paralelo, depois da resposta (nunca atrasa a implementação).
+    runAfterResponse("architect-plan-approved", async () => (await architectModule()).onPlanApproved(id))
     return getWorkbench(id)
 }
 
@@ -1851,6 +1861,8 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await removeWorkbenchSessions(current)
     // Sessões que rodadas do Agente Adversário ainda seguram (melhor esforço; o histórico fica).
     await (await adversaryModule()).removeWorkbenchReviewSessions(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao excluir sessões do agente adversário", { workbenchId: id, error: errorText(error) }))
+    // Gerações do Agente Arquiteto: aborta e exclui as sessões pendentes (melhor esforço; as versões ficam no histórico).
+    await (await architectModule()).cleanupWorkbenchDiagrams(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao limpar o agente arquiteto da mesa", { workbenchId: id, error: errorText(error) }))
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await trackBuild(id, () => dropBuilds(id))

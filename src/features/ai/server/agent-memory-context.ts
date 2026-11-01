@@ -17,6 +17,9 @@ export async function agentMemoryContext(consumer: MemoryConsumer, turn: MemoryT
 /** Agente Adversário: Memórias do Opex + a lista dele. */
 export const adversarialMemoryContext = () => agentMemoryContext("adversario", { kind: "review" })
 
+/** Agente Arquiteto: Memórias do Opex + a lista dele. */
+export const architectMemoryContext = () => agentMemoryContext("arquiteto", { kind: "review" })
+
 /** Agente desenvolvedor: Memórias do Opex, as globais e as da central (a arquivada fica de fora). */
 export const developerMemoryContext = (centralId: string | null) => agentMemoryContext("desenvolvedor", { kind: "central", centralId })
 

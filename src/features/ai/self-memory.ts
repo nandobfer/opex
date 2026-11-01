@@ -16,11 +16,12 @@ export const selfMemorySettingsSchema = z.object({
     opex: z.boolean(),
     maddox: z.boolean(),
     adversario: z.boolean(),
+    arquiteto: z.boolean(),
     desenvolvedor: z.boolean(),
 })
 export type SelfMemorySettings = z.infer<typeof selfMemorySettingsSchema>
 
-export const DEFAULT_SELF_MEMORY_SETTINGS: SelfMemorySettings = { opex: true, maddox: true, adversario: true, desenvolvedor: true }
+export const DEFAULT_SELF_MEMORY_SETTINGS: SelfMemorySettings = { opex: true, maddox: true, adversario: true, arquiteto: true, desenvolvedor: true }
 
 /** Gravações (criar, editar, fixar, ativar/inativar, excluir) aceitas por turno do agente. */
 export const SELF_MEMORY_TURN_LIMIT = 5
@@ -82,6 +83,7 @@ function listGuide(consumer: MemoryConsumer, turn: MemoryTurn): string[] {
             "opex-client-specific": turn.kind === "client" ? "o que vale para este cliente (a única lista que você grava aqui)" : "o que vale para um cliente específico (informe o clientId)",
             "maddox-client-specific": turn.kind === "client" ? "o que vale para este cliente (a única lista que você grava aqui)" : "o que vale para um cliente específico (informe o clientId)",
             adversarial: "o que verificar ou ignorar nas revisões",
+            architect: "como desenhar a arquitetura deste app (camadas, nomes, o que destacar ou omitir)",
             "developer-global": "como trabalhar em qualquer projeto",
             "developer-central": "convenções, comandos, caminhos e preferências deste projeto (a central da mesa)",
         }
