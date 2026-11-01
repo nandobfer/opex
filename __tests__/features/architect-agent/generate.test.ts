@@ -55,6 +55,8 @@ import { runDiagram } from '@/features/architect-agent/server/generate'
 import { registerDiagram, abortWorkbenchDiagrams, isDiagramLive } from '@/features/architect-agent/server/registry'
 import { DEFAULT_ARCHITECT_SETTINGS } from '@/features/architect-agent/schemas'
 import { ARCHITECT_SETUP_STEP_TIMEOUT_MS } from '@/features/architect-agent/constants'
+import { subscribeLive } from '@/features/architect-agent/server/live-hub'
+import type { ArchitectStreamLine } from '@/features/architect-agent/types'
 
 const diagrams = ArchitectDiagram as unknown as { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
 const workbenches = AgenticWorkbench as unknown as { docs: Record<string, unknown>[] }
@@ -211,5 +213,108 @@ describe('runDiagram', () => {
     await runDiagram(second.id, second.controller)
     expect(doc(second.id).state).toBe('interrupted')
     expect(doc(second.id).error).toBe('A mesa foi excluída durante a geração')
+  })
+})
+
+describe('runDiagram ao vivo', () => {
+  const opLine = (value: unknown) => `${JSON.stringify(value)}\n`
+  const liveText = [
+    'Lendo o plano.\n```architect\n',
+    opLine({ op: 'meta', title: 'Arquitetura ao vivo', summary: 'Resumo' }),
+    opLine({ op: 'node', id: 'objective', label: 'Objetivo', kind: 'objective', status: 'new' }),
+    '{"op":"node","id":"a","lab',
+    'el":"Aba","status":"new"}\n```\nLendo src/a.tsx…\n```architect\n',
+    opLine({ op: 'edge', source: 'objective', target: 'a', kind: 'flow' }),
+    opLine({ op: 'done' }),
+    '```\n',
+  ]
+  type Hooks = { publish: (event: { type: string; text?: string; state?: string; name?: string }) => void }
+
+  it('as operações chegam ao stream na ordem, o rascunho é gravado antes do fim do turno e o grafo final é o rascunho saneado', async () => {
+    const { id, controller } = await seed()
+    const lines: ArchitectStreamLine[] = []
+    const draftsDuringTurn: unknown[] = []
+    let snapshotSeen = false
+    // O relógio anda 2 s a cada pedaço: o intervalo das gravações do rascunho passa entre eles.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    let clock = Date.now()
+    mocks.runTurn.mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: Hooks) => {
+      hooks.publish({ type: 'tool', state: 'running', name: 'read' })
+      for (const [index, chunk] of liveText.entries()) {
+        vi.setSystemTime((clock += 2_000))
+        hooks.publish({ type: 'text', text: chunk })
+        // Conecta no meio da geração (depois do primeiro nó): retrato e, depois, as operações na ordem.
+        if (index === 2 && !snapshotSeen) {
+          const subscription = subscribeLive(id, (line) => lines.push(line))
+          lines.push(subscription!.snapshot)
+          snapshotSeen = true
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        draftsDuringTurn.push(doc(id).draft ?? null)
+      }
+      return succeeded(liveText.join(''))
+    })
+    await runDiagram(id, controller).finally(() => vi.useRealTimers())
+    const snapshot = lines[0] as Extract<ArchitectStreamLine, { type: 'snapshot' }>
+    expect(snapshot.type).toBe('snapshot')
+    expect(snapshot.graph.nodes.map((node) => node.id)).toEqual(['objective'])
+    const ops = lines.filter((line): line is Extract<ArchitectStreamLine, { type: 'ops' }> => line.type === 'ops')
+    expect(ops.map((line) => line.seq)).toEqual([...ops.map((line) => line.seq)].sort((a, b) => a - b))
+    expect(ops[0]!.seq).toBeGreaterThan(snapshot.seq)
+    expect(ops.flatMap((line) => line.ops.map((op) => op.op))).toEqual(['node', 'edge', 'reset'])
+    expect(lines.at(-1)).toEqual({ type: 'end', state: 'done' })
+    // Rascunho gravado durante o turno (não só no fim).
+    expect(draftsDuringTurn.some((draft) => (draft as { nodes?: unknown[] } | null)?.nodes?.length)).toBe(true)
+    const saved = doc(id)
+    expect(saved.state).toBe('done')
+    expect((saved.graph as { title: string; nodes: unknown[]; edges: unknown[] })).toMatchObject({ title: 'Arquitetura ao vivo' })
+    expect((saved.graph as { nodes: unknown[] }).nodes).toHaveLength(2)
+    expect((saved.graph as { edges: unknown[] }).edges).toHaveLength(1)
+    expect(saved.draft).toBeNull()
+  })
+
+  it('blocos sem nenhum nó válido: o rascunho recomeça e o agente reescreve o diagrama completo', async () => {
+    const { id, controller } = await seed()
+    const lines: ArchitectStreamLine[] = []
+    mocks.runTurn
+      .mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: Hooks) => {
+        lines.push(subscribeLive(id, (line) => lines.push(line))!.snapshot)
+        hooks.publish({ type: 'text', text: '```architect\n{quebrado\n```\n' })
+        return succeeded('```architect\n{quebrado\n```\n')
+      })
+      .mockImplementationOnce(async (_client: unknown, request: { text: string }, hooks: Hooks) => {
+        expect(request.text).toContain('Reescreva o diagrama COMPLETO')
+        for (const chunk of liveText) hooks.publish({ type: 'text', text: chunk })
+        return succeeded(liveText.join(''))
+      })
+    await runDiagram(id, controller)
+    expect(doc(id).state).toBe('done')
+    expect(doc(id).repaired).toBe(true)
+    const ops = lines.flatMap((line) => (line.type === 'ops' ? line.ops.map((op) => op.op) : []))
+    expect(ops[0]).toBe('reset')
+  })
+
+  it('falha no meio: o rascunho desenhado fica gravado como contexto', async () => {
+    const { id, controller } = await seed()
+    mocks.runTurn.mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: Hooks) => {
+      for (const chunk of liveText.slice(0, 3)) hooks.publish({ type: 'text', text: chunk })
+      return { outcome: 'failed', text: '', message: 'Tempo esgotado', costUsd: 0, durationMs: 10 }
+    })
+    await runDiagram(id, controller)
+    expect(doc(id).state).toBe('failed')
+    expect((doc(id).draft as { nodes: { id: string }[] }).nodes.map((node) => node.id)).toEqual(['objective'])
+  })
+
+  it('ajuste: começa do grafo anterior e aplica as diferenças emitidas', async () => {
+    diagrams.docs.push({ _id: 'b'.repeat(24), graph: { title: 'Antes', summary: '', groups: [], nodes: [{ id: 'objective', label: 'O', groupId: null, kind: 'objective', detail: '', files: [], status: 'new' }, { id: 'velho', label: 'Velho', groupId: null, kind: 'module', detail: '', files: [], status: 'existing' }], edges: [], notes: [] } })
+    const { id, controller } = await seed({ feedback: 'tire o velho e ponha o novo', baseDiagramId: 'b'.repeat(24), origin: 'adjust' })
+    mocks.runTurn.mockImplementationOnce(async (_client: unknown, request: { text: string }, hooks: Hooks) => {
+      expect(request.text).toContain('JÁ ESTÁ desenhado na tela')
+      const text = '```architect\n' + opLine({ op: 'remove', id: 'velho' }) + opLine({ op: 'node', id: 'novo', label: 'Novo', status: 'new' }) + '```\n'
+      hooks.publish({ type: 'text', text })
+      return succeeded(text)
+    })
+    await runDiagram(id, controller)
+    expect((doc(id).graph as { nodes: { id: string }[] }).nodes.map((node) => node.id)).toEqual(['objective', 'novo'])
   })
 })

@@ -157,10 +157,20 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         await ArchitectDiagram.updateOne(filter, { $set: { "progress.phase": phase } })
         if (doc) void publishDiagrams(doc.workbenchId, diagramId)
     }
+    let trailingSave: ReturnType<typeof setTimeout> | null = null
     const saveDraft = async (force = false) => {
         if (!assembler) return
         const now = Date.now()
-        if (!force && now - lastDraftSave < ARCHITECT_DRAFT_SAVE_MS) return
+        if (!force && now - lastDraftSave < ARCHITECT_DRAFT_SAVE_MS) {
+            // Dentro do intervalo: uma gravação no fim dele leva o que chegou até lá.
+            trailingSave ??= setTimeout(() => {
+                trailingSave = null
+                void saveDraft()
+            }, ARCHITECT_DRAFT_SAVE_MS - (now - lastDraftSave))
+            return
+        }
+        if (trailingSave) clearTimeout(trailingSave)
+        trailingSave = null
         lastDraftSave = now
         await ArchitectDiagram.updateOne(filter, { $set: { draft: assembler.draft } }).catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar o rascunho"))
     }
@@ -334,6 +344,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         log.error({ err: errorText(error), diagramId }, "[architect] falha na geração")
         await fail(errorText(error)).catch(() => undefined)
     } finally {
+        if (trailingSave) clearTimeout(trailingSave)
         await cleanupSession().catch(() => undefined)
         closeLive(diagramId, endState)
         releaseDiagram(diagramId, controller)

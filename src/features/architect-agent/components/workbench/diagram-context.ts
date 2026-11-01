@@ -12,6 +12,8 @@ export interface DiagramHighlight {
     relatedEdges: ReadonlySet<string>
     selectedId: string | null
     reducedMotion: boolean
+    /** Diagrama sendo desenhado ao vivo: entrada sem atraso por camada e pulso nas arestas que nascem. */
+    live: boolean
     showFiles: boolean
     onToggleGroup: (groupId: string) => void
 }
@@ -22,6 +24,7 @@ export const DiagramHighlightContext = createContext<DiagramHighlight>({
     relatedEdges: new Set(),
     selectedId: null,
     reducedMotion: false,
+    live: false,
     showFiles: true,
     onToggleGroup: () => undefined,
 })

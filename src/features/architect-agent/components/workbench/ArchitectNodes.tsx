@@ -13,9 +13,11 @@ import { enterDelay, isDimmed, useDiagramHighlight } from "./diagram-context"
 
 /** Nós do canvas do Agente Arquiteto (componentes React com os tokens do tema escuro). */
 
-export type ItemNode = Node<{ node: GraphNode; rank: number }, "item">
-export type GroupNode = Node<{ group: ArchitectGroup; count: number; rank: number }, "group">
-export type CollapsedNode = Node<{ groupId: string; label: string; count: number; rank: number }, "collapsed">
+/** `leaving`: o nó saiu do grafo e some durante o deslize do layout ao vivo. */
+type Common = { rank: number; leaving?: boolean }
+export type ItemNode = Node<{ node: GraphNode } & Common, "item">
+export type GroupNode = Node<{ group: ArchitectGroup; count: number } & Common, "group">
+export type CollapsedNode = Node<{ groupId: string; label: string; count: number } & Common, "collapsed">
 export type DiagramNode = ItemNode | GroupNode | CollapsedNode
 
 const HANDLE = "!h-1.5 !w-1.5 !border-0 !bg-transparent"
@@ -47,9 +49,10 @@ function ItemNodeView({ id, data }: NodeProps<ItemNode>) {
         <motion.div
             data-testid={`architect-node-${id}`}
             data-dimmed={dimmed ? "true" : "false"}
-            initial={highlight.reducedMotion ? false : { opacity: 0, scale: 0.92 }}
-            animate={{ opacity: dimmed ? 0.25 : 1, scale: 1 }}
-            transition={{ duration: 0.2, delay: enterDelay(data.rank, highlight.reducedMotion) }}
+            data-leaving={data.leaving ? "true" : undefined}
+            initial={highlight.reducedMotion ? false : { opacity: 0, scale: highlight.live ? 0.6 : 0.92 }}
+            animate={data.leaving ? { opacity: 0, scale: 0.85 } : { opacity: dimmed ? 0.25 : 1, scale: 1 }}
+            transition={{ duration: 0.2, delay: highlight.live ? 0 : enterDelay(data.rank, highlight.reducedMotion) }}
             className={cn(
                 "flex h-[68px] w-[220px] flex-col justify-center gap-1 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm",
                 node.kind === "objective" && "border-primary bg-primary/10",
@@ -86,8 +89,8 @@ function GroupNodeView({ data }: NodeProps<GroupNode>) {
         <motion.div
             data-testid={`architect-group-${group.id}`}
             initial={highlight.reducedMotion ? false : { opacity: 0 }}
-            animate={{ opacity: highlight.focusedId ? 0.6 : 1 }}
-            transition={{ duration: 0.2, delay: enterDelay(data.rank, highlight.reducedMotion) }}
+            animate={{ opacity: data.leaving ? 0 : highlight.focusedId ? 0.6 : 1 }}
+            transition={{ duration: 0.2, delay: highlight.live ? 0 : enterDelay(data.rank, highlight.reducedMotion) }}
             className="h-full w-full rounded-xl border border-dashed border-primary/25 bg-primary/[0.03]"
         >
             <div className="flex items-center gap-1.5 px-3 pt-2">
@@ -115,8 +118,8 @@ function CollapsedNodeView({ id, data }: NodeProps<CollapsedNode>) {
         <motion.div
             data-testid={`architect-collapsed-${data.groupId}`}
             initial={highlight.reducedMotion ? false : { opacity: 0, scale: 0.92 }}
-            animate={{ opacity: dimmed ? 0.25 : 1, scale: 1 }}
-            transition={{ duration: 0.2, delay: enterDelay(data.rank, highlight.reducedMotion) }}
+            animate={data.leaving ? { opacity: 0, scale: 0.85 } : { opacity: dimmed ? 0.25 : 1, scale: 1 }}
+            transition={{ duration: 0.2, delay: highlight.live ? 0 : enterDelay(data.rank, highlight.reducedMotion) }}
             className="flex h-[68px] w-[220px] items-center gap-2 rounded-xl border border-dashed border-primary/50 bg-primary/5 px-3"
         >
             <Handles />

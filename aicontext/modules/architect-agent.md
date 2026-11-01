@@ -66,13 +66,46 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
 - Pedido (`buildDiagramPrompt`): tarefa (código, título, descrição e especificação técnica), o plano
   aprovado da versão, o diretório e a diretiva do nível de profundidade; no ajuste, o grafo anterior e o
   pedido do usuário.
-- Resposta sem JSON válido: **uma** nova mensagem na mesma sessão (`buildRepairPrompt`, fase "A resposta
-  veio inválida…"); falhou de novo → `failed` com o motivo.
+- Resposta sem diagrama legível (nenhum bloco ` ```architect ` com nós válidos, nem o JSON antigo):
+  **uma** nova mensagem na mesma sessão pedindo o diagrama COMPLETO de novo (`buildRepairPrompt`, fase
+  "refazendo o diagrama…"); o rascunho recomeça do ponto de partida (operação `reset`). Falhou de novo →
+  `failed` com o motivo.
 - Agente, modelo, variante e modelos de fallback da configuração (`runWithFallback`); tempo máximo
   configurável (3–60 min, padrão 15). Consumo em `ai_consumption_logs` com origem `architect-agent`
   ("Agente Arquiteto" no painel). O custo **não** soma no uso nem no apontamento da mesa (não é etapa).
-- Progresso (fase e quantidade de leituras) fica na própria versão e vai pelo Pusher com intervalo
-  mínimo de 3 s; a aba nunca desenha grafo parcial.
+- Progresso (fase, leituras, nós e ligações) vai pelo stream ao vivo; a mudança de fase também fica na
+  versão e vai pelo Pusher (para quem não está com o stream aberto).
+
+## Diagrama ao vivo (`stream-parser.ts`, `server/live-hub.ts`, `server/stream.ts`)
+
+O diagrama é construído na tela enquanto o agente trabalha.
+
+- **Formato**: o agente escreve OPERAÇÕES, uma linha JSON por operação, em blocos ` ```architect `
+  (vários ao longo do turno, aos poucos: o objetivo, as camadas e os módulos logo depois de ler o
+  plano; depois os nós e as arestas conforme confirma os caminhos): `meta`, `group`, `node`, `edge`,
+  `note`, `remove` (corrigir algo emitido) e `done`. Sem nenhum bloco, vale o formato antigo (um JSON
+  no fim, `parse.ts`).
+- **Montador** (`createGraphAssembler`, puro, o mesmo `applyOps` no servidor e na tela): só aplica
+  **linhas completas** (o pedaço que termina no meio de uma linha espera); cada linha é validada e
+  normalizada ao chegar com as funções do saneamento — inválida é descartada com aviso, sem derrubar a
+  geração; aresta cuja ponta ainda não chegou fica **pendente** e entra quando o nó chegar (as que
+  sobram no fim saem com aviso); `node` repetido **mescla** os campos (o mais recente vence); grupo que
+  chega depois é aplicado aos nós que o pediram. Teto com folga durante a geração (nível × 1,25,
+  `ARCHITECT_LIVE_CAP_FACTOR`); no fim, o `sanitizeGraph` valida o resultado UMA vez e aplica o teto
+  exato com a prioridade de sempre.
+- **Ajuste**: o rascunho começa do grafo anterior (operação `reset`) e o agente emite só as diferenças.
+- **Hub** (memória do processo): rascunho atual, `seq` das operações e assinantes. O rascunho também é
+  gravado em `draft` com intervalo (no máximo a cada 1,5 s, `ARCHITECT_DRAFT_SAVE_MS`, com uma gravação
+  no fim do intervalo); pronta ou descartada, o `draft` sai; falhou ou interrompida, ele fica como
+  contexto (esmaecido atrás da mensagem de erro).
+- **Stream** `GET /api/architect/diagrams/[id]/stream` (NDJSON, só o dono): `snapshot` (rascunho,
+  progresso e o `seq` em que está) e depois `ops` numeradas, `progress`, `ping` a cada 15 s e `end` com o
+  estado final. Assina antes do retrato (nenhuma operação cai entre os dois). Sem geração viva neste
+  processo, o retrato vem do grafo/rascunho gravado e fecha com `end`. No fim, o grafo final vai como
+  `reset` antes do `end`.
+- **Cliente** (`useLiveDiagram`): abre o stream da versão gerando; aplica o retrato e as operações
+  (`seq` repetido ou antigo é ignorado); caiu, reconecta (novo retrato, nada se perde) e a faixa mostra
+  "Reconectando…"; no `end`, relê as versões da mesa.
 
 ## Grafo (`graph.ts`, `sanitize.ts`, `parse.ts`)
 
@@ -112,7 +145,8 @@ vale só para aquele pedido.
 
 - Aparece depois de "Adversário (N)" quando a mesa tem versões ou quando o arquiteto se aplica e há
   plano aprovado (`useArchitectTab`). N = versões da mesa (sem as descartadas).
-- Estados: **gerando** (skeleton no formato do canvas, com a fase e as leituras), **pronto**,
+- Estados: **gerando antes do primeiro nó** (o canvas no formato final com o objetivo "fantasma"
+  pulsando e a faixa de progresso), **ao vivo** (o diagrama crescendo), **pronto**,
   **falhou/interrompido** (erro, "A mesa segue normalmente", **Tentar novamente** e **Regerar com
   profundidade maior**) e **vazio** (slider + **Gerar arquitetura**, ou o motivo quando o arquiteto não
   se aplica).
@@ -121,8 +155,19 @@ vale só para aquele pedido.
   plano cria/altera"; o objetivo fica sempre), **Exportar** (Copiar Mermaid, Copiar Markdown, Baixar
   imagem) e os dados da versão (plano, nível, data, custo, duração e cortes). Acima do canvas, título,
   resumo e as notas recolhíveis (com "Mostrar riscos e decisões").
-- Canvas com **React Flow** (`@xyflow/react`), cores só por tokens (classe `architect-flow` no
-  `globals.css`):
+- **Ao vivo**: o mesmo painel do diagrama pronto (`ArchitectDiagramPane`), então a chegada do grafo
+  final NÃO remonta o canvas. O layout é recalculado a cada lote (espera de 250 ms) e os nós **deslizam**
+  para as posições novas (`useAnimatedLayout`, Framer Motion, 300 ms); nó novo nasce no nó de onde veio
+  (a origem da aresta que chega nele) e cresce; nó que sai encolhe e some; aresta nova se desenha com um
+  **pulso de luz** que a percorre uma vez (`PathTraveler`, compartilhado com a rede do Engramind). A
+  câmera **acompanha** o crescimento até o usuário mover a visão (botão **Acompanhar** religa). Durante a
+  geração: sem arrastar, sem exportar, sem Restaurar layout e sem Pedir ajustes; hover, clique, painel,
+  filtros, grupos e troca de visão funcionam. Com movimento reduzido: sem deslize, sem pulso e sem
+  animação da câmera.
+- Canvas com **React Flow** (`@xyflow/react`) no **fundo padrão do app** (tema compartilhado
+  `src/components/flow/flow-theme.ts`: `bg-background` com o brilho violeta, pontos discretos e as
+  variáveis `--xy-*` por tokens no `style` do elemento — inclusive minimapa e controles —, que vencem o
+  cinza da folha do `colorMode="dark"`; grupos em `bg-primary/[0.03]` com borda tracejada da primária):
   - **Arquitetura**: `@dagrejs/dagre` composto, da esquerda para a direita, grupos como caixas
     (`layoutArchitecture`);
   - **Mapa mental**: árvore radial do `d3-hierarchy` a partir do objetivo (BFS sem direção; nós soltos
@@ -175,6 +220,7 @@ de validação leva à seção do campo).
 | `POST /api/architect/workbenches/[id]/diagrams` | Gerar (`{ depth? }`) ou ajustar (`{ feedback, depth?, baseDiagramId? }`) |
 | `GET /api/architect/diagrams` | Histórico (sem o grafo) |
 | `GET /api/architect/diagrams/[id]` | Uma versão |
+| `GET /api/architect/diagrams/[id]/stream` | Diagrama ao vivo (NDJSON: `snapshot`, `ops`, `progress`, `ping`, `end`) |
 | `POST /api/architect/diagrams/[id]/retry` | Tentar novamente (a mesma versão) |
 
 Nenhuma é pública por token (fora da especificação OpenAPI).
@@ -183,9 +229,10 @@ Nenhuma é pública por token (fora da especificação OpenAPI).
 
 - Coleção `architect_diagrams` (`ArchitectDiagram`): mesa, tarefa, `version` (sequencial da mesa),
   `planVersion`/`planSeq`, `depth`, `origin` (`auto`, `manual`, `adjust`), `feedback`/`baseDiagramId`,
-  `state` (`running`, `done`, `failed`, `interrupted`, `superseded`), `progress`, `graph`, `trimmed`,
+  `state` (`running`, `done`, `failed`, `interrupted`, `superseded`), `progress`, `graph`, `draft`, `trimmed`,
   `warnings`, `repaired`, `report`, `error`, `directory`, sessão e `usage`. Índices garantidos no
   primeiro uso.
 - Tempo real: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app`, só pelo
-  servidor e depois de persistir e auditar; `useArchitectRealtime` relê a mesa afetada e o histórico.
+  servidor e depois de persistir e auditar (início, troca de fase e desfecho); `useArchitectRealtime`
+  relê a mesa afetada e o histórico. O desenho ao vivo vai pelo stream NDJSON, não pelo Pusher.
 - Auditoria `ArquiteturaPlano`: criação de cada versão, o desfecho e o "Tentar novamente".

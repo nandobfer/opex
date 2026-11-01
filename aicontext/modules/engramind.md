@@ -193,7 +193,9 @@ arestas SVG. **Não** se arrasta node individual: arrastar move a rede inteira, 
 layout automático e **Centralizar** reenquadra (`RecenterButton`; volta ao enquadramento da visão).
 **Fundo no padrão do tema**: o canvas usa `bg-background` (o fundo das páginas) com um brilho violeta
 bem suave no centro (`NETWORK_CANVAS_CLASS`), e o React Flow recebe `NETWORK_FLOW_THEME` (variáveis
-`--xy-*` por tokens: fundo transparente, pontos da grade em `--muted-foreground`). O `colorMode="dark"`
+`--xy-*` por tokens: fundo transparente, pontos da grade em `--muted-foreground`). Os dois vêm do tema
+compartilhado dos canvas React Flow (`src/components/flow/flow-theme.ts`, também usado pelos diagramas
+do Agente Arquiteto), e a partícula que viaja pela aresta é o `PathTraveler` (`src/components/flow/`). O `colorMode="dark"`
 da biblioteca sozinho pintava o canvas de cinza neutro, fora do padrão. Nada de cor fixa na pasta da
 rede (teste estático).
 

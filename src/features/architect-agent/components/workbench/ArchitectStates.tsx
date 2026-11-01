@@ -1,16 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { AlertTriangle, Loader2, Network, RotateCcw, Sparkles, ZoomIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FLOW_SURFACE_CLASS } from "@/components/flow/flow-theme"
-import { ARCHITECT_PHASE_LABELS, type ArchitectDepth } from "../../constants"
+import { type ArchitectDepth, type ArchitectPhase } from "../../constants"
 import type { ArchitectDiagramDto } from "../../types"
 import { DepthControl } from "./DepthControl"
+import { ArchitectLiveBar } from "./ArchitectLiveBar"
 
-/** Estados da aba Arquitetura: carregando/gerando (skeleton no formato do canvas), falhou e vazio. */
+/** Estados da aba Arquitetura: carregando (skeleton no formato do canvas), esperando o primeiro nó, falhou e vazio. */
 
 /** Classes do contêiner da aba (o skeleton usa as mesmas do resultado final). */
 export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-3 p-4"
@@ -49,9 +50,35 @@ export function ArchitectCanvasSkeleton({ label }: { label?: string }) {
     )
 }
 
-export function ArchitectGenerating({ diagram }: { diagram: ArchitectDiagramDto }) {
-    const phase = diagram.phase ? ARCHITECT_PHASE_LABELS[diagram.phase] : ARCHITECT_PHASE_LABELS.starting
-    return <ArchitectCanvasSkeleton label={`${phase}${diagram.tools ? ` (${diagram.tools} leitura(s))` : ""} O diagrama aparece aqui quando ficar pronto.`} />
+/**
+ * Geração em curso antes do primeiro nó (o agente lendo o plano e o código): o próprio canvas, no
+ * formato final, com o nó do objetivo "fantasma" pulsando no centro. Os nós aparecem aqui ao vivo.
+ */
+export function ArchitectLiveWaiting({ phase, tools, connected }: { phase: ArchitectPhase | null; tools: number; connected: boolean }) {
+    const reducedMotion = useReducedMotion()
+    return (
+        <div className={ARCHITECT_TAB_CLASS} aria-busy="true">
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <Skeleton className="h-8 w-48" />
+                    <Skeleton className="h-8 w-24" />
+                </div>
+                <Skeleton className="h-3 w-80" />
+            </div>
+            <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-live-waiting">
+                <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} />
+                <div className="flex h-full items-center justify-center p-8">
+                    <motion.div
+                        className="flex h-[68px] w-[220px] items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"
+                        animate={reducedMotion ? undefined : { opacity: [0.45, 1, 0.45], scale: [0.98, 1, 0.98] }}
+                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                        <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />O diagrama vai sendo desenhado aqui
+                    </motion.div>
+                </div>
+            </div>
+        </div>
+    )
 }
 
 export function ArchitectFailed({ diagram, pending, canRetry, onRetry, onDeeper }: { diagram: ArchitectDiagramDto; pending: boolean; canRetry: boolean; onRetry: () => void; onDeeper: (() => void) | null }) {

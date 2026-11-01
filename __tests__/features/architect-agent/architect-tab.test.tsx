@@ -16,10 +16,18 @@ const mocks = vi.hoisted(() => ({
   generate: vi.fn(async (input: unknown) => ({ id: 'novo', input })),
   retry: vi.fn(),
   settings: undefined as unknown,
+  live: { graph: null, progress: null, seq: 0, connected: false, ended: false } as Record<string, unknown>,
+  liveIds: [] as (string | null)[],
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interactive')).xyflowMock())
+vi.mock('@/features/architect-agent/hooks/useLiveDiagram', () => ({
+  useLiveDiagram: (_workbenchId: string, id: string | null) => {
+    mocks.liveIds.push(id)
+    return id ? mocks.live : { graph: null, progress: null, seq: 0, connected: false, ended: false }
+  },
+}))
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   useWorkbenchDiagrams: () => ({ data: mocks.diagrams, isLoading: false, isError: false, refetch: vi.fn() }),
   useArchitectRealtime: vi.fn(),
@@ -67,6 +75,7 @@ const diagram = (overrides: Record<string, unknown> = {}) => ({
   phase: null,
   tools: 0,
   graph: sampleGraph(),
+  draft: null,
   trimmed: { nodes: 0, edges: 0 },
   warnings: [],
   repaired: false,
@@ -82,6 +91,8 @@ const workbench = (architect: { applies: boolean; approvedPlanVersion: number | 
 
 beforeEach(() => {
   mocks.diagrams = []
+  mocks.live = { graph: null, progress: null, seq: 0, connected: false, ended: false }
+  mocks.liveIds = []
   mocks.settings = undefined
   vi.clearAllMocks()
   localStorage.clear()
@@ -124,22 +135,64 @@ describe('ArchitectTab', () => {
     expect(mocks.generate).toHaveBeenLastCalledWith({ depth: 2 })
   })
 
-  it('gerando mostra o skeleton no formato do canvas e nunca um grafo parcial; o Pusher troca para pronto sem recarregar', () => {
+  it('gerando antes do primeiro nó: o canvas no formato final esperando, com a fase e as leituras', () => {
     mocks.diagrams = [diagram({ state: 'running', phase: 'reading', tools: 4, graph: null })]
-    const { rerender } = render(<ArchitectTab workbench={workbench()} />)
-    expect(screen.getByTestId('architect-skeleton')).toBeTruthy()
+    render(<ArchitectTab workbench={workbench()} />)
+    expect(screen.getByTestId('architect-live-waiting')).toBeTruthy()
     expect(screen.getByText(/Lendo o plano e o código/)).toBeTruthy()
+    expect(screen.getByTestId('architect-live-bar').textContent).toContain('4 leituras')
     expect(screen.queryByTestId('architect-canvas')).toBeNull()
-    // Evento do Pusher: a consulta é relida e a mesma aba (montada) passa a mostrar o diagrama.
+    // O stream ao vivo é aberto para a versão gerando.
+    expect(mocks.liveIds).toContain('d1')
+  })
+
+  it('ao vivo: os nós que chegam pelo stream aparecem sem remontar o canvas, e o grafo final entra no mesmo canvas', async () => {
+    mocks.diagrams = [diagram({ state: 'running', phase: 'writing', graph: null })]
+    const partial = sampleGraph()
+    mocks.live = { graph: { ...partial, nodes: partial.nodes.slice(0, 2), edges: partial.edges.slice(0, 1) }, progress: { phase: 'writing', tools: 2, nodes: 2, edges: 1 }, seq: 3, connected: true, ended: false }
+    const { rerender } = render(<ArchitectTab workbench={workbench()} />)
+    const canvas = screen.getByTestId('architect-canvas')
+    expect(screen.getByTestId('architect-node-objective')).toBeTruthy()
+    expect(screen.queryByTestId('architect-node-route')).toBeNull()
+    expect(screen.getByTestId('architect-live-bar').textContent).toContain('Desenhando o diagrama')
+    // Ao vivo: sem exportação e sem arrastar (o layout ainda muda).
+    expect(screen.queryByRole('button', { name: /Exportar/ })).toBeNull()
+    // Chegam mais operações: o mesmo elemento do canvas continua no DOM.
+    mocks.live = { ...mocks.live, graph: partial, seq: 4 }
+    rerender(<ArchitectTab workbench={workbench()} />)
+    // O layout ao vivo espera o lote assentar (debounce) antes de desenhar.
+    expect(await screen.findByTestId('architect-node-route')).toBeTruthy()
+    expect(screen.getByTestId('architect-canvas')).toBe(canvas)
+    // Fim (Pusher relê a lista): a versão pronta entra no mesmo canvas, e o stream é fechado.
     mocks.diagrams = [diagram()]
     rerender(<ArchitectTab workbench={workbench()} />)
-    expect(screen.queryByTestId('architect-skeleton')).toBeNull()
-    expect(screen.getByTestId('architect-canvas')).toBeTruthy()
+    expect(screen.getByTestId('architect-canvas')).toBe(canvas)
+    expect(screen.queryByTestId('architect-live-bar')).toBeNull()
+    expect(screen.getByRole('button', { name: /Exportar/ })).toBeTruthy()
+    expect(mocks.liveIds.at(-1)).toBeNull()
+  })
+
+  it('aberta no meio da geração, o rascunho gravado aparece antes do stream conectar; a queda mostra "Reconectando"', () => {
+    const draft = sampleGraph()
+    mocks.diagrams = [diagram({ state: 'running', graph: null, draft })]
+    const { rerender } = render(<ArchitectTab workbench={workbench()} />)
     expect(screen.getByTestId('architect-node-tab')).toBeTruthy()
-    // E volta a "gerando" quando uma versão nova começa.
-    mocks.diagrams = [diagram(), diagram({ id: 'd2', version: 2, planSeq: 2, state: 'running', graph: null })]
+    mocks.live = { graph: draft, progress: { phase: 'writing', tools: 1, nodes: 6, edges: 5 }, seq: 2, connected: false, ended: false }
     rerender(<ArchitectTab workbench={workbench()} />)
-    expect(screen.getByTestId('architect-skeleton')).toBeTruthy()
+    expect(screen.getByTestId('architect-live-bar').textContent).toContain('Reconectando')
+  })
+
+  it('volta a "gerando" quando uma versão nova começa', () => {
+    mocks.diagrams = [diagram(), diagram({ id: 'd2', version: 2, planSeq: 2, state: 'running', graph: null })]
+    render(<ArchitectTab workbench={workbench()} />)
+    expect(screen.getByTestId('architect-live-waiting')).toBeTruthy()
+  })
+
+  it('falhou com rascunho: o desenho até a falha fica esmaecido atrás da mensagem', () => {
+    mocks.diagrams = [diagram({ state: 'failed', graph: null, draft: sampleGraph(), error: 'Tempo esgotado' })]
+    render(<ArchitectTab workbench={workbench()} />)
+    expect(screen.getByTestId('architect-failed-draft').getAttribute('aria-hidden')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toContain('Tempo esgotado')
   })
 
   it('falhou: "Tentar novamente" refaz a versão e "Regerar com profundidade maior" sobe um nível', async () => {

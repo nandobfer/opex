@@ -17,6 +17,8 @@ vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interac
 import { ArchitectDiagramView } from '@/features/architect-agent/components/workbench/ArchitectDiagramView'
 import { positionsKey } from '@/features/architect-agent/hooks/useDiagramLayout'
 import { ARCHITECT_NODE_KINDS, type ArchitectView } from '@/features/architect-agent/constants'
+import { FLOW_THEME_STYLE } from '@/components/flow/flow-theme'
+import { flowSpies } from '../../helpers/xyflow-interactive'
 
 const allKinds = { kinds: [...ARCHITECT_NODE_KINDS], onlyChanges: false }
 const view = (props: { view?: ArchitectView; filter?: typeof allKinds; diagramId?: string } = {}) => (
@@ -96,5 +98,47 @@ describe('ArchitectDiagramView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Restaurar layout/ }))
     expect(Object.keys(JSON.parse(localStorage.getItem(positionsKey('w1', 'd1', 'architecture')) ?? '{}'))).toHaveLength(0)
     expect(Number(screen.getByTestId('rf-node-objective').getAttribute('data-x'))).toBe(before)
+  })
+})
+
+describe('ArchitectDiagramView ao vivo', () => {
+  const live = { progress: { phase: 'writing' as const, tools: 3, nodes: 6, edges: 5 }, connected: true }
+
+  it('sem arrasto durante a geração; ao terminar, volta a arrastar no mesmo canvas', () => {
+    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles live={live} />)
+    const flow = screen.getByTestId('rf')
+    expect(flow.getAttribute('data-draggable')).toBe('false')
+    expect(screen.getByTestId('architect-live-bar').textContent).toContain('6 nós')
+    expect(screen.getByRole('button', { name: /Restaurar layout/ }).hasAttribute('disabled')).toBe(true)
+    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles />)
+    expect(screen.getByTestId('rf')).toBe(flow)
+    expect(flow.getAttribute('data-draggable')).toBe('true')
+    expect(screen.queryByTestId('architect-live-bar')).toBeNull()
+  })
+
+  it('a câmera acompanha até o usuário mover a visão; "Acompanhar" religa', async () => {
+    flowSpies.fitView.mockClear()
+    render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles live={live} />)
+    await vi.waitFor(() => expect(flowSpies.fitView).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /Acompanhar/ })).toBeNull()
+    fireEvent.click(screen.getByTestId('rf-user-move'))
+    fireEvent.click(await screen.findByRole('button', { name: /Acompanhar/ }))
+    expect(screen.queryByRole('button', { name: /Acompanhar/ })).toBeNull()
+  })
+
+  it('nós que saem do grafo somem e os novos aparecem sem remontar', async () => {
+    const graph = sampleGraph()
+    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={graph} view="mindmap" filter={allKinds} showFiles live={live} />)
+    const flow = screen.getByTestId('rf')
+    const next = { ...graph, nodes: [...graph.nodes.filter((item) => item.id !== 'pusher'), { id: 'auth', label: 'Autenticação', groupId: null, kind: 'feature' as const, detail: '', files: [], status: 'new' as const }], edges: graph.edges.filter((edge) => edge.target !== 'pusher') }
+    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={next} view="mindmap" filter={allKinds} showFiles live={live} />)
+    expect(await screen.findByTestId('architect-node-auth')).toBeTruthy()
+    expect(screen.queryByTestId('architect-node-pusher')).toBeNull()
+    expect(screen.getByTestId('rf')).toBe(flow)
+  })
+
+  it('o canvas usa o tema compartilhado (fundo do app, sem o cinza do React Flow)', () => {
+    render(view())
+    expect(JSON.parse(screen.getByTestId('rf').getAttribute('data-style')!)).toEqual(FLOW_THEME_STYLE)
   })
 })

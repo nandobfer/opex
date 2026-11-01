@@ -1,14 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useReactFlow } from "@xyflow/react"
 import { useReducedMotion } from "framer-motion"
-import { Maximize, RotateCcw } from "lucide-react"
+import { LocateFixed, Maximize, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { ArchitectView } from "../../constants"
 import type { GraphFilter } from "../../filters"
 import type { ArchitectGraph } from "../../graph"
-import { useDiagramLayout, useDiagramPositions } from "../../hooks/useDiagramLayout"
+import { useDiagramLayout, useDiagramPositions, useSettledGraph } from "../../hooks/useDiagramLayout"
+import type { ArchitectLiveProgress } from "../../types"
+import { ArchitectLiveBar } from "./ArchitectLiveBar"
 import { ArchitectCanvas } from "./ArchitectCanvas"
 import { ArchitectNodePanel } from "./ArchitectNodePanel"
 import { ARCHITECT_CANVAS_CLASS } from "./ArchitectStates"
@@ -21,6 +23,8 @@ interface ArchitectDiagramViewProps {
     view: ArchitectView
     filter: GraphFilter
     showFiles: boolean
+    /** Geração ao vivo: o grafo cresce sem remontar, a câmera acompanha e o arrasto fica desligado. */
+    live?: { progress: ArchitectLiveProgress | null; connected: boolean } | null
 }
 
 /**
@@ -28,7 +32,10 @@ interface ArchitectDiagramViewProps {
  * clique abre o painel lateral, arrastar reorganiza (posição salva no navegador), grupos recolhem e
  * expandem, "Ajustar visão" e "Restaurar layout". Precisa estar dentro de um `ReactFlowProvider`.
  */
-export function ArchitectDiagramView({ workbenchId, diagramId, graph, view, filter, showFiles }: ArchitectDiagramViewProps) {
+export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, view, filter, showFiles, live = null }: ArchitectDiagramViewProps) {
+    const isLive = Boolean(live)
+    const graph = useSettledGraph(incoming, isLive)
+    const [follow, setFollow] = useState(true)
     const reducedMotion = Boolean(useReducedMotion())
     const flow = useReactFlow()
     const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
@@ -57,11 +64,17 @@ export function ArchitectDiagramView({ workbenchId, diagramId, graph, view, filt
                 relatedNodes.add(edge.source === focusedId ? edge.target : edge.source)
             }
         }
-        return { focusedId, relatedNodes, relatedEdges, selectedId, reducedMotion, showFiles, onToggleGroup: toggleGroup }
+        return { focusedId, relatedNodes, relatedEdges, selectedId, reducedMotion, live: isLive, showFiles, onToggleGroup: toggleGroup }
         // `toggleGroup` só usa setters estáveis.
-    }, [focusedId, selectedId, viewGraph, reducedMotion, showFiles])
+    }, [focusedId, selectedId, viewGraph, reducedMotion, isLive, showFiles])
     const canvasKey = `${diagramId}:${view}:${filter.kinds.join(",")}:${filter.onlyChanges}:${[...collapsed].sort().join(",")}:${layoutRun}`
     const fit = () => void flow.fitView({ padding: 0.15, duration: reducedMotion ? 0 : 300 })
+    // Ao vivo, a câmera acompanha o grafo crescendo até o usuário mover a visão.
+    useEffect(() => {
+        if (!isLive || !follow) return
+        const timer = setTimeout(() => void flow.fitView({ padding: 0.15, duration: reducedMotion ? 0 : 400 }), 320)
+        return () => clearTimeout(timer)
+    }, [layout, isLive, follow, flow, reducedMotion])
 
     return (
         <DiagramHighlightContext.Provider value={highlight}>
@@ -69,18 +82,24 @@ export function ArchitectDiagramView({ workbenchId, diagramId, graph, view, filt
                 {viewGraph.nodes.length === 0 ? (
                     <p className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">Nenhum nó com os filtros escolhidos.</p>
                 ) : (
-                    <ArchitectCanvas key={canvasKey} layout={layout} view={viewGraph} positions={positions.positions} onSavePosition={positions.save} onFocus={setFocused} onSelect={setSelected} />
+                    <ArchitectCanvas key={canvasKey} layout={layout} view={viewGraph} positions={positions.positions} live={isLive} reducedMotion={reducedMotion} onSavePosition={positions.save} onFocus={setFocused} onSelect={setSelected} onUserMove={() => setFollow(false)} />
                 )}
+                {live && <ArchitectLiveBar progress={live.progress} connected={live.connected} />}
                 <div className="absolute left-2 top-2 z-10 flex gap-1">
-                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 bg-card" onClick={fit}>
+                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 bg-card/90" onClick={fit}>
                         <Maximize className="h-3.5 w-3.5" aria-hidden /> Ajustar visão
                     </Button>
+                    {isLive && !follow && (
+                        <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5 bg-card/90" onClick={() => setFollow(true)}>
+                            <LocateFixed className="h-3.5 w-3.5" aria-hidden /> Acompanhar
+                        </Button>
+                    )}
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-7 gap-1.5 bg-card"
-                        disabled={Object.keys(positions.positions).length === 0}
+                        className="h-7 gap-1.5 bg-card/90"
+                        disabled={isLive || Object.keys(positions.positions).length === 0}
                         onClick={() => {
                             positions.reset()
                             setLayoutRun((value) => value + 1)

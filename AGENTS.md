@@ -191,7 +191,8 @@ sem pedido explícito.
   Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds }`, só ids e slugs) em
   `private-app` (ver `aicontext/modules/engramind.md`, "Webhook e tempo real").
 - Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
-  avançar, concluir ou falhar uma versão do diagrama (ver `aicontext/modules/architect-agent.md`).
+  avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
+  (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou

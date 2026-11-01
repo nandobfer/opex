@@ -1,12 +1,26 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { z } from "zod"
 import { usePersistentState } from "@/hooks/usePersistentState"
-import type { ArchitectView } from "../constants"
+import { ARCHITECT_LIVE_LAYOUT_DEBOUNCE_MS, type ArchitectView } from "../constants"
 import { filterGraph, toViewGraph, type GraphFilter, type ViewGraph } from "../filters"
 import type { ArchitectGraph } from "../graph"
 import { layoutArchitecture, layoutMindMap, type LayoutResult } from "../layout"
+
+/**
+ * Ao vivo, o grafo que entra no layout espera o lote de operações assentar (o layout não treme a cada
+ * linha); fora do ao vivo, passa direto.
+ */
+export function useSettledGraph(graph: ArchitectGraph, live: boolean): ArchitectGraph {
+    const [settled, setSettled] = useState(graph)
+    useEffect(() => {
+        if (!live) return
+        const timer = setTimeout(() => setSettled(graph), ARCHITECT_LIVE_LAYOUT_DEBOUNCE_MS)
+        return () => clearTimeout(timer)
+    }, [graph, live])
+    return live ? settled : graph
+}
 
 /** Grafo filtrado, a visão (grupos recolhidos) e o layout automático da visão escolhida. */
 export function useDiagramLayout(graph: ArchitectGraph, view: ArchitectView, filter: GraphFilter, collapsed: ReadonlySet<string>): { filtered: ArchitectGraph; viewGraph: ViewGraph; layout: LayoutResult } {

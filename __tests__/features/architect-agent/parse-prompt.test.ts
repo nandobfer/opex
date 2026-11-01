@@ -31,6 +31,11 @@ describe('prompts do arquiteto', () => {
     expect(text).not.toContain('Memória própria')
     // O limite do detalhe do nó é informado ao modelo (o excedente é cortado no saneamento).
     expect(text).toContain('`detail` de cada nó: no máximo 4.000 caracteres')
+    // Formato ao vivo: uma operação por linha, escrita aos poucos, terminando com done.
+    expect(text).toContain('```architect')
+    expect(text).toContain('{"op":"node","id":"objective"')
+    expect(text).toContain('Escreva aos POUCOS')
+    expect(text).toContain('Termine o último bloco com `{"op":"done"}`')
   })
 
   it('o pedido traz a diretiva e o teto do nível, a tarefa, o plano e o diretório', () => {
@@ -41,6 +46,7 @@ describe('prompts do arquiteto', () => {
     expect(text).toContain('worktree da mesa: /repo/worktrees/ope-1')
     expect(text).toContain('Spec')
     expect(text).not.toContain('Ajuste pedido')
+    expect(text).toContain('blocos ```architect')
   })
 
   it('sem worktree, manda ler a base; no ajuste, leva o grafo anterior e o pedido', () => {
@@ -48,10 +54,12 @@ describe('prompts do arquiteto', () => {
     expect(text).toContain('base do repositório em /repo')
     expect(text).toContain('expanda o fluxo de autenticação')
     expect(text).toContain('"id":"tab"')
+    expect(text).toContain('JÁ ESTÁ desenhado na tela')
   })
 
   it('o pedido de correção leva o erro e o teto', () => {
     expect(buildRepairPrompt('o JSON não segue o formato', 1)).toContain('o JSON não segue o formato')
     expect(buildRepairPrompt('x', 1)).toContain('no máximo 8 nós')
+    expect(buildRepairPrompt('x', 1)).toContain('Reescreva o diagrama COMPLETO')
   })
 })

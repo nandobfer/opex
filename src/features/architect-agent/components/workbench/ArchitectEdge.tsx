@@ -1,9 +1,10 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useState } from "react"
 import { EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { PathTraveler } from "@/components/flow/path-traveler"
 import type { ArchitectEdgeKind } from "../../constants"
 import { enterDelay, useDiagramHighlight } from "./diagram-context"
 
@@ -15,6 +16,8 @@ const DASH: Partial<Record<ArchitectEdgeKind, string>> = { event: "6 4", contain
 
 function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<DiagramEdge>) {
     const highlight = useDiagramHighlight()
+    // Aresta que nasce ao vivo: um pulso de luz a percorre uma vez (sem pulsos contínuos depois).
+    const [pulse, setPulse] = useState(() => highlight.live && !highlight.reducedMotion)
     const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition })
     const focused = highlight.relatedEdges.has(id)
     const dimmed = Boolean(highlight.focusedId) && !focused
@@ -32,9 +35,10 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
                 strokeDasharray={DASH[kind]}
                 initial={highlight.reducedMotion ? false : { pathLength: 0, opacity: 0 }}
                 animate={{ pathLength: 1, opacity: dimmed ? 0.12 : data?.secondary ? 0.35 : 0.8 }}
-                transition={{ duration: 0.3, delay: enterDelay((data?.rank ?? 0) + 1, highlight.reducedMotion) }}
+                transition={{ duration: highlight.live ? 0.45 : 0.3, delay: highlight.live ? 0 : enterDelay((data?.rank ?? 0) + 1, highlight.reducedMotion) }}
                 markerEnd={kind === "contains" ? undefined : "url(#architect-arrow)"}
             />
+            {pulse && <PathTraveler path={path} durationMs={700} radius={3.5} testId={`architect-edge-pulse-${id}`} onDone={() => setPulse(false)} />}
             {label && !dimmed && (
                 <EdgeLabelRenderer>
                     <div

@@ -4,7 +4,8 @@ import { vi } from 'vitest'
 /**
  * Mock de `@xyflow/react` para os testes de UI: o canvas real mede o DOM (ResizeObserver, matrizes)
  * que o happy-dom não tem. Este `ReactFlow` renderiza os nós e as arestas com os MESMOS componentes
- * de `nodeTypes`/`edgeTypes` e repassa hover, clique, arrasto (botão `rf-drag-<id>`) e clique no fundo.
+ * de `nodeTypes`/`edgeTypes` e repassa hover, clique, arrasto (botão `rf-drag-<id>`), clique no fundo e o
+ * movimento da visão pelo usuário (botão `rf-user-move`); expõe `nodesDraggable` e o `style` do tema.
  *
  * Uso: `vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interactive')).xyflowMock())` (a rede do Engramind usa o mock leve de `xyflow.tsx`)
  */
@@ -26,12 +27,16 @@ export function xyflowMock() {
     onNodeClick?: (event: unknown, node: AnyNode) => void
     onNodeDragStop?: (event: unknown, node: AnyNode) => void
     onPaneClick?: () => void
+    onMoveStart?: (event: unknown) => void
+    nodesDraggable?: boolean
+    style?: React.CSSProperties
     children?: React.ReactNode
     className?: string
   }) {
     return (
-      <div data-testid="rf" className={props.className}>
+      <div data-testid="rf" className={props.className} data-draggable={String(props.nodesDraggable ?? true)} data-style={JSON.stringify(props.style ?? {})}>
         <button type="button" data-testid="rf-pane" onClick={() => props.onPaneClick?.()} />
+        <button type="button" data-testid="rf-user-move" onClick={(event) => props.onMoveStart?.(event)} />
         {props.nodes.map((node) => {
           const Comp = props.nodeTypes[node.type ?? 'default']!
           return (
