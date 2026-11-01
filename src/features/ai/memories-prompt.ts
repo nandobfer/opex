@@ -1,7 +1,7 @@
 /**
  * Seção das memórias dos agentes nas instruções de sistema (módulo PURO, compartilhado pelo Agente
  * Opex, Agente Maddox, Agente Adversário e agente desenvolvedor). Desde a OPE-104 o bloco é o
- * **contexto pronto do Engramind** (`format=markdown`), que entra sem alteração depois do cabeçalho.
+ * **contexto pronto do Engramind** (`format=tagged`, desde a OPE-109), que entra sem alteração depois do cabeçalho.
  */
 
 export const MEMORIES_SECTION_HEADER = "## Memórias e instruções permanentes"

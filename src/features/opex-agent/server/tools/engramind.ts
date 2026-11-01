@@ -1,12 +1,12 @@
 import { z } from "zod"
 import { DomainError } from "@/lib/api/route"
-import { defineTool, type OpexToolDef } from "./define"
+import { defineTool, type OpexToolContext, type OpexToolDef } from "./define"
 import { ENGRAMIND_OPERATIONS, type EngramindOperation } from "@/features/engramind/operations"
 import { TOKEN_REVEAL_TTL_MS } from "@/features/engramind/constants"
 import { importInputSchema } from "@/features/engramind/schemas/import"
 import { envUpdateSchema } from "@/features/engramind/schemas/env"
 import { applyAiSourceToolSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
-import type { IssuedToken } from "@/features/engramind/types"
+import type { IssuedToken, SearchResults } from "@/features/engramind/types"
 
 /**
  * Ferramentas do Agente Opex do dono para o Engramind (só no catálogo do dono; nada no portal). Uma por
@@ -50,6 +50,32 @@ async function issueToken(input: unknown, actorId: string): Promise<unknown> {
     return { token: view, note: "O segredo NÃO está aqui: o dono vê pelo botão \"Ver token\" do card, uma única vez, nos próximos 10 minutos.", resultAction }
 }
 
+/**
+ * Busca de memórias pelo agente (OPE-109): publica o consumo na rede (`engramind-consumption`, só ids).
+ * Pelo MCP do Agente Maddox (token de sistema) o consumidor é `opex/maddox`; no chat, `opex/opex`.
+ * Nunca derruba a ferramenta.
+ */
+export async function publishSearchConsumption(input: unknown, result: unknown, context: Pick<OpexToolContext, "origin">): Promise<void> {
+    const hits = (result as Partial<SearchResults> | null)?.results ?? []
+    const requested = ((input as { channels?: unknown } | null)?.channels as string[] | undefined) ?? []
+    const delivered = [...new Set(hits.map((hit) => hit.memory.channel))]
+    if (!hits.length) return
+    const { publishConsumption } = await import("@/features/engramind/server/consumption")
+    await publishConsumption({
+        agent: context.origin?.kind === "api-token" ? "opex/maddox" : "opex/opex",
+        kind: "search",
+        channels: requested.length ? requested : delivered,
+        delivered,
+        memoryIds: hits.map((hit) => hit.memory.id),
+    })
+}
+
+async function runOperation(operation: EngramindOperation, input: unknown, context: OpexToolContext): Promise<unknown> {
+    const result = await (await runner()).runEngramindOperation(operation.id, input, context.actorId)
+    if (operation.id === "search_memories") void publishSearchConsumption(input, result, context).catch(() => undefined)
+    return result
+}
+
 function operationTool(operation: EngramindOperation): AnyTool {
     return tool<unknown>({
         name: operation.tool,
@@ -59,7 +85,7 @@ function operationTool(operation: EngramindOperation): AnyTool {
         input: operation.input,
         ...(operation.summarize ? { summarize: operation.summarize } : {}),
         ...(operation.redact ? { redact: operation.redact } : {}),
-        execute: (input, context) => (operation.id === "issue_token" ? issueToken(input, context.actorId) : runner().then((module) => module.runEngramindOperation(operation.id, input, context.actorId))),
+        execute: (input, context) => (operation.id === "issue_token" ? issueToken(input, context.actorId) : runOperation(operation, input, context)),
     })
 }
 
