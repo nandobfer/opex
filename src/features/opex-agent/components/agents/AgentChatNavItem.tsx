@@ -7,7 +7,8 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { VisuallyHidden } from "@/components/ui/visually-hidden"
 import { SidebarTooltip } from "@/features/layout/components/sidebar/SidebarTooltip"
-import { SIDEBAR_FOCUS_RING, sidebarItemVariants } from "@/features/layout/components/sidebar/sidebar-styles"
+import { SidebarItemSurface } from "@/features/layout/components/sidebar/SidebarItemSurface"
+import { SIDEBAR_FOCUS_RING } from "@/features/layout/components/sidebar/sidebar-styles"
 import { agentColorStyle } from "@/features/maddox-agent/colors"
 import { CHAT_AGENT_IDS, type ChatAgentId } from "../../agents"
 import { useOpexRealtime, useOpexSessions } from "../../hooks/useOpexSessions"
@@ -166,18 +167,7 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
 
     const trigger = (
         <button type="button" aria-label={collapsed ? agent.label : undefined} aria-expanded={open} aria-haspopup="dialog" className={cn("block w-full rounded-[4px]", SIDEBAR_FOCUS_RING)} onClick={() => setOpen((value) => !value)} data-testid="agent-nav-item">
-            <motion.div
-                variants={sidebarItemVariants}
-                initial="hidden"
-                animate="show"
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.98 }}
-                className={cn(
-                    "relative flex w-full items-center gap-3 rounded-[4px] px-3 py-2 text-sm transition-colors",
-                    open ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground" : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                    collapsed && "justify-center px-0 py-2.5",
-                )}
-            >
+            <SidebarItemSurface active={open} activeBar={false} collapsed={collapsed} reduceMotion={reduceMotion}>
                 <span className="relative" style={agentColorStyle(colors[active])}>
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.span
@@ -208,7 +198,7 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
                     </AnimatePresence>
                 )}
                 {anyBusy && <span className="sr-only">: respondendo</span>}
-            </motion.div>
+            </SidebarItemSurface>
         </button>
     )
 

@@ -15,12 +15,12 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   metadados de todas as páginas, inclusive login e portal. O mesmo símbolo é usado como logo da
   sidebar (topo), em `public/opex-mark.png`; a logo completa fica em `public/opex-logo.png`.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
-- `src/app/(app)/dashboard/page.tsx`: **Dashboards** — página inicial do app (item próprio no menu,
-  acima de Tarefas; ver `modules/dashboard.md`).
+- `src/app/(app)/dashboard/page.tsx`: **Dashboards** — página inicial do app, **sem item no menu**:
+  a logo no topo da barra leva a ela (ver `modules/dashboard.md`).
 - `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
-- `src/app/(app)/tarefas/horas/page.tsx`: Minhas horas (item próprio no menu).
+- `src/app/(app)/tarefas/horas/page.tsx`: Horas agênticas (no grupo **Contábil** do menu).
 - `src/app/(app)/financeiro/page.tsx`: Financeiro — faturamento das tarefas concluídas por cliente
-  (item próprio no menu; ver `modules/finance.md`), envolto no `RepoIndexProvider`.
+  (no grupo **Contábil** do menu; ver `modules/finance.md`), envolto no `RepoIndexProvider`.
 - `src/app/(app)/desenvolvimento/layout.tsx`: Central de desenvolvimento (item próprio no menu; ver
   `modules/agentic-dev.md`). Distribui o índice de repositórios e renderiza a tela **no layout**
   (`DevCenterRoute`, tarefa por `useParams`); `desenvolvimento/page.tsx` e
@@ -59,8 +59,29 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   portal, o item fica sempre montado e aparece quando algum dos dois está ligado para o cliente, inclusive
   quando o dono liga em tempo real (sem recarregar); sem nenhum, o rodapé vazio com o divisor some
   (`empty:hidden` na lista do rodapé).
-- `navigation.ts`: `APP_NAV` (Dashboards, Tarefas, Horas agênticas, Financeiro, Central de desenvolvimento — ícone `</>` `CodeXml` —, Ambientes; **Agentes** › Agente Revisor, Agente Adversário, Agente Mentor; Sistema › Integrações), `HOME_HREF` (`/dashboard`),
-  `PERSISTENT_PAGE_HREFS`, `pageTransitionKey`, `flattenNav`, `formatBadge`, `badgeLabel`, `isActiveHref`, `activeNavHref`.
+- `navigation.ts`: `APP_NAV`, uma seção sem título com, nesta ordem: Tarefas, Central de
+  desenvolvimento (ícone `</>` `CodeXml`), Engramind e os **grupos** (`NavGroupDef`, `kind: "group"`)
+  **Agentes** (`Bot`: Agente Revisor, Agente Adversário, Agente Mentor), **Contábil** (`Landmark`: Horas
+  agênticas, Financeiro) e **Configurações** (`Settings`: Integrações, Ambientes). Dashboards não tem
+  item (a logo leva a ela). Também exporta `HOME_HREF` (`/dashboard`), `PERSISTENT_PAGE_HREFS`,
+  `pageTransitionKey`, `flattenNav` (expande os grupos: `APP_NAV_ITEMS` tem todas as rotas
+  navegáveis), `navGroupActive`, `formatBadge`, `badgeLabel`, `isActiveHref` e `activeNavHref`.
+- `sidebar/SidebarNavGroup` (+ `hooks/useHoverPopover`): o grupo é um item da barra que abre um
+  painel **à direita, fora da barra** (portal do Radix Popover, ancorado ao gatilho, `sideOffset` 12 e
+  limitado à janela), animado com Framer Motion. Abre ao **passar o mouse** e também por **clique,
+  toque e teclado**:
+  - o hover usa dois sinais de presença (gatilho e painel) com eventos de ponteiro, e só fecha
+    150 ms depois que o cursor saiu dos dois;
+  - toque não conta como hover;
+  - clique com o mouse em cima mantém o painel aberto;
+  - Enter/Espaço focam o primeiro link, as setas ↑/↓ (e Home/End) percorrem os links, e Esc fecha
+    só o painel (não a gaveta do celular) e devolve o foco ao gatilho.
+
+  Escolher um item ou mudar de rota fecha o painel. O gatilho fica ativo (fundo e barra primária)
+  quando a rota atual é de um item do grupo, e o link ativo tem `aria-current="page"`. No celular,
+  o comportamento é o mesmo, por toque.
+- `sidebar/SidebarItemSurface`: superfície visual comum dos itens (link, grupo e o item do agente de
+  chat): entrada, `whileHover x:4`, `whileTap`, estado ativo e barra primária com `layoutId`.
 
 ## Regras
 
@@ -84,5 +105,5 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 ## Testes
 
-`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer}.test.*` e
+`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,sidebar-nav-group}.test.*` e
 `__tests__/app/in-development-pages.test.tsx`.

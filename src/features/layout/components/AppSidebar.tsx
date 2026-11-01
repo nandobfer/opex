@@ -8,10 +8,11 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { withBasePath } from "@/lib/base-path"
 import { activeNavHref, flattenNav } from "../navigation"
-import type { NavBadges, NavSectionDef } from "../types"
+import { isNavGroup, type NavBadges, type NavSectionDef } from "../types"
 import { useNavSectionsState } from "../hooks/useNavSectionsState"
 import { SidebarNavSection } from "./sidebar/SidebarNavSection"
 import { SidebarNavItem } from "./sidebar/SidebarNavItem"
+import { SidebarNavGroup } from "./sidebar/SidebarNavGroup"
 import { SidebarFooter } from "./sidebar/SidebarFooter"
 import { SIDEBAR_FOCUS_RING } from "./sidebar/sidebar-styles"
 
@@ -42,7 +43,8 @@ interface AppSidebarProps {
 
 /**
  * Menu lateral (tema escuro, destaque na cor primária, marca no topo, dono do app no rodapé) com o
- * padrão SideNavigation do DS Sipal: seções recolhíveis, contadores acessíveis e foco visível.
+ * padrão SideNavigation do DS Sipal: seções recolhíveis, grupos com painel à direita
+ * (`SidebarNavGroup`), contadores acessíveis e foco visível.
  *
  * No desktop a barra é **sempre recolhida** (68px), sem botão de recolher/expandir: a versão fica na
  * linha inferior e o avatar do dono abre o popover com a ação "Sair" (`SidebarFooter`). A gaveta do
@@ -52,7 +54,7 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
     const pathname = usePathname()
     const reduceMotion = useReducedMotion() ?? false
     const activeHref = activeNavHref(pathname, flattenNav(sections))
-    const activeSectionId = sections.find((section) => section.items.some((item) => item.href === activeHref))?.id
+    const activeSectionId = sections.find((section) => flattenNav([section]).some((item) => item.href === activeHref))?.id
     const sectionsState = useNavSectionsState(activeSectionId)
 
     return (
@@ -105,20 +107,29 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
                                 reduceMotion={reduceMotion}
                                 onToggle={() => sectionsState.toggle(section.id)}
                             >
-                                {section.items.map((item) => {
-                                    return (
-                                        <SidebarNavItem
-                                            key={item.href}
-                                            item={item}
-                                            href={item.href}
-                                            active={item.href === activeHref}
+                                {section.items.map((entry) =>
+                                    isNavGroup(entry) ? (
+                                        <SidebarNavGroup
+                                            key={entry.id}
+                                            group={entry}
+                                            activeHref={activeHref}
                                             collapsed={collapsed}
-                                            badgeCount={item.badge ? (badges?.[item.badge] ?? 0) : 0}
                                             reduceMotion={reduceMotion}
                                             onNavigate={onNavigate}
                                         />
-                                    )
-                                })}
+                                    ) : (
+                                        <SidebarNavItem
+                                            key={entry.href}
+                                            item={entry}
+                                            href={entry.href}
+                                            active={entry.href === activeHref}
+                                            collapsed={collapsed}
+                                            badgeCount={entry.badge ? (badges?.[entry.badge] ?? 0) : 0}
+                                            reduceMotion={reduceMotion}
+                                            onNavigate={onNavigate}
+                                        />
+                                    ),
+                                )}
                             </SidebarNavSection>
                 ))}
             </nav>
