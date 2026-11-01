@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { OptionTabs } from "@/components/ui/option-tabs"
@@ -50,28 +51,53 @@ export function CronJobExtraFields({ job, onChange, disabled }: CronJobExtraFiel
                     </p>
                 </div>
             )}
-            {jobSupportsRetentionDays(job.id) && (
-                <div className="space-y-1.5">
-                    <Label htmlFor={`cron-retention-${job.id}`} className="text-xs">
-                        Dias sem interação
-                    </Label>
-                    <Input
-                        id={`cron-retention-${job.id}`}
-                        type="number"
-                        min={SESSION_RETENTION_DAYS_MIN}
-                        max={SESSION_RETENTION_DAYS_MAX}
-                        step={1}
-                        className="w-full"
-                        value={jobRetentionDays(job)}
-                        onChange={(event) => {
-                            const n = Math.floor(Number(event.target.value) || SESSION_RETENTION_DAYS_MIN)
-                            onChange({ retentionDays: Math.min(SESSION_RETENTION_DAYS_MAX, Math.max(SESSION_RETENTION_DAYS_MIN, n)) })
-                        }}
-                        disabled={disabled}
-                    />
-                    <p className="text-xs text-muted-foreground">{retentionHelp(job.id)}</p>
-                </div>
-            )}
+            {jobSupportsRetentionDays(job.id) && <RetentionDaysField job={job} onChange={onChange} disabled={disabled} />}
         </>
+    )
+}
+
+/** Limita os dias à faixa aceita (vazio ou inválido = mínimo). */
+export function clampRetentionDays(text: string): number {
+    const n = Math.floor(Number(text) || SESSION_RETENTION_DAYS_MIN)
+    return Math.min(SESSION_RETENTION_DAYS_MAX, Math.max(SESSION_RETENTION_DAYS_MIN, n))
+}
+
+/**
+ * "Dias sem interação": o texto digitado fica em estado local (dá para apagar e digitar outro número);
+ * só números inteiros válidos na faixa sobem durante a digitação, e o limite é aplicado ao sair do campo.
+ */
+function RetentionDaysField({ job, onChange, disabled }: CronJobExtraFieldsProps) {
+    const saved = jobRetentionDays(job)
+    // Rascunho só durante a edição; fora dela o campo mostra o valor salvo (reflete mudanças externas).
+    const [draft, setDraft] = useState<string | null>(null)
+    const text = draft ?? String(saved)
+    return (
+        <div className="space-y-1.5">
+            <Label htmlFor={`cron-retention-${job.id}`} className="text-xs">
+                Dias sem interação
+            </Label>
+            <Input
+                id={`cron-retention-${job.id}`}
+                type="number"
+                min={SESSION_RETENTION_DAYS_MIN}
+                max={SESSION_RETENTION_DAYS_MAX}
+                step={1}
+                className="w-full"
+                value={text}
+                onChange={(event) => {
+                    const value = event.target.value
+                    setDraft(value)
+                    const n = Number(value)
+                    if (value.trim() !== "" && Number.isInteger(n) && n >= SESSION_RETENTION_DAYS_MIN && n <= SESSION_RETENTION_DAYS_MAX) onChange({ retentionDays: n })
+                }}
+                onBlur={() => {
+                    const n = clampRetentionDays(text)
+                    setDraft(null)
+                    if (n !== saved) onChange({ retentionDays: n })
+                }}
+                disabled={disabled}
+            />
+            <p className="text-xs text-muted-foreground">{retentionHelp(job.id)}</p>
+        </div>
     )
 }

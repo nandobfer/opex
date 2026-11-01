@@ -169,6 +169,32 @@ describe('cleanupIdleAgentSessions — excluir as arquivadas', () => {
     expect(mocks.removeOpencode).toHaveBeenCalledWith('ses_m')
   })
 
+  it('regressão F4: sessão desarquivada e com mensagem nova entre a leitura e a exclusão não é apagada', async () => {
+    const id = await session({ lastMessageAt: daysAgo(90), archived: true, archivedAt: daysAgo(45) })
+    const model = sessions() as unknown as { find: (...args: unknown[]) => unknown }
+    const originalFind = model.find
+    let first = true
+    model.find = (...args: unknown[]) => {
+      const query = originalFind(...args) as { lean: () => Promise<unknown> }
+      if (!first) return query
+      first = false
+      // O usuário desarquiva e manda mensagem logo depois da leitura da rotina.
+      return { ...query, sort: () => ({ limit: () => ({ lean: async () => {
+        const docs = await query.lean()
+        Object.assign(docOf(id)!, { archived: false, archivedAt: null, lastMessageAt: NOW, status: 'running' })
+        return docs
+      } }) }) }
+    }
+    try {
+      const result = await cleanupIdleAgentSessions('opex', 30, NOW)
+      expect(result.deleted).toBe(0)
+      expect(docOf(id)).toBeDefined()
+      expect(mocks.deleteFiles).not.toHaveBeenCalled()
+    } finally {
+      model.find = originalFind
+    }
+  })
+
   it('falha numa sessão não interrompe as demais', async () => {
     const a = await session({ lastMessageAt: daysAgo(90), archived: true, archivedAt: daysAgo(45) })
     const b = await session({ lastMessageAt: daysAgo(80), archived: true, archivedAt: daysAgo(45) })

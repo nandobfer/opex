@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * execução. OpenCode sempre falso; banco em memória.
  */
 
+const pageSize = vi.hoisted(() => ({ value: 2 }))
 const store = vi.hoisted(() => ({ models: {} as Record<string, ReturnType<typeof import('../../helpers/memory-model').memoryModel>> }))
 const oc = vi.hoisted(() => ({
   sessions: [] as { id: string; parentID?: string; time: { created: number; updated: number } }[],
@@ -15,7 +16,12 @@ const oc = vi.hoisted(() => ({
   failOn: new Set<string>(),
   listCalls: [] as Record<string, unknown>[],
   unavailable: false,
+  hang: null as null | 'list' | 'active' | 'project',
 }))
+
+/** Promessa que só termina quando o `signal` aborta (servidor que aceita a conexão e não responde). */
+const hanging = (signal?: AbortSignal) =>
+  new Promise<never>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason ?? new Error('abortado')), { once: true }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {} }))
 vi.mock('@/lib/db/models/Agentic', async () => {
@@ -50,25 +56,28 @@ vi.mock('@/lib/ai/opencode-client', () => ({
     if (oc.unavailable) throw new Error('sem conexão')
     return {
       session: {
-        list: async (input: { limit: number; cursor?: string; project?: string }) => {
+        list: async (input: { limit: number; cursor?: string; project?: string; parentID?: string; order?: string }, options?: { signal?: AbortSignal }) => {
           oc.listCalls.push(input)
+          if (oc.hang === 'list') return hanging(options?.signal)
+          if (input.parentID) return { data: oc.sessions.filter((s) => s.parentID === input.parentID), cursor: { next: null } }
           const pool = input.project ? oc.sessions.filter((s) => s.id.startsWith(`${input.project}:`)) : oc.sessions.filter((s) => !s.id.includes(':'))
+          const size = Math.min(input.limit, pageSize.value)
           const start = input.cursor ? Number(input.cursor) : 0
-          const data = pool.slice(start, start + 2)
-          return { data, cursor: { next: start + 2 < pool.length ? String(start + 2) : null } }
+          const data = pool.slice(start, start + size)
+          return { data, cursor: { next: start + size < pool.length ? String(start + size) : null } }
         },
-        active: async () => oc.active,
+        active: async (options?: { signal?: AbortSignal }) => (oc.hang === 'active' ? hanging(options?.signal) : oc.active),
         remove: async ({ sessionID }: { sessionID: string }) => {
           if (oc.failOn.has(sessionID)) throw new Error('falhou')
           oc.removed.push(sessionID)
         },
       },
-      project: { list: async () => oc.projects },
+      project: { list: async (options?: { signal?: AbortSignal }) => (oc.hang === 'project' ? hanging(options?.signal) : oc.projects) },
     }
   },
 }))
 
-import { cleanupIdleOpencodeSessions, describeOpencodeSessionCleanup, planOpencodeSessionCleanup } from '@/features/opencode-service/server/session-retention'
+import { OPENCODE_SESSION_SCAN_LIMIT, cleanupIdleOpencodeSessions, describeOpencodeSessionCleanup, planOpencodeSessionCleanup } from '@/features/opencode-service/server/session-retention'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const daysAgo = (days: number) => NOW.getTime() - days * 86_400_000
@@ -83,6 +92,8 @@ beforeEach(() => {
   oc.failOn = new Set()
   oc.listCalls = []
   oc.unavailable = false
+  oc.hang = null
+  pageSize.value = 2
 })
 
 describe('cleanupIdleOpencodeSessions', () => {
@@ -90,7 +101,9 @@ describe('cleanupIdleOpencodeSessions', () => {
     oc.sessions = [ses('a', 40), ses('b', 5), ses('c', 31), ses('d', 60), ses('e', 1)]
     const result = await cleanupIdleOpencodeSessions(30, NOW)
     expect(oc.removed.sort()).toEqual(['a', 'c', 'd'])
-    expect(result).toEqual({ scanned: 5, deleted: 3, protected: 0, failed: 0 })
+    expect(result).toEqual({ scanned: 5, deleted: 3, protected: 0, failed: 0, truncated: false, outOfTime: false })
+    // Mais antigas primeiro: o teto de leitura nunca corta justamente as candidatas.
+    expect(oc.listCalls.every((call) => call.order === 'asc')).toBe(true)
     expect(oc.listCalls.length).toBeGreaterThan(1)
     expect(describeOpencodeSessionCleanup(result)).toBe('3 sessão(ões) do OpenCode excluída(s) — 5 lida(s)')
   })
@@ -141,5 +154,38 @@ describe('cleanupIdleOpencodeSessions', () => {
 
     oc.unavailable = true
     await expect(cleanupIdleOpencodeSessions(30, NOW)).rejects.toThrow('OpenCode indisponível para limpar as sessões')
+  })
+
+  it('regressão F1: OpenCode que não responde à listagem não trava a rotina (erro pelo prazo da leitura)', async () => {
+    oc.sessions = [ses('a', 40)]
+    oc.hang = 'list'
+    await expect(cleanupIdleOpencodeSessions(30, NOW, { requestTimeoutMs: 20 })).rejects.toThrow('Não foi possível listar as sessões do OpenCode')
+    oc.hang = 'active'
+    await expect(cleanupIdleOpencodeSessions(30, NOW, { requestTimeoutMs: 20 })).rejects.toThrow('Não foi possível listar as sessões do OpenCode')
+    // `project.list` pendurado: segue só com a listagem padrão.
+    oc.hang = 'project'
+    expect(await cleanupIdleOpencodeSessions(30, NOW, { requestTimeoutMs: 20 })).toMatchObject({ deleted: 1 })
+    expect(oc.removed).toEqual(['a'])
+  })
+
+  it('regressão F1: orçamento de tempo esgotado para as exclusões e avisa no resumo', async () => {
+    oc.sessions = [ses('a', 40), ses('b', 40)]
+    const result = await cleanupIdleOpencodeSessions(30, NOW, { budgetMs: 0 })
+    expect(result).toMatchObject({ deleted: 0, outOfTime: true })
+    expect(oc.removed).toEqual([])
+    expect(describeOpencodeSessionCleanup(result)).toMatch(/tempo esgotado/)
+  })
+
+  it('regressão F2: leitura no teto avisa no resumo e confere as subsessões que ficaram de fora antes de excluir a raiz', async () => {
+    pageSize.value = 500
+    const old = Array.from({ length: OPENCODE_SESSION_SCAN_LIMIT - 1 }, (_, i) => ses(`s${i}`, 60))
+    // Raiz mais antiga dentro da leitura; a subsessão recente dela fica além do teto.
+    oc.sessions = [ses('raiz', 90), ...old, ses('filha', 1, 'raiz')]
+    const result = await cleanupIdleOpencodeSessions(30, NOW)
+    expect(result.truncated).toBe(true)
+    expect(result.scanned).toBe(OPENCODE_SESSION_SCAN_LIMIT)
+    expect(oc.removed).not.toContain('raiz')
+    expect(oc.removed.length).toBe(199)
+    expect(describeOpencodeSessionCleanup(result)).toMatch(/teto de 5000 atingido/)
   })
 })

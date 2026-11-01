@@ -57,7 +57,7 @@ sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como
 - Nunca entram: sessão respondendo ou aguardando confirmação (só `idle`/`error`), com turno vivo neste
   processo ou vinculada a um job ativo (`scheduled`, `running` ou `awaiting_confirmation`, por
   `sessionId`, `originSessionId` ou `resultSessionId`). A condição de arquivar é reconferida na
-  gravação. Teto de 200 por etapa e execução; falha numa sessão não interrompe as demais.
+  gravação, e a de excluir é relida logo antes da exclusão. Teto de 200 por etapa e execução; falha numa sessão não interrompe as demais.
 
 ## Chat
 

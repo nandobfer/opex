@@ -81,7 +81,11 @@ export async function cleanupIdleAgentSessions(agent: OpexAgentKind, days: numbe
     for (const doc of archived) {
         if (!eligible(doc) || archivedIdleSince(doc) > cutoff) continue
         try {
-            await purgeSession(doc, actor, { motivo: "inatividade", diasSemInteracao: days })
+            // Reconfere na hora de excluir (a leitura acima pode estar velha): desarquivada, com mensagem
+            // nova ou com turno começado no meio do caminho sai da limpeza.
+            const current = await OpexSession.findOne({ _id: doc._id, archived: true, status: { $in: IDLE_STATUSES }, lastMessageAt: { $lte: cutoff } }).lean<SessionDoc>()
+            if (!current || !eligible(current) || archivedIdleSince(current) > cutoff) continue
+            await purgeSession(current, actor, { motivo: "inatividade", diasSemInteracao: days })
             result.deleted += 1
         } catch (error) {
             result.failed += 1

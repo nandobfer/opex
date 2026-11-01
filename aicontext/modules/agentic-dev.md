@@ -654,9 +654,12 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   é compartilhada pelas mesas, refinamentos, revisões de PR e Agente Adversário.
 - **Limpeza das sessões do OpenCode sem interação** (OPE-106, rotina `opencode-sessions-cleanup`,
   `features/opencode-service/server/session-retention.ts`): lê **todas** as sessões do servidor
-  OpenCode (listagem paginada por `cursor`, mais a de cada projeto de `project.list`, deduplicadas; teto
-  de 5.000 lidas) e exclui as paradas há X dias (`max(time.updated, time.created)`), no máximo 200 por
-  execução. **Nunca** exclui as protegidas: vinculadas a mesa (`sessionId`), fork, refinamento (e a skill
+  OpenCode (listagem paginada por `cursor`, das mais antigas primeiro — `order: "asc"` —, mais a de cada
+  projeto de `project.list`, deduplicadas; teto de 5.000 lidas, avisado no log e no resumo da rotina) e
+  exclui as paradas há X dias (`max(time.updated, time.created)`), no máximo 200 por execução. Cada
+  leitura no OpenCode tem prazo de 30 s (`signal`) e a rotina tem orçamento de 10 min (abaixo do lease
+  de 15 min): passado o prazo, as exclusões param e o restante fica para a próxima. Com a leitura no
+  teto, as subsessões diretas da raiz (`parentID`) são conferidas antes de excluí-la. **Nunca** exclui as protegidas: vinculadas a mesa (`sessionId`), fork, refinamento (e a skill
   ativa), revisão de PR, rodada do Agente Adversário, sessão do Agente Maddox (arquivada ou não) ou em
   execução (`session.active()`). A decisão é por **árvore** (raiz + subsessões `parentID`): sai só a
   árvore inteira parada e sem nenhuma sessão protegida, pela raiz. OpenCode indisponível vira erro da
