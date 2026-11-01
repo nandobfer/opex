@@ -37,6 +37,14 @@ describe('regras do curador', () => {
     expect(decisions.get('x2')!.motivo).toBe('Sem classificação válida do curador')
   })
 
+  it('reescrita proposta acima do text_max (original curto) vai para revisar_dono com o tamanho da reescrita', () => {
+    const decision = applyCuratorRules([item({ ownerProtected: false })], [{ id: 'x1', decisao: 'migrar_reescrevendo', motivo: 'Mais clara', textoProposto: 'y'.repeat(60) }], context).get('x1')!
+    expect(decision.decisao).toBe('revisar_dono')
+    expect(decision.motivo).toContain('A reescrita proposta tem 60 caracteres, acima de 50')
+    // Reescrita dentro do limite continua como migrar_reescrevendo.
+    expect(applyCuratorRules([item({ ownerProtected: false })], [{ id: 'x1', decisao: 'migrar_reescrevendo', motivo: 'ok', textoProposto: 'Curta.' }], context).get('x1')!.decisao).toBe('migrar_reescrevendo')
+  })
+
   it('texto acima do text_max sempre vai para revisar_dono (com a reescrita proposta)', () => {
     const long = item({ texto: 'x'.repeat(51), ownerProtected: false })
     const decision = applyCuratorRules([long], [{ id: 'x1', decisao: 'migrar_reescrevendo', motivo: 'Longa', textoProposto: 'Curta.' }], context).get('x1')!

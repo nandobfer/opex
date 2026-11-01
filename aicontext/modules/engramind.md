@@ -312,14 +312,19 @@ etapa em andamento num reinício vira falha "Interrompida pelo reinício do Opex
 2. **Curador** (`memory-curator.ts` + `server/memory-curator.ts`): modelo escolhido (`OpexAiModelPicker`,
    Gemini/Anthropic/OpenAI/DeepSeek, por `streamAi`), uma chamada por lista. `applyCuratorRules`: sem
    classificação válida → `revisar_dono` ("Sem classificação válida do curador"); `descartar` em memória
-   do dono (`createdBy` local sem `origin`) → `revisar_dono`; acima de `text_max` → `revisar_dono`;
+   do dono (`createdBy` local sem `origin`) → `revisar_dono`; original ou reescrita proposta
+   (`migrar_reescrevendo`) acima de `text_max` → `revisar_dono`;
    categoria inválida → a primeira; **o destino é sempre o canal da lista de origem** (troca sugerida
    pelo modelo só aparece no motivo). Cada chamada tem tempo máximo (`CURATOR_TIMEOUT_MS`, 8 min; o
-   stream é abortado): na triagem o bloco que não responde vai para `revisar_dono`; na compactação a
-   etapa vira falha com "Tentar novamente" — nenhuma etapa fica "em andamento" para sempre.
+   stream é abortado). Na triagem, um bloco que falha (erro do provedor ou tempo esgotado) **preserva a
+   decisão e a revisão anteriores** das memórias dele; a que ainda não tinha decisão vai para
+   `revisar_dono` com o erro real ("Curador indisponível: …"). Se **todos** os blocos falham, a etapa
+   vira falha com o erro e nada do que já foi decidido ou aprovado é trocado. Na compactação, a falha
+   vira etapa falha com "Tentar novamente" — nenhuma etapa fica "em andamento" para sempre.
 3. **Orçamento**: estimativa (~4 caracteres/token) por combinação de turno contra `context.budget_tokens`;
    estourou → "Compactar com o curador" (reescritas e fusões, de volta à revisão).
-4. **Revisão**: original × proposta, Aprovar/Rejeitar/Editar por item ou por lista. Em `descartar`, os
+4. **Revisão**: original × proposta, Aprovar/Rejeitar/Editar por item ou por lista (aprovar a lista
+   pula, deixando pendente, a memória cujo texto final não cabe nos limites do canal). Em `descartar`, os
    botões são **"Aceitar descarte"** (não importa) e **"Migrar mesmo assim"** (ação explícita); o lote
    nunca aprova uma descartada ("Aprovar incluindo as de revisão do dono" aprova só as `revisar_dono`).
 5. **Importação** (com confirmação): só as aprovadas, no canal da lista, em lotes de `limits.max_batch`,

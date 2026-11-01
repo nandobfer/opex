@@ -163,6 +163,13 @@ export function applyCuratorRules(items: readonly CuratorSourceItem[], answers: 
             decisao = "revisar_dono"
             motivo = `Acima de ${context.textMax} caracteres: reescreva antes de importar. ${answer.motivo}`
         }
+        // A reescrita também precisa caber: acima do limite, a memória vai para a revisão do dono.
+        if (decisao === "migrar_reescrevendo" && textoProposto && textoProposto.length > context.textMax) {
+            decisao = "revisar_dono"
+            motivo = `A reescrita proposta tem ${textoProposto.length} caracteres, acima de ${context.textMax}: reescreva antes de importar. ${answer.motivo}`
+        } else if (decisao === "revisar_dono" && textoProposto && textoProposto.length > context.textMax) {
+            motivo = `${motivo} (a reescrita proposta também passa de ${context.textMax} caracteres)`
+        }
         if (answer.canalDestino && answer.canalDestino !== channel && listOfChannel(answer.canalDestino)) {
             motivo = `${motivo} (o curador sugeriu mover para ${answer.canalDestino}; a memória fica na lista de origem)`
         }

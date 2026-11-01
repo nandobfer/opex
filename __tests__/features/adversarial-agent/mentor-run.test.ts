@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  limitsFor: vi.fn(),
 }))
 const store = vi.hoisted(() => ({ runs: null as unknown, reviews: null as unknown }))
 
@@ -21,6 +22,7 @@ vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
 vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 // Memórias do adversário: a lista `adversarial` do serviço de memórias dos agentes.
+vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limitsFor }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, createAgentMemory: mocks.create, updateAgentMemory: mocks.update }))
 vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: vi.fn(async () => [{ id: 'c1', projectName: 'App' }]) }))
 vi.mock('@/features/adversarial-agent/server/models', async () => {
@@ -82,6 +84,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([{ id: 'm1', resumo: 'Providers', texto: 'Confira providers.', autor: 'Eu', criadaEm: '', atualizadaEm: '' }])
   mocks.create.mockImplementation(async () => ({ memoria: { id: 'new' }, formatadaPorIa: true }))
   mocks.update.mockImplementation(async (_agent: string, id: string) => ({ memoria: { id }, formatadaPorIa: true }))
+  mocks.limitsFor.mockResolvedValue({ textMin: 3, textMax: 4000 })
 })
 
 describe('pipeline do Agente Mentor', () => {
@@ -143,6 +146,26 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 4.000')
     expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.any(Object))
+  })
+
+  it('limite do canal no Engramind (2.000): regra de 3.000 volta ao redator com esse teto e só a curta é gravada', async () => {
+    mocks.limitsFor.mockResolvedValue({ textMin: 3, textMax: 2000 })
+    const long = 'x'.repeat(3000)
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ action: 'create', text: long }))
+      .mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    expect(await run(settings())).toMatchObject({ status: 'created' })
+    expect(mocks.limitsFor).toHaveBeenCalledWith('agentes/adversario')
+    expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 2.000')
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.any(Object))
+  })
+
+  it('limites indisponíveis: usa o padrão de 4.000 e segue', async () => {
+    mocks.limitsFor.mockRejectedValue(new Error('Engramind fora'))
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    expect(await run(settings())).toMatchObject({ status: 'created' })
   })
 
   it('regra longa de novo, mesmo em Sugerir: descartada (nunca vira sugestão que não pode ser aprovada)', async () => {

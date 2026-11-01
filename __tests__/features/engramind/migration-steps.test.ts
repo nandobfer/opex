@@ -12,7 +12,7 @@ const holder = vi.hoisted(() => ({
   backups: new Map<string, Record<string, unknown>>(),
   legacy: [] as Record<string, unknown>[],
   writes: [] as string[],
-  stream: null as null | ((input: { signal?: AbortSignal }) => AsyncIterable<{ type: string; text?: string; message?: string }>),
+  stream: null as null | ((input: { signal?: AbortSignal; prompt?: string }) => AsyncIterable<{ type: string; text?: string; message?: string }>),
 }))
 
 function setPath(target: Record<string, unknown>, path: string, value: unknown) {
@@ -57,7 +57,7 @@ vi.mock('@/features/ai/server/memory-settings', () => ({
   memorySettings: async () => ({ textMin: 3, textMax: 4000, maxBatch: 100, budgetTokens: 4000, categories: [{ key: 'PROJECT_RULES', label: 'Regras' }] }),
   memoryLimitsFor: async () => ({ textMin: 3, textMax: 4000 }),
 }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: (input: { signal?: AbortSignal }) => holder.stream!(input) }))
+vi.mock('@/lib/ai/stream', () => ({ streamAi: (input: { signal?: AbortSignal; prompt?: string }) => holder.stream!(input) }))
 
 import { compactCombination, downloadBackup, generateBackup, getMigration, resetMigrationRuntimeForTests, runCurator, setCuratorTimeoutForTests } from '@/features/engramind/server/migration'
 
@@ -113,19 +113,45 @@ describe('etapas da migração', () => {
     expect(holder.stream).not.toHaveBeenCalled()
   })
 
-  it('curador classifica todas: resposta válida aplica a decisão; bloco que não responde no tempo vira revisar_dono', async () => {
+  it('curador classifica todas; se todos os blocos falham, a etapa falha e decisões e aprovações anteriores ficam', async () => {
     await generateBackup('local')
     holder.stream = replying(JSON.stringify([{ id: 'a1', decisao: 'migrar', motivo: 'ok', confianca: 0.9 }, { id: 'a2', decisao: 'migrar', motivo: 'ok', confianca: 0.9 }]))
     await runCurator(CURATOR, 'local')
     await stepDone('triage')
     expect(holder.state!.items.map((item) => (item.decision as { decisao: string }).decisao)).toEqual(['migrar', 'migrar'])
+    holder.state!.items[0]!.review = { status: 'aprovada', texto: null, categoria: null, at: new Date() }
 
     setCuratorTimeoutForTests(20)
     holder.stream = never()
     await runCurator(CURATOR, 'local')
     await stepDone('triage')
+    expect(holder.state!.steps.triage).toMatchObject({ status: 'failed', error: expect.stringContaining('O curador não classificou nenhuma memória: O curador não respondeu') })
+    expect(holder.state!.items.map((item) => (item.decision as { decisao: string }).decisao)).toEqual(['migrar', 'migrar'])
+    expect(holder.state!.items[0]!.review).toMatchObject({ status: 'aprovada' })
+  })
+
+  it('falha parcial: o bloco que falha preserva a decisão anterior; sem decisão, vai para revisar_dono com o erro real', async () => {
+    holder.legacy[1]!.agentId = 'maddox-owner'
+    await generateBackup('local')
+    const byList = (failing: string) => (input: { prompt?: string }) =>
+      (async function* () {
+        if (input.prompt?.includes(failing)) throw new Error('cota esgotada')
+        const id = input.prompt?.includes('Use pnpm.') ? 'a1' : 'a2'
+        yield { type: 'delta', text: JSON.stringify([{ id, decisao: 'migrar', motivo: 'ok', confianca: 0.9 }]) }
+      })()
+    holder.stream = byList('Responda em pt-BR.')
+    await runCurator(CURATOR, 'local')
+    await stepDone('triage')
     expect(holder.state!.steps.triage!.status).toBe('done')
-    expect(holder.state!.items.map((item) => (item.decision as { decisao: string }).decisao)).toEqual(['revisar_dono', 'revisar_dono'])
+    expect(holder.state!.items[0]!.decision).toMatchObject({ decisao: 'migrar' })
+    expect(holder.state!.items[1]!.decision).toMatchObject({ decisao: 'revisar_dono', motivo: 'Curador indisponível: cota esgotada' })
+
+    holder.state!.items[0]!.review = { status: 'aprovada', texto: null, categoria: null, at: new Date() }
+    holder.stream = byList('Use pnpm.')
+    await runCurator(CURATOR, 'local')
+    await stepDone('triage')
+    expect(holder.state!.items[0]).toMatchObject({ decision: { decisao: 'migrar', motivo: 'ok' }, review: { status: 'aprovada' } })
+    expect(holder.state!.items[1]!.decision).toMatchObject({ decisao: 'migrar' })
   })
 
   it('compactação que não responde no tempo vira falha (não fica em andamento) e libera as outras etapas', async () => {

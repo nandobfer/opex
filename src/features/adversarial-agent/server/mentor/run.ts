@@ -38,6 +38,7 @@ import { enabledTargets, type MentorRunListQuery, type MentorSettings } from "..
 import type { MentorProposal, MentorRunDto, MentorRunListDto } from "../../mentor/types"
 import { AdversarialReview } from "../models"
 import { createAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
+import { memoryChannelOf } from "@/features/ai/agents"
 import { pageInfo } from "@/lib/list/query"
 import { listCentralOptions } from "../central-options"
 import { buildMentorRunListFilter } from "./list-query"
@@ -55,6 +56,20 @@ const log = loggerFor({ module: "adversarial-agent", feature: "mentor" })
 
 /** Central da lista: só `developer-central` tem (a da mesa). */
 const centralOf = (target: MentorTarget, centralId: string | null) => (target === "developer-central" ? centralId : null)
+
+/**
+ * Tamanho máximo do canal de destino (`memory.text_max` do Engramind, com a sobreposição do canal), para o
+ * redator reescrever antes de o serviço recusar. Sem o Engramind, o padrão; o serviço ainda confere ao gravar.
+ */
+async function targetTextMax(target: MentorTarget, centralId: string | null): Promise<number | undefined> {
+    try {
+        const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
+        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }))).textMax
+    } catch (error) {
+        log.warn({ target, err: error instanceof Error ? error.message : String(error) }, "[mentor] limites das memórias indisponíveis: usando o padrão")
+        return undefined
+    }
+}
 
 /** Memórias de uma lista (Engramind), no formato que o redator lê. */
 async function listTargetMemories(target: MentorTarget, centralId: string | null): Promise<{ id: string; summary: string; text: string }[]> {
@@ -269,6 +284,7 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
         const memories = lists.find((list) => list.target === target)?.memories ?? []
         const others = summaries.filter((list) => list.target !== target)
         const sanitizeContext: SanitizeContext = {
+            textMax: await targetTextMax(target, centralOf(target, input.centralId)),
             allowPaths: target === "developer-central",
             taskCode: input.taskCode,
             taskTitle: input.taskTitle,

@@ -145,4 +145,11 @@ describe('revisão em lote', () => {
     await reviewBulk({ list: 'opex-owner', centralId: null, status: 'aprovada', includeAttention: true }, 'local')
     expect(holder.state!.items.map((row) => (row.review as { status: string }).status)).toEqual(['aprovada', 'aprovada', 'pendente'])
   })
+
+  it('aprovar em lote pula a memória cujo texto final não cabe (fica pendente) e aprova as demais', async () => {
+    const tooLong = { ...decision('migrar_reescrevendo'), textoProposto: 'x'.repeat(4001) }
+    seed([item('a', 'migrar', 'pendente'), item('b', 'migrar_reescrevendo', 'pendente', { decision: tooLong }), item('c', 'migrar', 'pendente')])
+    await expect(reviewBulk({ list: 'opex-owner', centralId: null, status: 'aprovada', includeAttention: false }, 'local')).resolves.toBeTruthy()
+    expect(holder.state!.items.map((row) => (row.review as { status: string }).status)).toEqual(['aprovada', 'pendente', 'aprovada'])
+  })
 })

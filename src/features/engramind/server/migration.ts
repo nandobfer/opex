@@ -276,25 +276,38 @@ export async function runCurator(input: CuratorRunInput, actorId: string): Promi
         for (const item of pending) groups.set(groupKey(item), [...(groups.get(groupKey(item)) ?? []), item])
         const instructions = buildCuratorInstructions(settings.categories, settings.textMax)
         const decisions = new Map<string, NonNullable<IMigrationItem["decision"]>>()
+        const decided = new Set(pending.filter((item) => item.decision).map((item) => item.sourceId))
         let done = 0
+        let chunks = 0
+        let failed = 0
+        let lastError = ""
         for (const items of groups.values()) {
             const sources = items.map(sourceOf)
             const summaries = sources.map((item) => ({ id: item.id, resumo: item.resumo || item.texto.slice(0, 120), createdAt: item.createdAt }))
             const channel = channelOfSource(sources[0]) ?? sources[0].list
             for (let start = 0; start < sources.length; start += CURATOR_CHUNK) {
                 const chunk = sources.slice(start, start + CURATOR_CHUNK)
-                let answers: ReturnType<typeof parseCuratorAnswer> = []
+                const rules = { categories: settings.categories, textMax: settings.textMax }
+                chunks++
                 try {
-                    answers = parseCuratorAnswer(await askCurator(input, instructions, buildCuratorPrompt(chunk[0].list, chunk, summaries, channel), chunk[0].list, curatorTimeoutMs))
+                    const answers = parseCuratorAnswer(await askCurator(input, instructions, buildCuratorPrompt(chunk[0].list, chunk, summaries, channel), chunk[0].list, curatorTimeoutMs))
+                    for (const [id, decision] of applyCuratorRules(chunk, answers, rules)) decisions.set(id, decision)
                 } catch (error) {
-                    // Uma chamada que falha não para a triagem: as memórias dela vão para a revisão do dono.
-                    engramindLog.warn({ list: chunk[0].list, err: messageOf(error) }, "[engramind] curador falhou num bloco: memórias vão para a revisão do dono")
+                    // Bloco que falha: a decisão e a revisão anteriores ficam como estavam; a memória ainda sem
+                    // decisão vai para a revisão do dono com o erro real no motivo.
+                    failed++
+                    lastError = messageOf(error)
+                    engramindLog.warn({ list: chunk[0].list, err: lastError }, "[engramind] curador falhou num bloco: decisões anteriores preservadas")
+                    for (const [id, decision] of applyCuratorRules(chunk, [], rules)) {
+                        if (!decided.has(id)) decisions.set(id, { ...decision, motivo: `Curador indisponível: ${lastError}` })
+                    }
                 }
-                for (const [id, decision] of applyCuratorRules(chunk, answers, { categories: settings.categories, textMax: settings.textMax })) decisions.set(id, decision)
                 done += chunk.length
                 await setStep("triage", { progress: { done, total: pending.length } })
             }
         }
+        // Todos os blocos falharam: a etapa falha com o erro real e nada do que já foi decidido é trocado.
+        if (chunks > 0 && failed === chunks) throw new Error(`O curador não classificou nenhuma memória: ${lastError}`)
         const latest = await loadState()
         const items = latest.items.map((item) => {
             const decision = decisions.get(item.sourceId)
@@ -304,7 +317,7 @@ export async function runCurator(input: CuratorRunInput, actorId: string): Promi
         })
         await MemoryMigration.updateOne({ _id: MIGRATION_ID }, { $set: { items, curator: { provider: input.provider, model: input.model, variant: input.variant ?? null, ranAt: new Date() } } })
         const counts = Object.fromEntries(CURATOR_DECISIONS.map((key) => [key, [...decisions.values()].filter((item) => item.decisao === key).length]))
-        await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "curador", provedor: input.provider, modelo: input.model, memorias: decisions.size, ...counts })
+        await auditEngramind(actorId, "migracao", AcaoAuditoria.EXECUTAR, { passo: "curador", provedor: input.provider, modelo: input.model, memorias: decisions.size, blocosComFalha: failed, ...counts })
     })
     return getMigration()
 }
@@ -354,6 +367,12 @@ function included(item: IMigrationItem): boolean {
     return item.decision?.decisao === "migrar" || item.decision?.decisao === "migrar_reescrevendo"
 }
 
+async function fits(item: IMigrationItem, texto: string): Promise<boolean> {
+    const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
+    const limits = await memoryLimitsFor(item.channel)
+    return texto.length <= limits.textMax && texto.trim().length >= limits.textMin
+}
+
 async function assertFits(item: IMigrationItem, texto: string): Promise<void> {
     const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
     const limits = await memoryLimitsFor(item.channel)
@@ -399,7 +418,13 @@ export async function reviewBulk(input: MigrationBulkInput, actorId: string): Pr
         if (input.status === "aprovada" && item.decision?.decisao === "descartar") return false
         return Boolean(input.includeAttention)
     }
-    const targets = state.items.filter((item) => item.list === input.list && (item.centralId ?? null) === (input.centralId ?? null) && item.decision && !item.imported && eligible(item))
+    const candidates = state.items.filter((item) => item.list === input.list && (item.centralId ?? null) === (input.centralId ?? null) && item.decision && !item.imported && eligible(item))
+    // Aprovar em lote pula a memória cujo texto final não cabe nos limites (fica pendente para editar).
+    const targets: IMigrationItem[] = []
+    for (const item of candidates) {
+        if (input.status === "aprovada" && !(await fits(item, finalOf(item).texto))) continue
+        targets.push(item)
+    }
     if (!targets.length) return getMigration()
     return reviewItems({ items: targets.map((item) => ({ id: item.sourceId, status: input.status })) }, actorId)
 }
