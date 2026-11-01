@@ -21,7 +21,7 @@ export function StatsCard({ title, rows, children }: { title: string; rows: Stat
                 {rows.map((row) => (
                     <div key={row.label} className="contents">
                         <dt className="text-muted-foreground">{row.label}</dt>
-                        <dd className="text-right font-medium tabular-nums text-foreground" data-testid={row.testId}>
+                        <dd className="text-right font-medium tabular-nums text-foreground" data-testid={row.testId} data-value={row.value}>
                             {typeof row.value === "number" ? <AnimatedNumber value={row.value} /> : row.value}
                         </dd>
                     </div>

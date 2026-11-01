@@ -5,7 +5,7 @@ import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/r
 import { Archive, Hash, MoreHorizontal, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { agentIcon } from "./agent-icons"
+import { AgentIcon } from "./agent-icons"
 import { PulseRing } from "./live"
 
 /** Zoom abaixo do qual os rótulos somem (visão muito afastada). */
@@ -27,13 +27,12 @@ export function CenterHandles() {
 export type AgentNodeData = { id: string; name: string; app: string; dimmed?: boolean }
 
 export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentNodeData, "agent">>) {
-    const Icon = agentIcon(data.id)
     const showLabel = useZoom() >= LABEL_MIN_ZOOM
     return (
         <div data-testid={`agent-node-${data.id}`} title={data.id} className={cn("relative flex cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
             <PulseRing nodeKey={`agent:${data.id}`} />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                <Icon className="h-4 w-4" aria-hidden />
+                <AgentIcon agent={data.id} className="h-4 w-4" />
             </span>
             {showLabel && (
                 <span className="flex min-w-0 flex-col leading-tight">

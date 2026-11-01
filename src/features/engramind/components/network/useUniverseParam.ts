@@ -43,8 +43,8 @@ export function useUniverseParam(options: { escapeEnabled: boolean }) {
         if (!universe || !options.escapeEnabled) return
         const onKey = (event: KeyboardEvent) => {
             if (event.key !== "Escape" || event.defaultPrevented) return
-            const target = event.target as HTMLElement | null
-            if (target?.closest("input, textarea, [role='dialog'], [role='alertdialog']")) return
+            const target = event.target
+            if (target instanceof Element && target.closest("input, textarea, [role='dialog'], [role='alertdialog']")) return
             back()
         }
         window.addEventListener("keydown", onKey)

@@ -404,16 +404,27 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   `CLIENT_NOT_ALLOWED`). Memória de outro canal = 404. Lista desconhecida = 404 `AI_AGENT_NOT_FOUND`.
 - **DTO** (`MemoryDto`): `id` (`m_…`), `texto`, `resumo` (título do Redator; primeira frase enquanto
   `resumoPendente`), `categoria`, `fixada`, `ativa`, `versao`, `autor`, `doDono`, `origin`, datas,
-  `centralId?`/`clientId?`. Limites (`text_min`/`text_max`) e categorias vêm do Engramind
+  `centralId?`/`clientId?` e `uso` (OPE-109: `consultas` = `retrieval_count`, `injecoes` =
+  `injected_count`, `ultimaConsulta`, `verificadaEm`, `esquecida` = `stale_candidate`). Limites (`text_min`/`text_max`) e categorias vêm do Engramind
   (`memoryInputSchemaFor`, a mesma regra na tela, nas rotas e nas ferramentas).
 - **Prompt**: `agentMemoryContext(consumer, turn)` (`server/agent-memory-context.ts`) devolve o bloco
-  markdown do Engramind, que entra sem alteração depois do cabeçalho de `memoriesSection`
+  do Engramind em `format=tagged` (desde a OPE-109: `<memories>`/`<channel slug>`/`<CATEGORIA>` com uma
+  linha `#<id>: <texto>` por memória, para o Opex saber quais foram entregues), que entra sem alteração depois do cabeçalho de `memoriesSection`
   (`memories-prompt.ts`); com o Engramind fora do ar, o cache de reserva e o aviso do turno.
-- **Tela**: `AgentMemoriesCard` + `MemoryList` (`MemoryRow`: resumo inteiro, categoria, selos
-  **Fixada**, origem (Mentor/agente) e dono; Fixar/Desafixar; `Switch` Ativo/Inativo **otimista**
-  com reversão e toast; Editar/Excluir com `ConfirmDialog`; inativas esmaecidas; contador "N ativas ·
-  M inativas"). `MemoryEditor`: contador até `textMax`, Categoria (`Select` do projeto), Ctrl+Enter/Esc,
-  conflito de versão mantém o rascunho. `MemoriesNotices` (sempre montado, oculto por estilo): migração
+- **Tela** (OPE-109: **sempre em rede**, sem lista nem seletor Lista | Rede): `AgentMemoriesCard` +
+  `MemoryNetworkView` mostra o **universo do canal da lista** (`memoryChannelOf`: Memórias do Opex →
+  `opex`, Memórias do dono do Maddox → `agentes/maddox/dono`, listas por cliente/central → o canal
+  daquele cliente/central), com o componente compartilhado `MemoryUniverse` da rede do Engramind
+  (`aicontext/modules/engramind.md`, "Rede"): uma partícula por memória (ativas, fixadas e inativas),
+  card no hover/toque com título, texto, idade, relevância, última vez usada, **Ativa** (otimista com
+  reversão e toast), Fixar/Desafixar, Editar (diálogo com o `MemoryEditor`; conflito de versão mantém
+  o rascunho com "Esta memória mudou enquanto você editava. Confira a versão atual.") e Excluir
+  (`ConfirmDialog`); selo "Memória do dono". As ações passam pelo `useMemories` (mesmas rotas e
+  proteções: a memória do dono continua protegida contra o agente; o dono pode tudo). Lista vazia (ou
+  canal ainda não criado): "Nenhuma memória nesta lista ainda" + **Nova memória**; com memórias, o
+  botão Nova memória fica no canto do canvas. Skeleton com a altura do canvas compacto
+  (`NETWORK_CANVAS_COMPACT_CLASS`). `MemoryEditor`: contador até `textMax`, Categoria (`Select` do
+  projeto), Ctrl+Enter/Esc. `MemoriesNotices` (sempre montado, oculto por estilo): migração
   pendente, Engramind indisponível e memórias fora do contexto. Tempo real por `useMemoriesRealtime`
   (`ai-memories-updated` por lista/central/cliente; `engramind-updated` `migration.updated` relê os
   metadados). "Memórias do Opex" aparece nas abas dos quatro agentes.

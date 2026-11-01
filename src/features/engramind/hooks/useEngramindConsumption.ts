@@ -69,6 +69,7 @@ export interface Travel {
 }
 
 let travelSeq = 0
+const NO_BUMPS: Record<string, number> = {}
 
 /**
  * Efeitos locais da rede: pulsos por node (contador que remonta o anel), partículas viajando pelas
@@ -79,12 +80,20 @@ export function useLiveEffects(resetKey: unknown) {
     const reducedMotion = useReducedMotion()
     const [pulses, setPulses] = useState<Record<string, number>>({})
     const [travels, setTravels] = useState<Travel[]>([])
-    const [bumps, setBumps] = useState<Record<string, number>>({})
+    // O aumento vale até a próxima releitura (`resetKey`): o estado guarda a chave em que nasceu.
+    const [bumpState, setBumpState] = useState<{ key: unknown; bumps: Record<string, number> }>({ key: resetKey, bumps: {} })
+    const bumps = bumpState.key === resetKey ? bumpState.bumps : NO_BUMPS
+    const keyRef = useRef(resetKey)
     const [liveCount, setLiveCount] = useState(0)
     const timers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-    useEffect(() => setBumps({}), [resetKey])
-    useEffect(() => () => timers.current.forEach(clearTimeout), [])
+    useEffect(() => {
+        keyRef.current = resetKey
+    }, [resetKey])
+    useEffect(() => {
+        const pending = timers.current
+        return () => pending.forEach(clearTimeout)
+    }, [])
 
     const pulse = useCallback(
         (keys: readonly string[], delayMs = 0) => {
@@ -105,10 +114,11 @@ export function useLiveEffects(resetKey: unknown) {
     const finish = useCallback((id: string) => setTravels((previous) => previous.filter((item) => item.id !== id)), [])
     const bump = useCallback((ids: readonly string[]) => {
         if (!ids.length) return
-        setBumps((previous) => {
-            const next = { ...previous }
+        setBumpState((previous) => {
+            const key = keyRef.current
+            const next = { ...(previous.key === key ? previous.bumps : {}) }
             for (const id of ids) next[id] = (next[id] ?? 0) + 1
-            return next
+            return { key, bumps: next }
         })
     }, [])
     const countEvent = useCallback(() => setLiveCount((count) => count + 1), [])

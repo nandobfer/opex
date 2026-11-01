@@ -65,7 +65,7 @@ export function useEngramindNetwork() {
     const settings = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     const usage = useMemoryUsage()
 
-    const setting = (key: string) => settings.data?.settings.find((meta) => meta.key === key)?.value
+    const setting = (key: string) => settings.data?.settings?.find((meta) => meta.key === key)?.value
     const staleDays = setting(STALE_AFTER_DAYS_KEY)
     const maxBatch = setting("limits.max_batch")
     const categories = (setting("categories.list") as Category[] | undefined) ?? []

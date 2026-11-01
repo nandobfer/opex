@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef, useState, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { Panel } from "@xyflow/react"
 import { Brain, Hash, Plus, type LucideIcon } from "lucide-react"
@@ -64,22 +64,20 @@ export function MemoryUniverse({ center, memories, usage, staleAfterDays, channe
     const [hovered, setHovered] = useState<string | null>(null)
     const [pinned, setPinned] = useState<string | null>(null)
     const localRemovals = useRef(new Set<string>())
-    const { items, removed } = useLeavingItems(memories)
     const ids = useMemo(() => new Set(memories.map((memory) => memory.id)), [memories])
+    const openRef = useRef<(string | null)[]>([])
+    const items = useLeavingItems(memories, (removed) => {
+        // Memória aberta que sumiu por outra origem (excluída ou movida): o card fecha com aviso.
+        if (removed.some((id) => openRef.current.includes(id) && !localRemovals.current.has(id))) toast.info("A memória aberta foi excluída ou movida por outra origem.")
+    })
 
     const visuals = useMemo(() => buildParticles(memories, { usage, staleAfterDays, bumps: live.bumps }), [memories, usage, staleAfterDays, live.bumps])
     const positions = useMemo(() => layoutUniverse(items), [items])
-    const activeId = pinned ?? hovered
-
+    // Só vale o que ainda está no universo: a memória que saiu fecha o card sozinha.
+    const activeId = [pinned, hovered].find((id) => id !== null && ids.has(id)) ?? null
     useEffect(() => {
-        if (!removed.length) return
-        const external = removed.filter((id) => (id === pinned || id === hovered) && !localRemovals.current.has(id))
-        if (external.length) toast.info("A memória aberta foi excluída ou movida por outra origem.")
-        if (removed.includes(pinned ?? "")) setPinned(null)
-        if (removed.includes(hovered ?? "")) setHovered(null)
-        // Só a lista de removidas dispara o aviso.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [removed])
+        openRef.current = [pinned, hovered]
+    }, [pinned, hovered])
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {

@@ -54,7 +54,7 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
     const [deleting, setDeleting] = useState<MemoryDto | null>(null)
     const byId = useMemo(() => new Map(memories.map((memory) => [memory.id, memory])), [memories])
     const network = useMemo(() => memories.map((memory) => memoryDtoToNetwork(memory, channel)), [memories, channel])
-    const staleDays = settings.data?.settings.find((setting) => setting.key === STALE_AFTER_DAYS_KEY)?.value
+    const staleDays = settings.data?.settings?.find((setting) => setting.key === STALE_AFTER_DAYS_KEY)?.value
     const limits = meta.data ? { textMin: meta.data.textMin, textMax: meta.data.textMax } : undefined
     const categories = meta.data?.categories ?? []
 
