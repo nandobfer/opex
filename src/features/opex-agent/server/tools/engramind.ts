@@ -7,6 +7,9 @@ import { importInputSchema } from "@/features/engramind/schemas/import"
 import { envUpdateSchema } from "@/features/engramind/schemas/env"
 import { applyAiSourceToolSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
 import type { IssuedToken, SearchResults } from "@/features/engramind/types"
+import { loggerFor } from "@/lib/logger"
+
+const log = loggerFor({ module: "opex-agent" })
 
 /**
  * Ferramentas do Agente Opex do dono para o Engramind (só no catálogo do dono; nada no portal). Uma por
@@ -52,17 +55,29 @@ async function issueToken(input: unknown, actorId: string): Promise<unknown> {
 
 /**
  * Busca de memórias pelo agente (OPE-109): publica o consumo na rede (`engramind-consumption`, só ids).
- * Pelo MCP do Agente Maddox (token de sistema) o consumidor é `opex/maddox`; no chat, `opex/opex`.
- * Nunca derruba a ferramenta.
+ * O consumidor vem do escopo da sessão: o Agente Maddox (`scope.agent === "maddox"`, sessão dele pelo
+ * MCP) é `opex/maddox`; o chat do Agente Opex, `opex/opex`. Chamada por **token de sistema** (`origin`
+ * `api-token`: outro sistema ou o dono pelo MCP) não é um agente do Opex: não anima a rede (o consumo de
+ * fora só atualiza os números na releitura). Nunca derruba a ferramenta.
  */
-export async function publishSearchConsumption(input: unknown, result: unknown, context: Pick<OpexToolContext, "origin">): Promise<void> {
+export function searchConsumer(context: Pick<OpexToolContext, "origin" | "scope">): "opex/opex" | "opex/maddox" | null {
+    if (context.origin?.kind === "api-token") return null
+    return context.scope?.agent === "maddox" ? "opex/maddox" : "opex/opex"
+}
+
+export async function publishSearchConsumption(input: unknown, result: unknown, context: Pick<OpexToolContext, "origin" | "scope">): Promise<void> {
     const hits = (result as Partial<SearchResults> | null)?.results ?? []
     const requested = ((input as { channels?: unknown } | null)?.channels as string[] | undefined) ?? []
     const delivered = [...new Set(hits.map((hit) => hit.memory.channel))]
+    const agent = searchConsumer(context)
     if (!hits.length) return
+    if (!agent) {
+        log.info({ tokenId: context.origin?.tokenId, results: hits.length }, "[engramind] busca por token de sistema: consumo não animado na rede")
+        return
+    }
     const { publishConsumption } = await import("@/features/engramind/server/consumption")
     await publishConsumption({
-        agent: context.origin?.kind === "api-token" ? "opex/maddox" : "opex/opex",
+        agent,
         kind: "search",
         // Só slugs reais: prefixos (`agentes/opex/*`) não casam com nenhum link da rede.
         channels: [...new Set([...requested.filter((slug) => typeof slug === "string" && !slug.endsWith("*")), ...delivered])],

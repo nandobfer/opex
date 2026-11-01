@@ -267,7 +267,12 @@ injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafi
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
 (com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
 zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
-partícula sai animada (`useLeavingItems`).
+partícula sai animada (`useLeavingItems`: um timer por item que sai, independente de novas leituras da
+lista, então o node e o link somem depois de `LEAVE_MS` mesmo com a lista relida no meio). Excluir ou
+mover **daqui** não avisa: a remoção é marcada só na confirmação do diálogo (`useLocalRemovals`; cancelar
+não marca, falha desmarca, a marca é esquecida quando o item sai). As listas do Engramind
+(`useEngramindList().items`) e os dados da rede (`useEngramindNetwork`) mantêm a referência enquanto os
+dados não mudam, para o layout e os nodes não recalcularem a cada render.
 
 **Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
 `useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
@@ -356,7 +361,9 @@ todas as páginas) pelo proxy, `settings` (prazo, categorias, limites, `max_batc
   partícula volta ao agente). Origens: o contexto do turno (`getAgentMemoryContext`, faixa 1 do bloco
   `tagged`; a resposta `304` usa os ids do cache e anima do mesmo jeito; cache por indisponibilidade
   ou turno sem memórias não publica) e a ferramenta `search_engramind_memories` do Agente Opex
-  (`opex/opex` no chat, `opex/maddox` pelo MCP do Maddox; sem resultados não publica). As buscas do
+  (consumidor pelo escopo da sessão, `searchConsumer`: `opex/opex` no chat do Agente Opex,
+  `opex/maddox` na sessão do Agente Maddox; chamada por **token de sistema** no MCP do dono não é um
+  agente do Opex e não publica, só log informativo; sem resultados não publica). As buscas do
   dono na tela não contam. Também grava `engramind_memory_usage`. No cliente,
   `useEngramindConsumption` marca o uso no cache, anima localmente (`useLiveEffects`: pulso, partícula,
   +tamanho) e relê memórias e uso 6 s depois (o Engramind grava contadores em lote a cada 5 s); id de

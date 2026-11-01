@@ -20,6 +20,7 @@ import type { MemoryDto } from "../../types"
 import { PENDING_PREFIX } from "../../memory-list"
 import { MemoriesNotices } from "./MemoriesNotices"
 import { ChannelLabelsProvider } from "@/features/engramind/components/network/ChannelName"
+import { useLocalRemovals } from "@/features/engramind/components/network/useLocalRemovals"
 import { isCentralChannel } from "@/features/engramind/network/channel-labels"
 
 /** Memória provisória da criação otimista (`useMemories`). */
@@ -60,6 +61,7 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
     const settings = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     const [editor, setEditor] = useState<(MemoryEditorTarget & { memory?: MemoryDto }) | null>(null)
     const [deleting, setDeleting] = useState<MemoryDto | null>(null)
+    const localRemovals = useLocalRemovals()
     const byId = useMemo(() => new Map(memories.map((memory) => [memory.id, memory])), [memories])
     const network = useMemo(() => memories.map((memory) => memoryDtoToNetwork(memory, channel)), [memories, channel])
     const staleDays = settings.data?.settings?.find((setting) => setting.key === STALE_AFTER_DAYS_KEY)?.value
@@ -92,6 +94,7 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
                     <MemoryUniverse
                         center={{ kind: "channel", id: channel, label: channel }}
                         isProvisional={isProvisionalMemory}
+                        localRemovals={localRemovals}
                         memories={network}
                         usage={usage.data}
                         staleAfterDays={typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS}
@@ -144,7 +147,11 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
                     confirmLabel="Excluir memória"
                     variant="destructive"
                     onConfirm={() => {
-                        if (deleting) mutate({ type: "delete", id: deleting.id })
+                        if (deleting) {
+                            const id = deleting.id
+                            localRemovals.mark(id)
+                            mutate({ type: "delete", id }, { onError: () => localRemovals.forget(id) })
+                        }
                         setDeleting(null)
                     }}
                 />

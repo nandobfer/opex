@@ -135,11 +135,19 @@ describe('busca de memórias pelo agente (OPE-109)', () => {
     expect(JSON.stringify(event)).not.toContain('segredo')
   })
 
-  it('pelo MCP do Agente Maddox (token de sistema) o consumidor é opex/maddox; canais pedidos entram como consultados', async () => {
+  it('pela sessão do Agente Maddox (escopo maddox) o consumidor é opex/maddox; canais pedidos entram como consultados', async () => {
     mocks.run.mockResolvedValue({ mode: 'text', results: [hit('m_1', 'opex')] })
-    await find('search_engramind_memories').execute({ query: 'x', channels: ['opex', 'agentes/maddox/dono'] }, { ...context, sessionId: '', origin: { kind: 'api-token', tokenId: 't', nome: 'Maddox', prefixo: 'opx_' } })
+    await find('search_engramind_memories').execute({ query: 'x', channels: ['opex', 'agentes/maddox/dono'] }, { ...context, scope: { kind: 'owner', agent: 'maddox' } as never })
     await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
     expect(consumption.publishConsumption.mock.calls[0]![0]).toMatchObject({ agent: 'opex/maddox', channels: ['opex', 'agentes/maddox/dono'], delivered: ['opex'] })
+  })
+
+  it('regressão: busca por token de sistema (MCP do dono) não anima nenhum agente', async () => {
+    mocks.run.mockResolvedValue({ mode: 'text', results: [hit('m_1', 'opex')] })
+    const output = await find('search_engramind_memories').execute({ query: 'x' }, { ...context, sessionId: '', scope: { kind: 'owner', agent: 'maddox' } as never, origin: { kind: 'api-token', tokenId: 't', nome: 'Sistema externo', prefixo: 'opx_' } })
+    expect(output).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(consumption.publishConsumption).not.toHaveBeenCalled()
   })
 
   it('regressão: busca por prefixo publica os slugs entregues, não o prefixo', async () => {

@@ -15,6 +15,16 @@ export function useLeavingItems<T extends { id: string }>(items: readonly T[], o
     useEffect(() => {
         onRemovedRef.current = onRemoved
     }, [onRemoved])
+    // Um timer por item que sai, independente do ciclo do efeito: uma nova referência de `items`
+    // dentro de `LEAVE_MS` não cancela a limpeza (senão o item ficaria "saindo" para sempre).
+    const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+    useEffect(() => {
+        const pending = timers.current
+        return () => {
+            for (const timer of pending.values()) clearTimeout(timer)
+            pending.clear()
+        }
+    }, [])
     useEffect(() => {
         const current = new Map(items.map((item) => [item.id, item]))
         const gone = [...previous.current.values()].filter((item) => !current.has(item.id))
@@ -22,8 +32,22 @@ export function useLeavingItems<T extends { id: string }>(items: readonly T[], o
         if (!gone.length) return
         onRemovedRef.current?.(gone.map((item) => item.id))
         setLeaving((map) => new Map([...map, ...gone.map((item) => [item.id, item] as const)]))
-        const timer = setTimeout(() => setLeaving((map) => new Map([...map].filter(([id]) => !gone.some((item) => item.id === id)))), LEAVE_MS)
-        return () => clearTimeout(timer)
+        for (const item of gone) {
+            const existing = timers.current.get(item.id)
+            if (existing) clearTimeout(existing)
+            timers.current.set(
+                item.id,
+                setTimeout(() => {
+                    timers.current.delete(item.id)
+                    setLeaving((map) => {
+                        if (!map.has(item.id)) return map
+                        const next = new Map(map)
+                        next.delete(item.id)
+                        return next
+                    })
+                }, LEAVE_MS),
+            )
+        }
     }, [items])
     // Mesma referência enquanto nada sai: o layout e os nodes só recalculam quando os dados mudam.
     return useMemo(() => {

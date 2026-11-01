@@ -458,6 +458,33 @@ describe('universos', () => {
     await waitFor(() => expect(screen.queryByTestId('memory-node-m_1')).toBeNull())
   })
 
+  it('regressão: Excluir cancelado não marca a memória; se outra origem a exclui depois, o aviso aparece', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    const card = await screen.findByTestId('memory-card-m_1')
+    fireEvent.click(within(card).getByRole('button', { name: 'Excluir' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Voltar' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(net.delete).not.toHaveBeenCalled()
+    memories = memories.filter((item) => item.id !== 'm_1')
+    emit('engramind-updated', { type: 'memory.deleted', channel: 'opex' })
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('A memória aberta foi excluída ou movida por outra origem.'))
+  })
+
+  it('exclusão confirmada aqui não mostra o aviso de outra origem', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    net.delete.mockResolvedValue({ data: { data: {} } })
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    fireEvent.click(within(await screen.findByTestId('memory-card-m_1')).getByRole('button', { name: 'Excluir' }))
+    memories = memories.filter((item) => item.id !== 'm_1')
+    fireEvent.click(await screen.findByRole('button', { name: 'Excluir de vez' }))
+    await waitFor(() => expect(net.delete).toHaveBeenCalledWith('/engramind/memories/m_1'))
+    await waitFor(() => expect(screen.queryByTestId('memory-node-m_1')).toBeNull())
+    expect(toast.info).not.toHaveBeenCalledWith('A memória aberta foi excluída ou movida por outra origem.')
+  })
+
   it('canal sem memórias mostra o estado vazio com Nova memória', async () => {
     memories = []
     nav.params = new URLSearchParams('universo=canal:opex')

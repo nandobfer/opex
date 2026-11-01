@@ -21,6 +21,7 @@ import { UniverseStatsCard } from "./UniverseStatsCard"
 import { useEnteringIds } from "./useEnteringIds"
 import { useHoverPresence } from "./useHoverPresence"
 import { useLeavingItems } from "./useLeavingItems"
+import type { LocalRemovals } from "./useLocalRemovals"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
 const CENTER_ID = "center"
@@ -55,6 +56,8 @@ export interface MemoryUniverseProps {
     className?: string
     /** Memória provisória da lista otimista (`pendente-…`): a definitiva que a substitui não nasce de novo. */
     isProvisional?: (id: string) => boolean
+    /** Remoções confirmadas nesta tela (sem o aviso de "outra origem" quando a memória aberta sai). */
+    localRemovals?: LocalRemovals
 }
 
 /**
@@ -77,16 +80,17 @@ export function MemoryUniverse({
     emptyTitle = "Nenhuma memória neste universo",
     className,
     isProvisional,
+    localRemovals,
 }: MemoryUniverseProps) {
     const live = useLiveEffects(dataVersion)
     const { hovered, hover, hoverCard } = useHoverPresence()
     const [pinned, setPinned] = useState<string | null>(null)
-    const localRemovals = useRef(new Set<string>())
     const ids = useMemo(() => new Set(memories.map((memory) => memory.id)), [memories])
     const openRef = useRef<(string | null)[]>([])
     const items = useLeavingItems(memories, (removed) => {
         // Memória aberta que sumiu por outra origem (excluída ou movida): o card fecha com aviso.
-        if (removed.some((id) => openRef.current.includes(id) && !localRemovals.current.has(id))) toast.info("A memória aberta foi excluída ou movida por outra origem.")
+        if (removed.some((id) => openRef.current.includes(id) && !localRemovals?.has(id))) toast.info("A memória aberta foi excluída ou movida por outra origem.")
+        for (const id of removed) localRemovals?.forget(id)
     })
 
     const memoryIds = useMemo(() => memories.map((memory) => memory.id), [memories])
@@ -115,22 +119,7 @@ export function MemoryUniverse({
     )
     useEngramindConsumption(onConsumption)
 
-    const wrapped = useMemo<MemoryCardActions>(
-        () => ({
-            ...actions,
-            onDelete: (memory) => {
-                localRemovals.current.add(memory.id)
-                actions.onDelete(memory)
-            },
-            onMove: actions.onMove
-                ? (memory) => {
-                      localRemovals.current.add(memory.id)
-                      actions.onMove?.(memory)
-                  }
-                : undefined,
-        }),
-        [actions],
-    )
+    const wrapped = actions
 
     const nodes = useMemo<Node[]>(() => {
         const centerData: CenterNodeData = {

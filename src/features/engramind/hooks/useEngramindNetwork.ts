@@ -68,7 +68,8 @@ export function useEngramindNetwork() {
     const setting = (key: string) => settings.data?.settings?.find((meta) => meta.key === key)?.value
     const staleDays = setting(STALE_AFTER_DAYS_KEY)
     const maxBatch = setting("limits.max_batch")
-    const categories = (setting("categories.list") as Category[] | undefined) ?? []
+    const categoriesSetting = setting("categories.list") as Category[] | undefined
+    const categories = useMemo(() => categoriesSetting ?? [], [categoriesSetting])
     const textMin = setting("memory.text_min")
     const textMax = setting("memory.text_max")
     const limits = typeof textMin === "number" && typeof textMax === "number" ? { textMin, textMax } : undefined
@@ -88,16 +89,20 @@ export function useEngramindNetwork() {
         return { agents: networkAgents, channels: networkChannels, subscriptions: subscriptionInputs, memories: memories.items.map(toNetworkMemory) }
     }, [agents.items, channels.items, subscriptions.items, memories.items])
 
+    // Referências estáveis enquanto os dados não mudam (o layout e os nodes da rede derivam delas).
+    const activeApps = useMemo(() => apps.items.filter((app) => !app.disabled_at).map((app) => ({ slug: app.slug, name: app.name })), [apps.items])
+    const usageMap = useMemo(() => usage.data ?? {}, [usage.data])
+
     const queries = [channels, apps, agents, subscriptions, memories]
     const loading = queries.some((query) => query.isLoading) || queries.some((query) => query.hasNextPage)
     const error = queries.find((query) => query.error)?.error ?? settings.error ?? null
     return {
         ...data,
-        apps: apps.items.filter((app) => !app.disabled_at).map((app) => ({ slug: app.slug, name: app.name })),
+        apps: activeApps,
         rawChannels: channels.items,
         rawAgents: agents.items,
         rawMemories: memories.items,
-        usage: usage.data ?? {},
+        usage: usageMap,
         categories,
         limits,
         maxBatch: typeof maxBatch === "number" ? maxBatch : null,

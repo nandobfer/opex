@@ -131,6 +131,7 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
                                 staleAfterDays={data.staleAfterDays}
                                 isMatch={isMatch}
                                 actions={channel.archived ? { ...raw.actions, readOnly: true } : raw.actions}
+                                localRemovals={raw.localRemovals}
                                 subscribers={new Set(links.filter((link) => link.channel === channel.slug).map((link) => link.agent)).size}
                                 dataVersion={data.memoriesUpdatedAt}
                                 onCreate={channel.archived ? null : () => raw.openCreate(channel.slug)}
@@ -145,6 +146,7 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
                                 channelColors={colors}
                                 isMatch={isMatch}
                                 actions={raw.actions}
+                                localRemovals={raw.localRemovals}
                                 dataVersion={data.memoriesUpdatedAt}
                                 emptyTitle={agentChannels.length ? "Nenhuma memória nos canais deste agente" : "Este agente não assina nenhum canal"}
                             />

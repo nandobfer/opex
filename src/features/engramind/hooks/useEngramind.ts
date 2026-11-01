@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
@@ -46,6 +46,9 @@ export function useEngramindQuery<T>(path: string | null, params?: Params, optio
 }
 
 /** Lista paginada por cursor (`next_cursor`). `field` é o nome da lista na resposta do Engramind. */
+/** Lista vazia estável (sem dados ainda). */
+const EMPTY_ITEMS: never[] = []
+
 export function useEngramindList<T>(path: string | null, field: string, params?: Params, options: { enabled?: boolean; /** Lê todas as páginas (listas pequenas, como apps e tokens). */ all?: boolean } = {}) {
     const query = useInfiniteQuery({
         queryKey: [...engramindKey(path ?? "-", params), "pages"],
@@ -62,7 +65,8 @@ export function useEngramindList<T>(path: string | null, field: string, params?:
     useEffect(() => {
         if (options.all && hasNextPage && !isFetchingNextPage) void fetchNextPage()
     }, [options.all, hasNextPage, isFetchingNextPage, fetchNextPage])
-    const items = query.data?.pages.flatMap((page) => page.items) ?? []
+    // Mesma referência enquanto os dados não mudam: as telas derivam layout e nodes de `items`.
+    const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? EMPTY_ITEMS, [query.data]) as T[]
     return { ...query, items }
 }
 

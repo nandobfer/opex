@@ -12,6 +12,7 @@ import { areaKey, engramindGet, engramindSend, route, useEngramindMutation } fro
 import { toNetworkMemory } from "../../hooks/useEngramindNetwork"
 import { MemoryHistoryDialog } from "../page/memories/MemoryHistoryDialog"
 import { MoveMemoryDialog } from "../page/memories/MoveMemoryDialog"
+import { useLocalRemovals } from "./useLocalRemovals"
 import type { MemoryCardActions } from "./MemoryCard"
 import { MemoryEditorDialog, type MemoryEditorTarget } from "./MemoryEditorDialog"
 
@@ -39,6 +40,7 @@ export function useRawMemoryActions({ rawById, channels, categories, limits }: {
     const [move, setMove] = useState<EngramindMemory | null>(null)
     const [deleting, setDeleting] = useState<NetworkMemory | null>(null)
     const queryClient = useQueryClient()
+    const localRemovals = useLocalRemovals()
     const act = useEngramindMutation(({ op, id }: { op: MemoryOp; id: string }) => (op === "delete" ? engramindSend("delete", route("memories", id)) : engramindSend("post", route("memories", id, op), {})), {
         invalidate: ["memories", "channels"],
         success: ({ op }) => SUCCESS[op],
@@ -111,7 +113,7 @@ export function useRawMemoryActions({ rawById, channels, categories, limits }: {
                 }}
             />
             {history && <MemoryHistoryDialog memory={history} onOpenChange={(open) => !open && setHistory(null)} />}
-            {move && <MoveMemoryDialog memory={move} channels={channels} onOpenChange={(open) => !open && setMove(null)} />}
+            {move && <MoveMemoryDialog memory={move} channels={channels} onOpenChange={(open) => !open && setMove(null)} onConfirm={() => localRemovals.mark(move.id)} onFailed={() => localRemovals.forget(move.id)} />}
             <ConfirmDialog
                 open={deleting !== null}
                 onOpenChange={(open) => !open && setDeleting(null)}
@@ -120,9 +122,14 @@ export function useRawMemoryActions({ rawById, channels, categories, limits }: {
                 confirmLabel="Excluir de vez"
                 variant="destructive"
                 pending={act.isPending}
-                onConfirm={() => deleting && act.mutate({ op: "delete", id: deleting.id }, { onSettled: () => setDeleting(null) })}
+                onConfirm={() => {
+                    if (!deleting) return
+                    const id = deleting.id
+                    localRemovals.mark(id)
+                    act.mutate({ op: "delete", id }, { onError: () => localRemovals.forget(id), onSettled: () => setDeleting(null) })
+                }}
             />
         </>
     )
-    return { actions, dialogs, openCreate: (channel: string) => setEditor({ mode: "create", channel }) }
+    return { actions, dialogs, localRemovals, openCreate: (channel: string) => setEditor({ mode: "create", channel }) }
 }
