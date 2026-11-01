@@ -1,6 +1,6 @@
 import { isValidObjectId } from "mongoose"
-import { isSessionNotFoundError } from "@opencode/client"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { loggerFor } from "@/lib/logger"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
@@ -20,7 +20,6 @@ import { AdversarialReview, adversarialDb, type IAdversarialReview } from "./mod
 /** Revisões do adversário: consultas (aba Revisões, mesa) e as decisões do usuário na mesa. */
 
 const log = loggerFor({ module: "adversarial-agent" })
-const DELETE_TIMEOUT_MS = 15_000
 
 const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
 
@@ -162,15 +161,8 @@ export async function recordRerun(workbenchId: string): Promise<void> {
 }
 
 /** Exclui a sessão do OpenCode de uma rodada (não encontrada = já excluída). */
-export async function removeReviewSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
-    try {
-        await client.session.remove({ sessionID: sessionId }, { signal: AbortSignal.timeout(DELETE_TIMEOUT_MS) })
-        return true
-    } catch (error) {
-        if (isSessionNotFoundError(error)) return true
-        log.warn({ err: error, sessionId }, "[adversarial] falha ao excluir a sessão do OpenCode")
-        return false
-    }
+export function removeReviewSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
+    return removeOpencodeSessionSafe(client, sessionId, log, "adversarial")
 }
 
 /**

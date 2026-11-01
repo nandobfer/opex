@@ -1,7 +1,25 @@
 import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
-import { AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import {
+    AGENTIC_PR_WATCH_JOB_ID,
+    AGENTIC_QUEUE_JOB_ID,
+    ATTACHMENT_CLEANUP_JOB_ID,
+    BUILDER_MACHINE_CLEANUP_JOB_ID,
+    ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID,
+    GITHUB_ISSUE_SYNC_JOB_ID,
+    HEALTH_CHECK_JOB_ID,
+    MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
+    OPENCODE_QUOTA_JOB_ID,
+    OPENCODE_SESSIONS_CLEANUP_JOB_ID,
+    OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
+    OPEX_FILES_CLEANUP_JOB_ID,
+    TASK_SUMMARY_JOB_ID,
+    TASK_TAGS_CONCLUDED_JOB_ID,
+    TASK_TAGS_JOB_ID,
+    jobRetentionDays,
+    type CronJobConfig,
+} from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
@@ -363,6 +381,19 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(BUILDER_MACHINE_CLEANUP_JOB_ID, async () => {
         const { runBuilderMachineCleanup } = await import("@/features/local-docker/server/cleanup")
         return runBuilderMachineCleanup()
+    })
+    // Limpezas de sessões sem interação há X dias (`retentionDays` da rotina) — ver aicontext/modules/integrations.md.
+    registerInternalJob(OPENCODE_SESSIONS_CLEANUP_JOB_ID, async (job) => {
+        const { cleanupIdleOpencodeSessions, describeOpencodeSessionCleanup } = await import("@/features/opencode-service/server/session-retention")
+        return describeOpencodeSessionCleanup(await cleanupIdleOpencodeSessions(jobRetentionDays(job)))
+    })
+    registerInternalJob(OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, async (job) => {
+        const { cleanupIdleAgentSessions, describeAgentSessionCleanup } = await import("@/features/opex-agent/server/session-retention")
+        return describeAgentSessionCleanup(await cleanupIdleAgentSessions("opex", jobRetentionDays(job)))
+    })
+    registerInternalJob(MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, async (job) => {
+        const { cleanupIdleAgentSessions, describeAgentSessionCleanup } = await import("@/features/opex-agent/server/session-retention")
+        return describeAgentSessionCleanup(await cleanupIdleAgentSessions("maddox", jobRetentionDays(job)))
     })
 }
 

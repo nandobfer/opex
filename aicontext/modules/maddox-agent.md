@@ -185,6 +185,10 @@ auditado (`ClienteOrcamentoMaddoxAgent`) e publica `maddox-client-config-updated
   `opencodeSessionId`, `modelOverride` e `pendingRequests`. O filtro central (`sessionFilterOf` com o
   `agent` do escopo) separa os agentes: sessão do outro agente responde **404**. Jobs nunca usam
   sessão do Maddox.
+- **Limpeza automática** (rotina `maddox-agent-sessions-cleanup`, OPE-106): arquiva as sessões
+  sem interação há X dias (a sessão do OpenCode continua vinculada) e exclui as arquivadas há X dias
+  (removendo também a sessão do OpenCode). Mesmas regras do Agente Opex — ver `modules/opex-agent.md`,
+  "Limpeza automática das sessões".
 - Auditoria das sessões e das decisões na entidade `AgenteMaddox`.
 
 ## APIs

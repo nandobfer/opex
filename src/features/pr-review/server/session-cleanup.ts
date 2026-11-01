@@ -1,5 +1,5 @@
-import { isSessionNotFoundError } from "@opencode/client"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { PrReview } from "@/lib/db/models/PrReview"
 import { loggerFor } from "@/lib/logger"
@@ -11,18 +11,8 @@ import { loggerFor } from "@/lib/logger"
  */
 
 const log = loggerFor({ module: "pr-review-session" })
-const DELETE_TIMEOUT_MS = 15_000
-
-async function removeSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
-    try {
-        await client.session.remove({ sessionID: sessionId }, { signal: AbortSignal.timeout(DELETE_TIMEOUT_MS) })
-        return true
-    } catch (error) {
-        if (isSessionNotFoundError(error)) return true
-        log.warn({ err: error, sessionId }, "[pr-review-session] Falha ao excluir a sessão do OpenCode")
-        return false
-    }
-}
+/** Exclui uma sessão no OpenCode; `true` quando ela já não existe (idempotente). */
+const removeSession = (client: OpencodeClient, sessionId: string) => removeOpencodeSessionSafe(client, sessionId, log, "pr-review-session")
 
 /** Desvincula e tenta excluir a sessão da revisão; `false` = ficou pendente. Nunca lança. */
 export async function finishReviewSession(reviewId: string, sessionId: string): Promise<boolean> {

@@ -31,6 +31,8 @@ export interface IOpexSession {
     status: OpexSessionStatus
     lastError: string | null
     archived: boolean
+    /** Quando a sessão foi arquivada (tela ou rotina de limpeza); `null`/ausente = não arquivada ou arquivada antes do campo. */
+    archivedAt?: Date | null
     messageCount: number
     /** Próximo número de ordem das mensagens. */
     nextSeq: number
@@ -127,6 +129,7 @@ const OpexSessionSchema = new Schema<IOpexSession>(
         status: { type: String, enum: ["idle", "running", "awaiting_confirmation", "error"], default: "idle" },
         lastError: { type: String, default: null },
         archived: { type: Boolean, default: false },
+        archivedAt: { type: Date, default: null },
         messageCount: { type: Number, default: 0 },
         nextSeq: { type: Number, default: 1 },
         clientId: { type: String, default: null },

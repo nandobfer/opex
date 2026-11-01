@@ -147,7 +147,11 @@ export async function updateSession(id: string, input: { title?: string; archive
     const before = await loadSession(id, scope)
     const $set: Partial<IOpexSession> = {}
     if (input.title !== undefined) Object.assign($set, { title: input.title, titleSource: "manual" as const })
-    if (input.archived !== undefined) $set.archived = input.archived
+    if (input.archived !== undefined) {
+        $set.archived = input.archived
+        // Marca o início do arquivamento (a limpeza das arquivadas conta a carência a partir daqui).
+        if (input.archived !== before.archived) $set.archivedAt = input.archived ? new Date() : null
+    }
     const doc = await OpexSession.findByIdAndUpdate(id, { $set }, { new: true }).lean<SessionDoc>()
     if (!doc) throw new DomainError(404, "Sessão não encontrada", "OPEX_SESSION_NOT_FOUND")
     await recordAudit({
@@ -182,6 +186,20 @@ export async function deleteClientOpexData(clientId: string): Promise<void> {
 
 export async function deleteSession(id: string, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<void> {
     const session = await loadSession(id, scope)
+    await purgeSession(session, actorId)
+}
+
+/**
+ * Exclui a sessão de vez, sem filtro de escopo (quem chama já validou): arquivos (storage + metadados),
+ * mensagens, ações pendentes, a sessão e, no Agente Maddox, a sessão do OpenCode; audita e avisa o canal
+ * da sessão. Usada pelo `deleteSession` e pela rotina de limpeza das sessões arquivadas.
+ */
+export async function purgeSession(
+    session: Pick<SessionDoc, "_id" | "title" | "messageCount" | "agent" | "opencodeSessionId" | "clientId" | "userId">,
+    actorId: string,
+    extraAudit?: Record<string, unknown>,
+): Promise<void> {
+    const id = session._id.toString()
     forgetSession(id)
     // Arquivos primeiro (objetos no storage + metadados), depois o resto da sessão.
     const { deleteSessionFiles } = await import("./files")
@@ -195,6 +213,12 @@ export async function deleteSession(id: string, actorId: string, scope: OpexServ
         const { removeOpencodeSession } = await import("@/features/maddox-agent/server/opencode-session")
         await removeOpencodeSession(session.opencodeSessionId)
     }
-    await recordAudit({ userId: actorId, entidade: agentAuditEntity(agentOf(scope)), entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { titulo: session.title, mensagens: session.messageCount } })
+    await recordAudit({
+        userId: actorId,
+        entidade: agentAuditEntity(session.agent ?? "opex"),
+        entidadeId: id,
+        acao: AcaoAuditoria.EXCLUIR,
+        antes: { titulo: session.title, mensagens: session.messageCount, ...(extraAudit ?? {}) },
+    })
     await publishSessionDeleted(session, id)
 }
