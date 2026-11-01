@@ -26,6 +26,8 @@ import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgen
 import { MaddoxAgentTab } from "@/features/maddox-agent/components/settings/MaddoxAgentTab"
 import { AdversarialAgentTab } from "@/features/adversarial-agent/components/settings/AdversarialAgentTab"
 import { MENTOR_AI_TAB_DEF, MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
+import { ArchitectAgentTab } from "@/features/architect-agent/components/settings/ArchitectAgentTab"
+import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -52,6 +54,7 @@ const TABS: IntegrationTabDef<AiTab>[] = [
     { id: "agente-opex", label: "Agente Opex", icon: Bot },
     { id: "agente-adversario", label: "Agente Adversário", icon: Swords },
     MENTOR_AI_TAB_DEF,
+    { id: "agente-arquiteto", label: "Agente Arquiteto", icon: ARCHITECT_ICON },
 ]
 
 /**
@@ -102,6 +105,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "agente-opex" && <OpexAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-adversario" && <AdversarialAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-mentor" && <MentorAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "agente-arquiteto" && <ArchitectAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>
     )

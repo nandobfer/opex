@@ -210,3 +210,23 @@
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* React Flow (aba "Arquitetura" do Agente Arquiteto): cores só por tokens do tema. */
+.react-flow.architect-flow {
+    --xy-background-color: transparent;
+    --xy-background-pattern-color: hsl(var(--border));
+    --xy-node-background-color: hsl(var(--card));
+    --xy-node-border: 1px solid hsl(var(--border));
+    --xy-node-color: hsl(var(--foreground));
+    --xy-edge-stroke: hsl(var(--muted-foreground) / 0.55);
+    --xy-minimap-background-color: hsl(var(--card));
+    --xy-minimap-mask-background-color: hsl(var(--background) / 0.7);
+    --xy-minimap-node-background-color: hsl(var(--muted));
+    --xy-minimap-node-stroke-color: hsl(var(--border));
+    --xy-controls-button-background-color: hsl(var(--card));
+    --xy-controls-button-background-color-hover: hsl(var(--muted));
+    --xy-controls-button-color: hsl(var(--foreground));
+    --xy-controls-button-color-hover: hsl(var(--foreground));
+    --xy-controls-button-border-color: hsl(var(--border));
+    --xy-attribution-background-color: transparent;
+}
