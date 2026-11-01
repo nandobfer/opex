@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { isOpexMemoryAgent } from "@/features/ai/agents"
 import { Bot, Pencil, Plus, Power, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -50,6 +51,7 @@ export function AgentsCard({ agents, apps, subscriptions }: { agents: EngramindA
                                         <p className="flex flex-wrap items-center gap-1.5 font-medium">
                                             {agent.name} <span className="font-mono text-xs text-muted-foreground">{agent.qualified_slug}</span>
                                             {agent.disabled_at && <HelpBadge value="desativado" tone="warning" help={IDENTITY_HELP.disabled} />}
+                                            {isOpexMemoryAgent(agent.app.slug, agent.slug) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Agente das memórias dos agentes do Opex (criado pelo passo Memórias dos agentes)." />}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                                             {own.length === 0 ? (

@@ -11,6 +11,7 @@ import type { EngramindMemory, MemoryWrite } from "@/features/engramind/types"
 import { AI_AGENTS, MEMORY_CONSUMER_DEFS, MEMORY_CONSUMERS, isAiAgentId, memoryChannelName, memoryChannelOf, type AiAgentId, type MemoryConsumer, type MemoryListScope } from "../agents"
 import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
 import { firstSentence, memoryTextSchema } from "../memory-text"
+import { sortMemories } from "../memory-list"
 import type { AgentMemoryOrigin, MemoryDto, MemoryMutationResult } from "../types"
 import { memoryLimitsFor, memorySettings } from "./memory-settings"
 
@@ -147,13 +148,7 @@ export function toMemoryDto(memory: EngramindMemory, list: Pick<ResolvedList, "c
     }
 }
 
-const timeOf = (iso: string) => new Date(iso).getTime() || 0
-
-/** Ativas (fixadas primeiro) e depois as inativas; cada grupo da mais recente para a mais antiga. */
-export function sortMemories(list: MemoryDto[]): MemoryDto[] {
-    const rank = (item: MemoryDto) => (!item.ativa ? 2 : item.fixada ? 0 : 1)
-    return [...list].sort((a, b) => rank(a) - rank(b) || timeOf(b.criadaEm) - timeOf(a.criadaEm))
-}
+export { sortMemories } from "../memory-list"
 
 async function publish(list: Pick<ResolvedList, "agent" | "centralId" | "clientId">) {
     await publishToChannels([integrationChannel("ai")], AI_MEMORIES_UPDATED_EVENT, { agentId: list.agent, ...(list.centralId ? { centralId: list.centralId } : {}), ...(list.clientId ? { clientId: list.clientId } : {}) }).catch(() => undefined)

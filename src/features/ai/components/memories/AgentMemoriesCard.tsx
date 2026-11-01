@@ -1,29 +1,34 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AI_AGENTS, isCentralScopedAgent, type AiAgentId } from "../../agents"
-import { agentMemoriesSource, centralMemoriesSource } from "../../hooks/useMemories"
+import { AI_AGENTS, isCentralScopedAgent, isClientScopedAgent, memoryChannelOf, type AiAgentId } from "../../agents"
+import { agentMemoriesSource, centralMemoriesSource, clientMemoriesSource } from "../../hooks/useMemories"
 import { MemoryList } from "./MemoryList"
 
 /**
- * Card de uma lista de memórias do agente (mesmo card "Memórias" do Ciliar): alimenta e treina o
- * agente com instruções permanentes. Salva sozinho (cada memória grava na hora). O tempo real
- * (`useMemoriesRealtime`) fica com quem monta os cards, uma assinatura para todas as listas. Nas
- * listas por central (`developer-central`), `centralId` escolhe a central.
+ * Card de uma lista de memórias do agente (um canal do Engramind): alimenta e treina o agente com
+ * instruções permanentes. Salva sozinho (cada memória grava na hora). O tempo real
+ * (`useMemoriesRealtime`) fica com quem monta os cards. `centralId`/`clientId` escolhem a central ou o
+ * cliente nas listas com escopo; `action` entra no cabeçalho (ex.: o seletor de cliente).
  */
-export function AgentMemoriesCard({ agentId, centralId }: { agentId: AiAgentId; centralId?: string }) {
+export function AgentMemoriesCard({ agentId, centralId, clientId, action }: { agentId: AiAgentId; centralId?: string; clientId?: string; action?: React.ReactNode }) {
     const agent = AI_AGENTS[agentId]
-    const source = isCentralScopedAgent(agentId) && centralId ? centralMemoriesSource(centralId) : agentMemoriesSource(agentId)
+    const source = isCentralScopedAgent(agentId) && centralId ? centralMemoriesSource(centralId) : isClientScopedAgent(agentId) && clientId ? clientMemoriesSource(agentId, clientId) : agentMemoriesSource(agentId, !isClientScopedAgent(agentId))
     return (
-        <Card>
+        <Card data-testid={`memories-card-${agentId}`}>
             <CardHeader>
                 <CardTitle className="text-base">{agent.title}</CardTitle>
                 <CardDescription>
                     {agent.description} Use para alimentar e treinar o agente. Clique para ver o texto completo.
                 </CardDescription>
+                {action}
             </CardHeader>
             <CardContent>
-                <MemoryList source={source} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
+                {isClientScopedAgent(agentId) && !clientId ? (
+                    <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">Escolha um cliente para ver e editar as memórias dele.</p>
+                ) : (
+                    <MemoryList source={source} channel={memoryChannelOf(agentId, { centralId, clientId })} canEdit emptyTitle="Nenhuma memória" emptyDescription={`Adicione instruções e fatos que o ${agent.label} deve lembrar.`} />
+                )}
             </CardContent>
         </Card>
     )

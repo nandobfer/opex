@@ -1,14 +1,11 @@
 "use client"
 
-import { AnimatePresence, motion } from "framer-motion"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Check, FlaskConical, Loader2 } from "lucide-react"
 import { useForm, useWatch } from "react-hook-form"
 import type { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { MultiAutocomplete } from "@/components/ui/multi-autocomplete"
-import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
-import { ModelPickerField } from "@/features/ai/components/ModelFields"
 import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 import { useAiModels } from "@/features/ai/hooks/useAi"
 import type { AiProviderStatusDto } from "@/lib/ai/providers"
@@ -17,6 +14,7 @@ import { AI_SOURCE_HELP } from "../../../../help/ai-source"
 import { redatorSourceSchema, type RedatorSourceInput } from "../../../../schemas/ai-source"
 import type { AiSourceSectionDto } from "../../../../types"
 import { InfoField } from "../../../shared/InfoField"
+import { OpexAiModelPicker } from "../../../shared/OpexAiModelPicker"
 import { SourceStatus } from "./SourceStatus"
 import { TestResult } from "./TestResult"
 import { useSourceActions } from "./useSourceActions"
@@ -55,56 +53,46 @@ export function RedatorSourceSection({ state, providers, disabled }: { state: Ai
                 <h3 className="text-sm font-semibold">Redator</h3>
                 <SourceStatus state={state} onResend={actions.resend} resending={actions.resending} />
             </div>
-            <InfoField id="redator-source-provider" label="Provedor" info={AI_SOURCE_HELP.redatorProvider} error={errors.provider?.message} hint="O OpenCode não aparece: o Engramind chama o provedor direto.">
-                <AiProviderTabs
-                    id="redator-source-provider"
-                    providers={providers}
-                    allowed={REDATOR_SOURCE_PROVIDERS}
-                    value={provider}
-                    disabled={disabled}
-                    emptyText="Nenhum provedor conectado: configure Gemini, Anthropic, OpenAI ou DeepSeek em Integrações › Inteligência Artificial."
-                    onChange={(next) => {
-                        if (next === provider) return
-                        form.setValue("provider", next as RedatorSourceProvider, { shouldDirty: true, shouldValidate: true })
-                        form.setValue("model", "", { shouldDirty: true, shouldValidate: true })
-                        form.setValue("fallbackModels", [], { shouldDirty: true, shouldValidate: true })
-                        actions.clearOutcome()
-                    }}
-                />
-            </InfoField>
-            <AnimatePresence initial={false}>
-                {provider && (
-                    <motion.div key="model" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="space-y-4 overflow-hidden">
-                        <ModelPickerField
-                            id="redator-source-model"
-                            models={models}
-                            modelId={modelId || null}
-                            error={errors.model?.message}
-                            disabled={disabled}
-                            onPick={(item) => {
-                                form.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
-                                form.setValue("fallbackModels", fallbacks.filter((id) => id !== item.id), { shouldDirty: true, shouldValidate: true })
-                            }}
-                        />
-                        <InfoField id="redator-source-fallbacks" label={`Modelos de reserva (até ${MAX_FALLBACK_MODELS})`} info={AI_SOURCE_HELP.fallbacks} error={errors.fallbackModels?.message ?? (errors.fallbackModels as { root?: { message?: string } } | undefined)?.root?.message}>
-                            <MultiAutocomplete
-                                id="redator-source-fallbacks"
-                                aria-label="Modelos de reserva"
-                                options={options}
-                                value={fallbacks}
-                                loading={models.isLoading}
-                                disabled={disabled || !modelId}
-                                placeholder={fallbacks.length >= MAX_FALLBACK_MODELS ? "Limite de reservas atingido" : "Buscar modelo"}
-                                emptyText="Nenhum modelo disponível"
-                                onChange={(next) => form.setValue("fallbackModels", next.slice(0, MAX_FALLBACK_MODELS), { shouldDirty: true, shouldValidate: true })}
-                            />
-                        </InfoField>
-                        <InfoField id="redator-source-temperature" label="Temperatura" info={AI_SOURCE_HELP.temperature} error={errors.temperature?.message}>
-                            <TemperatureInput id="redator-source-temperature" value={temperature} disabled={disabled} aria-invalid={Boolean(errors.temperature)} onChange={(next) => form.setValue("temperature", next, { shouldDirty: true, shouldValidate: true })} />
-                        </InfoField>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <OpexAiModelPicker
+                id="redator-source"
+                providers={providers}
+                allowed={REDATOR_SOURCE_PROVIDERS}
+                provider={provider}
+                modelId={modelId || null}
+                models={models}
+                errors={{ provider: errors.provider?.message, model: errors.model?.message }}
+                disabled={disabled}
+                info={AI_SOURCE_HELP.redatorProvider}
+                hint="O OpenCode não aparece: o Engramind chama o provedor direto."
+                emptyText="Nenhum provedor conectado: configure Gemini, Anthropic, OpenAI ou DeepSeek em Integrações › Inteligência Artificial."
+                onProviderChange={(next) => {
+                    form.setValue("provider", next as RedatorSourceProvider, { shouldDirty: true, shouldValidate: true })
+                    form.setValue("model", "", { shouldDirty: true, shouldValidate: true })
+                    form.setValue("fallbackModels", [], { shouldDirty: true, shouldValidate: true })
+                    actions.clearOutcome()
+                }}
+                onModelPick={(item) => {
+                    form.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })
+                    form.setValue("fallbackModels", fallbacks.filter((id) => id !== item.id), { shouldDirty: true, shouldValidate: true })
+                }}
+            >
+                <InfoField id="redator-source-fallbacks" label={`Modelos de reserva (até ${MAX_FALLBACK_MODELS})`} info={AI_SOURCE_HELP.fallbacks} error={errors.fallbackModels?.message ?? (errors.fallbackModels as { root?: { message?: string } } | undefined)?.root?.message}>
+                    <MultiAutocomplete
+                        id="redator-source-fallbacks"
+                        aria-label="Modelos de reserva"
+                        options={options}
+                        value={fallbacks}
+                        loading={models.isLoading}
+                        disabled={disabled || !modelId}
+                        placeholder={fallbacks.length >= MAX_FALLBACK_MODELS ? "Limite de reservas atingido" : "Buscar modelo"}
+                        emptyText="Nenhum modelo disponível"
+                        onChange={(next) => form.setValue("fallbackModels", next.slice(0, MAX_FALLBACK_MODELS), { shouldDirty: true, shouldValidate: true })}
+                    />
+                </InfoField>
+                <InfoField id="redator-source-temperature" label="Temperatura" info={AI_SOURCE_HELP.temperature} error={errors.temperature?.message}>
+                    <TemperatureInput id="redator-source-temperature" value={temperature} disabled={disabled} aria-invalid={Boolean(errors.temperature)} onChange={(next) => form.setValue("temperature", next, { shouldDirty: true, shouldValidate: true })} />
+                </InfoField>
+            </OpexAiModelPicker>
             <TestResult outcome={actions.outcome} />
             <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" title={AI_SOURCE_HELP.test} disabled={disabled || !isValid || actions.testing} onClick={() => void form.handleSubmit((values) => actions.runTest(values))()}>

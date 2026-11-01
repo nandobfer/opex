@@ -282,3 +282,8 @@ export function opexMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
 export function maddoxMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
     return scope === "owner" ? ["maddox-global", "maddox-owner"] : ["maddox-global", "maddox-client", "maddox-client-specific"]
 }
+
+/** Agente (`app/agente`) de memórias do Opex no Engramind (aba Identidades marca "Memórias do Opex"). */
+export function isOpexMemoryAgent(appSlug: string | null | undefined, agentSlug: string | null | undefined): boolean {
+    return appSlug === "opex" && Boolean(agentSlug) && (MEMORY_CONSUMERS as readonly string[]).includes(agentSlug!.split("/").pop()!)
+}

@@ -2,24 +2,24 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Bot, Brain, ChevronDown, GraduationCap, Pencil, Plus, Trash2 } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { Badge } from "@/components/ui/badge"
+import { Brain, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { IconAction } from "@/components/ui/icon-action"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
-import { listItem } from "@/components/motion/presets"
 import { cn } from "@/lib/utils"
-import { PENDING_PREFIX, useMemories, type MemorySource } from "../../hooks/useMemories"
+import { memoryCountLabel } from "../../memory-list"
+import { useMemories, useMemoriesMeta, type MemorySource } from "../../hooks/useMemories"
 import type { MemoryDto } from "../../types"
 import { MemoryEditor } from "./MemoryEditor"
+import { MEMORY_ROW_CLASS, MemoryRow } from "./MemoryRow"
+import { MemoriesNotices } from "./MemoriesNotices"
 
 interface MemoryListProps {
     source: MemorySource
+    /** Canal do Engramind da lista (aviso de memórias fora do contexto). */
+    channel?: string | null
     /** Sem edição: a lista fica somente leitura (sem adicionar, editar ou excluir). */
     canEdit: boolean
     /** Sem "Nova memória" (lista em que só o agente cria). */
@@ -31,136 +31,118 @@ interface MemoryListProps {
 
 const expand = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
+/** Skeleton com a mesma estrutura da lista (barra de ações + linhas). */
+export function MemoryListSkeleton() {
+    return (
+        <div className="flex flex-col gap-3" data-testid="memory-list-skeleton">
+            <div className="flex items-center justify-between gap-2">
+                <Skeleton className="h-8 w-36" />
+                <Skeleton className="h-4 w-28" />
+            </div>
+            <ul className="flex flex-col divide-y rounded-lg border" aria-hidden>
+                {[0, 1, 2].map((index) => (
+                    <li key={index} className={cn(MEMORY_ROW_CLASS, "flex items-center gap-2 py-3")}>
+                        <Skeleton className="h-4 w-4 shrink-0 rounded-full" />
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-5 w-16" />
+                        <Skeleton className="h-6 w-28" />
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
+}
+
 /**
- * Lista compacta de memórias de um agente: cada linha mostra o resumo de uma linha; clicar expande o
- * texto completo. Editar e criar passam pelo uso "Resumo de memórias" (formata o texto e gera o
- * resumo); enquanto ele trabalha, a linha mostra o resumo carregando. Copiada do Ciliar.
+ * Lista compacta de memórias de um agente (Engramind): ativas primeiro (fixadas no topo) e as inativas
+ * depois, esmaecidas. Criar, editar (texto + categoria, com a versão lida), fixar, ativar/inativar e
+ * excluir são otimistas. No conflito de versão o editor continua aberto com o texto digitado.
  */
-export function MemoryList({ source, canEdit, canCreate = true, emptyTitle, emptyDescription, className }: MemoryListProps) {
+export function MemoryList({ source, channel, canEdit, canCreate = true, emptyTitle, emptyDescription, className }: MemoryListProps) {
     const { query, memories, mutate } = useMemories(source)
+    const meta = useMemoriesMeta()
     const [openId, setOpenId] = useState<string | null>(null)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [creating, setCreating] = useState(false)
     const [deleting, setDeleting] = useState<MemoryDto | null>(null)
-
-    if (query.isLoading) return <Skeleton className="h-32 w-full" />
-    if (query.isError) return <ErrorState title="Não foi possível carregar as memórias" onRetry={() => void query.refetch()} />
+    const limits = meta.data ? { textMin: meta.data.textMin, textMax: meta.data.textMax } : undefined
+    const categories = meta.data?.categories ?? []
 
     return (
         <div className={cn("flex flex-col gap-3", className)}>
-            {canEdit && canCreate && (
-                <AnimatePresence initial={false} mode="wait">
-                    {creating ? (
-                        <motion.div key="editor" {...expand} className="overflow-hidden">
-                            <MemoryEditor
-                                label="Nova memória"
-                                onCancel={() => setCreating(false)}
-                                onSave={(texto) => {
-                                    mutate({ type: "create", texto })
-                                    setCreating(false)
-                                }}
-                            />
-                        </motion.div>
-                    ) : (
-                        <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center justify-between gap-2">
-                            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
-                                <Plus className="h-4 w-4" aria-hidden /> Nova memória
-                            </Button>
-                            <span data-testid="memory-count" className="text-xs text-muted-foreground">
-                                {memories.length === 1 ? "1 memória" : `${memories.length} memórias`}
-                            </span>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            )}
-
-            {memories.length === 0 && !creating ? (
-                <EmptyState icon={Brain} title={emptyTitle} description={emptyDescription} />
+            <MemoriesNotices meta={meta.data} channel={channel} />
+            {query.isLoading ? (
+                <MemoryListSkeleton />
+            ) : query.isError ? (
+                <ErrorState title="Não foi possível carregar as memórias" onRetry={() => void query.refetch()} />
             ) : (
-                <ul className="flex flex-col divide-y rounded-lg border" aria-label="Memórias">
-                    <AnimatePresence initial={false}>
-                        {memories.map((memory) => {
-                            const pending = memory.id.startsWith(PENDING_PREFIX) || !memory.resumo
-                            const open = openId === memory.id
-                            return (
-                                <motion.li key={memory.id} variants={listItem} initial="hidden" animate="visible" exit="exit" className="px-3 py-2">
-                                    <div className="flex items-start gap-2">
-                                        <button type="button" className="flex min-w-0 flex-1 items-start gap-2 py-1 text-left" aria-expanded={open} onClick={() => setOpenId(open ? null : memory.id)}>
-                                            {memory.origem === "agente" ? (
-                                                <Bot className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-label="Registrada pelo agente" />
-                                            ) : (
-                                                <Brain className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                                            )}
-                                            {pending ? (
-                                                <span className="flex flex-1 items-center gap-2" aria-label="Resumindo a memória">
-                                                    <Skeleton className="h-4 w-2/3" />
-                                                </span>
-                                            ) : (
-                                                <span className="min-w-0 flex-1 break-words text-sm" data-testid="memory-summary">
-                                                    {memory.resumo}
-                                                </span>
-                                            )}
-                                            {memory.origin ? (
-                                                <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]" title={`Gravada por ${memory.origin.label}`}>
-                                                    <GraduationCap className="h-3 w-3" aria-hidden /> {memory.origin.label}
-                                                </Badge>
-                                            ) : null}
-                                            <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} className="mt-0.5 shrink-0 text-muted-foreground">
-                                                <ChevronDown className="h-4 w-4" aria-hidden />
-                                            </motion.span>
-                                        </button>
-                                        {canEdit && !pending && (
-                                            <div className="flex shrink-0 items-center">
-                                                <IconAction
-                                                    icon={Pencil}
-                                                    label="Editar memória"
-                                                    onClick={() => {
-                                                        setOpenId(memory.id)
-                                                        setEditingId(memory.id)
-                                                    }}
-                                                />
-                                                <IconAction icon={Trash2} label="Excluir memória" tone="danger" onClick={() => setDeleting(memory)} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <AnimatePresence initial={false}>
-                                        {open && (
-                                            <motion.div key="body" {...expand} className="overflow-hidden">
-                                                <div className="pt-2">
-                                                    {editingId === memory.id ? (
-                                                        <MemoryEditor
-                                                            label="Editar memória"
-                                                            initial={memory.texto}
-                                                            onCancel={() => setEditingId(null)}
-                                                            onSave={(texto) => {
-                                                                mutate({ type: "update", id: memory.id, texto })
-                                                                setEditingId(null)
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <>
-                                                            <p className="whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-sm">{memory.texto}</p>
-                                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                                {memory.origem === "agente" ? "Agente" : (memory.autor ?? "—")} · {formatDistanceToNow(new Date(memory.atualizadaEm), { addSuffix: true, locale: ptBR })}
-                                                            </p>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                </motion.li>
-                            )
-                        })}
-                    </AnimatePresence>
-                </ul>
+                <>
+                    {canEdit && canCreate && (
+                        <AnimatePresence initial={false} mode="wait">
+                            {creating ? (
+                                <motion.div key="editor" {...expand} className="overflow-hidden">
+                                    <MemoryEditor
+                                        label="Nova memória"
+                                        limits={limits}
+                                        categories={categories}
+                                        onCancel={() => setCreating(false)}
+                                        onSave={(values) => {
+                                            mutate({ type: "create", texto: values.texto, categoria: values.categoria })
+                                            setCreating(false)
+                                        }}
+                                    />
+                                </motion.div>
+                            ) : (
+                                <motion.div key="button" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center justify-between gap-2">
+                                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)}>
+                                        <Plus className="h-4 w-4" aria-hidden /> Nova memória
+                                    </Button>
+                                    <span data-testid="memory-count" className="text-xs text-muted-foreground">
+                                        {memoryCountLabel(memories)}
+                                    </span>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    )}
+
+                    {memories.length === 0 && !creating ? (
+                        <EmptyState icon={Brain} title={emptyTitle} description={emptyDescription} />
+                    ) : (
+                        <ul className="flex flex-col divide-y rounded-lg border" aria-label="Memórias">
+                            <AnimatePresence initial={false}>
+                                {memories.map((memory) => (
+                                    <MemoryRow
+                                        key={memory.id}
+                                        memory={memory}
+                                        canEdit={canEdit}
+                                        open={openId === memory.id}
+                                        editing={editingId === memory.id}
+                                        limits={limits}
+                                        categories={categories}
+                                        onToggle={() => setOpenId(openId === memory.id ? null : memory.id)}
+                                        onEdit={() => {
+                                            setOpenId(memory.id)
+                                            setEditingId(memory.id)
+                                        }}
+                                        onCancelEdit={() => setEditingId(null)}
+                                        // O editor só fecha no sucesso: num conflito de versão o texto digitado fica.
+                                        onSave={(values) => mutate({ type: "update", id: memory.id, texto: values.texto, categoria: values.categoria, versao: memory.versao }, { onSuccess: () => setEditingId(null) })}
+                                        onPin={(fixada) => mutate({ type: "pin", id: memory.id, fixada })}
+                                        onActive={(ativa) => mutate({ type: "active", id: memory.id, ativa })}
+                                        onDelete={() => setDeleting(memory)}
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </ul>
+                    )}
+                </>
             )}
 
             <ConfirmDialog
                 open={deleting !== null}
                 onOpenChange={(next) => !next && setDeleting(null)}
-                title="Excluir memória?"
-                description={deleting ? `"${deleting.resumo}" deixa de ser usada pelo agente.` : undefined}
+                title="Excluir memória de vez?"
+                description={deleting ? `"${deleting.resumo}" é apagada do Engramind e deixa de ser usada pelo agente. Para só tirar do contexto, inative.` : undefined}
                 confirmLabel="Excluir memória"
                 variant="destructive"
                 onConfirm={() => {

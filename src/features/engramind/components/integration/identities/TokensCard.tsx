@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { isOpexMemoryAgent } from "@/features/ai/agents"
 import { AnimatePresence } from "framer-motion"
 import { Ban, KeyRound, Pencil, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -58,6 +59,7 @@ export function TokensCard({ tokens, apps, agents, ownTokenId }: TokensCardProps
                                         <div className="flex flex-wrap items-center gap-1.5">
                                             <span className="font-mono text-xs">{token.prefix}</span>
                                             {own && <HelpBadge value="Este Opex" tone="secondary" help={IDENTITY_HELP.ownToken} />}
+                                            {token.kind === "agent" && isOpexMemoryAgent(token.app.slug, token.agent?.slug) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Token do agente nas memórias dos agentes do Opex (contexto e aprendizado autônomo). Revogado, o Opex emite outro na próxima conferência." />}
                                             <HelpBadge value={token.kind} help={TOKEN_KIND_HELP[token.kind]} />
                                             <HelpBadge value={token.status} tone={toneOf(token.status)} help={TOKEN_STATUS_HELP[token.status]} />
                                             {token.scopes.map((scope) => (

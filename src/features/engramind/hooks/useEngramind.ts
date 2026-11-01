@@ -102,6 +102,7 @@ export function areasForEvent(type: string): string[] {
     if (type === "identities.updated") return ["apps", "agents", "tokens", "connection"]
     if (type === "jobs.updated" || type === "status.updated") return ["jobs", "status"]
     if (type.startsWith("env.")) return ["env", "status", "connection"]
+    if (type === "migration.updated") return ["migration"]
     return []
 }
 
