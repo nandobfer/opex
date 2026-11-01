@@ -24,6 +24,8 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
 }))
 vi.mock('@/features/ai/hooks/useMemories', () => ({ useMemoriesRealtime: () => {} }))
 vi.mock('@/features/ai/components/memories/AgentMemoriesCard', () => ({ AgentMemoriesCard: ({ agentId }: { agentId: string }) => <div data-testid={`memories-${agentId}`} /> }))
+vi.mock('@/features/ai/components/memories/ClientMemoriesCard', () => ({ ClientMemoriesCard: ({ agentId }: { agentId: string }) => <div data-testid={`memories-${agentId}`} /> }))
+vi.mock('@/features/ai/components/memories/SelfMemorySwitch', () => ({ SelfMemorySwitch: ({ consumer }: { consumer: string }) => <div data-testid={`self-memory-${consumer}`} /> }))
 vi.mock('@/features/maddox-agent/hooks/useMaddoxSettings', () => ({
   useMaddoxSettings: () => ({ data: mocks.settings, isLoading: false, isError: false, refetch: vi.fn() }),
   useSaveMaddoxSettings: () => ({ mutateAsync: mocks.save, isPending: false }),
@@ -71,6 +73,10 @@ describe('aba "Agente Maddox" da integração de IA', () => {
     expect(screen.getByTestId('memories-maddox-owner')).toBeTruthy()
     expect(screen.getByTestId('memories-maddox-client')).toBeTruthy()
     expect(screen.queryByTestId('memories-opex-global')).toBeNull()
+    // OPE-104: Memórias do Opex (todos os agentes), memórias de um cliente específico e o aprendizado autônomo do Maddox.
+    expect(screen.getByTestId('memories-app-global')).toBeTruthy()
+    expect(screen.getByTestId('memories-maddox-client-specific')).toBeTruthy()
+    expect(screen.getByTestId('self-memory-maddox')).toBeTruthy()
   })
 
   it('"Restaurar padrão" volta as instruções e salvar envia a configuração', async () => {

@@ -587,7 +587,7 @@ interface LaunchOptions {
 type MentorTurns = Parameters<Awaited<ReturnType<typeof adversaryModule>>["mentorAfterTurns"]>[0]["turns"]
 
 /** Agente Mentor: fim da cadeia de turnos → avalia em segundo plano (nunca bloqueia a mesa). */
-async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns): Promise<void> {
+async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns, chainStartedAt: Date | null): Promise<void> {
     if (turn.attach || turn.stage === "finishing") {
         // Sem avaliação nesta cadeia: as mensagens ao vivo dela não podem ficar para a próxima.
         const adversary = await adversaryModule()
@@ -609,6 +609,9 @@ async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, 
         approvedPlan: doc.plans?.at(-1)?.text ?? null,
         origin: { action: options.action ?? null, userText: options.userText ?? null, feedback: options.feedback ?? null },
         turns,
+        // Início da cadeia, capturado no launchTurn: o `turnStartedAt` do documento pode já ser de outra cadeia
+        // (ex.: o build disparado pela fila logo depois).
+        since: chainStartedAt,
     })
 }
 
@@ -625,6 +628,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
     const mentorTurns: MentorTurns = []
+    const chainStartedAt = new Date()
     markWorkbenchActive(id, controller)
     try {
         await update(loaded.doc, {
@@ -634,7 +638,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             heartbeatAt: new Date(),
             // Reconectar preserva o turno original (o "Tentar novamente" e o marco de tempo continuam
             // válidos) e a causa da parada; um turno novo começa um episódio novo (limpa o desfecho).
-            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null }),
+            ...(turn.attach ? {} : { lastStage: turn.stage, lastPrompt: { stage: turn.stage, text: turn.text, ...(turn.fileIds?.length ? { fileIds: turn.fileIds } : {}) }, turnStartedAt: chainStartedAt, stopRequestedAt: null, reconnect: null }),
             ...(options.feedback !== undefined ? { pendingFeedback: options.feedback } : {}),
             ...options.extraSet,
         })
@@ -648,7 +652,7 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
             clearWorkbenchActive(id, controller)
             // Terminou um build (liberou a vaga) ou uma implementação/revisão adversária (entrou na fila): avalia a fila do build.
             if (turn.stage === "building" || turn.stage === "implementing" || turn.stage === "adversarial_review") pumpBuildQueue()
-            void notifyMentor(id, turn, options, mentorTurns).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
+            void notifyMentor(id, turn, options, mentorTurns, chainStartedAt).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
         })
 }
 
@@ -664,6 +668,9 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         if (turn.stage === "adversarial_review") {
             try {
                 next = await adversarialTurn(loaded, turn, controller)
+                // Agente Mentor ("Revisões do adversário"): o relatório da rodada entra na avaliação do fim da cadeia.
+                const review = await (await adversaryModule()).mentorAdversarialTurn(id)
+                if (review) mentorTurns.push(review)
             } catch (error) {
                 log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
                 await prepareHub(id)
@@ -683,7 +690,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Limpeza: a sessão volta ao diretório da central antes de qualquer outra chamada (GO-DEV-805).
             if (turn.stage === "finishing" && !turn.attach) await moveSessionHome(client, loaded, sessionId)
             // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão a cada turno.
-            const memories = turn.attach ? null : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId)
+            const memories = turn.attach
+                ? null
+                : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId, {
+                      directories: [loaded.config.sessionDirectory, loaded.doc.sessionDirectory, loaded.doc.worktreePath],
+                      notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+                  })
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
                 next = await buildTurn(client, loaded, turn, sessionId, controller, memories)
@@ -696,14 +708,9 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
             const text = withAttachmentsSection(memories ? withDeveloperMemories(memories, withNotes) : withNotes, attachments.section)
-            // Agente Mentor: pode pedir ao agente um bloco de lição no fim da resposta.
-            const adversary = await adversaryModule()
-            const stageText = turn.attach ? text : await adversary.mentorPrepareTurn({ centralId: loaded.doc.centralId, stage: turn.stage, text })
-            const raw = await runStageAgent(client, loaded, { stage: turn.stage, text: stageText, attach: turn.attach, files: attachments.files }, sessionId, controller)
-            // O bloco de lição sai da resposta antes de a mesa interpretar o turno (plano, JSON da etapa).
-            const taken = raw.outcome === "succeeded" ? adversary.mentorTakeLesson(raw.text) : null
-            const result = taken ? { ...raw, text: taken.text } : raw
-            if (taken) mentorTurns.push({ stage: turn.stage, text: taken.text, lesson: taken.lesson, lessonError: taken.error })
+            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
+            // Agente Mentor: a resposta do turno entra na avaliação do fim da cadeia.
+            if (result.outcome === "succeeded") mentorTurns.push({ stage: turn.stage, text: result.text })
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return

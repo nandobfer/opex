@@ -76,6 +76,8 @@ export async function createCentral(input: CreateCentralInput, actorId: string):
     await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { produto: input.projectName, diretorio: input.sessionDirectory } })
     centralLogger(id).success(`Central criada para ${input.projectName} em ${input.sessionDirectory}`)
     await publishAgentic({ centralId: id })
+    // Canal de memórias da central no Engramind (melhor esforço: sem ele, nasce na primeira gravação).
+    void import("@/features/ai/server/agent-memory-service").then((memories) => memories.ensureCentralMemoryChannel(id, input.projectName))
     return getCentral(id)
 }
 
@@ -107,10 +109,10 @@ export async function deleteCentral(id: string, actorId: string): Promise<void> 
     const { deleteWorkbenchFiles } = await import("./files")
     for (const item of finished) await deleteWorkbenchFiles(String(item._id)).catch(() => undefined)
     await AgenticWorkbench.deleteMany({ centralId: id })
-    // Memórias do agente desenvolvedor desta central (a auditoria de cada uma não se aplica: saem com a central).
-    const memories = await (await import("@/features/ai/server/agent-memory-service")).deleteCentralMemories(id)
+    // Memórias do agente desenvolvedor desta central: o canal é arquivado no Engramind (recuperável); falha não bloqueia.
+    const archived = await (await import("@/features/ai/server/agent-memory-service")).archiveCentralMemories(id)
     await AgenticCentral.deleteOne({ _id: doc._id })
-    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName, ...(memories ? { memorias: memories } : {}) } })
+    await recordAudit({ userId: actorId, entidade: AGENTIC_AUDIT_CENTRAL, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { produto: doc.projectName }, depois: { canalMemoriasArquivado: archived } })
     await publishAgentic({ centralId: id })
 }
 

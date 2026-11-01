@@ -80,14 +80,14 @@ describe('aba do Agente Mentor', () => {
     expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('Seletivo')
   })
 
-  it('gatilhos: mensagens do usuário ligadas, turnos da IA desligados; desligar pedidos esconde as etapas', () => {
+  it('gatilhos: mensagens do usuário ligadas, turnos da IA (inclusive as revisões do adversário) desligados; sem a porta do opex-lesson', () => {
     render(<WithForm>{(form) => <MentorTriggersCard form={form} />}</WithForm>)
     const checked = (name: RegExp) => (screen.getByLabelText(name) as HTMLInputElement).checked
     expect(checked(/Correção da prévia/)).toBe(true)
     expect(checked(/^Implementação e correções$/)).toBe(false)
-    expect(screen.getByText('Pedidos do desenvolvedor pulam o decisor')).toBeTruthy()
-    fireEvent.click(screen.getByRole('checkbox', { name: /Aceitar pedidos do agente desenvolvedor/ }))
-    expect(screen.queryByText('Pedidos do desenvolvedor pulam o decisor')).toBeNull()
+    expect(checked(/^Revisões do adversário$/)).toBe(false)
+    expect(screen.queryByText(/Pedidos do desenvolvedor/)).toBeNull()
+    expect(screen.queryByText(/opex-lesson/)).toBeNull()
   })
 
   it('execuções: sugestão abre com o texto editável; aprovar envia o texto editado', () => {

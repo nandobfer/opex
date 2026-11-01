@@ -1,4 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
+import { listOfChannel } from "@/features/ai/agents"
+import { AI_MEMORIES_UPDATED_EVENT } from "@/features/ai/constants"
+import { integrationChannel } from "@/lib/pusher/channel-names"
+import { publishToChannels } from "@/lib/pusher/channels"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import { ENGRAMIND_INTEGRATION_ID, WEBHOOK_TOLERANCE_SECONDS } from "../constants"
 import type { EngramindWebhookEvent as WebhookEvent } from "../types"
@@ -80,5 +84,21 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<boolean>
         return false
     }
     await publishEngramind({ type: event.type, channel: event.channel ?? null, keys: Array.isArray(event.keys) ? event.keys.slice(0, 50) : undefined })
+    await publishMemoryList(event)
+    return true
+}
+
+/**
+ * Memórias dos agentes (OPE-104): `memory.*` num canal mapeado também publica `ai-memories-updated`
+ * `{ agentId, centralId?, clientId? }` (os cards relêem sem recarregar). Canal fora do mapeamento é ignorado.
+ */
+export async function publishMemoryList(event: Pick<WebhookEvent, "type" | "channel">): Promise<boolean> {
+    if (!event.type.startsWith("memory.")) return false
+    const list = listOfChannel(event.channel)
+    if (!list) {
+        engramindLog.debug({ type: event.type, channel: event.channel }, "[engramind] memória num canal fora das listas dos agentes: ignorada pelos cards")
+        return false
+    }
+    await publishToChannels([integrationChannel("ai")], AI_MEMORIES_UPDATED_EVENT, { agentId: list.agentId, ...(list.centralId ? { centralId: list.centralId } : {}), ...(list.clientId ? { clientId: list.clientId } : {}) }).catch(() => undefined)
     return true
 }

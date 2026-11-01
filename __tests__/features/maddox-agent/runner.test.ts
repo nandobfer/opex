@@ -88,10 +88,10 @@ vi.mock('@/features/maddox-agent/server/opencode-session', () => ({
 vi.mock('@/features/maddox-agent/server/scope-tools', () => ({ maddoxPermissionsFor: async () => [{ action: 'opex_portal_*', resource: '*', effect: 'deny' }] }))
 vi.mock('@/features/maddox-agent/server/client-config', () => ({ assertClientMaddoxEnabled: vi.fn(async () => ({ enabled: true, disabledTools: [] })) }))
 vi.mock('@/features/opex-agent/server/titler', () => ({ refreshSessionTitleWith: mocks.refreshTitle }))
-vi.mock('@/features/ai/server/agent-memory-service', async (original) => ({
-  ...(await original<object>()),
-  agentMemoryTexts: async (ids: string[]) => ids.flatMap((id) => (id === 'maddox-global' ? ['Memória global do Maddox'] : id === 'maddox-owner' ? ['Memória do dono'] : [])),
-}))
+vi.mock('@/features/ai/server/agent-memory-context', async () =>
+  (await import('../../helpers/memory-context')).memoryContextModule({ 'agentes/maddox/global': ['Memória global do Maddox'], 'agentes/maddox/dono': ['Memória do dono'] }),
+)
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 const secretTool = {
   name: 'update_integration',
   group: 'integrations',

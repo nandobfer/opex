@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('sonner', () => ({ toast: mocks.toast }))
+vi.mock('@/features/ai/components/memories/MemoriesNotices', () => ({ MemoriesNoticesBlock: () => null }))
 vi.mock('@/features/engramind/hooks/useEngramind', async (original) => ({
   ...(await original<object>()),
   useEngramindQuery: (path: string) => mocks.queries[path] ?? { data: undefined, isLoading: false, error: null, refetch: vi.fn() },

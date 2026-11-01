@@ -28,6 +28,8 @@ export interface EngramindCallOptions {
     timeoutMs?: number
     /** O corpo leva segredo: vai como bytes, que o debug não registra (só método, URL e cabeçalhos mascarados). */
     sensitiveBody?: boolean
+    /** Cabeçalhos extras (ex.: `If-None-Match` do contexto); `304` devolve `null`. */
+    headers?: Record<string, string>
 }
 
 export async function engramindTarget(): Promise<EngramindTarget> {
@@ -52,7 +54,7 @@ const debug = () => integrationDebug(ENGRAMIND_INTEGRATION_ID)
 /** Chama o Engramind e devolve o JSON (204/corpo vazio → `null`). */
 export async function engramindCall<T = unknown>(method: EngramindMethod, request: EngramindRequest, options: EngramindCallOptions = {}): Promise<T> {
     const target = options.target ?? (await engramindTarget())
-    const headers: Record<string, string> = { Authorization: `Bearer ${target.token}`, Accept: "application/json", "User-Agent": USER_AGENT }
+    const headers: Record<string, string> = { ...options.headers, Authorization: `Bearer ${target.token}`, Accept: "application/json", "User-Agent": USER_AGENT }
     if (method !== "GET") headers["Idempotency-Key"] = options.idempotencyKey ?? `opex-${randomUUID()}`
     const hasBody = request.body !== undefined && method !== "GET"
     if (hasBody) headers["Content-Type"] = "application/json"
@@ -64,6 +66,7 @@ export async function engramindCall<T = unknown>(method: EngramindMethod, reques
         const reason = error instanceof Error ? (error.name === "TimeoutError" || error.name === "AbortError" ? "tempo limite" : ((error as { cause?: { code?: string } }).cause?.code ?? error.message)) : String(error)
         throw unreachableError(reason)
     }
+    if (res.status === 304) return null as T
     const text = await res.text()
     let json: unknown = null
     if (text) {

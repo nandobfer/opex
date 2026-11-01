@@ -24,7 +24,7 @@ export const WEBHOOK_TOLERANCE_SECONDS = 300
 export const ENGRAMIND_PAGE_HREF = "/engramind"
 export const ENGRAMIND_INTEGRATION_HREF = "/integracoes/engramind"
 
-export const ENGRAMIND_TABS = ["sobre", "conexao", "configuracoes", "provedores", "identidades", "operacao", "variaveis"] as const
+export const ENGRAMIND_TABS = ["sobre", "conexao", "configuracoes", "provedores", "identidades", "operacao", "variaveis", "migracao"] as const
 export type EngramindTab = (typeof ENGRAMIND_TABS)[number]
 
 export const ENGRAMIND_PAGE_TABS = ["canais", "memorias"] as const

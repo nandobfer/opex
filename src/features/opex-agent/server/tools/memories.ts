@@ -1,59 +1,86 @@
 import { z } from "zod"
-import { AI_AGENT_IDS, AI_AGENTS, isCentralScopedAgent, type AiAgentId } from "@/features/ai/agents"
+import { AI_AGENT_IDS, AI_AGENTS, isCentralScopedAgent, isClientScopedAgent, type AiAgentId, type MemoryListScope } from "@/features/ai/agents"
 import { DomainError } from "@/lib/api/route"
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
+import { MEMORY_TEXT_ABSOLUTE_MAX } from "@/features/ai/memory-text"
 import { createAgentMemory, deleteAgentMemory, getAgentMemory, listAgentMemories, updateAgentMemory } from "@/features/ai/server/agent-memory-service"
 import type { MemoryDto } from "@/features/ai/types"
 import { defineTool } from "./define"
 import { objectIdSchema } from "./helpers"
 
 /**
- * Memórias dos agentes (copiadas do Ciliar): chamam o serviço real (`agent-memory-service`). A lista
- * é um enum do catálogo `src/features/ai/agents.ts` (globais, do dono e do cliente do Agente Opex, a
- * do Agente Adversário e as do agente desenvolvedor — globais e por central), então listas futuras
- * entram sozinhas. Nas listas por central (`developer-central`), `centralId` (de list_centrals)
- * escolhe a central.
+ * Memórias dos agentes (gestão pelo dono): chamam o serviço real (`agent-memory-service`), que lê e
+ * grava no Engramind. A lista é um enum do catálogo `src/features/ai/agents.ts` (Memórias do Opex,
+ * Agente Opex, Agente Maddox, Agente Adversário e agente desenvolvedor), então listas futuras entram
+ * sozinhas. `centralId` (de list_centrals) escolhe a central nas listas por central e `clientId` (de
+ * list_clients) o cliente nas listas por cliente. Toda gravação é do dono (origem "Dono").
  */
 
-const AGENT_LIST = AI_AGENT_IDS.map((id) => `${id} = ${AI_AGENTS[id].title}${isCentralScopedAgent(id) ? " (exige centralId)" : ""}`).join("; ")
+const scopeHint = (id: AiAgentId) => (isCentralScopedAgent(id) ? " (exige centralId)" : isClientScopedAgent(id) ? " (exige clientId)" : "")
+const AGENT_LIST = AI_AGENT_IDS.map((id) => `${id} = ${AI_AGENTS[id].title}${scopeHint(id)}`).join("; ")
 const agent = z.enum(AI_AGENT_IDS).describe(`Lista de memórias: ${AGENT_LIST}`)
-const memoryId = objectIdSchema.describe("Id da memória (de list_agent_memories)")
+const memoryId = z.string().trim().regex(/^m_[A-Za-z0-9]+$/, "Use o id da memória (m_…) de list_agent_memories").describe("Id da memória (de list_agent_memories)").meta({ examples: ["m_01hx7k2q9w"] })
 const centralId = objectIdSchema.optional().describe("Id da central (de list_centrals); obrigatório na lista developer-central e recusado nas demais")
-const text = z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, "Até 2.000 caracteres").describe("Texto livre da memória (instrução ou fato permanente)")
+const clientId = objectIdSchema.optional().describe("Id do cliente (de list_clients); obrigatório nas listas *-client-specific e recusado nas demais")
+const text = z.string().trim().min(1, "Escreva a memória").max(MEMORY_TEXT_ABSOLUTE_MAX).describe("Texto livre da memória (instrução ou fato permanente; os limites são os do Engramind)")
+const categoria = z.string().trim().min(1).max(40).optional().describe("Categoria do Engramind (categories.list; padrão: a primeira)")
+const fixada = z.boolean().optional().describe("Fixada (entra primeiro no contexto do agente)")
+const ativa = z.boolean().optional().describe("Ativa; false inativa (arquiva, fora do contexto) e true reativa")
 
 const view = (agentId: AiAgentId, memory: MemoryDto) => ({
     agent: agentId,
     agentLabel: AI_AGENTS[agentId].title,
     id: memory.id,
     ...(memory.centralId ? { centralId: memory.centralId } : {}),
+    ...(memory.clientId ? { clientId: memory.clientId } : {}),
     summary: memory.resumo,
     text: memory.texto,
+    category: memory.categoria,
+    pinned: memory.fixada,
+    active: memory.ativa,
+    version: memory.versao,
     author: memory.autor,
     origin: memory.origin?.label ?? null,
     createdAt: memory.criadaEm,
     updatedAt: memory.atualizadaEm,
 })
 const short = (value: string) => (value.length > 80 ? `${value.slice(0, 79)}…` : value)
-const where = (agentId: AiAgentId, central?: string) => `${AI_AGENTS[agentId].title}${central ? ` · central ${central}` : ""}`
+const where = (agentId: AiAgentId, scope: MemoryListScope) => `${AI_AGENTS[agentId].title}${scope.centralId ? ` · central ${scope.centralId}` : ""}${scope.clientId ? ` · cliente ${scope.clientId}` : ""}`
 
 interface MemoryListView {
     agent: AiAgentId
     agentLabel: string
     centralId?: string
     centralName?: string
+    clientId?: string
+    clientName?: string
     items: ReturnType<typeof view>[]
 }
 
-/** Listas de um agente: nas por central, uma por central (a pedida ou todas). */
-async function listsOf(agentId: AiAgentId, central?: string): Promise<MemoryListView[]> {
-    if (!isCentralScopedAgent(agentId)) return [{ agent: agentId, agentLabel: AI_AGENTS[agentId].title, items: (await listAgentMemories(agentId)).map((memory) => view(agentId, memory)) }]
-    const { listCentrals } = await import("@/features/agentic/server/centrals")
-    const centrals = (await listCentrals()).filter((item) => !central || item.id === central)
-    if (central && !centrals.length) throw new DomainError(404, "Central não encontrada", "CENTRAL_NOT_FOUND")
-    return Promise.all(
-        centrals.map(async (item) => ({ agent: agentId, agentLabel: AI_AGENTS[agentId].title, centralId: item.id, centralName: item.projectName, items: (await listAgentMemories(agentId, item.id)).map((memory) => view(agentId, memory)) })),
-    )
+/**
+ * Uma lista de um agente. Nas por central/cliente o id é obrigatório (sem rajada por todas as centrais e
+ * todos os clientes); `list_centrals`/`list_clients` dão os ids.
+ */
+async function listOf(agentId: AiAgentId, scope: MemoryListScope): Promise<MemoryListView> {
+    const base = { agent: agentId, agentLabel: AI_AGENTS[agentId].title }
+    if (isCentralScopedAgent(agentId) && !scope.centralId) throw new DomainError(400, `A lista ${agentId} é por central: informe o centralId (de list_centrals)`, "CENTRAL_REQUIRED")
+    if (isClientScopedAgent(agentId) && !scope.clientId) throw new DomainError(400, `A lista ${agentId} é por cliente: informe o clientId (de list_clients)`, "CLIENT_REQUIRED")
+    const items = (await listAgentMemories(agentId, scope)).map((memory) => view(agentId, memory))
+    return { ...base, ...(scope.centralId ? { centralId: scope.centralId } : {}), ...(scope.clientId ? { clientId: scope.clientId } : {}), items }
 }
+
+/** Sem `agent`: só a contagem das listas sem escopo (uma chamada por vez) e como abrir as por central/cliente. */
+async function overview() {
+    const lists: { agent: AiAgentId; agentLabel: string; active: number; inactive: number }[] = []
+    for (const id of AI_AGENT_IDS) {
+        if (isCentralScopedAgent(id) || isClientScopedAgent(id)) continue
+        const memories = await listAgentMemories(id)
+        lists.push({ agent: id, agentLabel: AI_AGENTS[id].title, active: memories.filter((memory) => memory.ativa).length, inactive: memories.filter((memory) => !memory.ativa).length })
+    }
+    const scoped = AI_AGENT_IDS.filter((id) => isCentralScopedAgent(id) || isClientScopedAgent(id)).map((id) => ({ agent: id, agentLabel: AI_AGENTS[id].title, requires: isCentralScopedAgent(id) ? "centralId" : "clientId" }))
+    return { lists, scoped, hint: "Para ver os textos, chame de novo com agent (e centralId/clientId nas listas por central/cliente)." }
+}
+
+const scopeOf = (input: { centralId?: string; clientId?: string }): MemoryListScope => ({ ...(input.centralId ? { centralId: input.centralId } : {}), ...(input.clientId ? { clientId: input.clientId } : {}) })
 
 export const memoryTools = [
     defineTool({
@@ -61,12 +88,12 @@ export const memoryTools = [
         group: "memories",
         label: "Listar memórias",
         risk: "read",
-        description: `Memórias (instruções permanentes) do Agente Opex, do Agente Adversário e do agente desenvolvedor das centrais (${AGENT_LIST}), com id, resumo, texto, autor e datas. Sem agent, lista as de todas as listas; as da central vêm agrupadas por central (centralId filtra uma).`,
-        input: z.object({ agent: agent.optional(), centralId }),
+        description: `Memórias (instruções permanentes, no Engramind) de uma lista dos agentes do Opex (${AGENT_LIST}), com id, resumo, texto, categoria, fixada, ativa, versão, autor e datas. Sem agent, devolve só a contagem de cada lista sem escopo; nas listas por central/cliente informe o centralId/clientId.`,
+        input: z.object({ agent: agent.optional(), centralId, clientId }),
         async execute(input) {
-            const agents = input.agent ? [input.agent] : [...AI_AGENT_IDS]
-            const lists = (await Promise.all(agents.map((id) => listsOf(id, isCentralScopedAgent(id) ? input.centralId : undefined)))).flat()
-            return { agents: lists, total: lists.reduce((sum, list) => sum + list.items.length, 0) }
+            if (!input.agent) return overview()
+            const list = await listOf(input.agent, { centralId: isCentralScopedAgent(input.agent) ? input.centralId : undefined, clientId: isClientScopedAgent(input.agent) ? input.clientId : undefined })
+            return { agents: [list], total: list.items.length }
         },
     }),
     defineTool({
@@ -74,10 +101,10 @@ export const memoryTools = [
         group: "memories",
         label: "Ler memória",
         risk: "read",
-        description: "Uma memória (texto completo, resumo, autor e datas). Na lista developer-central, informe o centralId.",
-        input: z.object({ agent, memoryId, centralId }),
+        description: "Uma memória (texto completo, resumo, categoria, estado, versão, autor e datas). Informe o centralId/clientId nas listas por central/cliente.",
+        input: z.object({ agent, memoryId, centralId, clientId }),
         async execute(input) {
-            return view(input.agent, await getAgentMemory(input.agent, input.memoryId, input.centralId))
+            return view(input.agent, await getAgentMemory(input.agent, input.memoryId, scopeOf(input)))
         },
     }),
     defineTool({
@@ -85,12 +112,12 @@ export const memoryTools = [
         group: "memories",
         label: "Criar memória",
         risk: "write",
-        description: `Cria uma memória (instrução ou fato permanente, de 3 a 2.000 caracteres) numa lista do Agente Opex, do Agente Adversário ou do agente desenvolvedor (${AGENT_LIST}). O texto é revisado e resumido pelo uso "Resumo de memórias" (formattedByAi=false quando ele está indisponível). Sem limite de quantidade. As do agente desenvolvedor valem a partir do próximo turno das mesas e forks.`,
-        input: z.object({ agent, text, centralId }),
-        summarize: (input) => `Criar a memória (${where(input.agent, input.centralId)}): "${short(input.text)}"`,
+        description: `Cria uma memória (instrução ou fato permanente) numa lista dos agentes do Opex (${AGENT_LIST}), com categoria e fixada opcionais. O resumo é gerado pelo Redator do Engramind. Vale a partir da próxima resposta (ou do próximo turno das mesas e forks). Texto igual a outra memória da lista não é gravado (duplicated=true).`,
+        input: z.object({ agent, text, categoria, fixada, centralId, clientId }),
+        summarize: (input) => `Criar a memória (${where(input.agent, input)}): "${short(input.text)}"`,
         async execute(input, { actorId }) {
-            const result = await createAgentMemory(input.agent, input.text, actorId, { centralId: input.centralId })
-            return { ok: true, ...view(input.agent, result.memoria), formattedByAi: result.formatadaPorIa }
+            const result = await createAgentMemory(input.agent, input.text, actorId, { ...scopeOf(input), categoria: input.categoria, fixada: input.fixada })
+            return { ok: true, ...view(input.agent, result.memoria), ...(result.duplicada ? { duplicated: true } : {}), ...(result.similares?.length ? { similar: result.similares } : {}) }
         },
     }),
     defineTool({
@@ -98,12 +125,13 @@ export const memoryTools = [
         group: "memories",
         label: "Editar memória",
         risk: "write",
-        description: "Substitui o texto de uma memória (revisado e resumido de novo pelo Resumo de memórias). Na lista developer-central, informe o centralId.",
-        input: z.object({ agent, memoryId, text, centralId }),
-        summarize: (input) => `Editar a memória (${where(input.agent, input.centralId)}): "${short(input.text)}"`,
+        description: "Altera uma memória: texto e/ou categoria (envie a versão lida para não sobrescrever uma edição concorrente), fixada (fixar/desafixar) e ativa (inativar/reativar). Informe o centralId/clientId nas listas por central/cliente.",
+        input: z.object({ agent, memoryId, text: text.optional(), categoria, version: z.number().int().positive().optional().describe("Versão lida (de get_agent_memory)"), fixada, ativa, centralId, clientId }),
+        summarize: (input) => `Editar a memória ${input.memoryId} (${where(input.agent, input)})${input.text ? `: "${short(input.text)}"` : ""}`,
         async execute(input, { actorId }) {
-            const result = await updateAgentMemory(input.agent, input.memoryId, input.text, actorId, { centralId: input.centralId })
-            return { ok: true, ...view(input.agent, result.memoria), formattedByAi: result.formatadaPorIa }
+            if (input.text === undefined && input.categoria === undefined && input.fixada === undefined && input.ativa === undefined) throw new DomainError(400, "Informe o que mudar: text, categoria, fixada ou ativa", "VALIDATION_ERROR")
+            const result = await updateAgentMemory(input.agent, input.memoryId, { texto: input.text, categoria: input.categoria, versao: input.version, fixada: input.fixada, ativa: input.ativa }, actorId, scopeOf(input))
+            return { ok: true, ...view(input.agent, result.memoria) }
         },
     }),
     defineTool({
@@ -111,11 +139,11 @@ export const memoryTools = [
         group: "memories",
         label: "Excluir memória",
         risk: "destructive",
-        description: "Exclui uma memória: o agente deixa de segui-la a partir da próxima resposta (ou do próximo turno da mesa/fork). Na lista developer-central, informe o centralId.",
-        input: z.object({ agent, memoryId, centralId }),
-        summarize: (input) => `Excluir a memória ${input.memoryId} (${where(input.agent, input.centralId)})`,
+        description: "Exclui de vez uma memória no Engramind: o agente deixa de segui-la a partir da próxima resposta (ou do próximo turno da mesa/fork). Para só tirar do contexto, use update_agent_memory com ativa=false. Informe o centralId/clientId nas listas por central/cliente.",
+        input: z.object({ agent, memoryId, centralId, clientId }),
+        summarize: (input) => `Excluir a memória ${input.memoryId} (${where(input.agent, input)})`,
         async execute(input, { actorId }) {
-            const removed = await deleteAgentMemory(input.agent, input.memoryId, actorId, input.centralId)
+            const removed = await deleteAgentMemory(input.agent, input.memoryId, actorId, scopeOf(input))
             return { ok: true, deleted: view(input.agent, removed) }
         },
     }),

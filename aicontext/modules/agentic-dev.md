@@ -101,15 +101,17 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
   diretório da central confere `git rev-parse --show-toplevel`, `git ls-remote` das branches base e
   de destino, `gh auth status`, `docker compose version`, o arquivo do compose e a pasta dos
   worktrees; mais feature/OpenCode e o vínculo do repositório (aviso). Grava `lastTest`.
-- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas e as **memórias
-  da central**, com a quantidade na auditoria da central — `deleteCentralMemories`).
+- Excluir a central só sem mesas em andamento (apaga as concluídas e a saída delas e **arquiva o canal
+  das memórias da central** no Engramind — `archiveCentralMemories`, recuperável, melhor esforço que
+  nunca bloqueia a exclusão; a auditoria da central traz `canalMemoriasArquivado`).
 
-### Memórias do agente desenvolvedor (OPE-97)
+### Memórias do agente desenvolvedor (OPE-97 · Engramind OPE-104)
 
 - Instruções permanentes que o agente desenvolvedor (o agente do OpenCode nas mesas e forks das
-  centrais) segue, no mesmo módulo das memórias do Agente Opex e do Adversário (`agent_memories`,
-  "Resumo de memórias", auditoria `MemoriaAgente`, evento `ai-memories-updated`; ver
-  `modules/ai.md`, "Memórias dos agentes"). Duas listas:
+  centrais) segue, no mesmo módulo das memórias do Agente Opex e do Adversário (no **Engramind**:
+  canais `agentes/desenvolvedor/global` e `agentes/desenvolvedor/central/<centralId>`, mais as Memórias
+  do Opex `opex`; auditoria `MemoriaAgente`, evento `ai-memories-updated`; ver `modules/ai.md`,
+  "Memórias dos agentes"). Duas listas:
   - `developer-global` — **Memórias globais do agente desenvolvedor**, valem em todas as centrais
     (aba Agente Desenvolvedor › Memórias e, abaixo do card da central, na página da central);
   - `developer-central` — **Memórias da central**, uma lista por central (`centralId` no documento;
@@ -117,7 +119,8 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 - **Onde valem**: em **todo turno da mesa** (planejamento, revisões do plano, implementação, build,
   correção de CI, PR, conclusão/limpeza etc.) e em **todo turno dos forks** (Plan e Build). A cada
   turno (exceto a reconexão, que só reata a execução) o servidor relê as globais e as da central, nessa
-  ordem (`developerMemoryTexts`), e grava a seção "Memórias e instruções permanentes"
+  ordem (`developerMemoryContext`: o bloco do Engramind, com cache de reserva e aviso na mesa quando ele
+  está fora do ar), e grava a seção "Memórias e instruções permanentes"
   (`memoriesSection`) como entrada durável de instrução da sessão do OpenCode, chave
   `opex-developer-memories` (`syncDeveloperMemories`, `server/developer-memories.ts`). Por isso
   criar, editar ou excluir vale **a partir do próximo turno**, inclusive numa sessão já existente ou
@@ -125,9 +128,15 @@ caem nos padrões em `parseCentralConfig`). Abas (`?aba=`, "Descartar alteraçõ
 - **Fallback**: se o OpenCode recusar a instrução, a seção vai à frente do prompt do turno
   (`withDeveloperMemories`, separada por `---`) — também na etapa de build, no primeiro prompt do
 agente no turno (preparo da prévia ou correção do build; as correções seguintes do mesmo turno já
-as têm no histórico). Falha ao ler as memórias no banco não derruba o
+as têm no histórico). Falha ao ler as memórias não derruba o
   turno (a sessão segue com a última versão gravada).
-- O **Agente Mentor** também grava nestas listas: depois do decisor, o **Triador** escolhe UMA lista
+- **Aprendizado autônomo** (OPE-104): com ele ligado, a mesa e o fork registram o MCP `opex_memorias` no
+  diretório da sessão (`ensureAgentMemoryMcp`) e a instrução "Memória própria" entra junto das memórias:
+  o agente grava, edita e consolida sozinho nas listas globais e na da central (inativar/excluir pedem a
+  confirmação do dono e, sem chat, são recusadas). Registro falhou → aviso "Aprendizado autônomo
+  indisponível neste turno" e o turno segue. Excluir a central arquiva o canal dela no Engramind.
+- O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
+  adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista
   entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
   `modules/adversarial-agent.md`, "Agente Mentor"). Os agentes de refinamento e de revisão de PR não
   recebem estas memórias.
@@ -450,10 +459,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
   chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
   adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
-- **Agente Mentor (OPE-92)**: com o Mentor ativo, o pedido de planejamento e de implementação pode
-  ganhar a instrução do bloco ` ```opex-lesson ` (`mentorPrepareTurn`); o bloco é retirado da resposta
-  antes de a mesa interpretar o turno (`mentorTakeLesson`), e o fim de cada cadeia de turnos (com a ação
-  que a originou e o texto do usuário) e o chat ao vivo vão ao Mentor
+- **Agente Mentor (OPE-92 · OPE-104)**: o fim de cada cadeia de turnos (com a ação que a originou, o
+  texto do usuário, a rodada do Adversário quando houver e o início da cadeia) e o chat ao vivo vão ao
+  Mentor (sem o antigo bloco ` ```opex-lesson `: o agente consolida as próprias memórias)
   (`mentorAfterTurns`/`mentorRecordLiveMessage`), que avalia em segundo plano: a mesa nunca espera e uma
   falha dele não muda a etapa. Comportamento em `modules/adversarial-agent.md`, "Agente Mentor".
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave

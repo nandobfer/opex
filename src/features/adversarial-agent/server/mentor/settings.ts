@@ -22,11 +22,6 @@ export function withMentorDefaults(saved: unknown): unknown {
         triggers: {
             user: { ...defaults.triggers.user, ...(value.triggers?.user ?? {}) },
             ai: { ...defaults.triggers.ai, ...(value.triggers?.ai ?? {}) },
-            developer: {
-                ...defaults.triggers.developer,
-                ...(value.triggers?.developer ?? {}),
-                stages: { ...defaults.triggers.developer.stages, ...(value.triggers?.developer?.stages ?? {}) },
-            },
         },
         decider: { ...defaults.decider, ...(value.decider ?? {}) },
         router: value.router ? { ...defaults.router, ...value.router } : { ...defaults.router, ...(value.decider ?? {}), instructions: "" },

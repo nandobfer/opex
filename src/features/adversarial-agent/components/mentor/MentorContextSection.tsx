@@ -8,7 +8,6 @@ import { MentorCheckbox } from "./MentorCheckbox"
 const ITEMS: { key: keyof MentorContext; label: string; description: string }[] = [
     { key: "userMessage", label: "Mensagem do usuário", description: "O que você pediu (correção, feedback, orientação)" },
     { key: "agentResponse", label: "Resposta do agente", description: "O fim da resposta de cada turno da cadeia" },
-    { key: "developerRequest", label: "Pedido do desenvolvedor", description: "O bloco opex-lesson, quando houver" },
     { key: "taskBasics", label: "Dados básicos da tarefa", description: "Código e título: só para julgar, nunca copiados para a memória" },
     { key: "adversarialVerdict", label: "Último veredito do adversário", description: "Resumo e títulos dos achados da rodada mais recente da mesa" },
     { key: "approvedPlan", label: "Plano aprovado", description: "A versão mais recente do plano da mesa" },

@@ -147,6 +147,8 @@ export async function runBootstrap(actorId: string, options: { forceWebhook?: bo
         appSlug = OPEX_APP_SLUG
     }
     if (config.opexPublicUrl) await ensureWebhook(target, appSlug, config.opexPublicUrl, options.forceWebhook === true, actorId, steps)
+    // Memórias dos agentes (OPE-104): canais, agentes, tokens e assinaturas `inject` (idempotente).
+    steps.push((await (await import("./memory-network")).ensureAgentMemoryNetwork(actorId, target)).step)
     engramindLog.info({ steps: steps.map((item) => `${item.id}:${item.status}`) }, "[engramind] bootstrap executado")
     return steps
 }

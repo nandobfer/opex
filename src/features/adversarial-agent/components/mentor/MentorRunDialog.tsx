@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field } from "@/components/ui/field"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
+import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
 import { MENTOR_LEVEL_DEFS, MENTOR_SOURCE_LABELS, MENTOR_TARGET_LABELS, MENTOR_TARGETS, MENTOR_USER_TRIGGER_LABELS, type MentorTarget } from "../../mentor/constants"
 import type { MentorRunDto } from "../../mentor/types"
 import { useMentorRunDecision } from "../../hooks/useMentor"

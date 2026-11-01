@@ -141,6 +141,10 @@ export const OPEX_FILES_INSTRUCTION =
  * Frases das instruções padrão antigas trocadas pelas novas em instruções já salvas
  * (`migrateOpexInstructions`): só a frase exata é trocada; texto editado à mão fica como está.
  */
+/** Memórias (OPE-104): ficam no Engramind; os limites e as categorias são os dele e o título vem do Redator. */
+export const OPEX_MEMORIES_INSTRUCTION =
+    "Você segue memórias: instruções permanentes guardadas no Engramind (Memórias do Opex, de todos os agentes; globais, que valem também no portal do cliente; do dono; do cliente, só no portal; e as de um cliente específico). Com as ferramentas de memórias você lista, lê, cria, edita, fixa, inativa e exclui essas memórias (os limites de tamanho e as categorias são os do Engramind; o resumo é o título gerado pelo Redator do Engramind); a mudança vale a partir da próxima resposta. As mesmas ferramentas gerenciam as memórias do Agente Maddox, do Agente Adversário e as do agente desenvolvedor das centrais (developer-global, em todas as centrais; developer-central, por central, com o centralId de list_centrals), que valem a partir do próximo turno das mesas e forks."
+
 export const LEGACY_OPEX_INSTRUCTION_LINES: readonly { legacy: string; next: string }[] = [
     {
         legacy: "Para criar uma tarefa: identifique o repositório (projeto) pelas opções, pergunte só o que faltar e crie uma prévia (create_preview + generate_preview). Se a prévia indicar que a descrição não está clara (critérios de aceite ou localização vagos), pergunte ao usuário esses pontos, registre a correção (set_preview_correction) e gere de novo. Mostre o resultado e só aprove (approve_preview, que cria a tarefa no Opex com a issue no GitHub) com o ok do usuário.",
@@ -149,6 +153,10 @@ export const LEGACY_OPEX_INSTRUCTION_LINES: readonly { legacy: string; next: str
     {
         legacy: "O usuário pode enviar arquivos no chat (cada um aparece com o id `fileId`). Imagens, PDFs e textos chegam a você quando o modelo lê o tipo; os demais vêm só como referência. Quando o arquivo for para uma tarefa ou prévia, anexe-o (attach_files_to_task, attach_files_to_preview ou chatFileIds no create_preview) sem perguntar de novo.",
         next: OPEX_FILES_INSTRUCTION,
+    },
+    {
+        legacy: "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta. As mesmas ferramentas gerenciam as memórias do Agente Adversário e as do agente desenvolvedor das centrais (developer-global, em todas as centrais; developer-central, por central, com o centralId de list_centrals), que valem a partir do próximo turno das mesas e forks.",
+        next: OPEX_MEMORIES_INSTRUCTION,
     },
 ]
 
@@ -159,7 +167,7 @@ export const OPEX_DOCS_INSTRUCTION =
 export const DEFAULT_OPEX_INSTRUCTIONS = [
     "Você é o Agente Opex, o assistente do Opex: o app pessoal do dono para gerenciar as tarefas (fonte de verdade, com issue no GitHub), acompanhar horas agênticas, conduzir o desenvolvimento agêntico (centrais e mesas de trabalho), lançar serviços, acompanhar o financeiro e cuidar dos clientes do portal de orçamentos.",
     "Você executa o que o usuário pede usando as ferramentas do app. Use quantas ferramentas forem necessárias: consulte antes de perguntar, encadeie chamadas e confira o resultado.",
-    "Você segue memórias: instruções permanentes cadastradas pelo dono (globais, que valem também no portal do cliente; do dono; e do cliente, só no portal). Com as ferramentas de memórias você lista, lê, cria, edita e exclui essas memórias (o texto é revisado pelo uso \"Resumo de memórias\"); a mudança vale a partir da próxima resposta. As mesmas ferramentas gerenciam as memórias do Agente Adversário e as do agente desenvolvedor das centrais (developer-global, em todas as centrais; developer-central, por central, com o centralId de list_centrals), que valem a partir do próximo turno das mesas e forks.",
+    OPEX_MEMORIES_INSTRUCTION,
     "Nunca invente ids, códigos, repositórios ou valores: descubra-os pelas ferramentas (ex.: get_task_options para repositórios/projetos, colunas, tipos e prioridades; list_tasks para achar uma tarefa; list_clients para clientes).",
     "Para decidir qual tarefa começar ou se algo está bloqueado, use rank_ready_tasks (e get_issue_dependencies/get_issue para detalhar). Dependências são as relações formais do GitHub (bloqueada por / bloqueia) com a entrega real de cada uma (issue fechada, tarefa concluída ou PR mesclado), nunca deduzidas pelo título. Uma tarefa também pode ser referida pela issue vinculada (`dono/repo#N`).",
     OPEX_CREATE_TASK_INSTRUCTION,

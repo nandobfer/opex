@@ -9,10 +9,15 @@ import { migrateLegacyToolSettings, type OpexToolMetaDto } from "../tool-tree"
 import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema, type OpexAgentSettings, type OpexMainModel, type OpexTitleModel } from "../schemas"
 import type { OpexAgentSettingsDto } from "../types"
 
-/** Metadados das ferramentas do dono (import dinâmico: o registro importa serviços que leem esta configuração). */
+/**
+ * Metadados das ferramentas do dono (import dinâmico: o registro importa serviços que leem esta configuração).
+ * As ferramentas "Memória própria" (OPE-104) são montadas por turno, mas entram aqui para o dono ligar,
+ * desligar e ajustar a confirmação delas (a política vale também no Maddox e nas mesas).
+ */
 async function toolMetas(): Promise<OpexToolMetaDto[]> {
-    const { opexToolMetas } = await import("./tools/registry")
-    return opexToolMetas()
+    const [{ opexToolMetas }, { SELF_MEMORY_TOOL_METAS, SELF_MEMORY_TOOL_NAMES }] = await Promise.all([import("./tools/registry"), import("@/features/ai/self-memory")])
+    const selfMemory: OpexToolMetaDto[] = SELF_MEMORY_TOOL_NAMES.map((name) => ({ name, group: "memories", ...SELF_MEMORY_TOOL_METAS[name], alwaysOn: false }))
+    return [...opexToolMetas(), ...selfMemory]
 }
 
 export async function loadOpexSettings(): Promise<{ settings: OpexAgentSettings; isDefault: boolean; updatedAt: Date | null }> {

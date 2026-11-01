@@ -149,6 +149,7 @@ export interface EngramindMemory {
     status: "active" | "permanent" | "archived"
     version: number
     author: Author
+    origin?: { source: string; label?: string | null } | null
     embedding_state: "pending" | "ready" | "failed" | "off"
     retrieval_count: number
     created_at: string
@@ -170,6 +171,22 @@ export interface MemoryRevision {
 export interface SearchResults {
     mode: "hybrid" | "text"
     results: { memory: EngramindMemory; rank: number; score: number }[]
+}
+
+/** Resposta de `create_memory`/`update_memory`. */
+export interface MemoryWrite {
+    memory: EngramindMemory
+    duplicate: boolean
+    similar: { id: string; text?: string; title?: string | null; score?: number }[]
+}
+
+/** `GET /v1/context` (o `content` é texto em `markdown`/`tagged`). */
+export interface ContextView {
+    content: string
+    version: string
+    counts: { full: number; titles: number; overflow: number }
+    rendered_tokens: number
+    format: string
 }
 
 export interface ImportResult {
@@ -290,7 +307,7 @@ export interface EngramindConnectionDto {
 }
 
 export interface BootstrapStepDto {
-    id: "whoami" | "app" | "token" | "save" | "revoke" | "webhook"
+    id: "whoami" | "app" | "token" | "save" | "revoke" | "webhook" | "agent-memories"
     status: "ok" | "skipped" | "failed"
     message: string
 }
@@ -373,4 +390,58 @@ export interface ApplyAiSourceResult {
     applied: true
     keySynced: boolean
     state: AiSourceStateDto
+}
+
+/** Etapa da migração das memórias dos agentes (OPE-104). */
+export interface MigrationStepDto {
+    status: "idle" | "running" | "failed" | "done"
+    error: string | null
+    startedAt: string | null
+    finishedAt: string | null
+    progress: { done: number; total: number } | null
+}
+
+export interface MigrationItemDto {
+    id: string
+    list: string
+    listTitle: string
+    centralId: string | null
+    texto: string
+    resumo: string
+    origem: string
+    ownerProtected: boolean
+    channel: string | null
+    criadaEm: string
+    decision: {
+        decisao: "migrar" | "migrar_reescrevendo" | "descartar" | "revisar_dono"
+        motivo: string
+        textoProposto: string | null
+        categoriaProposta: string | null
+        canalDestino: string
+        duplicataDe: string | null
+        confianca: number | null
+    } | null
+    review: { status: "pendente" | "aprovada" | "rejeitada"; texto: string | null; categoria: string | null }
+    /** Texto e categoria que serão importados (edição do dono > proposta > original). */
+    final: { texto: string; categoria: string | null }
+    /** Pede ação explícita do dono (`descartar`/`revisar_dono`). */
+    needsAttention: boolean
+    imported: { engramindId: string; at: string; duplicate: boolean } | null
+}
+
+export interface MigrationReportDto {
+    byDecision: Record<"migrar" | "migrar_reescrevendo" | "descartar" | "revisar_dono", number>
+    byList: { list: string; centralId: string | null; title: string; total: number; counts: Record<"migrar" | "migrar_reescrevendo" | "descartar" | "revisar_dono", number> }[]
+}
+
+export interface MemoryMigrationDto {
+    legacyCount: number
+    backup: { id: string; createdAt: string; count: number; sha256: string } | null
+    steps: { backup: MigrationStepDto; triage: MigrationStepDto; compact: MigrationStepDto; import: MigrationStepDto }
+    curator: { provider: string; model: string; variant: string | null; ranAt: string } | null
+    items: MigrationItemDto[]
+    report: MigrationReportDto | null
+    budget: { key: string; label: string; tokens: number; budget: number; over: boolean; memories: number }[]
+    firstCompletedAt: string | null
+    lastImportAt: string | null
 }

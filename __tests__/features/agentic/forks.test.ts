@@ -268,7 +268,7 @@ describe('abrir fork', () => {
     const id = await workbench()
     const dto = await openFork(id, 'Por que o plano usa X?')
     await settle(dto.id)
-    expect(memories.sync).toHaveBeenCalledWith(mocks.client, 'fork-sess-1', 'c1')
+    expect(memories.sync).toHaveBeenCalledWith(mocks.client, 'fork-sess-1', 'c1', expect.objectContaining({ directories: expect.any(Array), notify: expect.any(Function) }))
     expect(mocks.runTurn).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ text: 'Por que o plano usa X?' }), expect.anything())
   })
 

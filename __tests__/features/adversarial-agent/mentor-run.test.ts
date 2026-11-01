@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  limitsFor: vi.fn(),
 }))
 const store = vi.hoisted(() => ({ runs: null as unknown, reviews: null as unknown }))
 
@@ -21,6 +22,7 @@ vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
 vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 // Memórias do adversário: a lista `adversarial` do serviço de memórias dos agentes.
+vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limitsFor }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, createAgentMemory: mocks.create, updateAgentMemory: mocks.update }))
 vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: vi.fn(async () => [{ id: 'c1', projectName: 'App' }]) }))
 vi.mock('@/features/adversarial-agent/server/models', async () => {
@@ -65,7 +67,7 @@ const input = (overrides: Partial<MentorRunInput['case']> = {}): MentorRunInput 
   projectName: 'SmartDesk',
   repo: 'org/smart-desk',
   approvedPlan: null,
-  case: { sources: ['user'], trigger: 'preview_correction', userMessage: 'Salvar derrubou o app', responses: [{ stage: 'implementing', text: 'Faltava o provider' }], lessons: [], ...overrides },
+  case: { sources: ['user'], trigger: 'preview_correction', userMessage: 'Salvar derrubou o app', responses: [{ stage: 'implementing', text: 'Faltava o provider' }], ...overrides },
 })
 
 const RULE = 'Confira se componentes que exigem provider são renderizados abaixo dele e se há teste de render da tela.'
@@ -82,6 +84,7 @@ beforeEach(() => {
   mocks.list.mockResolvedValue([{ id: 'm1', resumo: 'Providers', texto: 'Confira providers.', autor: 'Eu', criadaEm: '', atualizadaEm: '' }])
   mocks.create.mockImplementation(async () => ({ memoria: { id: 'new' }, formatadaPorIa: true }))
   mocks.update.mockImplementation(async (_agent: string, id: string) => ({ memoria: { id }, formatadaPorIa: true }))
+  mocks.limitsFor.mockResolvedValue({ textMin: 3, textMax: 4000 })
 })
 
 describe('pipeline do Agente Mentor', () => {
@@ -93,12 +96,12 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
-  it('acima do limiar: cria a memória com a origem do Mentor, avisa a mesa e soma o custo', async () => {
+  it('acima do limiar: cria a memória como o agente Mentor (token próprio, origem do Mentor), avisa a mesa e soma o custo', async () => {
     mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'create', text: RULE, reason: 'novo' }, 0.02))
     const doc = await run(settings())
     expect(doc).toMatchObject({ status: 'created', memoryId: 'new', writerAction: 'create' })
     expect(doc.costUsd).toBeCloseTo(0.03)
-    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ origin: { source: 'mentor', label: 'Mentor · OPE-746' }, auditContext: expect.objectContaining({ mesa: 'w1', tarefa: 'OPE-746' }) }))
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ agent: { consumer: 'mentor', label: 'Mentor · OPE-746' }, auditContext: expect.objectContaining({ mesa: 'w1', tarefa: 'OPE-746' }) }))
     expect(mocks.streamAi.mock.calls[1]![0]).toMatchObject({ provider: 'anthropic', consumption: { origin: 'adversarial-mentor-writer', subject: 'OPE-746' } })
     expect(mocks.streamAi.mock.calls[1]![0].prompt).toContain('id m1 · Providers')
     expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'notice', message: expect.stringContaining('memória nova') }))
@@ -108,7 +111,7 @@ describe('pipeline do Agente Mentor', () => {
   it('duplicata: funde com a memória existente (update)', async () => {
     mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'update', memoryId: 'm1', text: RULE }))
     expect(await run(settings())).toMatchObject({ status: 'updated', memoryId: 'm1' })
-    expect(mocks.update).toHaveBeenCalledWith('adversarial', 'm1', RULE, 'local', expect.any(Object))
+    expect(mocks.update).toHaveBeenCalledWith('adversarial', 'm1', RULE, 'local', expect.objectContaining({ agent: { consumer: 'mentor', label: 'Mentor · OPE-746' } }))
   })
 
   it('update de memória inexistente vira create', async () => {
@@ -133,25 +136,45 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
-  it('regra acima de 2.000 caracteres: o redator reescreve mais curto e a memória é gravada', async () => {
-    const long = `${RULE} `.repeat(30)
+  it('regra acima de 4.000 caracteres: o redator reescreve mais curto e a memória é gravada', async () => {
+    const long = `${RULE} `.repeat(80)
     mocks.streamAi
       .mockReturnValueOnce(reply({ score: 0.9 }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
       .mockReturnValueOnce(reply({ action: 'create', text: RULE }))
     expect(await run(settings())).toMatchObject({ status: 'created' })
+    expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 4.000')
+    expect(mocks.create).toHaveBeenCalledTimes(1)
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.any(Object))
+  })
+
+  it('limite do canal no Engramind (2.000): regra de 3.000 volta ao redator com esse teto e só a curta é gravada', async () => {
+    mocks.limitsFor.mockResolvedValue({ textMin: 3, textMax: 2000 })
+    const long = 'x'.repeat(3000)
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ action: 'create', text: long }))
+      .mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    expect(await run(settings())).toMatchObject({ status: 'created' })
+    expect(mocks.limitsFor).toHaveBeenCalledWith('agentes/adversario')
     expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('reescreva em até 2.000')
     expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.any(Object))
   })
 
+  it('limites indisponíveis: usa o padrão de 4.000 e segue', async () => {
+    mocks.limitsFor.mockRejectedValue(new Error('Engramind fora'))
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'create', text: RULE }))
+    expect(await run(settings())).toMatchObject({ status: 'created' })
+  })
+
   it('regra longa de novo, mesmo em Sugerir: descartada (nunca vira sugestão que não pode ser aprovada)', async () => {
-    const long = `${RULE} `.repeat(30)
+    const long = `${RULE} `.repeat(80)
     mocks.streamAi
       .mockReturnValueOnce(reply({ score: 0.9 }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
       .mockReturnValueOnce(reply({ action: 'create', text: long }))
-    expect(await run(settings({ saveMode: 'suggest' }))).toMatchObject({ status: 'discarded', sanitizerReason: expect.stringContaining('reescreva em até 2.000') })
+    expect(await run(settings({ saveMode: 'suggest' }))).toMatchObject({ status: 'discarded', sanitizerReason: expect.stringContaining('reescreva em até 4.000') })
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
@@ -177,16 +200,6 @@ describe('pipeline do Agente Mentor', () => {
     const doc = await run(settings({ decider: { provider: 'jev', model: 'jev-latest', variant: null } }))
     expect(doc).toMatchObject({ status: 'created', score: 0.7 })
     expect(mocks.askJev).toHaveBeenCalledWith(expect.objectContaining({ model: 'jev-latest', tracking: { feature: 'adversarial-mentor-decision', subject: 'OPE-746' } }))
-  })
-
-  it('pedido do desenvolvedor com "pular o decisor" vai direto ao redator', async () => {
-    mocks.streamAi.mockReturnValueOnce(reply({ action: 'create', text: RULE }))
-    const s = settings()
-    s.triggers.developer.skipDecider = true
-    const doc = await run(s, input({ sources: ['developer'], trigger: null, userMessage: null, lessons: [{ problem: 'Crash', shouldHaveCaught: 'Provider', why: 'Genérico' }] }))
-    expect(doc).toMatchObject({ status: 'created' })
-    expect(doc.score ?? null).toBeNull()
-    expect(mocks.streamAi).toHaveBeenCalledTimes(1)
   })
 
   it('falha do provedor: execução falha com o erro visível', async () => {

@@ -52,7 +52,7 @@ function record(input: MentorRunInput, settings: MentorSettings, extra: { status
         sources: input.case.sources,
         trigger: input.case.trigger,
         userMessage: input.case.userMessage ? input.case.userMessage.slice(0, 500) : null,
-        lessonCount: input.case.lessons.length,
+        lessonCount: 0,
         level: settings.level,
         threshold: mentorThreshold(settings.level),
         status: extra.status,

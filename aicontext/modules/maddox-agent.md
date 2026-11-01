@@ -150,8 +150,15 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   **Ferramentas do Opex no OpenCode** (endereço e situação dos MCPs).
 - **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs** e sem `issue_engramind_token` — `MADDOX_EXCLUDED_TOOLS`, que depende do "Ver token" do card do Agente Opex), com seleção e
   **"Pede confirmação"** próprios, independentes do Agente Opex.
-- **Memórias**: **Memórias globais**, **Memórias do dono** e **Memórias do cliente** do Maddox
-  (`maddox-global`, `maddox-owner`, `maddox-client`), que salvam sozinhas.
+- **Memórias** (Engramind, OPE-104): chave **Aprendizado autônomo** do Maddox, **Memórias do Opex**
+  (`app-global`, de todos os agentes), **Memórias globais**, **Memórias do dono** e **Memórias do
+  cliente** do Maddox (`maddox-global`, `maddox-owner`, `maddox-client`) e **Memórias de um cliente**
+  (`maddox-client-specific`, com seletor), que salvam sozinhas. O contexto do turno vem do Engramind
+  (`agentMemoryContext("maddox", turno)`, com cache de reserva e aviso no chat). Com o aprendizado
+  autônomo, o runner registra o MCP `opex_memorias` no diretório da sessão e a sessão do OpenCode recebe
+  regras próprias (`selfMemorySessionPermissions`: `ask` em inativar/excluir pelo padrão, `deny` nas
+  desligadas, conforme o Agente Opex › Ferramentas); no portal o Maddox grava só na lista do cliente da
+  sessão. Ver `modules/ai.md`, "Aprendizado autônomo".
 - Não há seção de MCPs: o Maddox usa os MCPs configurados no OpenCode.
 - Salvar avisa o portal dos clientes com o Maddox ligado (`maddox-settings-updated` em
   `private-client-{clientId}`).

@@ -1,5 +1,6 @@
 "use client"
 
+import { MemoriesNoticesBlock } from "@/features/ai/components/memories/MemoriesNotices"
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -76,6 +77,7 @@ function ConnectionForm({ connection, onDirtyChange, draft, setDraft, dirty, pen
 
     return (
         <div className="flex flex-col gap-6">
+            <MemoriesNoticesBlock />
             <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-6">
                 <Section title="Conexão" info="O servidor do Opex fala com o Engramind por esta URL, com o token admin guardado cifrado. O navegador nunca chama o Engramind." description="Ao salvar com o token de bootstrap, o Opex cria o app opex, emite um token próprio, revoga o de bootstrap e registra o webhook.">
                     <div className={FORM_GRID}>

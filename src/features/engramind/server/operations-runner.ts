@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { DomainError } from "@/lib/api/route"
 import { AUDIT_MAX_PAGES } from "../constants"
 import { findEngramindOperation, type EngramindOperation } from "../operations"
-import { batchLimitError, importInputSchema, type ImportInput } from "../schemas/import"
+import { batchLimitError, importInputSchema } from "../schemas/import"
 import { buildSettingsSchema } from "../schemas/settings"
 import type { AuditEvent, ChannelSettingsView, ImportResult, IssuedToken, SettingMeta } from "../types"
 import { engramindCall } from "./client"
@@ -135,8 +135,11 @@ export async function runEngramindOperation(id: string, rawInput: unknown, actor
     return result
 }
 
-/** Chave de idempotência da importação: o mesmo canal com o mesmo conteúdo nunca duplica. */
-export function importIdempotencyKey(input: Pick<ImportInput, "channel" | "memories">): string {
+/**
+ * Chave de idempotência da importação: o mesmo canal com o mesmo conteúdo nunca duplica. Única para as
+ * duas rotas de importação (página /engramind e aba Migração de memórias).
+ */
+export function importIdempotencyKey(input: { channel: string; memories: readonly unknown[] }): string {
     return `opex-import-${createHash("sha256").update(`${input.channel}\n${JSON.stringify(input.memories)}`).digest("hex").slice(0, 48)}`
 }
 

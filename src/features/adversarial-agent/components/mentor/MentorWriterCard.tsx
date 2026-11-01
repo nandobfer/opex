@@ -21,7 +21,7 @@ export function MentorWriterCard({ form, providers }: { form: UseFormReturn<Ment
             <CardHeader>
                 <CardTitle className="text-base">Redator e gravação</CardTitle>
                 <CardDescription>
-                    O redator transforma o caso numa regra para a lista escolhida pelo Triador (para o revisor: classe de erro, como detectar e que teste a teria pegado; para o desenvolvedor: o que fazer ou evitar), compara com as memórias dessa lista e decide criar, fundir ou não gravar — e não grava o que outra lista já cobre. Em seguida o sanitizador recusa a regra que citar projeto, repositório, rota, URL, tarefa ou issue (nas memórias da central, caminhos e rotas do projeto são aceitos), com uma nova tentativa. O título da memória é gerado pelo Resumo de memórias.
+                    O redator transforma o caso numa regra para a lista escolhida pelo Triador (para o revisor: classe de erro, como detectar e que teste a teria pegado; para o desenvolvedor: o que fazer ou evitar), compara com as memórias dessa lista e decide criar, fundir ou não gravar — e não grava o que outra lista já cobre. Em seguida o sanitizador recusa a regra que citar projeto, repositório, rota, URL, tarefa ou issue (nas memórias da central, caminhos e rotas do projeto são aceitos), com uma nova tentativa. O título da memória é gerado pelo Redator do Engramind.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">

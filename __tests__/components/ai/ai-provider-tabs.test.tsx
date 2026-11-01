@@ -39,7 +39,7 @@ describe('AiProviderTabs', () => {
       'src/features/ai/components/understand-task/ProviderModelCard.tsx',
       'src/features/opex-agent/components/settings/OpexModelCard.tsx',
       'src/features/adversarial-agent/components/mentor/MentorModelFields.tsx',
-      'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx',
+      'src/features/engramind/components/shared/OpexAiModelPicker.tsx',
       'src/features/engramind/components/integration/providers/opex-ai/EmbeddingSourceSection.tsx',
     ]
     for (const file of files) {
@@ -47,6 +47,10 @@ describe('AiProviderTabs', () => {
       expect(source, file).toMatch(/<AiProviderTabs/)
       expect(source, file).not.toMatch(/from "@\/components\/ui\/option-tabs"/)
     }
+    // O Redator usa o seletor compartilhado (OPE-104), que é o dono do AiProviderTabs nessa tela.
+    const redator = readFileSync(join(process.cwd(), 'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx'), 'utf8')
+    expect(redator).toMatch(/<OpexAiModelPicker/)
+    expect(redator).not.toMatch(/<AiProviderTabs/)
   })
 })
 

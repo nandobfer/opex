@@ -348,7 +348,13 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         await AgenticFork.updateOne({ _id: fork._id }, { $set: { childNotesSynced: true } })
     }
     // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão do fork a cada turno.
-    text = withDeveloperMemories(await syncDeveloperMemories(client, fork.sessionId, fork.centralId), text)
+    text = withDeveloperMemories(
+        await syncDeveloperMemories(client, fork.sessionId, fork.centralId, {
+            directories: [fork.sessionDirectory],
+            notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+        }),
+        text,
+    )
     // Anexos da mensagem do usuário: conteúdo no prompt e links para baixar (fora do worktree).
     const attachments = fileIds?.length ? await promptFilesFor(fileIds, { downloadDir: agenticDownloadDir(fork.taskCode, fork.number), signal: controller.signal }) : { files: [], section: "" }
     text = withAttachmentsSection(text, attachments.section)

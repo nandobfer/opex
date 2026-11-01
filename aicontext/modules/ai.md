@@ -139,7 +139,7 @@ e opções na própria aba da página "Inteligência Artificial".
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
   `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
   transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
-  "Agente Mentor" — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
+  "Agente Mentor". O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
@@ -386,73 +386,68 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   como texto; o refinamento só é marcado como esclarecido quando o turno produz a especificação **e**
   ela é gravada. Ver `modules/refinement.md`.
 
-## Memórias dos agentes (Agente Opex OPE-85, copiado do Ciliar · Agente Adversário OPE-87 · agente desenvolvedor OPE-97)
+## Memórias dos agentes (Agente Opex OPE-85 · Agente Adversário OPE-87 · agente desenvolvedor OPE-97 · Engramind OPE-104)
 
-- **Listas** (catálogo puro `src/features/ai/agents.ts`): `opex-global` (**Memórias globais**, valem
-  no dono e no portal), `opex-owner` (**Memórias do dono**, só nos turnos do dono), `opex-client`
-  (**Memórias do cliente**, só nos turnos do portal, para todos os clientes), as mesmas três do Agente
-  Maddox (`maddox-global`, `maddox-owner`, `maddox-client`, aba `agente-maddox`; entram nas instruções
-  da sessão do OpenCode do Maddox) e `adversarial`
-  (**Memórias do Agente Adversário**, entram nas instruções de toda revisão da mesa), `developer-global`
-  (**Memórias globais do agente desenvolvedor**, valem em todas as centrais) e `developer-central`
-  (**Memórias da central**, uma lista por central — `scope: "central"`, `isCentralScopedAgent`; ver
-  `modules/agentic-dev.md`, "Memórias do agente desenvolvedor"). Cada lista tem a aba onde aparece
-  (`tab`: `agente-opex`, `agente-maddox`, `agente-adversario` ou `desenvolvimento-agentico`; `aiAgentsOfTab` devolve só
-  as listas que não são por central — as da central aparecem na página da central). Uma lista nova
-  entra no catálogo e ganha a API, o card e as ferramentas do Agente Opex.
-- **Listas por central**: toda operação exige `centralId` (sem ele, 400 `CENTRAL_REQUIRED`; central
-  inexistente, 404 `CENTRAL_NOT_FOUND`) e só alcança as memórias daquela central (memória de outra
-  central = 404); as demais listas recusam `centralId` (400 `CENTRAL_NOT_ALLOWED`). O DTO, a auditoria
-  (`central`) e o evento (`{ agentId, centralId }`) levam a central. Rotas:
-  `/api/agentic/centrals/[id]/memories[/memoryId]`; `deleteCentralMemories` limpa a lista ao excluir a
-  central.
-- **Dados**: coleção `agent_memories` (`AgentMemory`: `agentId`, `centralId` (só nas listas por
-  central; `null` nas demais), `texto`, `resumo`, `origin` opcional, `createdBy`, `updatedBy`, datas;
-  índices `{ agentId, createdAt }` e `{ agentId, centralId, createdAt }`). **Sem limite de
-  quantidade** por lista (o antigo limite de 50 e o 409 `MEMORY_LIMIT` saíram na OPE-92, como na
-  MT-27 do my-tasks); texto de 3 a 2.000 caracteres (`memoryInputSchema`, mesmo schema na tela e na API); lista
-  desconhecida dá 404 `AI_AGENT_NOT_FOUND`.
-- **Serviço** (`server/agent-memory-service.ts`): listar (mais recentes primeiro), ler, criar, editar
-  e excluir. Criar/editar passam por `formatMemory` (uso "Resumo de memórias") e aceitam
-  `{ origin, auditContext }` opcionais (`AgentMemoryWriteOptions`): a origem (`{ source, label }`, ex.:
-  `Mentor · OPE-12`, gravada pelo Agente Mentor) fica no documento e no DTO (`origin`), nunca no
-  texto, e o contexto vai para o `depois` da auditoria; auditoria
-  `MemoriaAgente` (criar/atualizar/excluir, com o texto e a origem), log Pino e evento
-  `ai-memories-updated` `{ agentId }` em `private-integration-ai`. Autor = dono (usuário local).
-- **Prompt**: `agentMemoryTexts(listas)` + `memoriesSection` (módulo puro
-  `src/features/ai/memories-prompt.ts`, compartilhado; ver `modules/opex-agent.md` e
-  `modules/adversarial-agent.md`). O prompt do Agente Opex nunca recebe a lista `adversarial` nem as
-  do agente desenvolvedor; o agente desenvolvedor recebe `developerMemoryTexts(centralId)` (globais e
-  depois as da central) como instrução da sessão do OpenCode.
-- **Tela**: aba Agente Opex › Memórias mostra só as listas da aba (`aiAgentsOfTab("agente-opex")`:
-  três cards); aba Agente Adversário › Memórias mostra o card `adversarial` (sem modelo de resumo
-  próprio: usa o Resumo de memórias global). Cards `AgentMemoriesCard` com `MemoryList` — linha com o
-  resumo (inteiro, quebrando linha quando não cabe — nunca cortado na tela) que expande o texto completo, autor e "há X tempo", o **selo da origem**
-  (`GraduationCap` + rótulo) quando houver e o **total de memórias** ao lado de **Nova memória**
-  (sempre habilitado); **Nova memória**/editar com
-  `MemoryEditor` (contador, Ctrl+Enter salva, Esc cancela); criar/editar/excluir **otimistas**
-  (linha com o resumo em skeleton enquanto a IA formata; falha reverte com toast); excluir pede
-  confirmação (`ConfirmDialog`, `src/components/ui/confirm-dialog.tsx`); aviso quando a memória foi
-  salva sem formatação. Tempo real por `useMemoriesRealtime`. O card aceita `centralId` nas listas por
-  central (`centralMemoriesSource`, cache `["ai","memories","developer-central",centralId]`); a seção
-  compartilhada `DeveloperMemoriesSection` monta os cards do agente desenvolvedor na aba
-  Desenvolvimento agêntico › Memórias e na aba Memórias da central.
-- **Ferramentas do agente**: grupo "Memórias do agente" (`list/get/create/update/delete_agent_memory`),
-  com o enum de todas as listas do catálogo — inclusive a do Agente Adversário e as do agente
-  desenvolvedor (`centralId` opcional, obrigatório em `developer-central`).
+As memórias ficam no **Engramind** (fonte única desde a OPE-104; a coleção antiga `agent_memories`
+só é lida pelo backup da migração). Mapeamento lista → canal, rede (canais, agentes, tokens,
+assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`, "Memórias dos agentes".
 
-## Feature "Resumo de memórias"
+- **Listas** (catálogo puro `src/features/ai/agents.ts`): `app-global` (**Memórias do Opex**, canal
+  `opex`, lidas por todos os agentes), `opex-global` (**Memórias globais**, dono e portal), `opex-owner`
+  (**Memórias do dono**), `opex-client` (**Memórias do cliente**, no portal, para todos os clientes),
+  `opex-client-specific` (**Memórias de um cliente**, `scope: "client"`, só no portal daquele cliente),
+  as mesmas quatro do Agente Maddox (`maddox-*`), `adversarial`, `developer-global` e `developer-central`
+  (`scope: "central"`). Cada lista tem a aba onde aparece (`tab`); as por central aparecem na página da
+  central e as por cliente no card "Memórias de um cliente" (seletor de cliente).
+- **Escopo**: lista por central exige `centralId` (400 `CENTRAL_REQUIRED`, 404 `CENTRAL_NOT_FOUND`,
+  `CENTRAL_NOT_ALLOWED` nas demais); por cliente exige `clientId` (`CLIENT_REQUIRED`/`CLIENT_NOT_FOUND`/
+  `CLIENT_NOT_ALLOWED`). Memória de outro canal = 404. Lista desconhecida = 404 `AI_AGENT_NOT_FOUND`.
+- **DTO** (`MemoryDto`): `id` (`m_…`), `texto`, `resumo` (título do Redator; primeira frase enquanto
+  `resumoPendente`), `categoria`, `fixada`, `ativa`, `versao`, `autor`, `doDono`, `origin`, datas,
+  `centralId?`/`clientId?`. Limites (`text_min`/`text_max`) e categorias vêm do Engramind
+  (`memoryInputSchemaFor`, a mesma regra na tela, nas rotas e nas ferramentas).
+- **Prompt**: `agentMemoryContext(consumer, turn)` (`server/agent-memory-context.ts`) devolve o bloco
+  markdown do Engramind, que entra sem alteração depois do cabeçalho de `memoriesSection`
+  (`memories-prompt.ts`); com o Engramind fora do ar, o cache de reserva e o aviso do turno.
+- **Tela**: `AgentMemoriesCard` + `MemoryList` (`MemoryRow`: resumo inteiro, categoria, selos
+  **Fixada**, origem (Mentor/agente) e dono; Fixar/Desafixar; `Switch` Ativo/Inativo **otimista**
+  com reversão e toast; Editar/Excluir com `ConfirmDialog`; inativas esmaecidas; contador "N ativas ·
+  M inativas"). `MemoryEditor`: contador até `textMax`, Categoria (`Select` do projeto), Ctrl+Enter/Esc,
+  conflito de versão mantém o rascunho. `MemoriesNotices` (sempre montado, oculto por estilo): migração
+  pendente, Engramind indisponível e memórias fora do contexto. Tempo real por `useMemoriesRealtime`
+  (`ai-memories-updated` por lista/central/cliente; `engramind-updated` `migration.updated` relê os
+  metadados). "Memórias do Opex" aparece nas abas dos quatro agentes.
+- **Ferramentas de gestão do Agente Opex** (só o dono): `list/get/create/update/delete_agent_memory`,
+  com `categoria`, `fixada`, `ativa`, `version`, `centralId`/`clientId`; `list_agent_memories` sem
+  `agent` devolve só contagens das listas sem escopo (nas por central/cliente o id é obrigatório, sem
+  rajada); `delete_agent_memory` é `destructive`.
 
-- Aba `resumo-memorias` (`MemorySummaryTab`, moldura `FeatureFormShell` copiada do Ciliar): liga/
-  desliga com a disponibilidade, provedor e modelo pelo cartão do Agente Opex (`OpexModelCard`:
-  Gemini, Anthropic, OpenAI ou DeepSeek), instruções e **tamanho máximo do resumo** (40–200, padrão
-  80; é a orientação dada ao modelo: o resumo da IA é gravado **inteiro**, cortado só no teto de
-  segurança de 1.000 caracteres — `SUMMARY_SAFETY_MAX_LENGTH`, separado do máximo configurável). Salva em `ai_feature_settings` (`feature: "memory-summary"`), auditada como as demais.
-- `formatMemory` (`server/memory-summary.ts`) nunca lança: com a feature disponível, pede ao modelo
-  `{"texto","resumo"}` (texto revisado + resumo de uma linha; `parseFormattedMemory` tolera cercas e
-  texto em volta); desligada, indisponível, com erro ou resposta inválida, salva o texto como escrito
-  (normalizado) com o **resumo de reserva** (primeira frase, cortada em limite de palavra) e devolve
-  `formatadaPorIa: false`. Consumo na origem `memory-summary`; timeout de 30 s.
+## Aprendizado autônomo ("Memória própria", OPE-104)
+
+- Cada agente (Opex, Maddox, Adversário e desenvolvedor) grava, edita, fixa, inativa e exclui as
+  memórias dos **próprios** canais, com o token dele no Engramind (o Engramind registra o agente como
+  autor; origem `{ source: <consumidor>, label }`). Ferramentas (`server/self-memory/tools.ts`, metadados
+  em `self-memory.ts`): `list_my_memories`, `remember`, `update_my_memory`, `pin_my_memory` (`write`),
+  `set_my_memory_active` e `forget_my_memory` (**`destructive`**: pedem Confirmar/Cancelar; o dono troca a
+  confirmação e liga/desliga cada uma em Agente Opex › Ferramentas, valendo para todos os agentes).
+- Listas graváveis = `writableListsFor` do turno (portal: só a do cliente da sessão, cliente forçado
+  pelo servidor). Sem filtro de conteúdo (decisão do dono): o agente pode registrar códigos de tarefa,
+  URLs, rotas, nomes, tokens e chaves; a instrução pede só a lista mais específica, para não sujar as globais.
+- Memória do dono: editar sim; excluir/inativar não (`OWNER_MEMORY_PROTECTED`) — o dono exclui pela tela
+  ou pedindo ao Agente Opex (`delete_agent_memory`, com o card de confirmação).
+- Até 5 mutações por turno (`SELF_MEMORY_TURN_LIMIT`); as respostas trazem
+  `similares` e `foraDoContexto` para o agente consolidar; cada mutação gera um aviso no turno.
+- O **Agente Mentor** também grava como agente (`opex/mentor`, token `read+write`, ator `agente:mentor`),
+  mas não é consumidor: não tem lista, contexto, aprendizado autônomo nem chave na tela; o card mostra o
+  rótulo da origem ("Mentor · OPE-xx"). Ver `modules/adversarial-agent.md`, "Agente Mentor".
+- Acesso: Agente Opex nativo (ferramentas do turno); Maddox, mesas/forks e revisões do Adversário pelo
+  MCP `opex_memorias` (`POST /api/agent-memory/mcp`, Bearer = segredo derivado da chave das integrações;
+  o agente e o turno saem da sessão do OpenCode, subindo à sessão-mãe; sessão desconhecida é recusada),
+  registrado por diretório (`ensureAgentMemoryMcp`; falha vira aviso e o turno segue). No Maddox a
+  sessão do OpenCode faz `ask` nas que pedem confirmação; nas mesas e revisões (sem chat) a chamada que
+  pede confirmação é recusada e o agente edita em vez de excluir.
+- Liga/desliga por agente: `ai_feature_settings` `feature: "agent-self-memory"` (padrão: ligado),
+  `SelfMemorySwitch` no topo da seção de memórias de cada agente (`GET/PUT /api/ai/features/agent-self-memory`).
 
 ## APIs
 
@@ -478,9 +473,11 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
 | `GET/PUT /api/ai/features/estimate-hours` | Configuração de "Estimar prazos" + disponibilidade |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração do "Agente Refinador" + disponibilidade + situação da skill |
-| `GET/PUT /api/ai/features/memory-summary` | Configuração do "Resumo de memórias" + disponibilidade |
-| `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista (`opex-global`, `opex-owner`, `opex-client`, `adversarial`); criar `{ texto }` → `{ memoria, formatadaPorIa }` |
-| `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto }` (reformata); excluir |
+| `GET/PUT /api/ai/features/agent-self-memory` | Aprendizado autônomo por agente |
+| `GET /api/ai/memories/meta` | Limites, categorias, migração pendente, disponibilidade e memórias fora do contexto |
+| `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista; criar `{ texto, categoria?, fixada? }` → `{ memoria, duplicada?, similares? }` |
+| `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto?, categoria?, versao?, fixada?, ativa? }`; excluir |
+| `…/agents/[agentId]/clients/[clientId]/memories[/memoryId]` | O mesmo nas listas por cliente |
 | `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
@@ -496,7 +493,9 @@ substituída pelo resumo, a especificação técnica em aba própria e a troca d
 hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o rótulo "Resumo (IA)";
 `estimate-hours-settings` cobre a configuração de "Estimar prazos"; tags: `task-tags` puro,
 `task-tags-settings`, `task-tags-job`; estimativa por tarefas semelhantes: `orcamentos-estimate` e
-`orcamentos-similar`; `task-refinement-settings` cobre a configuração do "Agente Refinador", `task-refinement-tab` a aba e `opencode-skills` a lista de skills). A
+`orcamentos-similar`; `task-refinement-settings` cobre a configuração do "Agente Refinador", `task-refinement-tab` a aba e `opencode-skills` a lista de skills;
+memórias: `memories`, `agent-memory-mapping`, `memory-list`, `memories-realtime`, `self-memory-tools` e
+`self-memory-mcp`). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o
 refinamento de tarefas em `__tests__/features/refinement/` (ver `modules/refinement.md`). As contas dos providers do OpenCode em `__tests__/features/opencode-accounts/` (junção sem
 segredos, formulários dos métodos, detecção de retorno em localhost, serviço, rotas, aba e diálogo).

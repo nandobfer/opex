@@ -10,7 +10,7 @@ import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { getTask } from "@/features/tasks/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { tagLabel } from "@/features/tasks/tags"
-import { agentMemoryTexts } from "@/features/ai/server/agent-memory-service"
+import { memoryCacheNotice } from "@/features/ai/memories-prompt"
 import { loadTaskTagsSettings } from "@/features/ai/server/settings"
 import { ADVERSARIAL_AUDIT_ENTITY, ADVERSARIAL_CONSUMPTION_ORIGIN, ADVERSARIAL_INSTRUCTIONS_KEY, ADVERSARIAL_LEVEL_DEFS, ADVERSARIAL_STAGE_LABEL, type AdversarialDecision } from "../constants"
 import { buildContextSections, renderContext, type PlanVersion, type PreviousRound } from "../context"
@@ -184,7 +184,22 @@ export async function runAdversaryRound(input: AdversaryRoundInput): Promise<Adv
         const context = renderContext(
             buildContextSections(settings.context, { task, plans: input.plans, centralInstructions: input.centralInstructions, previous, attachments, tagLabels, attachedFiles: files.map((file) => file.name) }),
         )
-        const instructions = buildAdversarialInstructions({ level: settings.level, instructions: settings.instructions, memories: await agentMemoryTexts(["adversarial"]) })
+        // Memórias (contexto do Engramind) e o aprendizado autônomo pelo MCP "Memória própria".
+        const { adversarialMemoryContext } = await import("@/features/ai/server/agent-memory-context")
+        const memories = await adversarialMemoryContext()
+        const cacheNotice = memoryCacheNotice(memories)
+        if (cacheNotice) publishWorkbenchEvent(input.workbenchId, { type: "notice", level: "warn", message: cacheNotice })
+        const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
+        let selfMemory = await selfMemoryEnabled("adversario")
+        if (selfMemory) {
+            const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+            const registered = await ensureAgentMemoryMcp(client, [input.worktreePath])
+            if (!registered.ok) {
+                selfMemory = false
+                log.warn({ workbenchId: input.workbenchId, err: registered.error }, "[adversarial] aprendizado autônomo indisponível nesta revisão")
+            }
+        }
+        const instructions = buildAdversarialInstructions({ level: settings.level, instructions: settings.instructions, memories: memories.block, selfMemory })
         const session = await client.session.create({
             title: `Adversário · ${input.taskCode} · rodada ${plan.round}`.slice(0, 120),
             location: { directory: input.worktreePath },

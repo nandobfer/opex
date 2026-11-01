@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { Activity, BookOpen, Cable, FileCog, KeyRound, SlidersHorizontal, Users } from "lucide-react"
+import { Activity, ArrowRightLeft, BookOpen, Cable, FileCog, KeyRound, SlidersHorizontal, Users } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
@@ -15,6 +15,7 @@ import { AboutTab } from "./AboutTab"
 import { ConnectionTab } from "./ConnectionTab"
 import { EnvTab } from "./env/EnvTab"
 import { IdentitiesTab } from "./identities/IdentitiesTab"
+import { MigrationTab } from "./migration/MigrationTab"
 import { OperationTab } from "./operation/OperationTab"
 import { ProvidersTab } from "./providers/ProvidersTab"
 import { SettingsTab } from "./settings/SettingsTab"
@@ -38,11 +39,12 @@ const TABS: IntegrationTabDef<EngramindTab>[] = [
     { id: "identidades", label: "Identidades", icon: Users },
     { id: "operacao", label: "Operação", icon: Activity },
     { id: "variaveis", label: "Variáveis de ambiente", icon: FileCog },
+    { id: "migracao", label: "Migração de memórias", icon: ArrowRightLeft },
 ]
 
 /**
  * Página da integração Engramind em abas (`?aba=`): Sobre, Conexão, Configurações, Provedores,
- * Identidades, Operação e Variáveis de ambiente. Trocar de aba com alterações pede descarte.
+ * Identidades, Operação, Variáveis de ambiente e Migração de memórias. Trocar de aba com alterações pede descarte.
  */
 export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: EngramindEditorFormProps) {
     useEngramindRealtime()
@@ -67,6 +69,7 @@ export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending
                 {tab === "identidades" && <IdentitiesTab key={resetKey} {...tabProps} />}
                 {tab === "operacao" && <OperationTab key={resetKey} {...tabProps} />}
                 {tab === "variaveis" && <EnvTab key={resetKey} {...tabProps} />}
+                {tab === "migracao" && <MigrationTab key={resetKey} {...tabProps} />}
             </IntegrationTabs>
         </motion.div>
     )

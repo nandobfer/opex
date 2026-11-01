@@ -155,7 +155,7 @@ describe('memórias do agente desenvolvedor na mesa (OPE-97)', () => {
     const id = await workbench({})
     await implement(id)
     await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
-    expect(memories.sync).toHaveBeenCalledWith(expect.anything(), expect.any(String), 'c1')
+    expect(memories.sync).toHaveBeenCalledWith(expect.anything(), expect.any(String), 'c1', expect.objectContaining({ directories: expect.any(Array), notify: expect.any(Function) }))
     expect(mocks.runTurn.mock.calls[0]![1].text).not.toContain('Memórias e instruções permanentes')
   })
 

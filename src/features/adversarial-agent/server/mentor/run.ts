@@ -38,6 +38,7 @@ import { enabledTargets, type MentorRunListQuery, type MentorSettings } from "..
 import type { MentorProposal, MentorRunDto, MentorRunListDto } from "../../mentor/types"
 import { AdversarialReview } from "../models"
 import { createAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
+import { memoryChannelOf } from "@/features/ai/agents"
 import { pageInfo } from "@/lib/list/query"
 import { listCentralOptions } from "../central-options"
 import { buildMentorRunListFilter } from "./list-query"
@@ -56,7 +57,21 @@ const log = loggerFor({ module: "adversarial-agent", feature: "mentor" })
 /** Central da lista: só `developer-central` tem (a da mesa). */
 const centralOf = (target: MentorTarget, centralId: string | null) => (target === "developer-central" ? centralId : null)
 
-/** Memórias de uma lista (`agent_memories`), no formato que o redator lê. */
+/**
+ * Tamanho máximo do canal de destino (`memory.text_max` do Engramind, com a sobreposição do canal), para o
+ * redator reescrever antes de o serviço recusar. Sem o Engramind, o padrão; o serviço ainda confere ao gravar.
+ */
+async function targetTextMax(target: MentorTarget, centralId: string | null): Promise<number | undefined> {
+    try {
+        const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
+        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }))).textMax
+    } catch (error) {
+        log.warn({ target, err: error instanceof Error ? error.message : String(error) }, "[mentor] limites das memórias indisponíveis: usando o padrão")
+        return undefined
+    }
+}
+
+/** Memórias de uma lista (Engramind), no formato que o redator lê. */
 async function listTargetMemories(target: MentorTarget, centralId: string | null): Promise<{ id: string; summary: string; text: string }[]> {
     return (await listAgentMemories(target, centralOf(target, centralId))).map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto }))
 }
@@ -213,11 +228,15 @@ function notice(workbenchId: string, level: "info" | "warn", message: string): P
     })().catch(() => undefined)
 }
 
-/** Cria ou atualiza a memória na lista de destino com a origem do Mentor (auditoria com a mesa, a tarefa e o destino). */
+/**
+ * Cria ou atualiza a memória na lista de destino como o agente `opex/mentor` (token próprio, `read+write`):
+ * origem `{ source: "mentor", label: "Mentor · <tarefa>" }` e auditoria com `ator: agente:mentor`, a
+ * mesa, a tarefa e o destino.
+ */
 async function applyProposal(run: Pick<IMentorRun, "_id" | "workbenchId" | "taskCode">, proposal: MentorProposal, actorId: string) {
-    const origin = { source: MENTOR_MEMORY_SOURCE, label: `Mentor · ${run.taskCode}` }
+    const agent = { consumer: MENTOR_MEMORY_SOURCE, label: `Mentor · ${run.taskCode}` }
     const auditContext = { origem: "Agente Mentor", execucao: String(run._id), mesa: run.workbenchId, tarefa: run.taskCode, destino: proposal.target }
-    const options = { origin, auditContext, centralId: proposal.centralId }
+    const options: AgentMemoryWriteOptions = { agent, auditContext, centralId: proposal.centralId }
     const update = proposal.action === "update" && proposal.memoryId
     const result = update ? await updateTargetMemory(proposal.target, proposal.memoryId!, proposal.text, actorId, options) : await createTargetMemory(proposal.target, proposal.text, actorId, options)
     return { status: (update ? "updated" : "created") as MentorRunStatus, memoryId: result.memory.id }
@@ -251,12 +270,9 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
         const state = buildMentorState(fullCase, settings.context)
         const subject = input.taskCode
 
-        const developerOnly = input.case.sources.length === 1 && input.case.sources[0] === "developer"
-        if (!(settings.triggers.developer.skipDecider && developerOnly && input.case.lessons.length)) {
-            const decision = await decide(settings, state, subject, usage)
-            await setRun(runId, { score: decision.score, deciderReason: decision.reason })
-            if (!passesThreshold(decision.score, settings.level)) return await finish("skipped")
-        }
+        const decision = await decide(settings, state, subject, usage)
+        await setRun(runId, { score: decision.score, deciderReason: decision.reason })
+        if (!passesThreshold(decision.score, settings.level)) return await finish("skipped")
 
         const { provider, model, variant, instructions } = settings.writer
         if (!provider || !model) throw new Error("O redator do Agente Mentor não tem provedor e modelo configurados")
@@ -268,12 +284,13 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
         const memories = lists.find((list) => list.target === target)?.memories ?? []
         const others = summaries.filter((list) => list.target !== target)
         const sanitizeContext: SanitizeContext = {
+            textMax: await targetTextMax(target, centralOf(target, input.centralId)),
             allowPaths: target === "developer-central",
             taskCode: input.taskCode,
             taskTitle: input.taskTitle,
             projectName: input.projectName,
             repo: input.repo,
-            sources: [input.case.userMessage, ...input.case.responses.map((response) => response.text), ...input.case.lessons.flatMap((lesson) => [lesson.problem, lesson.shouldHaveCaught, lesson.evidence, lesson.why])],
+            sources: [input.case.userMessage, ...input.case.responses.map((response) => response.text)],
         }
         let rejection: string | null = null
         for (let attempt = 0; attempt < 2; attempt++) {

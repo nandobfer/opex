@@ -94,7 +94,7 @@ describe('contexto do adversário', () => {
 
 describe('mensagens do adversário', () => {
   it('as instruções proíbem testes e alterações, trazem o nível e as memórias', () => {
-    const text = buildAdversarialInstructions({ level: 'tolerant', instructions: 'Foque em segurança', memories: ['X é intencional'] })
+    const text = buildAdversarialInstructions({ level: 'tolerant', instructions: 'Foque em segurança', memories: '- X é intencional' })
     expect(text).toContain('NUNCA rode testes, build, typecheck, lint')
     expect(text).toContain('NUNCA altere arquivos')
     expect(text).toContain('Nível de criticidade: Tolerante')

@@ -69,13 +69,14 @@ export const MENTOR_USER_TRIGGER_LABELS: Record<MentorUserTrigger, { label: stri
     live_chat: { label: "Chat ao vivo", description: "Mensagens enviadas durante a execução de um turno" },
 }
 
-/** Etapas do agente da mesa que o Mentor observa (turnos da IA) e onde entra o pedido do desenvolvedor. */
-export const MENTOR_AI_STAGES = ["planning", "implementing"] as const
+/** Turnos da IA que o Mentor pode observar: etapas do agente da mesa e as rodadas do Agente Adversário. */
+export const MENTOR_AI_STAGES = ["planning", "implementing", "adversarial_review"] as const
 export type MentorAiStage = (typeof MENTOR_AI_STAGES)[number]
 
 export const MENTOR_AI_STAGE_LABELS: Record<MentorAiStage, string> = {
     planning: "Planejamento",
     implementing: "Implementação e correções",
+    adversarial_review: "Revisões do adversário",
 }
 
 /** Gravar direto ou sugerir e aguardar aprovação na aba Execuções. */
@@ -89,6 +90,7 @@ export type MentorSource = (typeof MENTOR_SOURCES)[number]
 export const MENTOR_SOURCE_LABELS: Record<MentorSource, string> = {
     user: "Mensagem do usuário",
     ai: "Turno da IA",
+    // Execuções anteriores à OPE-104 (o bloco opex-lesson saiu: o desenvolvedor aprende sozinho).
     developer: "Pedido do desenvolvedor",
 }
 
@@ -105,9 +107,6 @@ export const MENTOR_RUN_STATUS_LABELS: Record<MentorRunStatus, string> = {
     updated: "Memória atualizada",
     failed: "Falhou",
 }
-
-/** Linguagem da cerca do bloco que o agente desenvolvedor usa para pedir uma memória. */
-export const LESSON_FENCE = "opex-lesson"
 
 export const MENTOR_TIMEOUT_MIN = 15
 export const MENTOR_TIMEOUT_MAX = 600
@@ -154,7 +153,7 @@ export const MENTOR_TARGET_LABELS: Record<MentorTarget, { label: string; short: 
     },
 }
 /** Origem gravada nas memórias criadas ou atualizadas pelo Mentor. */
-export const MENTOR_MEMORY_SOURCE = "mentor"
+export const MENTOR_MEMORY_SOURCE = "mentor" as const
 
 export const DEFAULT_MENTOR_WRITER_INSTRUCTIONS = [
     "Prefira regras curtas e acionáveis, escritas como instrução direta ao revisor.",

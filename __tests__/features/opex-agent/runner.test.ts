@@ -95,11 +95,10 @@ const settings = {
   files: { maxPerMessage: 5, maxSizeMb: 10 },
   confirmationOverrides: {},
 }
-const MEMORIES: Record<string, string[]> = { 'opex-global': ['Regra global'], 'opex-owner': ['Regra do dono'], 'opex-client': ['Regra do cliente'] }
-vi.mock('@/features/ai/server/agent-memory-service', async (original) => ({
-  ...(await original<object>()),
-  agentMemoryTexts: async (agentIds: string[]) => agentIds.flatMap((id) => MEMORIES[id] ?? []),
-}))
+vi.mock('@/features/ai/server/agent-memory-context', async () =>
+  (await import('../../helpers/memory-context')).memoryContextModule({ 'agentes/opex/global': ['Regra global'], 'agentes/opex/dono': ['Regra do dono'], 'agentes/opex/cliente': ['Regra do cliente'] }),
+)
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 vi.mock('@/features/opex-agent/server/settings', () => ({
   loadOpexSettings: async () => ({ settings, isDefault: false, updatedAt: null }),
   opexAvailability: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Agente desativado' }),
@@ -405,6 +404,6 @@ describe('runner no portal do cliente', () => {
   it('a dica de jobs só entra nas instruções do portal com o grupo ligado', () => {
     const scope = { kind: 'client', actor: clientActor } as never
     expect(instructionsFor(settings as never, scope)).not.toContain('schedule_job')
-    expect(instructionsFor(settings as never, scope, [], { jobs: true })).toContain('schedule_job')
+    expect(instructionsFor(settings as never, scope, '', { jobs: true })).toContain('schedule_job')
   })
 })

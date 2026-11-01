@@ -8,7 +8,7 @@
  * memórias recusaria ao gravar.
  */
 
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
+import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
 
 export interface SanitizeContext {
     taskCode?: string | null
@@ -22,6 +22,8 @@ export interface SanitizeContext {
      * (OPE-97), onde a convenção do projeto é legítima. As demais recusas continuam.
      */
     allowPaths?: boolean
+    /** Tamanho máximo efetivo do canal de destino (`memory.text_max` do Engramind); padrão `MEMORY_TEXT_MAX`. */
+    textMax?: number
 }
 
 /** Quantas palavras seguidas iguais a um texto do caso caracterizam cópia. */
@@ -80,7 +82,8 @@ export function copiedExcerpt(text: string, sources: readonly (string | null | u
 export function sanitizeMemoryText(text: string, context: SanitizeContext = {}): string | null {
     const value = text.trim()
     if (value.length < 3) return "A regra está vazia"
-    if (value.length > MEMORY_TEXT_MAX) return `A regra tem ${value.length.toLocaleString("pt-BR")} caracteres: reescreva em até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")}`
+    const max = context.textMax ?? MEMORY_TEXT_MAX
+    if (value.length > max) return `A regra tem ${value.length.toLocaleString("pt-BR")} caracteres: reescreva em até ${max.toLocaleString("pt-BR")}`
     if (TASK_CODE.test(value)) return "A regra cita um código de tarefa"
     if (ISSUE.test(value)) return "A regra cita uma issue ou PR (#N)"
     if (URL.test(value)) return "A regra cita uma URL"
