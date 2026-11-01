@@ -76,7 +76,7 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
                     variant="ghost"
                     size="icon"
                     aria-label={`Ações do canal ${data.slug}`}
-                    className="nodrag nopan h-7 w-7 text-muted-foreground"
+                    className="nodrag nopan h-7 w-7 text-muted-foreground max-md:h-9 max-md:w-9"
                     onClick={(event) => {
                         event.stopPropagation()
                         data.onMenu?.(data.slug)

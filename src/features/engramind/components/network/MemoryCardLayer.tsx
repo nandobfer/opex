@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useStore } from "@xyflow/react"
 import { motion, useReducedMotion } from "framer-motion"
-import { clampCardRect, type Point } from "../../network/network-math"
+import { clampCardRect, memoryCardSize, type Point } from "../../network/network-math"
 import type { ParticleVisual } from "../../network/particles"
 import type { NetworkMemory } from "../../network/types"
 import { MemoryCard, type MemoryCardActions } from "./MemoryCard"
@@ -68,10 +68,12 @@ export function MemoryCardLayer({
     }, [])
 
     const anchor = { x: point.x * zoom + tx, y: point.y * zoom + ty }
-    const target = clampCardRect(anchor, { width: MEMORY_CARD_WIDTH, height }, { width: canvasWidth || MEMORY_CARD_WIDTH + 16, height: canvasHeight || height + 16 })
+    // Limitado ao quadro (8 px de cada lado): texto longo rola dentro do card, quadro estreito encolhe a largura.
+    const { width, height: visibleHeight } = memoryCardSize({ width: MEMORY_CARD_WIDTH, height }, { width: canvasWidth, height: canvasHeight })
+    const target = clampCardRect(anchor, { width, height: visibleHeight }, { width: canvasWidth || width + 16, height: canvasHeight || visibleHeight + 16 })
     const particle = Math.max(visual.size * zoom, 6)
     const asParticle = { left: anchor.x - particle / 2, top: anchor.y - particle / 2, width: particle, height: particle, borderRadius: particle / 2 }
-    const asCard = { left: target.x, top: target.y, width: MEMORY_CARD_WIDTH, height, borderRadius: 12 }
+    const asCard = { left: target.x, top: target.y, width, height: visibleHeight, borderRadius: 12 }
     const morph = { duration: reducedMotion ? 0 : MEMORY_CARD_MORPH_S, ease: "easeOut" as const }
     // Depois de aberto, a posição segue o arrastar/zoom na hora (sem transição atrasada).
     const follow = settled || reducedMotion ? { duration: 0 } : morph
@@ -81,16 +83,17 @@ export function MemoryCardLayer({
             role="dialog"
             aria-label={`Memória ${memory.title}`}
             data-testid={`memory-card-${memory.id}`}
-            data-card-width={MEMORY_CARD_WIDTH}
+            data-card-width={width}
+            data-card-height={visibleHeight}
             data-network-card=""
-            className="nodrag nopan nowheel pointer-events-auto absolute z-30 w-72 cursor-default overflow-hidden border bg-popover text-popover-foreground shadow-xl"
+            className="nodrag nopan nowheel pointer-events-auto absolute z-30 cursor-default overflow-hidden border bg-popover text-popover-foreground shadow-xl"
             initial={reducedMotion ? { ...asCard, opacity: 0 } : { ...asParticle, opacity: 1 }}
             animate={{ ...asCard, opacity: 1 }}
             exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : { ...asParticle, opacity: 0, transition: morph }}
             transition={{ ...morph, left: follow, top: follow, height: settled ? { duration: 0.12 } : morph }}
             onAnimationComplete={() => setSettled(true)}
-            onPointerEnter={onPointerEnter}
-            onPointerLeave={onPointerLeave}
+            onPointerEnter={(event) => event.pointerType !== "touch" && onPointerEnter()}
+            onPointerLeave={(event) => event.pointerType !== "touch" && onPointerLeave()}
             onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
         >
@@ -104,8 +107,10 @@ export function MemoryCardLayer({
                 exit={{ opacity: 1 }}
                 transition={morph}
             />
-            <div ref={ref} className="relative w-72">
-                <MemoryCard memory={memory} visual={visual} actions={actions} channelColor={channelColor} contentDelay={reducedMotion ? 0 : MEMORY_CARD_MORPH_S * 0.7} />
+            <div className="relative h-full overflow-y-auto overscroll-contain" data-testid="memory-card-scroll">
+                <div ref={ref} style={{ width }}>
+                    <MemoryCard memory={memory} visual={visual} actions={actions} channelColor={channelColor} contentDelay={reducedMotion ? 0 : MEMORY_CARD_MORPH_S * 0.7} />
+                </div>
             </div>
         </motion.div>
     )

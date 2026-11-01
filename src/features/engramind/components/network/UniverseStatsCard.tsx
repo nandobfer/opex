@@ -40,7 +40,7 @@ export function UniverseStatsCard({
         ...(liveCount ? [{ label: "Consumos ao vivo", value: liveCount, testId: "stat-live" }] : []),
     ]
     return (
-        <StatsCard title={kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows}>
+        <StatsCard title={kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows} summary={`${memories.length} ${memories.length === 1 ? "memória" : "memórias"}`}>
             {kind === "agent" && (
                 <StatList
                     title="Por canal"

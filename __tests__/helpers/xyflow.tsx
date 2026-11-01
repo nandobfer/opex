@@ -14,6 +14,8 @@ interface MockEdge { id: string; type?: string; data?: unknown; source: string; 
 export const fitView = { calls: 0 }
 /** Chamadas de `fitBounds` (enquadramento inicial da visão horizontal e o Centralizar). */
 export const fitBounds = { calls: [] as unknown[] }
+/** Chamadas de `setCenter` (celular: enquadramento com zoom mínimo; toque com zoom afastado). */
+export const setCenter = { calls: [] as { x: number; y: number; options: unknown }[] }
 /** Estado lido por `useStore`: zoom/deslocamento e o tamanho do canvas (mude no teste e re-renderize). */
 export const flowState = { transform: [0, 0, 1] as [number, number, number], width: 800, height: 600 }
 
@@ -50,7 +52,7 @@ export function xyflowMock() {
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject>{children}</foreignObject>,
     getBezierPath: () => ['M0,0 C5,5 5,5 10,10', 5, 5],
     getStraightPath: () => ['M0,0 L10,10', 5, 5],
-    useReactFlow: () => ({ fitView: () => { fitView.calls += 1 }, fitBounds: (bounds: unknown) => { fitBounds.calls.push(bounds) } }),
+    useReactFlow: () => ({ fitView: () => { fitView.calls += 1 }, fitBounds: (bounds: unknown) => { fitBounds.calls.push(bounds) }, setCenter: (x: number, y: number, options: unknown) => { setCenter.calls.push({ x, y, options }) } }),
     useStore: (selector: (state: typeof flowState) => unknown) => selector(flowState),
   }
 }

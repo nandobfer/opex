@@ -189,6 +189,7 @@ export function MemoryUniverse({
                         channelColors={channelColors}
                         actions={wrapped}
                         hoverCard={hoverCard}
+                        pinned={pinned !== null && pinned === activeId}
                     />
                     <RecenterButton />
                     <UniversePanels count={memories.length} onCreate={onCreate} createLabel={createLabel} emptyTitle={emptyTitle} />

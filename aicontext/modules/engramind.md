@@ -301,6 +301,31 @@ Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas
 `layout-classes.ts`; linha de agentes em cima e de canais embaixo), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
 (`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
 
+### Celular (`useIsMobile`, até 767 px)
+
+As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela estreita; no computador
+nada muda.
+
+- **Estatísticas recolhidas:** o `StatsCard` começa como um botão no canto com o resumo ("N agentes ·
+  M canais" na visão inicial, "N memórias" no universo); o toque abre o card por cima do quadro (largura
+  toda menos a margem) e "Recolher estatísticas" fecha. O filtro por app fica dentro do card aberto.
+- **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha (Buscar e Limpar só com ícone); embaixo,
+  **Filtros** (com quantos estão ativos) abre os cinco filtros numa gaveta de baixo para cima
+  (`NetworkFiltersSheet`, com Limpar e Ver rede), Arquivados e Importar/Novo canal só com ícone e dica.
+- **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a linha de
+  agentes não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
+  Centralizar volta a esse enquadramento. Os universos continuam enquadrando tudo.
+- **Toque na partícula:** os sinais de "passar o mouse" ignoram ponteiro de toque; tocar fixa o card,
+  tocar fora fecha, tocar em outra troca. Com o zoom abaixo de 0,6 (celular ou computador), o clique ou
+  toque aproxima até 0,6 centralizado na partícula e o card abre.
+- **Card limitado ao quadro** (vale em qualquer tela, `memoryCardSize`): largura e altura cabem no quadro
+  menos 8 px de cada lado; texto longo rola dentro do card.
+- **Link:** no toque, o modo da assinatura aparece por 1,5 s (`LINK_TOUCH_LABEL_MS`).
+- **Quadro e botões:** altura dinâmica da tela (`70dvh` na rede, `60dvh` nos cards de `/integracoes/ia`),
+  sobrando margem para rolar a página fora do quadro; Centralizar, Nova memória e o menu "⋯" do canal
+  com área de toque de 40 px; a trilha mostra só Voltar e o nome atual. O skeleton acompanha (card
+  recolhido no canto).
+
 ### Dados (`hooks/useEngramindNetwork.ts`)
 
 Canais (com arquivados), apps, agentes, assinaturas e memórias (`status=active,permanent,archived`,

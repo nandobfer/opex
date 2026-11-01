@@ -5,7 +5,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { fitBounds, flowState, xyflowMock } from '../../helpers/xyflow'
+import { fitBounds, flowState, setCenter, xyflowMock } from '../../helpers/xyflow'
+import { MOBILE_MEDIA_QUERY } from '@/hooks/useMediaQuery'
 
 /** OPE-109: rede do Engramind em `/engramind` (visão inicial, universos, card, busca e consumo ao vivo). */
 
@@ -338,7 +339,7 @@ describe('universos', () => {
     expect(node.getAttribute('data-expanded')).toBe('true')
     const at = () => ({ classes: screen.getByTestId('memory-card-m_1').className, width: screen.getByTestId('memory-card-m_1').getAttribute('data-card-width') })
     const zoomOne = at()
-    expect(zoomOne.classes).toContain('w-72')
+    expect(zoomOne.width).toBe('288')
     expect(zoomOne.classes).not.toMatch(/\bscale-/)
     cleanup()
     flowState.transform = [0, 0, 2]
@@ -349,14 +350,23 @@ describe('universos', () => {
     flowState.transform = [0, 0, 1]
   })
 
-  it('zoom afastado demais: a partícula só se destaca, sem card', async () => {
+  it('zoom afastado demais: o hover só destaca a partícula; o clique aproxima até o zoom do card, centralizado nela', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     flowState.transform = [0, 0, 0.4]
-    mount()
-    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
-    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
-    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-expanded')).toBeNull()
-    flowState.transform = [0, 0, 1]
+    setCenter.calls = []
+    try {
+      mount()
+      const node = await screen.findByTestId('memory-node-m_1')
+      fireEvent.pointerEnter(node)
+      expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
+      expect(node.getAttribute('data-expanded')).toBeNull()
+      fireEvent.click(node)
+      await waitFor(() => expect(setCenter.calls).toHaveLength(1))
+      expect((setCenter.calls[0]!.options as { zoom: number }).zoom).toBe(0.6)
+      expect(Math.hypot(setCenter.calls[0]!.x, setCenter.calls[0]!.y)).toBeGreaterThan(0)
+    } finally {
+      flowState.transform = [0, 0, 1]
+    }
   })
 
   it('memória nova em tempo real entra marcada para nascer (partícula e link); as da primeira carga não', async () => {
@@ -454,5 +464,104 @@ describe('universos', () => {
     mount()
     expect((await screen.findByTestId('universe-empty')).textContent).toContain('Nenhuma memória neste universo')
     expect(screen.getByRole('button', { name: /Nova memória/ })).toBeTruthy()
+  })
+})
+
+describe('celular', () => {
+  const realMatchMedia = window.matchMedia
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) => ({ matches: query === MOBILE_MEDIA_QUERY, media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false }),
+    })
+    setCenter.calls = []
+    fitBounds.calls = []
+  })
+  afterEach(() => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: realMatchMedia })
+    flowState.width = 800
+    flowState.height = 600
+    flowState.transform = [0, 0, 1]
+  })
+
+  it('o card de estatísticas começa recolhido com o resumo, abre e recolhe', async () => {
+    mount()
+    const toggle = await screen.findByTestId('network-stats-toggle')
+    expect(toggle.textContent).toMatch(/agentes? · \d+ cana(l|is)/)
+    expect(screen.queryByTestId('network-stats')).toBeNull()
+    fireEvent.click(toggle)
+    expect(await screen.findByTestId('network-stats')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher estatísticas' }))
+    await waitFor(() => expect(screen.queryByTestId('network-stats')).toBeNull())
+    expect(screen.getByTestId('network-stats-toggle')).toBeTruthy()
+  })
+
+  it('universo: o resumo recolhido mostra quantas memórias', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    expect((await screen.findByTestId('network-stats-toggle')).textContent).toContain('2 memórias')
+  })
+
+  it('barra compacta: filtros na gaveta, com quantos estão ativos', async () => {
+    mount()
+    const toolbar = await screen.findByTestId('network-toolbar')
+    expect(toolbar.hasAttribute('data-mobile')).toBe(true)
+    expect(screen.queryByLabelText('Autor')).toBeNull()
+    expect(within(toolbar).getByRole('button', { name: 'Novo canal' })).toBeTruthy()
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'Filtros' }))
+    expect(await screen.findByText('Filtros da rede')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Autor'), { target: { value: 'opex' } })
+    await waitFor(() => expect(screen.getByTestId('network-filter-count').textContent).toBe('1'))
+    expect(within(toolbar).getByRole('button', { name: 'Filtros (1 ativo)', hidden: true })).toBeTruthy()
+  })
+
+  it('visão inicial: quadro estreito demais enquadra com zoom mínimo legível, centralizado nos agentes', async () => {
+    flowState.width = 200
+    mount()
+    await waitFor(() => expect(setCenter.calls.length).toBeGreaterThan(0))
+    expect((setCenter.calls.at(-1)!.options as { zoom: number }).zoom).toBe(0.5)
+    expect(fitBounds.calls).toHaveLength(0)
+  })
+
+  it('visão inicial: quando cabe com zoom legível, enquadra como no computador', async () => {
+    flowState.width = 2000
+    flowState.height = 1200
+    mount()
+    await waitFor(() => expect(fitBounds.calls.length).toBeGreaterThan(0))
+    expect(setCenter.calls).toHaveLength(0)
+  })
+
+  it('toque: o "passar o mouse" do toque não abre nem fecha; o toque (clique) fixa o card', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    const node = await screen.findByTestId('memory-node-m_1')
+    fireEvent.pointerEnter(node, { pointerType: 'touch' })
+    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
+    fireEvent.click(node)
+    const card = await screen.findByTestId('memory-card-m_1')
+    fireEvent.pointerLeave(node, { pointerType: 'touch' })
+    fireEvent.pointerLeave(card, { pointerType: 'touch' })
+    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
+    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('react-flow-pane'))
+    await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+  })
+
+  it('o card fica dentro do quadro baixo e estreito: altura e largura limitadas, o texto rola dentro', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    flowState.width = 240
+    flowState.height = 200
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    const card = await screen.findByTestId('memory-card-m_1')
+    expect(Number(card.getAttribute('data-card-height'))).toBeLessThanOrEqual(200 - 16)
+    expect(Number(card.getAttribute('data-card-width'))).toBeLessThanOrEqual(240 - 16)
+    expect(within(card).getByTestId('memory-card-scroll').className).toContain('overflow-y-auto')
+  })
+
+  it('toque no link mostra o modo da assinatura por um instante', async () => {
+    mount()
+    fireEvent.pointerDown(await screen.findByTestId('link-outro/bot→opex'), { pointerType: 'touch' })
+    expect(screen.getByRole('tooltip').textContent).toContain('search')
   })
 })

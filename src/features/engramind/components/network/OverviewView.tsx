@@ -112,6 +112,7 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
             >
                 <StatsCard
                     title="Rede"
+                    summary={`${visibleAgents.length} ${visibleAgents.length === 1 ? "agente" : "agentes"} · ${channels.length} ${channels.length === 1 ? "canal" : "canais"}`}
                     rows={[
                         { label: "Agentes", value: visibleAgents.length, testId: "stat-agents" },
                         { label: "Canais", value: channels.length, testId: "stat-channels" },

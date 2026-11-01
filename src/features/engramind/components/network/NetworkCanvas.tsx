@@ -1,12 +1,13 @@
 "use client"
 
 import { createContext, useContext, useEffect } from "react"
-import { Background, BackgroundVariant, ReactFlow, useReactFlow, type Edge, type Node, type NodeMouseHandler, type NodeTypes, type ReactFlowInstance } from "@xyflow/react"
+import { Background, BackgroundVariant, ReactFlow, useReactFlow, useStore, type Edge, type Node, type NodeMouseHandler, type NodeTypes, type ReactFlowInstance } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { NETWORK_EDGE_TYPES } from "./edges"
-import type { Rect } from "../../network/network-math"
+import { useIsMobile } from "@/hooks/useMediaQuery"
+import { MOBILE_FIT_MIN_ZOOM, minZoomCenter, type Rect } from "../../network/network-math"
 import { NETWORK_CANVAS_CLASS, NETWORK_FLOW_THEME } from "./layout-classes"
 
 export const FIT_DURATION_MS = 300
@@ -15,9 +16,25 @@ const FIT_PADDING = 0.15
 /** Enquadramento da visão atual (`null` = a rede inteira): o "Centralizar" volta a ele. */
 const FitBoundsContext = createContext<Rect | null>(null)
 
-function fitTo(flow: Pick<ReactFlowInstance, "fitView" | "fitBounds">, bounds: Rect | null, duration: number) {
-    if (bounds) void flow.fitBounds(bounds, { padding: 0, duration })
+type Fitter = Pick<ReactFlowInstance, "fitView" | "fitBounds" | "setCenter">
+
+/**
+ * Enquadra a visão: o retângulo da visão (ou a rede inteira). No celular, o enquadramento inicial
+ * não afasta abaixo de `MOBILE_FIT_MIN_ZOOM`: centraliza no retângulo e o resto fica a um arrastar.
+ */
+function fitTo(flow: Fitter, bounds: Rect | null, duration: number, mobile: { size: { width: number; height: number } } | null) {
+    const center = bounds && mobile ? minZoomCenter(bounds, mobile.size, MOBILE_FIT_MIN_ZOOM) : null
+    if (center) void flow.setCenter(center.x, center.y, { zoom: center.zoom, duration })
+    else if (bounds) void flow.fitBounds(bounds, { padding: 0, duration })
     else void flow.fitView({ padding: FIT_PADDING, duration })
+}
+
+/** Tamanho do quadro quando é celular (a regra do zoom mínimo só vale lá). */
+function useMobileFit(): { size: { width: number; height: number } } | null {
+    const mobile = useIsMobile()
+    const width = useStore((state) => state.width)
+    const height = useStore((state) => state.height)
+    return mobile ? { size: { width, height } } : null
 }
 
 /**
@@ -94,13 +111,16 @@ function FitOnChange({ fitKey }: { fitKey: string }) {
     const flow = useReactFlow()
     const reducedMotion = useReducedMotion()
     const bounds = useContext(FitBoundsContext)
+    const mobile = useMobileFit()
     const boundsKey = bounds ? `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}` : "all"
+    // Celular: refaz quando o quadro ganha tamanho (o zoom mínimo depende dele).
+    const mobileKey = mobile ? `${mobile.size.width}x${mobile.size.height}` : "desktop"
     useEffect(() => {
-        const frame = requestAnimationFrame(() => fitTo(flow, bounds, reducedMotion ? 0 : FIT_DURATION_MS))
+        const frame = requestAnimationFrame(() => fitTo(flow, bounds, reducedMotion ? 0 : FIT_DURATION_MS, mobile))
         return () => cancelAnimationFrame(frame)
-        // `boundsKey` resume o retângulo (o objeto muda a cada render).
+        // `boundsKey`/`mobileKey` resumem o retângulo e o quadro (os objetos mudam a cada render).
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fitKey, boundsKey, flow, reducedMotion])
+    }, [fitKey, boundsKey, mobileKey, flow, reducedMotion])
     return null
 }
 
@@ -109,5 +129,6 @@ export function useRecenter() {
     const flow = useReactFlow()
     const reducedMotion = useReducedMotion()
     const bounds = useContext(FitBoundsContext)
-    return () => fitTo(flow, bounds, reducedMotion ? 0 : FIT_DURATION_MS)
+    const mobile = useMobileFit()
+    return () => fitTo(flow, bounds, reducedMotion ? 0 : FIT_DURATION_MS, mobile)
 }

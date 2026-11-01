@@ -66,8 +66,9 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
                 initial={hidden}
                 animate={ready ? shown : hidden}
                 transition={born ? { type: "spring", stiffness: 140, damping: 18, mass: 0.9 } : { duration: expanded ? 0.12 : 0.22 }}
-                onPointerEnter={() => focus?.hover(memory.id)}
-                onPointerLeave={() => focus?.hover(null)}
+                // No toque, o card abre e fecha só pelo toque (clique), sem os sinais de "passar o mouse".
+                onPointerEnter={(event) => event.pointerType !== "touch" && focus?.hover(memory.id)}
+                onPointerLeave={(event) => event.pointerType !== "touch" && focus?.hover(null)}
             >
                 <span
                     aria-label={memory.title}

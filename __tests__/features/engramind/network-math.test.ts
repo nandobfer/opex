@@ -34,6 +34,9 @@ import {
   splitChannelSlug,
   universeRingCapacity,
   universeRingCounts,
+  minZoomCenter,
+  memoryCardSize,
+  MOBILE_FIT_MIN_ZOOM,
   universeStats,
 } from '@/features/engramind/network/network-math'
 import { buildParticles } from '@/features/engramind/network/particles'
@@ -290,6 +293,20 @@ describe('layout', () => {
     expect(splitChannelSlug('agentes/desenvolvedor/central/abc123')).toEqual({ prefix: 'agentes/desenvolvedor/central/', leaf: 'abc123' })
     expect(splitChannelSlug('opex')).toEqual({ prefix: '', leaf: 'opex' })
     expect(splitChannelSlug('agentes/adversario/')).toEqual({ prefix: 'agentes/', leaf: 'adversario' })
+  })
+
+  it('celular: enquadra com zoom mínimo legível só quando o retângulo não cabe; centraliza nele', () => {
+    const bounds = { x: -500, y: -50, width: 1000, height: 400 }
+    expect(minZoomCenter(bounds, { width: 360, height: 600 }, MOBILE_FIT_MIN_ZOOM)).toEqual({ x: 0, y: 150, zoom: 0.5 })
+    expect(minZoomCenter(bounds, { width: 1200, height: 800 }, MOBILE_FIT_MIN_ZOOM)).toBeNull()
+    expect(minZoomCenter(bounds, { width: 0, height: 0 }, MOBILE_FIT_MIN_ZOOM)).toBeNull()
+  })
+
+  it('card da memória limitado ao quadro (8 px de margem), sem mudar quando cabe', () => {
+    expect(memoryCardSize({ width: 288, height: 300 }, { width: 800, height: 600 })).toEqual({ width: 288, height: 300 })
+    expect(memoryCardSize({ width: 288, height: 700 }, { width: 800, height: 448 })).toEqual({ width: 288, height: 432 })
+    expect(memoryCardSize({ width: 288, height: 300 }, { width: 280, height: 600 })).toEqual({ width: 264, height: 300 })
+    expect(memoryCardSize({ width: 288, height: 300 }, { width: 0, height: 0 })).toEqual({ width: 288, height: 300 })
   })
 
   it('hover afasta as vizinhas para longe da focada', () => {

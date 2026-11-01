@@ -235,6 +235,31 @@ export function overviewInitialBounds(agents: readonly Point[]): Rect | null {
     return { x: left - margin, y: top, width: right - left + margin * 2, height: bottom - top }
 }
 
+/** Zoom mínimo do enquadramento inicial no celular: os nomes continuam legíveis. */
+export const MOBILE_FIT_MIN_ZOOM = 0.5
+
+/**
+ * Enquadramento com zoom mínimo (celular): se caber o retângulo inteiro com zoom ≥ `minZoom`, devolve
+ * `null` (enquadra normalmente); senão, centraliza no meio do retângulo com `minZoom` (o resto fica a
+ * um arrastar). Sem tamanho medido do quadro, `null`.
+ */
+export function minZoomCenter(bounds: Rect, size: { width: number; height: number }, minZoom: number): { x: number; y: number; zoom: number } | null {
+    if (size.width <= 0 || size.height <= 0 || bounds.width <= 0 || bounds.height <= 0) return null
+    const fit = Math.min(size.width / bounds.width, size.height / bounds.height)
+    if (fit >= minZoom) return null
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, zoom: minZoom }
+}
+
+/**
+ * Tamanho visível do card da memória: o natural (largura fixa, altura do conteúdo) limitado ao quadro
+ * menos `margin` de cada lado. Sem quadro medido, o natural.
+ */
+export function memoryCardSize(natural: { width: number; height: number }, canvas: { width: number; height: number }, margin = 8): { width: number; height: number } {
+    const width = canvas.width > 0 ? Math.min(natural.width, Math.max(canvas.width - margin * 2, 160)) : natural.width
+    const height = canvas.height > 0 ? Math.min(natural.height, Math.max(canvas.height - margin * 2, 120)) : natural.height
+    return { width, height }
+}
+
 /**
  * Posição (canto superior esquerdo, em px da tela) do card que substitui a partícula: centralizado
  * sobre ela e empurrado para dentro do canvas, com `margin` de folga em todas as bordas.
