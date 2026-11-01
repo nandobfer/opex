@@ -13,7 +13,7 @@ import type { ArchitectDiagramDto, WorkbenchArchitectDto } from "../types"
 import { retryPendingDeletions, runDiagram } from "./generate"
 import { ArchitectDiagram, architectDb, type IArchitectDiagram } from "./models"
 import { publishDiagrams } from "./publish"
-import { abortWorkbenchDiagrams, liveDiagramIds, registerDiagram } from "./registry"
+import { abortWorkbenchDiagrams, isDiagramLive, liveDiagramIds, registerDiagram } from "./registry"
 import { architectAvailability, loadArchitectSettings, settingsApply } from "./settings"
 
 /**
@@ -180,6 +180,8 @@ export async function retryDiagram(id: string): Promise<ArchitectDiagramDto> {
     if (!doc) throw new DomainError(404, "Versão do diagrama não encontrada", "ARCHITECT_DIAGRAM_NOT_FOUND")
     await loadWorkbench(doc.workbenchId)
     if (doc.state !== "failed" && doc.state !== "interrupted") throw new DomainError(409, "Só uma versão que falhou pode ser gerada de novo", "ARCHITECT_NOT_FAILED")
+    // A execução anterior desta versão ainda está encerrando (limpeza da sessão): espera ela sair do registro.
+    if (isDiagramLive(id)) throw new DomainError(409, "A geração anterior desta versão ainda está encerrando; tente novamente em alguns segundos.", "ARCHITECT_BUSY")
     await assertReady(doc.centralId)
     await reconcileOrphans({ workbenchId: doc.workbenchId })
     if (await ArchitectDiagram.exists({ workbenchId: doc.workbenchId, state: "running" })) throw new DomainError(409, "O Agente Arquiteto já está gerando um diagrama nesta mesa; aguarde terminar.", "ARCHITECT_BUSY")

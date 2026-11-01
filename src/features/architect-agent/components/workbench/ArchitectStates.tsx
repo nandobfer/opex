@@ -79,7 +79,9 @@ export function ArchitectFailed({ diagram, pending, canRetry, onRetry, onDeeper 
 }
 
 export function ArchitectEmpty({ canGenerate, reason, defaultDepth, pending, onGenerate }: { canGenerate: boolean; reason: string; defaultDepth: ArchitectDepth; pending: boolean; onGenerate: (depth: ArchitectDepth) => void }) {
-    const [depth, setDepth] = useState(defaultDepth)
+    // Só a escolha do usuário fica no estado: até ele mexer, vale o padrão (que pode chegar depois da montagem).
+    const [choice, setChoice] = useState<ArchitectDepth | null>(null)
+    const depth = choice ?? defaultDepth
     return (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <div className="rounded-full bg-muted p-3">
@@ -89,7 +91,7 @@ export function ArchitectEmpty({ canGenerate, reason, defaultDepth, pending, onG
             <p className="max-w-md text-sm text-muted-foreground">{reason}</p>
             {canGenerate && (
                 <div className="w-full max-w-md space-y-3">
-                    <DepthControl id="architect-empty-depth" value={depth} onChange={setDepth} disabled={pending} />
+                    <DepthControl id="architect-empty-depth" value={depth} onChange={setChoice} disabled={pending} />
                     <Button type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => onGenerate(depth)}>
                         {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Sparkles className="h-3.5 w-3.5" aria-hidden />} Gerar arquitetura
                     </Button>

@@ -54,6 +54,7 @@ import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { runDiagram } from '@/features/architect-agent/server/generate'
 import { registerDiagram, abortWorkbenchDiagrams, isDiagramLive } from '@/features/architect-agent/server/registry'
 import { DEFAULT_ARCHITECT_SETTINGS } from '@/features/architect-agent/schemas'
+import { ARCHITECT_SETUP_STEP_TIMEOUT_MS } from '@/features/architect-agent/constants'
 
 const diagrams = ArchitectDiagram as unknown as { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
 const workbenches = AgenticWorkbench as unknown as { docs: Record<string, unknown>[] }
@@ -128,6 +129,39 @@ describe('runDiagram', () => {
     expect(doc(id).state).toBe('failed')
     expect(String(doc(id).error)).toContain('nova tentativa')
     expect(mocks.workbenchUpdate).not.toHaveBeenCalled()
+  })
+
+  it('exclui a sessão antes de gravar o desfecho (o "Tentar novamente" não cruza com a limpeza)', async () => {
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Tempo esgotado', costUsd: 0, durationMs: 10 })
+    const { id, controller } = await seed()
+    const statesAtRemoval: unknown[] = []
+    mocks.sessionRemove.mockImplementationOnce(async () => void statesAtRemoval.push(doc(id).state))
+    await runDiagram(id, controller)
+    expect(statesAtRemoval).toEqual(['running'])
+    expect(doc(id).state).toBe('failed')
+    expect(isDiagramLive(id)).toBe(false)
+  })
+
+  it('o OpenCode que nunca responde à criação da sessão não deixa a versão "gerando": falha no prazo e libera a mesa', async () => {
+    vi.useFakeTimers()
+    try {
+      let createdLate: ((value: { id: string }) => void) | null = null
+      mocks.sessionCreate.mockImplementationOnce(() => new Promise((resolve) => (createdLate = resolve)))
+      const { id, controller } = await seed()
+      const run = runDiagram(id, controller)
+      await vi.advanceTimersByTimeAsync(ARCHITECT_SETUP_STEP_TIMEOUT_MS + 1)
+      await run
+      expect(doc(id).state).toBe('failed')
+      expect(String(doc(id).error)).toContain('A criação da sessão do OpenCode não respondeu')
+      expect(isDiagramLive(id)).toBe(false)
+      expect(mocks.runTurn).not.toHaveBeenCalled()
+      // A sessão que chega depois do prazo é excluída (ninguém vai usá-la).
+      createdLate!({ id: 'tarde' })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.sessionRemove).toHaveBeenCalledWith({ sessionID: 'tarde' }, expect.anything())
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('falha ou tempo esgotado do agente vira "failed" e a sessão pendente é guardada quando não exclui', async () => {

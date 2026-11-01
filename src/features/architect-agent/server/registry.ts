@@ -21,8 +21,9 @@ export function registerDiagram(diagramId: string, workbenchId: string): AbortCo
     return controller
 }
 
-export function releaseDiagram(diagramId: string): void {
-    live.delete(diagramId)
+/** Libera a entrada SÓ se ainda for desta execução (uma nova tentativa pode ter registrado outra). */
+export function releaseDiagram(diagramId: string, controller: AbortController): void {
+    if (live.get(diagramId)?.controller === controller) live.delete(diagramId)
 }
 
 export const isDiagramLive = (diagramId: string): boolean => live.has(diagramId)

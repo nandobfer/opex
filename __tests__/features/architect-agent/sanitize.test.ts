@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ARCHITECT_DEPTH_DEFS } from '@/features/architect-agent/constants'
+import { ARCHITECT_DEPTH_DEFS, ARCHITECT_NODE_DETAIL_MAX } from '@/features/architect-agent/constants'
 import { architectGraphSchema } from '@/features/architect-agent/graph'
 import { sanitizeGraph } from '@/features/architect-agent/sanitize'
 
@@ -77,5 +77,15 @@ describe('sanitizeGraph', () => {
     expect(a.kind).toBe('module')
     expect(a.status).toBe('existing')
     expect(a.files).toEqual(['src/a.ts', '3'])
+  })
+
+  it('nível Minucioso: detalhe acima do limite é cortado e avisado; abaixo dele, fica inteiro', () => {
+    const long = 'x'.repeat(ARCHITECT_NODE_DETAIL_MAX + 500)
+    const fits = 'campo: validação; '.repeat(150)
+    const { graph, warnings } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), node('a', { detail: long }), node('b', { detail: fits })] }, 5)
+    expect(graph.nodes.find((item) => item.id === 'a')!.detail).toHaveLength(ARCHITECT_NODE_DETAIL_MAX)
+    expect(graph.nodes.find((item) => item.id === 'b')!.detail).toBe(fits.trim())
+    expect(warnings).toContain(`1 descrição(ões) de nó cortada(s) no limite de ${ARCHITECT_NODE_DETAIL_MAX} caracteres`)
+    expect(architectGraphSchema.safeParse(graph).success).toBe(true)
   })
 })

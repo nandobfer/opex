@@ -19,6 +19,15 @@ export const ARCHITECT_TIMEOUT_DEFAULT = 15
 export const ARCHITECT_HISTORY_LIMIT = 50
 /** Arquivos guardados por nó (o resto é cortado no saneamento). */
 export const ARCHITECT_NODE_FILES_MAX = 20
+/**
+ * Teto do `detail` de um nó. O prompt informa o limite (o nível Minucioso pede campos, validações e
+ * riscos por nó, que cabem com folga); o que passar é cortado no saneamento, com aviso em `warnings`.
+ */
+export const ARCHITECT_NODE_DETAIL_MAX = 4000
+/** Texto bruto da resposta guardado em `report` (o final, onde fica o bloco JSON). */
+export const ARCHITECT_REPORT_MAX_CHARS = 50_000
+/** Prazo de cada chamada de preparo da geração (cliente, central, tarefa, sessão, instruções, memórias). */
+export const ARCHITECT_SETUP_STEP_TIMEOUT_MS = 60_000
 
 /** Profundidade (minuciosidade): diretiva do prompt e teto de nós/arestas validado no servidor. */
 export const ARCHITECT_DEPTHS = [1, 2, 3, 4, 5] as const

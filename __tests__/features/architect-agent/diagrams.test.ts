@@ -43,6 +43,10 @@ import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
 import { isDiagramLive, registerDiagram, releaseDiagram, liveDiagramIds, abortReasonOf } from '@/features/architect-agent/server/registry'
+
+/** Limpa o registro entre os casos (cada entrada é liberada pelo próprio controlador). */
+const live = (globalThis as unknown as { __architectLiveDiagrams: Map<string, unknown> }).__architectLiveDiagrams
+const releaseAll = (id: string) => live.delete(id)
 import { DEFAULT_ARCHITECT_SETTINGS, type ArchitectSettings } from '@/features/architect-agent/schemas'
 
 const diagrams = ArchitectDiagram as unknown as { docs: Record<string, unknown>[] }
@@ -65,7 +69,7 @@ beforeEach(() => {
   workbenches.docs.length = 0
   mocks.tasks.length = 0
   mocks.available = true
-  for (const id of liveDiagramIds()) releaseDiagram(id)
+  for (const id of liveDiagramIds()) releaseAll(id)
   use()
 })
 
@@ -155,6 +159,28 @@ describe('retryDiagram e órfãos', () => {
     expect(dto.version).toBe(1)
     expect(diagrams.docs).toHaveLength(1)
     expect(isDiagramLive('c'.repeat(24))).toBe(true)
+  })
+
+  it('"Tentar novamente" com a execução anterior ainda encerrando é recusado e não perde o registro', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })
+    // A execução que falhou ainda está no registro (excluindo a sessão do OpenCode).
+    const previous = registerDiagram('c'.repeat(24), WB)
+    await expect(retryDiagram('c'.repeat(24))).rejects.toMatchObject({ status: 409, code: 'ARCHITECT_BUSY' })
+    expect(diagrams.docs[0]!.state).toBe('failed')
+    expect(mocks.runDiagram).not.toHaveBeenCalled()
+    releaseDiagram('c'.repeat(24), previous)
+    await retryDiagram('c'.repeat(24))
+    expect(isDiagramLive('c'.repeat(24))).toBe(true)
+  })
+
+  it('a execução antiga encerrando não libera o registro de uma execução nova da mesma versão', () => {
+    const old = registerDiagram('9'.repeat(24), WB)
+    const current = registerDiagram('9'.repeat(24), WB)
+    releaseDiagram('9'.repeat(24), old)
+    expect(isDiagramLive('9'.repeat(24))).toBe(true)
+    releaseDiagram('9'.repeat(24), current)
+    expect(isDiagramLive('9'.repeat(24))).toBe(false)
   })
 
   it('versão "gerando" sem geração viva (o app reiniciou) vira interrompida ao listar', async () => {

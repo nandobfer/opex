@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS } from "./constants"
+import { ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS } from "./constants"
 
 /**
  * Grafo semântico do Agente Arquiteto (módulo PURO): o mesmo schema valida o que o servidor grava e o
@@ -22,7 +22,7 @@ export const architectNodeSchema = z.object({
     label: text(120).min(1),
     groupId: id.nullable(),
     kind: z.enum(ARCHITECT_NODE_KINDS),
-    detail: text(2000),
+    detail: text(ARCHITECT_NODE_DETAIL_MAX),
     files: z.array(text(300).min(1)).max(20),
     status: z.enum(ARCHITECT_NODE_STATUSES),
 })

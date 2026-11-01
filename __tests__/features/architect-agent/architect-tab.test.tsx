@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   diagrams: [] as unknown[],
   generate: vi.fn(async (input: unknown) => ({ id: 'novo', input })),
   retry: vi.fn(),
+  settings: undefined as unknown,
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -22,7 +23,7 @@ vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interac
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   useWorkbenchDiagrams: () => ({ data: mocks.diagrams, isLoading: false, isError: false, refetch: vi.fn() }),
   useArchitectRealtime: vi.fn(),
-  useArchitectSettings: () => ({ data: undefined }),
+  useArchitectSettings: () => ({ data: mocks.settings }),
   useGenerateDiagram: () => ({ mutateAsync: mocks.generate, isPending: false }),
   useRetryDiagram: () => ({ mutate: mocks.retry, isPending: false }),
 }))
@@ -47,6 +48,7 @@ vi.mock('@/components/ui/select', () => {
 vi.mock('@/components/agent-reply/ReplyTextarea', () => ({ ReplyTextarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { onValueChange?: (value: string) => void }) => { const { onValueChange, ...rest } = props; return <textarea {...rest} onChange={(event) => onValueChange?.(event.target.value)} /> } }))
 
 import { ArchitectTab, useArchitectTab } from '@/features/architect-agent/components/workbench/ArchitectTab'
+import { DEFAULT_ARCHITECT_SETTINGS } from '@/features/architect-agent/schemas'
 
 const diagram = (overrides: Record<string, unknown> = {}) => ({
   id: 'd1',
@@ -80,6 +82,7 @@ const workbench = (architect: { applies: boolean; approvedPlanVersion: number | 
 
 beforeEach(() => {
   mocks.diagrams = []
+  mocks.settings = undefined
   vi.clearAllMocks()
   localStorage.clear()
 })
@@ -103,6 +106,22 @@ describe('ArchitectTab', () => {
     rerender(<ArchitectTab workbench={workbench({ applies: false, approvedPlanVersion: 1 })} />)
     expect(screen.queryByRole('button', { name: /Gerar arquitetura/ })).toBeNull()
     expect(screen.getByText(/desativado para esta central/)).toBeTruthy()
+  })
+
+  it('vazio: a profundidade padrão configurada vale, inclusive quando a configuração chega depois da montagem', async () => {
+    const withDepth = (depth: number) => ({ settings: { ...DEFAULT_ARCHITECT_SETTINGS, diagram: { ...DEFAULT_ARCHITECT_SETTINGS.diagram, depth } } })
+    const { rerender } = render(<ArchitectTab workbench={workbench()} />)
+    expect(screen.getByText(/até 35 nós/)).toBeTruthy()
+    mocks.settings = withDepth(5)
+    rerender(<ArchitectTab workbench={workbench()} />)
+    expect(screen.getByText(/até 120 nós/)).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar arquitetura/ })))
+    expect(mocks.generate).toHaveBeenLastCalledWith({ depth: 5 })
+    cleanup()
+    mocks.settings = withDepth(2)
+    render(<ArchitectTab workbench={workbench()} />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar arquitetura/ })))
+    expect(mocks.generate).toHaveBeenLastCalledWith({ depth: 2 })
   })
 
   it('gerando mostra o skeleton no formato do canvas e nunca um grafo parcial; o Pusher troca para pronto sem recarregar', () => {

@@ -29,6 +29,8 @@ describe('prompts do arquiteto', () => {
     expect(text).toContain('Destaque o Pusher')
     expect(text).toContain('- Camadas X')
     expect(text).not.toContain('Memória própria')
+    // O limite do detalhe do nó é informado ao modelo (o excedente é cortado no saneamento).
+    expect(text).toContain('`detail` de cada nó: no máximo 4.000 caracteres')
   })
 
   it('o pedido traz a diretiva e o teto do nível, a tarefa, o plano e o diretório', () => {

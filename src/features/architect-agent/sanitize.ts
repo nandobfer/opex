@@ -1,4 +1,4 @@
-import { ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_FILES_MAX, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_FILES_MAX, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import { architectGraphSchema, type ArchitectEdge, type ArchitectGraph, type ArchitectGroup, type ArchitectNode, type ArchitectNote, type RawGraph } from "./graph"
 
 /**
@@ -46,6 +46,7 @@ function cleanNodes(raw: readonly unknown[], groupIds: ReadonlySet<string>, warn
     const seen = new Set<string>()
     const nodes: ArchitectNode[] = []
     let duplicates = 0
+    let longDetails = 0
     raw.forEach((item, index) => {
         if (!isRec(item)) return
         const label = str(item.label, 120) || str(item.id, 120)
@@ -57,17 +58,19 @@ function cleanNodes(raw: readonly unknown[], groupIds: ReadonlySet<string>, warn
         }
         seen.add(id)
         const groupId = str(item.groupId, 80)
+        if (typeof item.detail === "string" && item.detail.trim().length > ARCHITECT_NODE_DETAIL_MAX) longDetails++
         nodes.push({
             id,
             label,
             groupId: groupId && groupIds.has(groupId) ? groupId : null,
             kind: oneOf(item.kind, ARCHITECT_NODE_KINDS, "module"),
-            detail: longStr(item.detail, 2000),
+            detail: longStr(item.detail, ARCHITECT_NODE_DETAIL_MAX),
             files: cleanFiles(item.files),
             status: oneOf(item.status, ARCHITECT_NODE_STATUSES, "existing"),
         })
     })
     if (duplicates) warnings.push(`${duplicates} nó(s) com id repetido descartado(s)`)
+    if (longDetails) warnings.push(`${longDetails} descrição(ões) de nó cortada(s) no limite de ${ARCHITECT_NODE_DETAIL_MAX} caracteres`)
     return nodes
 }
 

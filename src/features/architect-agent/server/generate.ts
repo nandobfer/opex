@@ -12,7 +12,7 @@ import { loadCentral } from "@/features/agentic/server/centrals"
 import { worktreePathFor } from "@/features/agentic/prompts"
 import { getTask } from "@/features/tasks/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_INSTRUCTIONS_KEY, type ArchitectDepth, type ArchitectPhase } from "../constants"
+import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
 import { architectGraphSchema } from "../graph"
 import { parseArchitectOutput } from "../parse"
 import { buildArchitectInstructions, buildDiagramPrompt, buildRepairPrompt } from "../prompt"
@@ -36,6 +36,37 @@ const DELETE_TIMEOUT_MS = 15_000
 /** Intervalo mínimo entre os eventos de progresso no Pusher. */
 const PROGRESS_THROTTLE_MS = 3_000
 const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`
+
+/**
+ * Prazo de uma chamada de preparo: um serviço que aceita a conexão e nunca responde não pode deixar a
+ * versão "gerando" para sempre. Estoura com erro (a versão vira falha e libera a mesa); `late` recebe
+ * o valor que ainda chegar depois do prazo (ex.: excluir a sessão criada tarde).
+ */
+export async function withTimeout<T>(promise: Promise<T>, label: string, signal: AbortSignal, late?: (value: T) => void, ms = ARCHITECT_SETUP_STEP_TIMEOUT_MS): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let settled = false
+    let onAbort: (() => void) | undefined
+    const expired = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} não respondeu em ${Math.round(ms / 1000)} s`)), ms)
+        onAbort = () => reject(new Error(`${label} interrompido`))
+        if (signal.aborted) onAbort()
+        else signal.addEventListener("abort", onAbort, { once: true })
+    })
+    expired.catch(() => undefined)
+    promise.then(
+        (value) => {
+            if (settled) late?.(value)
+        },
+        () => undefined,
+    )
+    try {
+        return await Promise.race([promise, expired])
+    } finally {
+        settled = true
+        clearTimeout(timer)
+        if (onAbort) signal.removeEventListener("abort", onAbort)
+    }
+}
 
 async function removeSession(client: OpencodeClient, sessionId: string): Promise<boolean> {
     try {
@@ -125,7 +156,16 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         await ArchitectDiagram.updateOne(filter, { $set: { "progress.phase": phase } })
         publish(true)
     }
+    /** Exclui a sessão ANTES de gravar o desfecho: com a versão já "falhou", o Tentar novamente não pode cruzar com esta limpeza. */
+    const cleanupSession = async () => {
+        if (!client || !sessionId) return
+        const current = sessionId
+        sessionId = null
+        const removed = await removeSession(client, current)
+        await ArchitectDiagram.updateOne(filter, { $set: { sessionId: null, pendingSessionDeletion: removed ? null : current } }).catch(() => undefined)
+    }
     const finish = async (set: Partial<IArchitectDiagram>) => {
+        await cleanupSession()
         await ArchitectDiagram.updateOne(filter, { $set: { ...set, "progress.phase": null, finishedAt: new Date() } })
         if (doc) {
             await recordAudit({
@@ -154,25 +194,32 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         if (!workbench) return void (await fail("a mesa de trabalho não existe mais"))
         const plan = workbench.plans?.[doc.planVersion - 1]?.text
         if (!plan) return void (await fail(`o plano v${doc.planVersion} não foi encontrado na mesa`))
-        client = await getOpencodeClient()
-        await retryPendingDeletions(client, doc.workbenchId)
-        const { directory, worktree } = await resolveDirectory(client, { worktreePath: workbench.worktreePath, centralId: workbench.centralId, taskCode: workbench.taskCode }, signal)
+        client = await withTimeout(getOpencodeClient(), "O OpenCode", signal)
+        const opencodeClient = client
+        await withTimeout(retryPendingDeletions(opencodeClient, doc.workbenchId), "A exclusão das sessões pendentes", signal)
+        const { directory, worktree } = await withTimeout(resolveDirectory(opencodeClient, { worktreePath: workbench.worktreePath, centralId: workbench.centralId, taskCode: workbench.taskCode }, signal), "A leitura da central", signal)
         await ArchitectDiagram.updateOne(filter, { $set: { directory } })
-        const task = await loadTaskSafe(doc.taskId)
+        const task = await withTimeout(loadTaskSafe(doc.taskId), "A leitura da tarefa", signal)
         const base = doc.baseDiagramId ? await ArchitectDiagram.findById(doc.baseDiagramId, { graph: 1 }).lean() : null
         const adjust = doc.feedback && base?.graph ? { graph: base.graph, feedback: doc.feedback } : null
-        const memory = await memoryInstructions(client, directory, doc.workbenchId)
+        const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId), "As memórias do agente", signal)
         if (memory.notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${memory.notice}`)
         const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory })
-        const session = await client.session.create({
-            title: `Arquiteto · ${doc.taskCode} · v${doc.version}`.slice(0, 120),
-            location: { directory },
-            metadata: { app: "opex", kind: "architect-diagram", workbenchId: doc.workbenchId, diagramId },
-            permissions: [...ADVERSARIAL_SESSION_PERMISSIONS],
-        })
+        const session = await withTimeout(
+            opencodeClient.session.create({
+                title: `Arquiteto · ${doc.taskCode} · v${doc.version}`.slice(0, 120),
+                location: { directory },
+                metadata: { app: "opex", kind: "architect-diagram", workbenchId: doc.workbenchId, diagramId },
+                permissions: [...ADVERSARIAL_SESSION_PERMISSIONS],
+            }),
+            "A criação da sessão do OpenCode",
+            signal,
+            // Sessão criada depois do prazo: ninguém vai usá-la.
+            (late) => void removeSession(opencodeClient, late.id),
+        )
         sessionId = session.id
         await ArchitectDiagram.updateOne(filter, { $set: { sessionId } })
-        const applied = await applyInstructions(client, sessionId, instructions)
+        const applied = await withTimeout(applyInstructions(opencodeClient, sessionId, instructions), "A gravação das instruções da sessão", signal)
         const depth = doc.depth as ArchitectDepth
         const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory, worktree, depth, adjust })
         await setPhase("reading")
@@ -225,7 +272,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             parsed = parseArchitectOutput(result.text)
             repaired = true
         }
-        if (!parsed.ok) return void (await finish({ state: "failed", error: `Resposta inválida depois de uma nova tentativa: ${parsed.error}`, report: result.text.slice(-50_000) }))
+        if (!parsed.ok) return void (await finish({ state: "failed", error: `Resposta inválida depois de uma nova tentativa: ${parsed.error}`, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
         const sanitized = sanitizeGraph(parsed.raw, depth)
         architectGraphSchema.parse(sanitized.graph)
 
@@ -234,18 +281,15 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         const approved = latest ? approvedPlanVersionOf(latest) : null
         if (abortReasonOf(diagramId) === "superseded" || (doc.origin === "auto" && approved !== null && approved > doc.planVersion)) {
             log.info({ diagramId, planVersion: doc.planVersion, approved }, "[architect] resultado de um plano antigo descartado")
-            return void (await finish({ state: "superseded", error: "Descartada: um plano mais novo foi aprovado", report: result.text.slice(-50_000) }))
+            return void (await finish({ state: "superseded", error: "Descartada: um plano mais novo foi aprovado", report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
         }
-        await finish({ state: "done", graph: sanitized.graph, trimmed: sanitized.trimmed, warnings: sanitized.warnings, repaired, report: result.text.slice(-50_000), error: null })
+        await finish({ state: "done", graph: sanitized.graph, trimmed: sanitized.trimmed, warnings: sanitized.warnings, repaired, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS), error: null })
         log.info({ diagramId, workbenchId: doc.workbenchId, nodes: sanitized.graph.nodes.length, edges: sanitized.graph.edges.length, trimmed: sanitized.trimmed }, `[architect] ${doc.taskCode} arquitetura v${doc.version} pronta`)
     } catch (error) {
         log.error({ err: errorText(error), diagramId }, "[architect] falha na geração")
         await fail(errorText(error)).catch(() => undefined)
     } finally {
-        if (client && sessionId) {
-            const removed = await removeSession(client, sessionId)
-            await ArchitectDiagram.updateOne(filter, { $set: { sessionId: null, pendingSessionDeletion: removed ? null : sessionId } }).catch(() => undefined)
-        }
-        releaseDiagram(diagramId)
+        await cleanupSession().catch(() => undefined)
+        releaseDiagram(diagramId, controller)
     }
 }

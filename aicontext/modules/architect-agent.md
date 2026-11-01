@@ -51,6 +51,12 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
 - **Diretório**: o worktree da mesa quando já existe no host (conferido pelo shell do OpenCode com
   `git -C <worktree> rev-parse`); senão a base do repositório (`sessionDirectory` da central), com o
   prompt avisando que o plano descreve mudanças sobre ela.
+- Cada chamada de preparo (cliente do OpenCode, sessões pendentes, central/worktree, tarefa, memórias,
+  criação da sessão e instruções) tem prazo de 60 s (`ARCHITECT_SETUP_STEP_TIMEOUT_MS`): um serviço que
+  aceita a conexão e não responde vira **falha** com o motivo ("… não respondeu em 60 s") e libera a
+  mesa; a sessão criada depois do prazo é excluída. O turno do agente usa o tempo máximo da configuração.
+- A sessão é excluída **antes** de gravar o desfecho, e o registro de execução só é liberado pela própria
+  execução: "Tentar novamente" enquanto a anterior ainda encerra responde 409 `ARCHITECT_BUSY`.
 - O id do turno é `architect:<diagramId>` (nunca o da mesa): o arquiteto roda junto com a
   implementação e não pode colidir com o turno vivo dela (chat ao vivo, reconexão).
 - Instruções duráveis (`buildArchitectInstructions`, chave `opex-architect`): regras de leitura, escopo
@@ -84,7 +90,9 @@ inexistente por nenhum, valores fora da enumeração caem no padrão (`module`, 
 `other`), descarta arestas com ponta inexistente, laços e duplicadas, garante o nó do **objetivo**
 (criado a partir do título), corta acima do teto do nível — prioridade: objetivo, depois o que o plano
 cria, altera e o contexto existente; nas arestas, as relações antes do "contém" — e remove grupos
-vazios. Os cortes ficam em `trimmed` e `warnings` ("N nó(s) cortado(s) pelo teto do nível").
+vazios. O `detail` de cada nó tem até 4.000 caracteres (`ARCHITECT_NODE_DETAIL_MAX`, informado no
+prompt); o excedente é cortado com aviso. O texto bruto guardado em `report` são os últimos 50.000
+caracteres da resposta (`ARCHITECT_REPORT_MAX_CHARS`). Os cortes ficam em `trimmed` e `warnings` ("N nó(s) cortado(s) pelo teto do nível").
 
 ## Profundidade
 
