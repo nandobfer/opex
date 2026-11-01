@@ -21,6 +21,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     "adversarial-agent": "Agente Adversário",
     "adversarial-mentor-decision": "Agente Mentor (decisor)",
     "adversarial-mentor-writer": "Agente Mentor (redator)",
+    "memory-curator": "Curador de memórias (migração para o Engramind)",
 }
 
 export function aiConsumptionOriginLabel(origin: string): string {

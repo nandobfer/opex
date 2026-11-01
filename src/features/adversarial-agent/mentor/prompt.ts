@@ -1,7 +1,6 @@
 import type { JevQuestion } from "@/lib/ai/jev"
 import { MENTOR_MESSAGE_MAX, MENTOR_RESPONSE_MAX, MENTOR_SOURCE_LABELS, MENTOR_TARGET_LABELS, MENTOR_USER_TRIGGER_LABELS, type MentorSource, type MentorTarget, type MentorUserTrigger } from "./constants"
 import type { MentorContext } from "./schemas"
-import type { LessonBlock } from "./schemas"
 
 /**
  * Textos do Agente Mentor (módulo puro): o estado avaliado pelo decisor, as perguntas do JEV, os
@@ -14,7 +13,8 @@ export interface MentorCase {
     trigger: MentorUserTrigger | null
     userMessage: string | null
     responses: { stage: string; text: string }[]
-    lessons: LessonBlock[]
+    /** Memórias que o próprio agente gravou nesta cadeia (aprendizado autônomo). */
+    selfLearned?: string[]
     task: { code: string; title: string } | null
     adversarialVerdict: { summary: string | null; findings: string[] } | null
     approvedPlan: string | null
@@ -40,9 +40,8 @@ export function buildMentorState(input: MentorCase, context: MentorContext): Rec
         const budget = Math.max(1000, Math.floor(MENTOR_RESPONSE_MAX / input.responses.length))
         state.respostasDoAgente = input.responses.map((item) => ({ etapa: item.stage, texto: tail(item.text, budget) }))
     }
-    if (context.developerRequest && input.lessons.length) {
-        state.pedidosDoDesenvolvedor = input.lessons.map((lesson) => ({ problema: lesson.problem, oQueORevisorDeveriaTerPego: lesson.shouldHaveCaught, evidencia: lesson.evidence ?? null, porQue: lesson.why }))
-    }
+    // O agente já aprendeu sozinho: o Mentor não repete a mesma lição.
+    if (input.selfLearned?.length) state.memoriasJaGravadasPeloAgente = input.selfLearned
     if (context.taskBasics && input.task) state.tarefa = { codigo: input.task.code, titulo: input.task.title }
     if (context.adversarialVerdict && input.adversarialVerdict) state.ultimoVereditoDoAdversario = input.adversarialVerdict
     if (context.approvedPlan && input.approvedPlan) state.planoAprovado = head(input.approvedPlan, MENTOR_MESSAGE_MAX)

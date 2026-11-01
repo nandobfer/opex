@@ -609,6 +609,7 @@ async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, 
         approvedPlan: doc.plans?.at(-1)?.text ?? null,
         origin: { action: options.action ?? null, userText: options.userText ?? null, feedback: options.feedback ?? null },
         turns,
+        since: doc.turnStartedAt ?? null,
     })
 }
 
@@ -664,6 +665,9 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         if (turn.stage === "adversarial_review") {
             try {
                 next = await adversarialTurn(loaded, turn, controller)
+                // Agente Mentor ("Revisões do adversário"): o relatório da rodada entra na avaliação do fim da cadeia.
+                const review = await (await adversaryModule()).mentorAdversarialTurn(id)
+                if (review) mentorTurns.push(review)
             } catch (error) {
                 log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
                 await prepareHub(id)
@@ -683,7 +687,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Limpeza: a sessão volta ao diretório da central antes de qualquer outra chamada (GO-DEV-805).
             if (turn.stage === "finishing" && !turn.attach) await moveSessionHome(client, loaded, sessionId)
             // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão a cada turno.
-            const memories = turn.attach ? null : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId)
+            const memories = turn.attach
+                ? null
+                : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId, {
+                      directories: [loaded.config.sessionDirectory, loaded.doc.sessionDirectory, loaded.doc.worktreePath],
+                      notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+                  })
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
                 next = await buildTurn(client, loaded, turn, sessionId, controller, memories)
@@ -696,14 +705,9 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
             const text = withAttachmentsSection(memories ? withDeveloperMemories(memories, withNotes) : withNotes, attachments.section)
-            // Agente Mentor: pode pedir ao agente um bloco de lição no fim da resposta.
-            const adversary = await adversaryModule()
-            const stageText = turn.attach ? text : await adversary.mentorPrepareTurn({ centralId: loaded.doc.centralId, stage: turn.stage, text })
-            const raw = await runStageAgent(client, loaded, { stage: turn.stage, text: stageText, attach: turn.attach, files: attachments.files }, sessionId, controller)
-            // O bloco de lição sai da resposta antes de a mesa interpretar o turno (plano, JSON da etapa).
-            const taken = raw.outcome === "succeeded" ? adversary.mentorTakeLesson(raw.text) : null
-            const result = taken ? { ...raw, text: taken.text } : raw
-            if (taken) mentorTurns.push({ stage: turn.stage, text: taken.text, lesson: taken.lesson, lessonError: taken.error })
+            const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
+            // Agente Mentor: a resposta do turno entra na avaliação do fim da cadeia.
+            if (result.outcome === "succeeded") mentorTurns.push({ stage: turn.stage, text: result.text })
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return

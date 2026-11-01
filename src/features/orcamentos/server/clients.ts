@@ -136,6 +136,8 @@ export async function deleteClient(id: string, actorId: string): Promise<void> {
     const before = await getClientDoc(id)
     const { deleteClientOpexData } = await import("@/features/opex-agent/server/sessions")
     await Promise.all([OrcamentoClient.deleteOne({ _id: id }), OrcamentoDraft.deleteMany({ clientId: id }), deleteClientOpexData(id)])
+    // Memórias do cliente nos agentes (Engramind): os canais são arquivados (recuperáveis); nunca lança.
+    await (await import("@/features/ai/server/agent-memory-service")).archiveClientMemories(id)
     // Remove os vínculos dos usuários com este cliente (o **padrão** incluído); órfãos são excluídos.
     await removeClientUsers(id)
     await recordAudit({ userId: actorId, entidade: CLIENTE_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { nome: before.name } })

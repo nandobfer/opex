@@ -1,4 +1,5 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
+import { selfMemoryInstructions } from "@/features/ai/self-memory"
 import { ADVERSARIAL_LEVEL_DEFS, FINDING_CATEGORIES, FINDING_SEVERITIES, FINDING_SEVERITY_LABELS, type AdversarialLevel } from "./constants"
 import type { EvaluatedFinding } from "./verdict"
 
@@ -15,7 +16,10 @@ const SEVERITY_GUIDE: Record<(typeof FINDING_SEVERITIES)[number], string> = {
     nit: "legibilidade, nomes, duplicação pequena, estilo",
 }
 
-export function buildAdversarialInstructions(input: { level: AdversarialLevel; instructions: string; memories: readonly string[] }): string {
+/** Prefixo das ferramentas do MCP "Memória própria" no OpenCode (`opex_memorias_<ferramenta>`). */
+export const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
+
+export function buildAdversarialInstructions(input: { level: AdversarialLevel; instructions: string; memories: string; selfMemory?: boolean }): string {
     const level = ADVERSARIAL_LEVEL_DEFS[input.level]
     const extra = input.instructions.trim()
     return [
@@ -57,6 +61,7 @@ export function buildAdversarialInstructions(input: { level: AdversarialLevel; i
         "- `previous` só existe a partir da 2ª rodada: o estado de cada achado bloqueante anterior.",
         extra ? `\n## Instruções adicionais\n${extra}` : "",
         memoriesSection(input.memories),
+        input.selfMemory ? selfMemoryInstructions("adversario", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX }) : "",
     ]
         .filter((line) => line !== "")
         .join("\n")

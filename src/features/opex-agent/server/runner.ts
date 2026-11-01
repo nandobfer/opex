@@ -18,11 +18,13 @@ import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
-import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
-import { opexMemoryAgentsFor } from "@/features/ai/agents"
+import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
+import { selfMemoryInstructions } from "@/features/ai/self-memory"
+import type { MemoryTurn } from "@/features/ai/agents"
 import type { McpTurnTools } from "./mcp/tools"
 import { buildToolRuntime, redactToolInput, stringifyForDisplay } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
+import { clientActorFor } from "@/features/auth/server/context"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
 import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
 import { nowContext } from "./tools/context"
@@ -35,9 +37,10 @@ const INTERRUPTED = "Interrompido pelo usuário"
  * Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema.
  * No portal, a dica de jobs só entra com o grupo "Jobs agendados" ligado para o cliente.
  */
-export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories: readonly string[] = [], options: { jobs?: boolean } = {}): string {
+export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories = "", options: { jobs?: boolean; selfMemory?: boolean } = {}): string {
+    const self = options.selfMemory ? selfMemoryInstructions("opex", memoryTurnOf(scope)) : ""
     if (scope.kind === "owner") {
-        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories)].join("\n")
+        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : [])].join("\n")
     }
     const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
     return [
@@ -46,7 +49,27 @@ export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerSc
         `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${role}).`,
         "A data e a hora de cada turno vêm ao fim da mensagem do usuário.",
         memoriesSection(memories),
+        ...(self ? [self] : []),
     ].join("\n")
+}
+
+/** Turno das memórias: dono ou o cliente do portal. */
+export function memoryTurnOf(scope: OpexServerScope): MemoryTurn {
+    return scope.kind === "client" ? { kind: "client", clientId: String(scope.actor.client._id) } : { kind: "owner" }
+}
+
+/** Memórias do turno (contexto do Engramind) e as ferramentas "Memória própria" quando ligadas. */
+async function memoriesForTurn(scope: OpexServerScope, sessionId: string, turnKey: string, actorId: string): Promise<{ block: string; notice: string | null; selfTools: OpexTool[] }> {
+    const turn = memoryTurnOf(scope)
+    const [{ agentMemoryContext }, { selfMemoryEnabled }] = await Promise.all([import("@/features/ai/server/agent-memory-context"), import("@/features/ai/server/self-memory/settings")])
+    const context = await agentMemoryContext("opex", turn)
+    let selfTools: OpexTool[] = []
+    if (await selfMemoryEnabled("opex")) {
+        const { selfMemoryTools } = await import("@/features/ai/server/self-memory/tools")
+        const label = scope.kind === "client" ? `Agente Opex · ${scope.actor.client.name}` : "Agente Opex"
+        selfTools = selfMemoryTools({ consumer: "opex", turn, label, turnKey, actorId, auditContext: { sessao: sessionId } })
+    }
+    return { block: context.block, notice: memoryCacheNotice(context), selfTools }
 }
 
 /** Ferramentas e política do turno, conforme o escopo. */
@@ -251,14 +274,18 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const { tools: appTools, overrides: appOverrides } = await toolsForTurn(scope, settings)
         // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
         mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
-        const mcpTools: TurnToolMap = new Map(mcp.tools.map((tool) => [tool.name, tool]))
-        const appNames = new Set(appTools.map((tool) => tool.name))
-        const tools = [...appTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
+        const mcpTools = new Map(mcp.tools.map((tool) => [tool.name, tool]))
+        const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId)
+        const selfNames = new Set(memory.selfTools.map((tool) => tool.name))
+        const appNames = new Set([...appTools.map((tool) => tool.name), ...selfNames])
+        const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
+        if (memory.notice) publishLine(sessionId, { type: "text-delta", text: `> ${memory.notice}\n\n` })
         const overrides = { ...mcp.overrides, ...appOverrides }
         const history = await loadHistory(sessionId, session.summary, main.provider!, mcp.notices)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
+        for (const tool of memory.selfTools) mcpTools.set(tool.name, tool)
         lookup = mcpTools
         const runtime = buildToolRuntime(tools, toolContext, overrides, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
@@ -267,6 +294,13 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                       authorize: async (tool: OpexTool) => {
                           const current = toolContext.scope
                           if (!current || current.kind !== "client") return
+                          // Memória própria: não é ferramenta do catálogo do portal; só revalida o acesso do usuário.
+                          if (selfNames.has(tool.name)) {
+                              const fresh = await clientActorFor(current.actor.userId, String(current.actor.client._id))
+                              await assertClientOpexEnabled(fresh)
+                              toolContext.scope = { kind: "client", actor: fresh }
+                              return
+                          }
                           const actor = await assertClientToolAllowed(tool.name, current.actor, tool.mcpServerId)
                           toolContext.scope = { kind: "client", actor }
                       },
@@ -276,7 +310,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, await agentMemoryTexts(opexMemoryAgentsFor(scope.kind)), { jobs: tools.some((tool) => tool.group === "jobs") }),
+            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.selfTools.length > 0 }),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),

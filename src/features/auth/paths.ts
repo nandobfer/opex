@@ -10,6 +10,8 @@
  * - o **servidor MCP do Opex para o OpenCode** (`/api/maddox/mcp/*`, Agente Maddox), autenticado pelo
  *   segredo derivado da chave das integrações e com o escopo conferido pela sessão do Maddox — ou,
  *   no servidor do dono, pelo token de sistema com o escopo `mcp:owner`;
+ * - o **MCP "Memória própria" dos agentes** (`/api/agent-memory/mcp`, OPE-104), autenticado pelo
+ *   segredo derivado da chave das integrações e com o agente resolvido pela sessão do OpenCode;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
  * - o **webhook do Engramind** (`/api/engramind/webhook`, exato), autenticado só pela assinatura
@@ -43,7 +45,7 @@ export const PUBLIC_ROUTES: readonly string[] = [
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */
-export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/maddox/mcp"]
+export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/maddox/mcp", "/api/agent-memory/mcp"]
 
 /**
  * Caminho sem o subcaminho público (`BASE_PATH`), com barra inicial e sem barra final.

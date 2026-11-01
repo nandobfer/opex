@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { csvList, isoDate, objectIdCsv, pageQuery } from "@/lib/list/query"
 import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
+import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
 import {
     DEFAULT_MENTOR_WRITER_INSTRUCTIONS,
     MENTOR_AI_STAGES,
@@ -32,7 +32,6 @@ const modelFields = {
 export const mentorContextSchema = z.object({
     userMessage: z.boolean(),
     agentResponse: z.boolean(),
-    developerRequest: z.boolean(),
     taskBasics: z.boolean(),
     adversarialVerdict: z.boolean(),
     approvedPlan: z.boolean(),
@@ -50,12 +49,6 @@ export const mentorSettingsSchema = z
         triggers: z.object({
             user: flags(MENTOR_USER_TRIGGERS),
             ai: flags(MENTOR_AI_STAGES),
-            developer: z.object({
-                enabled: z.boolean(),
-                stages: flags(MENTOR_AI_STAGES),
-                /** Pedido do desenvolvedor vai direto ao redator (sem nota do decisor). */
-                skipDecider: z.boolean(),
-            }),
         }),
         /** Decide se vale gravar: JEV (pergunta `noul`) ou qualquer provedor de texto (JSON com a nota). */
         decider: z.object({ provider: z.enum(AI_PROVIDER_IDS).nullable(), ...modelFields }),
@@ -108,8 +101,7 @@ export const DEFAULT_MENTOR_SETTINGS: MentorSettings = {
     scope: { all: true, centralIds: [] },
     triggers: {
         user: allUser(true),
-        ai: { planning: false, implementing: false } satisfies Record<MentorAiStage, boolean>,
-        developer: { enabled: true, stages: { planning: false, implementing: true }, skipDecider: false },
+        ai: { planning: false, implementing: false, adversarial_review: false } satisfies Record<MentorAiStage, boolean>,
     },
     decider: { provider: null, model: null, variant: null },
     level: "balanced",
@@ -118,17 +110,9 @@ export const DEFAULT_MENTOR_SETTINGS: MentorSettings = {
     writer: { provider: null, model: null, variant: null, instructions: DEFAULT_MENTOR_WRITER_INSTRUCTIONS },
     saveMode: "direct",
     timeoutSeconds: MENTOR_TIMEOUT_DEFAULT,
-    context: { userMessage: true, agentResponse: true, developerRequest: true, taskBasics: true, adversarialVerdict: true, approvedPlan: false },
+    context: { userMessage: true, agentResponse: true, taskBasics: true, adversarialVerdict: true, approvedPlan: false },
 }
 
-/** Bloco `opex-lesson` que o agente desenvolvedor escreve no fim da resposta para pedir uma memória. */
-export const lessonBlockSchema = z.object({
-    problem: z.string().trim().min(3, "Descreva o problema").max(4000),
-    shouldHaveCaught: z.string().trim().min(3, "Diga o que o revisor deveria ter pego").max(4000),
-    evidence: z.string().trim().max(4000).optional(),
-    why: z.string().trim().min(3, "Diga por que vale como regra").max(2000),
-})
-export type LessonBlock = z.infer<typeof lessonBlockSchema>
 
 /** Aprovar uma sugestão (o texto pode ser editado antes). */
 export const mentorApproveSchema = z.object({

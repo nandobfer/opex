@@ -251,12 +251,9 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
         const state = buildMentorState(fullCase, settings.context)
         const subject = input.taskCode
 
-        const developerOnly = input.case.sources.length === 1 && input.case.sources[0] === "developer"
-        if (!(settings.triggers.developer.skipDecider && developerOnly && input.case.lessons.length)) {
-            const decision = await decide(settings, state, subject, usage)
-            await setRun(runId, { score: decision.score, deciderReason: decision.reason })
-            if (!passesThreshold(decision.score, settings.level)) return await finish("skipped")
-        }
+        const decision = await decide(settings, state, subject, usage)
+        await setRun(runId, { score: decision.score, deciderReason: decision.reason })
+        if (!passesThreshold(decision.score, settings.level)) return await finish("skipped")
 
         const { provider, model, variant, instructions } = settings.writer
         if (!provider || !model) throw new Error("O redator do Agente Mentor não tem provedor e modelo configurados")
@@ -273,7 +270,7 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
             taskTitle: input.taskTitle,
             projectName: input.projectName,
             repo: input.repo,
-            sources: [input.case.userMessage, ...input.case.responses.map((response) => response.text), ...input.case.lessons.flatMap((lesson) => [lesson.problem, lesson.shouldHaveCaught, lesson.evidence, lesson.why])],
+            sources: [input.case.userMessage, ...input.case.responses.map((response) => response.text)],
         }
         let rejection: string | null = null
         for (let attempt = 0; attempt < 2; attempt++) {

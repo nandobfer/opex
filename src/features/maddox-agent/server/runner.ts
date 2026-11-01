@@ -1,7 +1,8 @@
 import { Types } from "mongoose"
 import { clientActorFor } from "@/features/auth/server/context"
-import { maddoxMemoryAgentsFor } from "@/features/ai/agents"
-import { agentMemoryTexts, memoriesSection } from "@/features/ai/server/agent-memory-service"
+import type { MemoryTurn } from "@/features/ai/agents"
+import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
+import { selfMemoryInstructions } from "@/features/ai/self-memory"
 import { findOpexClientTool } from "@/features/opex-agent/client-tools"
 import { OPEX_FILE_CONTENT_MAX_BYTES } from "@/features/opex-agent/constants"
 import { closePendingRequests, closeRunningTools, partsText } from "@/features/opex-agent/live-message"
@@ -58,7 +59,7 @@ type SessionDoc = Awaited<ReturnType<typeof loadSession>>
 const maddoxScope = (scope: OpexServerScope): OpexServerScope => withAgent(scope, "maddox")
 
 /** Instruções da sessão: as configuradas (dono) ou as fixas do portal + escopo + memórias. */
-export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: OpexServerScope, memories: readonly string[] = [], notices: readonly string[] = []): string {
+export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: OpexServerScope, memories = "", notices: readonly string[] = [], options: { selfMemory?: boolean } = {}): string {
     const head =
         scope.kind === "owner"
             ? [settings.instructions, "", `Dono do app: ${getLocalUser().name}.`]
@@ -67,7 +68,13 @@ export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: Opex
                   "",
                   `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"}).`,
               ]
-    return [...head, ...notices, memoriesSection(memories)].join("\n")
+    const self = options.selfMemory ? [selfMemoryInstructions("maddox", maddoxMemoryTurn(scope), { toolPrefix: "opex_memorias_" })] : []
+    return [...head, ...notices, memoriesSection(memories), ...self].join("\n")
+}
+
+/** Turno das memórias do Maddox: dono ou o cliente da sessão do portal. */
+export function maddoxMemoryTurn(scope: OpexServerScope): MemoryTurn {
+    return scope.kind === "client" ? { kind: "client", clientId: String(scope.actor.client._id) } : { kind: "owner" }
 }
 
 type ToolCard = { group: OpexToolPartGroup | null; label: string; tool?: OpexTool; opex: boolean }
@@ -268,8 +275,22 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         if (!mcp.ok) notices.push(`Aviso: as ferramentas do Opex (MCP) estão indisponíveis neste turno (${mcp.error}).`)
         const permissions = await maddoxPermissionsFor(scope, settings)
         const ocSessionId = await opencodeSessionFor(client, session, directory, permissions)
-        const memories = await agentMemoryTexts(maddoxMemoryAgentsFor(scope.kind))
-        await applySessionSetup(client, ocSessionId, { permissions, instructions: maddoxInstructionsFor(settings, scope, memories, notices) })
+        const { agentMemoryContext } = await import("@/features/ai/server/agent-memory-context")
+        const memories = await agentMemoryContext("maddox", maddoxMemoryTurn(scope))
+        const cacheNotice = memoryCacheNotice(memories)
+        if (cacheNotice) publishLine(sessionId, { type: "text-delta", text: `> ${cacheNotice}\n\n` })
+        const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
+        let selfMemory = await selfMemoryEnabled("maddox")
+        if (selfMemory) {
+            const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+            const registered = await ensureAgentMemoryMcp(client, [directory])
+            if (!registered.ok) {
+                selfMemory = false
+                notices.push(`Aviso: o aprendizado autônomo (memória própria) está indisponível neste turno (${registered.error}).`)
+            }
+        }
+        const sessionPermissions = selfMemory ? [...permissions, { action: "opex_memorias_*", resource: "*", effect: "allow" as const }] : permissions
+        await applySessionSetup(client, ocSessionId, { permissions: sessionPermissions, instructions: maddoxInstructionsFor(settings, scope, memories.block, notices, { selfMemory }) })
         const { uris, references } = await turnFiles(args.files)
         const prompt = references.length ? `${args.text}${args.text ? "\n\n" : ""}Arquivos enviados nesta mensagem:\n${references.join("\n")}` : args.text
 

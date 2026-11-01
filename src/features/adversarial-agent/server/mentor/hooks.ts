@@ -1,8 +1,7 @@
 import { loggerFor } from "@/lib/logger"
 import { MENTOR_AI_STAGES, type MentorAiStage, type MentorSource, type MentorUserTrigger } from "../../mentor/constants"
-import { takeLessonBlock, withLessonInstruction, type TakenLesson } from "../../mentor/lesson-block"
-import type { LessonBlock, MentorSettings } from "../../mentor/schemas"
-import { enqueueMentorRun, recordFailedMentorRun } from "./queue"
+import type { MentorSettings } from "../../mentor/schemas"
+import { enqueueMentorRun } from "./queue"
 import { mentorSettingsFor } from "./settings"
 
 /**
@@ -18,25 +17,22 @@ const isAiStage = (stage: string): stage is MentorAiStage => (MENTOR_AI_STAGES a
 const globalForMentor = globalThis as typeof globalThis & { __opexMentorLive?: Map<string, string[]> }
 const liveMessages = (globalForMentor.__opexMentorLive ??= new Map())
 
-/** Acrescenta ao pedido do turno a instrução do bloco de lição (quando o Mentor aceita pedidos nesta etapa). */
-export async function mentorPrepareTurn(input: { centralId: string; stage: string; text: string }): Promise<string> {
+/**
+ * Rodada do Agente Adversário que acabou de terminar, como turno da cadeia para o Mentor ("Revisões do
+ * adversário"): o relatório (ou o resumo) da revisão mais recente da mesa. Nunca lança.
+ */
+export async function mentorAdversarialTurn(workbenchId: string): Promise<MentorTurnRecord | null> {
     try {
-        if (!isAiStage(input.stage)) return input.text
-        const settings = await mentorSettingsFor(input.centralId)
-        const developer = settings?.triggers.developer
-        return developer?.enabled && developer.stages[input.stage] ? withLessonInstruction(input.text) : input.text
+        const { AdversarialReview } = await import("../models")
+        const review = await AdversarialReview.findOne({ workbenchId, finishedAt: { $ne: null } })
+            .sort({ startedAt: -1 })
+            .select({ report: 1, summary: 1 })
+            .lean()
+        const text = review?.report ?? review?.summary ?? null
+        return text ? { stage: "adversarial_review", text } : null
     } catch (error) {
-        log.warn({ err: error }, "[adversarial-agent] Agente Mentor: instrução do bloco de lição não aplicada")
-        return input.text
-    }
-}
-
-/** Retira da resposta do agente o bloco de lição (a mesa interpreta o turno sem ele). */
-export function mentorTakeLesson(text: string): TakenLesson {
-    try {
-        return takeLessonBlock(text)
-    } catch {
-        return { text, lesson: null, error: null }
+        log.warn({ err: error, workbenchId }, "[adversarial-agent] Agente Mentor: rodada do adversário não lida")
+        return null
     }
 }
 
@@ -82,8 +78,6 @@ export function mentorTriggerOf(origin: { action: string | null; userText: strin
 export interface MentorTurnRecord {
     stage: string
     text: string
-    lesson: LessonBlock | null
-    lessonError: string | null
 }
 
 export interface MentorAfterTurnsInput {
@@ -97,6 +91,27 @@ export interface MentorAfterTurnsInput {
     approvedPlan: string | null
     origin: { action: string | null; userText: string | null; feedback: string | null }
     turns: MentorTurnRecord[]
+    /** Início da cadeia (as memórias que o próprio agente gravou desde então vão ao Mentor). */
+    since?: Date | null
+}
+
+/**
+ * Memórias que o agente desenvolvedor ou o Adversário gravaram sozinhos nesta mesa desde o início da
+ * cadeia (auditoria `MemoriaAgente` com `ator: agente:*`): o Mentor não repete o que já foi aprendido.
+ */
+async function selfLearnedMemories(workbenchId: string, since: Date | null): Promise<string[]> {
+    try {
+        const { AuditLog } = await import("@/lib/db/models/AuditLog")
+        const rows = await AuditLog.find({ entidade: "MemoriaAgente", "dadosNovos.mesa": workbenchId, "dadosNovos.ator": { $regex: "^agente:" }, ...(since ? { timestamp: { $gte: since } } : {}) })
+            .sort({ timestamp: 1 })
+            .limit(20)
+            .select({ dadosNovos: 1 })
+            .lean<{ dadosNovos?: { texto?: string } }[]>()
+        return rows.map((row) => row.dadosNovos?.texto).filter((text): text is string => Boolean(text))
+    } catch (error) {
+        log.warn({ err: error, workbenchId }, "[adversarial-agent] Agente Mentor: memórias gravadas pelo agente não lidas")
+        return []
+    }
 }
 
 /** O que dispara o Mentor neste fim de cadeia, conforme a configuração. */
@@ -115,11 +130,7 @@ export function mentorSourcesFor(settings: MentorSettings, input: Pick<MentorAft
     }
     if (userParts.length) sources.add("user")
     if (input.turns.some((turn) => isAiStage(turn.stage) && settings.triggers.ai[turn.stage])) sources.add("ai")
-    const developer = settings.triggers.developer
-    const lessons = developer.enabled ? input.turns.filter((turn) => turn.lesson && isAiStage(turn.stage) && developer.stages[turn.stage]).map((turn) => turn.lesson!) : []
-    if (lessons.length) sources.add("developer")
-    const lessonError = developer.enabled ? (input.turns.find((turn) => turn.lessonError && isAiStage(turn.stage) && developer.stages[turn.stage])?.lessonError ?? null) : null
-    return { sources: [...sources], trigger, userMessage: userParts.length ? userParts.join("\n\n") : null, lessons, lessonError }
+    return { sources: [...sources], trigger, userMessage: userParts.length ? userParts.join("\n\n") : null }
 }
 
 /** Fim da cadeia de turnos da mesa: enfileira uma execução do Mentor quando algum gatilho ligado bateu. */
@@ -139,12 +150,15 @@ export async function mentorAfterTurns(input: MentorAfterTurnsInput): Promise<st
             projectName: input.projectName,
             repo: input.repo,
             approvedPlan: settings.context.approvedPlan ? input.approvedPlan : null,
-            case: { sources: found.sources, trigger: found.trigger, userMessage: found.userMessage, responses: input.turns.map((turn) => ({ stage: turn.stage, text: turn.text })), lessons: found.lessons },
+            case: {
+                sources: found.sources,
+                trigger: found.trigger,
+                userMessage: found.userMessage,
+                responses: input.turns.map((turn) => ({ stage: turn.stage, text: turn.text })),
+                selfLearned: await selfLearnedMemories(input.workbenchId, input.since ?? null),
+            },
         }
-        if (!found.sources.length) {
-            if (found.lessonError) return await recordFailedMentorRun({ ...runInput, case: { ...runInput.case, sources: ["developer"] } }, settings, found.lessonError)
-            return null
-        }
+        if (!found.sources.length) return null
         return await enqueueMentorRun(runInput, settings)
     } catch (error) {
         log.warn({ err: error, workbenchId: input.workbenchId }, "[adversarial-agent] Agente Mentor: não foi possível enfileirar a avaliação")

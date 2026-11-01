@@ -97,13 +97,26 @@ export interface AgentMemoryOrigin {
 export interface MemoryDto {
     /** Central da memória, nas listas por central (`developer-central`). */
     centralId?: string
+    /** Cliente da memória, nas listas por cliente (`*-client-specific`). */
+    clientId?: string
+    /** Id da memória no Engramind (`m_…`). */
     id: string
     texto: string
+    /** Título do Redator do Engramind; enquanto ele não responde, a primeira frase do texto. */
     resumo: string
-    /** Mantido do Ciliar/crm (lá, memórias do contato); no Opex toda memória é escrita pelo dono ou pelo agente a pedido dele. */
-    origem?: "agente" | "usuario"
+    /** O Redator ainda não respondeu (`title_state: pending`): a linha mostra o resumo carregando. */
+    resumoPendente: boolean
+    categoria: string
+    /** `permanent` no Engramind (entra primeiro no contexto). */
+    fixada: boolean
+    /** `false` = arquivada no Engramind (fora do contexto). */
+    ativa: boolean
+    /** Versão lida (vai em `expected_version` ao editar). */
+    versao: number
     autor: string | null
-    /** Origem da memória (ex.: gravada pelo Agente Mentor); `null` quando escrita pelo dono. */
+    /** Escrita pelo dono (o agente edita, mas não exclui nem inativa sem pedido dele). */
+    doDono: boolean
+    /** Origem da memória (Mentor, um agente sozinho...); `null` quando escrita pelo dono. */
     origin?: AgentMemoryOrigin | null
     criadaEm: string
     atualizadaEm: string
@@ -111,13 +124,22 @@ export interface MemoryDto {
 
 export interface MemoryMutationResult {
     memoria: MemoryDto
-    /** `false` quando o Resumo de memórias estava indisponível e o texto foi salvo como escrito. */
-    formatadaPorIa: boolean
+    /** O texto já existia na lista: nada foi gravado e a memória existente voltou. */
+    duplicada?: boolean
+    /** Memórias parecidas da mesma lista (prefira editar a duplicar). */
+    similares?: { id: string; resumo: string; similaridade: number }[]
 }
 
-export interface MemorySummarySettingsDto {
-    settings: import("./schemas").MemorySummarySettings
-    isDefault: boolean
-    availability: AiFeatureAvailability
-    updatedAt: string | null
+/** Metadados das telas de memórias (limites, categorias, pendência da migração e saúde do contexto). */
+export interface MemoriesMetaDto {
+    textMin: number
+    textMax: number
+    categories: { key: string; label: string }[]
+    /** Nenhuma importação concluída ainda: "Migração de memórias pendente". */
+    migrationPending: boolean
+    availability: { unavailable: boolean; since: string | null; lastOkAt: string | null; reason: string | null }
+    /** Memórias fora do texto completo do contexto (faixa de títulos + overflow), por agente e combinação de canais. */
+    outside: { consumer: string; channels: string[]; outside: number }[]
+    /** Erro ao ler o Engramind (sem conexão, fora do ar). */
+    error: string | null
 }

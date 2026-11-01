@@ -8,7 +8,7 @@
  * memórias recusaria ao gravar.
  */
 
-import { MEMORY_TEXT_MAX } from "@/features/ai/schemas"
+import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
 
 export interface SanitizeContext {
     taskCode?: string | null

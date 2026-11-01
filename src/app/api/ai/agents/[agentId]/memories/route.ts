@@ -1,18 +1,11 @@
-import { created, ok } from "@/lib/api/responses"
-import { parseBody, withRoute } from "@/lib/api/route"
-import { getLocalUser } from "@/lib/local-user"
-import { memoryInputSchema } from "@/features/ai/schemas"
-import { createAgentMemory, listAgentMemories } from "@/features/ai/server/agent-memory-service"
+import { withRoute } from "@/lib/api/route"
+import { createMemoryRoute, listMemoriesRoute } from "@/features/ai/server/memory-routes"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** GET /api/ai/agents/[agentId]/memories — memórias de uma lista do agente. */
-export const GET = withRoute<{ agentId: string }>(async ({ params }) => ok(await listAgentMemories(params.agentId)))
+/** GET /api/ai/agents/[agentId]/memories — memórias de uma lista (canal do Engramind), ativas e inativas. */
+export const GET = withRoute<{ agentId: string }>(async ({ params }) => listMemoriesRoute(params.agentId))
 
-/** POST /api/ai/agents/[agentId]/memories — nova memória, formatada pelo Resumo de memórias. */
-export const POST = withRoute<{ agentId: string }>(async ({ req, params }) => {
-    const body = await parseBody(req, memoryInputSchema)
-    if (!body.ok) return body.response
-    return created(await createAgentMemory(params.agentId, body.data.texto, getLocalUser().id))
-})
+/** POST /api/ai/agents/[agentId]/memories — nova memória (`{ texto, categoria?, fixada? }`). */
+export const POST = withRoute<{ agentId: string }>(async ({ req, params }) => createMemoryRoute(req, params.agentId))
