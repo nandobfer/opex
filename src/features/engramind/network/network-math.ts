@@ -164,18 +164,67 @@ export interface Point {
     y: number
 }
 
-export const OVERVIEW_ROW_GAP = 84
-export const OVERVIEW_COLUMN_GAP = 560
+export interface Rect {
+    x: number
+    y: number
+    width: number
+    height: number
+}
 
-/** Visão inicial: agentes numa coluna (agrupados por app) e canais na outra, centralizados na vertical. */
+/** Distância vertical entre a linha de agentes (em cima) e a de canais (embaixo). */
+export const OVERVIEW_ROW_GAP = 320
+/** Passo horizontal entre agentes (pílula de até ~180 px). */
+export const OVERVIEW_AGENT_GAP = 210
+/** Passo horizontal entre canais (card de até 240 px, `max-w-60`). */
+export const OVERVIEW_CHANNEL_GAP = 270
+/** Caixa aproximada dos nodes, para o enquadramento inicial. */
+export const OVERVIEW_AGENT_BOX = { width: 180, height: 48 }
+export const OVERVIEW_CHANNEL_BOX = { width: 240, height: 52 }
+/** Folga do enquadramento inicial em cada lado da linha de agentes (fração da largura). */
+export const OVERVIEW_FIT_MARGIN = 0.15
+
+/**
+ * Visão inicial na horizontal: os agentes numa linha em cima (agrupados por app) e os canais numa
+ * linha embaixo, as duas centralizadas em x = 0.
+ */
 export function layoutOverview(agents: readonly { id: string; app: string }[], channels: readonly { slug: string }[]): { agents: Map<string, Point>; channels: Map<string, Point> } {
     const sortedAgents = [...agents].sort((a, b) => a.app.localeCompare(b.app) || a.id.localeCompare(b.id))
     const sortedChannels = [...channels].sort((a, b) => a.slug.localeCompare(b.slug))
-    const column = (count: number, index: number) => (index - (count - 1) / 2) * OVERVIEW_ROW_GAP
+    const row = (count: number, index: number, gap: number) => (index - (count - 1) / 2) * gap
     return {
-        agents: new Map(sortedAgents.map((agent, index) => [agent.id, { x: 0, y: column(sortedAgents.length, index) }])),
-        channels: new Map(sortedChannels.map((channel, index) => [channel.slug, { x: OVERVIEW_COLUMN_GAP, y: column(sortedChannels.length, index) }])),
+        agents: new Map(sortedAgents.map((agent, index) => [agent.id, { x: row(sortedAgents.length, index, OVERVIEW_AGENT_GAP), y: 0 }])),
+        channels: new Map(sortedChannels.map((channel, index) => [channel.slug, { x: row(sortedChannels.length, index, OVERVIEW_CHANNEL_GAP), y: OVERVIEW_ROW_GAP }])),
     }
+}
+
+/**
+ * Enquadramento inicial da visão horizontal: a largura da linha de agentes com uma folga de
+ * `OVERVIEW_FIT_MARGIN` de cada lado e a altura dos agentes até a linha de canais (os links ficam
+ * visíveis; canais além da largura dos agentes ficam fora, a um arrastar). Sem agentes: `null`
+ * (enquadra tudo).
+ */
+export function overviewInitialBounds(agents: readonly Point[]): Rect | null {
+    if (!agents.length) return null
+    const xs = agents.map((point) => point.x)
+    const left = Math.min(...xs) - OVERVIEW_AGENT_BOX.width / 2
+    const right = Math.max(...xs) + OVERVIEW_AGENT_BOX.width / 2
+    const margin = (right - left) * OVERVIEW_FIT_MARGIN
+    const top = -OVERVIEW_AGENT_BOX.height / 2 - margin / 4
+    const bottom = OVERVIEW_ROW_GAP + OVERVIEW_CHANNEL_BOX.height / 2 + margin / 4
+    return { x: left - margin, y: top, width: right - left + margin * 2, height: bottom - top }
+}
+
+/**
+ * Posição (canto superior esquerdo, em px da tela) do card que substitui a partícula: centralizado
+ * sobre ela e empurrado para dentro do canvas, com `margin` de folga em todas as bordas.
+ */
+export function clampCardRect(anchor: Point, card: { width: number; height: number }, canvas: { width: number; height: number }, margin = 8): Point {
+    const axis = (center: number, size: number, limit: number) => {
+        const max = limit - size - margin
+        if (max < margin) return margin
+        return Math.min(Math.max(center - size / 2, margin), max)
+    }
+    return { x: axis(anchor.x, card.width, canvas.width), y: axis(anchor.y, card.height, canvas.height) }
 }
 
 export const UNIVERSE_FIRST_RADIUS = 150
@@ -222,8 +271,7 @@ export interface MemoryFilters {
     since?: string
 }
 
-export const hasActiveFilters = (filters: MemoryFilters, searchIds: ReadonlySet<string> | null): boolean =>
-    Boolean(searchIds || filters.channel || filters.status || filters.category || filters.author?.trim() || filters.since)
+export const hasActiveFilters = (filters: MemoryFilters, searchIds: ReadonlySet<string> | null): boolean => Boolean(searchIds || filters.channel || filters.status || filters.category || filters.author?.trim() || filters.since)
 
 /** A memória casa com a busca e os filtros? (Destaque: as demais ficam apagadas, nada sai do universo.) */
 export function matchesFilters(memory: NetworkMemory, filters: MemoryFilters, searchIds: ReadonlySet<string> | null): boolean {

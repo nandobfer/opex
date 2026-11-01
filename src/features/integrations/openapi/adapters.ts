@@ -12,7 +12,8 @@ import { getInternalBaseUrl, type IntegrationConfigMap } from "@/lib/integration
  *
  * API interna: chama a própria aplicação, SEM injetar credencial — os tokens de sistema ficam só
  * como hash no banco, então quem explora informa `Authorization: Bearer <token>` no cabeçalho.
- * As demais integrações exploram a especificação sem autenticação automática.
+ * Engramind: `Bearer` com o token admin guardado cifrado. As demais integrações exploram a
+ * especificação sem autenticação automática.
  */
 
 type Values<Id extends IntegrationId> = IntegrationConfigMap[Id]
@@ -26,6 +27,8 @@ interface AdapterImpl<Id extends IntegrationId> {
 
 const ADAPTERS: { [Id in IntegrationId]?: AdapterImpl<Id> } = {
     internal_api: { authorize: () => null, clientAuthorization: true },
+    // Engramind: o token admin do Opex (campo privado), só no servidor.
+    engramind: { authorize: (values) => (values.adminToken ? { Authorization: `Bearer ${values.adminToken}` } : null) },
 }
 
 export interface ResolvedExplorerTarget {

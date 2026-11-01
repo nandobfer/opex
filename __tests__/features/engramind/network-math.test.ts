@@ -3,6 +3,14 @@ import { deliveredChannels, parseTaggedContext } from '@/features/engramind/cont
 import {
   agentDisplayName,
   agentReach,
+  clampCardRect,
+  OVERVIEW_AGENT_BOX,
+  OVERVIEW_AGENT_GAP,
+  OVERVIEW_CHANNEL_BOX,
+  OVERVIEW_CHANNEL_GAP,
+  OVERVIEW_FIT_MARGIN,
+  OVERVIEW_ROW_GAP,
+  overviewInitialBounds,
   ageColor,
   ageRatios,
   channelColors,
@@ -177,11 +185,37 @@ describe('links das assinaturas', () => {
 })
 
 describe('layout', () => {
-  it('visão inicial: agentes numa coluna e canais na outra, centralizados', () => {
-    const layout = layoutOverview([{ id: 'opex/opex', app: 'opex' }, { id: 'x/a', app: 'x' }], [{ slug: 'opex' }])
-    expect(layout.agents.get('opex/opex')!.x).toBe(0)
-    expect(layout.channels.get('opex')).toEqual({ x: expect.any(Number), y: 0 })
-    expect(layout.agents.get('opex/opex')!.y).toBe(-layout.agents.get('x/a')!.y)
+  it('visão inicial horizontal: agentes numa linha em cima e canais numa linha embaixo, centralizadas', () => {
+    const layout = layoutOverview([{ id: 'opex/opex', app: 'opex' }, { id: 'x/a', app: 'x' }, { id: 'x/b', app: 'x' }], [{ slug: 'opex' }, { slug: 'b' }])
+    const agents = [...layout.agents.values()]
+    const channels = [...layout.channels.values()]
+    expect(agents.every((point) => point.y === 0)).toBe(true)
+    expect(channels.every((point) => point.y === OVERVIEW_ROW_GAP)).toBe(true)
+    expect(agents.reduce((sum, point) => sum + point.x, 0)).toBe(0)
+    expect(channels.reduce((sum, point) => sum + point.x, 0)).toBe(0)
+    expect(layout.agents.get('x/b')!.x - layout.agents.get('x/a')!.x).toBe(OVERVIEW_AGENT_GAP)
+    expect(Math.abs(layout.channels.get('opex')!.x - layout.channels.get('b')!.x)).toBe(OVERVIEW_CHANNEL_GAP)
+  })
+
+  it('enquadramento inicial: a linha de agentes com folga e a altura até a linha de canais; sem agentes, tudo', () => {
+    const agents = [{ x: -210, y: 0 }, { x: 0, y: 0 }, { x: 210, y: 0 }]
+    const bounds = overviewInitialBounds(agents)!
+    const rowWidth = 420 + OVERVIEW_AGENT_BOX.width
+    expect(bounds.width).toBeCloseTo(rowWidth * (1 + 2 * OVERVIEW_FIT_MARGIN))
+    expect(bounds.x).toBeCloseTo(-rowWidth / 2 - rowWidth * OVERVIEW_FIT_MARGIN)
+    expect(bounds.y).toBeLessThan(-OVERVIEW_AGENT_BOX.height / 2 + 1)
+    expect(bounds.y + bounds.height).toBeGreaterThanOrEqual(OVERVIEW_ROW_GAP + OVERVIEW_CHANNEL_BOX.height / 2)
+    expect(overviewInitialBounds([])).toBeNull()
+  })
+
+  it('card da memória: centralizado sobre a partícula e sempre inteiro dentro do quadro', () => {
+    const canvas = { width: 800, height: 600 }
+    const card = { width: 288, height: 300 }
+    expect(clampCardRect({ x: 400, y: 300 }, card, canvas)).toEqual({ x: 256, y: 150 })
+    expect(clampCardRect({ x: 0, y: 0 }, card, canvas)).toEqual({ x: 8, y: 8 })
+    expect(clampCardRect({ x: 800, y: 600 }, card, canvas)).toEqual({ x: 800 - 288 - 8, y: 600 - 300 - 8 })
+    expect(clampCardRect({ x: 790, y: 5 }, card, canvas)).toEqual({ x: 504, y: 8 })
+    expect(clampCardRect({ x: 50, y: 50 }, card, { width: 200, height: 200 })).toEqual({ x: 8, y: 8 })
   })
 
   it('universo: as mais usadas na órbita interna e nenhuma partícula sobreposta', () => {

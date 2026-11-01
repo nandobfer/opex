@@ -21,6 +21,13 @@ import { CenterNode, type CenterNodeData } from "./nodes"
 import { RecenterButton } from "./RecenterButton"
 import { StatList, StatsCard, type StatRow } from "./StatsCard"
 import { useLeavingItems } from "./useLeavingItems"
+import { useEnteringIds } from "./useEnteringIds"
+import { MemoryCardLayer } from "./MemoryCardLayer"
+import { CARD_MIN_ZOOM } from "./MemoryNode"
+import { useZoom } from "./nodes"
+import { AnimatePresence } from "framer-motion"
+import type { ParticleVisual } from "../../network/particles"
+import type { Point } from "../../network/network-math"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
 const CENTER_ID = "center"
@@ -54,6 +61,8 @@ export interface MemoryUniverseProps {
     createLabel?: string
     emptyTitle?: string
     className?: string
+    /** Memória provisória da lista otimista (`pendente-…`): a definitiva que a substitui não nasce de novo. */
+    isProvisional?: (id: string) => boolean
 }
 
 /**
@@ -75,6 +84,7 @@ export function MemoryUniverse({
     createLabel,
     emptyTitle = "Nenhuma memória neste universo",
     className,
+    isProvisional,
 }: MemoryUniverseProps) {
     const live = useLiveEffects(dataVersion)
     const [hovered, setHovered] = useState<string | null>(null)
@@ -86,6 +96,10 @@ export function MemoryUniverse({
         // Memória aberta que sumiu por outra origem (excluída ou movida): o card fecha com aviso.
         if (removed.some((id) => openRef.current.includes(id) && !localRemovals.current.has(id))) toast.info("A memória aberta foi excluída ou movida por outra origem.")
     })
+
+    const memoryIds = useMemo(() => memories.map((memory) => memory.id), [memories])
+    const pulse = live.pulse
+    const entering = useEnteringIds(memoryIds, { isProvisional, onEnter: (fresh) => pulse(fresh.map((id) => `memory:${id}`)) })
 
     const visuals = useMemo(() => buildParticles(memories, { usage, staleAfterDays, bumps: live.bumps }), [memories, usage, staleAfterDays, live.bumps])
     const positions = useMemo(() => layoutUniverse(items), [items])
@@ -139,15 +153,22 @@ export function MemoryUniverse({
             const visual = visuals.get(memory.id) ?? buildParticles([memory], { usage, staleAfterDays }).get(memory.id)
             const point = positions.get(memory.id) ?? { x: 0, y: 0 }
             if (!visual) continue
-            const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, channelColor: channelColors?.get(memory.channel), leaving: memory.leaving }
+            const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, channelColor: channelColors?.get(memory.channel), leaving: memory.leaving, entering: entering.has(memory.id) }
             list.push({ id: memory.id, type: "memory", position: point, data, zIndex: activeId === memory.id ? 20 : 1 })
         }
         return list
-    }, [items, visuals, positions, isMatch, channelColors, activeId, center, memories.length, usage, staleAfterDays])
+    }, [items, visuals, positions, isMatch, channelColors, activeId, center, memories.length, usage, staleAfterDays, entering])
 
     const edges = useMemo<Edge[]>(
-        () => items.map((memory) => ({ id: `orbit:${memory.id}`, source: memory.id, target: CENTER_ID, type: "orbit", data: { color: channelColors?.get(memory.channel), dimmed: isMatch ? !isMatch(memory) : false } })),
-        [items, channelColors, isMatch],
+        () =>
+            items.map((memory) => ({
+                id: `orbit:${memory.id}`,
+                source: memory.id,
+                target: CENTER_ID,
+                type: "orbit",
+                data: { color: channelColors?.get(memory.channel), dimmed: isMatch ? !isMatch(memory) : false, entering: entering.has(memory.id) },
+            })),
+        [items, channelColors, isMatch, entering],
     )
 
     const brightness = useMemo(() => new Map([...visuals].map(([id, visual]) => [id, visual.brightness])), [visuals])
@@ -192,6 +213,14 @@ export function MemoryUniverse({
                     <StatsCard title={center.kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows}>
                         {center.kind === "agent" && <StatList title="Por canal" testId="channel-legend" colors={channelColors} items={stats.byChannel.map((item) => ({ key: item.slug, label: item.slug, count: item.count }))} />}
                     </StatsCard>
+                    <ActiveMemoryCard
+                        memory={activeId ? (memories.find((memory) => memory.id === activeId) ?? null) : null}
+                        visual={activeId ? visuals.get(activeId) : undefined}
+                        point={activeId ? positions.get(activeId) : undefined}
+                        channelColors={channelColors}
+                        actions={wrapped}
+                        hover={hover}
+                    />
                     <RecenterButton />
                     {onCreate && createLabel && memories.length > 0 && (
                         <Panel position="top-left">
@@ -216,5 +245,35 @@ export function MemoryUniverse({
                 </NetworkCanvas>
             </UniverseFocusContext.Provider>
         </NetworkLiveProvider>
+    )
+}
+
+/**
+ * Card da memória ativa na camada sem zoom (filho do React Flow): a partícula vira o card a partir
+ * do zoom `CARD_MIN_ZOOM`; afastada demais, só a partícula se destaca.
+ */
+function ActiveMemoryCard({
+    memory,
+    visual,
+    point,
+    channelColors,
+    actions,
+    hover,
+}: {
+    memory: NetworkMemory | null
+    visual?: ParticleVisual
+    point?: Point
+    channelColors?: Map<string, string>
+    actions: MemoryCardActions
+    hover: (id: string | null) => void
+}) {
+    const zoom = useZoom()
+    const open = memory && visual && point && zoom >= CARD_MIN_ZOOM
+    return (
+        <AnimatePresence>
+            {open && (
+                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} onPointerEnter={() => hover(memory.id)} onPointerLeave={() => hover(null)} />
+            )}
+        </AnimatePresence>
     )
 }

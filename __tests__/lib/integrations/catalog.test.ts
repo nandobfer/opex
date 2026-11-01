@@ -12,6 +12,7 @@ import {
   INTEGRATION_IDS,
   TASK_TAGS_CONCLUDED_JOB_ID,
   cronJobIntegration,
+  defaultSwaggerUrl,
   getInDevelopmentIntegration,
   getIntegrationDef,
   hasCustomIntegrationPath,
@@ -170,5 +171,15 @@ describe('catálogo de integrações', () => {
   it('isCardManagedField só reconhece o grupo "card"', () => {
     expect(isCardManagedField({ group: 'card' })).toBe(true)
     expect(isCardManagedField({})).toBe(false)
+  })
+})
+
+describe('documentação padrão do serviço (defaultSwagger)', () => {
+  it('Engramind: a URL base salva + /openapi.json, sem barra dupla; sem URL base não há padrão', () => {
+    const def = getIntegrationDef('engramind')
+    expect(def.explorer?.baseUrlField).toBe('baseUrl')
+    expect(defaultSwaggerUrl(def, { baseUrl: 'http://engramind-api:8000/' })).toBe('http://engramind-api:8000/openapi.json')
+    expect(defaultSwaggerUrl(def, { baseUrl: '  ' })).toBeUndefined()
+    expect(defaultSwaggerUrl(getIntegrationDef('github'), { baseUrl: 'http://x' })).toBeUndefined()
   })
 })

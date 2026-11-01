@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { xyflowMock } from '../../helpers/xyflow'
+import { fitBounds, flowState, xyflowMock } from '../../helpers/xyflow'
 
 /** OPE-109: rede do Engramind em `/engramind` (visão inicial, universos, card, busca e consumo ao vivo). */
 
@@ -34,6 +34,7 @@ vi.mock('@/lib/pusher/client', () => ({
 }))
 
 import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
+import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
 
 const now = new Date().toISOString()
 const ref = (id: string, slug: string) => ({ id, slug })
@@ -106,6 +107,29 @@ describe('visão inicial', () => {
     expect(screen.getByTestId('stat-agents').textContent).toBe('2')
     expect(screen.getByTestId('stat-active').textContent).toBe('2')
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
+  })
+
+  it('visão horizontal: enquadra a linha de agentes com folga (fitBounds) e o Centralizar volta a ela', async () => {
+    fitBounds.calls.length = 0
+    mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    await waitFor(() => expect(fitBounds.calls.length).toBeGreaterThan(0))
+    const first = fitBounds.calls[0] as { x: number; width: number; height: number }
+    expect(first.width).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: /Centralizar/ }))
+    expect(fitBounds.calls.at(-1)).toEqual(first)
+  })
+
+  it('fundo no padrão do tema: canvas bg-background e React Flow transparente com pontos por token', async () => {
+    mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    const canvas = screen.getByTestId('network-canvas')
+    expect(canvas.classList.contains('bg-background')).toBe(true)
+    expect(canvas.classList.contains('bg-card')).toBe(false)
+    const style = JSON.parse(screen.getByTestId('react-flow').getAttribute('data-style')!)
+    expect(style).toEqual(NETWORK_FLOW_THEME)
+    expect(style['--xy-background-color']).toBe('transparent')
+    expect(style['--xy-background-pattern-color']).toContain('var(--muted-foreground)')
   })
 
   it('o modo da assinatura aparece no hover do link', async () => {
@@ -200,21 +224,61 @@ describe('universos', () => {
     expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Texto novo')
   })
 
-  it('regressão: sair da partícula e entrar no card mantém o card aberto; sair de vez fecha depois do atraso', async () => {
+  it('regressão: o card cobre a partícula; sair dela e entrar no card mantém aberto; sair do card fecha depois do atraso', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
     const node = await screen.findByTestId('memory-node-m_1')
     fireEvent.mouseEnter(node)
     const card = await screen.findByTestId('memory-card-m_1')
-    expect(card.classList.contains('pl-3')).toBe(true)
-    expect(card.classList.contains('ml-3')).toBe(false)
     fireEvent.mouseLeave(node)
-    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
-    fireEvent.mouseEnter(node)
+    fireEvent.pointerEnter(card)
     await new Promise((resolve) => setTimeout(resolve, 400))
     expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
-    fireEvent.mouseLeave(node)
+    fireEvent.pointerLeave(screen.getByTestId('memory-card-m_1'))
     await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+  })
+
+  it('a partícula vira o card numa camada fora do zoom: mesmo tamanho com zoom 1 e 2, dentro do quadro', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    const node = await screen.findByTestId('memory-node-m_1')
+    fireEvent.click(node)
+    const card = await screen.findByTestId('memory-card-m_1')
+    // Fora do node (a camada com zoom), irmão do canvas.
+    expect(node.contains(card)).toBe(false)
+    expect(node.getAttribute('data-expanded')).toBe('true')
+    const at = () => ({ classes: screen.getByTestId('memory-card-m_1').className, width: screen.getByTestId('memory-card-m_1').getAttribute('data-card-width') })
+    const zoomOne = at()
+    expect(zoomOne.classes).toContain('w-72')
+    expect(zoomOne.classes).not.toMatch(/\bscale-/)
+    cleanup()
+    flowState.transform = [0, 0, 2]
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    await screen.findByTestId('memory-card-m_1')
+    expect(at()).toEqual(zoomOne)
+    flowState.transform = [0, 0, 1]
+  })
+
+  it('zoom afastado demais: a partícula só se destaca, sem card', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    flowState.transform = [0, 0, 0.4]
+    mount()
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-expanded')).toBeNull()
+    flowState.transform = [0, 0, 1]
+  })
+
+  it('memória nova em tempo real entra marcada para nascer (partícula e link); as da primeira carga não', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    expect((await screen.findByTestId('memory-node-m_1')).getAttribute('data-entering')).toBeNull()
+    memories = [...memories, memory('m_9', 'opex')]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_9').getAttribute('data-entering')).toBe('true'))
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-entering')).toBeNull()
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_9').getAttribute('data-entering')).toBeNull(), { timeout: 1500 })
   })
 
   it('regressão: Ativa é otimista (muda antes da resposta) e volta com toast na falha', async () => {

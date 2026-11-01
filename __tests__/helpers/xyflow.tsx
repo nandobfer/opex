@@ -12,10 +12,14 @@ interface MockNode { id: string; type?: string; data: unknown }
 interface MockEdge { id: string; type?: string; data?: unknown; source: string; target: string }
 
 export const fitView = { calls: 0 }
+/** Chamadas de `fitBounds` (enquadramento inicial da visão horizontal e o Centralizar). */
+export const fitBounds = { calls: [] as unknown[] }
+/** Estado lido por `useStore`: zoom/deslocamento e o tamanho do canvas (mude no teste e re-renderize). */
+export const flowState = { transform: [0, 0, 1] as [number, number, number], width: 800, height: 600 }
 
 export function xyflowMock() {
-  const ReactFlow = ({ nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, onNodeClick, onNodeContextMenu, onPaneClick, children }: AnyProps & { nodes?: MockNode[]; edges?: MockEdge[]; nodeTypes?: Record<string, React.FC<AnyProps>>; edgeTypes?: Record<string, React.FC<AnyProps>>; onNodeClick?: (event: unknown, node: MockNode) => void; onNodeContextMenu?: (event: unknown, node: MockNode) => void; onPaneClick?: () => void; children?: React.ReactNode }) => (
-    <div data-testid="react-flow">
+  const ReactFlow = ({ nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, onNodeClick, onNodeContextMenu, onPaneClick, children, style }: AnyProps & { style?: React.CSSProperties; nodes?: MockNode[]; edges?: MockEdge[]; nodeTypes?: Record<string, React.FC<AnyProps>>; edgeTypes?: Record<string, React.FC<AnyProps>>; onNodeClick?: (event: unknown, node: MockNode) => void; onNodeContextMenu?: (event: unknown, node: MockNode) => void; onPaneClick?: () => void; children?: React.ReactNode }) => (
+    <div data-testid="react-flow" data-style={JSON.stringify(style ?? {})}>
       <div data-testid="react-flow-pane" onClick={() => onPaneClick?.()} />
       <svg>
         {edges.map((edge) => {
@@ -46,7 +50,7 @@ export function xyflowMock() {
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject>{children}</foreignObject>,
     getBezierPath: () => ['M0,0 C5,5 5,5 10,10', 5, 5],
     getStraightPath: () => ['M0,0 L10,10', 5, 5],
-    useReactFlow: () => ({ fitView: () => { fitView.calls += 1 } }),
-    useStore: (selector: (state: { transform: [number, number, number] }) => unknown) => selector({ transform: [0, 0, 1] }),
+    useReactFlow: () => ({ fitView: () => { fitView.calls += 1 }, fitBounds: (bounds: unknown) => { fitBounds.calls.push(bounds) } }),
+    useStore: (selector: (state: typeof flowState) => unknown) => selector(flowState),
   }
 }

@@ -144,6 +144,7 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                         pending={mutation.isPending}
                         onSave={save}
                         onUndo={() => setDraft(draftFrom(data))}
+                        onExplore={() => setExploring(true)}
                     />
                 ) : id === "builder_machine" ? (
                     // Builder Machine: ponto de montagem — ver aicontext/modules/builder-machine.md.

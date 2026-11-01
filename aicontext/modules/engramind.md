@@ -70,7 +70,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Aba | Conteúdo |
 |---|---|
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
-| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card Geral (debug). |
+| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data), o card Geral (debug) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
 | Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex"). A proteção vale também no servidor (proxy e agente, `guardOwnToken` com o `whoami` atual): o token não é revogado, rebaixado nem ganha validade (`expires_at`), e o app não é desativado nem excluído (`409 ENGRAMIND_OWN_TOKEN`). |
@@ -190,14 +190,23 @@ com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba ma
 gestão delas acontece dentro da rede. Renderização com **React Flow** (`@xyflow/react`): agentes,
 canais e memórias são nodes; pulsos e partículas que viajam pelos links usam Framer Motion sobre as
 arestas SVG. **Não** se arrasta node individual: arrastar move a rede inteira, scroll/pinça dão zoom,
-layout automático e **Centralizar** reenquadra (`RecenterButton`).
+layout automático e **Centralizar** reenquadra (`RecenterButton`; volta ao enquadramento da visão).
+**Fundo no padrão do tema**: o canvas usa `bg-background` (o fundo das páginas) com um brilho violeta
+bem suave no centro (`NETWORK_CANVAS_CLASS`), e o React Flow recebe `NETWORK_FLOW_THEME` (variáveis
+`--xy-*` por tokens: fundo transparente, pontos da grade em `--muted-foreground`). O `colorMode="dark"`
+da biblioteca sozinho pintava o canvas de cinza neutro, fora do padrão. Nada de cor fixa na pasta da
+rede (teste estático).
 
 ### Visões
 
 - **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
-  `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`), à esquerda (agrupados por app),
-  e os canais ativos à direita. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
+  `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`), **na horizontal**: os agentes
+  numa linha em cima (agrupados por app) e os canais ativos numa linha embaixo, as duas centralizadas
+  (`layoutOverview`; links saem por baixo do agente e chegam por cima do canal). O enquadramento
+  inicial (`overviewInitialBounds` + `fitBounds`) pega a largura da linha de agentes com 15% de folga
+  de cada lado e a altura até a linha de canais; canais além dessa largura ficam a um arrastar. O
+  Centralizar volta a esse enquadramento. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
   `reaches` do Engramind para os ativos; com **Mostrar arquivados**, os arquivados casados localmente
   por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
   mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos).
@@ -226,16 +235,30 @@ layout automático e **Centralizar** reenquadra (`RecenterButton`).
 O Engramind não expõe `last_injected_at` no DTO: por isso o Opex registra o último consumo dos seus
 agentes (`server/memory-usage.ts`); consumo de apps de fora só conta por `last_retrieved_at`.
 
-### Card da memória (`MemoryCard`)
+### Card da memória (`MemoryCardLayer` + `MemoryCard`)
 
-Hover (ou toque/clique, que fixa o card; clicar fora fecha; sair da partícula fecha só depois de 300 ms, e o card é colado à partícula por uma ponte de `pl-3`, para o cursor chegar às ações) afasta levemente as vizinhas
-(`repelOffset`) e abre o card com título, texto, categoria, canal, idade, relevância (consultas +
+A **partícula vira o card**: no hover (ou toque/clique, que fixa o card; clicar fora fecha) o card
+nasce no lugar, no tamanho e na cor da partícula na tela e se expande até o retângulo final (~220 ms),
+com o conteúdo entrando em fade; ao fechar, encolhe de volta para ela. A partícula fica invisível
+(`data-expanded`) enquanto o card está aberto. O card fica numa **camada fora da área com zoom**
+(filho do React Flow, irmão do viewport): tamanho e fonte fixos (`w-72`) em qualquer zoom, posição
+convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **inteiro dentro do
+quadro** (`clampCardRect`, 8 px de margem). Sair da partícula fecha depois de 300 ms; o card cobre a
+partícula, então entrar nele cancela, e sair dele fecha. Movimento reduzido: troca instantânea. As
+vizinhas se afastam levemente (`repelOffset`). O card tem título, texto, categoria, canal, idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
 (com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
 zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
-partícula sai animada (`useLeavingItems`); a criada entra animada.
+partícula sai animada (`useLeavingItems`).
+
+**Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
+`useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
+crescendo de 0 (mola), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
+órbita mudou com o recálculo deslizam da posição antiga para a nova (~450 ms). A animação de entrada
+espera o React Flow medir e mostrar o node (dois quadros). Na lista otimista de `/integracoes/ia`, a
+provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento reduzido: aparece direto.
 
 ### Estatísticas (`StatsCard`, números com `AnimatedNumber`)
 
@@ -258,8 +281,8 @@ arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `C
 (sobreposições com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar
 leva ao universo do canal).
 
-Estados: skeleton com as dimensões da rede (`NetworkSkeleton`, mesmas classes de
-`layout-classes.ts`), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
+Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
+`layout-classes.ts`; linha de agentes em cima e de canais embaixo), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
 (`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
 
 ### Dados (`hooks/useEngramindNetwork.ts`)

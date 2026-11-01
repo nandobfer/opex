@@ -17,7 +17,11 @@ import type { NetworkMemory } from "@/features/engramind/network/types"
 import type { SettingMeta } from "@/features/engramind/types"
 import { useMemories, useMemoriesMeta, type MemorySource } from "../../hooks/useMemories"
 import type { MemoryDto } from "../../types"
+import { PENDING_PREFIX } from "../../memory-list"
 import { MemoriesNotices } from "./MemoriesNotices"
+
+/** Memória provisória da criação otimista (`useMemories`). */
+const isProvisionalMemory = (id: string) => id.startsWith(PENDING_PREFIX)
 
 /** Memória de uma lista dos agentes → partícula da rede (status do Engramind derivado de ativa/fixada). */
 export function memoryDtoToNetwork(memory: MemoryDto, channel: string): NetworkMemory {
@@ -83,6 +87,7 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
             ) : (
                 <MemoryUniverse
                     center={{ kind: "channel", id: channel, label: channel }}
+                    isProvisional={isProvisionalMemory}
                     memories={network}
                     usage={usage.data}
                     staleAfterDays={typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS}

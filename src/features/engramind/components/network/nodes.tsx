@@ -14,12 +14,15 @@ export const useZoom = () => useStore((state) => state.transform[2])
 
 const HANDLE_STYLE: React.CSSProperties = { left: "50%", top: "50%", width: 1, height: 1, minWidth: 0, minHeight: 0, opacity: 0, border: 0, transform: "translate(-50%, -50%)", pointerEvents: "none" }
 
-/** Arestas saem e chegam pelo centro do node. */
-export function CenterHandles() {
+/**
+ * Arestas saem e chegam pelo centro do node. `vertical`: visão inicial horizontal (agentes em cima,
+ * canais embaixo), com a saída para baixo e a entrada por cima.
+ */
+export function CenterHandles({ vertical = false }: { vertical?: boolean }) {
     return (
         <>
-            <Handle type="source" position={Position.Right} style={HANDLE_STYLE} isConnectable={false} />
-            <Handle type="target" position={Position.Left} style={HANDLE_STYLE} isConnectable={false} />
+            <Handle type="source" position={vertical ? Position.Bottom : Position.Right} style={HANDLE_STYLE} isConnectable={false} />
+            <Handle type="target" position={vertical ? Position.Top : Position.Left} style={HANDLE_STYLE} isConnectable={false} />
         </>
     )
 }
@@ -29,7 +32,7 @@ export type AgentNodeData = { id: string; name: string; app: string; dimmed?: bo
 export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentNodeData, "agent">>) {
     const showLabel = useZoom() >= LABEL_MIN_ZOOM
     return (
-        <div data-testid={`agent-node-${data.id}`} title={data.id} className={cn("relative flex cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
+        <div data-testid={`agent-node-${data.id}`} title={data.id} className={cn("relative flex max-w-[11.25rem] cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
             <PulseRing nodeKey={`agent:${data.id}`} />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <AgentIcon agent={data.id} className="h-4 w-4" />
@@ -40,7 +43,7 @@ export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentN
                     <span className="truncate text-[10px] text-muted-foreground">{data.app}</span>
                 </span>
             )}
-            <CenterHandles />
+            <CenterHandles vertical />
         </div>
     )
 })
@@ -53,7 +56,7 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
         <div
             data-testid={`channel-node-${data.slug}`}
             data-archived={data.archived || undefined}
-            className={cn("relative flex min-w-44 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.archived && "border-dashed opacity-60", data.dimmed && "opacity-30")}
+            className={cn("relative flex min-w-44 max-w-60 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.archived && "border-dashed opacity-60", data.dimmed && "opacity-30")}
         >
             <PulseRing nodeKey={`channel:${data.slug}`} className="rounded-xl" />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">{data.archived ? <Archive className="h-4 w-4" aria-hidden /> : <Hash className="h-4 w-4" aria-hidden />}</span>
@@ -81,7 +84,7 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
                     <MoreHorizontal className="h-4 w-4" aria-hidden />
                 </Button>
             )}
-            <CenterHandles />
+            <CenterHandles vertical />
         </div>
     )
 })

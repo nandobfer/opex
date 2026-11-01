@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { agentReach, layoutOverview } from "../../network/network-math"
+import { agentReach, layoutOverview, overviewInitialBounds } from "../../network/network-math"
 import type { ConsumptionEvent, NetworkAgent, NetworkChannel, NetworkLink, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
 import { NetworkLiveProvider } from "./live"
@@ -50,6 +50,7 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
         return counts
     }, [memories])
     const positions = useMemo(() => layoutOverview(visibleAgents, channels), [visibleAgents, channels])
+    const initialBounds = useMemo(() => overviewInitialBounds([...positions.agents.values()]), [positions])
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {
@@ -100,6 +101,7 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
                 edges={edges}
                 nodeTypes={NODE_TYPES}
                 fitKey={`overview:${visibleAgents.length}:${channels.length}`}
+                initialBounds={initialBounds}
                 label="Rede de agentes e canais"
                 onNodeClick={(_event, node) => (node.type === "agent" ? onOpenAgent((node.data as AgentNodeData).id) : node.type === "channel" && onOpenChannel((node.data as ChannelNodeData).slug))}
                 onNodeContextMenu={(event, node) => {

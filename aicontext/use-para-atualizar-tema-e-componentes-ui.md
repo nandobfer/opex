@@ -233,6 +233,14 @@ vi.mock('framer-motion', () => {
 (`stripMotionProps` remove `initial`, `animate`, `exit`, `transition`, `layout` etc. antes de
 repassar ao elemento DOM.)
 
+## Redes (React Flow)
+
+- O canvas das redes (`src/features/engramind/components/network`) usa o fundo das páginas
+  (`bg-background`) e passa o tema ao React Flow por `NETWORK_FLOW_THEME` (variáveis `--xy-*` por
+  tokens). Nunca dependa do fundo do `colorMode` da biblioteca (cinza neutro fora do padrão).
+- Card ou painel sobre a rede fica numa camada fora da área com zoom (filho do React Flow), com
+  tamanho fixo e preso às bordas do quadro (`MemoryCardLayer`).
+
 ## Gráficos (recharts via Chart do shadcn)
 
 - Base: `src/components/ui/chart.tsx` (`ChartContainer`, `ChartTooltip`, `ChartTooltipContent`,

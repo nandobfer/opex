@@ -115,6 +115,21 @@ describe('universo de uma lista de memórias', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Memória adicionada'))
   })
 
+  it('criação otimista: a provisória nasce animada e a definitiva herda o estado (não nasce de novo)', async () => {
+    let resolve: (value: unknown) => void = () => undefined
+    net.post.mockReturnValue(new Promise((done) => (resolve = done)))
+    mount()
+    await particle('m_aaa')
+    fireEvent.click(screen.getByRole('button', { name: /Nova memória/ }))
+    fireEvent.change(await screen.findByLabelText('Texto da memória'), { target: { value: 'Nova regra' } })
+    await waitFor(() => expect((screen.getByRole('button', { name: /Salvar/ }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(document.querySelector('[data-testid^="memory-node-pendente-"]')?.getAttribute('data-entering')).toBe('true'))
+    rows = [memory, { ...memory, id: 'm_new', texto: 'Nova regra', resumo: 'Nova regra' }]
+    await act(async () => resolve({ data: { data: { memoria: { ...memory, id: 'm_new', texto: 'Nova regra', resumo: 'Nova regra' } } } }))
+    expect((await particle('m_new')).getAttribute('data-entering')).toBeNull()
+  })
+
   it('o switch Ativa é otimista; a falha volta o estado e mostra o erro', async () => {
     net.patch.mockRejectedValueOnce(new Error('Engramind fora do ar'))
     mount()
@@ -245,6 +260,14 @@ describe('controles do design system', () => {
       expect(source, file).not.toMatch(/<select\b/)
       expect(source, file).not.toMatch(/type=["']checkbox["']/)
       expect(source, file).not.toMatch(/@radix-ui\/react-(select|checkbox|switch|tabs)/)
+    }
+  })
+
+  it('a rede não tem cor fixa: só tokens do tema (hex/rgb fora)', () => {
+    const dir = 'src/features/engramind/components/network'
+    for (const name of readdirSync(dir)) {
+      const source = readFileSync(join(dir, name), 'utf8')
+      expect(source, name).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)
     }
   })
 })
