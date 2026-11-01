@@ -8,6 +8,8 @@ export const ENGRAMIND_INTEGRATION_ID = "engramind" as const
 export const ENGRAMIND_QUERY_KEY = "engramind"
 /** Evento em `private-app` (payload `{ type, channel?, keys? }`). */
 export const ENGRAMIND_UPDATED_EVENT = "engramind-updated"
+/** Consumo de memórias por um agente do Opex, em `private-app` (OPE-109; só ids e slugs). */
+export const ENGRAMIND_CONSUMPTION_EVENT = "engramind-consumption"
 /** Entidade da auditoria do Opex. */
 export const ENGRAMIND_AUDIT_ENTITY = "Engramind"
 /** App do próprio Opex na rede do Engramind (criado no bootstrap). */
@@ -27,8 +29,6 @@ export const ENGRAMIND_INTEGRATION_HREF = "/integracoes/engramind"
 export const ENGRAMIND_TABS = ["sobre", "conexao", "configuracoes", "provedores", "identidades", "operacao", "variaveis", "migracao"] as const
 export type EngramindTab = (typeof ENGRAMIND_TABS)[number]
 
-export const ENGRAMIND_PAGE_TABS = ["canais", "memorias"] as const
-export type EngramindPageTab = (typeof ENGRAMIND_PAGE_TABS)[number]
 
 /** Escopos e as únicas combinações aceitas pelo Engramind (`write`/`delete` exigem `read`). */
 export const ENGRAMIND_SCOPES = ["read", "write", "delete"] as const

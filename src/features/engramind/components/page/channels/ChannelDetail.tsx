@@ -24,8 +24,8 @@ export function ChannelDetail({ slug }: { slug: string }) {
         <div className="flex flex-col gap-6">
             <CadastroHeader title={channel.data?.name ?? slug} description={`Canal ${slug}`}>
                 <Button asChild variant="outline" size="sm">
-                    <Link href={ENGRAMIND_PAGE_HREF}>
-                        <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden /> Canais
+                    <Link href={`${ENGRAMIND_PAGE_HREF}?universo=${encodeURIComponent(`canal:${slug}`)}`}>
+                        <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden /> Rede
                     </Link>
                 </Button>
             </CadastroHeader>

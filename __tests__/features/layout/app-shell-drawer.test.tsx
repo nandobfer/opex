@@ -59,7 +59,7 @@ describe("AppShell — gaveta do menu e atalho (padrão Shell do DS Sipal)", () 
         expect(screen.getByRole("dialog", { name: "Menu principal" })).toBeTruthy()
         expect(menuButton.closest("[inert]")).not.toBeNull()
         await flushFrames()
-        expect(document.activeElement?.textContent).toContain("Dashboards")
+        expect(document.activeElement?.textContent).toContain("Tarefas")
 
         fireEvent.keyDown(document, { key: "Escape" })
         expect(screen.queryByRole("dialog")).toBeNull()

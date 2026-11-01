@@ -39,10 +39,10 @@ const SECTIONS: readonly NavSectionDef[] = [
     },
 ]
 
-function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[]; footerItems?: (collapsed: boolean) => React.ReactNode } = {}) {
+function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[]; homeHref?: string; footerItems?: (collapsed: boolean) => React.ReactNode } = {}) {
     return render(
         <AppSidebar
-            brand={{ name: "Meu App", subtitle: "Pessoal", homeHref: "/tarefas" }}
+            brand={{ name: "Meu App", subtitle: "Pessoal", homeHref: options.homeHref ?? "/tarefas" }}
             sections={options.sections ?? SECTIONS}
             navLabel="Menu principal"
             collapsed={options.collapsed ?? false}
@@ -61,14 +61,31 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AppSidebar — padrão SideNavigation do DS Sipal", () => {
-    it("mostra as seções do app com título e item ativo marcado", () => {
-        renderSidebar({ sections: APP_NAV })
-        expect(screen.getByRole("navigation", { name: "Menu principal" })).toBeTruthy()
-        // Seção "inicio" não tem título: os itens ficam soltos.
-        expect(screen.queryByRole("button", { name: /inicio/i })).toBeNull()
+    it("menu do app: itens soltos, grupos Agentes, Contábil e Configurações, sem Dashboards; a logo leva ao dashboard", () => {
+        renderSidebar({ sections: APP_NAV, collapsed: true, homeHref: "/dashboard" })
+        const nav = screen.getByRole("navigation", { name: "Menu principal" })
+        const names = Array.from(nav.querySelectorAll(":scope > div > ul > li > a, :scope > div > ul > li > button")).map((el) => el.getAttribute("aria-label"))
+        expect(names).toEqual(["Tarefas", "Central de desenvolvimento", "Engramind", "Agentes", "Contábil", "Configurações"])
+        expect(screen.getByRole("link", { name: "Tarefas" }).getAttribute("aria-current")).toBe("page")
+        expect(screen.queryByRole("link", { name: /Dashboards/ })).toBeNull()
+        expect(screen.queryByRole("link", { name: /Integrações/ })).toBeNull()
+        expect(screen.getByRole("link", { name: "Meu App" }).getAttribute("href")).toBe("/dashboard")
+    })
+
+    it("seção com título mostra o botão de recolher e marca o item ativo", () => {
+        renderSidebar()
         expect(screen.getByRole("button", { name: "Sistema" })).toBeTruthy()
         expect(screen.getByRole("link", { name: /Tarefas/ }).getAttribute("aria-current")).toBe("page")
         expect(screen.getByRole("link", { name: /Integrações/ }).hasAttribute("aria-current")).toBe(false)
+    })
+
+    it("rota de um item agrupado deixa o grupo ativo (barra primária) e abre a seção certa", () => {
+        mocks.pathname = "/tarefas/horas"
+        renderSidebar({ sections: APP_NAV, collapsed: true })
+        const contabil = screen.getByRole("button", { name: "Contábil" })
+        expect(contabil.querySelector("[data-testid='sidebar-active-bar']")).toBeTruthy()
+        expect(screen.getByRole("button", { name: "Agentes" }).querySelector("[data-testid='sidebar-active-bar']")).toBeNull()
+        expect(screen.getByRole("link", { name: "Tarefas" }).hasAttribute("aria-current")).toBe(false)
     })
 
     it("o topo mostra a logo (símbolo do favicon) no lugar da letra inicial", () => {

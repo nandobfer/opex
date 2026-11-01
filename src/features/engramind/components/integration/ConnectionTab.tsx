@@ -17,6 +17,8 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
 import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
+import { ApiDocsCard } from "@/features/integrations/components/detail/ApiDocsCard"
+import type { IntegrationDetailDto } from "@/features/integrations/types"
 import type { Draft } from "@/features/integrations/components/detail/draft"
 import { connectionInputSchema, type ConnectionInput, type ConnectionValues } from "../../schemas/connection"
 import type { BootstrapStepDto, EngramindConnectionDto } from "../../types"
@@ -29,12 +31,14 @@ const NO_ENV = "__none__"
 
 interface ConnectionTabProps {
     onDirtyChange: (dirty: boolean) => void
+    data: IntegrationDetailDto
     draft: Draft
     setDraft: Dispatch<SetStateAction<Draft>>
     dirty: boolean
     pending: boolean
     onSave: () => Promise<boolean>
     onUndo: () => void
+    onExplore: () => void
 }
 
 /** Aba Conexão: URL base, URL pública do Opex, token (só gravado), Ambiente e o estado do token/webhook. */
@@ -45,7 +49,7 @@ export function ConnectionTab(props: ConnectionTabProps) {
     return <ConnectionForm {...props} connection={connection.data} />
 }
 
-function ConnectionForm({ connection, onDirtyChange, draft, setDraft, dirty, pending, onSave, onUndo }: ConnectionTabProps & { connection: EngramindConnectionDto }) {
+function ConnectionForm({ connection, onDirtyChange, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: ConnectionTabProps & { connection: EngramindConnectionDto }) {
     const save = useSaveEngramindConnection()
     const bootstrap = useRunEngramindBootstrap()
     const environments = useEngramindEnvironmentOptions()
@@ -138,6 +142,7 @@ function ConnectionForm({ connection, onDirtyChange, draft, setDraft, dirty, pen
                 className="flex flex-col gap-6"
             >
                 <GeneralCard draft={draft} setDraft={setDraft} />
+                <ApiDocsCard data={data} draft={draft} setDraft={setDraft} dirty={dirty} onExplore={onExplore} />
                 <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
             </form>
         </div>

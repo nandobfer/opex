@@ -106,8 +106,24 @@ describe('localização da especificação', () => {
 })
 
 describe('explorador — adaptadores e execução', () => {
-  it('adaptador implementado: só a API interna', () => {
-    expect(EXPLORER_ADAPTER_IDS).toEqual(['internal_api'])
+  it('adaptadores implementados: API interna e Engramind', () => {
+    expect(EXPLORER_ADAPTER_IDS).toEqual(['internal_api', 'engramind'])
+  })
+
+  it('Engramind: a base é a URL do campo, e o servidor injeta o Bearer do token admin (sem ele, nada é injetado)', async () => {
+    const ENG = 'http://engramind-api:8000'
+    const engSpec = { ...spec, servers: [{ url: '.' }], paths: { '/v1/whoami': { get: { responses: { '200': { description: 'OK' } } } } } }
+    mocks.getIntegration.mockResolvedValue({ swaggerUrl: `${ENG}/openapi.json`, values: { baseUrl: `${ENG}/`, adminToken: 'eng.tk_segredo' } })
+    route({ [`${ENG}/openapi.json`]: () => json(engSpec), [`${ENG}/v1/whoami`]: () => json({ ok: true }) })
+    const dto = await getExplorerSpec('engramind')
+    expect(dto.baseUrl).toBe(ENG)
+    expect(dto.authReady).toBe(true)
+    expect(dto.auth).toMatch(/token admin do Opex/)
+    expect(JSON.stringify(dto)).not.toContain('eng.tk_segredo')
+    await executeExplorerOperation('engramind', { operation: 'GET /v1/whoami', headers: { Authorization: 'Bearer forjado' } }, actor)
+    expect(fetchMock.mock.calls.at(-1)![1].headers.Authorization).toBe('Bearer eng.tk_segredo')
+    mocks.getIntegration.mockResolvedValue({ swaggerUrl: `${ENG}/openapi.json`, values: { baseUrl: ENG } })
+    expect((await getExplorerSpec('engramind')).authReady).toBe(false)
   })
 
   it('API interna: a base é a URL interna (não o servers da especificação), sem credencial injetada', async () => {

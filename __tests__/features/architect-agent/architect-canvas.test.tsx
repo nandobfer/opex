@@ -12,7 +12,7 @@ import { sampleGraph } from './fixtures'
  */
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow')).xyflowMock())
+vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interactive')).xyflowMock())
 
 import { ArchitectDiagramView } from '@/features/architect-agent/components/workbench/ArchitectDiagramView'
 import { positionsKey } from '@/features/architect-agent/hooks/useDiagramLayout'

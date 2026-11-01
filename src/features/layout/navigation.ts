@@ -1,36 +1,52 @@
-import { Banknote, Clock, CodeXml, GitPullRequest, GraduationCap, LayoutDashboard, ListTodo, Network, Plug, Server, Swords } from "lucide-react"
+import { Banknote, Bot, Clock, CodeXml, GitPullRequest, GraduationCap, Landmark, ListTodo, Network, Plug, Server, Settings, Swords } from "lucide-react"
 import { ADVERSARIAL_PAGE_HREF } from "@/features/adversarial-agent/constants"
 import { MENTOR_PAGE_HREF } from "@/features/adversarial-agent/mentor/constants"
 import { PR_REVIEWS_HREF } from "@/features/pr-review/constants"
-import type { NavBadgeKey, NavItemDef, NavSectionDef } from "./types"
+import { isNavGroup, type NavBadgeKey, type NavGroupDef, type NavItemDef, type NavSectionDef } from "./types"
 
-/** Navegação do app, em seções. */
+/**
+ * Navegação do app: itens simples (Tarefas, Central de desenvolvimento, Engramind) e grupos que abrem
+ * um painel à direita (Agentes, Contábil e Configurações). Dashboards não tem item: a logo leva a ela.
+ */
 export const APP_NAV: readonly NavSectionDef[] = [
     {
         id: "inicio",
         items: [
-            { href: "/dashboard", label: "Dashboards", title: "Dashboards", icon: LayoutDashboard },
             { href: "/tarefas", label: "Tarefas", title: "Tarefas", icon: ListTodo },
-            { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
-            { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
             { href: "/desenvolvimento", label: "Central de desenvolvimento", title: "Central de desenvolvimento", icon: CodeXml },
-            { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
             { href: "/engramind", label: "Engramind", title: "Engramind", icon: Network },
+            {
+                kind: "group",
+                id: "agentes",
+                label: "Agentes",
+                icon: Bot,
+                items: [
+                    { href: PR_REVIEWS_HREF, label: "Agente Revisor", title: "Agente Revisor", icon: GitPullRequest },
+                    { href: ADVERSARIAL_PAGE_HREF, label: "Agente Adversário", title: "Agente Adversário", icon: Swords },
+                    { href: MENTOR_PAGE_HREF, label: "Agente Mentor", title: "Agente Mentor", icon: GraduationCap },
+                ],
+            },
+            {
+                kind: "group",
+                id: "contabil",
+                label: "Contábil",
+                icon: Landmark,
+                items: [
+                    { href: "/tarefas/horas", label: "Horas agênticas", title: "Horas agênticas", icon: Clock },
+                    { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
+                ],
+            },
+            {
+                kind: "group",
+                id: "configuracoes",
+                label: "Configurações",
+                icon: Settings,
+                items: [
+                    { href: "/integracoes", label: "Integrações", title: "Integrações", icon: Plug },
+                    { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
+                ],
+            },
         ],
-    },
-    {
-        id: "agentes",
-        label: "Agentes",
-        items: [
-            { href: PR_REVIEWS_HREF, label: "Agente Revisor", title: "Agente Revisor", icon: GitPullRequest },
-            { href: ADVERSARIAL_PAGE_HREF, label: "Agente Adversário", title: "Agente Adversário", icon: Swords },
-            { href: MENTOR_PAGE_HREF, label: "Agente Mentor", title: "Agente Mentor", icon: GraduationCap },
-        ],
-    },
-    {
-        id: "sistema",
-        label: "Sistema",
-        items: [{ href: "/integracoes", label: "Integrações", title: "Integrações", icon: Plug }],
     },
 ]
 
@@ -39,8 +55,14 @@ export const HOME_HREF = "/dashboard"
 /** Telas cujas sub-rotas não trocam a página inteira (Central de desenvolvimento: central e tarefa na URL). */
 export const PERSISTENT_PAGE_HREFS: readonly string[] = ["/desenvolvimento"]
 
+/** Todos os itens navegáveis, inclusive os de dentro dos grupos (na ordem do menu). */
 export function flattenNav(sections: readonly NavSectionDef[]): readonly NavItemDef[] {
-    return sections.flatMap((section) => section.items)
+    return sections.flatMap((section) => section.items.flatMap((entry) => (isNavGroup(entry) ? entry.items : [entry])))
+}
+
+/** O grupo contém o item ativo (o gatilho do grupo fica marcado como ativo). */
+export function navGroupActive(group: NavGroupDef, activeHref: string | null): boolean {
+    return activeHref !== null && group.items.some((item) => item.href === activeHref)
 }
 
 export const APP_NAV_ITEMS: readonly NavItemDef[] = flattenNav(APP_NAV)

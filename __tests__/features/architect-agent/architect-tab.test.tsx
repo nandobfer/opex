@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow')).xyflowMock())
+vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interactive')).xyflowMock())
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   useWorkbenchDiagrams: () => ({ data: mocks.diagrams, isLoading: false, isError: false, refetch: vi.fn() }),
   useArchitectRealtime: vi.fn(),

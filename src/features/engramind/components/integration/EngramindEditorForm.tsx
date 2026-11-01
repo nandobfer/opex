@@ -29,6 +29,8 @@ interface EngramindEditorFormProps {
     pending: boolean
     onSave: () => Promise<boolean>
     onUndo: () => void
+    /** Abre o explorador Swagger (card "Documentação da API" da aba Conexão). */
+    onExplore: () => void
 }
 
 const TABS: IntegrationTabDef<EngramindTab>[] = [
@@ -46,7 +48,7 @@ const TABS: IntegrationTabDef<EngramindTab>[] = [
  * Página da integração Engramind em abas (`?aba=`): Sobre, Conexão, Configurações, Provedores,
  * Identidades, Operação, Variáveis de ambiente e Migração de memórias. Trocar de aba com alterações pede descarte.
  */
-export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: EngramindEditorFormProps) {
+export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: EngramindEditorFormProps) {
     useEngramindRealtime()
     const [tabDirty, setTabDirty] = useState(false)
     const [resetKey, setResetKey] = useState(0)
@@ -63,7 +65,7 @@ export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending
             <DetailHeader def={def} data={data} hasAnySecret={def.secretFields.length > 0} />
             <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções da integração Engramind">
                 {tab === "sobre" && <AboutTab />}
-                {tab === "conexao" && <ConnectionTab key={resetKey} {...tabProps} draft={draft} setDraft={setDraft} dirty={dirty} pending={pending} onSave={onSave} onUndo={onUndo} />}
+                {tab === "conexao" && <ConnectionTab key={resetKey} {...tabProps} data={data} draft={draft} setDraft={setDraft} dirty={dirty} pending={pending} onSave={onSave} onUndo={onUndo} onExplore={onExplore} />}
                 {tab === "configuracoes" && <SettingsTab key={resetKey} {...tabProps} />}
                 {tab === "provedores" && <ProvidersTab key={resetKey} {...tabProps} />}
                 {tab === "identidades" && <IdentitiesTab key={resetKey} {...tabProps} />}
