@@ -13,6 +13,7 @@ export function memoryContextModule(blocks: Record<string, string[]> = {}, sourc
   return {
     agentMemoryContext: vi.fn(async (consumer: MemoryConsumer, turn: MemoryTurn) => build(consumer, turn)),
     adversarialMemoryContext: vi.fn(async () => build('adversario', { kind: 'review' })),
+    architectMemoryContext: vi.fn(async () => build('arquiteto', { kind: 'review' })),
     developerMemoryContext: vi.fn(async (centralId: string | null) => build('desenvolvedor', { kind: 'central', centralId })),
     getMemoriesMeta: vi.fn(),
   }
