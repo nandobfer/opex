@@ -2,16 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
-import { Panel } from "@xyflow/react"
-import { Brain, Hash, Plus, type LucideIcon } from "lucide-react"
+import { Hash, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { layoutUniverse, universeStats } from "../../network/network-math"
+import { layoutUniverse } from "../../network/network-math"
 import { buildParticles } from "../../network/particles"
 import type { ConsumptionEvent, MemoryUsageMap, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
+import { ActiveMemoryCard } from "./ActiveMemoryCard"
 import { agentIcon } from "./agent-icons"
 import { NetworkLiveProvider } from "./live"
 import type { MemoryCardActions } from "./MemoryCard"
@@ -19,21 +16,15 @@ import { MemoryNode, UniverseFocusContext, type MemoryNodeData } from "./MemoryN
 import { NetworkCanvas } from "./NetworkCanvas"
 import { CenterNode, type CenterNodeData } from "./nodes"
 import { RecenterButton } from "./RecenterButton"
-import { StatList, StatsCard, type StatRow } from "./StatsCard"
-import { ChannelName } from "./ChannelName"
-import { useLeavingItems } from "./useLeavingItems"
+import { UniversePanels } from "./UniversePanels"
+import { UniverseStatsCard } from "./UniverseStatsCard"
 import { useEnteringIds } from "./useEnteringIds"
-import { MemoryCardLayer } from "./MemoryCardLayer"
-import { CARD_MIN_ZOOM } from "./MemoryNode"
-import { useZoom } from "./nodes"
-import { AnimatePresence } from "framer-motion"
-import type { ParticleVisual } from "../../network/particles"
-import type { Point } from "../../network/network-math"
+import { useHoverPresence } from "./useHoverPresence"
+import { useLeavingItems } from "./useLeavingItems"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
 const CENTER_ID = "center"
-/** Atraso para fechar o card ao sair da partícula. */
-export const HOVER_CLOSE_DELAY_MS = 300
+export { HOVER_CLOSE_DELAY_MS } from "./useHoverPresence"
 
 export interface UniverseCenter {
     kind: "channel" | "agent"
@@ -88,7 +79,7 @@ export function MemoryUniverse({
     isProvisional,
 }: MemoryUniverseProps) {
     const live = useLiveEffects(dataVersion)
-    const [hovered, setHovered] = useState<string | null>(null)
+    const { hovered, hover, hoverCard } = useHoverPresence()
     const [pinned, setPinned] = useState<string | null>(null)
     const localRemovals = useRef(new Set<string>())
     const ids = useMemo(() => new Set(memories.map((memory) => memory.id)), [memories])
@@ -173,35 +164,7 @@ export function MemoryUniverse({
         [items, channelColors, isMatch, entering],
     )
 
-    const brightness = useMemo(() => new Map([...visuals].map(([id, visual]) => [id, visual.brightness])), [visuals])
-    const stats = universeStats(memories, brightness, usage)
-    const rows: StatRow[] = [
-        { label: "Ativas", value: stats.active, testId: "stat-active" },
-        { label: "Inativas", value: stats.inactive, testId: "stat-inactive" },
-        { label: "Fixadas", value: stats.pinned, testId: "stat-pinned" },
-        { label: "Consultas + injeções", value: stats.uses, testId: "stat-uses" },
-        { label: "Última consulta", value: stats.lastUse ? format(new Date(stats.lastUse), "dd/MM HH:mm", { locale: ptBR }) : "nunca", testId: "stat-last-use" },
-        ...(typeof subscribers === "number" ? [{ label: "Assinantes", value: subscribers, testId: "stat-subscribers" }] : []),
-        { label: "Esquecidas (cinza)", value: stats.forgotten, testId: "stat-forgotten" },
-        ...(live.liveCount ? [{ label: "Consumos ao vivo", value: live.liveCount, testId: "stat-live" }] : []),
-    ]
 
-    // Dois sinais de presença (cursor na partícula e no card): o fechamento, com atraso, só é
-    // agendado quando os dois estão desligados e é cancelado quando qualquer um liga. A ordem dos
-    // eventos não importa (o navegador avisa "entrei no card" antes de "saí da partícula").
-    const presence = useRef<{ particle: string | null; card: string | null }>({ particle: null, card: null })
-    const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-    useEffect(() => () => void (leaveTimer.current && clearTimeout(leaveTimer.current)), [])
-    const setPresence = useCallback((source: "particle" | "card", id: string | null) => {
-        presence.current[source] = id
-        if (leaveTimer.current) clearTimeout(leaveTimer.current)
-        leaveTimer.current = null
-        const present = presence.current.card ?? presence.current.particle
-        if (present !== null) return setHovered(present)
-        leaveTimer.current = setTimeout(() => setHovered(null), HOVER_CLOSE_DELAY_MS)
-    }, [])
-    const hover = useCallback((id: string | null) => setPresence("particle", id), [setPresence])
-    const hoverCard = useCallback((id: string | null) => setPresence("card", id), [setPresence])
     const focus = useMemo(() => ({ activeId, activePoint: activeId ? (positions.get(activeId) ?? null) : null, hover, actions: wrapped }), [activeId, positions, hover, wrapped])
     const liveValue = useMemo(() => ({ pulses: live.pulses, travels: live.travels, finish: live.finish }), [live.pulses, live.travels, live.finish])
 
@@ -218,9 +181,7 @@ export function MemoryUniverse({
                     onPaneClick={() => setPinned(null)}
                     className={className}
                 >
-                    <StatsCard title={center.kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows}>
-                        {center.kind === "agent" && <StatList title="Por canal" testId="channel-legend" colors={channelColors} items={stats.byChannel.map((item) => ({ key: item.slug, label: item.slug, count: item.count, node: <ChannelName slug={item.slug} size="legend" className="flex-1" titleClassName="text-muted-foreground" /> }))} />}
-                    </StatsCard>
+                    <UniverseStatsCard kind={center.kind} memories={memories} visuals={visuals} usage={usage} subscribers={subscribers} liveCount={live.liveCount} channelColors={channelColors} />
                     <ActiveMemoryCard
                         memory={activeId ? (memories.find((memory) => memory.id === activeId) ?? null) : null}
                         visual={activeId ? visuals.get(activeId) : undefined}
@@ -230,58 +191,9 @@ export function MemoryUniverse({
                         hoverCard={hoverCard}
                     />
                     <RecenterButton />
-                    {onCreate && createLabel && memories.length > 0 && (
-                        <Panel position="top-left">
-                            <Button type="button" size="sm" variant="outline" className="bg-card/90" onClick={onCreate}>
-                                <Plus className="mr-1 h-4 w-4" aria-hidden /> {createLabel}
-                            </Button>
-                        </Panel>
-                    )}
-                    {memories.length === 0 && (
-                        <Panel position="bottom-center" className="!mb-10">
-                            <div className="flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-4 text-center shadow" data-testid="universe-empty">
-                                <Brain className="h-6 w-6 text-muted-foreground" aria-hidden />
-                                <p className="text-sm font-medium">{emptyTitle}</p>
-                                {onCreate && (
-                                    <Button type="button" size="sm" variant="outline" onClick={onCreate}>
-                                        <Plus className="mr-1 h-4 w-4" aria-hidden /> Nova memória
-                                    </Button>
-                                )}
-                            </div>
-                        </Panel>
-                    )}
+                    <UniversePanels count={memories.length} onCreate={onCreate} createLabel={createLabel} emptyTitle={emptyTitle} />
                 </NetworkCanvas>
             </UniverseFocusContext.Provider>
         </NetworkLiveProvider>
-    )
-}
-
-/**
- * Card da memória ativa na camada sem zoom (filho do React Flow): a partícula vira o card a partir
- * do zoom `CARD_MIN_ZOOM`; afastada demais, só a partícula se destaca.
- */
-function ActiveMemoryCard({
-    memory,
-    visual,
-    point,
-    channelColors,
-    actions,
-    hoverCard,
-}: {
-    memory: NetworkMemory | null
-    visual?: ParticleVisual
-    point?: Point
-    channelColors?: Map<string, string>
-    actions: MemoryCardActions
-    hoverCard: (id: string | null) => void
-}) {
-    const zoom = useZoom()
-    const open = memory && visual && point && zoom >= CARD_MIN_ZOOM
-    return (
-        <AnimatePresence>
-            {open && (
-                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} onPointerEnter={() => hoverCard(memory.id)} onPointerLeave={() => hoverCard(null)} />
-            )}
-        </AnimatePresence>
     )
 }

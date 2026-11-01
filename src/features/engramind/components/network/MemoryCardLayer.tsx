@@ -82,6 +82,7 @@ export function MemoryCardLayer({
             aria-label={`Memória ${memory.title}`}
             data-testid={`memory-card-${memory.id}`}
             data-card-width={MEMORY_CARD_WIDTH}
+            data-network-card=""
             className="nodrag nopan nowheel pointer-events-auto absolute z-30 w-72 cursor-default overflow-hidden border bg-popover text-popover-foreground shadow-xl"
             initial={reducedMotion ? { ...asCard, opacity: 0 } : { ...asParticle, opacity: 1 }}
             animate={{ ...asCard, opacity: 1 }}

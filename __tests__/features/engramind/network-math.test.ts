@@ -137,6 +137,13 @@ describe('brilho pelo prazo do consolidador', () => {
     expect(buildParticles([memory], { staleAfterDays: 30, now: NOW }).get('a')!.brightness).toBeLessThan(0.1)
   })
 
+  it('buildParticles: candidata a esquecimento fica cinza, mas o consumo ao vivo (aumento local) a devolve ao brilho cheio', () => {
+    const memories = [mem('a', { stale: true })]
+    expect(buildParticles(memories, { staleAfterDays: 30, now: NOW }).get('a')!.brightness).toBe(0)
+    const live = buildParticles(memories, { staleAfterDays: 30, now: NOW, usage: { a: { lastUsedAt: new Date(NOW).toISOString(), liveCount: 1 } }, bumps: { a: 1 } })
+    expect(live.get('a')!.brightness).toBe(1)
+  })
+
   it('buildParticles: o consumo do Opex devolve o brilho e o aumento local cresce a partícula', () => {
     const memories = [mem('a', { createdAt: day(29), injections: 4 }), mem('b', { createdAt: day(0) })]
     const before = buildParticles(memories, { staleAfterDays: 30, now: NOW })

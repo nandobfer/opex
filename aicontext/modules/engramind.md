@@ -241,7 +241,7 @@ rede (teste estático).
 |---|---|
 | Cor | Relativa ao universo: a mais nova verde (`--color-success`), a mais antiga o roxo primário, gradiente pela criação (`color-mix`). Uma só ou datas iguais: verde. |
 | Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
-| Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at` e o registro do Opex (`engramind_memory_usage`), ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação). `stale_candidate` → 0. |
+| Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at` e o registro do Opex (`engramind_memory_usage`), ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação). `stale_candidate` → 0, exceto se consumida ao vivo desde a última leitura (volta ao brilho cheio na hora; a releitura traz o estado do Engramind). |
 | Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
 | Inativa | Contorno tracejado, sem brilho nem cor; o switch Ativa muda na hora. |
 
@@ -259,7 +259,8 @@ convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **
 quadro** (`clampCardRect`, 8 px de margem). Hover com **dois sinais de presença** (cursor na partícula e no card,
 ambos por eventos de ponteiro): o fechamento (300 ms) só é agendado quando os dois estão desligados e
 é cancelado quando qualquer um liga, então a ordem dos eventos não importa (o navegador avisa "entrei
-no card" antes de "saí da partícula"). Sair do card fecha depois do atraso. Movimento reduzido: troca instantânea. As
+no card" antes de "saí da partícula"). Sair do card fecha depois do atraso. Esc dentro do card (ele não é modal, `data-network-card`) volta à visão inicial como em qualquer
+ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. As
 vizinhas se afastam levemente (`repelOffset`). O card tem título, texto, categoria, canal, idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou

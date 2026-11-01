@@ -209,6 +209,22 @@ describe('visão inicial', () => {
 })
 
 describe('universos', () => {
+  it('regressão: Esc com o foco dentro do card da memória volta à visão inicial; num diálogo modal, não', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    fireEvent.pointerEnter(await screen.findByTestId('memory-node-m_1'))
+    const card = await screen.findByTestId('memory-card-m_1')
+    const pin = within(card).getByRole('button', { name: 'Fixar' })
+    pin.focus()
+    fireEvent.keyDown(pin, { key: 'Escape' })
+    expect(nav.push).toHaveBeenCalledWith('/engramind', { scroll: false })
+    nav.push.mockClear()
+    fireEvent.click(within(card).getByRole('button', { name: 'Excluir' }))
+    const confirm = await screen.findByRole('alertdialog')
+    fireEvent.keyDown(within(confirm).getAllByRole('button')[0]!, { key: 'Escape' })
+    expect(nav.push).not.toHaveBeenCalled()
+  })
+
   it('universo do canal: centro, uma partícula por memória (inativa inclusive), trilha e Esc volta', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
@@ -408,6 +424,16 @@ describe('universos', () => {
     await waitFor(() => expect(size()).toBeGreaterThan(before))
     expect(screen.queryByTestId('memory-node-m_nao_carregada')).toBeNull()
     expect(screen.getByTestId('stat-live').textContent).toBe('1')
+  })
+
+  it('regressão: memória candidata a esquecimento consumida ao vivo volta ao brilho cheio antes da releitura', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    memories = [memory('m_1', 'opex', { stale_candidate: true }), memory('m_2', 'opex')]
+    mount()
+    const node = await screen.findByTestId('memory-node-m_1')
+    expect(node.getAttribute('data-brightness')).toBe('0')
+    emit('engramind-consumption', { agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-brightness')).toBe('1'))
   })
 
   it('memória aberta excluída por outra origem: o card fecha com aviso e a partícula sai', async () => {

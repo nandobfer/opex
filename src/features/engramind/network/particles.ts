@@ -35,7 +35,10 @@ export function buildParticles(memories: readonly NetworkMemory[], options: { us
     for (const memory of memories) {
         const uses = memoryUses(memory)
         const lastUse = lastUseOf(memory, options.usage)
-        const brightness = particleBrightness({ status: memory.status, stale: memory.stale, lastUse }, options.staleAfterDays, now)
+        // Consumida ao vivo desde a última leitura: a candidata a esquecimento volta ao brilho cheio na
+        // hora (o `stale_candidate` do Engramind só muda na releitura).
+        const consumedLive = (options.bumps?.[memory.id] ?? 0) > 0
+        const brightness = particleBrightness({ status: memory.status, stale: memory.stale && !consumedLive, lastUse }, options.staleAfterDays, now)
         const base = ageColor(ages.get(memory.id) ?? 0)
         const bump = (options.bumps?.[memory.id] ?? 0) * LIVE_BUMP_PX
         result.set(memory.id, {

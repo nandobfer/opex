@@ -21,7 +21,8 @@ export const formatUniverse = (ref: UniverseRef): string => (ref.kind === "chann
 
 /**
  * O universo aberto fica no endereço (`?universo=`): o link pode ser compartilhado e o voltar do
- * navegador funciona. `Esc` volta à visão inicial (fora de diálogos e campos).
+ * navegador funciona. `Esc` volta à visão inicial (fora de diálogos modais e campos; o card da
+ * memória, `data-network-card`, não é modal e não segura a tecla).
  */
 export function useUniverseParam(options: { escapeEnabled: boolean }) {
     const router = useRouter()
@@ -47,7 +48,7 @@ export function useUniverseParam(options: { escapeEnabled: boolean }) {
         const onKey = (event: KeyboardEvent) => {
             if (event.key !== "Escape" || event.defaultPrevented) return
             const target = event.target
-            if (target instanceof Element && target.closest("input, textarea, [role='dialog'], [role='alertdialog']")) return
+            if (target instanceof Element && target.closest("input, textarea, [role='dialog']:not([data-network-card]), [role='alertdialog']")) return
             back()
         }
         window.addEventListener("keydown", onKey)
