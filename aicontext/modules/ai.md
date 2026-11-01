@@ -139,7 +139,7 @@ e opções na própria aba da página "Inteligência Artificial".
   ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
   `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
   transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
-  "Agente Mentor" — e a aba **Resumo de memórias** (`resumo-memorias`, ver abaixo).
+  "Agente Mentor". O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista

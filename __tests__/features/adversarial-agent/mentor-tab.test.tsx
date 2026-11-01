@@ -54,7 +54,6 @@ vi.mock('@/features/ai/components/understand-task/UnderstandTaskTab', () => stub
 vi.mock('@/features/ai/components/task-summary/TaskSummaryTab', () => stub('TaskSummaryTab'))
 vi.mock('@/features/ai/components/task-tags/TaskTagsTab', () => stub('TaskTagsTab'))
 vi.mock('@/features/ai/components/budget-preview/BudgetPreviewTab', () => stub('BudgetPreviewTab'))
-vi.mock('@/features/ai/components/memory-summary/MemorySummaryTab', () => stub('MemorySummaryTab'))
 vi.mock('@/features/ai/components/estimate-hours/EstimateHoursTab', () => stub('EstimateHoursTab'))
 vi.mock('@/features/ai/components/task-refinement/TaskRefinementTab', () => stub('TaskRefinementTab'))
 vi.mock('@/features/agentic/components/settings/AgenticTab', () => stub('AgenticTab'))

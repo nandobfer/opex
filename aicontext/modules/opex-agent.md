@@ -663,4 +663,5 @@ indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-t
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
 conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar
 MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
-`memory-list`, `memory-summary` e `agent-settings-tabs`.
+`memory-list`, `memories-realtime`, `agent-memory-mapping`, `self-memory-tools`, `self-memory-mcp` e
+`agent-settings-tabs`; `__tests__/features/opex-agent/memory-tools.test.ts` cobre `list_agent_memories`.
