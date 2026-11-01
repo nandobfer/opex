@@ -16,7 +16,7 @@ import { workbenchPath } from "@/features/agentic/constants"
 import { formatCost, formatDuration } from "@/features/adversarial-agent/components/ReviewBadges"
 import { ARCHITECT_DEPTH_DEFS, ARCHITECT_DIAGRAM_STATE_LABELS, ARCHITECT_HISTORY_LIMIT, ARCHITECT_ORIGIN_LABELS, type ArchitectDepth, type ArchitectDiagramState } from "../../constants"
 import { useArchitectHistory, useArchitectRealtime } from "../../hooks/useArchitect"
-import { diagramVersionLabel } from "../workbench/ArchitectToolbar"
+import { diagramVersionLabel } from "../workbench/ArchitectHeader"
 
 const STATE_VARIANT: Record<ArchitectDiagramState, "default" | "secondary" | "destructive" | "outline"> = { running: "secondary", done: "default", failed: "destructive", interrupted: "destructive", superseded: "outline" }
 

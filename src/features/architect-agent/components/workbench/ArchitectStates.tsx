@@ -10,41 +10,72 @@ import { type ArchitectDepth, type ArchitectPhase } from "../../constants"
 import type { ArchitectDiagramDto } from "../../types"
 import { DepthControl } from "./DepthControl"
 import { ArchitectLiveBar } from "./ArchitectLiveBar"
+import { ARCHITECT_CANVAS_TOOLBAR_CLASS } from "./ArchitectCanvasToolbar"
+import { ARCHITECT_HEADER_CLASS, ARCHITECT_HEADER_ROW_CLASS } from "./ArchitectHeader"
 
 /** Estados da aba Arquitetura: carregando (skeleton no formato do canvas), esperando o primeiro nó, falhou e vazio. */
 
-/** Classes do contêiner da aba (o skeleton usa as mesmas do resultado final). */
-export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-3 p-4"
+/**
+ * Classes do contêiner da aba (o skeleton usa as mesmas do resultado final). A aba rola quando a tela é
+ * baixa demais: o canvas nunca vaza por baixo da barra de ações da mesa.
+ */
+export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+/** O canvas fica com todo o resto da altura da aba; o piso só vale em telas muito baixas. */
+export const ARCHITECT_CANVAS_WRAP_CLASS = "flex min-h-[360px] flex-1 flex-col"
 export const ARCHITECT_CANVAS_CLASS = `${FLOW_SURFACE_CLASS} min-h-0 flex-1`
+
+/** Cabeçalho compacto e barra de controles dentro do canvas, no formato do resultado final. */
+function HeaderSkeleton() {
+    return (
+        <div className={ARCHITECT_HEADER_CLASS}>
+            <div className={ARCHITECT_HEADER_ROW_CLASS}>
+                <Skeleton className="h-4 w-64" />
+                <Skeleton className="h-4 w-4 rounded-full" />
+            </div>
+            <div className={ARCHITECT_HEADER_ROW_CLASS}>
+                <Skeleton className="h-3 w-96 max-w-full" />
+                <Skeleton className="ml-auto h-7 w-52" />
+            </div>
+        </div>
+    )
+}
+
+function ToolbarSkeleton() {
+    return (
+        <div className={ARCHITECT_CANVAS_TOOLBAR_CLASS}>
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-7 w-20" />
+            <Skeleton className="h-7 w-24" />
+            <Skeleton className="h-7 w-28" />
+            <Skeleton className="h-7 w-36" />
+        </div>
+    )
+}
 
 /** Colunas de cartões no formato das camadas do diagrama (nunca um grafo parcial). */
 export function ArchitectCanvasSkeleton({ label }: { label?: string }) {
     const columns = [1, 3, 4, 2]
     return (
         <div className={ARCHITECT_TAB_CLASS} aria-busy="true">
-            <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-8 w-24" />
-                    <Skeleton className="ml-auto h-8 w-24" />
+            <HeaderSkeleton />
+            <div className={ARCHITECT_CANVAS_WRAP_CLASS}>
+                <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-skeleton">
+                    <ToolbarSkeleton />
+                    <div className="flex h-full items-center justify-center gap-16 p-8">
+                        {columns.map((count, column) => (
+                            <div key={column} className="flex flex-col gap-4">
+                                {Array.from({ length: count }, (_, row) => (
+                                    <Skeleton key={row} className="h-[68px] w-[180px] rounded-lg" />
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                    {label && (
+                        <p className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {label}
+                        </p>
+                    )}
                 </div>
-                <Skeleton className="h-3 w-80" />
-            </div>
-            <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-skeleton">
-                <div className="flex h-full items-center justify-center gap-16 p-8">
-                    {columns.map((count, column) => (
-                        <div key={column} className="flex flex-col gap-4">
-                            {Array.from({ length: count }, (_, row) => (
-                                <Skeleton key={row} className="h-[68px] w-[180px] rounded-lg" />
-                            ))}
-                        </div>
-                    ))}
-                </div>
-                {label && (
-                    <p className="absolute inset-x-0 top-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {label}
-                    </p>
-                )}
             </div>
         </div>
     )
@@ -58,23 +89,20 @@ export function ArchitectLiveWaiting({ phase, tools, connected }: { phase: Archi
     const reducedMotion = useReducedMotion()
     return (
         <div className={ARCHITECT_TAB_CLASS} aria-busy="true">
-            <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                    <Skeleton className="h-8 w-48" />
-                    <Skeleton className="h-8 w-24" />
-                </div>
-                <Skeleton className="h-3 w-80" />
-            </div>
-            <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-live-waiting">
-                <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} />
-                <div className="flex h-full items-center justify-center p-8">
-                    <motion.div
-                        className="flex h-[68px] w-[220px] items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"
-                        animate={reducedMotion ? undefined : { opacity: [0.45, 1, 0.45], scale: [0.98, 1, 0.98] }}
-                        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                        <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />O diagrama vai sendo desenhado aqui
-                    </motion.div>
+            <HeaderSkeleton />
+            <div className={ARCHITECT_CANVAS_WRAP_CLASS}>
+                <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-live-waiting">
+                    <ToolbarSkeleton />
+                    <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} />
+                    <div className="flex h-full items-center justify-center p-8">
+                        <motion.div
+                            className="flex h-[68px] w-[220px] items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"
+                            animate={reducedMotion ? undefined : { opacity: [0.45, 1, 0.45], scale: [0.98, 1, 0.98] }}
+                            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                            <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />O diagrama vai sendo desenhado aqui
+                        </motion.div>
+                    </div>
                 </div>
             </div>
         </div>

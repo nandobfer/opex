@@ -16,7 +16,7 @@ import type { ArchitectDiagramDto, ArchitectLiveProgress } from "../../types"
 import { ArchitectAdjustComposer } from "./ArchitectAdjustComposer"
 import { ArchitectDiagramPane } from "./ArchitectDiagramPane"
 import { ArchitectCanvasSkeleton, ArchitectEmpty, ArchitectFailed, ArchitectLiveWaiting } from "./ArchitectStates"
-import { ArchitectVersionSelect } from "./ArchitectToolbar"
+import { ArchitectVersionSelect } from "./ArchitectHeader"
 import { asDepth } from "./DepthControl"
 
 type ArchitectWorkbench = Pick<WorkbenchDto, "id" | "taskCode" | "architect">

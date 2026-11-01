@@ -162,11 +162,23 @@ vale só para aquele pedido.
   **falhou/interrompido** (erro, "A mesa segue normalmente", **Tentar novamente** e **Regerar com
   profundidade maior**) e **vazio** (slider + **Gerar arquitetura**, ou o motivo quando o arquiteto não
   se aplica).
-- Seletor de versão com mais de uma: "Plano v2 · arquitetura v1" ("(atual)" na mais recente).
-- Barra: visão (**Arquitetura** · **Mapa mental**, `OptionTabs`), **Filtros** (tipos de nó e "Só o que o
-  plano cria/altera"; o objetivo fica sempre), **Exportar** (Copiar Mermaid, Copiar Markdown, Baixar
-  imagem) e os dados da versão (plano, nível, data, custo, duração e cortes). Acima do canvas, título,
-  resumo e as notas recolhíveis (com "Mostrar riscos e decisões").
+- **Cabeçalho compacto** (`ArchitectHeader`, duas linhas finas, para o canvas ficar com o resto da
+  altura):
+  - linha do título: o título do diagrama, um ícone **ⓘ "Sobre o diagrama"** com o **resumo na dica**
+    (`InfoTooltip`, dica larga com rolagem) e, à direita, o seletor de versão quando há mais de uma
+    ("Plano v2 · arquitetura v1", "(atual)" na mais recente);
+  - linha de dados: plano, nível, data, custo, duração e cortes à esquerda e, **alinhado à direita**
+    (`ml-auto`), **Decisões, riscos e dúvidas (N)** (com "Mostrar riscos e decisões"), que abre num
+    **popover ancorado ao próprio botão** (alinhado à borda direita, limitado à janela, rolagem própria):
+    abrir não muda a altura do canvas. Em tela estreita a linha quebra e o botão desce, à direita.
+- **Barra dentro do canvas** (`ArchitectCanvasToolbar`, canto superior esquerdo, fora do viewport
+  transformado e fora do PNG): visão (**Arquitetura** · **Mapa mental**, `OptionTabs` `xs`),
+  **Filtros** (tipos de nó e "Só o que o plano cria/altera"; o objetivo fica sempre), **Exportar**
+  (Copiar Mermaid, Copiar Markdown, Baixar imagem), **Ajustar visão**, **Restaurar layout** e, ao vivo,
+  **Acompanhar**; quebra linha em tela estreita. A faixa de progresso ao vivo fica embaixo, no centro.
+- **Altura**: o canvas ocupa todo o resto da aba (`flex-1`, piso de 360 px só em telas muito baixas) e a
+  aba rola (`overflow-y-auto`) em vez de deixar o canvas vazar por baixo da barra de ações da mesa. O
+  skeleton e a espera ao vivo usam as mesmas classes (cabeçalho e barra).
 - **Ao vivo**: o mesmo painel do diagrama pronto (`ArchitectDiagramPane`), então a chegada do grafo
   final NÃO remonta o canvas. O layout é recalculado a cada lote (espera de 250 ms) e os nós **deslizam**
   para as posições novas (`useAnimatedLayout`, Framer Motion, 300 ms); nó novo nasce no nó de onde veio
@@ -179,7 +191,10 @@ vale só para aquele pedido.
 - Canvas com **React Flow** (`@xyflow/react`) no **fundo padrão do app** (tema compartilhado
   `src/components/flow/flow-theme.ts`: `bg-background` com o brilho violeta, pontos discretos e as
   variáveis `--xy-*` por tokens no `style` do elemento — inclusive minimapa e controles —, que vencem o
-  cinza da folha do `colorMode="dark"`; grupos em `bg-primary/[0.03]` com borda tracejada da primária):
+  cinza da folha do `colorMode="dark"`; grupos em `bg-primary/[0.03]` com borda tracejada da primária).
+  O nó de grupo usa o tipo **`architect-group`**, nunca `group`: esse tipo é reservado do React Flow, que
+  pinta `.react-flow__node-group` de cinza translúcido (com padding e borda) por trás do nosso visual; o
+  tema também zera `--xy-node-group-background-color`:
   - **Arquitetura**: `@dagrejs/dagre` composto, da esquerda para a direita, grupos como caixas
     (`layoutArchitecture`);
   - **Mapa mental**: árvore radial do `d3-hierarchy` a partir do objetivo (BFS sem direção; nós soltos

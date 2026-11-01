@@ -9,7 +9,7 @@ import type { ViewGraph } from "../../filters"
 import type { LayoutResult } from "../../layout"
 import type { DiagramPositions } from "../../hooks/useDiagramLayout"
 import { ARCHITECT_EDGE_TYPES, type DiagramEdge } from "./ArchitectEdge"
-import { ARCHITECT_NODE_TYPES, type DiagramNode } from "./ArchitectNodes"
+import { ARCHITECT_GROUP_NODE_TYPE, ARCHITECT_NODE_TYPES, type DiagramNode } from "./ArchitectNodes"
 
 /**
  * Canvas do diagrama (React Flow): nós e arestas a partir do layout automático, com as posições
@@ -27,7 +27,7 @@ export function buildNodes(layout: LayoutResult, view: ViewGraph, positions: Dia
             const group = groups.get(item.id)
             if (!group) return []
             const count = view.nodes.filter((node) => node.node && node.groupId === group.id).length
-            return [{ id: item.id, type: "group", position, data: { group, count, rank: item.rank }, width: item.width, height: item.height, style: { width: item.width, height: item.height }, selectable: false, zIndex: 0 }]
+            return [{ id: item.id, type: ARCHITECT_GROUP_NODE_TYPE, position, data: { group, count, rank: item.rank }, width: item.width, height: item.height, style: { width: item.width, height: item.height }, selectable: false, zIndex: 0 }]
         }
         const viewNode = byId.get(item.id)
         if (!viewNode) return []
@@ -91,7 +91,7 @@ export function ArchitectCanvas({ layout, view, positions, live, reducedMotion, 
                 nodeTypes={ARCHITECT_NODE_TYPES}
                 edgeTypes={ARCHITECT_EDGE_TYPES}
                 onNodesChange={onNodesChange}
-                onNodeMouseEnter={(_, node) => node.type !== "group" && onFocus(node.id)}
+                onNodeMouseEnter={(_, node) => node.type !== ARCHITECT_GROUP_NODE_TYPE && onFocus(node.id)}
                 onNodeMouseLeave={() => onFocus(null)}
                 onNodeClick={(_, node) => node.type === "item" && onSelect(node.id)}
                 onNodeDragStop={(_, node) => onSavePosition(node.id, node.position)}
@@ -108,7 +108,7 @@ export function ArchitectCanvas({ layout, view, positions, live, reducedMotion, 
             >
                 <Background {...FLOW_BACKGROUND_PROPS} />
                 <Controls showFitView={false} showInteractive={false} position="bottom-left" />
-                <MiniMap pannable zoomable position="bottom-right" nodeClassName={(node) => (node.type === "group" ? "fill-primary/15" : "fill-primary/60")} ariaLabel="Minimapa do diagrama" />
+                <MiniMap pannable zoomable position="bottom-right" nodeClassName={(node) => (node.type === ARCHITECT_GROUP_NODE_TYPE ? "fill-primary/15" : "fill-primary/60")} ariaLabel="Minimapa do diagrama" />
             </ReactFlow>
         </div>
     )

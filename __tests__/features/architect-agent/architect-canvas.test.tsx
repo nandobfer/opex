@@ -19,6 +19,10 @@ import { positionsKey } from '@/features/architect-agent/hooks/useDiagramLayout'
 import { ARCHITECT_NODE_KINDS, type ArchitectView } from '@/features/architect-agent/constants'
 import { FLOW_THEME_STYLE } from '@/components/flow/flow-theme'
 import { flowSpies } from '../../helpers/xyflow-interactive'
+import { buildNodes } from '@/features/architect-agent/components/workbench/ArchitectCanvas'
+import { ARCHITECT_GROUP_NODE_TYPE, ARCHITECT_NODE_TYPES } from '@/features/architect-agent/components/workbench/ArchitectNodes'
+import { toViewGraph } from '@/features/architect-agent/filters'
+import { layoutArchitecture } from '@/features/architect-agent/layout'
 
 const allKinds = { kinds: [...ARCHITECT_NODE_KINDS], onlyChanges: false }
 const view = (props: { view?: ArchitectView; filter?: typeof allKinds; diagramId?: string } = {}) => (
@@ -139,7 +143,23 @@ describe('ArchitectDiagramView ao vivo', () => {
 
   it('o canvas usa o tema compartilhado (fundo do app, sem o cinza do React Flow)', () => {
     render(view())
-    expect(JSON.parse(screen.getByTestId('rf').getAttribute('data-style')!)).toEqual(FLOW_THEME_STYLE)
+    const style = JSON.parse(screen.getByTestId('rf').getAttribute('data-style')!)
+    expect(style).toEqual(FLOW_THEME_STYLE)
+    // A variável de fundo dos grupos do React Flow fica neutralizada pelo tema.
+    expect(style['--xy-node-group-background-color']).toBe('transparent')
+  })
+
+  it('nenhum nó usa tipo reservado do React Flow (o "group" pinta a caixa de cinza por trás do nosso visual)', () => {
+    const graph = sampleGraph()
+    const viewGraph = toViewGraph(graph)
+    const nodes = buildNodes(layoutArchitecture(viewGraph), viewGraph, {})
+    expect(nodes.some((item) => item.type === ARCHITECT_GROUP_NODE_TYPE)).toBe(true)
+    for (const reserved of ['group', 'default', 'input', 'output']) expect(nodes.filter((item) => item.type === reserved)).toEqual([])
+    expect(Object.keys(ARCHITECT_NODE_TYPES).filter((type) => ['group', 'default', 'input', 'output'].includes(type))).toEqual([])
+    // O grupo desenhado é o nosso (borda tracejada e fundo por token).
+    render(view())
+    const group = screen.getAllByTestId(/^architect-group-/)[0]!
+    expect(group.className).toContain('bg-primary/[0.03]')
   })
 })
 

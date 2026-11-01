@@ -7,7 +7,9 @@ import type { BackgroundVariant } from "@xyflow/react"
  * O fundo segue o padrão das páginas (`bg-background`) com um brilho violeta bem suave no centro; o
  * React Flow fica transparente. O `colorMode="dark"` da biblioteca pinta o canvas, o minimapa e os
  * controles de cinza neutro fixo por uma folha de estilo fora das camadas do Tailwind: as variáveis no
- * `style` do próprio elemento (`FLOW_THEME_STYLE`) vencem essa folha.
+ * `style` do próprio elemento (`FLOW_THEME_STYLE`) vencem essa folha. Os tipos de nó reservados da
+ * biblioteca (`group`, `default`, `input`, `output`) ganham classe com fundo, padding e borda próprios:
+ * os canvas usam tipos com prefixo do domínio, e as variáveis abaixo neutralizam o que sobrar.
  */
 export const FLOW_SURFACE_CLASS = "relative overflow-hidden rounded-xl border bg-background bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.08),transparent_70%)]"
 
@@ -18,6 +20,10 @@ export const FLOW_THEME_STYLE = {
     "--xy-node-background-color": "transparent",
     "--xy-node-border": "0",
     "--xy-node-color": "hsl(var(--foreground))",
+    "--xy-node-group-background-color": "transparent",
+    "--xy-node-border-radius": "var(--radius)",
+    "--xy-node-boxshadow-hover": "none",
+    "--xy-node-boxshadow-selected": "0 0 0 1px hsl(var(--primary) / 0.6)",
     "--xy-minimap-background-color": "hsl(var(--card) / 0.9)",
     "--xy-minimap-mask-background-color": "hsl(var(--background) / 0.6)",
     "--xy-minimap-mask-stroke-color": "hsl(var(--primary) / 0.4)",

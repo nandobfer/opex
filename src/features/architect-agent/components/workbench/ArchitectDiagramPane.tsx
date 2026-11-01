@@ -5,11 +5,12 @@ import type { ArchitectView } from "../../constants"
 import type { GraphFilter } from "../../filters"
 import type { ArchitectGraph } from "../../graph"
 import type { ArchitectDiagramDto, ArchitectLiveProgress } from "../../types"
+import { ArchitectViewTabs } from "./ArchitectCanvasToolbar"
 import { ArchitectDiagramView } from "./ArchitectDiagramView"
 import { ArchitectExportMenu } from "./ArchitectExportMenu"
-import { ArchitectNotes } from "./ArchitectNotes"
-import { ARCHITECT_TAB_CLASS } from "./ArchitectStates"
-import { ArchitectToolbar } from "./ArchitectToolbar"
+import { ArchitectFilterMenu } from "./ArchitectFilterMenu"
+import { ArchitectHeader } from "./ArchitectHeader"
+import { ARCHITECT_CANVAS_WRAP_CLASS, ARCHITECT_TAB_CLASS } from "./ArchitectStates"
 
 interface ArchitectDiagramPaneProps {
     workbenchId: string
@@ -29,23 +30,24 @@ interface ArchitectDiagramPaneProps {
 }
 
 /**
- * Diagrama de uma versão (ao vivo ou pronto): título, resumo, barra, notas e o canvas. É o MESMO
- * componente nas duas situações, então a chegada do grafo final não remonta o canvas.
+ * Diagrama de uma versão (ao vivo ou pronto): cabeçalho compacto (título com o resumo na dica, dados da
+ * versão e as notas à direita) e o canvas com a barra de controles dentro dele. É o MESMO componente
+ * nas duas situações, então a chegada do grafo final não remonta o canvas.
  */
 export function ArchitectDiagramPane({ workbenchId, taskCode, diagrams, diagram, graph, view, onViewChange, filter, onFilterChange, onSelect, showFiles, showNotes, live = null }: ArchitectDiagramPaneProps) {
     const canvasRef = useRef<HTMLDivElement>(null)
+    const controls = (
+        <>
+            <ArchitectViewTabs view={view} onViewChange={onViewChange} />
+            <ArchitectFilterMenu filter={filter} onFilterChange={onFilterChange} />
+            <ArchitectExportMenu graph={graph} fileName={`${taskCode.toLowerCase()}-arquitetura-v${diagram.version}`} container={() => canvasRef.current} disabled={Boolean(live)} />
+        </>
+    )
     return (
         <div className={ARCHITECT_TAB_CLASS}>
-            <div>
-                <p className="text-sm font-medium">{graph.title || "Desenhando a arquitetura do plano…"}</p>
-                {graph.summary && <p className="text-xs text-muted-foreground">{graph.summary}</p>}
-            </div>
-            <ArchitectToolbar diagrams={diagrams} diagram={diagram} onSelect={onSelect} view={view} onViewChange={onViewChange} filter={filter} onFilterChange={onFilterChange}>
-                {!live && <ArchitectExportMenu graph={graph} fileName={`${taskCode.toLowerCase()}-arquitetura-v${diagram.version}`} container={() => canvasRef.current} />}
-            </ArchitectToolbar>
-            {showNotes && <ArchitectNotes notes={graph.notes} />}
-            <div ref={canvasRef} className="flex min-h-[420px] flex-1 flex-col">
-                <ArchitectDiagramView workbenchId={workbenchId} diagramId={diagram.id} graph={graph} view={view} filter={filter} showFiles={showFiles} live={live} />
+            <ArchitectHeader diagrams={diagrams} diagram={diagram} graph={graph} onSelect={onSelect} showNotes={showNotes} />
+            <div ref={canvasRef} className={ARCHITECT_CANVAS_WRAP_CLASS}>
+                <ArchitectDiagramView workbenchId={workbenchId} diagramId={diagram.id} graph={graph} view={view} filter={filter} showFiles={showFiles} live={live} controls={controls} />
             </div>
         </div>
     )

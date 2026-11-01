@@ -22,7 +22,9 @@ describe('tema dos canvas React Flow', () => {
   it('o React Flow, o minimapa e os controles ficam por tokens, sem cor fixa', () => {
     const values = Object.values(FLOW_THEME_STYLE as Record<string, string>)
     expect((FLOW_THEME_STYLE as Record<string, string>)['--xy-background-color']).toBe('transparent')
-    expect(values.every((value) => value === 'transparent' || value === '0' || value === 'none' || value.startsWith('hsl(var(--'))).toBe(true)
+    // Só tokens do tema (var(--…)) ou valores neutros; nunca hex/rgb fixos.
+    expect(values.every((value) => value === 'transparent' || value === '0' || value === 'none' || value.includes('var(--'))).toBe(true)
+    expect(values.some((value) => /#[0-9a-f]{3,8}\b|rgba?\(/i.test(value))).toBe(false)
     expect(Object.keys(FLOW_THEME_STYLE)).toEqual(expect.arrayContaining(['--xy-minimap-background-color', '--xy-controls-button-background-color']))
   })
 

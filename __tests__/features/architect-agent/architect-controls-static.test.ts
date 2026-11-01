@@ -26,4 +26,14 @@ describe('controles das telas do Agente Arquiteto', () => {
   it.each(['<select', 'type="checkbox"', "type='checkbox'", '<input', '@radix-ui/'])('nenhum componente usa %s', (pattern) => {
     expect(sources.filter((source) => source.text.includes(pattern)).map((source) => source.path)).toEqual([])
   })
+
+  it('nós do canvas não usam tipo reservado do React Flow (group, default, input, output)', () => {
+    const reserved = /type:\s*["'](group|default|input|output)["']/
+    expect(sources.filter((source) => reserved.test(source.text)).map((source) => source.path)).toEqual([])
+  })
+
+  it('o skeleton e a espera ao vivo usam as classes do cabeçalho e da barra do resultado final', () => {
+    const states = sources.find((source) => source.path.endsWith('ArchitectStates.tsx'))!.text
+    for (const constant of ['ARCHITECT_HEADER_CLASS', 'ARCHITECT_HEADER_ROW_CLASS', 'ARCHITECT_CANVAS_TOOLBAR_CLASS', 'ARCHITECT_CANVAS_WRAP_CLASS']) expect(states).toContain(constant)
+  })
 })

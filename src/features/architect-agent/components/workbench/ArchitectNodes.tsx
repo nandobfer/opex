@@ -16,7 +16,12 @@ import { enterDelay, isDimmed, useDiagramHighlight } from "./diagram-context"
 /** `leaving`: o nó saiu do grafo e some durante o deslize do layout ao vivo. */
 type Common = { rank: number; leaving?: boolean }
 export type ItemNode = Node<{ node: GraphNode } & Common, "item">
-export type GroupNode = Node<{ group: ArchitectGroup; count: number } & Common, "group">
+/**
+ * Tipo do nó de grupo: NUNCA "group" — é um tipo reservado do React Flow, que pinta a classe
+ * `.react-flow__node-group` de cinza translúcido (com padding e borda) por trás do nosso visual.
+ */
+export const ARCHITECT_GROUP_NODE_TYPE = "architect-group"
+export type GroupNode = Node<{ group: ArchitectGroup; count: number } & Common, typeof ARCHITECT_GROUP_NODE_TYPE>
 export type CollapsedNode = Node<{ groupId: string; label: string; count: number } & Common, "collapsed">
 export type DiagramNode = ItemNode | GroupNode | CollapsedNode
 
@@ -136,6 +141,6 @@ function CollapsedNodeView({ id, data }: NodeProps<CollapsedNode>) {
 
 export const ARCHITECT_NODE_TYPES = {
     item: memo(ItemNodeView),
-    group: memo(GroupNodeView),
+    [ARCHITECT_GROUP_NODE_TYPE]: memo(GroupNodeView),
     collapsed: memo(CollapsedNodeView),
 }

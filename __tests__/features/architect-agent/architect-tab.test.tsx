@@ -155,8 +155,8 @@ describe('ArchitectTab', () => {
     expect(screen.getByTestId('architect-node-objective')).toBeTruthy()
     expect(screen.queryByTestId('architect-node-route')).toBeNull()
     expect(screen.getByTestId('architect-live-bar').textContent).toContain('Desenhando o diagrama')
-    // Ao vivo: sem exportação e sem arrastar (o layout ainda muda).
-    expect(screen.queryByRole('button', { name: /Exportar/ })).toBeNull()
+    // Ao vivo, Exportar fica na barra do canvas, mas desligado até terminar.
+    expect(screen.getByRole('button', { name: /Exportar/ }).hasAttribute('disabled')).toBe(true)
     // Chegam mais operações: o mesmo elemento do canvas continua no DOM.
     mocks.live = { ...mocks.live, graph: partial, seq: 4 }
     rerender(<ArchitectTab workbench={workbench()} />)
@@ -168,7 +168,7 @@ describe('ArchitectTab', () => {
     rerender(<ArchitectTab workbench={workbench()} />)
     expect(screen.getByTestId('architect-canvas')).toBe(canvas)
     expect(screen.queryByTestId('architect-live-bar')).toBeNull()
-    expect(screen.getByRole('button', { name: /Exportar/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Exportar/ }).hasAttribute('disabled')).toBe(false)
     expect(mocks.liveIds.at(-1)).toBeNull()
   })
 
@@ -229,5 +229,71 @@ describe('ArchitectTab', () => {
     render(<ArchitectTab workbench={workbench({ applies: false, approvedPlanVersion: 1 })} />)
     expect(screen.getByTestId('architect-canvas')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Pedir ajustes/ })).toBeNull()
+  })
+
+  it('controles dentro do quadro: visão, filtros, exportar, ajustar visão e restaurar layout ficam na barra do canvas', () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const frame = screen.getByTestId('architect-canvas-frame')
+    const toolbar = screen.getByTestId('architect-canvas-toolbar')
+    expect(frame.contains(toolbar)).toBe(true)
+    for (const name of [/Filtrar nós/, /Exportar/, /Ajustar visão/, /Restaurar layout/]) expect(toolbar.contains(screen.getByRole('button', { name }))).toBe(true)
+    const tabs = screen.getByRole('radiogroup', { name: 'Visão do diagrama' })
+    expect(toolbar.contains(tabs)).toBe(true)
+    // Trocar a visão continua funcionando a partir da barra.
+    fireEvent.click(screen.getByRole('radio', { name: 'Mapa mental' }))
+    expect(screen.getByRole('radio', { name: 'Mapa mental' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('cabeçalho: o resumo vai para a dica do ícone ao lado do título, não fica como parágrafo', async () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const header = screen.getByTestId('architect-header')
+    expect(header.textContent).toContain('Agente Arquiteto')
+    expect(header.textContent).not.toContain('Diagrama do plano aprovado.')
+    const info = screen.getByRole('button', { name: 'Sobre o diagrama' })
+    expect(header.contains(info)).toBe(true)
+    await act(async () => {
+      info.focus()
+    })
+    expect((await screen.findAllByText('Diagrama do plano aprovado.')).length).toBeGreaterThan(0)
+  })
+
+  it('cabeçalho: "Decisões, riscos e dúvidas" fica na linha dos dados da versão, alinhado à direita, e abre num popover sem mexer no canvas', async () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const meta = screen.getByTestId('architect-meta-row')
+    const trigger = screen.getByTestId('architect-notes-trigger')
+    expect(meta.contains(trigger)).toBe(true)
+    expect(meta.textContent).toContain('Plano v1 · arquitetura v1')
+    expect(trigger.className.split(' ')).toContain('ml-auto')
+    const canvas = screen.getByTestId('architect-canvas')
+    const canvasClass = canvas.parentElement!.className
+    expect(screen.queryByRole('list', { name: 'Decisões, riscos e dúvidas' })).toBeNull()
+    await act(async () => {
+      fireEvent.click(trigger)
+    })
+    const list = await screen.findByRole('list', { name: 'Decisões, riscos e dúvidas' })
+    expect(list.textContent).toContain('Layout de grupos no dagre')
+    // O popover fica fora do canvas (portal) e não muda o canvas.
+    expect(screen.getByTestId('architect-canvas-frame').contains(list)).toBe(false)
+    expect(screen.getByTestId('architect-canvas')).toBe(canvas)
+    expect(canvas.parentElement!.className).toBe(canvasClass)
+  })
+
+  it('sem notas, o botão de decisões não aparece', () => {
+    mocks.diagrams = [diagram({ graph: { ...sampleGraph(), notes: [] } })]
+    render(<ArchitectTab workbench={workbench()} />)
+    expect(screen.queryByTestId('architect-notes-trigger')).toBeNull()
+  })
+
+  it('altura: o canvas ocupa o resto da aba e a aba rola em telas baixas (nada vaza por baixo da barra da mesa)', () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const frame = screen.getByTestId('architect-canvas-frame')
+    const wrap = frame.parentElement!
+    expect(wrap.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'min-h-[360px]']))
+    const tab = wrap.parentElement!
+    expect(tab.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'overflow-y-auto', 'min-h-0']))
   })
 })

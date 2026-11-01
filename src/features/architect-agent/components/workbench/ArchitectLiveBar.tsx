@@ -11,10 +11,10 @@ export function ArchitectLiveBar({ progress, connected }: { progress: ArchitectL
     const phase = ARCHITECT_PHASE_LABELS[progress?.phase ?? "starting"]
     return (
         <motion.div
-            initial={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18 }}
-            className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto flex w-fit max-w-[calc(100%-1rem)] items-center gap-2 rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur"
+            className="pointer-events-none absolute inset-x-0 bottom-3 z-10 mx-auto flex w-fit max-w-[calc(100%-1rem)] items-center gap-2 rounded-full border bg-card/90 px-3 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur"
             role="status"
             aria-live="polite"
             data-testid="architect-live-bar"

@@ -196,7 +196,9 @@ bem suave no centro (`NETWORK_CANVAS_CLASS`), e o React Flow recebe `NETWORK_FLO
 `--xy-*` por tokens: fundo transparente, pontos da grade em `--muted-foreground`). Os dois vêm do tema
 compartilhado dos canvas React Flow (`src/components/flow/flow-theme.ts`, também usado pelos diagramas
 do Agente Arquiteto), e a partícula que viaja pela aresta é o `PathTraveler` (`src/components/flow/`). O `colorMode="dark"`
-da biblioteca sozinho pintava o canvas de cinza neutro, fora do padrão. Nada de cor fixa na pasta da
+da biblioteca sozinho pintava o canvas de cinza neutro, fora do padrão. O tema também neutraliza os tipos
+de nó reservados da biblioteca (`--xy-node-group-background-color` transparente, raio e sombras por
+token): nós próprios usam tipos com prefixo do domínio, nunca `group`/`default`/`input`/`output`. Nada de cor fixa na pasta da
 rede (teste estático).
 
 ### Visões

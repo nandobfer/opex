@@ -10,9 +10,10 @@ import { copyText } from "@/lib/clipboard"
 import type { ArchitectGraph } from "../../graph"
 import { toMarkdown, toMermaid } from "../../mermaid"
 import { downloadDiagramImage } from "./export-image"
+import { CANVAS_TOOL_BUTTON_CLASS } from "./ArchitectCanvasToolbar"
 
 /** Exportar: copiar Mermaid (o GitHub renderiza em issue/PR), copiar Markdown e baixar imagem. */
-export function ArchitectExportMenu({ graph, fileName, container }: { graph: ArchitectGraph; fileName: string; container: () => HTMLElement | null }) {
+export function ArchitectExportMenu({ graph, fileName, container, disabled = false }: { graph: ArchitectGraph; fileName: string; container: () => HTMLElement | null; disabled?: boolean }) {
     const flow = useReactFlow()
     const [busy, setBusy] = useState(false)
     const copy = async (text: string, what: string) => ((await copyText(text)) ? toast.success(`${what} copiado`) : toast.error("Não foi possível copiar: selecione e copie manualmente."))
@@ -31,7 +32,7 @@ export function ArchitectExportMenu({ graph, fileName, container }: { graph: Arc
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 bg-transparent" disabled={busy}>
+                <Button type="button" variant="outline" size="sm" className={CANVAS_TOOL_BUTTON_CLASS} disabled={busy || disabled}>
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Share2 className="h-3.5 w-3.5" aria-hidden />} Exportar
                 </Button>
             </DropdownMenuTrigger>
