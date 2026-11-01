@@ -23,6 +23,8 @@ export interface NetworkMemory {
     author: string | null
     /** Memória escrita pelo dono (listas dos agentes em `/integracoes/ia`). */
     fromOwner?: boolean
+    /** Quem gravou, quando não foi o dono (Mentor, agente): o selo de origem da antiga lista. */
+    originLabel?: string
 }
 
 export interface NetworkAgent {

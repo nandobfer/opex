@@ -12,8 +12,8 @@ import { fitBounds, flowState, xyflowMock } from '../../helpers/xyflow'
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@xyflow/react', () => xyflowMock())
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }))
-const nav = vi.hoisted(() => ({ params: new URLSearchParams(), push: vi.fn() }))
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }), usePathname: () => '/engramind', useSearchParams: () => nav.params }))
+const nav = vi.hoisted(() => ({ params: new URLSearchParams(), push: vi.fn(), replace: vi.fn() }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push, replace: nav.replace }), usePathname: () => '/engramind', useSearchParams: () => nav.params }))
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }))
 vi.mock('sonner', () => ({ toast }))
 const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() }))
@@ -35,6 +35,7 @@ vi.mock('@/lib/pusher/client', () => ({
 
 import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
 import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
+import { channelColors } from '@/features/engramind/network/network-math'
 
 const now = new Date().toISOString()
 const ref = (id: string, slug: string) => ({ id, slug })
@@ -184,7 +185,20 @@ describe('universos', () => {
     nav.params = new URLSearchParams('universo=canal:nao-existe')
     mount()
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Canal não encontrado: voltando à rede.'))
-    expect(nav.push).toHaveBeenCalledWith('/engramind', { scroll: false })
+    // Regressão: substitui o endereço inválido no histórico (o voltar do navegador não volta a ele).
+    expect(nav.replace).toHaveBeenCalledWith('/engramind', { scroll: false })
+    expect(nav.push).not.toHaveBeenCalled()
+  })
+
+  it('regressão: a cor de um canal no universo do agente vem do mapa de todos os canais', async () => {
+    nav.params = new URLSearchParams('universo=agente:opex/opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    const all = channelColors(channels.map((item) => item.slug))
+    const legend = screen.getByTestId('channel-legend')
+    const styles = [...legend.querySelectorAll('span[aria-hidden]')].map((dot) => dot.getAttribute('style') ?? '').join(' | ')
+    expect(styles).toContain(all.get('opex')!)
+    expect(styles).toContain(all.get('agentes/opex/global')!)
   })
 
   it('universo do agente: memórias de todos os canais assinados e a legenda por canal', async () => {

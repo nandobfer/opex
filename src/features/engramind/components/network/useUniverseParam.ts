@@ -29,16 +29,19 @@ export function useUniverseParam(options: { escapeEnabled: boolean }) {
     const searchParams = useSearchParams()
     const universe = parseUniverse(searchParams.get(UNIVERSE_PARAM))
     const navigate = useCallback(
-        (ref: UniverseRef | null) => {
+        (ref: UniverseRef | null, options: { replace?: boolean } = {}) => {
             const params = new URLSearchParams(searchParams.toString())
             if (ref) params.set(UNIVERSE_PARAM, formatUniverse(ref))
             else params.delete(UNIVERSE_PARAM)
             const query = params.toString()
-            router.push(query ? `${pathname}?${query}` : pathname, { scroll: false })
+            const url = query ? `${pathname}?${query}` : pathname
+            // `replace`: o endereço inválido sai do histórico (o voltar do navegador não volta a ele).
+            if (options.replace) router.replace(url, { scroll: false })
+            else router.push(url, { scroll: false })
         },
         [router, pathname, searchParams],
     )
-    const back = useCallback(() => navigate(null), [navigate])
+    const back = useCallback((options: { replace?: boolean } = {}) => navigate(null, options), [navigate])
     useEffect(() => {
         if (!universe || !options.escapeEnabled) return
         const onKey = (event: KeyboardEvent) => {

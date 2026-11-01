@@ -102,6 +102,14 @@ describe('universo de uma lista de memórias', () => {
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
   })
 
+  it('selo de origem: a memória gravada pelo Mentor/agente mostra quem gravou no card', async () => {
+    rows = [{ ...memory, doDono: false, origin: { source: 'mentor', label: 'Mentor · OPE-7' } }]
+    mount()
+    await openCard('m_aaa')
+    expect(screen.getByTestId('memory-card-origin').textContent).toBe('Mentor · OPE-7')
+    expect(screen.getByTitle('Gravada por Mentor · OPE-7')).toBeTruthy()
+  })
+
   it('lista vazia mostra o estado vazio com Nova memória, e criar envia texto e categoria', async () => {
     rows = []
     net.post.mockResolvedValue({ data: { data: { memoria: { ...memory, id: 'm_new', texto: 'Nova regra', resumo: 'Nova regra' } } } })

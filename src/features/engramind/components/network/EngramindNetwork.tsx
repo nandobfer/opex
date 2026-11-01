@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
-import { channelColors, hasActiveFilters, matchesFilters, subscriptionLinks, type MemoryFilters } from "../../network/network-math"
+import { channelColors, pickChannelColors, hasActiveFilters, matchesFilters, subscriptionLinks, type MemoryFilters } from "../../network/network-math"
 import type { NetworkMemory } from "../../network/types"
 import type { SearchResults } from "../../types"
 import { engramindSend, useEngramindMutation, useEngramindRealtime } from "../../hooks/useEngramind"
@@ -73,11 +73,13 @@ export function EngramindNetwork({ onConfigure }: { onConfigure: () => void }) {
     useEffect(() => {
         if (!missing) return
         toast.error(universe?.kind === "channel" ? "Canal não encontrado: voltando à rede." : "Agente não encontrado: voltando à rede.")
-        back()
+        back({ replace: true })
     }, [missing, universe, back])
 
     const agentChannels = useMemo(() => (agent ? [...new Set(links.filter((link) => link.agent === agent.id && (includeArchived || !data.channels.find((item) => item.slug === link.channel)?.archived)).map((link) => link.channel))] : []), [agent, links, includeArchived, data.channels])
-    const colors = useMemo(() => channelColors(agentChannels), [agentChannels])
+    // Cores sobre todos os canais (estáveis entre universos); o universo só lê as dos seus canais.
+    const allColors = useMemo(() => channelColors(data.channels.map((item) => item.slug)), [data.channels])
+    const colors = useMemo(() => pickChannelColors(allColors, agentChannels), [allColors, agentChannels])
     const universeMemories = useMemo(() => {
         if (channel) return data.memories.filter((memory) => memory.channel === channel.slug)
         if (agent) return data.memories.filter((memory) => agentChannels.includes(memory.channel))
@@ -108,7 +110,7 @@ export function EngramindNetwork({ onConfigure }: { onConfigure: () => void }) {
                 onImport={() => setDialog("import")}
                 importDisabled={data.channels.every((item) => item.archived)}
             />
-            <NetworkBreadcrumb current={current} onBack={back} />
+            <NetworkBreadcrumb current={current} onBack={() => back()} />
             <QueryBoundary isLoading={data.isLoading} error={data.error} onRetry={data.refetch} skeleton={<NetworkSkeleton />} onConfigure={onConfigure}>
                 <AnimatePresence mode="wait" initial={false}>
                     <motion.div key={current ? `${current.kind}:${current.label}` : "overview"} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} transition={{ duration: 0.22 }}>

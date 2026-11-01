@@ -215,11 +215,13 @@ rede (teste estático).
   fixadas e inativas) em órbitas (`layoutUniverse`: as mais usadas mais perto), com links fracos ao
   centro. Canal arquivado abre apagado e somente leitura, sem Nova memória.
 - **Universo do agente**: as memórias de todos os canais que ele assina; o link de cada partícula tem
-  a **cor do canal** (`channelColors`: base `--chart-1..6` pelo hash do slug, sempre a mesma; canais
-  que caem na mesma base ganham variação de tom) e a legenda "Por canal" mostra cor e total.
+  a **cor do canal** (`channelColors` calculado sobre **todos** os canais e lido por universo com
+  `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais que caem na mesma base ganham
+  variação de tom, e o mesmo canal tem a mesma cor em qualquer universo) e a legenda "Por canal" mostra cor e total.
 - **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
-  **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial.
+  **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
+  histórico, e o voltar do navegador não fica preso nele).
   A troca de visão anima (escala/opacidade + `fitView` com duração; 0 com movimento reduzido).
 
 ### Partículas (`network/network-math.ts` + `network/particles.ts`, puros)

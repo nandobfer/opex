@@ -419,7 +419,8 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   card no hover/toque com título, texto, idade, relevância, última vez usada, **Ativa** (otimista com
   reversão e toast), Fixar/Desafixar, Editar (diálogo com o `MemoryEditor`; conflito de versão mantém
   o rascunho com "Esta memória mudou enquanto você editava. Confira a versão atual.") e Excluir
-  (`ConfirmDialog`); selo "Memória do dono". As ações passam pelo `useMemories` (mesmas rotas e
+  (`ConfirmDialog`); selos "Memória do dono" e a origem de quem gravou (Mentor/agente, `origin.label`,
+  com "Gravada por …"). O contador de ativas/inativas fica no card de estatísticas do universo. As ações passam pelo `useMemories` (mesmas rotas e
   proteções: a memória do dono continua protegida contra o agente; o dono pode tudo). Lista vazia (ou
   canal ainda não criado): "Nenhuma memória nesta lista ainda" + **Nova memória**; com memórias, o
   botão Nova memória fica no canto do canvas. Skeleton com a altura do canvas compacto

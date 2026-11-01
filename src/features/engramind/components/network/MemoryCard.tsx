@@ -50,6 +50,11 @@ export function MemoryCard({ memory, visual, actions, channelColor, contentDelay
                 <Badge variant="outline" className="text-[10px]" style={channelColor ? { borderColor: channelColor } : undefined}>
                     {memory.channel}
                 </Badge>
+                {memory.originLabel && (
+                    <Badge variant="outline" className="text-[10px]" title={`Gravada por ${memory.originLabel}`} data-testid="memory-card-origin">
+                        {memory.originLabel}
+                    </Badge>
+                )}
                 {memory.fromOwner && (
                     <Badge variant="outline" className="text-[10px]">
                         Memória do dono

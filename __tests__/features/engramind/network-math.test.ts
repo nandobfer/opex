@@ -14,6 +14,7 @@ import {
   ageColor,
   ageRatios,
   channelColors,
+  pickChannelColors,
   lastRealUseOf,
   lastUseOf,
   layoutOverview,
@@ -150,6 +151,19 @@ describe('cor estável dos canais', () => {
     expect(one.get('opex')).toBe(base)
     expect(many.get('opex')).toContain(base)
     expect(new Set(many.values()).size).toBe(8)
+  })
+
+  it('regressão: o mesmo canal tem a mesma cor em universos diferentes, mesmo quando colide na base', () => {
+    const base = (slug: string) => stableHash(slug) % 6
+    const all = ['opex', ...Array.from({ length: 40 }, (_, index) => `canal-${index}`)]
+    const rival = all.find((slug) => slug !== 'opex' && base(slug) === base('opex') && slug < 'opex')!
+    expect(rival).toBeTruthy()
+    const colors = channelColors(all)
+    const alone = pickChannelColors(colors, ['opex'])
+    const together = pickChannelColors(colors, ['opex', rival])
+    expect(alone.get('opex')).toBe(together.get('opex'))
+    expect(together.get('opex')).not.toBe(together.get(rival))
+    expect(pickChannelColors(colors, ['novo-canal']).get('novo-canal')).toMatch(/var\(--chart-/)
   })
 })
 

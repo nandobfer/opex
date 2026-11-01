@@ -120,6 +120,16 @@ export function channelColors(slugs: readonly string[]): Map<string, string> {
     return colors
 }
 
+/** Só as cores dos canais de um universo, a partir do mapa de TODOS os canais (a cor não muda entre universos). */
+export function pickChannelColors(all: ReadonlyMap<string, string>, slugs: readonly string[]): Map<string, string> {
+    const picked = new Map<string, string>()
+    for (const slug of slugs) {
+        const color = all.get(slug) ?? channelColors([slug]).get(slug)
+        if (color) picked.set(slug, color)
+    }
+    return picked
+}
+
 /** O alvo da assinatura (exato ou prefixo `eng/projeto-*`) alcança o canal? */
 export function subscriptionReaches(target: string, isPrefix: boolean, slug: string): boolean {
     if (!isPrefix && !target.endsWith("*")) return target === slug

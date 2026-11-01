@@ -42,6 +42,7 @@ export function memoryDtoToNetwork(memory: MemoryDto, channel: string): NetworkM
         stale: memory.uso?.esquecida === true,
         author: memory.autor,
         fromOwner: memory.doDono,
+        originLabel: memory.origin?.label,
     }
 }
 
