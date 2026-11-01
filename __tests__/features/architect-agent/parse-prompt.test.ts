@@ -64,4 +64,11 @@ describe('prompts do arquiteto', () => {
     expect(buildRepairPrompt('x', 1)).toContain('no máximo 8 nós')
     expect(buildRepairPrompt('x', 1)).toContain('Reescreva o diagrama COMPLETO')
   })
+
+  it('no ajuste, o pedido de correção segue o contrato do primeiro turno: só as diferenças sobre o grafo anterior', () => {
+    const text = buildRepairPrompt('x', 3, true)
+    expect(text).toContain('só as DIFERENÇAS')
+    expect(text).toContain('`remove`')
+    expect(text).not.toContain('Reescreva o diagrama COMPLETO')
+  })
 })

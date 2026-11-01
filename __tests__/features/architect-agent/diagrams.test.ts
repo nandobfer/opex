@@ -45,6 +45,8 @@ import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
 import { isDiagramLive, registerDiagram, releaseDiagram, liveDiagramIds, abortReasonOf } from '@/features/architect-agent/server/registry'
 import { subscribeLive } from '@/features/architect-agent/server/live-hub'
+import { openDiagramStream } from '@/features/architect-agent/server/stream'
+import { splitLiveLines } from '@/features/architect-agent/hooks/useLiveDiagram'
 
 /** Limpa o registro entre os casos (cada entrada é liberada pelo próprio controlador). */
 const live = (globalThis as unknown as { __architectLiveDiagrams: Map<string, unknown> }).__architectLiveDiagrams
@@ -273,5 +275,26 @@ describe('corridas entre a gravação da versão e o início da geração', () =
     expect(diagrams.docs).toHaveLength(1)
     await flush()
     expect(mocks.runDiagram).toHaveBeenCalledTimes(1)
+  })
+
+  it('stream de uma versão "gerando" sem geração viva (o app reiniciou): vira interrompida e o stream fecha com o estado real', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'f'.repeat(24), workbenchId: WB, version: 1, planVersion: 1, planSeq: 1, state: 'running', startedAt: new Date(), createdAt: new Date() })
+    const response = await openDiagramStream('f'.repeat(24), new AbortController().signal)
+    const { lines } = splitLiveLines(`${await response.text()}`)
+    expect(lines.map((line) => line.type)).toEqual(['snapshot', 'end'])
+    // Nunca um `end(running)`, que faria o cliente reconectar para sempre.
+    expect(lines.at(-1)).toEqual({ type: 'end', state: 'interrupted' })
+    expect(diagrams.docs[0]).toEqual(expect.objectContaining({ state: 'interrupted', error: expect.stringContaining('o app reiniciou') }))
+  })
+
+  it('stream de uma versão gerando com a geração viva não a interrompe', async () => {
+    seedWorkbench()
+    await requestDiagram(WB, {}, 'manual')
+    const id = String(diagrams.docs[0]!._id)
+    const controller = new AbortController()
+    await openDiagramStream(id, controller.signal)
+    controller.abort()
+    expect(diagrams.docs[0]!.state).toBe('running')
   })
 })

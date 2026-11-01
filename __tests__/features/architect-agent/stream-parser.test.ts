@@ -92,6 +92,28 @@ describe('createGraphAssembler', () => {
     expect(assembler.draft.nodes.map((node) => node.id)).toContain('pusher')
   })
 
+  it('reset zera o "já vi um bloco" e os avisos da tentativa descartada', () => {
+    const assembler = createGraphAssembler({ depth: 3 })
+    assembler.push('```architect\n{quebrado\n```\n')
+    assembler.finish()
+    expect(assembler.sawBlock).toBe(true)
+    expect(assembler.warnings.length).toBeGreaterThan(0)
+    assembler.reset()
+    expect(assembler.sawBlock).toBe(false)
+    expect(assembler.warnings).toEqual([])
+  })
+
+  it('grupos acima do teto de 40 não entram ao vivo (os nós ficam soltos) e viram aviso', () => {
+    const assembler = createGraphAssembler({ depth: 5 })
+    const items = Array.from({ length: 45 }, (_, index) => [{ op: 'group', id: `g${index}`, label: `G${index}`, layer: 'features' }, { op: 'node', id: `n${index}`, label: `N${index}`, groupId: `g${index}` }]).flat()
+    assembler.push(block(...items))
+    assembler.finish()
+    expect(assembler.draft.groups).toHaveLength(40)
+    expect(assembler.draft.nodes).toHaveLength(45)
+    expect(assembler.draft.nodes.find((node) => node.id === 'n44')!.groupId).toBeNull()
+    expect(assembler.warnings.some((warning) => warning.includes('5 grupo(s) acima do teto de 40'))).toBe(true)
+  })
+
   it('a tela chega ao mesmo rascunho aplicando as operações devolvidas', () => {
     const assembler = createGraphAssembler({ depth: 3 })
     let screenGraph = emptyDraft()

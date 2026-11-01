@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const mocks = vi.hoisted(() => ({ getDiagram: vi.fn() }))
-vi.mock('@/features/architect-agent/server/diagrams', () => ({ getDiagram: mocks.getDiagram }))
+vi.mock('@/features/architect-agent/server/diagrams', () => ({ getDiagramForStream: mocks.getDiagram }))
 
 import { openDiagramStream } from '@/features/architect-agent/server/stream'
 import { closeLive, emitOps, emitProgress, openLive } from '@/features/architect-agent/server/live-hub'

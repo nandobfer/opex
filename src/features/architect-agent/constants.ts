@@ -19,6 +19,9 @@ export const ARCHITECT_TIMEOUT_DEFAULT = 15
 export const ARCHITECT_HISTORY_LIMIT = 50
 /** Arquivos guardados por nó (o resto é cortado no saneamento). */
 export const ARCHITECT_NODE_FILES_MAX = 20
+/** Teto de grupos (camadas) de um diagrama e tamanho máximo de um id (os mesmos do schema estrito). */
+export const ARCHITECT_GROUPS_MAX = 40
+export const ARCHITECT_ID_MAX = 80
 /**
  * Textos do grafo vindos do modelo: `prompt` é o tamanho PEDIDO nas instruções; `max` é o teto de
  * PROTEÇÃO do schema, bem acima do pedido (o nível Minucioso pede campos, validações e riscos por nó).

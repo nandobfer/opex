@@ -37,6 +37,28 @@ describe('sanitizeGraph', () => {
     expect(warnings.some((warning) => warning.includes('id repetido'))).toBe(true)
   })
 
+  it('mais de 40 grupos com nós: fica o teto do schema, priorizando os grupos com nós novos/alterados, sem descartar nós', () => {
+    const groups = Array.from({ length: 45 }, (_, index) => ({ id: `g${index}`, label: `G${index}`, layer: 'features' }))
+    // Os 5 primeiros grupos só têm nós existentes; os demais, nós novos.
+    const nodes = groups.map((group, index) => ({ id: `n${index}`, label: `N${index}`, groupId: group.id, kind: 'module', status: index < 5 ? 'existing' : 'new' }))
+    const result = sanitizeGraph({ title: 'T', groups, nodes: [{ id: 'objective', label: 'O', kind: 'objective' }, ...nodes] }, 5)
+    expect(() => architectGraphSchema.parse(result.graph)).not.toThrow()
+    expect(result.graph.groups).toHaveLength(40)
+    expect(result.graph.groups.map((group) => group.id)).not.toContain('g0')
+    expect(result.graph.nodes).toHaveLength(46)
+    expect(result.graph.nodes.find((node) => node.id === 'n0')!.groupId).toBeNull()
+    expect(result.warnings.some((warning) => warning.includes('5 grupo(s) acima do teto de 40'))).toBe(true)
+  })
+
+  it('id de aresta repetido gera um id novo sem passar do tamanho máximo do schema', () => {
+    const long = 'e'.repeat(80)
+    const result = sanitizeGraph({ title: 'T', nodes: [{ id: 'a', label: 'A', kind: 'objective' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], edges: [{ id: long, source: 'a', target: 'b' }, { id: long, source: 'a', target: 'c' }] }, 3)
+    expect(() => architectGraphSchema.parse(result.graph)).not.toThrow()
+    const ids = result.graph.edges.map((edge) => edge.id)
+    expect(new Set(ids).size).toBe(2)
+    expect(ids.every((id) => id.length <= 80)).toBe(true)
+  })
+
   it('cria o nó do objetivo a partir do título quando falta', () => {
     const { graph } = sanitizeGraph({ title: 'Exportar CSV', summary: 'Resumo', nodes: [node('a')] }, 3)
     const objective = graph.nodes.find((item) => item.kind === 'objective')

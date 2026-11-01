@@ -317,4 +317,38 @@ describe('runDiagram ao vivo', () => {
     await runDiagram(id, controller)
     expect((doc(id).graph as { nodes: { id: string }[] }).nodes.map((node) => node.id)).toEqual(['objective', 'novo'])
   })
+
+  it('reparo de um ajuste: pede de novo só as diferenças sobre o grafo anterior, sem duplicar nós', async () => {
+    diagrams.docs.push({ _id: 'b'.repeat(24), graph: { title: 'Antes', summary: '', groups: [], nodes: [{ id: 'objective', label: 'O', groupId: null, kind: 'objective', detail: '', files: [], status: 'new' }, { id: 'velho', label: 'Velho', groupId: null, kind: 'module', detail: '', files: [], status: 'existing' }], edges: [], notes: [] } })
+    const { id, controller } = await seed({ feedback: 'tire o velho e ponha o novo', baseDiagramId: 'b'.repeat(24), origin: 'adjust' })
+    mocks.runTurn
+      // Primeiro turno sem nenhum bloco do diagrama: pede a correção.
+      .mockImplementationOnce(async () => succeeded('Pronto, ajustei o diagrama.'))
+      .mockImplementationOnce(async (_client: unknown, request: { text: string }, hooks: Hooks) => {
+        expect(request.text).toContain('só as DIFERENÇAS')
+        expect(request.text).not.toContain('Reescreva o diagrama COMPLETO')
+        const text = '```architect\n' + opLine({ op: 'remove', id: 'velho' }) + opLine({ op: 'node', id: 'novo', label: 'Novo', status: 'new' }) + '```\n'
+        hooks.publish({ type: 'text', text })
+        return succeeded(text)
+      })
+    await runDiagram(id, controller)
+    expect(doc(id).state).toBe('done')
+    expect(doc(id).repaired).toBe(true)
+    // Sem duplicatas: o grafo anterior com as diferenças da correção.
+    expect((doc(id).graph as { nodes: { id: string }[] }).nodes.map((node) => node.id)).toEqual(['objective', 'novo'])
+  })
+
+  it('correção depois de blocos sem nó válido aceita a resposta no formato antigo, sem levar os avisos da tentativa descartada', async () => {
+    const { id, controller } = await seed()
+    mocks.runTurn
+      .mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: Hooks) => {
+        hooks.publish({ type: 'text', text: '```architect\n{quebrado\n```\n' })
+        return succeeded('```architect\n{quebrado\n```\n')
+      })
+      .mockImplementationOnce(async () => succeeded(graphJson()))
+    await runDiagram(id, controller)
+    expect(doc(id).state).toBe('done')
+    expect(doc(id).repaired).toBe(true)
+    expect((doc(id).warnings as string[]).some((warning) => warning.includes('linha(s) inválida(s)'))).toBe(false)
+  })
 })

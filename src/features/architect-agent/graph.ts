@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { ARCHITECT_TEXT_LIMITS as LIMITS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS } from "./constants"
+import { ARCHITECT_TEXT_LIMITS as LIMITS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX } from "./constants"
 
 /**
  * Grafo semântico do Agente Arquiteto (módulo PURO): o mesmo schema valida o que o servidor grava e o
@@ -7,7 +7,7 @@ import { ARCHITECT_TEXT_LIMITS as LIMITS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_
  * (`sanitize.ts`) o converte neste formato estrito.
  */
 
-const id = z.string().trim().min(1).max(80)
+const id = z.string().trim().min(1).max(ARCHITECT_ID_MAX)
 const text = (max: number) => z.string().trim().max(max)
 
 export const architectGroupSchema = z.object({
@@ -43,7 +43,7 @@ export const architectNoteSchema = z.object({
 export const architectGraphSchema = z.object({
     title: text(LIMITS.title.max),
     summary: text(LIMITS.summary.max),
-    groups: z.array(architectGroupSchema).max(40),
+    groups: z.array(architectGroupSchema).max(ARCHITECT_GROUPS_MAX),
     nodes: z.array(architectNodeSchema).min(1).max(120),
     edges: z.array(architectEdgeSchema).max(200),
     notes: z.array(architectNoteSchema).max(40),

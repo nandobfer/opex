@@ -1,6 +1,6 @@
 import { emptyDraft } from "../stream-parser"
 import type { ArchitectStreamLine } from "../types"
-import { getDiagram } from "./diagrams"
+import { getDiagramForStream } from "./diagrams"
 import { subscribeLive } from "./live-hub"
 
 const PING_MS = 15_000
@@ -9,10 +9,10 @@ const PING_MS = 15_000
  * Stream NDJSON do diagrama ao vivo (`GET /api/architect/diagrams/[id]/stream`): `snapshot` (rascunho
  * e progresso, com o `seq`), depois `ops` numeradas e `progress`, com `ping` a cada 15 s, e `end` com o
  * estado final. Sem geração viva neste processo, o retrato vem do rascunho gravado e o stream fecha
- * com `end`. Reconectar recomeça pelo retrato: nada se perde.
+ * com `end` (uma versão "gerando" órfã vira interrompida antes: o `end` traz o estado real). Reconectar recomeça pelo retrato: nada se perde.
  */
 export async function openDiagramStream(diagramId: string, signal: AbortSignal): Promise<Response> {
-    const diagram = await getDiagram(diagramId)
+    const diagram = await getDiagramForStream(diagramId)
     const encoder = new TextEncoder()
     let cleanup = () => {}
     const stream = new ReadableStream<Uint8Array>({

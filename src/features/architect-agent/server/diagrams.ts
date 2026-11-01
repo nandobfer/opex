@@ -87,6 +87,20 @@ export async function getDiagram(id: string): Promise<ArchitectDiagramDto> {
     return toDiagramDto(doc)
 }
 
+/**
+ * Versão para o stream: "gerando" sem geração viva neste processo é órfã (o app reiniciou) — vira
+ * interrompida (e publica) antes de responder, para o stream fechar com o estado real em vez de um
+ * `end(running)` que faria o cliente reconectar para sempre. A geração é registrada antes de a versão
+ * ser gravada como "gerando", então não há janela em que uma versão recém-criada pareça órfã.
+ */
+export async function getDiagramForStream(id: string): Promise<ArchitectDiagramDto> {
+    const diagram = await getDiagram(id)
+    if (diagram.state !== "running" || isDiagramLive(id)) return diagram
+    const updated = await ArchitectDiagram.updateOne({ _id: id, state: "running" }, { $set: { state: "interrupted", error: ORPHAN_ERROR, "progress.phase": null, finishedAt: new Date() } })
+    if (updated.modifiedCount) await publishDiagrams(diagram.workbenchId, id)
+    return getDiagram(id)
+}
+
 /** Histórico da configuração: as versões mais recentes de todas as mesas (sem o grafo). */
 export async function listArchitectHistory(limit = ARCHITECT_HISTORY_LIMIT): Promise<ArchitectDiagramDto[]> {
     await architectDb()

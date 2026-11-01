@@ -1,4 +1,4 @@
-import { ARCHITECT_TEXT_LIMITS, type ArchitectTextField, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_FILES_MAX, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_TEXT_LIMITS, type ArchitectTextField, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_NODE_FILES_MAX, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import { architectGraphSchema, type ArchitectEdge, type ArchitectGraph, type ArchitectGroup, type ArchitectNode, type ArchitectNote, type RawGraph } from "./graph"
 
 /**
@@ -74,6 +74,33 @@ export function toNote(item: Rec, cuts?: TextCuts): ArchitectNote | null {
     return text ? { kind: oneOf(item.kind, ARCHITECT_NOTE_KINDS, "decision"), text } : null
 }
 
+/** Id ainda não usado, sem passar do tamanho máximo do schema (sufixo `_2`, `_3`… no lugar de `_` repetido). */
+export function uniqueId(base: string, taken: ReadonlySet<string>): string {
+    if (!taken.has(base)) return base
+    for (let n = 2; ; n++) {
+        const suffix = `_${n}`
+        const id = `${base.slice(0, ARCHITECT_ID_MAX - suffix.length)}${suffix}`
+        if (!taken.has(id)) return id
+    }
+}
+
+/**
+ * Grupos acima do teto do schema: ficam os que têm os nós mais importantes (objetivo, novo, alterado,
+ * existente); os nós dos grupos cortados ficam soltos (sem grupo), nunca descartados.
+ */
+function capGroups(groups: ArchitectGroup[], nodes: ArchitectNode[], max: number): { groups: ArchitectGroup[]; nodes: ArchitectNode[]; cut: number } {
+    if (groups.length <= max) return { groups, nodes, cut: 0 }
+    const best = new Map<string, number>()
+    for (const node of nodes) if (node.groupId) best.set(node.groupId, Math.min(best.get(node.groupId) ?? Infinity, priority(node)))
+    const ranked = groups.map((group, index) => ({ group, index })).sort((a, b) => (best.get(a.group.id) ?? Infinity) - (best.get(b.group.id) ?? Infinity) || a.index - b.index)
+    const keep = new Set(ranked.slice(0, max).map((item) => item.group.id))
+    return {
+        groups: groups.filter((group) => keep.has(group.id)),
+        nodes: nodes.map((node) => (node.groupId && !keep.has(node.groupId) ? { ...node, groupId: null } : node)),
+        cut: groups.length - max,
+    }
+}
+
 function cleanGroups(raw: readonly unknown[], cuts: TextCuts): ArchitectGroup[] {
     const seen = new Set<string>()
     const groups: ArchitectGroup[] = []
@@ -138,8 +165,7 @@ function cleanEdges(raw: readonly unknown[], nodeIds: ReadonlySet<string>, warni
         const pair = `${source}->${target}:${kind}`
         if (pairs.has(pair)) return
         pairs.add(pair)
-        let id = str(item.id, 80) || `e${index + 1}`
-        while (ids.has(id)) id = `${id}_`
+        const id = uniqueId(str(item.id, ARCHITECT_ID_MAX) || `e${index + 1}`, ids)
         ids.add(id)
         edges.push({ id, source, target, label: clip(item.label, "edgeLabel", cuts, true) || null, kind })
     })
@@ -172,8 +198,7 @@ export function sanitizeGraph(raw: RawGraph, depth: ArchitectDepth): SanitizedGr
     let groups = cleanGroups(raw.groups ?? [], cuts)
     let nodes = cleanNodes(raw.nodes, new Set(groups.map((group) => group.id)), warnings, cuts)
     if (!nodes.some((node) => node.kind === "objective")) {
-        let id = OBJECTIVE_ID
-        while (nodes.some((node) => node.id === id)) id = `${id}_`
+        const id = uniqueId(OBJECTIVE_ID, new Set(nodes.map((node) => node.id)))
         nodes.unshift({ id, label: title || "Objetivo do plano", groupId: null, kind: "objective", detail: summary, files: [], status: "new" })
         warnings.push("o nó do objetivo foi criado a partir do título")
     }
@@ -183,6 +208,9 @@ export function sanitizeGraph(raw: RawGraph, depth: ArchitectDepth): SanitizedGr
     const edgeCap = capEdges(cleanEdges(raw.edges ?? [], nodeIds, warnings, cuts), limits.maxEdges)
     const used = new Set(nodes.map((node) => node.groupId).filter(Boolean))
     groups = groups.filter((group) => used.has(group.id))
+    const groupCap = capGroups(groups, nodes, ARCHITECT_GROUPS_MAX)
+    groups = groupCap.groups
+    nodes = groupCap.nodes
     const graph = architectGraphSchema.parse({
         title: title || nodes.find((node) => node.kind === "objective")?.label || "Arquitetura do plano",
         summary,
@@ -194,5 +222,6 @@ export function sanitizeGraph(raw: RawGraph, depth: ArchitectDepth): SanitizedGr
     warnings.push(...cutWarnings(cuts))
     if (nodeCap.cut) warnings.push(`${nodeCap.cut} nó(s) acima do teto de ${limits.maxNodes} do nível "${limits.label}" cortado(s)`)
     if (edgeCap.cut) warnings.push(`${edgeCap.cut} aresta(s) acima do teto de ${limits.maxEdges} cortada(s)`)
+    if (groupCap.cut) warnings.push(`${groupCap.cut} grupo(s) acima do teto de ${ARCHITECT_GROUPS_MAX} desfeito(s): os nós deles ficaram sem grupo`)
     return { graph, trimmed: { nodes: nodeCap.cut, edges: edgeCap.cut }, warnings }
 }

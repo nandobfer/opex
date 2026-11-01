@@ -102,6 +102,10 @@ O diagrama é construído na tela enquanto o agente trabalha.
   `ARCHITECT_LIVE_CAP_FACTOR`); no fim, o `sanitizeGraph` valida o resultado UMA vez e aplica o teto
   exato com a prioridade de sempre.
 - **Ajuste**: o rascunho começa do grafo anterior (operação `reset`) e o agente emite só as diferenças.
+- **Correção** (uma vez, quando a resposta não traz diagrama legível): o rascunho volta ao ponto de
+  partida e a tentativa anterior é esquecida por inteiro (avisos e o "já vi um bloco", então uma resposta
+  no formato JSON antigo é aceita). Num ajuste, a correção segue o contrato do primeiro turno — só as
+  diferenças sobre o grafo anterior —, nunca a reescrita completa (que duplicaria os nós antigos).
 - **Hub** (memória do processo): rascunho atual, `seq` das operações e assinantes. O rascunho também é
   gravado em `draft` com intervalo (no máximo a cada 1,5 s, `ARCHITECT_DRAFT_SAVE_MS`, com uma gravação
   no fim do intervalo); pronta ou descartada, o `draft` sai; falhou ou interrompida, ele fica como
@@ -109,7 +113,9 @@ O diagrama é construído na tela enquanto o agente trabalha.
 - **Stream** `GET /api/architect/diagrams/[id]/stream` (NDJSON, só o dono): `snapshot` (rascunho,
   progresso e o `seq` em que está) e depois `ops` numeradas, `progress`, `ping` a cada 15 s e `end` com o
   estado final. Assina antes do retrato (nenhuma operação cai entre os dois). Sem geração viva neste
-  processo, o retrato vem do grafo/rascunho gravado e fecha com `end`. No fim, o grafo final vai como
+  processo, o retrato vem do grafo/rascunho gravado e fecha com `end`; uma versão ainda "gerando" sem
+  geração viva (o app reiniciou) vira **interrompida** antes (e publica), então o `end` traz o estado real
+  e o cliente não fica reconectando. No fim, o grafo final vai como
   `reset` antes do `end`.
 - **Cliente** (`useLiveDiagram`): abre o stream da versão gerando; aplica o retrato e as operações
   (`seq` repetido ou antigo é ignorado); caiu, reconecta (novo retrato, nada se perde) e a faixa mostra
@@ -133,7 +139,9 @@ inexistente por nenhum, valores fora da enumeração caem no padrão (`module`, 
 `other`), descarta arestas com ponta inexistente, laços e duplicadas, garante o nó do **objetivo**
 (criado a partir do título), corta acima do teto do nível — prioridade: objetivo, depois o que o plano
 cria, altera e o contexto existente; nas arestas, as relações antes do "contém" — e remove grupos
-vazios. Textos do modelo (`ARCHITECT_TEXT_LIMITS`): o prompt pede um tamanho (ex.: descrição do nó até
+vazios. Grupos acima do teto do schema (40, `ARCHITECT_GROUPS_MAX`) são desfeitos, ficando os que têm os
+nós mais importantes; os nós deles ficam soltos (nunca descartados) e o corte vira aviso — o mesmo teto
+vale ao vivo. Id repetido ganha sufixo `_2`, `_3`… sem passar dos 80 caracteres do schema. Textos do modelo (`ARCHITECT_TEXT_LIMITS`): o prompt pede um tamanho (ex.: descrição do nó até
 4.000, nota até 500, resumo até 600) e o schema tem um **teto de proteção** separado e folgado (8.000,
 1.000, 2.000…); só o que passa do teto é cortado, e todo corte — título, resumo, rótulos, descrições,
 notas — vira aviso da versão ("nota: 2 corte(s) no teto de proteção de 1.000 caracteres"). O texto bruto guardado em `report` são os últimos 50.000

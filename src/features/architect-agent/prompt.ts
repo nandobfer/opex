@@ -123,10 +123,15 @@ export function buildDiagramPrompt(input: DiagramPromptInput): string {
 }
 
 /** Segunda (e última) tentativa: a resposta anterior veio sem diagrama legível; o rascunho recomeça. */
-export function buildRepairPrompt(error: string, depth: ArchitectDepth): string {
+/**
+ * Pedido de correção (uma vez). Num ajuste, o contrato é o do primeiro turno: o grafo anterior volta a
+ * ser o ponto de partida na tela, e o agente reemite só as DIFERENÇAS — pedir a reescrita completa
+ * deixaria os nós antigos não reemitidos duplicados no resultado.
+ */
+export function buildRepairPrompt(error: string, depth: ArchitectDepth, adjusting = false): string {
     const def = ARCHITECT_DEPTH_DEFS[depth]
-    return [
-        `A sua resposta não pôde ser lida: ${error}.`,
-        `Reescreva o diagrama COMPLETO de novo, em blocos ${FENCE} com uma operação JSON por linha, no formato das instruções (no máximo ${def.maxNodes} nós, ao menos o objetivo, e termine com {"op":"done"}). Não leia mais nada do repositório.`,
-    ].join("\n")
+    const ask = adjusting
+        ? `O diagrama anterior voltou a ser o ponto de partida na tela (o que você emitiu foi descartado). Emita de novo só as DIFERENÇAS do pedido de ajuste sobre ele, em blocos ${FENCE} com uma operação JSON por linha: \`node\` para criar ou atualizar (mesmo id), \`edge\` para ligações novas e \`remove\` para o que sai (no máximo ${def.maxNodes} nós no total), e termine com {"op":"done"}. Não leia mais nada do repositório.`
+        : `Reescreva o diagrama COMPLETO de novo, em blocos ${FENCE} com uma operação JSON por linha, no formato das instruções (no máximo ${def.maxNodes} nós, ao menos o objetivo, e termine com {"op":"done"}). Não leia mais nada do repositório.`
+    return [`A sua resposta não pôde ser lida: ${error}.`, ask].join("\n")
 }

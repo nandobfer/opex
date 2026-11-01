@@ -1,6 +1,6 @@
-import { ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_LIVE_CAP_FACTOR, ARCHITECT_STREAM_FENCE, type ArchitectDepth } from "./constants"
+import { ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_LIVE_CAP_FACTOR, ARCHITECT_STREAM_FENCE, type ArchitectDepth } from "./constants"
 import type { ArchitectEdge, ArchitectGraph, ArchitectGroup, ArchitectNode, ArchitectNote } from "./graph"
-import { clip, cutWarnings, isRec, nodeLabelOf, oneOf, str, toGroup, toNode, toNote, type Rec, type TextCuts } from "./sanitize"
+import { clip, cutWarnings, isRec, nodeLabelOf, oneOf, str, toGroup, toNode, toNote, uniqueId, type Rec, type TextCuts } from "./sanitize"
 
 /**
  * Diagrama ao vivo (módulo PURO, servidor e tela). O agente escreve o grafo como operações, uma linha
@@ -96,8 +96,9 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
     let inBlock = false
     let sawBlock = false
     let overflow = 0
+    let groupOverflow = 0
     let edgeSeq = 0
-    const warnings: string[] = []
+    let warnings: string[] = []
     let invalid = 0
     /** Cortes de texto do modelo (o mesmo campo repetido num nó conta uma vez por linha recebida). */
     let cuts: TextCuts = new Map()
@@ -130,8 +131,7 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
         if (draft.edges.some((edge) => edge.source === source && edge.target === target && edge.kind === kind)) return "skip"
         if (draft.edges.length >= maxEdges) return "skip"
         const ids = new Set(draft.edges.map((edge) => edge.id))
-        let id = str(item.id, 80) || `e${++edgeSeq}`
-        while (ids.has(id)) id = `${id}_`
+        const id = uniqueId(str(item.id, ARCHITECT_ID_MAX) || `e${++edgeSeq}`, ids)
         apply(ops, { op: "edge", edge: { id, source, target, label: clip(item.label, "edgeLabel", cuts, true) || null, kind } })
         return "added"
     }
@@ -149,6 +149,8 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
         if (op === "group") {
             const id = str(item.id, 80) || str(item.label, 80)
             if (!id) return void invalid++
+            // Teto do schema: grupo novo acima dele não entra (os nós dele ficam soltos, sem grupo).
+            if (!draft.groups.some((group) => group.id === id) && draft.groups.length >= ARCHITECT_GROUPS_MAX) return void groupOverflow++
             apply(ops, { op: "group", group: toGroup(item, id, cuts) })
             for (const [nodeId, groupId] of wantsGroup) {
                 if (groupId !== id) continue
@@ -241,15 +243,23 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
             warnings.push(...cutWarnings(cuts))
             cuts = new Map()
             if (overflow) warnings.push(`${overflow} nó(s) acima do teto ignorado(s) durante a geração`)
+            if (groupOverflow) warnings.push(`${groupOverflow} grupo(s) acima do teto de ${ARCHITECT_GROUPS_MAX} ignorado(s) durante a geração`)
+            groupOverflow = 0
             invalid = 0
             return ops
         },
         reset() {
+            // A correção recomeça do ponto de partida (o grafo base num ajuste): nada da tentativa
+            // anterior vale — nem os avisos, nem o "já vi um bloco" (que recusaria o formato antigo).
             draft = start()
             buffer = ""
             inBlock = false
+            sawBlock = false
             overflow = 0
+            groupOverflow = 0
             invalid = 0
+            warnings = []
+            cuts = new Map()
             seedRaw()
             return [{ op: "reset", graph: cloneGraph(draft) }]
         },

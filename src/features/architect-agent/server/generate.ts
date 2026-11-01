@@ -316,9 +316,9 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         if (!parsed.ok) {
             log.info({ diagramId, err: parsed.error }, "[architect] resposta sem diagrama legível: pedindo a correção uma vez")
             await setPhase("retrying")
-            // O agente reescreve o diagrama completo: o rascunho recomeça do ponto de partida.
+            // O rascunho recomeça do ponto de partida (o grafo base num ajuste, que pede de novo só as diferenças).
             live(graphAssembler.reset())
-            result = await turn(buildRepairPrompt(parsed.error, depth), `Agente Arquiteto · v${doc.version} (correção)`)
+            result = await turn(buildRepairPrompt(parsed.error, depth, Boolean(adjust)), `Agente Arquiteto · v${doc.version} (correção)`)
             if (result.outcome !== "succeeded") return void (await fail(result.message ?? "o agente não concluiu a correção do diagrama"))
             parsed = readGraph(result.text)
             repaired = true
