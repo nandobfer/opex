@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { xyflowMock } from '../../helpers/xyflow'
@@ -55,7 +55,7 @@ const mount = (canEdit = true, queryClient = client()) =>
   )
 const particle = async (id: string) => (await screen.findByTestId(`memory-node-${id}`)) as HTMLElement
 const openCard = async (id: string) => {
-  fireEvent.mouseEnter(await particle(id))
+  fireEvent.pointerEnter(await particle(id))
   return screen.findByTestId(`memory-card-${id}`)
 }
 
@@ -89,6 +89,7 @@ describe('universo de uma lista de memórias', () => {
     rows = [memory, { ...memory, id: 'm_bbb', resumo: 'Antiga', ativa: false }, { ...memory, id: 'm_ccc', resumo: 'Fixa', fixada: true }]
     mount()
     expect((await screen.findByTestId('universe-center')).textContent).toContain('agentes/opex/global')
+    expect(within(screen.getByTestId('universe-center')).getByTestId('channel-name-title').textContent).toBe('global')
     expect(net.get).toHaveBeenCalledWith('/ai/agents/opex-global/memories')
     expect((await particle('m_bbb')).getAttribute('data-archived')).toBe('true')
     expect((await particle('m_ccc')).getAttribute('data-pinned')).toBe('true')

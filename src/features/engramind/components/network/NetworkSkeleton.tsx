@@ -17,7 +17,7 @@ export function NetworkSkeleton({ className }: { className?: string }) {
                 </div>
                 <div className="flex justify-center gap-6">
                     {[0, 1, 2, 3, 4].map((index) => (
-                        <Skeleton key={index} className="h-11 w-48 rounded-xl" />
+                        <Skeleton key={index} className="h-16 w-60 rounded-xl" />
                     ))}
                 </div>
             </div>

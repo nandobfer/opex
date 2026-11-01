@@ -19,6 +19,8 @@ import { useMemories, useMemoriesMeta, type MemorySource } from "../../hooks/use
 import type { MemoryDto } from "../../types"
 import { PENDING_PREFIX } from "../../memory-list"
 import { MemoriesNotices } from "./MemoriesNotices"
+import { ChannelLabelsProvider } from "@/features/engramind/components/network/ChannelName"
+import { isCentralChannel } from "@/features/engramind/network/channel-labels"
 
 /** Memória provisória da criação otimista (`useMemories`). */
 const isProvisionalMemory = (id: string) => id.startsWith(PENDING_PREFIX)
@@ -79,72 +81,74 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
     )
 
     return (
-        <div className={cn("flex flex-col gap-3", className)} data-testid="memory-network-view">
-            <MemoriesNotices meta={meta.data} channel={channel} />
-            {query.isLoading ? (
-                <NetworkSkeleton className={NETWORK_CANVAS_COMPACT_CLASS} />
-            ) : query.isError ? (
-                <ErrorState title="Não foi possível carregar as memórias" onRetry={() => void query.refetch()} />
-            ) : (
-                <MemoryUniverse
-                    center={{ kind: "channel", id: channel, label: channel }}
-                    isProvisional={isProvisionalMemory}
-                    memories={network}
-                    usage={usage.data}
-                    staleAfterDays={typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS}
-                    actions={actions}
-                    dataVersion={query.dataUpdatedAt}
-                    emptyTitle="Nenhuma memória nesta lista ainda"
-                    onCreate={canEdit && canCreate ? () => setEditor({ mode: "create", channel }) : null}
-                    createLabel={canEdit && canCreate && network.length > 0 ? "Nova memória" : undefined}
-                    className={NETWORK_CANVAS_COMPACT_CLASS}
-                />
-            )}
-            <MemoryEditorDialog
-                target={editor}
-                limits={limits}
-                categories={categories}
-                onClose={() => setEditor(null)}
-                onSave={(values) =>
-                    new Promise<boolean>((resolve) => {
-                        if (!editor) return resolve(false)
-                        if (editor.mode === "create") {
-                            mutate({ type: "create", texto: values.texto, categoria: values.categoria })
-                            return resolve(true)
-                        }
-                        const memory = editor.memory
-                        if (!memory) return resolve(false)
-                        // O editor só fecha no sucesso: num conflito de versão o texto digitado fica, a lista é
-                        // relida e o próximo Salvar usa a versão atual.
-                        mutate(
-                            { type: "update", id: memory.id, texto: values.texto, categoria: values.categoria, versao: memory.versao },
-                            {
-                                onSuccess: () => resolve(true),
-                                onError: (error) => {
-                                    resolve(false)
-                                    if (apiErrorCode(error) !== "MEMORY_VERSION_CONFLICT") return
-                                    void query.refetch().then((result) => {
-                                        const current = result.data?.find((item) => item.id === memory.id)
-                                        if (current) setEditor((target) => (target?.memory?.id === memory.id ? { ...target, memory: current } : target))
-                                    })
+        <ChannelLabelsProvider enabled={isCentralChannel(channel)}>
+            <div className={cn("flex flex-col gap-3", className)} data-testid="memory-network-view">
+                <MemoriesNotices meta={meta.data} channel={channel} />
+                {query.isLoading ? (
+                    <NetworkSkeleton className={NETWORK_CANVAS_COMPACT_CLASS} />
+                ) : query.isError ? (
+                    <ErrorState title="Não foi possível carregar as memórias" onRetry={() => void query.refetch()} />
+                ) : (
+                    <MemoryUniverse
+                        center={{ kind: "channel", id: channel, label: channel }}
+                        isProvisional={isProvisionalMemory}
+                        memories={network}
+                        usage={usage.data}
+                        staleAfterDays={typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS}
+                        actions={actions}
+                        dataVersion={query.dataUpdatedAt}
+                        emptyTitle="Nenhuma memória nesta lista ainda"
+                        onCreate={canEdit && canCreate ? () => setEditor({ mode: "create", channel }) : null}
+                        createLabel={canEdit && canCreate && network.length > 0 ? "Nova memória" : undefined}
+                        className={NETWORK_CANVAS_COMPACT_CLASS}
+                    />
+                )}
+                <MemoryEditorDialog
+                    target={editor}
+                    limits={limits}
+                    categories={categories}
+                    onClose={() => setEditor(null)}
+                    onSave={(values) =>
+                        new Promise<boolean>((resolve) => {
+                            if (!editor) return resolve(false)
+                            if (editor.mode === "create") {
+                                mutate({ type: "create", texto: values.texto, categoria: values.categoria })
+                                return resolve(true)
+                            }
+                            const memory = editor.memory
+                            if (!memory) return resolve(false)
+                            // O editor só fecha no sucesso: num conflito de versão o texto digitado fica, a lista é
+                            // relida e o próximo Salvar usa a versão atual.
+                            mutate(
+                                { type: "update", id: memory.id, texto: values.texto, categoria: values.categoria, versao: memory.versao },
+                                {
+                                    onSuccess: () => resolve(true),
+                                    onError: (error) => {
+                                        resolve(false)
+                                        if (apiErrorCode(error) !== "MEMORY_VERSION_CONFLICT") return
+                                        void query.refetch().then((result) => {
+                                            const current = result.data?.find((item) => item.id === memory.id)
+                                            if (current) setEditor((target) => (target?.memory?.id === memory.id ? { ...target, memory: current } : target))
+                                        })
+                                    },
                                 },
-                            },
-                        )
-                    })
-                }
-            />
-            <ConfirmDialog
-                open={deleting !== null}
-                onOpenChange={(next) => !next && setDeleting(null)}
-                title="Excluir memória de vez?"
-                description={deleting ? `"${deleting.resumo}" é apagada do Engramind e deixa de ser usada pelo agente. Para só tirar do contexto, inative.` : undefined}
-                confirmLabel="Excluir memória"
-                variant="destructive"
-                onConfirm={() => {
-                    if (deleting) mutate({ type: "delete", id: deleting.id })
-                    setDeleting(null)
-                }}
-            />
-        </div>
+                            )
+                        })
+                    }
+                />
+                <ConfirmDialog
+                    open={deleting !== null}
+                    onOpenChange={(next) => !next && setDeleting(null)}
+                    title="Excluir memória de vez?"
+                    description={deleting ? `"${deleting.resumo}" é apagada do Engramind e deixa de ser usada pelo agente. Para só tirar do contexto, inative.` : undefined}
+                    confirmLabel="Excluir memória"
+                    variant="destructive"
+                    onConfirm={() => {
+                        if (deleting) mutate({ type: "delete", id: deleting.id })
+                        setDeleting(null)
+                    }}
+                />
+            </div>
+        </ChannelLabelsProvider>
     )
 }

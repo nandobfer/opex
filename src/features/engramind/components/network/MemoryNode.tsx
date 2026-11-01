@@ -66,8 +66,8 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
                 initial={hidden}
                 animate={ready ? shown : hidden}
                 transition={born ? { type: "spring", stiffness: 140, damping: 18, mass: 0.9 } : { duration: expanded ? 0.12 : 0.22 }}
-                onMouseEnter={() => focus?.hover(memory.id)}
-                onMouseLeave={() => focus?.hover(null)}
+                onPointerEnter={() => focus?.hover(memory.id)}
+                onPointerLeave={() => focus?.hover(null)}
             >
                 <span
                     aria-label={memory.title}

@@ -20,6 +20,7 @@ import { NetworkCanvas } from "./NetworkCanvas"
 import { CenterNode, type CenterNodeData } from "./nodes"
 import { RecenterButton } from "./RecenterButton"
 import { StatList, StatsCard, type StatRow } from "./StatsCard"
+import { ChannelName } from "./ChannelName"
 import { useLeavingItems } from "./useLeavingItems"
 import { useEnteringIds } from "./useEnteringIds"
 import { MemoryCardLayer } from "./MemoryCardLayer"
@@ -147,6 +148,7 @@ export function MemoryUniverse({
             icon: center.kind === "agent" ? agentIcon(center.id) : (Hash as LucideIcon),
             pulseKey: `${center.kind}:${center.id}`,
             archived: center.archived,
+            channelSlug: center.kind === "channel" ? center.id : undefined,
         }
         const list: Node[] = [{ id: CENTER_ID, type: "center", position: { x: 0, y: 0 }, data: centerData, zIndex: 5 }]
         for (const memory of items) {
@@ -184,16 +186,22 @@ export function MemoryUniverse({
         ...(live.liveCount ? [{ label: "Consumos ao vivo", value: live.liveCount, testId: "stat-live" }] : []),
     ]
 
-    // Sair da partícula fecha o card com atraso: dá tempo de o cursor cruzar o vão até o card
-    // (entrar nele, que é filho da partícula, cancela o fechamento).
+    // Dois sinais de presença (cursor na partícula e no card): o fechamento, com atraso, só é
+    // agendado quando os dois estão desligados e é cancelado quando qualquer um liga. A ordem dos
+    // eventos não importa (o navegador avisa "entrei no card" antes de "saí da partícula").
+    const presence = useRef<{ particle: string | null; card: string | null }>({ particle: null, card: null })
     const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => () => void (leaveTimer.current && clearTimeout(leaveTimer.current)), [])
-    const hover = useCallback((id: string | null) => {
+    const setPresence = useCallback((source: "particle" | "card", id: string | null) => {
+        presence.current[source] = id
         if (leaveTimer.current) clearTimeout(leaveTimer.current)
         leaveTimer.current = null
-        if (id !== null) return setHovered(id)
+        const present = presence.current.card ?? presence.current.particle
+        if (present !== null) return setHovered(present)
         leaveTimer.current = setTimeout(() => setHovered(null), HOVER_CLOSE_DELAY_MS)
     }, [])
+    const hover = useCallback((id: string | null) => setPresence("particle", id), [setPresence])
+    const hoverCard = useCallback((id: string | null) => setPresence("card", id), [setPresence])
     const focus = useMemo(() => ({ activeId, activePoint: activeId ? (positions.get(activeId) ?? null) : null, hover, actions: wrapped }), [activeId, positions, hover, wrapped])
     const liveValue = useMemo(() => ({ pulses: live.pulses, travels: live.travels, finish: live.finish }), [live.pulses, live.travels, live.finish])
 
@@ -211,7 +219,7 @@ export function MemoryUniverse({
                     className={className}
                 >
                     <StatsCard title={center.kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows}>
-                        {center.kind === "agent" && <StatList title="Por canal" testId="channel-legend" colors={channelColors} items={stats.byChannel.map((item) => ({ key: item.slug, label: item.slug, count: item.count }))} />}
+                        {center.kind === "agent" && <StatList title="Por canal" testId="channel-legend" colors={channelColors} items={stats.byChannel.map((item) => ({ key: item.slug, label: item.slug, count: item.count, node: <ChannelName slug={item.slug} size="legend" className="flex-1" titleClassName="text-muted-foreground" /> }))} />}
                     </StatsCard>
                     <ActiveMemoryCard
                         memory={activeId ? (memories.find((memory) => memory.id === activeId) ?? null) : null}
@@ -219,7 +227,7 @@ export function MemoryUniverse({
                         point={activeId ? positions.get(activeId) : undefined}
                         channelColors={channelColors}
                         actions={wrapped}
-                        hover={hover}
+                        hoverCard={hoverCard}
                     />
                     <RecenterButton />
                     {onCreate && createLabel && memories.length > 0 && (
@@ -258,21 +266,21 @@ function ActiveMemoryCard({
     point,
     channelColors,
     actions,
-    hover,
+    hoverCard,
 }: {
     memory: NetworkMemory | null
     visual?: ParticleVisual
     point?: Point
     channelColors?: Map<string, string>
     actions: MemoryCardActions
-    hover: (id: string | null) => void
+    hoverCard: (id: string | null) => void
 }) {
     const zoom = useZoom()
     const open = memory && visual && point && zoom >= CARD_MIN_ZOOM
     return (
         <AnimatePresence>
             {open && (
-                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} onPointerEnter={() => hover(memory.id)} onPointerLeave={() => hover(null)} />
+                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} onPointerEnter={() => hoverCard(memory.id)} onPointerLeave={() => hoverCard(null)} />
             )}
         </AnimatePresence>
     )

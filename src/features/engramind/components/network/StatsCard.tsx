@@ -33,7 +33,7 @@ export function StatsCard({ title, rows, children }: { title: string; rows: Stat
 }
 
 /** Lista "nome → total" (por canal, por agente) dentro do card. */
-export function StatList({ title, items, colors, testId }: { title: string; items: { key: string; label: string; count: number }[]; colors?: Map<string, string>; testId?: string }) {
+export function StatList({ title, items, colors, testId }: { title: string; items: { key: string; label: string; count: number; node?: React.ReactNode }[]; colors?: Map<string, string>; testId?: string }) {
     if (!items.length) return null
     return (
         <div className="mt-3 border-t pt-2" data-testid={testId}>
@@ -42,9 +42,12 @@ export function StatList({ title, items, colors, testId }: { title: string; item
                 {items.map((item) => (
                     <li key={item.key} className="flex items-center gap-1.5">
                         {colors && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: colors.get(item.key) }} />}
-                        <span className="min-w-0 flex-1 truncate text-muted-foreground" title={item.label}>
-                            {item.label}
-                        </span>
+                        {/* `node`: conteúdo no lugar do rótulo (ex.: `ChannelName`). */}
+                        {item.node ?? (
+                            <span className="min-w-0 flex-1 truncate text-muted-foreground" title={item.label}>
+                                {item.label}
+                            </span>
+                        )}
                         <span className="tabular-nums text-foreground">
                             <AnimatedNumber value={item.count} />
                         </span>

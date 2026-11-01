@@ -130,6 +130,17 @@ export function pickChannelColors(all: ReadonlyMap<string, string>, slugs: reado
     return picked
 }
 
+/**
+ * Nome do canal em duas partes: o prefixo até a última `/` (linha discreta) e a ponta final (o
+ * título destacado). Canais com o mesmo começo (`agentes/desenvolvedor/…`) passam a se distinguir.
+ */
+export function splitChannelSlug(slug: string): { prefix: string; leaf: string } {
+    const trimmed = slug.replace(/\/+$/, "")
+    const cut = trimmed.lastIndexOf("/")
+    if (cut <= 0) return { prefix: "", leaf: trimmed || slug }
+    return { prefix: trimmed.slice(0, cut + 1), leaf: trimmed.slice(cut + 1) }
+}
+
 /** O alvo da assinatura (exato ou prefixo `eng/projeto-*`) alcança o canal? */
 export function subscriptionReaches(target: string, isPrefix: boolean, slug: string): boolean {
     if (!isPrefix && !target.endsWith("*")) return target === slug
@@ -185,11 +196,11 @@ export interface Rect {
 export const OVERVIEW_ROW_GAP = 320
 /** Passo horizontal entre agentes (pílula de até ~180 px). */
 export const OVERVIEW_AGENT_GAP = 210
-/** Passo horizontal entre canais (card de até 240 px, `max-w-60`). */
-export const OVERVIEW_CHANNEL_GAP = 270
+/** Passo horizontal entre canais (card de até 288 px, `max-w-72`: o prefixo cabe numa linha). */
+export const OVERVIEW_CHANNEL_GAP = 310
 /** Caixa aproximada dos nodes, para o enquadramento inicial. */
 export const OVERVIEW_AGENT_BOX = { width: 180, height: 48 }
-export const OVERVIEW_CHANNEL_BOX = { width: 240, height: 52 }
+export const OVERVIEW_CHANNEL_BOX = { width: 288, height: 64 }
 /** Folga do enquadramento inicial em cada lado da linha de agentes (fração da largura). */
 export const OVERVIEW_FIT_MARGIN = 0.15
 
@@ -245,21 +256,49 @@ export const UNIVERSE_SLOT = 46
 export function layoutUniverse(memories: readonly Pick<NetworkMemory, "id" | "retrievals" | "injections">[]): Map<string, Point> {
     const sorted = [...memories].sort((a, b) => memoryUses(b) - memoryUses(a) || a.id.localeCompare(b.id))
     const positions = new Map<string, Point>()
-    let ring = 0
     let cursor = 0
-    while (cursor < sorted.length) {
+    universeRingCounts(sorted.length).forEach((count, ring) => {
         const radius = UNIVERSE_FIRST_RADIUS + ring * UNIVERSE_RING_GAP
-        const capacity = Math.max(6, Math.floor((2 * Math.PI * radius) / UNIVERSE_SLOT))
-        const members = sorted.slice(cursor, cursor + capacity)
+        const members = sorted.slice(cursor, cursor + count)
         const offset = ring * 0.61
         members.forEach((memory, index) => {
             const angle = offset + (index / members.length) * 2 * Math.PI
             positions.set(memory.id, { x: Math.round(Math.cos(angle) * radius * 10) / 10, y: Math.round(Math.sin(angle) * radius * 10) / 10 })
         })
-        cursor += members.length
-        ring += 1
-    }
+        cursor += count
+    })
     return positions
+}
+
+/** Vagas de um anel (≈ `UNIVERSE_SLOT` px entre vizinhas). */
+export const universeRingCapacity = (ring: number) => Math.max(6, Math.floor((2 * Math.PI * (UNIVERSE_FIRST_RADIUS + ring * UNIVERSE_RING_GAP)) / UNIVERSE_SLOT))
+
+/**
+ * Quantas memórias em cada anel: o número de anéis é o mínimo que comporta todas, e elas são
+ * distribuídas proporcionalmente às vagas de cada anel (maior resto), para o último anel não ficar
+ * quase vazio (50 memórias: ~12/17/21 em vez de 20/28/2).
+ */
+export function universeRingCounts(total: number): number[] {
+    if (total <= 0) return []
+    const capacities: number[] = []
+    let room = 0
+    while (room < total) {
+        const capacity = universeRingCapacity(capacities.length)
+        capacities.push(capacity)
+        room += capacity
+    }
+    const exact = capacities.map((capacity) => (total * capacity) / room)
+    const counts = exact.map((value, ring) => Math.min(Math.floor(value), capacities[ring] ?? 0))
+    let missing = total - counts.reduce((sum, count) => sum + count, 0)
+    const byRemainder = exact.map((value, ring) => ({ ring, rest: value - Math.floor(value) })).sort((a, b) => b.rest - a.rest || a.ring - b.ring)
+    for (let index = 0; missing > 0; index = (index + 1) % byRemainder.length) {
+        const ring = byRemainder[index]?.ring ?? 0
+        if ((counts[ring] ?? 0) < (capacities[ring] ?? 0)) {
+            counts[ring] = (counts[ring] ?? 0) + 1
+            missing -= 1
+        }
+    }
+    return counts
 }
 
 /** Deslocamento do hover: as demais partículas se afastam levemente da focada. */

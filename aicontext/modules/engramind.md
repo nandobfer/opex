@@ -211,9 +211,20 @@ rede (teste estático).
   por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
   mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos).
   Clicar no agente/canal abre o universo; menu "⋯" ou botão direito no canal abre o `ChannelPanel`.
+- **Nome do canal** (`ChannelName`, nos canais da visão inicial, no centro do universo do canal e na
+  legenda "Por canal"): o prefixo até a última `/` numa linha discreta em cima (`splitChannelSlug`) e
+  a ponta final como título destacado; o slug inteiro aparece ao passar o mouse. O card do canal tem
+  até 288 px (`max-w-72`), para o prefixo caber numa linha (corta no fim só se não couber). Canal por
+  central (`agentes/desenvolvedor/central/<centralId>`): o título é a **sigla do repositório** (ex.:
+  `OPE`) e a dica mostra o nome do repositório (`ChannelLabelsProvider` lê as centrais com
+  `useCentrals`; `centralChannelLabels` em `network/channel-labels.ts`); central desconhecida mostra
+  o id.
 - **Universo do canal** (`MemoryUniverse`): o canal no centro e uma partícula por memória (ativas,
   fixadas e inativas) em órbitas (`layoutUniverse`: as mais usadas mais perto), com links fracos ao
-  centro. Canal arquivado abre apagado e somente leitura, sem Nova memória.
+  centro. Anéis concêntricos a partir do raio 150 (+58 por anel, ~46 px entre vizinhas): o número de
+  anéis é o mínimo que comporta todas, e elas são distribuídas proporcionalmente às vagas de cada anel
+  (`universeRingCounts`; 15 → 1 anel, 50 → 12/17/21, 100 → 4 anéis), então o universo cresce para fora
+  com densidade constante e o último anel não fica quase vazio. Canal arquivado abre apagado e somente leitura, sem Nova memória.
 - **Universo do agente**: as memórias de todos os canais que ele assina; o link de cada partícula tem
   a **cor do canal** (`channelColors` calculado sobre **todos** os canais e lido por universo com
   `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais que caem na mesma base ganham
@@ -245,8 +256,10 @@ com o conteúdo entrando em fade; ao fechar, encolhe de volta para ela. A partí
 (`data-expanded`) enquanto o card está aberto. O card fica numa **camada fora da área com zoom**
 (filho do React Flow, irmão do viewport): tamanho e fonte fixos (`w-72`) em qualquer zoom, posição
 convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **inteiro dentro do
-quadro** (`clampCardRect`, 8 px de margem). Sair da partícula fecha depois de 300 ms; o card cobre a
-partícula, então entrar nele cancela, e sair dele fecha. Movimento reduzido: troca instantânea. As
+quadro** (`clampCardRect`, 8 px de margem). Hover com **dois sinais de presença** (cursor na partícula e no card,
+ambos por eventos de ponteiro): o fechamento (300 ms) só é agendado quando os dois estão desligados e
+é cancelado quando qualquer um liga, então a ordem dos eventos não importa (o navegador avisa "entrei
+no card" antes de "saí da partícula"). Sair do card fecha depois do atraso. Movimento reduzido: troca instantânea. As
 vizinhas se afastam levemente (`repelOffset`). O card tem título, texto, categoria, canal, idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou

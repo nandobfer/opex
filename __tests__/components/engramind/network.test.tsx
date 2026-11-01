@@ -34,6 +34,7 @@ vi.mock('@/lib/pusher/client', () => ({
 }))
 
 import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
+import { HOVER_CLOSE_DELAY_MS } from '@/features/engramind/components/network/MemoryUniverse'
 import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
 import { channelColors } from '@/features/engramind/network/network-math'
 
@@ -64,6 +65,7 @@ const memory = (id: string, channel: string, extra: Record<string, unknown> = {}
   created_at: now, updated_at: now, archived_at: null, ...extra,
 })
 let memories: ReturnType<typeof memory>[]
+let centrals: { id: string; sigla: string; projectName: string; repo: string | null }[] = []
 
 const respond = (url: string) => {
   if (url === '/engramind/channels') return { channels, next_cursor: null }
@@ -73,6 +75,7 @@ const respond = (url: string) => {
   if (url === '/engramind/memories') return { memories, next_cursor: null }
   if (url === '/engramind/settings') return { settings: [{ key: 'consolidation.stale_after_days', value: 30 }, { key: 'categories.list', value: [{ key: 'PROJECT_RULES', label: 'Regras', priority: 1 }] }, { key: 'memory.text_min', value: 3 }, { key: 'memory.text_max', value: 200 }] }
   if (url === '/engramind/memory-usage') return {}
+  if (url === '/agentic/centrals') return centrals
   if (url.startsWith('/engramind/memories/')) return memories.find((item) => item.id === decodeURIComponent(url.slice('/engramind/memories/'.length)))
   return {}
 }
@@ -108,6 +111,44 @@ describe('visão inicial', () => {
     expect(screen.getByTestId('stat-agents').textContent).toBe('2')
     expect(screen.getByTestId('stat-active').textContent).toBe('2')
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
+  })
+
+  it('nome do canal: prefixo discreto em cima e a ponta final como título; o slug inteiro no hover', async () => {
+    mount()
+    const node = await screen.findByTestId('channel-node-agentes/opex/global')
+    const name = within(node).getByTestId('channel-name-agentes/opex/global')
+    expect(within(name).getByTestId('channel-name-prefix').textContent).toBe('agentes/opex/')
+    expect(within(name).getByTestId('channel-name-title').textContent).toBe('global')
+    expect(name.getAttribute('title')).toBe('agentes/opex/global')
+    // Canal sem barra: só o título.
+    const plain = within(screen.getByTestId('channel-node-opex')).getByTestId('channel-name-opex')
+    expect(within(plain).queryByTestId('channel-name-prefix')).toBeNull()
+    expect(within(plain).getByTestId('channel-name-title').textContent).toBe('opex')
+  })
+
+  it('canal de central: a sigla do repositório é o título e o nome do repositório fica na dica', async () => {
+    const slug = 'agentes/desenvolvedor/central/c1'
+    channels.push({ id: 'ch_9', slug, name: 'Central', description: null, priority: 0, version: 1, created_at: now, archived_at: null })
+    centrals = [{ id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' }]
+    try {
+      mount()
+      const node = await screen.findByTestId(`channel-node-${slug}`)
+      await waitFor(() => expect(within(node).getByTestId('channel-name-title').textContent).toBe('OPE'))
+      const title = within(node).getByTestId('channel-name-title')
+      expect(title.getAttribute('data-hint')).toBe('Opex · nandobfer/opex')
+      expect(within(node).getByTestId('channel-name-prefix').textContent).toBe('agentes/desenvolvedor/central/')
+    } finally {
+      channels.pop()
+      centrals = []
+    }
+  })
+
+  it('universo do canal: o centro mostra o prefixo e a ponta final', async () => {
+    nav.params = new URLSearchParams('universo=canal:agentes/opex/global')
+    mount()
+    const center = await screen.findByTestId('universe-center')
+    expect(within(center).getByTestId('channel-name-title').textContent).toBe('global')
+    expect(within(center).getByTestId('channel-name-prefix').textContent).toBe('agentes/opex/')
   })
 
   it('visão horizontal: enquadra a linha de agentes com folga (fitBounds) e o Centralizar volta a ela', async () => {
@@ -218,7 +259,7 @@ describe('universos', () => {
     net.delete.mockResolvedValue({ data: { data: {} } })
     net.patch.mockRejectedValueOnce(new Error('Esta memória mudou enquanto você editava. Confira a versão atual.'))
     mount()
-    fireEvent.mouseEnter(await screen.findByTestId('memory-node-m_1'))
+    fireEvent.pointerEnter(await screen.findByTestId('memory-node-m_1'))
     const card = await screen.findByTestId('memory-card-m_1')
     expect(card.textContent).toContain('Título m_1')
     expect(within(card).getByTestId('memory-card-uses').textContent).toContain('3 usos')
@@ -228,7 +269,7 @@ describe('universos', () => {
     expect(net.delete).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir de vez' }))
     await waitFor(() => expect(net.delete).toHaveBeenCalledWith('/engramind/memories/m_1'))
-    fireEvent.mouseEnter(screen.getByTestId('memory-node-m_1'))
+    fireEvent.pointerEnter(screen.getByTestId('memory-node-m_1'))
     fireEvent.click(within(await screen.findByTestId('memory-card-m_1')).getByRole('button', { name: 'Editar' }))
     fireEvent.change(await screen.findByLabelText('Texto da memória'), { target: { value: 'Texto novo' } })
     await waitFor(() => expect((screen.getByRole('button', { name: /Salvar/ }) as HTMLButtonElement).disabled).toBe(false))
@@ -238,18 +279,36 @@ describe('universos', () => {
     expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Texto novo')
   })
 
-  it('regressão: o card cobre a partícula; sair dela e entrar no card mantém aberto; sair do card fecha depois do atraso', async () => {
+  it('regressão: na ordem real do navegador (entra no card antes de sair da partícula) o card continua aberto; sair do card fecha depois do atraso', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
     const node = await screen.findByTestId('memory-node-m_1')
-    fireEvent.mouseEnter(node)
+    fireEvent.pointerEnter(node)
     const card = await screen.findByTestId('memory-card-m_1')
-    fireEvent.mouseLeave(node)
+    // O navegador avisa "entrei no card" antes de "saí da partícula".
     fireEvent.pointerEnter(card)
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    fireEvent.pointerLeave(node)
+    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
     expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-expanded')).toBe('true')
     fireEvent.pointerLeave(screen.getByTestId('memory-card-m_1'))
+    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS - 150))
+    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
     await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+  })
+
+  it('a ordem inversa (sai da partícula e depois entra no card) também mantém o card; voltar à partícula cancela o fechamento', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    const node = await screen.findByTestId('memory-node-m_1')
+    fireEvent.pointerEnter(node)
+    const card = await screen.findByTestId('memory-card-m_1')
+    fireEvent.pointerLeave(node)
+    fireEvent.pointerEnter(card)
+    fireEvent.pointerLeave(card)
+    fireEvent.pointerEnter(node)
+    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
+    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
   })
 
   it('a partícula vira o card numa camada fora do zoom: mesmo tamanho com zoom 1 e 2, dentro do quadro', async () => {

@@ -12,6 +12,7 @@ import { QueryBoundary } from "../shared/QueryBoundary"
 import { ImportMemoriesDialog } from "../page/memories/ImportMemoriesDialog"
 import { ChannelDialog } from "../page/channels/ChannelDialog"
 import { ChannelPanel } from "./ChannelPanel"
+import { ChannelLabelsProvider } from "./ChannelName"
 import { MemoryUniverse } from "./MemoryUniverse"
 import { NetworkBreadcrumb } from "./NetworkBreadcrumb"
 import { NetworkSkeleton } from "./NetworkSkeleton"
@@ -30,6 +31,14 @@ interface SearchHitIds {
  * universo do agente, com a gestão de canais e memórias (antes as abas Canais e Memórias).
  */
 export function EngramindNetwork({ onConfigure }: { onConfigure: () => void }) {
+    return (
+        <ChannelLabelsProvider>
+            <EngramindNetworkContent onConfigure={onConfigure} />
+        </ChannelLabelsProvider>
+    )
+}
+
+function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
     useEngramindRealtime()
     const data = useEngramindNetwork()
     const [includeArchived, setIncludeArchived] = useState(false)

@@ -45,6 +45,13 @@ export function MemoryCardLayer({
     const canvasWidth = useStore((state) => state.width)
     const canvasHeight = useStore((state) => state.height)
     const ref = useRef<HTMLDivElement>(null)
+    // Card que sai sem o cursor ter saído dele (fechado por clique fora, memória removida): a
+    // presença do card é desligada para não segurar o próximo hover.
+    const leaveRef = useRef(onPointerLeave)
+    useEffect(() => {
+        leaveRef.current = onPointerLeave
+    })
+    useEffect(() => () => leaveRef.current(), [])
     const [height, setHeight] = useState(MEMORY_CARD_ESTIMATED_HEIGHT)
     const [settled, setSettled] = useState(false)
 

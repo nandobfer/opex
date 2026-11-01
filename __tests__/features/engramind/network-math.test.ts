@@ -30,9 +30,14 @@ import {
   subscriptionLinks,
   subscriptionReaches,
   UNIVERSE_FIRST_RADIUS,
+  UNIVERSE_RING_GAP,
+  splitChannelSlug,
+  universeRingCapacity,
+  universeRingCounts,
   universeStats,
 } from '@/features/engramind/network/network-math'
 import { buildParticles } from '@/features/engramind/network/particles'
+import { CENTRAL_CHANNEL_PREFIX, centralChannelLabels, channelNameParts, isCentralChannel } from '@/features/engramind/network/channel-labels'
 import type { NetworkMemory } from '@/features/engramind/network/types'
 
 /** OPE-109: cálculos puros da rede (cor, tamanho, brilho, links, layout e estatísticas) e o contexto tagged. */
@@ -237,9 +242,47 @@ describe('layout', () => {
     const positions = layoutUniverse(memories)
     const radius = (id: string) => Math.hypot(positions.get(id)!.x, positions.get(id)!.y)
     expect(Math.round(radius('m59'))).toBe(UNIVERSE_FIRST_RADIUS)
+    // Anéis equilibrados: 60 memórias em 3 anéis (≈ 15/20/25), as mais usadas por dentro.
+    expect(universeRingCounts(60)).toHaveLength(3)
     expect(radius('m0')).toBeGreaterThan(radius('m59'))
     const keys = new Set([...positions.values()].map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`))
     expect(keys.size).toBe(60)
+  })
+
+  it('anéis equilibrados: mesmo número de anéis, distribuição proporcional às vagas, sem anel quase vazio', () => {
+    // Até 20 memórias: um anel só, como antes.
+    expect(universeRingCounts(15)).toEqual([15])
+    expect(universeRingCounts(20)).toEqual([20])
+    for (const total of [50, 100, 1000]) {
+      const counts = universeRingCounts(total)
+      const capacities = counts.map((_, ring) => universeRingCapacity(ring))
+      const room = capacities.reduce((sum, capacity) => sum + capacity, 0)
+      expect(counts.reduce((sum, count) => sum + count, 0)).toBe(total)
+      // O mínimo de anéis que comporta todas (como antes).
+      expect(room - capacities.at(-1)!).toBeLessThan(total)
+      counts.forEach((count, ring) => {
+        expect(count).toBeLessThanOrEqual(capacities[ring]!)
+        expect(count).toBeGreaterThanOrEqual(Math.floor(((total * capacities[ring]!) / room) * 0.5))
+      })
+    }
+    // 50 memórias: ~12/17/21 em vez de 20/28/2.
+    expect(universeRingCounts(50)).toEqual([12, 17, 21])
+  })
+
+  it('universo com 50 memórias: as mais usadas no anel de dentro e o último anel cheio', () => {
+    const memories = Array.from({ length: 50 }, (_, index) => mem(`m${index}`, { injections: index }))
+    const positions = layoutUniverse(memories)
+    const ring = (id: string) => Math.round((Math.hypot(positions.get(id)!.x, positions.get(id)!.y) - UNIVERSE_FIRST_RADIUS) / UNIVERSE_RING_GAP)
+    const byRing = [0, 1, 2].map((index) => memories.filter((memory) => ring(memory.id) === index).map((memory) => memory.injections))
+    expect(byRing.map((items) => items.length)).toEqual([12, 17, 21])
+    expect(Math.min(...byRing[0]!)).toBeGreaterThan(Math.max(...byRing[1]!))
+    expect(Math.min(...byRing[1]!)).toBeGreaterThan(Math.max(...byRing[2]!))
+  })
+
+  it('nome do canal: prefixo até a última barra e a ponta final como título', () => {
+    expect(splitChannelSlug('agentes/desenvolvedor/central/abc123')).toEqual({ prefix: 'agentes/desenvolvedor/central/', leaf: 'abc123' })
+    expect(splitChannelSlug('opex')).toEqual({ prefix: '', leaf: 'opex' })
+    expect(splitChannelSlug('agentes/adversario/')).toEqual({ prefix: 'agentes/', leaf: 'adversario' })
   })
 
   it('hover afasta as vizinhas para longe da focada', () => {
@@ -270,5 +313,20 @@ describe('filtros e estatísticas', () => {
     expect(agentDisplayName('Agente Opex')).toBe('Opex')
     expect(agentDisplayName('agente   Maddox')).toBe('Maddox')
     expect(agentDisplayName('Revisor')).toBe('Revisor')
+  })
+})
+
+describe('rótulos dos canais por central', () => {
+  it('a sigla do repositório vira o título e o nome vai na dica; central desconhecida mantém a ponta do slug', () => {
+    const labels = centralChannelLabels([
+      { id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' },
+      { id: 'c2', sigla: '', projectName: 'Sem sigla', repo: null },
+    ])
+    expect(channelNameParts(`${CENTRAL_CHANNEL_PREFIX}c1`, labels)).toEqual({ prefix: CENTRAL_CHANNEL_PREFIX, title: 'OPE', hint: 'Opex · nandobfer/opex' })
+    expect(channelNameParts(`${CENTRAL_CHANNEL_PREFIX}c2`, labels).title).toBe('Sem sigla')
+    expect(channelNameParts(`${CENTRAL_CHANNEL_PREFIX}c9`, labels)).toEqual({ prefix: CENTRAL_CHANNEL_PREFIX, title: 'c9', hint: null })
+    expect(channelNameParts('agentes/opex/global', labels)).toEqual({ prefix: 'agentes/opex/', title: 'global', hint: null })
+    expect(isCentralChannel(`${CENTRAL_CHANNEL_PREFIX}c1`)).toBe(true)
+    expect(isCentralChannel('agentes/desenvolvedor/global')).toBe(false)
   })
 })

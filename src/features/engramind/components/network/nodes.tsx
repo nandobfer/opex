@@ -6,6 +6,7 @@ import { Archive, Hash, MoreHorizontal, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { AgentIcon } from "./agent-icons"
+import { ChannelName } from "./ChannelName"
 import { PulseRing } from "./live"
 
 /** Zoom abaixo do qual os rótulos somem (visão muito afastada). */
@@ -56,13 +57,13 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
         <div
             data-testid={`channel-node-${data.slug}`}
             data-archived={data.archived || undefined}
-            className={cn("relative flex min-w-44 max-w-60 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.archived && "border-dashed opacity-60", data.dimmed && "opacity-30")}
+            className={cn("relative flex min-w-48 max-w-72 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.archived && "border-dashed opacity-60", data.dimmed && "opacity-30")}
         >
             <PulseRing nodeKey={`channel:${data.slug}`} className="rounded-xl" />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">{data.archived ? <Archive className="h-4 w-4" aria-hidden /> : <Hash className="h-4 w-4" aria-hidden />}</span>
             {showLabel && (
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <span className="truncate text-sm font-medium text-foreground">{data.slug}</span>
+                    <ChannelName slug={data.slug} />
                     <span className="truncate text-[10px] text-muted-foreground">
                         {data.count} {data.count === 1 ? "memória" : "memórias"}
                         {typeof data.hits === "number" && <span className="ml-1 font-semibold text-primary">· {data.hits} na busca</span>}
@@ -89,7 +90,15 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
     )
 })
 
-export type CenterNodeData = { label: string; detail: string; icon: LucideIcon; pulseKey: string; archived?: boolean }
+export type CenterNodeData = {
+    label: string
+    detail: string
+    icon: LucideIcon
+    pulseKey: string
+    archived?: boolean
+    /** Universo do canal: o nome sai em duas linhas (`ChannelName`). */
+    channelSlug?: string
+}
 
 export const CenterNode = memo(function CenterNode({ data }: NodeProps<Node<CenterNodeData, "center">>) {
     const Icon = data.icon
@@ -100,7 +109,13 @@ export const CenterNode = memo(function CenterNode({ data }: NodeProps<Node<Cent
                 <Icon className="h-7 w-7" aria-hidden />
                 <CenterHandles />
             </span>
-            <span className="max-w-56 truncate rounded-md bg-card/80 px-2 text-sm font-semibold text-foreground">{data.label}</span>
+            {data.channelSlug ? (
+                <span className="flex max-w-72 flex-col items-center rounded-md bg-card/80 px-2 text-center">
+                    <ChannelName slug={data.channelSlug} size="center" className="items-center" titleClassName="font-semibold" />
+                </span>
+            ) : (
+                <span className="max-w-56 truncate rounded-md bg-card/80 px-2 text-sm font-semibold text-foreground">{data.label}</span>
+            )}
             <span className="text-[10px] text-muted-foreground">{data.detail}</span>
         </div>
     )
