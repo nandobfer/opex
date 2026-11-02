@@ -1,8 +1,9 @@
 import type { MemoryStatus, MemoryUsageMap, NetworkChannel, NetworkLink, NetworkMemory, SubscriptionMode } from "./types"
 
 /**
- * Cálculos puros da rede "universo de partículas" do Engramind (OPE-109): cor por idade, tamanho por
- * uso, brilho pelo prazo do consolidador, cor estável dos canais, links das assinaturas e layout.
+ * Cálculos puros da rede "universo de partículas" do Engramind (OPE-109, OPE-114): cor pelo canal,
+ * distância do centro pela idade, tamanho pelo uso, brilho pelo prazo do consolidador, cor estável dos
+ * canais, links das assinaturas e layout.
  * Cores só por tokens do tema (`color-mix` sobre variáveis CSS), nunca valores fixos.
  */
 
@@ -44,21 +45,6 @@ export function lastRealUseOf(memory: Pick<NetworkMemory, "id" | "lastRetrievedA
     return candidates.reduce((best, value) => (time(value) > time(best) ? value : best))
 }
 
-/** Idade relativa ao universo: 0 = a mais nova (verde), 1 = a mais antiga (roxo). Uma só ou datas iguais → 0. */
-export function ageRatios(memories: readonly Pick<NetworkMemory, "id" | "createdAt">[]): Map<string, number> {
-    const times = memories.map((memory) => time(memory.createdAt)).filter((value) => !Number.isNaN(value))
-    const newest = Math.max(...times)
-    const oldest = Math.min(...times)
-    const span = newest - oldest
-    return new Map(memories.map((memory) => [memory.id, span > 0 && !Number.isNaN(time(memory.createdAt)) ? (newest - time(memory.createdAt)) / span : 0]))
-}
-
-/** Cor pela idade (gradiente verde → roxo primário). */
-export function ageColor(ratio: number): string {
-    const pct = Math.round(clamp01(ratio) * 100)
-    return `color-mix(in oklch, var(--color-primary) ${pct}%, var(--color-success))`
-}
-
 /** Tamanho pela soma de consultas e injeções, em escala logarítmica suave relativa ao universo. */
 export function particleSize(uses: number, maxUses: number): number {
     if (maxUses <= 0 || uses <= 0) return PARTICLE_MIN_PX
@@ -80,13 +66,16 @@ export function particleBrightness(input: { status: MemoryStatus; stale: boolean
     return Math.round(value * 1000) / 1000
 }
 
-/** Cor final da partícula: a cor da idade apagada em direção ao cinza conforme perde brilho. */
+/** Cor final da partícula: a cor do canal apagada em direção ao cinza conforme perde brilho. */
 export function particleColor(base: string, brightness: number): string {
     const pct = Math.round(clamp01(brightness) * 100)
     return `color-mix(in oklch, ${base} ${pct}%, var(--color-muted-foreground))`
 }
 
-const CHART_TOKENS = 6
+/** Paleta dos canais: `--chart-2..6` (o `--chart-1` é o roxo primário, reservado ao canal em destaque). */
+const CHANNEL_TOKENS = 5
+/** Cor do canal com mais memórias do universo (e de todo universo de um canal só). */
+export const PRIMARY_CHANNEL_COLOR = "var(--color-primary)"
 const TONES = ["", "var(--color-foreground)", "var(--color-background)"] as const
 
 export function stableHash(text: string): number {
@@ -99,20 +88,20 @@ export function stableHash(text: string): number {
 }
 
 const toneOf = (base: number, tone: number): string => {
-    const token = `var(--chart-${base + 1})`
+    const token = `var(--chart-${base + 2})`
     if (tone === 0) return token
     return `color-mix(in oklch, ${token} 70%, ${TONES[tone % TONES.length] || TONES[1]})`
 }
 
 /**
- * Cor de cada canal: a cor base (`--chart-1..6`) vem só do slug (o mesmo canal tem sempre a mesma
+ * Cor de cada canal: a cor base (`--chart-2..6`) vem só do slug (o mesmo canal tem sempre a mesma
  * cor). Quando mais de um canal cai na mesma base, os seguintes (em ordem de slug) ganham variações de
  * tom da mesma cor.
  */
 export function channelColors(slugs: readonly string[]): Map<string, string> {
     const byBase = new Map<number, string[]>()
     for (const slug of [...new Set(slugs)].sort()) {
-        const base = stableHash(slug) % CHART_TOKENS
+        const base = stableHash(slug) % CHANNEL_TOKENS
         byBase.set(base, [...(byBase.get(base) ?? []), slug])
     }
     const colors = new Map<string, string>()
@@ -128,6 +117,25 @@ export function pickChannelColors(all: ReadonlyMap<string, string>, slugs: reado
         if (color) picked.set(slug, color)
     }
     return picked
+}
+
+/**
+ * Cores de um universo: cada canal com a sua cor estável (do mapa `base` ou do slug) e o canal com mais
+ * memórias (todas, inclusive inativas; empate pelo slug, a ordem da legenda "Por canal") com o roxo
+ * primário. Canais do mapa sem memórias entram com a cor estável. Sem memórias, nenhum fica roxo.
+ */
+export function universeChannelColors(base: ReadonlyMap<string, string> | undefined, memories: readonly Pick<NetworkMemory, "channel">[]): Map<string, string> {
+    const counts = new Map<string, number>()
+    for (const memory of memories) counts.set(memory.channel, (counts.get(memory.channel) ?? 0) + 1)
+    const slugs = [...new Set([...(base?.keys() ?? []), ...counts.keys()])]
+    const colors = new Map<string, string>()
+    for (const slug of slugs) {
+        const color = base?.get(slug) ?? channelColors([slug]).get(slug)
+        if (color) colors.set(slug, color)
+    }
+    const top = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]
+    if (top) colors.set(top[0], PRIMARY_CHANNEL_COLOR)
+    return colors
 }
 
 /**
@@ -277,9 +285,21 @@ export const UNIVERSE_FIRST_RADIUS = 150
 export const UNIVERSE_RING_GAP = 58
 export const UNIVERSE_SLOT = 46
 
-/** Universo: órbitas concêntricas em volta do centro (0,0); as mais usadas ficam nas órbitas internas. */
-export function layoutUniverse(memories: readonly Pick<NetworkMemory, "id" | "retrievals" | "injections">[]): Map<string, Point> {
-    const sorted = [...memories].sort((a, b) => memoryUses(b) - memoryUses(a) || a.id.localeCompare(b.id))
+/** Criação em ms; data inválida conta como a mais antiga. */
+const createdTime = (memory: Pick<NetworkMemory, "createdAt">): number => {
+    const value = time(memory.createdAt)
+    return Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value
+}
+
+/**
+ * Universo: órbitas concêntricas em volta do centro (0,0) pela idade (criação): as mais novas nas
+ * órbitas internas, as mais antigas (e as de data inválida) nas externas.
+ */
+export function layoutUniverse(memories: readonly Pick<NetworkMemory, "id" | "createdAt">[]): Map<string, Point> {
+    const sorted = [...memories].sort((a, b) => {
+        const diff = createdTime(b) - createdTime(a)
+        return (Number.isNaN(diff) ? 0 : diff) || a.id.localeCompare(b.id)
+    })
     const positions = new Map<string, Point>()
     let cursor = 0
     universeRingCounts(sorted.length).forEach((count, ring) => {
