@@ -59,7 +59,7 @@ import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup }
 import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
-import { syncDeveloperMemories, withDeveloperMemories, type DeveloperMemoriesSync } from "./developer-memories"
+import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories, type DeveloperMemoriesSync } from "./developer-memories"
 import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
@@ -983,6 +983,8 @@ function turnHooks(doc: IAgenticWorkbench) {
         onMoved: async (directory: string) => {
             await AgenticWorkbench.updateOne(filter, { $set: { sessionDirectory: directory } })
             await changed()
+            // Aprendizado autônomo: as ferramentas de memória seguem a sessão para o worktree recém-criado.
+            void registerDeveloperMemoryMcpAt(getOpencodeClient, directory)
         },
         heartbeat: async () => {
             await AgenticWorkbench.updateOne(filter, { $set: { heartbeatAt: new Date() } })

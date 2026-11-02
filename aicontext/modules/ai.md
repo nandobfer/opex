@@ -455,7 +455,10 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 - Acesso: Agente Opex nativo (ferramentas do turno); Maddox, mesas/forks e revisões do Adversário pelo
   MCP `opex_memorias` (`POST /api/agent-memory/mcp`, Bearer = segredo derivado da chave das integrações;
   o agente e o turno saem da sessão do OpenCode, subindo à sessão-mãe; sessão desconhecida é recusada),
-  registrado por diretório (`ensureAgentMemoryMcp`; falha vira aviso e o turno segue). No Maddox a
+  registrado por diretório (`ensureAgentMemoryMcp`: diretório ainda inexistente é pulado e volta em
+  `skipped`, erro num diretório não derruba os outros; `ok: false` sem configuração ou quando nenhum
+  diretório foi registrado — por erro ou por nenhum existir, como o diretório único do Maddox ou o worktree
+  do Adversário removido —, e aí as ferramentas não são anunciadas, a falha vira aviso e o turno segue). No Maddox a
   sessão do OpenCode faz `ask` nas que pedem confirmação; nas mesas e revisões (sem chat) a chamada que
   pede confirmação é recusada e o agente edita em vez de excluir.
 - Liga/desliga por agente: `ai_feature_settings` `feature: "agent-self-memory"` (padrão: ligado),

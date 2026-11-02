@@ -220,35 +220,71 @@ async function mcpBaseUrl(): Promise<string | null> {
 const globalRegistry = globalThis as unknown as { __agentMemoryMcpRegistered?: Set<string> }
 const registered = (globalRegistry.__agentMemoryMcpRegistered ??= new Set())
 
+/** Diretório que (ainda) não existe no host: ex. o worktree antes de o agente de implementação criá-lo. */
+export function isMissingDirectoryError(error: unknown): boolean {
+    if (typeof error === "object" && error !== null && (error as { _tag?: unknown })._tag === "LocationNotFoundError") return true
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+    return /location not found/i.test(message)
+}
+
+export interface AgentMemoryMcpRegistration {
+    ok: boolean
+    error: string | null
+    /** Diretórios pulados porque ainda não existem (não é falha: o registro acontece quando existirem). */
+    skipped: string[]
+}
+
 /**
  * Registra o MCP de memórias no OpenCode para os diretórios da sessão (uma vez por processo e
- * diretório). Nunca lança: falha vira `{ ok: false }` e o turno segue sem as ferramentas.
+ * diretório). Cada diretório é independente: um diretório que ainda não existe é pulado (em `skipped`)
+ * e outro com falha não impede os demais. `ok: true` quando ao menos um diretório tem o MCP; `ok: false`
+ * quando falta configuração ou nenhum diretório foi registrado (por erro ou por não existir). Nunca lança.
  */
-export async function ensureAgentMemoryMcp(client: OpencodeClient, directories: readonly (string | null | undefined)[]): Promise<{ ok: boolean; error: string | null }> {
+export async function ensureAgentMemoryMcp(client: OpencodeClient, directories: readonly (string | null | undefined)[]): Promise<AgentMemoryMcpRegistration> {
+    const skipped: string[] = []
     try {
         const base = await mcpBaseUrl()
-        if (!base) return { ok: false, error: "configure a URL pública do Opex (integração Engramind › Conexão)" }
+        if (!base) return { ok: false, error: "configure a URL pública do Opex (integração Engramind › Conexão)", skipped }
         const secret = agentMemoryMcpSecret()
-        if (!secret) return { ok: false, error: "defina INTEGRATIONS_ENCRYPTION_KEY" }
+        if (!secret) return { ok: false, error: "defina INTEGRATIONS_ENCRYPTION_KEY", skipped }
         const url = `${base}${AGENT_MEMORY_MCP_PATH}`
+        let succeeded = 0
+        let failure: string | null = null
         for (const directory of [...new Set(directories.filter((item): item is string => Boolean(item)))]) {
-            const key = `${directory}|${url}`
-            const location = { location: { directory } }
-            const present = new Set(
-                await client.mcp
-                    .list(location)
-                    .then((result) => result.data.map((server) => server.name))
-                    .catch(() => [] as string[]),
-            )
-            if (registered.has(key) && present.has(AGENT_MEMORY_MCP_SERVER)) continue
-            if (present.has(AGENT_MEMORY_MCP_SERVER)) await client.mcp.remove({ server: AGENT_MEMORY_MCP_SERVER, ...location }).catch(() => undefined)
-            await client.mcp.add({ server: AGENT_MEMORY_MCP_SERVER, ...location, config: { type: "remote", url, headers: { Authorization: `Bearer ${secret}` }, oauth: false, timeout: { execution: 120_000 } } })
-            registered.add(key)
+            try {
+                const key = `${directory}|${url}`
+                const location = { location: { directory } }
+                const present = new Set(
+                    await client.mcp
+                        .list(location)
+                        .then((result) => result.data.map((server) => server.name))
+                        .catch(() => [] as string[]),
+                )
+                if (registered.has(key) && present.has(AGENT_MEMORY_MCP_SERVER)) {
+                    succeeded++
+                    continue
+                }
+                if (present.has(AGENT_MEMORY_MCP_SERVER)) await client.mcp.remove({ server: AGENT_MEMORY_MCP_SERVER, ...location }).catch(() => undefined)
+                await client.mcp.add({ server: AGENT_MEMORY_MCP_SERVER, ...location, config: { type: "remote", url, headers: { Authorization: `Bearer ${secret}` }, oauth: false, timeout: { execution: 120_000 } } })
+                registered.add(key)
+                succeeded++
+            } catch (error) {
+                if (isMissingDirectoryError(error)) {
+                    skipped.push(directory)
+                    log.info({ directory }, "[ai] diretório ainda inexistente no OpenCode: MCP de memórias não registrado nele por enquanto")
+                    continue
+                }
+                failure = error instanceof Error ? error.message : String(error)
+                log.warn({ err: failure, directory }, "[ai] não foi possível registrar o MCP de memórias neste diretório")
+            }
         }
-        return { ok: true, error: null }
+        // Nenhum diretório registrado: as ferramentas não existem em lugar nenhum (não anunciar ao agente).
+        if (succeeded === 0 && failure) return { ok: false, error: failure, skipped }
+        if (succeeded === 0 && skipped.length) return { ok: false, error: `diretório inexistente no host: ${skipped.join(", ")}`, skipped }
+        return { ok: true, error: null, skipped }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         log.warn({ err: message }, "[ai] não foi possível registrar o MCP de memórias no OpenCode")
-        return { ok: false, error: message }
+        return { ok: false, error: message, skipped }
     }
 }
