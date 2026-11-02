@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   context: vi.fn(async (_centralId: string | null) => ({ block: '', source: 'live' as 'live' | 'cache' | 'none', cachedAt: null as string | null, counts: { full: 0, titles: 0, overflow: 0 }, reason: null })),
   selfEnabled: vi.fn(async () => false),
-  ensureMcp: vi.fn(async () => ({ ok: true, error: null as string | null })),
+  ensureMcp: vi.fn(async () => ({ ok: true, error: null as string | null, skipped: [] as string[] })),
 }))
 vi.mock('@/features/ai/server/agent-memory-context', () => ({ developerMemoryContext: mocks.context }))
 vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: mocks.selfEnabled }))
 vi.mock('@/features/ai/server/self-memory/mcp', () => ({ ensureAgentMemoryMcp: mocks.ensureMcp }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
 
-import { syncDeveloperMemories, withDeveloperMemories } from '@/features/agentic/server/developer-memories'
+import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories } from '@/features/agentic/server/developer-memories'
 import type { OpencodeClient } from '@/lib/ai/opencode-client'
 
 const makeClient = () => {
@@ -25,7 +25,7 @@ const live = (block: string) => ({ block, source: 'live' as const, cachedAt: nul
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.selfEnabled.mockResolvedValue(false)
-  mocks.ensureMcp.mockResolvedValue({ ok: true, error: null })
+  mocks.ensureMcp.mockResolvedValue({ ok: true, error: null, skipped: [] })
 })
 
 describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
@@ -82,13 +82,34 @@ describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
 
   it('MCP indisponível: o turno segue sem a instrução de memória própria e avisa', async () => {
     mocks.selfEnabled.mockResolvedValue(true)
-    mocks.ensureMcp.mockResolvedValue({ ok: false, error: 'sem URL' })
+    mocks.ensureMcp.mockResolvedValue({ ok: false, error: 'sem URL', skipped: [] })
     mocks.context.mockResolvedValueOnce(live('- Regra.'))
     const notify = vi.fn()
     const { client, put } = makeClient()
     await syncDeveloperMemories(client, 'ses_1', 'c1', { directories: ['/repo/wt'], notify })
     expect((put.mock.calls[0] as unknown as [{ value: string }])[0].value).not.toContain('Memória própria')
     expect(notify).toHaveBeenCalledWith('warn', expect.stringContaining('Aprendizado autônomo indisponível'))
+  })
+
+  it('OPE-115: worktree ainda inexistente (ao clicar em Implementar) não vira aviso e o aprendizado segue', async () => {
+    mocks.selfEnabled.mockResolvedValue(true)
+    mocks.ensureMcp.mockResolvedValue({ ok: true, error: null, skipped: ['/repo/worktrees/ope-113'] })
+    const notify = vi.fn()
+    const { client, put } = makeClient()
+    await syncDeveloperMemories(client, 'ses_1', 'c1', { directories: ['/repo', '/repo/worktrees/ope-113'], notify })
+    expect(notify).not.toHaveBeenCalledWith('warn', expect.stringContaining('Aprendizado autônomo indisponível'))
+    expect((put.mock.calls[0] as unknown as [{ value: string }])[0].value).toContain('## Memória própria (aprendizado autônomo)')
+  })
+
+  it('OPE-115: sessão movida para o worktree registra o MCP no novo diretório (só com o aprendizado ligado, sem lançar)', async () => {
+    const { client } = makeClient()
+    await registerDeveloperMemoryMcpAt(client, '/repo/worktrees/ope-115')
+    expect(mocks.ensureMcp).not.toHaveBeenCalled()
+    mocks.selfEnabled.mockResolvedValue(true)
+    await registerDeveloperMemoryMcpAt(client, '/repo/worktrees/ope-115')
+    expect(mocks.ensureMcp).toHaveBeenCalledWith(client, ['/repo/worktrees/ope-115'])
+    mocks.ensureMcp.mockRejectedValueOnce(new Error('OpenCode fora'))
+    await expect(registerDeveloperMemoryMcpAt(client, '/repo/worktrees/ope-115')).resolves.toBeUndefined()
   })
 
   it('falha ao ler as memórias não derruba o turno nem mexe na sessão', async () => {

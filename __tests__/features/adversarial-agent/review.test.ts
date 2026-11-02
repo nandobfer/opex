@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getTask: vi.fn(),
   loadFiles: vi.fn(async () => []),
   listAttachments: vi.fn(async () => [] as { name: string }[]),
+  mcpAdd: vi.fn(async (): Promise<unknown> => Promise.reject(Object.assign(new Error('Location not found: /repo/worktrees/opx-1'), { _tag: 'LocationNotFoundError' }))),
   memories: vi.fn(async () => ({ block: '- Validação X é intencional', source: 'live', cachedAt: null, counts: { full: 1, titles: 0, overflow: 0 }, reason: null })),
 }))
 
@@ -32,8 +33,12 @@ vi.mock('@/lib/ai/opencode-client', () => ({
   getOpencodeClient: async () => ({
     session: { create: mocks.sessionCreate, remove: mocks.sessionRemove, instructions: { entry: { put: mocks.instructionsPut } }, form: { cancel: mocks.formCancel } },
     permission: { reply: mocks.permissionReply },
+    mcp: { list: async () => ({ data: [] }), add: mocks.mcpAdd, remove: async () => undefined },
   }),
 }))
+// MCP "Memória própria" real (OPE-115): só a URL pública e o segredo derivado são dublês.
+vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-de-teste') }))
+vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
@@ -45,6 +50,7 @@ vi.mock('@/features/ai/server/settings', () => ({ loadTaskTagsSettings: async ()
 vi.mock('@/features/adversarial-agent/server/attachments', () => ({ loadPromptFiles: mocks.loadFiles, listTaskAttachments: mocks.listAttachments }))
 
 import { AdversarialReview } from '@/features/adversarial-agent/server/models'
+import { selfMemoryEnabled } from '@/features/ai/server/self-memory/settings'
 import { runAdversaryRound, type AdversaryRoundInput } from '@/features/adversarial-agent/server/review'
 import { DEFAULT_ADVERSARIAL_SETTINGS, type AdversarialSettings } from '@/features/adversarial-agent/schemas'
 
@@ -96,6 +102,16 @@ describe('runAdversaryRound', () => {
     expect(mocks.sessionRemove).toHaveBeenCalledWith({ sessionID: 'adv-1' }, expect.anything())
     expect(reviews.docs[0]).toMatchObject({ cycle: 1, round: 1, state: 'done', decision: 'approved', sessionId: null })
     expect(mocks.publish).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'adversarial-verdict', round: 1, outcome: 'Aprovado' }))
+  })
+
+  it('OPE-115: worktree inexistente no host: o MCP de memórias não é registrado e a instrução de memória própria não é anunciada', async () => {
+    vi.mocked(selfMemoryEnabled).mockResolvedValue(true)
+    mocks.runTurn.mockResolvedValue(succeeded(output([])))
+    await runAdversaryRound(input())
+    expect(mocks.mcpAdd).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: '/repo/worktrees/opx-1' } }))
+    const value = (mocks.instructionsPut.mock.calls[0] as unknown as [{ value: string }])[0].value
+    expect(value).not.toContain('opex_memorias_')
+    vi.mocked(selfMemoryEnabled).mockResolvedValue(false)
   })
 
   it('bloqueio com correção automática devolve o pedido de correção ao implementador', async () => {
