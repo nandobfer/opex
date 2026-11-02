@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useStore } from "@xyflow/react"
 import { motion, useReducedMotion } from "framer-motion"
 import { clampCardRect, memoryCardSize, type Point } from "../../network/network-math"
@@ -8,10 +8,9 @@ import type { ParticleVisual } from "../../network/particles"
 import type { NetworkMemory } from "../../network/types"
 import { MemoryCard, type MemoryCardActions } from "./MemoryCard"
 
-/** Largura fixa do card (`w-72`): não depende do zoom da rede. */
-export const MEMORY_CARD_WIDTH = 288
-/** Altura estimada até a primeira medição. */
-const MEMORY_CARD_ESTIMATED_HEIGHT = 300
+/** Card quadrado e fixo (OPE-113): não depende do zoom da rede; o texto rola dentro. */
+export const MEMORY_CARD_WIDTH = 360
+export const MEMORY_CARD_HEIGHT = 360
 export const MEMORY_CARD_MORPH_S = 0.22
 
 /**
@@ -26,8 +25,6 @@ export function MemoryCardLayer({
     point,
     actions,
     channelColor,
-    onPointerEnter,
-    onPointerLeave,
 }: {
     memory: NetworkMemory
     visual: ParticleVisual
@@ -35,8 +32,6 @@ export function MemoryCardLayer({
     point: Point
     actions: MemoryCardActions
     channelColor?: string
-    onPointerEnter: () => void
-    onPointerLeave: () => void
 }) {
     const reducedMotion = useReducedMotion()
     const tx = useStore((state) => state.transform[0])
@@ -44,32 +39,11 @@ export function MemoryCardLayer({
     const zoom = useStore((state) => state.transform[2])
     const canvasWidth = useStore((state) => state.width)
     const canvasHeight = useStore((state) => state.height)
-    const ref = useRef<HTMLDivElement>(null)
-    // Card que sai sem o cursor ter saído dele (fechado por clique fora, memória removida): a
-    // presença do card é desligada para não segurar o próximo hover.
-    const leaveRef = useRef(onPointerLeave)
-    useEffect(() => {
-        leaveRef.current = onPointerLeave
-    })
-    useEffect(() => () => leaveRef.current(), [])
-    const [height, setHeight] = useState(MEMORY_CARD_ESTIMATED_HEIGHT)
     const [settled, setSettled] = useState(false)
 
-    // A altura real do conteúdo (texto, selos) entra assim que é medida.
-    useEffect(() => {
-        const element = ref.current
-        if (!element || typeof ResizeObserver === "undefined") return
-        const observer = new ResizeObserver(() => {
-            const measured = element.scrollHeight
-            if (measured > 0) setHeight((current) => (Math.abs(current - measured) > 1 ? measured : current))
-        })
-        observer.observe(element)
-        return () => observer.disconnect()
-    }, [])
-
     const anchor = { x: point.x * zoom + tx, y: point.y * zoom + ty }
-    // Limitado ao quadro (8 px de cada lado): texto longo rola dentro do card, quadro estreito encolhe a largura.
-    const { width, height: visibleHeight } = memoryCardSize({ width: MEMORY_CARD_WIDTH, height }, { width: canvasWidth, height: canvasHeight })
+    // Limitado ao quadro (8 px de cada lado): o quadrado encolhe só quando o quadro não comporta.
+    const { width, height: visibleHeight } = memoryCardSize({ width: MEMORY_CARD_WIDTH, height: MEMORY_CARD_HEIGHT }, { width: canvasWidth, height: canvasHeight })
     const target = clampCardRect(anchor, { width, height: visibleHeight }, { width: canvasWidth || width + 16, height: canvasHeight || visibleHeight + 16 })
     const particle = Math.max(visual.size * zoom, 6)
     const asParticle = { left: anchor.x - particle / 2, top: anchor.y - particle / 2, width: particle, height: particle, borderRadius: particle / 2 }
@@ -90,10 +64,8 @@ export function MemoryCardLayer({
             initial={reducedMotion ? { ...asCard, opacity: 0 } : { ...asParticle, opacity: 1 }}
             animate={{ ...asCard, opacity: 1 }}
             exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : { ...asParticle, opacity: 0, transition: morph }}
-            transition={{ ...morph, left: follow, top: follow, height: settled ? { duration: 0.12 } : morph }}
+            transition={{ ...morph, left: follow, top: follow }}
             onAnimationComplete={() => setSettled(true)}
-            onPointerEnter={(event) => event.pointerType !== "touch" && onPointerEnter()}
-            onPointerLeave={(event) => event.pointerType !== "touch" && onPointerLeave()}
             onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
         >
@@ -107,8 +79,8 @@ export function MemoryCardLayer({
                 exit={{ opacity: 1 }}
                 transition={morph}
             />
-            <div className="relative h-full overflow-y-auto overscroll-contain" data-testid="memory-card-scroll">
-                <div ref={ref} style={{ width }}>
+            <div className="relative h-full overflow-hidden" data-testid="memory-card-scroll">
+                <div className="h-full" style={{ width }}>
                     <MemoryCard memory={memory} visual={visual} actions={actions} channelColor={channelColor} contentDelay={reducedMotion ? 0 : MEMORY_CARD_MORPH_S * 0.7} />
                 </div>
             </div>

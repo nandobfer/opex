@@ -49,6 +49,8 @@ export function TravelDots({ edgeId, path }: { edgeId: string; path: string }) {
     )
 }
 
+const TRAVEL_FILL: Record<Travel["tone"], string> = { primary: "fill-primary", white: "fill-foreground", success: "fill-success" }
+
 function TravelDot({ travel, path, onDone }: { travel: Travel; path: string; onDone: () => void }) {
     const ref = useRef<SVGPathElement>(null)
     const progress = useMotionValue(0)
@@ -68,9 +70,9 @@ function TravelDot({ travel, path, onDone }: { travel: Travel; path: string; onD
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
     return (
-        <g data-testid="travel-dot">
+        <g data-testid="travel-dot" data-edge={travel.edge}>
             <path ref={ref} d={path} fill="none" stroke="none" />
-            <motion.circle cx={cx} cy={cy} r={travel.tone === "white" ? 2.5 : 4} className={travel.tone === "white" ? "fill-foreground" : "fill-primary"} />
+            <motion.circle cx={cx} cy={cy} r={travel.tone === "white" ? 2.5 : 4} className={TRAVEL_FILL[travel.tone]} data-tone={travel.tone} />
         </g>
     )
 }

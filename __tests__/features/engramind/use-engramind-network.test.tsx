@@ -52,3 +52,19 @@ describe('useEngramindNetwork', () => {
     expect(result.current.categories).toBe(before.categories)
   })
 })
+
+describe('OPE-113: autor agente e pesos da busca', () => {
+  it('authorAgent vem de author.agent (app/agente); sem agente, null', async () => {
+    const { toNetworkMemory } = await import('@/features/engramind/hooks/useEngramindNetwork')
+    const base = { id: 'm', channel: 'opex', channel_id: 'c', title: 'T', title_state: 'ready', text: 'Texto', category: 'X', status: 'active', version: 1, embedding_state: 'ready', retrieval_count: 0, created_at: now, updated_at: now } as unknown as Parameters<typeof toNetworkMemory>[0]
+    expect(toNetworkMemory({ ...base, author: { app: 'opex', app_id: 'a', agent: 'opex/opex', agent_id: 'g' } }).authorAgent).toBe('opex/opex')
+    expect(toNetworkMemory({ ...base, author: { app: 'opex', app_id: 'a', agent: null, agent_id: null } })).toMatchObject({ author: 'opex', authorAgent: null })
+  })
+
+  it('pesos da fusão da busca vêm das configurações, com o padrão 1/1/60', async () => {
+    const { searchFusionOf } = await import('@/features/engramind/hooks/useEngramindNetwork')
+    expect(searchFusionOf(() => undefined)).toEqual({ vectorWeight: 1, textWeight: 1, k: 60 })
+    const settings: Record<string, unknown> = { 'search.vector_weight': 2, 'search.rrf_k': 30 }
+    expect(searchFusionOf((key) => settings[key])).toEqual({ vectorWeight: 2, textWeight: 1, k: 30 })
+  })
+})

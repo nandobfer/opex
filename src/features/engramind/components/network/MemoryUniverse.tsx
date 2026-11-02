@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { Hash, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import { layoutUniverse, universeChannelColors } from "../../network/network-math"
+import { agentWritesOf, isAuthoredByCenter, layoutUniverse, universeChannelColors } from "../../network/network-math"
 import { buildParticles } from "../../network/particles"
 import type { ConsumptionEvent, MemoryUsageMap, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
@@ -19,13 +19,14 @@ import { RecenterButton } from "./RecenterButton"
 import { UniversePanels } from "./UniversePanels"
 import { UniverseStatsCard } from "./UniverseStatsCard"
 import { useEnteringIds } from "./useEnteringIds"
-import { useHoverPresence } from "./useHoverPresence"
 import { useLeavingItems } from "./useLeavingItems"
+import { useStable } from "./useStableNodes"
 import type { LocalRemovals } from "./useLocalRemovals"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
 const CENTER_ID = "center"
-export { HOVER_CLOSE_DELAY_MS } from "./useHoverPresence"
+/** Atraso entre o nascimento da memória criada pelo agente do centro e a partícula verde. */
+const AUTHORED_TRAVEL_DELAY_MS = 300
 
 export interface UniverseCenter {
     kind: "channel" | "agent"
@@ -63,8 +64,9 @@ export interface MemoryUniverseProps {
 /**
  * Universo de um canal ou de um agente (OPE-109): o node central e uma partícula por memória, em
  * órbitas (mais novas mais perto), com a cor do canal (o com mais memórias no roxo primário), tamanho pelo
- * uso e brilho pelo último uso.
- * Hover ou toque abre o card; o consumo ao vivo pulsa a memória e manda uma partícula ao centro.
+ * uso e brilho pelo último uso. Clique ou toque abre o card (passar o mouse só afasta as vizinhas); o
+ * consumo ao vivo pulsa a memória e manda uma partícula ao centro. No universo do agente, o link tem a
+ * cor do canal e é destacado nas memórias que ele escreveu (OPE-113).
  */
 export function MemoryUniverse({
     center,
@@ -84,8 +86,9 @@ export function MemoryUniverse({
     localRemovals,
 }: MemoryUniverseProps) {
     const live = useLiveEffects(dataVersion)
-    const { hovered, hover, hoverCard } = useHoverPresence()
-    const [pinned, setPinned] = useState<string | null>(null)
+    // O card abre só por clique/toque (`opened`); o cursor (`hovered`) só afasta as vizinhas.
+    const [hovered, setHovered] = useState<string | null>(null)
+    const [opened, setOpened] = useState<string | null>(null)
     const ids = useMemo(() => new Set(memories.map((memory) => memory.id)), [memories])
     const openRef = useRef<(string | null)[]>([])
     const items = useLeavingItems(memories, (removed) => {
@@ -95,19 +98,35 @@ export function MemoryUniverse({
     })
 
     const memoryIds = useMemo(() => memories.map((memory) => memory.id), [memories])
-    const pulse = live.pulse
-    const entering = useEnteringIds(memoryIds, { isProvisional, onEnter: (fresh) => pulse(fresh.map((id) => `memory:${id}`)) })
+    const { pulse, travel } = live
+    const authoredBy = center.kind === "agent" ? center.id : null
+    const byIdRef = useRef(new Map<string, NetworkMemory>())
+    useEffect(() => {
+        byIdRef.current = new Map(memories.map((memory) => [memory.id, memory]))
+    })
+    const entering = useEnteringIds(memoryIds, {
+        isProvisional,
+        onEnter: (fresh) => {
+            pulse(fresh.map((id) => `memory:${id}`))
+            // Universo do agente: a memória que ele acabou de criar recebe a partícula verde do centro.
+            if (!authoredBy) return
+            const writes = agentWritesOf(fresh, [...byIdRef.current.values()]).filter((write) => write.agent === authoredBy)
+            travel(writes.map((write) => ({ edge: `orbit:${write.id}`, reverse: true, tone: "success" as const, delayMs: AUTHORED_TRAVEL_DELAY_MS })))
+        },
+    })
 
     const particleColors = useMemo(() => universeChannelColors(channelColors, memories), [channelColors, memories])
-    // Links, legenda e selo do card: só no universo do agente (o do canal mantém o link fraco primário).
-    const linkColors = center.kind === "agent" ? particleColors : undefined
+    // Links, legenda e selo do card com a cor do canal: só no universo do agente (o do canal mantém o link
+    // fraco primário). A memória escrita pelo agente do centro tem o link destacado (OPE-113).
+    const legendColors = center.kind === "agent" ? particleColors : undefined
     const visuals = useMemo(() => buildParticles(memories, { channelColors: particleColors, usage, staleAfterDays, bumps: live.bumps }), [memories, particleColors, usage, staleAfterDays, live.bumps])
     const positions = useMemo(() => layoutUniverse(items), [items])
     // Só vale o que ainda está no universo: a memória que saiu fecha o card sozinha.
-    const activeId = [pinned, hovered].find((id) => id !== null && ids.has(id)) ?? null
+    const openId = opened !== null && ids.has(opened) ? opened : null
+    const focusId = openId ?? (hovered !== null && ids.has(hovered) ? hovered : null)
     useEffect(() => {
-        openRef.current = [pinned, hovered]
-    }, [pinned, hovered])
+        openRef.current = [opened]
+    }, [opened])
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {
@@ -139,11 +158,13 @@ export function MemoryUniverse({
             const visual = visuals.get(memory.id) ?? buildParticles([memory], { channelColors: particleColors, usage, staleAfterDays }).get(memory.id)
             const point = positions.get(memory.id) ?? { x: 0, y: 0 }
             if (!visual) continue
-            const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, channelColor: linkColors?.get(memory.channel), leaving: memory.leaving, entering: entering.has(memory.id) }
-            list.push({ id: memory.id, type: "memory", position: point, data, zIndex: activeId === memory.id ? 20 : 1 })
+            const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, leaving: memory.leaving, entering: entering.has(memory.id) }
+            // Sem nada do hover/card aberto aqui (vem pelo contexto): node novo pisca no React Flow.
+            list.push({ id: memory.id, type: "memory", position: point, data, zIndex: 1 })
         }
         return list
-    }, [items, visuals, positions, isMatch, linkColors, particleColors, activeId, center, memories.length, usage, staleAfterDays, entering])
+    }, [items, visuals, positions, isMatch, particleColors, center, memories.length, usage, staleAfterDays, entering])
+    const stableNodes = useStable(nodes)
 
     const edges = useMemo<Edge[]>(
         () =>
@@ -152,37 +173,38 @@ export function MemoryUniverse({
                 source: memory.id,
                 target: CENTER_ID,
                 type: "orbit",
-                data: { color: linkColors?.get(memory.channel), dimmed: isMatch ? !isMatch(memory) : false, entering: entering.has(memory.id) },
+                data: { color: legendColors?.get(memory.channel), authored: isAuthoredByCenter(memory, { kind: center.kind, id: center.id }), dimmed: isMatch ? !isMatch(memory) : false, entering: entering.has(memory.id) },
             })),
-        [items, linkColors, isMatch, entering],
+        [items, legendColors, center.kind, center.id, isMatch, entering],
     )
+    const stableEdges = useStable(edges)
 
 
-    const focus = useMemo(() => ({ activeId, activePoint: activeId ? (positions.get(activeId) ?? null) : null, hover, actions: wrapped }), [activeId, positions, hover, wrapped])
+    const hover = useCallback((id: string | null) => setHovered(id), [])
+    const focus = useMemo(() => ({ openId, focusId, focusPoint: focusId ? (positions.get(focusId) ?? null) : null, hover, actions: wrapped }), [openId, focusId, positions, hover, wrapped])
     const liveValue = useMemo(() => ({ pulses: live.pulses, travels: live.travels, finish: live.finish }), [live.pulses, live.travels, live.finish])
 
     return (
         <NetworkLiveProvider value={liveValue}>
             <UniverseFocusContext.Provider value={focus}>
                 <NetworkCanvas
-                    nodes={nodes}
-                    edges={edges}
+                    nodes={stableNodes}
+                    edges={stableEdges}
                     nodeTypes={NODE_TYPES}
                     fitKey={`${center.kind}:${center.id}:${memories.length === 0 ? "empty" : "full"}`}
                     label={center.kind === "agent" ? `Universo do agente ${center.label}` : `Universo do canal ${center.label}`}
-                    onNodeClick={(_event, node) => node.type === "memory" && setPinned((current) => (current === node.id ? null : node.id))}
-                    onPaneClick={() => setPinned(null)}
+                    onNodeClick={(_event, node) => node.type === "memory" && setOpened((current) => (current === node.id ? null : node.id))}
+                    onPaneClick={() => setOpened(null)}
                     className={className}
                 >
-                    <UniverseStatsCard kind={center.kind} memories={memories} visuals={visuals} usage={usage} subscribers={subscribers} liveCount={live.liveCount} channelColors={linkColors} />
+                    <UniverseStatsCard kind={center.kind} memories={memories} visuals={visuals} usage={usage} subscribers={subscribers} liveCount={live.liveCount} channelColors={legendColors} />
                     <ActiveMemoryCard
-                        memory={activeId ? (memories.find((memory) => memory.id === activeId) ?? null) : null}
-                        visual={activeId ? visuals.get(activeId) : undefined}
-                        point={activeId ? positions.get(activeId) : undefined}
-                        channelColors={linkColors}
+                        memory={openId ? (memories.find((memory) => memory.id === openId) ?? null) : null}
+                        visual={openId ? visuals.get(openId) : undefined}
+                        point={openId ? positions.get(openId) : undefined}
+                        channelColors={legendColors}
                         actions={wrapped}
-                        hoverCard={hoverCard}
-                        pinned={pinned !== null && pinned === activeId}
+                        pinned={openId !== null}
                     />
                     <RecenterButton />
                     <UniversePanels count={memories.length} onCreate={onCreate} createLabel={createLabel} emptyTitle={emptyTitle} />

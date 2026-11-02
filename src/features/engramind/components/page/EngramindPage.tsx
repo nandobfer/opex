@@ -13,19 +13,15 @@ import { ENGRAMIND_INTEGRATION_HREF } from "../../constants"
 import { useEngramindConnection } from "../../hooks/useEngramindConnection"
 import { EngramindNetwork } from "../network/EngramindNetwork"
 import { NetworkSkeleton } from "../network/NetworkSkeleton"
-import { AboutCard } from "./AboutCard"
 
-/** Esqueleto da página: card "O que é", barra da rede, trilha e a área da rede. */
+/** Esqueleto da página: trilha, barra da rede, a área da rede e o card "O que é" no fim (OPE-113). */
 function PageSkeleton() {
     return (
-        <div className="flex flex-col gap-6" aria-busy="true">
-            <Skeleton className="h-28 w-full rounded-xl" />
-            <div className="flex flex-col gap-3">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-8 w-full" />
-                <Skeleton className="h-8 w-40" />
-                <NetworkSkeleton />
-            </div>
+        <div className="flex flex-col gap-3" aria-busy="true" data-testid="engramind-page-skeleton">
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-9 w-full" />
+            <NetworkSkeleton />
+            <Skeleton className="h-28 w-full rounded-xl" data-testid="about-card-skeleton" />
         </div>
     )
 }
@@ -46,8 +42,7 @@ export function EngramindPage() {
                 <EmptyState icon={PlugZap} title="Engramind não configurado" description="Configure a conexão com o Engramind (URL base e token admin) para gerenciar canais e memórias." actionLabel="Configurar integração" onAction={configure} />
             ) : (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col gap-6">
-                    <AboutCard />
-                    <Suspense fallback={<NetworkSkeleton />}>
+                    <Suspense fallback={<PageSkeleton />}>
                         <EngramindNetwork onConfigure={configure} />
                     </Suspense>
                 </motion.div>
