@@ -23,6 +23,7 @@ import { NetworkBreadcrumb } from "./NetworkBreadcrumb"
 import { NetworkSkeleton } from "./NetworkSkeleton"
 import { NetworkActions, NetworkToolbar } from "./NetworkToolbar"
 import { OverviewView } from "./OverviewView"
+import { AboutCard } from "../page/AboutCard"
 import { useRawMemoryActions } from "./useRawMemoryActions"
 import { useUniverseParam } from "./useUniverseParam"
 
@@ -178,7 +179,6 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
                                 selectedApps={filters.apps}
                                 onSelectApps={(apps) => patchFilters({ apps })}
                                 layout={filters.overviewLayout}
-                                onLayout={(overviewLayout) => patchFilters({ overviewLayout })}
                                 hitsByChannel={hitsByChannel}
                                 onOpenAgent={(id) => open({ kind: "agent", id })}
                                 onOpenChannel={(slug) => open({ kind: "channel", slug })}
@@ -188,6 +188,8 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
                     </motion.div>
                 </AnimatePresence>
             </QueryBoundary>
+            {/* Fim da página (OPE-113): o resumo, Configurar, Saiba mais e a distribuição da visão inicial. */}
+            <AboutCard onConfigure={onConfigure} layout={universe ? undefined : { value: filters.overviewLayout, onChange: (overviewLayout) => patchFilters({ overviewLayout }) }} />
             <ChannelPanel channel={data.rawChannels.find((item) => item.slug === panel) ?? null} onOpenChange={(next) => !next && setPanel(null)} onDeleted={(slug) => universe?.kind === "channel" && universe.slug === slug && back()} />
             {dialog === "channel" && <ChannelDialog key="new" channel={null} open onOpenChange={(next) => !next && setDialog(null)} />}
             {dialog === "import" && <ImportMemoriesDialog channels={data.rawChannels} maxBatch={data.maxBatch} onOpenChange={(next) => !next && setDialog(null)} />}

@@ -906,13 +906,23 @@ describe('OPE-113 (rodada 2)', () => {
     }
   })
 
-  it('distribuição na legenda: padrão "Canais junto dos agentes"; a troca fica no navegador e o Limpar não a desfaz', async () => {
+  it('distribuição no card "O que é o Engramind" (no fim, depois da rede): Órbita padrão, Radial; fica no navegador e o Limpar não a desfaz', async () => {
     const view = mount()
+    await screen.findByTestId('agent-node-opex/opex')
     const group = await screen.findByRole('radiogroup', { name: 'Distribuição da rede' })
-    expect(within(group).getByRole('radio', { name: 'Canais junto dos agentes' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByTestId('about-actions').contains(group)).toBe(true)
+    expect(screen.getByText('O que é o Engramind')).toBeTruthy()
+    // O card vem depois da área da rede e o seletor saiu da legenda.
+    const canvas = screen.getByTestId('react-flow')
+    expect(canvas.compareDocumentPosition(screen.getByTestId('about-actions')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(screen.getByTestId('network-stats')).queryByRole('radiogroup')).toBeNull()
+    expect(within(group).getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['Órbita', 'Radial'])
+    expect(within(group).getByRole('radio', { name: 'Órbita' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(screen.getByTestId('about-actions')).getByRole('button', { name: /Configurar/ })).toBeTruthy()
+    expect(within(screen.getByTestId('about-actions')).getByRole('button', { name: /Saiba mais/ })).toBeTruthy()
     const position = () => JSON.stringify(flowItems.nodes.map((node) => (node as unknown as { position: unknown }).position))
     const first = position()
-    fireEvent.click(within(group).getByRole('radio', { name: 'Agentes no centro' }))
+    fireEvent.click(within(group).getByRole('radio', { name: 'Radial' }))
     await waitFor(() => expect(position()).not.toBe(first))
     await expandFilters()
     await pickOption('Filtrar por canal', 'opex')
@@ -921,7 +931,17 @@ describe('OPE-113 (rodada 2)', () => {
     view.unmount()
     mount()
     const again = await screen.findByRole('radiogroup', { name: 'Distribuição da rede' })
-    expect(within(again).getByRole('radio', { name: 'Agentes no centro' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(again).getByRole('radio', { name: 'Radial' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('num universo, o seletor de distribuição some; Configurar e Saiba mais continuam', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    const actions = screen.getByTestId('about-actions')
+    await waitFor(() => expect(within(actions).queryByRole('radiogroup')).toBeNull())
+    expect(within(actions).getByRole('button', { name: /Configurar/ })).toBeTruthy()
+    expect(within(actions).getByRole('button', { name: /Saiba mais/ })).toBeTruthy()
   })
 
   it('o card do agente com maior alcance tem a maior escala', async () => {

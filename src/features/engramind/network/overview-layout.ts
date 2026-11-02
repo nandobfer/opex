@@ -15,7 +15,7 @@ import type { Point, Rect } from "./network-math"
 export type OverviewLayoutMode = "by-agent" | "agents-center"
 export const OVERVIEW_LAYOUT_MODES = ["by-agent", "agents-center"] as const satisfies readonly OverviewLayoutMode[]
 export const DEFAULT_OVERVIEW_LAYOUT: OverviewLayoutMode = "by-agent"
-export const OVERVIEW_LAYOUT_LABEL: Record<OverviewLayoutMode, string> = { "by-agent": "Canais junto dos agentes", "agents-center": "Agentes no centro" }
+export const OVERVIEW_LAYOUT_LABEL: Record<OverviewLayoutMode, string> = { "by-agent": "Órbita", "agents-center": "Radial" }
 
 /** Caixa dos cards em escala 1 (pílula do agente até 180 px; card do canal até 288 px, `max-w-72`). */
 export const OVERVIEW_AGENT_BOX = { width: 180, height: 48 }
@@ -24,15 +24,26 @@ export const OVERVIEW_CHANNEL_BOX = { width: 288, height: 64 }
 export const OVERVIEW_SCALE_MIN = 0.85
 export const OVERVIEW_SCALE_MAX = 1.6
 /** Folga mínima entre dois cards. */
-export const OVERVIEW_PADDING = 24
+export const OVERVIEW_PADDING = 16
 /** Folga do enquadramento inicial em cada lado (fração do tamanho). */
 export const OVERVIEW_FIT_MARGIN = 0.1
 /** Curvatura dos links (fração do comprimento, para o lado). */
 export const OVERVIEW_LINK_BEND = 0.12
 
 const RELAX_STEPS = 160
-const MAX_ATTEMPTS = 8
-const GROWTH = 1.25
+/** Passadas finais só de afastamento (até ninguém encostar). */
+const SEPARATE_STEPS = 600
+/**
+ * Caso residual: se ainda sobrar sobreposição, o círculo de agentes cresce pouco e poucas vezes. O
+ * conflito comum (canais compartilhados no mesmo centroide) não depende do círculo: quem resolve é o
+ * afastamento dos cards móveis, nunca o crescimento sem teto (a rede explodia a ~27.000 px).
+ */
+const MAX_ATTEMPTS = 3
+const GROWTH = 1.1
+/** Radial um pouco mais compacta (OPE-113, rodada 3). */
+const RADIAL_RING_GAP = 0.8
+const RADIAL_SLOT = 1.7
+const RADIAL_INNER = 0.85
 
 export interface OverviewLayoutInput {
     agents: readonly { id: string; app: string }[]
@@ -80,7 +91,8 @@ interface Body {
 function overlap(a: Body, b: Body): { x: number; y: number } | null {
     const ox = (a.width + b.width) / 2 + OVERVIEW_PADDING - Math.abs(a.x - b.x)
     const oy = (a.height + b.height) / 2 + OVERVIEW_PADDING - Math.abs(a.y - b.y)
-    return ox > 0 && oy > 0 ? { x: ox, y: oy } : null
+    // Meio pixel de tolerância: encostar por erro de arredondamento não conta (senão o afastamento empurra 1e-13 para sempre).
+    return ox > 0.5 && oy > 0.5 ? { x: ox, y: oy } : null
 }
 
 /** Uma passada de afastamento: separa cada par sobreposto pela menor penetração. Devolve se mexeu. */
@@ -124,7 +136,7 @@ function relax(bodies: Body[]): void {
             }
         separate(bodies)
     }
-    for (let step = 0; step < RELAX_STEPS && separate(bodies); step += 1) {
+    for (let step = 0; step < SEPARATE_STEPS && separate(bodies); step += 1) {
         // só afastamento
     }
 }
@@ -172,8 +184,8 @@ function meanAngle(angles: readonly number[]): number | null {
 function rings(boxes: readonly { width: number; height: number }[], inner: number, preferred: readonly (number | null)[]): Point[] {
     if (!boxes.length) return []
     const widest = Math.max(...boxes.map((box) => box.width))
-    const ringGap = widest + OVERVIEW_PADDING * 2
-    const slot = (index: number) => reach(boxes[index]!) * 2
+    const ringGap = RADIAL_RING_GAP * widest + OVERVIEW_PADDING
+    const slot = (index: number) => reach(boxes[index]!) * RADIAL_SLOT
     const points: Point[] = new Array(boxes.length)
     let start = 0
     let radius = inner + reach({ width: widest, height: Math.max(...boxes.map((box) => box.height)) })
@@ -229,7 +241,7 @@ export function layoutOverview(input: OverviewLayoutInput): OverviewLayout {
     const place = mode === "agents-center" ? placeAgentsCenter : placeByAgent
     let spread = 1
     let bodies: Body[] = []
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt += 1) {
         bodies = place({ agents, channels, usersOf, boxes, spread })
         relax(bodies)
         if (!hasOverlap(bodies)) break
@@ -272,17 +284,28 @@ function placeAgentsCenter({ agents, channels, usersOf, boxes, spread }: PlaceIn
         const norm = (angle: number) => (angle + Math.PI / 2 + 4 * Math.PI) % (2 * Math.PI)
         return norm(pa) - norm(pb) || a.slug.localeCompare(b.slug)
     })
-    const inner = agentRadius + Math.max(0, ...agentBoxes.map(reach))
+    const inner = (agentRadius + Math.max(0, ...agentBoxes.map(reach))) * RADIAL_INNER
     const channelBoxes = ordered.map((channel) => boxes.get(`channel:${channel.slug}`)!)
     const points = rings(channelBoxes, inner * (agents.length ? 1 : 0), ordered.map((channel) => preferredOf(channel.slug)))
     ordered.forEach((channel, index) => bodies.push(body(`channel:${channel.slug}`, points[index]!, channelBoxes[index]!, false, points[index]!)))
     return bodies
 }
 
+/** Menor distância entre os centros de duas caixas, na direção `angle`, para não se tocarem (com a folga). */
+export function clearDistance(a: { width: number; height: number }, b: { width: number; height: number }, angle: number): number {
+    const cos = Math.abs(Math.cos(angle))
+    const sin = Math.abs(Math.sin(angle))
+    const byX = cos > 1e-9 ? ((a.width + b.width) / 2 + OVERVIEW_PADDING) / cos : Infinity
+    const byY = sin > 1e-9 ? ((a.height + b.height) / 2 + OVERVIEW_PADDING) / sin : Infinity
+    return Math.min(byX, byY)
+}
+
 /**
- * "Canais junto dos agentes": cada agente com os canais só dele em órbita; os agentes num círculo com
- * espaço para as órbitas; o canal compartilhado no centroide dos seus agentes; os sem agente num anel
- * de fora.
+ * "Órbita" (`by-agent`): cada agente com os canais só dele numa órbita **justa pela caixa** (a menor
+ * distância que separa os cards naquela direção: perto em cima e embaixo, mais longe dos lados), virada
+ * para fora; os agentes num círculo do tamanho real dos grupos; o canal compartilhado no centroide dos
+ * seus agentes (o meio fica livre para eles); os sem agente num anel de fora. Canais são móveis com
+ * âncora: o afastamento resolve quem encostar, sem aumentar o círculo.
  */
 function placeByAgent({ agents, channels, usersOf, boxes, spread }: PlaceInput): Body[] {
     const exclusive = new Map<string, string[]>(agents.map((agent) => [agent.id, []]))
@@ -296,34 +319,41 @@ function placeByAgent({ agents, channels, usersOf, boxes, spread }: PlaceInput):
     }
     const agentBox = (id: string) => boxes.get(`agent:${id}`)!
     const channelBox = (slug: string) => boxes.get(`channel:${slug}`)!
-    // Órbita de cada agente: cabe a volta dos canais dele e não encosta nele.
-    const orbits = agents.map((agent) => {
+    const single = agents.length === 1
+    // Grupo de cada agente em coordenadas locais, com os canais começando virados para fora (ângulo 0).
+    const groups = agents.map((agent) => {
         const mine = exclusive.get(agent.id)!
-        if (!mine.length) return { radius: 0, footprint: reach(agentBox(agent.id)) }
-        const slots = mine.map((slug) => reach(channelBox(slug)))
-        const around = circle(slots).radius
-        const radius = Math.max(around, reach(agentBox(agent.id)) + Math.max(...slots))
-        return { radius, footprint: radius + Math.max(...slots) }
+        const own = agentBox(agent.id)
+        // Leque para fora (meia volta) quando há outros agentes; volta inteira com um agente só.
+        const span = single ? 2 * Math.PI : Math.min(Math.PI, (mine.length * Math.PI) / 3)
+        const offsets = mine.map((slug, index) => {
+            const angle = mine.length === 1 ? 0 : single ? (index * span) / mine.length : -span / 2 + (index * span) / (mine.length - 1)
+            const box = channelBox(slug)
+            const distance = clearDistance(own, box, angle) + (index % 2 ? box.height + OVERVIEW_PADDING : 0) * (mine.length > 3 ? 1 : 0)
+            return { slug, angle, distance, box }
+        })
+        // Pegada pela caixa real (canto mais distante do card), sem a meia diagonal de folga extra.
+        const footprint = Math.max(reach(own), ...offsets.map((item) => Math.hypot(item.distance + item.box.height / 2, item.box.width / 2)))
+        return { offsets, footprint }
     })
-    const sharedRoom = shared.length ? Math.max(...shared.map((slug) => reach(channelBox(slug)))) : 0
-    const { radius, angles } = circle(orbits.map((orbit) => orbit.footprint + sharedRoom))
+    // Miolo livre para os compartilhados (nascem no centroide, entre os agentes): um disco com a área
+    // deles; o círculo de agentes nunca fica menor que ele (senão os agentes os prendem no meio).
+    const sharedArea = shared.reduce((sum, slug) => sum + (channelBox(slug).width + OVERVIEW_PADDING) * (channelBox(slug).height + OVERVIEW_PADDING), 0)
+    const core = shared.length ? 1.2 * Math.sqrt(sharedArea / Math.PI) + Math.max(...agents.map((agent) => reach(agentBox(agent.id)))) : 0
+    const { radius, angles } = circle(groups.map((group) => group.footprint), agents.length > 1 ? core : 0)
     const agentRadius = radius * spread
     const bodies: Body[] = []
     const agentPoint = new Map<string, Point>()
     agents.forEach((agent, index) => {
-        const angle = angles[index]!
-        const point = { x: agentRadius * Math.cos(angle), y: agentRadius * Math.sin(angle) }
+        const outward = single ? -Math.PI / 2 : angles[index]!
+        const point = { x: agentRadius * Math.cos(angles[index]!), y: agentRadius * Math.sin(angles[index]!) }
         agentPoint.set(agent.id, point)
         bodies.push(body(`agent:${agent.id}`, point, agentBox(agent.id), true))
-        const mine = exclusive.get(agent.id)!
-        // Os canais do agente começam virados para fora do círculo (o lado livre).
-        const outward = agents.length > 1 ? angle : -Math.PI / 2
-        const around = circle(mine.map((slug) => reach(channelBox(slug))), 0, outward)
-        mine.forEach((slug, position) => {
-            const orbitAngle = mine.length === 1 ? outward : around.angles[position]!
-            const at = { x: point.x + orbits[index]!.radius * Math.cos(orbitAngle), y: point.y + orbits[index]!.radius * Math.sin(orbitAngle) }
-            bodies.push(body(`channel:${slug}`, at, channelBox(slug), true))
-        })
+        for (const item of groups[index]!.offsets) {
+            const angle = outward + item.angle
+            const at = { x: point.x + item.distance * Math.cos(angle), y: point.y + item.distance * Math.sin(angle) }
+            bodies.push(body(`channel:${item.slug}`, at, item.box, false, at))
+        }
     })
     for (const slug of shared) {
         const users = usersOf.get(slug)!

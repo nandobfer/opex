@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   layoutOverview,
   OVERVIEW_FIT_MARGIN,
+  OVERVIEW_LAYOUT_LABEL,
+  clearDistance,
   OVERVIEW_PADDING,
   OVERVIEW_SCALE_MAX,
   OVERVIEW_SCALE_MIN,
@@ -174,5 +176,75 @@ describe('links', () => {
   it('o enquadramento usa a folga declarada', () => {
     expect(OVERVIEW_FIT_MARGIN).toBe(0.1)
     expect(OVERVIEW_PADDING).toBeGreaterThan(0)
+  })
+})
+
+/** Cenário de referência da rodada 3: 8 agentes (3 canais só deles cada), 6 canais de 6 agentes e 4 de pares. */
+function reference(): OverviewLayoutInput {
+  const agents = Array.from({ length: 8 }, (_, i) => agent(`a${i}`, i < 6 ? 'opex' : 'x'))
+  const channels: { slug: string }[] = []
+  const links: { agent: string; channel: string }[] = []
+  agents.forEach((item, i) => {
+    for (let k = 0; k < 3; k += 1) {
+      channels.push(channel(`agentes/a${i}/c${k}`))
+      links.push({ agent: item.id, channel: `agentes/a${i}/c${k}` })
+    }
+  })
+  for (let k = 0; k < 6; k += 1) {
+    channels.push(channel(`sh${k}`))
+    for (const item of agents.slice(0, 6)) links.push({ agent: item.id, channel: `sh${k}` })
+  }
+  for (let k = 0; k < 4; k += 1) {
+    channels.push(channel(`par${k}`))
+    links.push({ agent: agents[k]!.id, channel: `par${k}` }, { agent: agents[k + 1]!.id, channel: `par${k}` })
+  }
+  return { agents, channels, links, channelCounts: new Map(channels.map((item, i) => [item.slug, (i * 7) % 30])) }
+}
+
+const meanNearest = (layout: OverviewLayout) => {
+  const points = [...layout.agents.values(), ...layout.channels.values()]
+  const nearest = points.map((p, i) => Math.min(...points.filter((_, j) => j !== i).map((q) => dist(p, q))))
+  return nearest.reduce((sum, value) => sum + value, 0) / nearest.length
+}
+
+describe('OPE-113 rodada 3: Órbita e Radial compactas', () => {
+  it('rótulos: Órbita (canais junto dos agentes) e Radial (agentes no centro)', () => {
+    expect(OVERVIEW_LAYOUT_LABEL).toEqual({ 'by-agent': 'Órbita', 'agents-center': 'Radial' })
+  })
+
+  it('Radial um pouco mais compacta: caixa abaixo de 3.900 px (antes ~4.260) e sem sobreposição', () => {
+    const radial = layoutOverview({ ...reference(), mode: 'agents-center' })
+    const box = overviewInitialBounds(radial)!
+    expect(box.width).toBeLessThanOrEqual(3900)
+    expect(box.width).toBeGreaterThan(3000)
+    expect(overlaps(radial)).toEqual([])
+  })
+
+  it('Órbita perto: no máximo 1,3× a caixa da Radial, vizinho mais próximo em até 400 px (antes ~26.900 px de largura)', () => {
+    const orbit = layoutOverview({ ...reference(), mode: 'by-agent' })
+    const radial = overviewInitialBounds(layoutOverview({ ...reference(), mode: 'agents-center' }))!
+    const box = overviewInitialBounds(orbit)!
+    expect(box.width).toBeLessThanOrEqual(1.3 * radial.width)
+    expect(box.height).toBeLessThanOrEqual(1.3 * radial.height)
+    expect(meanNearest(orbit)).toBeLessThanOrEqual(400)
+    expect(overlaps(orbit)).toEqual([])
+  })
+
+  it('regressão: canais compartilhados no mesmo centroide não fazem o círculo de agentes crescer sem teto', () => {
+    const agents = Array.from({ length: 6 }, (_, i) => agent(`a${i}`))
+    const channels = Array.from({ length: 6 }, (_, k) => channel(`sh${k}`))
+    const links = channels.flatMap((item) => agents.map((a) => ({ agent: a.id, channel: item.slug })))
+    const layout = layoutOverview({ agents, channels, links })
+    const radius = Math.max(...[...layout.agents.values()].map((point) => Math.hypot(point.x, point.y)))
+    // Miolo para 6 cards de 288×64 (~1,2× o raio do disco de mesma área) mais o agente: bem abaixo de 1.000 px.
+    expect(radius).toBeLessThan(1000)
+    expect(overlaps(layout)).toEqual([])
+  })
+
+  it('órbita justa pela caixa: o canal fica mais perto do agente em cima/embaixo que dos lados', () => {
+    const a = { width: 180, height: 48 }
+    const c = { width: 288, height: 64 }
+    expect(clearDistance(a, c, Math.PI / 2)).toBeCloseTo((48 + 64) / 2 + OVERVIEW_PADDING)
+    expect(clearDistance(a, c, 0)).toBeCloseTo((180 + 288) / 2 + OVERVIEW_PADDING)
   })
 })

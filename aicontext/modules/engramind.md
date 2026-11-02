@@ -185,8 +185,12 @@ Um teste confere a cobertura de todas as chaves e variáveis.
 ## Página `/engramind` — rede "universo de partículas" (OPE-109)
 
 Item "Engramind" em `APP_NAV`, logo abaixo de "Ambientes". Sem a integração configurada: estado vazio
-com "Configurar integração". Com ela: card "O que é o Engramind" (+ "Saiba mais") e a **rede**
-(`components/network/EngramindNetwork.tsx`), que **substitui as antigas abas Canais e Memórias**: toda a
+com "Configurar integração". Com ela: a **rede**
+(`components/network/EngramindNetwork.tsx`) e, **no fim da página** (OPE-113), o card "O que é o
+Engramind" (`AboutCard`, renderizado pela rede depois da área do canvas) com o resumo e as ações:
+o seletor **Distribuição da rede** (Órbita/Radial, só na visão inicial: some com fade nos universos),
+**Configurar** (abre `/integracoes/engramind?aba=conexao`, o mesmo destino do estado vazio) e
+**Saiba mais** (diálogo com o conteúdo da aba Sobre). A rede que **substitui as antigas abas Canais e Memórias**: toda a
 gestão delas acontece dentro da rede. Renderização com **React Flow** (`@xyflow/react`): agentes,
 canais e memórias são nodes; pulsos e partículas que viajam pelos links usam Framer Motion sobre as
 arestas SVG. **Não** se arrasta node individual: arrastar move a rede inteira, scroll/pinça dão zoom,
@@ -202,23 +206,30 @@ rede (teste estático).
 - **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
   `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`) e os canais ativos, numa das
-  **duas distribuições** escolhidas na legenda (card de estatísticas, "Distribuição", `OptionTabs`;
+  **duas distribuições** escolhidas no card "O que é o Engramind" (`OptionTabs` "Distribuição da rede";
   `layoutOverview` em `network/overview-layout.ts`, OPE-113, puro e determinístico):
-  - **Canais junto dos agentes** (`by-agent`, padrão): o canal usado por **um agente só** orbita esse
-    agente (órbita com raio para a volta dos canais dele, começando virada para fora); os agentes ficam
-    num círculo com espaço proporcional às órbitas (um agente só fica no centro); o canal
-    **compartilhado** nasce no **centroide** dos agentes que o usam (entre os dois; o de todos perto do
-    meio); canais sem assinante vão para um anel de fora;
-  - **Agentes no centro** (`agents-center`): agentes num círculo no meio (ordem por app e id) e os
-    canais em anéis em volta (mais anéis quando não cabem), cada anel girado para o **ângulo médio**
-    dos agentes de cada canal; sem agente, no fim do anel.
+  - **Órbita** (`by-agent`, padrão): o canal usado por **um agente só** orbita esse agente numa órbita
+    **justa pela caixa** (`clearDistance`: a menor distância que separa os dois cards naquela direção,
+    então perto em cima e embaixo e mais afastado dos lados), em leque virado para fora (volta inteira
+    com um agente só); os agentes ficam num círculo do tamanho real dos grupos (canto mais distante de
+    cada card), nunca menor que o **miolo** reservado aos compartilhados (disco com a área deles); o
+    canal **compartilhado** nasce no **centroide** dos agentes que o usam (entre os dois; o de todos
+    perto do meio); canais sem assinante vão para um anel de fora;
+  - **Radial** (`agents-center`): agentes num círculo no meio (ordem por app e id) e os canais em
+    anéis em volta (mais anéis quando não cabem), cada anel girado para o **ângulo médio** dos agentes
+    de cada canal; sem agente, no fim do anel. Um pouco compacta (rodada 3): primeiro anel a 0,85× da
+    distância do círculo de agentes, espaço entre anéis `0,8 × largura máxima + folga` e espaço de cada
+    canal no anel `1,7 ×` a meia diagonal.
 
   Os cards são os de sempre, **escalados pelo tamanho** (`overviewScale`, log entre 0,85× e 1,6×): o
   agente pelo **alcance** (soma das memórias ativas dos canais que ele assina), o canal por **todas as
   memórias** dele (inclusive inativas); tudo zero, o mínimo (`data-scale`). **Nenhum card se
-  sobrepõe**: um afastamento determinístico (pela menor penetração das caixas escaladas, com 24 px de
-  folga) separa o que encostar, puxando os compartilhados de volta ao centroide; se ainda sobrar
-  sobreposição, o círculo de agentes cresce e o cálculo se repete. Os links são **curvas suaves de
+  sobrepõe**: só os agentes ficam fixos; os canais voltam aos poucos ao seu lugar (órbita, centroide ou
+  anel) enquanto um afastamento determinístico (pela menor penetração das caixas escaladas, com 16 px
+  de folga e meio pixel de tolerância) separa o que encostar, seguido de passadas só de afastamento até
+  ninguém encostar. O círculo de agentes só cresce num caso residual (1,1×, no máximo 3 vezes): o
+  aumento sem teto de antes não separava os compartilhados empilhados no centroide e deixava a Órbita
+  com ~27.000 px. Os links são **curvas suaves de
   centro a centro** (`overviewLinkPath`, curvatura alternada entre links vizinhos), saindo do centro dos
   cards: minimizam cruzamentos, sem garantia absoluta de não passar por cima de outro card. Trocar de
   distribuição desliza os cards até as novas posições (`usePositionSlide`, ~300 ms; movimento reduzido:
@@ -659,7 +670,11 @@ criação por agente e relevância da busca híbrida) e o bloco `OPE-113` de `ne
 roxos/verdes, regressão da busca no universo do agente, partícula verde de criação, filtros recolhíveis
 e guardados no navegador) e o bloco `OPE-113 (rodada 2)` (**regressão do piscar**: o mock do React Flow
 guarda o último `nodes`/`edges` e passar o mouse, abrir e trocar o card reaproveitam os mesmos objetos;
-trilha com os botões; chip do autor; canal de central legível; distribuição na legenda e escala).
+trilha com os botões; chip do autor; canal de central legível; distribuição Órbita/Radial no card do
+fim da página, sumindo nos universos; escala); `engramind-page.test.tsx` (card depois da rede,
+Configurar e Saiba mais) e o bloco "rodada 3" de `overview-layout.test.ts` (rótulos, Radial abaixo de
+3.900 px, Órbita até 1,3× a Radial com vizinho mais próximo em até 400 px, compartilhados no mesmo
+centroide sem fazer o círculo crescer, órbita justa pela caixa).
 Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,

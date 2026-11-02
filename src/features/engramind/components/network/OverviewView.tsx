@@ -3,10 +3,9 @@
 import { useCallback, useMemo } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { AppWindow } from "lucide-react"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
 import { agentReach, type AgentWrite } from "../../network/network-math"
-import { layoutOverview, OVERVIEW_LAYOUT_LABEL, OVERVIEW_LAYOUT_MODES, OVERVIEW_LINK_BEND, overviewInitialBounds, type OverviewLayoutMode } from "../../network/overview-layout"
+import { layoutOverview, OVERVIEW_LINK_BEND, overviewInitialBounds, type OverviewLayoutMode } from "../../network/overview-layout"
 import type { ConsumptionEvent, NetworkAgent, NetworkChannel, NetworkLink, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
 import { NetworkLiveProvider } from "./live"
@@ -32,9 +31,8 @@ export interface OverviewViewProps {
     /** Apps escolhidos no filtro (vazio = todos). */
     selectedApps: readonly string[]
     onSelectApps: (apps: string[]) => void
-    /** Distribuição da visão inicial (escolhida na legenda; guardada no navegador). */
+    /** Distribuição da visão inicial (escolhida no card "O que é o Engramind"; guardada no navegador). */
     layout: OverviewLayoutMode
-    onLayout: (layout: OverviewLayoutMode) => void
     /** Busca/filtros: memórias que casam por canal (`null` = sem filtro). */
     hitsByChannel: Map<string, number> | null
     onOpenAgent: (agent: string) => void
@@ -46,12 +44,12 @@ export interface OverviewViewProps {
 export const linkEdgeId = (agent: string, channel: string) => `${agent}→${channel}`
 
 /**
- * Visão inicial da rede: agentes e canais ligados pelas assinaturas, na distribuição escolhida na
- * legenda ("Canais junto dos agentes" ou "Agentes no centro"), com os cards pelo tamanho. O consumo ao
+ * Visão inicial da rede: agentes e canais ligados pelas assinaturas, na distribuição escolhida no
+ * card "O que é o Engramind" (Órbita ou Radial), com os cards pelo tamanho. O consumo ao
  * vivo de um agente do Opex pulsa o agente, manda a partícula ao canal e, se ele entregou memórias,
  * de volta ao agente.
  */
-export function OverviewView({ agents, channels, links, memories, allMemories, apps, selectedApps, onSelectApps, layout, onLayout, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
+export function OverviewView({ agents, channels, links, memories, allMemories, apps, selectedApps, onSelectApps, layout, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
     const live = useLiveEffects(null)
     // App escolhido que não existe mais não conta (sem nenhum válido, todos).
     const chosenApps = useMemo(() => selectedApps.filter((slug) => apps.some((app) => app.slug === slug)), [selectedApps, apps])
@@ -171,17 +169,6 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
                         { label: "Consumos ao vivo", value: live.liveCount, testId: "stat-live" },
                     ]}
                 >
-                    <div className="mt-3 border-t pt-2" data-testid="overview-layout">
-                        <p className="mb-1 font-semibold text-foreground">Distribuição</p>
-                        <OptionTabs
-                            aria-label="Distribuição da rede"
-                            size="xs"
-                            className="w-full"
-                            options={OVERVIEW_LAYOUT_MODES.map((mode) => ({ value: mode, label: OVERVIEW_LAYOUT_LABEL[mode] }))}
-                            value={layout}
-                            onChange={onLayout}
-                        />
-                    </div>
                     {apps.length > 0 && (
                         <div className="mt-3 border-t pt-2" data-testid="app-filter">
                             <p className="mb-1 font-semibold text-foreground">Apps</p>
