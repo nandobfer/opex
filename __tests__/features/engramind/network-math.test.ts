@@ -11,9 +11,9 @@ import {
   OVERVIEW_FIT_MARGIN,
   OVERVIEW_ROW_GAP,
   overviewInitialBounds,
-  ageColor,
-  ageRatios,
   channelColors,
+  PRIMARY_CHANNEL_COLOR,
+  universeChannelColors,
   pickChannelColors,
   lastRealUseOf,
   lastUseOf,
@@ -43,7 +43,7 @@ import { buildParticles } from '@/features/engramind/network/particles'
 import { CENTRAL_CHANNEL_PREFIX, centralChannelLabels, channelNameParts, isCentralChannel } from '@/features/engramind/network/channel-labels'
 import type { NetworkMemory } from '@/features/engramind/network/types'
 
-/** OPE-109: cálculos puros da rede (cor, tamanho, brilho, links, layout e estatísticas) e o contexto tagged. */
+/** OPE-109/OPE-114: cálculos puros da rede (cor pelo canal, tamanho, brilho, links, layout pela idade e estatísticas) e o contexto tagged. */
 
 const NOW = Date.parse('2026-11-01T12:00:00Z')
 const day = (offset: number) => new Date(NOW - offset * 86_400_000).toISOString()
@@ -83,18 +83,55 @@ describe('contexto tagged', () => {
   })
 })
 
-describe('cor pela idade', () => {
-  it('a mais nova é verde (0), a mais antiga roxa (1), as demais no gradiente', () => {
-    const ratios = ageRatios([mem('nova', { createdAt: day(0) }), mem('meio', { createdAt: day(5) }), mem('velha', { createdAt: day(10) })])
-    expect([ratios.get('nova'), ratios.get('meio'), ratios.get('velha')]).toEqual([0, 0.5, 1])
-    expect(ageColor(0)).toBe('color-mix(in oklch, var(--color-primary) 0%, var(--color-success))')
-    expect(ageColor(1)).toBe('color-mix(in oklch, var(--color-primary) 100%, var(--color-success))')
+describe('cor pelo canal (OPE-114)', () => {
+  it('buildParticles: a partícula usa a cor do canal; sem mapa, o roxo primário; inativa sem cor', () => {
+    const colors = new Map([['opex', 'var(--chart-3)'], ['outro', 'var(--chart-5)']])
+    const memories = [mem('a', { channel: 'opex', lastRetrievedAt: day(0) }), mem('b', { channel: 'outro' }), mem('c', { channel: 'opex', status: 'archived' })]
+    const visuals = buildParticles(memories, { channelColors: colors, staleAfterDays: 30, now: NOW })
+    expect(visuals.get('a')!.baseColor).toBe('var(--chart-3)')
+    expect(visuals.get('a')!.color).toContain('var(--chart-3)')
+    expect(visuals.get('b')!.baseColor).toBe('var(--chart-5)')
+    expect(visuals.get('c')!.color).toBe('var(--color-muted-foreground)')
+    expect(buildParticles([mem('d')], { staleAfterDays: 30, now: NOW }).get('d')!.baseColor).toBe(PRIMARY_CHANNEL_COLOR)
   })
 
-  it('uma só memória ou datas iguais ficam verdes', () => {
-    expect(ageRatios([mem('a')]).get('a')).toBe(0)
-    const same = ageRatios([mem('a'), mem('b')])
-    expect([same.get('a'), same.get('b')]).toEqual([0, 0])
+  it('buildParticles: o tamanho segue só a relevância, não a idade', () => {
+    const visuals = buildParticles([mem('nova', { createdAt: day(0), injections: 3 }), mem('velha', { createdAt: day(300), injections: 3 })], { staleAfterDays: 30, now: NOW })
+    expect(visuals.get('nova')!.size).toBe(visuals.get('velha')!.size)
+  })
+
+  it('universo: o canal com mais memórias (inativas contam) fica com o roxo primário e os demais com a cor estável', () => {
+    const base = channelColors(['a', 'b', 'c'])
+    const memories = [mem('1', { channel: 'b' }), mem('2', { channel: 'b', status: 'archived' }), mem('3', { channel: 'a' })]
+    const colors = universeChannelColors(base, memories)
+    expect(colors.get('b')).toBe(PRIMARY_CHANNEL_COLOR)
+    expect(colors.get('a')).toBe(base.get('a'))
+    // Canal assinado sem memórias aparece com a cor estável.
+    expect(colors.get('c')).toBe(base.get('c'))
+    expect([...colors.values()].filter((color) => color === PRIMARY_CHANNEL_COLOR)).toHaveLength(1)
+  })
+
+  it('universo: empate vai para o menor slug (a primeira linha da legenda)', () => {
+    const colors = universeChannelColors(channelColors(['zeta', 'alfa']), [mem('1', { channel: 'zeta' }), mem('2', { channel: 'alfa' })])
+    expect(colors.get('alfa')).toBe(PRIMARY_CHANNEL_COLOR)
+    expect(colors.get('zeta')).not.toBe(PRIMARY_CHANNEL_COLOR)
+  })
+
+  it('universo: o roxo é por universo; quem não é o maior mantém a mesma cor em qualquer universo', () => {
+    const base = channelColors(['x', 'y', 'z'])
+    const first = universeChannelColors(base, [mem('1', { channel: 'x' }), mem('2', { channel: 'x' }), mem('3', { channel: 'z' })])
+    const second = universeChannelColors(base, [mem('4', { channel: 'y' }), mem('5', { channel: 'y' }), mem('6', { channel: 'x' }), mem('7', { channel: 'z' })])
+    expect(first.get('x')).toBe(PRIMARY_CHANNEL_COLOR)
+    expect(second.get('x')).toBe(base.get('x'))
+    expect(second.get('y')).toBe(PRIMARY_CHANNEL_COLOR)
+    expect(first.get('z')).toBe(second.get('z'))
+  })
+
+  it('universo de um canal só: roxo primário (também sem mapa); sem memórias, ninguém fica roxo', () => {
+    expect(universeChannelColors(undefined, [mem('1', { channel: 'opex' })]).get('opex')).toBe(PRIMARY_CHANNEL_COLOR)
+    const empty = universeChannelColors(channelColors(['a']), [])
+    expect(empty.get('a')).toBe(channelColors(['a']).get('a'))
+    expect([...empty.values()]).not.toContain(PRIMARY_CHANNEL_COLOR)
   })
 })
 
@@ -162,14 +199,22 @@ describe('cor estável dos canais', () => {
   it('a base vem do slug (mesma cor em qualquer conjunto) e repetições ganham variação de tom', () => {
     const one = channelColors(['opex'])
     const many = channelColors(['opex', 'a', 'b', 'c', 'd', 'e', 'f', 'g'])
-    const base = `var(--chart-${(stableHash('opex') % 6) + 1})`
+    const base = `var(--chart-${(stableHash('opex') % 5) + 2})`
     expect(one.get('opex')).toBe(base)
     expect(many.get('opex')).toContain(base)
     expect(new Set(many.values()).size).toBe(8)
   })
 
+  it('o roxo primário (--chart-1) fica fora da paleta estável dos canais', () => {
+    const colors = channelColors(Array.from({ length: 40 }, (_, index) => `canal-${index}`))
+    for (const color of colors.values()) {
+      expect(color).not.toContain('--chart-1)')
+      expect(color).not.toContain('--color-primary')
+    }
+  })
+
   it('regressão: o mesmo canal tem a mesma cor em universos diferentes, mesmo quando colide na base', () => {
-    const base = (slug: string) => stableHash(slug) % 6
+    const base = (slug: string) => stableHash(slug) % 5
     const all = ['opex', ...Array.from({ length: 40 }, (_, index) => `canal-${index}`)]
     const rival = all.find((slug) => slug !== 'opex' && base(slug) === base('opex') && slug < 'opex')!
     expect(rival).toBeTruthy()
@@ -247,14 +292,15 @@ describe('layout', () => {
     expect(clampCardRect({ x: 50, y: 50 }, card, { width: 200, height: 200 })).toEqual({ x: 8, y: 8 })
   })
 
-  it('universo: as mais usadas na órbita interna e nenhuma partícula sobreposta', () => {
-    const memories = Array.from({ length: 60 }, (_, index) => mem(`m${index}`, { injections: index }))
+  it('universo: as mais novas na órbita interna (o uso não muda a distância) e nenhuma partícula sobreposta', () => {
+    // m0 é a mais nova e a menos usada; m59, a mais antiga e a mais usada.
+    const memories = Array.from({ length: 60 }, (_, index) => mem(`m${index}`, { createdAt: day(index), injections: index }))
     const positions = layoutUniverse(memories)
     const radius = (id: string) => Math.hypot(positions.get(id)!.x, positions.get(id)!.y)
-    expect(Math.round(radius('m59'))).toBe(UNIVERSE_FIRST_RADIUS)
-    // Anéis equilibrados: 60 memórias em 3 anéis (≈ 15/20/25), as mais usadas por dentro.
+    expect(Math.round(radius('m0'))).toBe(UNIVERSE_FIRST_RADIUS)
+    // Anéis equilibrados: 60 memórias em 3 anéis (≈ 15/20/25), as mais novas por dentro.
     expect(universeRingCounts(60)).toHaveLength(3)
-    expect(radius('m0')).toBeGreaterThan(radius('m59'))
+    expect(radius('m59')).toBeGreaterThan(radius('m0'))
     const keys = new Set([...positions.values()].map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`))
     expect(keys.size).toBe(60)
   })
@@ -279,14 +325,23 @@ describe('layout', () => {
     expect(universeRingCounts(50)).toEqual([12, 17, 21])
   })
 
-  it('universo com 50 memórias: as mais usadas no anel de dentro e o último anel cheio', () => {
-    const memories = Array.from({ length: 50 }, (_, index) => mem(`m${index}`, { injections: index }))
+  it('universo com 50 memórias: as mais novas no anel de dentro e o último anel cheio', () => {
+    const memories = Array.from({ length: 50 }, (_, index) => mem(`m${index}`, { createdAt: day(index) }))
     const positions = layoutUniverse(memories)
     const ring = (id: string) => Math.round((Math.hypot(positions.get(id)!.x, positions.get(id)!.y) - UNIVERSE_FIRST_RADIUS) / UNIVERSE_RING_GAP)
-    const byRing = [0, 1, 2].map((index) => memories.filter((memory) => ring(memory.id) === index).map((memory) => memory.injections))
+    // Idade em dias: maior = mais antiga.
+    const byRing = [0, 1, 2].map((index) => memories.filter((memory) => ring(memory.id) === index).map((memory) => Number(memory.id.slice(1))))
     expect(byRing.map((items) => items.length)).toEqual([12, 17, 21])
-    expect(Math.min(...byRing[0]!)).toBeGreaterThan(Math.max(...byRing[1]!))
-    expect(Math.min(...byRing[1]!)).toBeGreaterThan(Math.max(...byRing[2]!))
+    expect(Math.max(...byRing[0]!)).toBeLessThan(Math.min(...byRing[1]!))
+    expect(Math.max(...byRing[1]!)).toBeLessThan(Math.min(...byRing[2]!))
+  })
+
+  it('universo: memória com data de criação inválida vai para o anel externo', () => {
+    const memories = [...Array.from({ length: 30 }, (_, index) => mem(`m${index}`, { createdAt: day(index) })), mem('sem-data', { createdAt: 'invalida' })]
+    const positions = layoutUniverse(memories)
+    const radius = (id: string) => Math.hypot(positions.get(id)!.x, positions.get(id)!.y)
+    expect(radius('sem-data')).toBeGreaterThan(radius('m0'))
+    expect(Math.round(radius('sem-data'))).toBe(Math.round(Math.max(...memories.map((memory) => radius(memory.id)))))
   })
 
   it('nome do canal: prefixo até a última barra e a ponta final como título', () => {

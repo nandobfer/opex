@@ -36,7 +36,7 @@ export function MemoryCard({ memory, visual, actions, channelColor, contentDelay
     return (
         <motion.div data-testid="memory-card-body" className="p-3 text-left" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { duration: 0.14, delay: contentDelay } }} exit={{ opacity: 0, transition: { duration: 0.08 } }}>
             <div className="flex items-start gap-2">
-                <span aria-hidden className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: visual.ageColor }} />
+                <span aria-hidden className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: visual.baseColor }} />
                 <p className="flex-1 text-sm font-semibold leading-snug">{memory.title}</p>
                 {visual.pinned && <Pin className="h-3.5 w-3.5 shrink-0 text-primary" aria-label="Fixada" />}
             </div>
