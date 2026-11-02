@@ -13,7 +13,7 @@ import { CARD_MIN_ZOOM } from "./MemoryNode"
 import { useZoom } from "./nodes"
 
 /**
- * Card da memória ativa na camada sem zoom (filho do React Flow): a partícula vira o card a partir
+ * Card da memória aberta (só por clique ou toque; o hover só afasta as vizinhas) na camada sem zoom (filho do React Flow): a partícula vira o card a partir
  * do zoom `CARD_MIN_ZOOM`; afastada demais, só a partícula se destaca. Clique/toque (`pinned`) com o
  * zoom afastado aproxima até `CARD_MIN_ZOOM`, centralizado na partícula, e o card abre.
  */
@@ -23,7 +23,6 @@ export function ActiveMemoryCard({
     point,
     channelColors,
     actions,
-    hoverCard,
     pinned = false,
 }: {
     memory: NetworkMemory | null
@@ -31,8 +30,7 @@ export function ActiveMemoryCard({
     point?: Point
     channelColors?: Map<string, string>
     actions: MemoryCardActions
-    hoverCard: (id: string | null) => void
-    /** A memória ativa foi fixada por clique/toque (não só o hover). */
+    /** O card acabou de ser aberto por clique/toque (com a rede afastada, aproxima até `CARD_MIN_ZOOM`). */
     pinned?: boolean
 }) {
     const zoom = useZoom()
@@ -49,7 +47,7 @@ export function ActiveMemoryCard({
     return (
         <AnimatePresence>
             {open && (
-                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} onPointerEnter={() => hoverCard(memory.id)} onPointerLeave={() => hoverCard(null)} />
+                <MemoryCardLayer key={memory.id} memory={memory} visual={visual} point={point} actions={actions} channelColor={channelColors?.get(memory.channel)} />
             )}
         </AnimatePresence>
     )

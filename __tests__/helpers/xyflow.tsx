@@ -48,7 +48,7 @@ export function xyflowMock() {
     Handle: () => null,
     Position: { Left: 'left', Right: 'right', Top: 'top', Bottom: 'bottom' },
     Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    BaseEdge: ({ id, path }: { id: string; path: string }) => <path data-testid={`edge-${id}`} d={path} />,
+    BaseEdge: ({ id, path, style, ...rest }: { id: string; path: string; style?: React.CSSProperties } & AnyProps) => <path data-testid={`edge-${id}`} d={path} data-stroke={style?.stroke as string | undefined} data-tone={rest['data-tone'] as string | undefined} data-route={rest['data-route'] as string | undefined} />,
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject>{children}</foreignObject>,
     getBezierPath: () => ['M0,0 C5,5 5,5 10,10', 5, 5],
     getStraightPath: () => ['M0,0 L10,10', 5, 5],

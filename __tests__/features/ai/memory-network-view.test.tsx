@@ -54,8 +54,10 @@ const mount = (canEdit = true, queryClient = client()) =>
     </QueryClientProvider>,
   )
 const particle = async (id: string) => (await screen.findByTestId(`memory-node-${id}`)) as HTMLElement
+/** OPE-113: o card abre só pelo clique (clicar de novo fecha; por isso só clica se estiver fechado). */
 const openCard = async (id: string) => {
-  fireEvent.pointerEnter(await particle(id))
+  const node = await particle(id)
+  if (!screen.queryByTestId(`memory-card-${id}`)) fireEvent.click(node)
   return screen.findByTestId(`memory-card-${id}`)
 }
 
@@ -85,7 +87,7 @@ describe('memoryDtoToNetwork', () => {
 })
 
 describe('universo de uma lista de memórias', () => {
-  it('uma partícula por memória (inclusive inativa) e o canal no centro; hover abre o card com os campos', async () => {
+  it('uma partícula por memória (inclusive inativa) e o canal no centro; clique abre o card com os campos', async () => {
     rows = [memory, { ...memory, id: 'm_bbb', resumo: 'Antiga', ativa: false }, { ...memory, id: 'm_ccc', resumo: 'Fixa', fixada: true }]
     mount()
     expect((await screen.findByTestId('universe-center')).textContent).toContain('agentes/opex/global')

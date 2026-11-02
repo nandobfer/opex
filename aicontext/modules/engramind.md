@@ -202,15 +202,40 @@ rede (teste estático).
 - **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
   `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`), **na horizontal**: os agentes
-  numa linha em cima (agrupados por app) e os canais ativos numa linha embaixo, as duas centralizadas
-  (`layoutOverview`; links saem por baixo do agente e chegam por cima do canal). O enquadramento
-  inicial (`overviewInitialBounds` + `fitBounds`) pega a largura da linha de agentes com 15% de folga
-  de cada lado e a altura até a linha de canais; canais além dessa largura ficam a um arrastar. O
-  Centralizar volta a esse enquadramento. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
+  numa linha em cima (agrupados por app) e os canais ativos embaixo, **com a mesma largura**
+  (`layoutOverview` em `network/overview-layout.ts`, OPE-113; links saem por baixo do agente e chegam
+  por cima do canal):
+  - canais que cabem na largura dos agentes ficam numa linha só e se espalham até ela; uma linha de
+    canais mais larga que os agentes (até 3 canais) espalha os agentes até ela;
+  - com mais canais, eles quebram numa **grade** com tantas colunas quantas cabem na largura dos
+    agentes (no mínimo `OVERVIEW_MIN_COLUMNS` = 3, para não virar uma coluna alta), colunas alinhadas
+    em todas as linhas (passo `OVERVIEW_CHANNEL_COL` = card de 288 px + corredor de 64 px; linhas a
+    cada 160 px, com uma faixa livre de 96 px entre elas) e a última linha centralizada em colunas
+    inteiras; os agentes se espalham até a largura da grade;
+  - **nenhum link atravessa canal ou agente que não é o seu** (`overviewLinkPath`): para a primeira
+    linha, a curva direta; para as de baixo (`overviewRoute`), curva até o corredor mais perto do
+    agente ao lado da coluna do canal, reta corredor abaixo e curva dentro da faixa até o topo do
+    canal (os links que dividem um corredor se afastam alguns px pelo índice do agente). O rótulo do
+    modo fica no meio do caminho.
+
+  O enquadramento inicial (`overviewInitialBounds` + `fitBounds`) pega a largura comum das fileiras
+  com 15% de folga de cada lado e a altura até a última linha de canais. O Centralizar volta a esse
+  enquadramento. Os links da visão inicial são sempre roxo primário. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
   `reaches` do Engramind para os ativos; com **Mostrar arquivados**, os arquivados casados localmente
   por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
-  mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos).
+  mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos; ver
+  "Estatísticas").
   Clicar no agente/canal abre o universo; menu "⋯" ou botão direito no canal abre o `ChannelPanel`.
+- **Partícula de criação** (OPE-113): memória criada por um agente (`authorAgent` = `author.agent` do
+  Engramind, `app/agente`) que chega pelo tempo real (`memory.created` → relê as memórias) pulsa o
+  agente, manda uma **partícula verde** (`--color-success`, `Travel.tone: "success"`) pelo link do
+  agente até o canal e pulsa o canal, sem recarregar. Sem link visível, só os pulsos. Só conta id que
+  apareceu depois da primeira carga **e** foi criado há até 2 min (`agentWritesOf`,
+  `AGENT_WRITE_WINDOW_MS`; `useAgentWrites` sobre `useEnteringIds`, com todas as memórias da rede):
+  ligar Mostrar arquivados, trocar o filtro de app ou mover memória não gera partícula. Memória do
+  dono ou do Mentor (sem `author.agent`) não gera. No universo do agente, a memória nova que ele
+  escreveu recebe a partícula verde do centro até ela (aresta `orbit`, sentido inverso, 300 ms depois
+  do nascimento). Movimento reduzido: sem partícula nem pulso.
 - **Nome do canal** (`ChannelName`, nos canais da visão inicial, no centro do universo do canal e na
   legenda "Por canal"): o prefixo até a última `/` numa linha discreta em cima (`splitChannelSlug`) e
   a ponta final como título destacado; o slug inteiro aparece ao passar o mouse. O card do canal tem
@@ -225,10 +250,14 @@ rede (teste estático).
   anéis é o mínimo que comporta todas, e elas são distribuídas proporcionalmente às vagas de cada anel
   (`universeRingCounts`; 15 → 1 anel, 50 → 12/17/21, 100 → 4 anéis), então o universo cresce para fora
   com densidade constante e o último anel não fica quase vazio. Canal arquivado abre apagado e somente leitura, sem Nova memória.
-- **Universo do agente**: as memórias de todos os canais que ele assina; o link de cada partícula tem
-  a **cor do canal** (`channelColors` calculado sobre **todos** os canais e lido por universo com
-  `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais que caem na mesma base ganham
-  variação de tom, e o mesmo canal tem a mesma cor em qualquer universo) e a legenda "Por canal" mostra cor e total.
+- **Universo do agente**: as memórias de todos os canais que ele assina. O link de cada partícula ao
+  centro é **roxo primário**, exceto nas memórias que **o agente do centro escreveu**
+  (`orbitLinkTone`: `authorAgent === center.id`), que têm o link **verde** (`--color-success`, um pouco
+  mais forte); o card de estatísticas explica ("Link verde: memória escrita por este agente"). A cor do
+  canal (`channelColors` calculado sobre **todos** os canais e lido por universo com
+  `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais na mesma base ganham variação de
+  tom, e o mesmo canal tem a mesma cor em qualquer universo) continua no selo de canal do card e na
+  legenda "Por canal" (cor e total). No universo do canal (e nos de `/integracoes/ia`), links sempre roxos.
 - **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
   **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
@@ -250,18 +279,19 @@ agentes (`server/memory-usage.ts`); consumo de apps de fora só conta por `last_
 
 ### Card da memória (`MemoryCardLayer` + `MemoryCard`)
 
-A **partícula vira o card**: no hover (ou toque/clique, que fixa o card; clicar fora fecha) o card
+A **partícula vira o card**, que abre **só pelo clique ou toque** (OPE-113): clicar na partícula abre
+(fixado), clicar nela de novo ou fora fecha, e clicar em outra troca de card (um só aberto). Passar o
+mouse (fora do toque) **não abre o card**: só afasta as vizinhas (`repelOffset`) e aumenta levemente a
+partícula em foco (1,35×), sem atraso; com um card aberto, o foco fica na aberta e o hover em outra não
+muda nada. Ao abrir, o card
 nasce no lugar, no tamanho e na cor da partícula na tela e se expande até o retângulo final (~220 ms),
 com o conteúdo entrando em fade; ao fechar, encolhe de volta para ela. A partícula fica invisível
 (`data-expanded`) enquanto o card está aberto. O card fica numa **camada fora da área com zoom**
 (filho do React Flow, irmão do viewport): tamanho e fonte fixos (`w-72`) em qualquer zoom, posição
 convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **inteiro dentro do
-quadro** (`clampCardRect`, 8 px de margem). Hover com **dois sinais de presença** (cursor na partícula e no card,
-ambos por eventos de ponteiro): o fechamento (300 ms) só é agendado quando os dois estão desligados e
-é cancelado quando qualquer um liga, então a ordem dos eventos não importa (o navegador avisa "entrei
-no card" antes de "saí da partícula"). Sair do card fecha depois do atraso. Esc dentro do card (ele não é modal, `data-network-card`) volta à visão inicial como em qualquer
-ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. As
-vizinhas se afastam levemente (`repelOffset`). O card tem título, texto, categoria, canal, idade, relevância (consultas +
+quadro** (`clampCardRect`, 8 px de margem). Tirar o mouse da partícula ou do card não fecha o card
+aberto (o antigo hover com dois sinais de presença, `useHoverPresence`, saiu). Esc dentro do card (ele não é modal, `data-network-card`) volta à visão inicial como em qualquer
+ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. O card tem título, texto, categoria, canal, idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
@@ -286,14 +316,41 @@ provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento redu
 - Inicial: agentes, canais, memórias ativas/inativas, consumos ao vivo desde que a tela abriu, filtro
   por app, total por canal e por agente (alcance = soma das memórias dos canais ligados). Respeita o
   filtro por app.
+- **Filtro por app** (OPE-113): picker compacto e pesquisável com várias escolhas (`CadastroMultiSelect`
+  `searchable`, `h-8`, "Todos os apps", "Buscar app..."). Nada escolhido = todos; escolhidos = só os
+  agentes desses apps (e os links deles). App escolhido que não existe mais é ignorado. A escolha fica
+  no navegador junto dos filtros (`apps`), e o Limpar dos filtros não a zera.
 - Universos: ativas, inativas, fixadas, consultas + injeções, última consulta, assinantes (canal),
   esquecidas (cinza) e consumos ao vivo; no do agente, a legenda por canal.
 
 ### Barra e gestão
 
-`NetworkToolbar`: busca (`/v1/memories/search`; "Busca só textual" quando `mode: text`), filtros
-(canal, status, categoria, autor, desde), **Mostrar arquivados**, **Importar** (o mesmo
-`ImportMemoriesDialog`: prévia, erros por índice, `limits.max_batch`, sem duplicar) e **Novo canal**.
+`NetworkToolbar`: **Importar** (o mesmo `ImportMemoriesDialog`: prévia, erros por índice,
+`limits.max_batch`, sem duplicar) e **Novo canal** à direita e, embaixo, a **busca e os filtros no
+padrão de `/tarefas`** (OPE-113, `NetworkFiltersBar`): o cartão recolhível `ListFilters collapsible`
+(começa recolhido com os chips dos filtros ativos, removíveis um a um, e o total de memórias que casam
+na visão atual), com a busca ("Buscar por sentido e por texto"), **Canal** e **Categoria** na primeira
+linha e **Status**, **Autor**, **Período** (`PresetDateRangeFilter`, pela última alteração, de/até) e
+**Arquivados** (`FilterSwitch` "Mostrar", compartilhado com `/tarefas`) na segunda. Canal, Status,
+Categoria e Autor são `CadastroMultiSelect` com várias escolhas (pesquisáveis, menos Status; Autor
+lista os autores que aparecem nas memórias). O **Limpar** zera busca e filtros, mas não os apps.
+Filtros, busca, Arquivados e apps ficam **no navegador** (`usePersistentState`, chave
+`opex.engramind.network-filters.v1`, schema `networkFiltersSchema` em `network/filters.ts`; valor
+inválido cai no padrão campo a campo).
+
+**Busca automática** (`useNetworkSearch`): roda sozinha 500 ms depois de parar de digitar (a espera é
+do `ListFilters`, `useDebouncedSearch`), sem botão nem Enter, por TanStack Query (resultado anterior
+mantido enquanto busca de novo; chave sob a área `memories`, então memória alterada pelo tempo real
+refaz a busca). Ela **cita os canais da visão atual** (o do universo, os do agente ou os visíveis na
+visão inicial, cortados pelo filtro de Canal) em lotes de 50 (`channelBatches`), porque o Engramind só
+busca nos canais `manage` e arquivados quando citados. **Destaque só do que é relevante**
+(`relevantSearchIds`): o ramo vetorial do Engramind não tem limiar e devolve as memórias mais próximas
+até o `limit` mesmo sem relação com o termo (com poucas memórias, todas), o que deixava a busca sem
+destacar nada; no modo `hybrid` só destacam os resultados acima do maior score possível de um ramo
+sozinho (`max(search.vector_weight, search.text_weight) / (search.rrf_k + 1)`, lidos das
+configurações, padrão 1/1/60), isto é, os que o texto também encontrou; no modo `text` ("Busca só
+textual"), todos.
+
 **Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
 destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na
 busca" e os sem resultado ficam apagados. **Nova memória** (`create_memory`) no universo de canal
@@ -303,7 +360,7 @@ arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `C
 leva ao universo do canal).
 
 Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
-`layout-classes.ts`; linha de agentes em cima e de canais embaixo), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
+`layout-classes.ts`; linha de agentes em cima e duas linhas de canais embaixo, com a mesma largura), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
 (`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
 
 ### Celular (`useIsMobile`, até 767 px)
@@ -314,13 +371,15 @@ nada muda.
 - **Estatísticas recolhidas:** o `StatsCard` começa como um botão no canto com o resumo ("N agentes ·
   M canais" na visão inicial, "N memórias" no universo); o toque abre o card por cima do quadro (largura
   toda menos a margem) e "Recolher estatísticas" fecha. O filtro por app fica dentro do card aberto.
-- **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha (Buscar e Limpar só com ícone); embaixo,
-  **Filtros** (com quantos estão ativos) abre os cinco filtros numa gaveta de baixo para cima
-  (`NetworkFiltersSheet`, com Limpar e Ver rede), Arquivados e Importar/Novo canal só com ícone e dica.
+- **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha e roda sozinha ao digitar (o × dentro
+  do campo limpa); embaixo, **Filtros** (com quantos estão ativos, sem contar a busca) abre os mesmos
+  campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa gaveta
+  de baixo para cima (`NetworkFiltersSheet`, com Limpar e Ver rede) e Importar/Novo canal só com ícone
+  e dica.
 - **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a linha de
   agentes não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
   Centralizar volta a esse enquadramento. Os universos continuam enquadrando tudo.
-- **Toque na partícula:** os sinais de "passar o mouse" ignoram ponteiro de toque; tocar fixa o card,
+- **Toque na partícula:** o "passar o mouse" (afastar as vizinhas) ignora ponteiro de toque; tocar fixa o card,
   tocar fora fecha, tocar em outra troca. Com o zoom abaixo de 0,6 (celular ou computador), o clique ou
   toque aproxima até 0,6 centralizado na partícula e o card abre.
 - **Card limitado ao quadro** (vale em qualquer tela, `memoryCardSize`): largura e altura cabem no quadro
@@ -551,7 +610,13 @@ canais, links, layout, filtros, estatísticas e o parser `tagged`), `consumption
 `memory-context.test.ts` (formato `tagged`, ids no cache e consumo), `agent-tools.test.ts` (busca
 publica o consumo), `__tests__/components/engramind/network.test.tsx` e
 `__tests__/features/ai/memory-network-view.test.tsx` (React Flow mockado por
-`__tests__/helpers/xyflow.tsx`: o happy-dom não mede o canvas). Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
+`__tests__/helpers/xyflow.tsx`: o happy-dom não mede o canvas). OPE-113:
+`overview-layout.test.ts` (larguras iguais, grade alinhada e nenhum link cruzando outro node, por
+amostragem dos caminhos), `network-filters.test.ts` (filtros em lista, período, chips, schema do
+navegador e lotes de canais da busca), os casos novos de `network-math.test.ts` (cor do link,
+criação por agente e relevância da busca híbrida) e o bloco `OPE-113` de `network.test.tsx` (links
+roxos/verdes, regressão da busca no universo do agente, partícula verde de criação, filtros recolhíveis
+e guardados no navegador). Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
 `opex-ai-card.test.tsx`, memórias dos agentes (`memory-context`, `memory-curator`, `migration`,

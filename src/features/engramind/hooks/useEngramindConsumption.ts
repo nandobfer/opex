@@ -64,7 +64,8 @@ export interface Travel {
     edge: string
     /** `true`: do alvo para a origem da aresta. */
     reverse: boolean
-    tone: "primary" | "white"
+    /** `success`: criação de memória por um agente (verde). */
+    tone: "primary" | "white" | "success"
     delayMs: number
 }
 

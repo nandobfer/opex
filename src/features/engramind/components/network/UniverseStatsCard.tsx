@@ -42,6 +42,12 @@ export function UniverseStatsCard({
     return (
         <StatsCard title={kind === "agent" ? "Universo do agente" : "Universo do canal"} rows={rows} summary={`${memories.length} ${memories.length === 1 ? "memória" : "memórias"}`}>
             {kind === "agent" && (
+                <p className="mt-3 flex items-center gap-1.5 border-t pt-2 text-muted-foreground" data-testid="authored-link-legend">
+                    <span aria-hidden className="h-0.5 w-4 shrink-0 rounded-full bg-success" />
+                    Link verde: memória escrita por este agente
+                </p>
+            )}
+            {kind === "agent" && (
                 <StatList
                     title="Por canal"
                     testId="channel-legend"

@@ -24,6 +24,7 @@ export function framerMotionMock() {
     motion: new Proxy({}, { get: (_, tag: string) => (cache[tag] ??= passthrough(tag)) }),
     useReducedMotion: () => true,
     useMotionValue: (value: unknown) => ({ get: () => value, set: () => {} }),
+    useTransform: (source: { get: () => unknown }, transform: (value: unknown) => unknown) => transform(source.get()),
     animate: () => ({ stop: () => {} }),
   }
 }

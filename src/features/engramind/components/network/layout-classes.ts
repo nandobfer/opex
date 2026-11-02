@@ -27,3 +27,6 @@ export const NETWORK_STATS_CLASS = "pointer-events-auto absolute right-3 top-3 z
 export const NETWORK_STATS_TOGGLE_CLASS = "pointer-events-auto absolute right-3 top-3 z-10 flex h-10 items-center gap-1.5 rounded-xl border bg-card/90 px-3 text-xs font-medium text-foreground shadow-lg backdrop-blur"
 /** Área de toque mínima (40 px) dos botões sobre a rede no celular. */
 export const NETWORK_TOUCH_BUTTON_CLASS = "max-md:h-10 max-md:px-3"
+/** Skeleton da visão inicial: a fileira de agentes e as linhas de canais centralizadas, com a mesma largura. */
+export const NETWORK_SKELETON_ROWS_CLASS = "absolute inset-y-0 left-0 right-72 flex max-md:right-0 max-md:overflow-hidden flex-col justify-center gap-24 px-10"
+export const NETWORK_SKELETON_ROW_CLASS = "flex justify-center gap-6"

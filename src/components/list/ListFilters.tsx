@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useState, type ReactNode } from "react"
+import { useId, useState, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Filter, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch"
 import type { ActiveFilterChip } from "./ActiveFilterChips"
 import { CollapseToggle, CollapsedChips, CollapsibleBody } from "./CollapsibleFilters"
 import { CadastroFilterCard } from "./CadastroFilterCard"
@@ -56,24 +57,9 @@ interface ListFiltersProps {
  * (removíveis), total, limpar e expandir. Abre/fecha animado (Framer Motion).
  */
 export function ListFilters({ total, search, onClear, children, secondary, collapsible = false, defaultCollapsed = true, chips = [] }: ListFiltersProps) {
-    const [localSearch, setLocalSearch] = useState(search?.value ?? "")
-    const externalSearch = search?.value ?? ""
-    const onSearchChange = search?.onChange
+    const [localSearch, setLocalSearch] = useDebouncedSearch(search?.value ?? "", search?.onChange, SEARCH_DEBOUNCE_MS)
     const [collapsed, setCollapsed] = useState(collapsible && defaultCollapsed)
     const contentId = useId()
-
-    // Acompanha mudanças externas (ex.: voltar no navegador, Limpar, remover chip).
-    const [lastExternal, setLastExternal] = useState(externalSearch)
-    if (lastExternal !== externalSearch) {
-        setLastExternal(externalSearch)
-        setLocalSearch(externalSearch)
-    }
-
-    useEffect(() => {
-        if (!onSearchChange || localSearch === externalSearch) return
-        const timer = setTimeout(() => onSearchChange(localSearch), SEARCH_DEBOUNCE_MS)
-        return () => clearTimeout(timer)
-    }, [localSearch, externalSearch, onSearchChange])
 
     const clear = () => {
         setLocalSearch("")

@@ -26,8 +26,6 @@ export function MemoryCardLayer({
     point,
     actions,
     channelColor,
-    onPointerEnter,
-    onPointerLeave,
 }: {
     memory: NetworkMemory
     visual: ParticleVisual
@@ -35,8 +33,6 @@ export function MemoryCardLayer({
     point: Point
     actions: MemoryCardActions
     channelColor?: string
-    onPointerEnter: () => void
-    onPointerLeave: () => void
 }) {
     const reducedMotion = useReducedMotion()
     const tx = useStore((state) => state.transform[0])
@@ -45,13 +41,6 @@ export function MemoryCardLayer({
     const canvasWidth = useStore((state) => state.width)
     const canvasHeight = useStore((state) => state.height)
     const ref = useRef<HTMLDivElement>(null)
-    // Card que sai sem o cursor ter saído dele (fechado por clique fora, memória removida): a
-    // presença do card é desligada para não segurar o próximo hover.
-    const leaveRef = useRef(onPointerLeave)
-    useEffect(() => {
-        leaveRef.current = onPointerLeave
-    })
-    useEffect(() => () => leaveRef.current(), [])
     const [height, setHeight] = useState(MEMORY_CARD_ESTIMATED_HEIGHT)
     const [settled, setSettled] = useState(false)
 
@@ -92,8 +81,6 @@ export function MemoryCardLayer({
             exit={reducedMotion ? { opacity: 0, transition: { duration: 0 } } : { ...asParticle, opacity: 0, transition: morph }}
             transition={{ ...morph, left: follow, top: follow, height: settled ? { duration: 0.12 } : morph }}
             onAnimationComplete={() => setSettled(true)}
-            onPointerEnter={(event) => event.pointerType !== "touch" && onPointerEnter()}
-            onPointerLeave={(event) => event.pointerType !== "touch" && onPointerLeave()}
             onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
         >

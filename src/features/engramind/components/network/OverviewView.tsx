@@ -2,9 +2,10 @@
 
 import { useCallback, useMemo } from "react"
 import type { Edge, Node } from "@xyflow/react"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { agentReach, layoutOverview, overviewInitialBounds } from "../../network/network-math"
+import { AppWindow } from "lucide-react"
+import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
+import { agentReach, type AgentWrite } from "../../network/network-math"
+import { layoutOverview, overviewInitialBounds, overviewRoute } from "../../network/overview-layout"
 import type { ConsumptionEvent, NetworkAgent, NetworkChannel, NetworkLink, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
 import { NetworkLiveProvider } from "./live"
@@ -12,6 +13,7 @@ import { NetworkCanvas } from "./NetworkCanvas"
 import { AgentNode, ChannelNode, type AgentNodeData, type ChannelNodeData } from "./nodes"
 import { RecenterButton } from "./RecenterButton"
 import { StatList, StatsCard } from "./StatsCard"
+import { useAgentWrites } from "./useAgentWrites"
 
 const NODE_TYPES = { agent: AgentNode, channel: ChannelNode }
 const TRAVEL_MS = 900
@@ -21,9 +23,12 @@ export interface OverviewViewProps {
     channels: NetworkChannel[]
     links: NetworkLink[]
     memories: NetworkMemory[]
+    /** Todas as memórias da rede (criações por agente: a partícula verde não depende dos filtros da visão). */
+    allMemories?: NetworkMemory[]
     apps: { slug: string; name: string }[]
-    hiddenApps: readonly string[]
-    onToggleApp: (app: string, visible: boolean) => void
+    /** Apps escolhidos no filtro (vazio = todos). */
+    selectedApps: readonly string[]
+    onSelectApps: (apps: string[]) => void
     /** Busca/filtros: memórias que casam por canal (`null` = sem filtro). */
     hitsByChannel: Map<string, number> | null
     onOpenAgent: (agent: string) => void
@@ -39,9 +44,11 @@ export const linkEdgeId = (agent: string, channel: string) => `${agent}→${chan
  * vivo de um agente do Opex pulsa o agente, manda a partícula ao canal e, se ele entregou memórias,
  * de volta ao agente.
  */
-export function OverviewView({ agents, channels, links, memories, apps, hiddenApps, onToggleApp, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
+export function OverviewView({ agents, channels, links, memories, allMemories, apps, selectedApps, onSelectApps, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
     const live = useLiveEffects(null)
-    const visibleAgents = useMemo(() => agents.filter((agent) => !hiddenApps.includes(agent.app)), [agents, hiddenApps])
+    // App escolhido que não existe mais não conta (sem nenhum válido, todos).
+    const chosenApps = useMemo(() => selectedApps.filter((slug) => apps.some((app) => app.slug === slug)), [selectedApps, apps])
+    const visibleAgents = useMemo(() => (chosenApps.length ? agents.filter((agent) => chosenApps.includes(agent.app)) : agents), [agents, chosenApps])
     const agentIds = useMemo(() => new Set(visibleAgents.map((agent) => agent.id)), [visibleAgents])
     const visibleLinks = useMemo(() => links.filter((link) => agentIds.has(link.agent)), [links, agentIds])
     const countByChannel = useMemo(() => {
@@ -50,7 +57,8 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
         return counts
     }, [memories])
     const positions = useMemo(() => layoutOverview(visibleAgents, channels), [visibleAgents, channels])
-    const initialBounds = useMemo(() => overviewInitialBounds([...positions.agents.values()]), [positions])
+    const initialBounds = useMemo(() => overviewInitialBounds(positions), [positions])
+    const agentIndex = useMemo(() => new Map(visibleAgents.map((agent, index) => [agent.id, index])), [visibleAgents])
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {
@@ -71,6 +79,21 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
     )
     useEngramindConsumption(onConsumption)
 
+    // Memória criada por um agente: pulso no agente, partícula verde até o canal e pulso no canal.
+    const channelSlugs = useMemo(() => new Set(channels.map((channel) => channel.slug)), [channels])
+    const onWrite = useCallback(
+        (writes: AgentWrite[]) => {
+            const mine = writes.filter((write) => agentIds.has(write.agent) && channelSlugs.has(write.channel))
+            if (!mine.length) return
+            live.pulse([...new Set(mine.map((write) => `agent:${write.agent}`))])
+            const linked = mine.filter((write) => visibleLinks.some((link) => link.agent === write.agent && link.channel === write.channel))
+            live.travel(linked.map((write) => ({ edge: linkEdgeId(write.agent, write.channel), reverse: false, tone: "success" as const, delayMs: 0 })))
+            live.pulse([...new Set(mine.map((write) => `channel:${write.channel}`))], linked.length ? TRAVEL_MS : 0)
+        },
+        [agentIds, channelSlugs, visibleLinks, live],
+    )
+    useAgentWrites(allMemories ?? memories, onWrite)
+
     const nodes = useMemo<Node[]>(() => {
         const list: Node[] = []
         for (const agent of visibleAgents) {
@@ -86,8 +109,14 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
     }, [visibleAgents, channels, positions, hitsByChannel, countByChannel, onChannelMenu])
 
     const edges = useMemo<Edge[]>(
-        () => visibleLinks.map((link) => ({ id: linkEdgeId(link.agent, link.channel), source: `agent:${link.agent}`, target: `channel:${link.channel}`, type: "link", data: { mode: link.mode, dimmed: hitsByChannel ? !hitsByChannel.get(link.channel) : false } })),
-        [visibleLinks, hitsByChannel],
+        () =>
+            visibleLinks.map((link) => {
+                const agentPoint = positions.agents.get(link.agent) ?? { x: 0, y: 0 }
+                const channelPoint = positions.channels.get(link.channel) ?? { x: 0, y: 0 }
+                const route = overviewRoute(positions, agentPoint, agentIndex.get(link.agent) ?? 0, channelPoint, link.channel)
+                return { id: linkEdgeId(link.agent, link.channel), source: `agent:${link.agent}`, target: `channel:${link.channel}`, type: "link", data: { mode: link.mode, dimmed: hitsByChannel ? !hitsByChannel.get(link.channel) : false, route } }
+            }),
+        [visibleLinks, hitsByChannel, positions, agentIndex],
     )
 
     const reach = agentReach(visibleLinks, countByChannel)
@@ -100,7 +129,7 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={NODE_TYPES}
-                fitKey={`overview:${visibleAgents.length}:${channels.length}`}
+                fitKey={`overview:${visibleAgents.length}:${channels.length}:${positions.rowCount}`}
                 initialBounds={initialBounds}
                 label="Rede de agentes e canais"
                 onNodeClick={(_event, node) => (node.type === "agent" ? onOpenAgent((node.data as AgentNodeData).id) : node.type === "channel" && onOpenChannel((node.data as ChannelNodeData).slug))}
@@ -122,19 +151,20 @@ export function OverviewView({ agents, channels, links, memories, apps, hiddenAp
                     ]}
                 >
                     {apps.length > 0 && (
-                        <fieldset className="mt-3 border-t pt-2" data-testid="app-filter">
-                            <legend className="mb-1 font-semibold text-foreground">Apps</legend>
-                            <div className="flex flex-col gap-1">
-                                {apps.map((app) => (
-                                    <span key={app.slug} className="flex items-center gap-2">
-                                        <Checkbox id={`app-${app.slug}`} checked={!hiddenApps.includes(app.slug)} onCheckedChange={(checked) => onToggleApp(app.slug, checked)} aria-label={`Mostrar agentes do app ${app.name}`} />
-                                        <Label htmlFor={`app-${app.slug}`} className="text-xs font-normal">
-                                            {app.name}
-                                        </Label>
-                                    </span>
-                                ))}
-                            </div>
-                        </fieldset>
+                        <div className="mt-3 border-t pt-2" data-testid="app-filter">
+                            <p className="mb-1 font-semibold text-foreground">Apps</p>
+                            <CadastroMultiSelect
+                                icon={AppWindow}
+                                aria-label="Filtrar agentes por app"
+                                placeholder="Todos os apps"
+                                options={apps.map((app) => ({ value: app.slug, label: app.name }))}
+                                selected={chosenApps}
+                                onSelect={onSelectApps}
+                                searchable
+                                searchPlaceholder="Buscar app..."
+                                className="h-8 text-xs"
+                            />
+                        </div>
                     )}
                     <StatList title="Por canal" testId="stats-by-channel" items={channels.map((channel) => ({ key: channel.slug, label: channel.slug, count: countByChannel.get(channel.slug) ?? 0 })).sort((a, b) => b.count - a.count)} />
                     <StatList title="Por agente (alcance)" testId="stats-by-agent" items={visibleAgents.map((agent) => ({ key: agent.id, label: agent.name, count: reach.get(agent.id) ?? 0 })).sort((a, b) => b.count - a.count)} />

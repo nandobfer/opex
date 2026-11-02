@@ -8,9 +8,14 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 import { fitBounds, flowState, setCenter, xyflowMock } from '../../helpers/xyflow'
 import { MOBILE_MEDIA_QUERY } from '@/hooks/useMediaQuery'
 
-/** OPE-109: rede do Engramind em `/engramind` (visão inicial, universos, card, busca e consumo ao vivo). */
+/**
+ * OPE-109: rede do Engramind em `/engramind` (visão inicial, universos, card, busca e consumo ao vivo).
+ * OPE-113: card só por clique, links roxos/verdes, partícula de criação, busca automática e filtros no
+ * padrão de `/tarefas`.
+ */
 
-vi.mock('framer-motion', () => framerMotionMock())
+const motionPrefs = vi.hoisted(() => ({ reduced: true }))
+vi.mock('framer-motion', () => ({ ...framerMotionMock(), useReducedMotion: () => motionPrefs.reduced }))
 vi.mock('@xyflow/react', () => xyflowMock())
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }))
 const nav = vi.hoisted(() => ({ params: new URLSearchParams(), push: vi.fn(), replace: vi.fn() }))
@@ -35,7 +40,6 @@ vi.mock('@/lib/pusher/client', () => ({
 }))
 
 import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
-import { HOVER_CLOSE_DELAY_MS } from '@/features/engramind/components/network/MemoryUniverse'
 import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
 import { channelColors } from '@/features/engramind/network/network-math'
 
@@ -87,10 +91,26 @@ const mount = () =>
       <EngramindNetwork onConfigure={vi.fn()} />
     </QueryClientProvider>,
   )
+/** Mais que qualquer atraso de fechamento: o card não pode fechar sozinho. */
+const WAIT_MS = 400
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+/** O cartão de filtros começa recolhido (padrão de `/tarefas`). */
+const expandFilters = async () => fireEvent.click(await screen.findByRole('button', { name: 'Expandir filtros' }))
+/** Abre o card pelo clique (só se ainda não estiver aberto: clicar de novo fecha). */
+const openCard = async (id: string) => {
+  if (!screen.queryByTestId(`memory-card-${id}`)) fireEvent.click(await screen.findByTestId(`memory-node-${id}`))
+  return screen.findByTestId(`memory-card-${id}`)
+}
+const pickOption = async (trigger: string, option: string) => {
+  fireEvent.click(await screen.findByRole('button', { name: trigger }))
+  fireEvent.click(await screen.findByText(option, { selector: 'div' }))
+}
 const emit = (event: string, payload: unknown) => act(() => (pusher.handlers.get(event) ?? []).forEach((handler) => handler(payload)))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
+  motionPrefs.reduced = true
   pusher.handlers.clear()
   nav.params = new URLSearchParams()
   memories = [memory('m_1', 'opex'), memory('m_2', 'agentes/opex/global'), memory('m_3', 'opex', { status: 'archived' })]
@@ -181,11 +201,20 @@ describe('visão inicial', () => {
     expect(screen.getByRole('tooltip').textContent).toContain('search')
   })
 
-  it('filtro por app esconde os agentes e os links dele; Mostrar arquivados exibe o canal arquivado apagado', async () => {
+  it('filtro por app (picker pesquisável): começa em todos; escolher um app esconde os agentes e os links dos outros; Mostrar arquivados exibe o canal arquivado apagado', async () => {
     mount()
-    fireEvent.click(await screen.findByLabelText('Mostrar agentes do app Outro'))
+    const picker = await screen.findByRole('button', { name: 'Filtrar agentes por app' })
+    expect(picker.textContent).toContain('Todos os apps')
+    expect(screen.getByTestId('agent-node-outro/bot')).toBeTruthy()
+    fireEvent.click(picker)
+    fireEvent.change(await screen.findByPlaceholderText('Buscar app...'), { target: { value: 'Opx' } })
+    expect(screen.queryByText('Outro', { selector: 'div' })).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText('Buscar app...'), { target: { value: '' } })
+    fireEvent.click(await screen.findByText('Opex', { selector: 'div' }))
     await waitFor(() => expect(screen.queryByTestId('agent-node-outro/bot')).toBeNull())
+    expect(screen.getByTestId('agent-node-opex/opex')).toBeTruthy()
     expect(screen.queryByTestId('edge-outro/bot→opex')).toBeNull()
+    await expandFilters()
     fireEvent.click(screen.getByLabelText('Mostrar arquivados'))
     const archived = await screen.findByTestId('channel-node-agentes/opex/velho')
     expect(archived.getAttribute('data-archived')).toBe('true')
@@ -213,8 +242,7 @@ describe('universos', () => {
   it('regressão: Esc com o foco dentro do card da memória volta à visão inicial; num diálogo modal, não', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
-    fireEvent.pointerEnter(await screen.findByTestId('memory-node-m_1'))
-    const card = await screen.findByTestId('memory-card-m_1')
+    const card = await openCard('m_1')
     const pin = within(card).getByRole('button', { name: 'Fixar' })
     pin.focus()
     fireEvent.keyDown(pin, { key: 'Escape' })
@@ -276,8 +304,7 @@ describe('universos', () => {
     net.delete.mockResolvedValue({ data: { data: {} } })
     net.patch.mockRejectedValueOnce(new Error('Esta memória mudou enquanto você editava. Confira a versão atual.'))
     mount()
-    fireEvent.pointerEnter(await screen.findByTestId('memory-node-m_1'))
-    const card = await screen.findByTestId('memory-card-m_1')
+    const card = await openCard('m_1')
     expect(card.textContent).toContain('Título m_1')
     expect(within(card).getByTestId('memory-card-uses').textContent).toContain('3 usos')
     fireEvent.click(within(card).getByRole('checkbox', { name: 'Ativa' }))
@@ -286,8 +313,7 @@ describe('universos', () => {
     expect(net.delete).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: 'Excluir de vez' }))
     await waitFor(() => expect(net.delete).toHaveBeenCalledWith('/engramind/memories/m_1'))
-    fireEvent.pointerEnter(screen.getByTestId('memory-node-m_1'))
-    fireEvent.click(within(await screen.findByTestId('memory-card-m_1')).getByRole('button', { name: 'Editar' }))
+    fireEvent.click(within(await openCard('m_1')).getByRole('button', { name: 'Editar' }))
     fireEvent.change(await screen.findByLabelText('Texto da memória'), { target: { value: 'Texto novo' } })
     await waitFor(() => expect((screen.getByRole('button', { name: /Salvar/ }) as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
@@ -296,36 +322,50 @@ describe('universos', () => {
     expect((screen.getByLabelText('Texto da memória') as HTMLTextAreaElement).value).toBe('Texto novo')
   })
 
-  it('regressão: na ordem real do navegador (entra no card antes de sair da partícula) o card continua aberto; sair do card fecha depois do atraso', async () => {
+  it('OPE-113: passar o mouse não abre o card; só afasta as vizinhas e aumenta levemente a partícula', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
     const node = await screen.findByTestId('memory-node-m_1')
     fireEvent.pointerEnter(node)
-    const card = await screen.findByTestId('memory-card-m_1')
-    // O navegador avisa "entrei no card" antes de "saí da partícula".
-    fireEvent.pointerEnter(card)
-    fireEvent.pointerLeave(node)
-    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
-    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
-    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-expanded')).toBe('true')
-    fireEvent.pointerLeave(screen.getByTestId('memory-card-m_1'))
-    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS - 150))
-    expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
-    await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+    await sleep(WAIT_MS)
+    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
+    expect(node.getAttribute('data-expanded')).toBeNull()
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-focused')).toBe('true')
+    fireEvent.pointerLeave(screen.getByTestId('memory-node-m_1'))
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-focused')).toBeNull())
+    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
   })
 
-  it('a ordem inversa (sai da partícula e depois entra no card) também mantém o card; voltar à partícula cancela o fechamento', async () => {
+  it('OPE-113: clique abre o card; clicar de novo fecha; clicar fora fecha; clicar em outra troca (um card só)', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     mount()
-    const node = await screen.findByTestId('memory-node-m_1')
-    fireEvent.pointerEnter(node)
-    const card = await screen.findByTestId('memory-card-m_1')
-    fireEvent.pointerLeave(node)
-    fireEvent.pointerEnter(card)
-    fireEvent.pointerLeave(card)
-    fireEvent.pointerEnter(node)
-    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
+    fireEvent.click(await screen.findByTestId('memory-node-m_1'))
+    expect(await screen.findByTestId('memory-card-m_1')).toBeTruthy()
+    // Tirar o mouse não fecha o card aberto pelo clique.
+    fireEvent.pointerLeave(screen.getByTestId('memory-node-m_1'))
+    fireEvent.pointerLeave(screen.getByTestId('memory-card-m_1'))
+    await sleep(WAIT_MS)
     expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('memory-node-m_1'))
+    await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
+    fireEvent.click(screen.getByTestId('memory-node-m_1'))
+    await screen.findByTestId('memory-card-m_1')
+    fireEvent.click(screen.getByTestId('memory-node-m_3'))
+    await screen.findByTestId('memory-card-m_3')
+    expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
+    fireEvent.click(screen.getByTestId('react-flow-pane'))
+    await waitFor(() => expect(screen.queryByTestId('memory-card-m_3')).toBeNull())
+  })
+
+  it('OPE-113: com um card aberto, passar o mouse em outra partícula não abre card nem tira o foco da aberta', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    await openCard('m_1')
+    fireEvent.pointerEnter(screen.getByTestId('memory-node-m_3'))
+    await sleep(50)
+    expect(screen.queryByTestId('memory-card-m_3')).toBeNull()
+    expect(screen.getByTestId('memory-node-m_3').getAttribute('data-focused')).toBeNull()
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-focused')).toBe('true')
   })
 
   it('a partícula vira o card numa camada fora do zoom: mesmo tamanho com zoom 1 e 2, dentro do quadro', async () => {
@@ -360,6 +400,7 @@ describe('universos', () => {
       fireEvent.pointerEnter(node)
       expect(screen.queryByTestId('memory-card-m_1')).toBeNull()
       expect(node.getAttribute('data-expanded')).toBeNull()
+      expect(screen.getByTestId('memory-node-m_1').getAttribute('data-focused')).toBe('true')
       fireEvent.click(node)
       await waitFor(() => expect(setCenter.calls).toHaveLength(1))
       expect((setCenter.calls[0]!.options as { zoom: number }).zoom).toBe(0.6)
@@ -412,13 +453,16 @@ describe('universos', () => {
     await waitFor(() => expect(screen.queryByLabelText('Texto da memória')).toBeNull())
   })
 
-  it('busca destaca sem remover: as que casam ficam em destaque e as demais apagadas', async () => {
+  it('busca automática (sem botão) destaca sem remover: as que casam ficam em destaque e as demais apagadas', async () => {
     nav.params = new URLSearchParams('universo=canal:opex')
     net.post.mockResolvedValue({ data: { data: { mode: 'text', results: [{ memory: memories[0], rank: 1, score: 1 }] } } })
     mount()
     await screen.findByTestId('memory-node-m_1')
+    await expandFilters()
+    expect(screen.queryByRole('button', { name: 'Buscar' })).toBeNull()
     fireEvent.change(screen.getByLabelText('Buscar memórias'), { target: { value: 'pnpm' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(net.post).not.toHaveBeenCalled()
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/engramind/memories/search', { query: 'pnpm', channels: ['opex'], include_archived: true, limit: 50 }), { timeout: 2000 })
     await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-matched')).toBe('true'))
     expect(screen.getByTestId('memory-node-m_3').getAttribute('data-matched')).toBe('false')
     expect(screen.getByText(/Busca só textual/)).toBeTruthy()
@@ -533,13 +577,18 @@ describe('celular', () => {
     mount()
     const toolbar = await screen.findByTestId('network-toolbar')
     expect(toolbar.hasAttribute('data-mobile')).toBe(true)
-    expect(screen.queryByLabelText('Autor')).toBeNull()
+    expect(screen.queryByLabelText('Filtrar por autor')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Buscar' })).toBeNull()
     expect(within(toolbar).getByRole('button', { name: 'Novo canal' })).toBeTruthy()
     fireEvent.click(within(toolbar).getByRole('button', { name: 'Filtros' }))
     expect(await screen.findByText('Filtros da rede')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Autor'), { target: { value: 'opex' } })
+    const fields = screen.getByTestId('network-filters-sheet-fields')
+    for (const label of ['Filtrar por canal', 'Filtrar por categoria', 'Filtrar por status', 'Filtrar por autor', 'Mostrar arquivados']) expect(within(fields).getByLabelText(label)).toBeTruthy()
+    await pickOption('Filtrar por autor', 'opex/opex')
     await waitFor(() => expect(screen.getByTestId('network-filter-count').textContent).toBe('1'))
     expect(within(toolbar).getByRole('button', { name: 'Filtros (1 ativo)', hidden: true })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar', hidden: true }))
+    await waitFor(() => expect(screen.queryByTestId('network-filter-count')).toBeNull())
   })
 
   it('visão inicial: quadro estreito demais enquadra com zoom mínimo legível, centralizado nos agentes', async () => {
@@ -568,7 +617,7 @@ describe('celular', () => {
     const card = await screen.findByTestId('memory-card-m_1')
     fireEvent.pointerLeave(node, { pointerType: 'touch' })
     fireEvent.pointerLeave(card, { pointerType: 'touch' })
-    await new Promise((resolve) => setTimeout(resolve, HOVER_CLOSE_DELAY_MS + 100))
+    await sleep(WAIT_MS)
     expect(screen.getByTestId('memory-card-m_1')).toBeTruthy()
     fireEvent.click(screen.getByTestId('react-flow-pane'))
     await waitFor(() => expect(screen.queryByTestId('memory-card-m_1')).toBeNull())
@@ -590,5 +639,98 @@ describe('celular', () => {
     mount()
     fireEvent.pointerDown(await screen.findByTestId('link-outro/bot→opex'), { pointerType: 'touch' })
     expect(screen.getByRole('tooltip').textContent).toContain('search')
+  })
+})
+
+describe('OPE-113', () => {
+  const ownerMemory = (id: string, channel: string) => memory(id, channel, { author: { app: 'opex', app_id: 'app_1', agent: null, agent_id: null } })
+  const travelDots = () => screen.queryAllByTestId('travel-dot').map((dot) => ({ edge: dot.getAttribute('data-edge'), tone: dot.querySelector('circle')?.getAttribute('data-tone') }))
+
+  it('links ao centro: verde nas memórias que o agente do centro escreveu e roxo nas demais (universo do agente)', async () => {
+    memories = [memory('m_1', 'opex'), ownerMemory('m_2', 'agentes/opex/global'), memory('m_4', 'opex', { author: { app: 'outro', app_id: 'app_2', agent: 'outro/bot', agent_id: 'ag_2' } })]
+    nav.params = new URLSearchParams('universo=agente:opex/opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    expect(screen.getByTestId('edge-orbit:m_1').getAttribute('data-stroke')).toBe('var(--color-success)')
+    expect(screen.getByTestId('edge-orbit:m_2').getAttribute('data-stroke')).toBe('var(--color-primary)')
+    expect(screen.getByTestId('edge-orbit:m_4').getAttribute('data-stroke')).toBe('var(--color-primary)')
+    expect(screen.getByTestId('authored-link-legend').textContent).toContain('Link verde')
+  })
+
+  it('links ao centro no universo do canal e links da visão inicial: sempre roxo primário', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    expect(screen.getByTestId('edge-orbit:m_1').getAttribute('data-stroke')).toBe('var(--color-primary)')
+    expect(screen.queryByTestId('authored-link-legend')).toBeNull()
+    cleanup()
+    nav.params = new URLSearchParams()
+    mount()
+    expect((await screen.findByTestId('edge-opex/opex→opex')).getAttribute('data-stroke')).toBe('var(--color-primary)')
+  })
+
+  it('regressão: no universo do agente a busca cita os canais dele e destaca só o que o texto também encontrou (o ramo vetorial devolve tudo)', async () => {
+    nav.params = new URLSearchParams('universo=agente:opex/opex')
+    net.post.mockResolvedValue({
+      data: { data: { mode: 'hybrid', results: [{ memory: memories[0], rank: 1, score: 0.0325 }, { memory: memories[1], rank: 1, score: 0.016393 }, { memory: memories[2], rank: 3, score: 0.0161 }] } },
+    })
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    await expandFilters()
+    fireEvent.change(screen.getByLabelText('Buscar memórias'), { target: { value: 'pnpm' } })
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/engramind/memories/search', { query: 'pnpm', channels: ['agentes/opex/global', 'opex'], include_archived: true, limit: 50 }), { timeout: 2000 })
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-matched')).toBe('true'))
+    expect(screen.getByTestId('memory-node-m_2').getAttribute('data-matched')).toBe('false')
+    expect(screen.getByTestId('memory-node-m_3').getAttribute('data-matched')).toBe('false')
+  })
+
+  it('memória criada por um agente: partícula verde do agente até o canal na visão inicial; a do dono não', async () => {
+    motionPrefs.reduced = false
+    mount()
+    await screen.findByTestId('edge-opex/opex→opex')
+    memories = [...memories, ownerMemory('m_8', 'opex')]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await waitFor(() => expect(screen.getByTestId('stat-active').getAttribute('data-value')).toBe('3'))
+    expect(travelDots()).toEqual([])
+    memories = [...memories, memory('m_9', 'opex')]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await waitFor(() => expect(travelDots()).toEqual([{ edge: 'opex/opex→opex', tone: 'success' }]))
+  })
+
+  it('memória antiga que só aparece agora (Mostrar arquivados) não gera partícula de criação', async () => {
+    motionPrefs.reduced = false
+    memories = [...memories, memory('m_7', 'agentes/opex/velho', { created_at: '2026-01-01T00:00:00Z' })]
+    mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    await expandFilters()
+    fireEvent.click(screen.getByLabelText('Mostrar arquivados'))
+    await screen.findByTestId('channel-node-agentes/opex/velho')
+    expect(travelDots()).toEqual([])
+  })
+
+  it('universo do agente: a memória nova que ele escreveu recebe a partícula verde do centro', async () => {
+    motionPrefs.reduced = false
+    nav.params = new URLSearchParams('universo=agente:opex/opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    memories = [...memories, memory('m_9', 'opex')]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await waitFor(() => expect(travelDots()).toContainEqual({ edge: 'orbit:m_9', tone: 'success' }))
+  })
+
+  it('cartão de filtros recolhível (padrão /tarefas): chips no resumo, remover o chip limpa o filtro e os filtros ficam no navegador', async () => {
+    const view = mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    expect(screen.queryByLabelText('Buscar memórias')).toBeNull()
+    await expandFilters()
+    await pickOption('Filtrar por canal', 'opex')
+    await waitFor(() => expect(screen.getByTestId('channel-node-agentes/opex/global').className).toContain('opacity-30'))
+    view.unmount()
+    mount()
+    const summary = await screen.findByTestId('list-filters-summary')
+    expect(summary.textContent).toContain('Canal: opex')
+    expect((await screen.findByTestId('channel-node-agentes/opex/global')).className).toContain('opacity-30')
+    fireEvent.click(within(summary).getByRole('button', { name: /Remover/ }))
+    await waitFor(() => expect(screen.getByTestId('channel-node-agentes/opex/global').className).not.toContain('opacity-30'))
   })
 })
