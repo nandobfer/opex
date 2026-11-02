@@ -254,12 +254,12 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         const onEvent = (event: TurnEvent) => {
             if (event.type === "tool" && event.state === "running") {
                 emitProgress(diagramId, { tools: ++tools })
-                void ArchitectDiagram.updateOne(filter, { $inc: { "progress.tools": 1 }, $set: { "progress.lastTool": event.name.slice(0, 80) } })
+                void ArchitectDiagram.updateOne(filter, { $inc: { "progress.tools": 1 }, $set: { "progress.lastTool": event.name.slice(0, 80) } }).catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar o progresso"))
             } else if (event.type === "text") {
                 live(graphAssembler.push(event.text))
                 if (!writing && graphAssembler.draft.nodes.length > (startGraph?.nodes.length ?? 0)) {
                     writing = true
-                    void setPhase("writing")
+                    void setPhase("writing").catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar a fase"))
                 }
             }
         }

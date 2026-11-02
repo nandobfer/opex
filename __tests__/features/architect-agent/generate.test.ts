@@ -19,12 +19,13 @@ const mocks = vi.hoisted(() => ({
   audit: vi.fn(async () => undefined),
   publish: vi.fn(async () => undefined),
   workbenchUpdate: vi.fn(),
+  logWarn: vi.fn(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: mocks.logWarn, error: vi.fn() }) }))
 vi.mock('@/features/architect-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { ArchitectDiagram: memoryModel(), architectDb: vi.fn(async () => undefined) }
@@ -424,3 +425,42 @@ describe('fonte: todos os planos da mesa', () => {
     expect(doc(id).state).toBe('done')
   })
 })
+
+describe('gravações de progresso em segundo plano', () => {
+  it('banco falhando ao gravar o progresso e a fase: vira aviso no log, sem rejeição solta, e o diagrama termina', async () => {
+    const model = ArchitectDiagram as unknown as { updateOne: (...args: unknown[]) => Promise<unknown> }
+    const original = model.updateOne
+    const failed: string[] = []
+    const spy = vi.spyOn(model, 'updateOne').mockImplementation(async (...args: unknown[]) => {
+      const update = JSON.stringify(args[1])
+      if (update.includes('progress.tools') || update.includes('"progress.phase":"writing"')) {
+        failed.push(update)
+        throw new Error('Mongo oscilou')
+      }
+      return original.apply(model, args)
+    })
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => rejections.push(reason)
+    process.on('unhandledRejection', onRejection)
+    try {
+      mocks.runTurn.mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: { publish: (event: unknown) => void }) => {
+        hooks.publish({ type: 'tool', id: 't1', name: 'read', state: 'running' })
+        const text = graphJson()
+        hooks.publish({ type: 'text', text })
+        return succeeded(text)
+      })
+      const { id, controller } = await seed()
+      await runDiagram(id, controller)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(failed.length).toBeGreaterThan(0)
+      // Cada gravação que falhou foi tratada (aviso no log), nenhuma ficou como rejeição solta.
+      expect(mocks.logWarn).toHaveBeenCalledWith(expect.objectContaining({ err: 'Mongo oscilou', diagramId: id }), '[architect] falha ao gravar o progresso')
+      expect(rejections).toEqual([])
+      expect(doc(id).state).toBe('done')
+    } finally {
+      process.off('unhandledRejection', onRejection)
+      spy.mockRestore()
+    }
+  })
+})
+
