@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { MEMORY_STATUSES } from "../constants"
+import { DEFAULT_OVERVIEW_LAYOUT, OVERVIEW_LAYOUT_MODES } from "./overview-layout"
 import type { NetworkMemory } from "./types"
 
 /**
@@ -24,16 +25,18 @@ export const networkFiltersSchema = z.object({
     includeArchived: z.boolean().catch(false),
     /** Apps cujos agentes aparecem na visão inicial (vazio = todos). */
     apps: list,
+    /** Distribuição da visão inicial (escolhida na legenda; o Limpar não mexe). */
+    overviewLayout: z.enum(OVERVIEW_LAYOUT_MODES).catch(DEFAULT_OVERVIEW_LAYOUT),
 })
 
 export type NetworkFilters = z.infer<typeof networkFiltersSchema>
 
-export const DEFAULT_NETWORK_FILTERS: NetworkFilters = { search: "", channels: [], statuses: [], categories: [], authors: [], from: "", to: "", includeArchived: false, apps: [] }
+export const DEFAULT_NETWORK_FILTERS: NetworkFilters = { search: "", channels: [], statuses: [], categories: [], authors: [], from: "", to: "", includeArchived: false, apps: [], overviewLayout: DEFAULT_OVERVIEW_LAYOUT }
 
-/** Campos que o "Limpar" zera (os apps escolhidos no card de estatísticas ficam). */
+/** Campos que o "Limpar" zera (os apps e a distribuição escolhidos no card de estatísticas ficam). */
 export const NETWORK_FILTER_KEYS = ["search", "channels", "statuses", "categories", "authors", "from", "to", "includeArchived"] as const satisfies readonly (keyof NetworkFilters)[]
 
-export const clearNetworkFilters = (filters: NetworkFilters): NetworkFilters => ({ ...DEFAULT_NETWORK_FILTERS, apps: filters.apps })
+export const clearNetworkFilters = (filters: NetworkFilters): NetworkFilters => ({ ...DEFAULT_NETWORK_FILTERS, apps: filters.apps, overviewLayout: filters.overviewLayout })
 
 /** Filtros que destacam memórias (sem a busca, que vem do servidor, e sem os arquivados/apps). */
 export const hasMemoryFilters = (filters: NetworkFilters): boolean => Boolean(filters.channels.length || filters.statuses.length || filters.categories.length || filters.authors.length || filters.from || filters.to)
@@ -67,14 +70,17 @@ export interface NetworkFilterChip {
 
 const formatDay = (value: string) => value.split("-").reverse().join("/")
 
-/** Chips dos filtros ativos (resumo do cartão recolhido e contagem da gaveta no celular). */
-export function activeNetworkFilterChips(filters: NetworkFilters): NetworkFilterChip[] {
+/**
+ * Chips dos filtros ativos (resumo do cartão recolhido e contagem da gaveta no celular). `channelLabel`
+ * mostra o canal legível (`channelDisplayName`: sigla da central no lugar do id).
+ */
+export function activeNetworkFilterChips(filters: NetworkFilters, channelLabel: (slug: string) => string = (slug) => slug): NetworkFilterChip[] {
     const chips: NetworkFilterChip[] = []
     if (filters.search.trim()) chips.push({ key: "search", label: `Busca: ${filters.search.trim()}`, remove: { search: "" } })
     const many = (key: "channels" | "statuses" | "categories" | "authors", title: string, label: (value: string) => string = (value) => value) => {
         for (const value of filters[key]) chips.push({ key: `${key}:${value}`, label: `${title}: ${label(value)}`, remove: { [key]: filters[key].filter((item) => item !== value) } })
     }
-    many("channels", "Canal")
+    many("channels", "Canal", channelLabel)
     many("statuses", "Status", memoryStatusLabel)
     many("categories", "Categoria")
     many("authors", "Autor")

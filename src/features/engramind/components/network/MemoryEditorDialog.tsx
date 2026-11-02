@@ -3,6 +3,7 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MemoryEditor } from "@/features/ai/components/memories/MemoryEditor"
 import type { MemoryTextLimits } from "@/features/ai/memory-text"
+import { ChannelDisplayName } from "./ChannelName"
 
 export interface MemoryEditorTarget {
     mode: "create" | "edit"
@@ -20,7 +21,7 @@ export function MemoryEditorDialog({ target, limits, categories, onSave, onClose
             <DialogContent className="sm:max-w-xl">
                 <DialogHeader>
                     <DialogTitle>{target?.mode === "edit" ? "Editar memória" : "Nova memória"}</DialogTitle>
-                    <DialogDescription>Canal {target?.channel}</DialogDescription>
+                    <DialogDescription>Canal {target?.channel ? <ChannelDisplayName slug={target.channel} /> : null}</DialogDescription>
                 </DialogHeader>
                 {target && (
                     <MemoryEditor

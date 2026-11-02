@@ -33,16 +33,22 @@ describe('filtros da rede', () => {
   })
 
   it('chips removíveis, um por valor; Limpar mantém os apps escolhidos', () => {
-    const current = filters({ search: 'pnpm', channels: ['opex', 'x'], statuses: ['permanent'], from: '2026-10-01', to: '2026-10-31', includeArchived: true, apps: ['opex'] })
+    const current = filters({ search: 'pnpm', channels: ['opex', 'x'], statuses: ['permanent'], from: '2026-10-01', to: '2026-10-31', includeArchived: true, apps: ['opex'], overviewLayout: 'agents-center' })
     const chips = activeNetworkFilterChips(current)
     expect(chips.map((chip) => chip.label)).toEqual(['Busca: pnpm', 'Canal: opex', 'Canal: x', 'Status: Fixada', 'Período: 01/10/2026 a 31/10/2026', 'Mostrando arquivados'])
     expect(chips.find((chip) => chip.key === 'channels:opex')!.remove).toEqual({ channels: ['x'] })
-    expect(clearNetworkFilters(current)).toEqual({ ...DEFAULT_NETWORK_FILTERS, apps: ['opex'] })
+    expect(clearNetworkFilters(current)).toEqual({ ...DEFAULT_NETWORK_FILTERS, apps: ['opex'], overviewLayout: 'agents-center' })
+    // Canal legível nos chips (sigla da central no lugar do id).
+    expect(activeNetworkFilterChips(filters({ channels: ['x/central/c1'] }), (slug) => slug.replace('c1', 'OPE')).map((chip) => chip.label)).toEqual(['Canal: x/central/OPE'])
   })
 
   it('o schema do navegador recupera valores inválidos sem perder os válidos', () => {
     const parsed = networkFiltersSchema.parse({ search: 'ok', channels: 'opex', from: '01/10/2026', includeArchived: 'sim', apps: ['opex'] })
     expect(parsed).toEqual({ ...DEFAULT_NETWORK_FILTERS, search: 'ok', apps: ['opex'] })
+    // Distribuição: padrão "Canais junto dos agentes"; valor inválido ou ausente cai no padrão.
+    expect(DEFAULT_NETWORK_FILTERS.overviewLayout).toBe('by-agent')
+    expect(networkFiltersSchema.parse({ overviewLayout: 'agents-center' }).overviewLayout).toBe('agents-center')
+    expect(networkFiltersSchema.parse({ overviewLayout: 'em-linhas' }).overviewLayout).toBe('by-agent')
   })
 
   it('a busca cita os canais em lotes de 50, sem repetir; sem canais, um lote sem citação', () => {

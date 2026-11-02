@@ -5,7 +5,7 @@ import {
   agentReach,
   agentWritesOf,
   AGENT_WRITE_WINDOW_MS,
-  orbitLinkTone,
+  isAuthoredByCenter,
   relevantSearchIds,
   clampCardRect,
   channelColors,
@@ -344,11 +344,11 @@ describe('layout', () => {
 })
 
 describe('filtros e estatísticas', () => {
-  it('OPE-113: link verde só quando o agente do centro escreveu a memória', () => {
-    expect(orbitLinkTone({ authorAgent: 'opex/opex' }, { kind: 'agent', id: 'opex/opex' })).toBe('success')
-    expect(orbitLinkTone({ authorAgent: 'outro/bot' }, { kind: 'agent', id: 'opex/opex' })).toBe('primary')
-    expect(orbitLinkTone({ authorAgent: null }, { kind: 'agent', id: 'opex/opex' })).toBe('primary')
-    expect(orbitLinkTone({ authorAgent: 'opex/opex' }, { kind: 'channel', id: 'opex/opex' })).toBe('primary')
+  it('OPE-113: link destacado só quando o agente do centro escreveu a memória', () => {
+    expect(isAuthoredByCenter({ authorAgent: 'opex/opex' }, { kind: 'agent', id: 'opex/opex' })).toBe(true)
+    expect(isAuthoredByCenter({ authorAgent: 'outro/bot' }, { kind: 'agent', id: 'opex/opex' })).toBe(false)
+    expect(isAuthoredByCenter({ authorAgent: null }, { kind: 'agent', id: 'opex/opex' })).toBe(false)
+    expect(isAuthoredByCenter({ authorAgent: 'opex/opex' }, { kind: 'channel', id: 'opex/opex' })).toBe(false)
   })
 
   it('OPE-113: criação por agente só conta para memória nova com agente autor criada há pouco', () => {

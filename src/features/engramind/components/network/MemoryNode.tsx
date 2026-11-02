@@ -1,8 +1,8 @@
 "use client"
 
-import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createContext, memo, useContext, useEffect, useState } from "react"
 import type { Node, NodeProps } from "@xyflow/react"
-import { animate, motion, useMotionValue, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { repelOffset, type Point } from "../../network/network-math"
 import type { ParticleVisual } from "../../network/particles"
@@ -10,6 +10,7 @@ import type { NetworkMemory } from "../../network/types"
 import { PulseRing } from "./live"
 import type { MemoryCardActions } from "./MemoryCard"
 import { CenterHandles, LABEL_MIN_ZOOM, useZoom } from "./nodes"
+import { usePositionSlide } from "./usePositionSlide"
 
 /** Zoom mínimo para o card abrir (visão afastada demais só destaca a partícula). */
 export const CARD_MIN_ZOOM = 0.6
@@ -49,7 +50,7 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
     const glow = visual.archived ? 0 : Math.round(4 + 14 * visual.brightness)
     const dimmed = data.matched === false
     const ready = useAfterMeasure()
-    const slide = useOrbitSlide(point, reducedMotion === true)
+    const slide = usePositionSlide(point, reducedMotion === true)
     // Nascimento: começa no centro (0,0 da rede), invisível e sem tamanho, até a própria órbita.
     const born = data.entering && !reducedMotion
     const hidden = { scale: 0, opacity: 0, x: born ? -point.x : 0, y: born ? -point.y : 0 }
@@ -106,19 +107,3 @@ function useAfterMeasure(): boolean {
     return ready
 }
 
-/** Órbita recalculada (memória nova ou removida): a partícula desliza da posição antiga para a nova. */
-function useOrbitSlide(point: Point, reduced: boolean) {
-    const x = useMotionValue(0)
-    const y = useMotionValue(0)
-    const previous = useRef(point)
-    useLayoutEffect(() => {
-        const before = previous.current
-        previous.current = point
-        if (reduced || (before.x === point.x && before.y === point.y)) return
-        x.set(before.x - point.x + x.get())
-        y.set(before.y - point.y + y.get())
-        const controls = [animate(x, 0, { duration: 0.45, ease: "easeInOut" }), animate(y, 0, { duration: 0.45, ease: "easeInOut" })]
-        return () => controls.forEach((control) => control.stop())
-    }, [point, reduced, x, y])
-    return { x, y }
-}

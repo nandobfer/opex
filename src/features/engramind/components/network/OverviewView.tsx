@@ -3,9 +3,10 @@
 import { useCallback, useMemo } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { AppWindow } from "lucide-react"
+import { OptionTabs } from "@/components/ui/option-tabs"
 import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
 import { agentReach, type AgentWrite } from "../../network/network-math"
-import { layoutOverview, overviewInitialBounds, overviewRoute } from "../../network/overview-layout"
+import { layoutOverview, OVERVIEW_LAYOUT_LABEL, OVERVIEW_LAYOUT_MODES, OVERVIEW_LINK_BEND, overviewInitialBounds, type OverviewLayoutMode } from "../../network/overview-layout"
 import type { ConsumptionEvent, NetworkAgent, NetworkChannel, NetworkLink, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
 import { NetworkLiveProvider } from "./live"
@@ -14,6 +15,8 @@ import { AgentNode, ChannelNode, type AgentNodeData, type ChannelNodeData } from
 import { RecenterButton } from "./RecenterButton"
 import { StatList, StatsCard } from "./StatsCard"
 import { useAgentWrites } from "./useAgentWrites"
+import { ChannelDisplayName } from "./ChannelName"
+import { useStable } from "./useStableNodes"
 
 const NODE_TYPES = { agent: AgentNode, channel: ChannelNode }
 const TRAVEL_MS = 900
@@ -29,6 +32,9 @@ export interface OverviewViewProps {
     /** Apps escolhidos no filtro (vazio = todos). */
     selectedApps: readonly string[]
     onSelectApps: (apps: string[]) => void
+    /** Distribuição da visão inicial (escolhida na legenda; guardada no navegador). */
+    layout: OverviewLayoutMode
+    onLayout: (layout: OverviewLayoutMode) => void
     /** Busca/filtros: memórias que casam por canal (`null` = sem filtro). */
     hitsByChannel: Map<string, number> | null
     onOpenAgent: (agent: string) => void
@@ -40,11 +46,12 @@ export interface OverviewViewProps {
 export const linkEdgeId = (agent: string, channel: string) => `${agent}→${channel}`
 
 /**
- * Visão inicial da rede: agentes de um lado e canais do outro, ligados pelas assinaturas. O consumo ao
+ * Visão inicial da rede: agentes e canais ligados pelas assinaturas, na distribuição escolhida na
+ * legenda ("Canais junto dos agentes" ou "Agentes no centro"), com os cards pelo tamanho. O consumo ao
  * vivo de um agente do Opex pulsa o agente, manda a partícula ao canal e, se ele entregou memórias,
  * de volta ao agente.
  */
-export function OverviewView({ agents, channels, links, memories, allMemories, apps, selectedApps, onSelectApps, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
+export function OverviewView({ agents, channels, links, memories, allMemories, apps, selectedApps, onSelectApps, layout, onLayout, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
     const live = useLiveEffects(null)
     // App escolhido que não existe mais não conta (sem nenhum válido, todos).
     const chosenApps = useMemo(() => selectedApps.filter((slug) => apps.some((app) => app.slug === slug)), [selectedApps, apps])
@@ -56,9 +63,18 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
         for (const memory of memories) if (memory.status !== "archived") counts.set(memory.channel, (counts.get(memory.channel) ?? 0) + 1)
         return counts
     }, [memories])
-    const positions = useMemo(() => layoutOverview(visibleAgents, channels), [visibleAgents, channels])
+    // Tamanho do canal: todas as memórias dele (inclusive inativas); do agente: o alcance.
+    const totalByChannel = useMemo(() => {
+        const counts = new Map<string, number>()
+        for (const memory of memories) counts.set(memory.channel, (counts.get(memory.channel) ?? 0) + 1)
+        return counts
+    }, [memories])
+    const reach = useMemo(() => agentReach(visibleLinks, countByChannel), [visibleLinks, countByChannel])
+    const positions = useMemo(
+        () => layoutOverview({ agents: visibleAgents, channels, links: visibleLinks, agentCounts: reach, channelCounts: totalByChannel, mode: layout }),
+        [visibleAgents, channels, visibleLinks, reach, totalByChannel, layout],
+    )
     const initialBounds = useMemo(() => overviewInitialBounds(positions), [positions])
-    const agentIndex = useMemo(() => new Map(visibleAgents.map((agent, index) => [agent.id, index])), [visibleAgents])
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {
@@ -97,39 +113,44 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
     const nodes = useMemo<Node[]>(() => {
         const list: Node[] = []
         for (const agent of visibleAgents) {
-            const data: AgentNodeData = { id: agent.id, name: agent.name, app: agent.app }
-            list.push({ id: `agent:${agent.id}`, type: "agent", position: positions.agents.get(agent.id) ?? { x: 0, y: 0 }, data })
+            const point = positions.agents.get(agent.id) ?? { x: 0, y: 0 }
+            const data: AgentNodeData = { id: agent.id, name: agent.name, app: agent.app, scale: positions.scales.get(`agent:${agent.id}`), point }
+            list.push({ id: `agent:${agent.id}`, type: "agent", position: point, data })
         }
         for (const channel of channels) {
             const hits = hitsByChannel ? (hitsByChannel.get(channel.slug) ?? 0) : null
-            const data: ChannelNodeData = { slug: channel.slug, name: channel.name, count: countByChannel.get(channel.slug) ?? 0, archived: channel.archived, hits, dimmed: hits === 0, onMenu: onChannelMenu }
-            list.push({ id: `channel:${channel.slug}`, type: "channel", position: positions.channels.get(channel.slug) ?? { x: 0, y: 0 }, data })
+            const point = positions.channels.get(channel.slug) ?? { x: 0, y: 0 }
+            const data: ChannelNodeData = { slug: channel.slug, name: channel.name, count: countByChannel.get(channel.slug) ?? 0, archived: channel.archived, hits, dimmed: hits === 0, onMenu: onChannelMenu, scale: positions.scales.get(`channel:${channel.slug}`), point }
+            list.push({ id: `channel:${channel.slug}`, type: "channel", position: point, data })
         }
         return list
     }, [visibleAgents, channels, positions, hitsByChannel, countByChannel, onChannelMenu])
 
     const edges = useMemo<Edge[]>(
         () =>
-            visibleLinks.map((link) => {
-                const agentPoint = positions.agents.get(link.agent) ?? { x: 0, y: 0 }
-                const channelPoint = positions.channels.get(link.channel) ?? { x: 0, y: 0 }
-                const route = overviewRoute(positions, agentPoint, agentIndex.get(link.agent) ?? 0, channelPoint, link.channel)
-                return { id: linkEdgeId(link.agent, link.channel), source: `agent:${link.agent}`, target: `channel:${link.channel}`, type: "link", data: { mode: link.mode, dimmed: hitsByChannel ? !hitsByChannel.get(link.channel) : false, route } }
-            }),
-        [visibleLinks, hitsByChannel, positions, agentIndex],
+            // Links vizinhos do mesmo canal curvam para lados alternados (não se sobrepõem por inteiro).
+            visibleLinks.map((link, index) => ({
+                id: linkEdgeId(link.agent, link.channel),
+                source: `agent:${link.agent}`,
+                target: `channel:${link.channel}`,
+                type: "link",
+                data: { mode: link.mode, dimmed: hitsByChannel ? !hitsByChannel.get(link.channel) : false, bend: index % 2 ? -OVERVIEW_LINK_BEND : OVERVIEW_LINK_BEND },
+            })),
+        [visibleLinks, hitsByChannel],
     )
+    const stableNodes = useStable(nodes)
+    const stableEdges = useStable(edges)
 
-    const reach = agentReach(visibleLinks, countByChannel)
     const active = memories.filter((memory) => memory.status !== "archived").length
     const liveValue = useMemo(() => ({ pulses: live.pulses, travels: live.travels, finish: live.finish }), [live.pulses, live.travels, live.finish])
 
     return (
         <NetworkLiveProvider value={liveValue}>
             <NetworkCanvas
-                nodes={nodes}
-                edges={edges}
+                nodes={stableNodes}
+                edges={stableEdges}
                 nodeTypes={NODE_TYPES}
-                fitKey={`overview:${visibleAgents.length}:${channels.length}:${positions.rowCount}`}
+                fitKey={`overview:${visibleAgents.length}:${channels.length}:${layout}`}
                 initialBounds={initialBounds}
                 label="Rede de agentes e canais"
                 onNodeClick={(_event, node) => (node.type === "agent" ? onOpenAgent((node.data as AgentNodeData).id) : node.type === "channel" && onOpenChannel((node.data as ChannelNodeData).slug))}
@@ -150,6 +171,17 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
                         { label: "Consumos ao vivo", value: live.liveCount, testId: "stat-live" },
                     ]}
                 >
+                    <div className="mt-3 border-t pt-2" data-testid="overview-layout">
+                        <p className="mb-1 font-semibold text-foreground">Distribuição</p>
+                        <OptionTabs
+                            aria-label="Distribuição da rede"
+                            size="xs"
+                            className="w-full"
+                            options={OVERVIEW_LAYOUT_MODES.map((mode) => ({ value: mode, label: OVERVIEW_LAYOUT_LABEL[mode] }))}
+                            value={layout}
+                            onChange={onLayout}
+                        />
+                    </div>
                     {apps.length > 0 && (
                         <div className="mt-3 border-t pt-2" data-testid="app-filter">
                             <p className="mb-1 font-semibold text-foreground">Apps</p>
@@ -166,7 +198,7 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
                             />
                         </div>
                     )}
-                    <StatList title="Por canal" testId="stats-by-channel" items={channels.map((channel) => ({ key: channel.slug, label: channel.slug, count: countByChannel.get(channel.slug) ?? 0 })).sort((a, b) => b.count - a.count)} />
+                    <StatList title="Por canal" testId="stats-by-channel" items={channels.map((channel) => ({ key: channel.slug, label: channel.slug, node: <ChannelDisplayName slug={channel.slug} className="min-w-0 flex-1 text-muted-foreground" />, count: countByChannel.get(channel.slug) ?? 0 })).sort((a, b) => b.count - a.count)} />
                     <StatList title="Por agente (alcance)" testId="stats-by-agent" items={visibleAgents.map((agent) => ({ key: agent.id, label: agent.name, count: reach.get(agent.id) ?? 0 })).sort((a, b) => b.count - a.count)} />
                 </StatsCard>
                 <RecenterButton />

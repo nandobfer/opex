@@ -37,3 +37,21 @@ export function channelNameParts(slug: string, labels?: ReadonlyMap<string, Chan
     const label = labels?.get(slug)
     return { prefix, title: label?.title ?? leaf, hint: label?.hint ?? null }
 }
+
+/**
+ * Slug do canal para exibir numa linha (chips, legendas, trilha, opções de filtro): canal de central com
+ * a ponta trocada pela sigla (`agentes/desenvolvedor/central/OPE`); sem rótulo, o slug como está.
+ * Helper único (OPE-113): todo lugar que mostra um canal usa este.
+ */
+export function channelDisplayName(slug: string, labels?: ReadonlyMap<string, ChannelLabel>): string {
+    const label = labels?.get(slug)
+    if (!label) return slug
+    const { prefix } = splitChannelSlug(slug)
+    return `${prefix}${label.title}`
+}
+
+/** Dica do canal exibido: nome do repositório e o slug inteiro (quando há rótulo); senão o slug. */
+export function channelDisplayHint(slug: string, labels?: ReadonlyMap<string, ChannelLabel>): string {
+    const label = labels?.get(slug)
+    return label ? `${label.hint} · ${slug}` : slug
+}

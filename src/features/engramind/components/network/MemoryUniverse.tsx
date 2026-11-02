@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { Hash, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import { agentWritesOf, layoutUniverse, orbitLinkTone, universeChannelColors } from "../../network/network-math"
+import { agentWritesOf, isAuthoredByCenter, layoutUniverse, universeChannelColors } from "../../network/network-math"
 import { buildParticles } from "../../network/particles"
 import type { ConsumptionEvent, MemoryUsageMap, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
@@ -20,6 +20,7 @@ import { UniversePanels } from "./UniversePanels"
 import { UniverseStatsCard } from "./UniverseStatsCard"
 import { useEnteringIds } from "./useEnteringIds"
 import { useLeavingItems } from "./useLeavingItems"
+import { useStable } from "./useStableNodes"
 import type { LocalRemovals } from "./useLocalRemovals"
 
 const NODE_TYPES = { center: CenterNode, memory: MemoryNode }
@@ -64,8 +65,8 @@ export interface MemoryUniverseProps {
  * Universo de um canal ou de um agente (OPE-109): o node central e uma partícula por memória, em
  * órbitas (mais novas mais perto), com a cor do canal (o com mais memórias no roxo primário), tamanho pelo
  * uso e brilho pelo último uso. Clique ou toque abre o card (passar o mouse só afasta as vizinhas); o
- * consumo ao vivo pulsa a memória e manda uma partícula ao centro. Links ao centro em roxo; no universo
- * do agente, verdes nas memórias que ele escreveu (OPE-113).
+ * consumo ao vivo pulsa a memória e manda uma partícula ao centro. No universo do agente, o link tem a
+ * cor do canal e é destacado nas memórias que ele escreveu (OPE-113).
  */
 export function MemoryUniverse({
     center,
@@ -115,8 +116,8 @@ export function MemoryUniverse({
     })
 
     const particleColors = useMemo(() => universeChannelColors(channelColors, memories), [channelColors, memories])
-    // Legenda e selo do card com a cor do canal: só no universo do agente. Os links ao centro não usam a
-    // cor do canal (OPE-113): roxo primário, verde nas memórias que o agente do centro escreveu.
+    // Links, legenda e selo do card com a cor do canal: só no universo do agente (o do canal mantém o link
+    // fraco primário). A memória escrita pelo agente do centro tem o link destacado (OPE-113).
     const legendColors = center.kind === "agent" ? particleColors : undefined
     const visuals = useMemo(() => buildParticles(memories, { channelColors: particleColors, usage, staleAfterDays, bumps: live.bumps }), [memories, particleColors, usage, staleAfterDays, live.bumps])
     const positions = useMemo(() => layoutUniverse(items), [items])
@@ -158,10 +159,12 @@ export function MemoryUniverse({
             const point = positions.get(memory.id) ?? { x: 0, y: 0 }
             if (!visual) continue
             const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, leaving: memory.leaving, entering: entering.has(memory.id) }
-            list.push({ id: memory.id, type: "memory", position: point, data, zIndex: focusId === memory.id ? 20 : 1 })
+            // Sem nada do hover/card aberto aqui (vem pelo contexto): node novo pisca no React Flow.
+            list.push({ id: memory.id, type: "memory", position: point, data, zIndex: 1 })
         }
         return list
-    }, [items, visuals, positions, isMatch, particleColors, focusId, center, memories.length, usage, staleAfterDays, entering])
+    }, [items, visuals, positions, isMatch, particleColors, center, memories.length, usage, staleAfterDays, entering])
+    const stableNodes = useStable(nodes)
 
     const edges = useMemo<Edge[]>(
         () =>
@@ -170,10 +173,11 @@ export function MemoryUniverse({
                 source: memory.id,
                 target: CENTER_ID,
                 type: "orbit",
-                data: { tone: orbitLinkTone(memory, { kind: center.kind, id: center.id }), dimmed: isMatch ? !isMatch(memory) : false, entering: entering.has(memory.id) },
+                data: { color: legendColors?.get(memory.channel), authored: isAuthoredByCenter(memory, { kind: center.kind, id: center.id }), dimmed: isMatch ? !isMatch(memory) : false, entering: entering.has(memory.id) },
             })),
-        [items, center.kind, center.id, isMatch, entering],
+        [items, legendColors, center.kind, center.id, isMatch, entering],
     )
+    const stableEdges = useStable(edges)
 
 
     const hover = useCallback((id: string | null) => setHovered(id), [])
@@ -184,8 +188,8 @@ export function MemoryUniverse({
         <NetworkLiveProvider value={liveValue}>
             <UniverseFocusContext.Provider value={focus}>
                 <NetworkCanvas
-                    nodes={nodes}
-                    edges={edges}
+                    nodes={stableNodes}
+                    edges={stableEdges}
                     nodeTypes={NODE_TYPES}
                     fitKey={`${center.kind}:${center.id}:${memories.length === 0 ? "empty" : "full"}`}
                     label={center.kind === "agent" ? `Universo do agente ${center.label}` : `Universo do canal ${center.label}`}

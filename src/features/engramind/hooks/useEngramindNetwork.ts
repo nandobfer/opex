@@ -96,7 +96,9 @@ export function useEngramindNetwork() {
             mode: subscription.mode,
             reaches: subscription.reaches ?? [],
         }))
-        return { agents: networkAgents, channels: networkChannels, subscriptions: subscriptionInputs, memories: memories.items.map(toNetworkMemory) }
+        // Nome de todos os agentes (inclusive os desligados): chip do autor no card da memória.
+        const agentNames = new Map(agents.items.map((agent) => [agent.qualified_slug, agentDisplayName(agent.name)]))
+        return { agents: networkAgents, agentNames, channels: networkChannels, subscriptions: subscriptionInputs, memories: memories.items.map(toNetworkMemory) }
     }, [agents.items, channels.items, subscriptions.items, memories.items])
 
     // Referências estáveis enquanto os dados não mudam (o layout e os nodes da rede derivam delas).

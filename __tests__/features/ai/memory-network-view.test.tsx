@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { xyflowMock } from '../../helpers/xyflow'
+import { flowItems, xyflowMock } from '../../helpers/xyflow'
 
 /**
  * Memórias dos agentes em `/integracoes/ia` como universo do canal da lista (OPE-109; antes a lista
@@ -200,6 +200,15 @@ describe('universo de uma lista de memórias', () => {
     expect((screen.getByRole('button', { name: 'Editar' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('checkbox', { name: 'Ativa' }) as HTMLInputElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: /Nova memória/ })).toBeNull()
+  })
+
+  it('OPE-113: passar o mouse não recria os nodes (sem piscar)', async () => {
+    mount()
+    const node = await particle('m_aaa')
+    const before = flowItems.nodes
+    fireEvent.pointerEnter(node)
+    fireEvent.pointerLeave(node)
+    flowItems.nodes.forEach((item, index) => expect(item).toBe(before[index]))
   })
 })
 

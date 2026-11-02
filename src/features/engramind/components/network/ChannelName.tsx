@@ -4,7 +4,7 @@ import { createContext, useContext, useMemo } from "react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import { cn } from "@/lib/utils"
-import { centralChannelLabels, channelNameParts, type ChannelLabel } from "../../network/channel-labels"
+import { centralChannelLabels, channelDisplayHint, channelDisplayName, channelNameParts, type ChannelLabel } from "../../network/channel-labels"
 
 const ChannelLabelsContext = createContext<ReadonlyMap<string, ChannelLabel>>(new Map())
 
@@ -16,6 +16,21 @@ export function ChannelLabelsProvider({ enabled = true, children }: { enabled?: 
     const centrals = useCentrals(enabled)
     const labels = useMemo(() => centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []), [centrals.data])
     return <ChannelLabelsContext.Provider value={labels}>{children}</ChannelLabelsContext.Provider>
+}
+
+/** Rótulos dos canais de central (fora do `ChannelLabelsProvider`, um mapa vazio: o slug como está). */
+export function useChannelLabels(): ReadonlyMap<string, ChannelLabel> {
+    return useContext(ChannelLabelsContext)
+}
+
+/** Nome legível de um canal numa linha (`channelDisplayName`), com o slug e o repositório na dica. */
+export function ChannelDisplayName({ slug, className }: { slug: string; className?: string }) {
+    const labels = useChannelLabels()
+    return (
+        <span className={cn("truncate", className)} title={channelDisplayHint(slug, labels)} data-channel-slug={slug}>
+            {channelDisplayName(slug, labels)}
+        </span>
+    )
 }
 
 const SIZES = {

@@ -9,7 +9,9 @@ import { FilterSwitch } from "@/components/list/FilterSwitch"
 import { Button } from "@/components/ui/button"
 import { PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { channelDisplayName } from "../../network/channel-labels"
 import { activeNetworkFilterChips, MEMORY_STATUS_OPTIONS, type NetworkFilters } from "../../network/filters"
+import { useChannelLabels } from "./ChannelName"
 
 export interface NetworkFilterOptions {
     channels: readonly string[]
@@ -37,10 +39,11 @@ export function activeFilterCount(filters: NetworkFilters): number {
  * empilhados (gaveta do celular).
  */
 export function NetworkFilterFields({ filters, onFilters, options, part = "all", groupClassName = COL }: NetworkFilterFieldsProps & { part?: "primary" | "secondary" | "all"; groupClassName?: string }) {
+    const labels = useChannelLabels()
     const primary = (
         <>
             <FilterGroup label="Canal" className={groupClassName}>
-                <CadastroMultiSelect icon={Hash} aria-label="Filtrar por canal" placeholder="Todos" options={toOptions(options.channels)} selected={filters.channels} onSelect={(channels) => onFilters({ channels })} searchable searchPlaceholder="Buscar canal..." />
+                <CadastroMultiSelect icon={Hash} aria-label="Filtrar por canal" placeholder="Todos" options={options.channels.map((slug) => ({ value: slug, label: channelDisplayName(slug, labels) }))} selected={filters.channels} onSelect={(channels) => onFilters({ channels })} searchable searchPlaceholder="Buscar canal..." />
             </FilterGroup>
             <FilterGroup label="Categoria" className={groupClassName}>
                 <CadastroMultiSelect icon={Tag} aria-label="Filtrar por categoria" placeholder="Todas" options={toOptions(options.categories)} selected={filters.categories} onSelect={(categories) => onFilters({ categories })} searchable searchPlaceholder="Buscar categoria..." />

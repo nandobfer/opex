@@ -201,26 +201,32 @@ rede (teste estático).
 
 - **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
-  `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`), **na horizontal**: os agentes
-  numa linha em cima (agrupados por app) e os canais ativos embaixo, **com a mesma largura**
-  (`layoutOverview` em `network/overview-layout.ts`, OPE-113; links saem por baixo do agente e chegam
-  por cima do canal):
-  - canais que cabem na largura dos agentes ficam numa linha só e se espalham até ela; uma linha de
-    canais mais larga que os agentes (até 3 canais) espalha os agentes até ela;
-  - com mais canais, eles quebram numa **grade** com tantas colunas quantas cabem na largura dos
-    agentes (no mínimo `OVERVIEW_MIN_COLUMNS` = 3, para não virar uma coluna alta), colunas alinhadas
-    em todas as linhas (passo `OVERVIEW_CHANNEL_COL` = card de 288 px + corredor de 64 px; linhas a
-    cada 160 px, com uma faixa livre de 96 px entre elas) e a última linha centralizada em colunas
-    inteiras; os agentes se espalham até a largura da grade;
-  - **nenhum link atravessa canal ou agente que não é o seu** (`overviewLinkPath`): para a primeira
-    linha, a curva direta; para as de baixo (`overviewRoute`), curva até o corredor mais perto do
-    agente ao lado da coluna do canal, reta corredor abaixo e curva dentro da faixa até o topo do
-    canal (os links que dividem um corredor se afastam alguns px pelo índice do agente). O rótulo do
-    modo fica no meio do caminho.
+  `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`) e os canais ativos, numa das
+  **duas distribuições** escolhidas na legenda (card de estatísticas, "Distribuição", `OptionTabs`;
+  `layoutOverview` em `network/overview-layout.ts`, OPE-113, puro e determinístico):
+  - **Canais junto dos agentes** (`by-agent`, padrão): o canal usado por **um agente só** orbita esse
+    agente (órbita com raio para a volta dos canais dele, começando virada para fora); os agentes ficam
+    num círculo com espaço proporcional às órbitas (um agente só fica no centro); o canal
+    **compartilhado** nasce no **centroide** dos agentes que o usam (entre os dois; o de todos perto do
+    meio); canais sem assinante vão para um anel de fora;
+  - **Agentes no centro** (`agents-center`): agentes num círculo no meio (ordem por app e id) e os
+    canais em anéis em volta (mais anéis quando não cabem), cada anel girado para o **ângulo médio**
+    dos agentes de cada canal; sem agente, no fim do anel.
 
-  O enquadramento inicial (`overviewInitialBounds` + `fitBounds`) pega a largura comum das fileiras
-  com 15% de folga de cada lado e a altura até a última linha de canais. O Centralizar volta a esse
-  enquadramento. Os links da visão inicial são sempre roxo primário. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
+  Os cards são os de sempre, **escalados pelo tamanho** (`overviewScale`, log entre 0,85× e 1,6×): o
+  agente pelo **alcance** (soma das memórias ativas dos canais que ele assina), o canal por **todas as
+  memórias** dele (inclusive inativas); tudo zero, o mínimo (`data-scale`). **Nenhum card se
+  sobrepõe**: um afastamento determinístico (pela menor penetração das caixas escaladas, com 24 px de
+  folga) separa o que encostar, puxando os compartilhados de volta ao centroide; se ainda sobrar
+  sobreposição, o círculo de agentes cresce e o cálculo se repete. Os links são **curvas suaves de
+  centro a centro** (`overviewLinkPath`, curvatura alternada entre links vizinhos), saindo do centro dos
+  cards: minimizam cruzamentos, sem garantia absoluta de não passar por cima de outro card. Trocar de
+  distribuição desliza os cards até as novas posições (`usePositionSlide`, ~300 ms; movimento reduzido:
+  instantâneo) e reenquadra. A escolha fica no navegador com os filtros (`overviewLayout`) e o Limpar
+  não a desfaz.
+
+  O enquadramento inicial (`overviewInitialBounds` + `fitBounds`) pega a caixa de todos os cards
+  escalados com 10% de folga. O Centralizar volta a esse enquadramento. Os links da visão inicial são sempre roxo primário. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
   `reaches` do Engramind para os ativos; com **Mostrar arquivados**, os arquivados casados localmente
   por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
   mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos; ver
@@ -236,14 +242,20 @@ rede (teste estático).
   dono ou do Mentor (sem `author.agent`) não gera. No universo do agente, a memória nova que ele
   escreveu recebe a partícula verde do centro até ela (aresta `orbit`, sentido inverso, 300 ms depois
   do nascimento). Movimento reduzido: sem partícula nem pulso.
-- **Nome do canal** (`ChannelName`, nos canais da visão inicial, no centro do universo do canal e na
-  legenda "Por canal"): o prefixo até a última `/` numa linha discreta em cima (`splitChannelSlug`) e
+- **Nome do canal** (`ChannelName`, em duas linhas, nos canais da visão inicial, no centro do universo do canal e na
+  legenda "Por canal" do universo): o prefixo até a última `/` numa linha discreta em cima (`splitChannelSlug`) e
   a ponta final como título destacado; o slug inteiro aparece ao passar o mouse. O card do canal tem
   até 288 px (`max-w-72`), para o prefixo caber numa linha (corta no fim só se não couber). Canal por
   central (`agentes/desenvolvedor/central/<centralId>`): o título é a **sigla do repositório** (ex.:
   `OPE`) e a dica mostra o nome do repositório (`ChannelLabelsProvider` lê as centrais com
   `useCentrals`; `centralChannelLabels` em `network/channel-labels.ts`); central desconhecida mostra
-  o id.
+  o id. **Numa linha** (OPE-113), o helper único `channelDisplayName(slug, labels)` troca a ponta pela
+  sigla (`agentes/desenvolvedor/central/OPE`; `channelDisplayHint` dá repositório + slug na dica), com
+  o hook `useChannelLabels()` (fora do provider, mapa vazio: o slug como está) e o componente
+  `ChannelDisplayName`. Usado no chip de canal do card da memória, na lista "Por canal" da visão
+  inicial, na trilha ("Canal …/central/OPE"), nas opções e nos chips do filtro **Canal** (o filtro
+  grava o slug; a busca da opção acha pela sigla e pelo slug), no `ChannelPanel` e no editor de
+  memória. Todo lugar novo que mostrar um canal usa esse helper.
 - **Universo do canal** (`MemoryUniverse`): o canal no centro e uma partícula por memória (ativas,
   fixadas e inativas) em órbitas pela **idade** (`layoutUniverse`, OPE-114: as mais novas, pela
   criação, mais perto; as mais antigas mais longe; data inválida no anel externo), com links fracos ao
@@ -261,11 +273,12 @@ rede (teste estático).
   ao canal com **mais memórias naquele universo** (todas, inclusive inativas; empate pelo slug, então é
   sempre a primeira linha da legenda). O roxo é por universo: um canal pode ser roxo num agente e ter a
   sua cor estável em outro; os demais canais têm a mesma cor em qualquer universo.
-- **Links ao centro** (OPE-113): o link de cada partícula ao centro **não** usa a cor do canal: é
-  **roxo primário**, exceto, no universo do agente, nas memórias que **o agente do centro escreveu**
-  (`orbitLinkTone`: `authorAgent === center.id`), que têm o link **verde** (`--color-success`, um pouco
-  mais forte); o card de estatísticas explica ("Link verde: memória escrita por este agente"). No
-  universo do canal (e nos de `/integracoes/ia`), links sempre roxos.
+- **Links ao centro**: no universo do agente, o link de cada partícula tem a **cor do canal** (a mesma
+  da partícula e da legenda, OPE-114); a memória que **o agente do centro escreveu**
+  (`isAuthoredByCenter`: `authorAgent === center.id`, OPE-113) tem o link **destacado**: mesma cor,
+  traço mais grosso (`ORBIT_STROKE_WIDTH`: 2,25 contra 1) e mais opaco (`data-authored`); o card de
+  estatísticas explica ("Link destacado: memória escrita por este agente"). No universo do canal (e
+  nos de `/integracoes/ia`), links fracos em roxo primário, sem destaque.
 - **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
   **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
@@ -292,15 +305,25 @@ A **partícula vira o card**, que abre **só pelo clique ou toque** (OPE-113): c
 (fixado), clicar nela de novo ou fora fecha, e clicar em outra troca de card (um só aberto). Passar o
 mouse (fora do toque) **não abre o card**: só afasta as vizinhas (`repelOffset`) e aumenta levemente a
 partícula em foco (1,35×), sem atraso; com um card aberto, o foco fica na aberta e o hover em outra não
-muda nada. Ao abrir, o card
+muda nada. **Sem piscar** (OPE-113): o React Flow trata objeto de node novo como ainda não medido
+e o esconde até medir, então hover, foco e card aberto chegam só pelo `UniverseFocusContext` (nada
+disso entra no array de nodes) e `useStable` (`useStableNodes.ts`) reaproveita o objeto anterior de
+cada node e aresta quando os dados não mudaram (também nas releituras e na visão inicial). Ao abrir, o card
 nasce no lugar, no tamanho e na cor da partícula na tela e se expande até o retângulo final (~220 ms),
 com o conteúdo entrando em fade; ao fechar, encolhe de volta para ela. A partícula fica invisível
 (`data-expanded`) enquanto o card está aberto. O card fica numa **camada fora da área com zoom**
-(filho do React Flow, irmão do viewport): tamanho e fonte fixos (`w-72`) em qualquer zoom, posição
+(filho do React Flow, irmão do viewport): **quadrado de 360 × 360 px** (`MEMORY_CARD_WIDTH` /
+`MEMORY_CARD_HEIGHT`, OPE-113) e fonte fixa em qualquer zoom, posição
 convertida da partícula para a tela e acompanhando o arrastar/zoom, e sempre **inteiro dentro do
-quadro** (`clampCardRect`, 8 px de margem). Tirar o mouse da partícula ou do card não fecha o card
+quadro** (`clampCardRect`, 8 px de margem; `memoryCardSize` encolhe o quadrado só quando o quadro não
+comporta). Dentro, em coluna: título em cima, o **texto rolando** no meio (`flex-1`) e chips, dados e
+ações sempre visíveis embaixo. Tirar o mouse da partícula ou do card não fecha o card
 aberto (o antigo hover com dois sinais de presença, `useHoverPresence`, saiu). Esc dentro do card (ele não é modal, `data-network-card`) volta à visão inicial como em qualquer
-ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. O card tem título, texto, categoria, canal, idade, relevância (consultas +
+ponto da rede; nos diálogos modais e campos, não. Movimento reduzido: troca instantânea. O card tem título, texto, chips de categoria, canal (legível, `ChannelDisplayName`) e **autor**
+(OPE-113: o agente que criou, com o ícone e o nome sem "Agente" — `AgentLabelsProvider` com os nomes de
+todos os agentes, inclusive desligados —, e o `app/agente` na dica; agente desconhecido mostra o
+`app/agente`; memória gravada por um app sem agente: "App `<app>`"; com a origem do Opex, o selo
+"Gravada por …" de sempre; sem autor, nada), idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
 `MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
@@ -335,8 +358,9 @@ provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento redu
 
 ### Barra e gestão
 
-`NetworkToolbar`: **Importar** (o mesmo `ImportMemoriesDialog`: prévia, erros por índice,
-`limits.max_batch`, sem duplicar) e **Novo canal** à direita e, embaixo, a **busca e os filtros no
+**Importar** (o mesmo `ImportMemoriesDialog`: prévia, erros por índice, `limits.max_batch`, sem
+duplicar) e **Novo canal** ficam na **linha da trilha** (Voltar / Rede / nome), à direita
+(`NetworkActions` no `actions` do `NetworkBreadcrumb`, OPE-113). Embaixo, o `NetworkToolbar` com a **busca e os filtros no
 padrão de `/tarefas`** (OPE-113, `NetworkFiltersBar`): o cartão recolhível `ListFilters collapsible`
 (começa recolhido com os chips dos filtros ativos, removíveis um a um, e o total de memórias que casam
 na visão atual), com a busca ("Buscar por sentido e por texto"), **Canal** e **Categoria** na primeira
@@ -376,7 +400,7 @@ arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `C
 leva ao universo do canal).
 
 Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
-`layout-classes.ts`; linha de agentes em cima e duas linhas de canais embaixo, com a mesma largura), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
+`layout-classes.ts`; a distribuição padrão: agentes em volta do centro, cada um com canais em órbita), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
 (`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
 
 ### Celular (`useIsMobile`, até 767 px)
@@ -390,10 +414,10 @@ nada muda.
 - **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha e roda sozinha ao digitar (o × dentro
   do campo limpa); embaixo, **Filtros** (com quantos estão ativos, sem contar a busca) abre os mesmos
   campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa gaveta
-  de baixo para cima (`NetworkFiltersSheet`, com Limpar e Ver rede) e Importar/Novo canal só com ícone
-  e dica.
-- **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a linha de
-  agentes não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
+  de baixo para cima (`NetworkFiltersSheet`, com Limpar e Ver rede). Importar/Novo canal ficam na
+  linha do Voltar, só com ícone e dica.
+- **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a rede
+  não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
   Centralizar volta a esse enquadramento. Os universos continuam enquadrando tudo.
 - **Toque na partícula:** o "passar o mouse" (afastar as vizinhas) ignora ponteiro de toque; tocar fixa o card,
   tocar fora fecha, tocar em outra troca. Com o zoom abaixo de 0,6 (celular ou computador), o clique ou
@@ -627,12 +651,16 @@ canais, links, layout, filtros, estatísticas e o parser `tagged`), `consumption
 publica o consumo), `__tests__/components/engramind/network.test.tsx` e
 `__tests__/features/ai/memory-network-view.test.tsx` (React Flow mockado por
 `__tests__/helpers/xyflow.tsx`: o happy-dom não mede o canvas). OPE-113:
-`overview-layout.test.ts` (larguras iguais, grade alinhada e nenhum link cruzando outro node, por
-amostragem dos caminhos), `network-filters.test.ts` (filtros em lista, período, chips, schema do
+`overview-layout.test.ts` (as duas distribuições: nenhum card sobreposto em vários cenários,
+determinismo, enquadramento, canal exclusivo perto do agente, compartilhado entre os seus, escala),
+`channel-labels.test.ts` (canal legível), `network-filters.test.ts` (filtros em lista, período, chips, schema do
 navegador e lotes de canais da busca), os casos novos de `network-math.test.ts` (cor do link,
 criação por agente e relevância da busca híbrida) e o bloco `OPE-113` de `network.test.tsx` (links
 roxos/verdes, regressão da busca no universo do agente, partícula verde de criação, filtros recolhíveis
-e guardados no navegador). Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
+e guardados no navegador) e o bloco `OPE-113 (rodada 2)` (**regressão do piscar**: o mock do React Flow
+guarda o último `nodes`/`edges` e passar o mouse, abrir e trocar o card reaproveitam os mesmos objetos;
+trilha com os botões; chip do autor; canal de central legível; distribuição na legenda e escala).
+Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
 `opex-ai-card.test.tsx`, memórias dos agentes (`memory-context`, `memory-curator`, `migration`,

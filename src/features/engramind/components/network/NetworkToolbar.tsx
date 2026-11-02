@@ -12,7 +12,6 @@ import { useIsMobile } from "@/hooks/useMediaQuery"
 import { MEMORY_HELP } from "../../help/identities"
 import { NetworkFiltersBar } from "./NetworkFiltersBar"
 import { NetworkFiltersSheet, type NetworkFilterFieldsProps } from "./NetworkFiltersSheet"
-import { NETWORK_TOOLBAR_CLASS } from "./layout-classes"
 
 export interface NetworkToolbarProps extends NetworkFilterFieldsProps {
     onClear: () => void
@@ -22,30 +21,52 @@ export interface NetworkToolbarProps extends NetworkFilterFieldsProps {
     /** Falha da busca automática (mensagem pt-BR) ou `null`. */
     searchError?: string | null
     onRetrySearch?: () => void
+}
+
+export interface NetworkActionsProps {
     onNewChannel: () => void
     onImport: () => void
     importDisabled: boolean
 }
 
 /**
- * Barra da rede: Importar e Novo canal e, embaixo, a busca e os filtros no padrão de `/tarefas`
- * (`NetworkFiltersBar`, recolhível). A busca roda sozinha ao digitar; filtros destacam sem remover.
+ * Importar e Novo canal, na linha da trilha (à direita do Voltar / Rede / nome, OPE-113). No celular, só
+ * com ícone e dica.
+ */
+export function NetworkActions({ onNewChannel, onImport, importDisabled }: NetworkActionsProps) {
+    const mobile = useIsMobile()
+    if (mobile)
+        return (
+            <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+                <TooltipIconButton label="Importar" className="h-10 min-w-10 bg-transparent" disabledReason={importDisabled ? "Nenhum canal ativo para importar" : null} onClick={onImport}>
+                    <FileUp aria-hidden />
+                </TooltipIconButton>
+                <TooltipIconButton label="Novo canal" className="h-10 min-w-10 bg-transparent" onClick={onNewChannel}>
+                    <Plus aria-hidden />
+                </TooltipIconButton>
+            </span>
+        )
+    return (
+        <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+            <Button type="button" variant="outline" onClick={onImport} disabled={importDisabled}>
+                <FileUp className="mr-1.5 h-4 w-4" aria-hidden /> Importar
+            </Button>
+            <Button type="button" onClick={onNewChannel}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Novo canal
+            </Button>
+        </span>
+    )
+}
+
+/**
+ * Barra da rede: a busca e os filtros no padrão de `/tarefas` (`NetworkFiltersBar`, recolhível). A busca
+ * roda sozinha ao digitar; filtros destacam sem remover. Importar e Novo canal ficam na trilha.
  */
 export function NetworkToolbar(props: NetworkToolbarProps) {
     const mobile = useIsMobile()
     if (mobile) return <MobileToolbar {...props} />
     return (
         <div className="flex flex-col gap-2" data-testid="network-toolbar">
-            <div className={NETWORK_TOOLBAR_CLASS}>
-                <span className="ml-auto flex items-center gap-2">
-                    <Button type="button" variant="outline" onClick={props.onImport} disabled={props.importDisabled}>
-                        <FileUp className="mr-1.5 h-4 w-4" aria-hidden /> Importar
-                    </Button>
-                    <Button type="button" onClick={props.onNewChannel}>
-                        <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Novo canal
-                    </Button>
-                </span>
-            </div>
             <NetworkFiltersBar filters={props.filters} onFilters={props.onFilters} options={props.options} onClear={props.onClear} total={props.total} />
             <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />
             <TextOnlyNotice show={props.textOnly} />
@@ -85,7 +106,7 @@ function TextOnlyNotice({ show }: { show: boolean }) {
 
 /**
  * Celular: a busca ocupa a linha inteira (roda sozinha ao digitar; o × limpa); embaixo, o botão
- * Filtros (gaveta com os mesmos campos) e Importar/Novo canal só com ícone e dica.
+ * Filtros (gaveta com os mesmos campos). Importar/Novo canal ficam na trilha, só com ícone e dica.
  */
 function MobileToolbar(props: NetworkToolbarProps) {
     const { onFilters } = props
@@ -114,14 +135,6 @@ function MobileToolbar(props: NetworkToolbarProps) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
                 <NetworkFiltersSheet filters={props.filters} onFilters={props.onFilters} options={props.options} onClear={props.onClear} />
-                <span className="ml-auto flex items-center gap-2">
-                    <TooltipIconButton label="Importar" className="h-10 min-w-10 bg-transparent" disabledReason={props.importDisabled ? "Nenhum canal ativo para importar" : null} onClick={props.onImport}>
-                        <FileUp aria-hidden />
-                    </TooltipIconButton>
-                    <TooltipIconButton label="Novo canal" className="h-10 min-w-10 bg-transparent" onClick={props.onNewChannel}>
-                        <Plus aria-hidden />
-                    </TooltipIconButton>
-                </span>
             </div>
             <TextOnlyNotice show={props.textOnly} />
             <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />

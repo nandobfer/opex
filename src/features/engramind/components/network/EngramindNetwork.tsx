@@ -15,11 +15,13 @@ import { QueryBoundary } from "../shared/QueryBoundary"
 import { ImportMemoriesDialog } from "../page/memories/ImportMemoriesDialog"
 import { ChannelDialog } from "../page/channels/ChannelDialog"
 import { ChannelPanel } from "./ChannelPanel"
-import { ChannelLabelsProvider } from "./ChannelName"
+import { AgentLabelsProvider } from "./AgentLabels"
+import { ChannelLabelsProvider, useChannelLabels } from "./ChannelName"
+import { channelDisplayName } from "../../network/channel-labels"
 import { MemoryUniverse } from "./MemoryUniverse"
 import { NetworkBreadcrumb } from "./NetworkBreadcrumb"
 import { NetworkSkeleton } from "./NetworkSkeleton"
-import { NetworkToolbar } from "./NetworkToolbar"
+import { NetworkActions, NetworkToolbar } from "./NetworkToolbar"
 import { OverviewView } from "./OverviewView"
 import { useRawMemoryActions } from "./useRawMemoryActions"
 import { useUniverseParam } from "./useUniverseParam"
@@ -39,6 +41,14 @@ export function EngramindNetwork({ onConfigure }: { onConfigure: () => void }) {
 function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
     useEngramindRealtime()
     const data = useEngramindNetwork()
+    return (
+        <AgentLabelsProvider value={data.agentNames}>
+            <EngramindNetworkView onConfigure={onConfigure} data={data} />
+        </AgentLabelsProvider>
+    )
+}
+
+function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; data: ReturnType<typeof useEngramindNetwork> }) {
     const { value: filters, setValue: setFilters } = usePersistentState<NetworkFilters>(NETWORK_FILTERS_STORAGE_KEY, networkFiltersSchema, DEFAULT_NETWORK_FILTERS)
     const patchFilters = useCallback((patch: Partial<NetworkFilters>) => setFilters((previous) => ({ ...previous, ...patch })), [setFilters])
     const clearFilters = useCallback(() => setFilters((previous) => clearNetworkFilters(previous)), [setFilters])
@@ -108,9 +118,15 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
         [data.channels, data.categories, data.memories, includeArchived],
     )
 
-    const current = channel ? { kind: "channel" as const, label: channel.slug } : agent ? { kind: "agent" as const, label: agent.name } : null
+    const channelLabels = useChannelLabels()
+    const current = channel ? { kind: "channel" as const, id: channel.slug, label: channelDisplayName(channel.slug, channelLabels) } : agent ? { kind: "agent" as const, id: agent.id, label: agent.name } : null
     return (
         <div className="flex flex-col gap-3">
+            <NetworkBreadcrumb
+                current={current}
+                onBack={() => back()}
+                actions={<NetworkActions onNewChannel={() => setDialog("channel")} onImport={() => setDialog("import")} importDisabled={data.channels.every((item) => item.archived)} />}
+            />
             <NetworkToolbar
                 filters={filters}
                 onFilters={patchFilters}
@@ -120,14 +136,10 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
                 textOnly={searching && !searchFailed && search.data?.textOnly === true}
                 searchError={searchError}
                 onRetrySearch={() => void search.refetch()}
-                onNewChannel={() => setDialog("channel")}
-                onImport={() => setDialog("import")}
-                importDisabled={data.channels.every((item) => item.archived)}
             />
-            <NetworkBreadcrumb current={current} onBack={() => back()} />
             <QueryBoundary isLoading={data.isLoading} error={data.error} onRetry={data.refetch} skeleton={<NetworkSkeleton />} onConfigure={onConfigure}>
                 <AnimatePresence mode="wait" initial={false}>
-                    <motion.div key={current ? `${current.kind}:${current.label}` : "overview"} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} transition={{ duration: 0.22 }}>
+                    <motion.div key={current ? `${current.kind}:${current.id}` : "overview"} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }} transition={{ duration: 0.22 }}>
                         {channel ? (
                             <MemoryUniverse
                                 center={{ kind: "channel", id: channel.slug, label: channel.slug, archived: channel.archived }}
@@ -165,6 +177,8 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
                                 apps={data.apps}
                                 selectedApps={filters.apps}
                                 onSelectApps={(apps) => patchFilters({ apps })}
+                                layout={filters.overviewLayout}
+                                onLayout={(overviewLayout) => patchFilters({ overviewLayout })}
                                 hitsByChannel={hitsByChannel}
                                 onOpenAgent={(id) => open({ kind: "agent", id })}
                                 onOpenChannel={(slug) => open({ kind: "channel", slug })}

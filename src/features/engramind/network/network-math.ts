@@ -313,9 +313,9 @@ export function repelOffset(from: Point, focus: Point, strength = 18, radius = 2
     return { x: dx * factor, y: dy * factor }
 }
 
-/** Cor do link partícula ↔ centro: verde quando o agente do centro escreveu a memória; senão o roxo primário. */
-export function orbitLinkTone(memory: Pick<NetworkMemory, "authorAgent">, center: { kind: "channel" | "agent"; id: string }): "primary" | "success" {
-    return center.kind === "agent" && Boolean(memory.authorAgent) && memory.authorAgent === center.id ? "success" : "primary"
+/** Link partícula ↔ centro destacado: só no universo do agente, quando ele escreveu a memória. */
+export function isAuthoredByCenter(memory: Pick<NetworkMemory, "authorAgent">, center: { kind: "channel" | "agent"; id: string }): boolean {
+    return center.kind === "agent" && Boolean(memory.authorAgent) && memory.authorAgent === center.id
 }
 
 /** Janela em que uma memória nova conta como "acabou de ser criada" (partícula de criação). */
