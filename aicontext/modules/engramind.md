@@ -284,7 +284,8 @@ dados não mudam, para o layout e os nodes não recalcularem a cada render.
 
 **Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
 `useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
-crescendo de 0 (mola) até o anel interno (é a mais nova), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
+crescendo de 0 (mola) até a sua órbita pela idade (a recém-criada, aqui ou por outra origem, vai ao anel
+interno; a movida mantém a criação original e vai ao anel da sua idade), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
 órbita mudou com o recálculo deslizam da posição antiga para a nova (~450 ms). A animação de entrada
 espera o React Flow medir e mostrar o node (dois quadros). Na lista otimista de `/integracoes/ia`, a
 provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento reduzido: aparece direto.
