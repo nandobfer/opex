@@ -83,12 +83,12 @@ export async function syncDeveloperMemories(client: OpencodeClient, sessionId: s
  * com o aprendizado autônomo ligado, o MCP de memórias passa a valer também no diretório novo.
  * Nunca lança e nunca avisa na mesa (o próximo turno registra de novo).
  */
-export async function registerDeveloperMemoryMcpAt(client: OpencodeClient, directory: string): Promise<void> {
+export async function registerDeveloperMemoryMcpAt(client: OpencodeClient | (() => Promise<OpencodeClient>), directory: string): Promise<void> {
     try {
         const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
         if (!(await selfMemoryEnabled("desenvolvedor"))) return
         const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
-        const registered = await ensureAgentMemoryMcp(client, [directory])
+        const registered = await ensureAgentMemoryMcp(typeof client === "function" ? await client() : client, [directory])
         if (!registered.ok) logger.warn({ directory, err: registered.error }, "[agentic] MCP de memórias não registrado no novo diretório da sessão")
     } catch (error) {
         logger.warn({ err: error, directory }, "[agentic] falha ao registrar o MCP de memórias no novo diretório da sessão")

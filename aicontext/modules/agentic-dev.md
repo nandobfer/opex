@@ -137,9 +137,10 @@ as têm no histórico). Falha ao ler as memórias não derruba o
   sessão e worktree): diretório que **ainda não existe** — o worktree no turno de **Implementar**, antes de
   o agente criá-lo — é **pulado sem aviso** (log `info`) e um diretório com erro não derruba os outros;
   quando a sessão muda para o worktree no meio do turno (hook `onMoved`), o MCP é registrado lá
-  (`registerDeveloperMemoryMcpAt`, sem aviso nem bloqueio) e as ferramentas seguem no mesmo turno
+  (`registerDeveloperMemoryMcpAt`, sem aviso nem bloqueio; falha, inclusive ao obter o cliente do
+  OpenCode, vai para o log `warn`) e as ferramentas seguem no mesmo turno
   (OPE-115). Só falha real (sem URL pública do Opex, sem `INTEGRATIONS_ENCRYPTION_KEY` ou nenhum
-  diretório registrado por erro) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
+  diretório registrado, por erro ou por nenhum existir) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
   segue sempre. Excluir a central arquiva o canal dela no Engramind.
 - O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
   adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista

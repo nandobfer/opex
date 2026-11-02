@@ -118,9 +118,9 @@ describe('MCP de memórias', () => {
     expect(add).toHaveBeenLastCalledWith(expect.objectContaining({ location: { directory: '/repo/worktrees/ope-113' } }))
   })
 
-  it('OPE-115: só diretórios inexistentes não é falha; erro real num diretório não derruba os outros', async () => {
+  it('OPE-115: nenhum diretório existente não registra nada (ok: false, ferramentas não anunciadas); erro real num diretório não derruba os outros', async () => {
     const onlyMissing = { mcp: { add: vi.fn(async () => Promise.reject(new Error('Location not found: /x'))), list: vi.fn(async () => ({ data: [] })), remove: vi.fn() } } as never
-    expect(await ensureAgentMemoryMcp(onlyMissing, ['/x'])).toEqual({ ok: true, error: null, skipped: ['/x'] })
+    expect(await ensureAgentMemoryMcp(onlyMissing, ['/x'])).toEqual({ ok: false, error: 'diretório inexistente no host: /x', skipped: ['/x'] })
     const add = vi.fn(async ({ location }: { location: { directory: string } }) => (location.directory === '/ruim' ? Promise.reject(new Error('boom')) : {}))
     const partial = { mcp: { add, list: vi.fn(async () => ({ data: [] })), remove: vi.fn() } } as never
     expect(await ensureAgentMemoryMcp(partial, ['/ruim', '/bom'])).toEqual({ ok: true, error: null, skipped: [] })

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   refreshTitle: vi.fn(async () => {}),
   publishAppEvent: vi.fn(async () => {}),
   permissionReply: vi.fn(async () => {}),
+  mcpAdd: vi.fn(async (): Promise<unknown> => Promise.reject(Object.assign(new Error('Location not found: /home/dono'), { _tag: 'LocationNotFoundError' }))),
   catalog: [{ id: 'anthropic/claude', name: 'Claude', variants: ['high'] }, { id: 'openai/gpt', name: 'GPT', variants: [] }] as { id: string; name: string; variants: string[] }[],
 }))
 
@@ -23,7 +24,10 @@ vi.mock('@/lib/ai/opencode-run', () => ({
     return { outcome: result.outcome, text: '', message: result.message ?? null, costUsd: 0, durationMs: 5 }
   },
 }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ permission: { reply: mocks.permissionReply } }) }))
+vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ permission: { reply: mocks.permissionReply }, mcp: { list: async () => ({ data: [] }), add: mocks.mcpAdd, remove: async () => {} } }) }))
+// MCP "Memória própria" real (OPE-115): só a URL pública e o segredo derivado são dublês.
+vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-de-teste') }))
+vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
 vi.mock('@/lib/ai/catalog', () => ({ listAiModels: async () => mocks.catalog }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
@@ -104,6 +108,7 @@ vi.mock('@/features/opex-agent/server/tools/registry', () => ({
 }))
 vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ findOpexClientServerTool: () => undefined }))
 
+import { selfMemoryEnabled } from '@/features/ai/server/self-memory/settings'
 import { queueMaddoxFollowUp, sendMaddoxMessage } from '@/features/maddox-agent/server/runner'
 import { MADDOX_OWNER_SCOPE } from '@/features/maddox-agent/server/sessions'
 import { decideMaddoxPermission } from '@/features/maddox-agent/server/requests'
@@ -176,6 +181,21 @@ describe('runner do Agente Maddox (OpenCode)', () => {
     expect(saved).toMatchObject({ status: 'complete', text: 'Achei 2 tarefas.', model: 'anthropic/claude (high)', usage: { inputTokens: 40, outputTokens: 10, totalTokens: 55 } })
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', opencodeSessionId: 'ses_oc' })
     expect(mocks.refreshTitle).toHaveBeenCalledWith(sessionId, expect.objectContaining({ provider: 'opencode', model: 'anthropic/claude', origin: 'maddox-title' }), expect.objectContaining({ userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.' }))
+  })
+
+  it('OPE-115: diretório do Maddox inexistente no host: avisa e não anuncia as ferramentas de memória própria', async () => {
+    vi.mocked(selfMemoryEnabled).mockResolvedValue(true)
+    const sessionId = await newSession()
+    mocks.scenario = (async () => ({ outcome: 'succeeded' })) satisfies Scenario
+    const { ended } = collect(sessionId)
+    await sendMaddoxMessage(sessionId, { text: 'Oi' }, 'local', MADDOX_OWNER_SCOPE)
+    await ended
+    vi.mocked(selfMemoryEnabled).mockResolvedValue(false)
+    expect(mocks.mcpAdd).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: '/home/dono' } }))
+    const setup = (mocks.applySetup.mock.calls[0] as unknown[])[2] as { instructions: string; permissions: { action: string }[] }
+    expect(setup.instructions).toContain('aprendizado autônomo (memória própria) está indisponível neste turno (diretório inexistente no host: /home/dono)')
+    expect(setup.instructions).not.toContain('opex_memorias_remember')
+    expect(setup.permissions.some((rule) => rule.action.startsWith('opex_memorias_'))).toBe(false)
   })
 
   it('entrada de ferramenta do Opex com segredo sai com o redact: nem o chat ao vivo nem o histórico guardam o valor', async () => {

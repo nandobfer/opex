@@ -236,9 +236,9 @@ export interface AgentMemoryMcpRegistration {
 
 /**
  * Registra o MCP de memórias no OpenCode para os diretórios da sessão (uma vez por processo e
- * diretório). Cada diretório é independente: um diretório que ainda não existe é pulado sem erro e
- * outro com falha não impede os demais. `ok: false` só quando falta configuração ou nenhum diretório
- * pôde ser registrado por erro real. Nunca lança.
+ * diretório). Cada diretório é independente: um diretório que ainda não existe é pulado (em `skipped`)
+ * e outro com falha não impede os demais. `ok: true` quando ao menos um diretório tem o MCP; `ok: false`
+ * quando falta configuração ou nenhum diretório foi registrado (por erro ou por não existir). Nunca lança.
  */
 export async function ensureAgentMemoryMcp(client: OpencodeClient, directories: readonly (string | null | undefined)[]): Promise<AgentMemoryMcpRegistration> {
     const skipped: string[] = []
@@ -278,7 +278,9 @@ export async function ensureAgentMemoryMcp(client: OpencodeClient, directories: 
                 log.warn({ err: failure, directory }, "[ai] não foi possível registrar o MCP de memórias neste diretório")
             }
         }
-        if (failure && succeeded === 0) return { ok: false, error: failure, skipped }
+        // Nenhum diretório registrado: as ferramentas não existem em lugar nenhum (não anunciar ao agente).
+        if (succeeded === 0 && failure) return { ok: false, error: failure, skipped }
+        if (succeeded === 0 && skipped.length) return { ok: false, error: `diretório inexistente no host: ${skipped.join(", ")}`, skipped }
         return { ok: true, error: null, skipped }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)

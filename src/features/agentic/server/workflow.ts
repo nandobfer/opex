@@ -984,7 +984,7 @@ function turnHooks(doc: IAgenticWorkbench) {
             await AgenticWorkbench.updateOne(filter, { $set: { sessionDirectory: directory } })
             await changed()
             // Aprendizado autônomo: as ferramentas de memória seguem a sessão para o worktree recém-criado.
-            void getOpencodeClient().then((client) => registerDeveloperMemoryMcpAt(client, directory)).catch(() => undefined)
+            void registerDeveloperMemoryMcpAt(getOpencodeClient, directory)
         },
         heartbeat: async () => {
             await AgenticWorkbench.updateOne(filter, { $set: { heartbeatAt: new Date() } })
