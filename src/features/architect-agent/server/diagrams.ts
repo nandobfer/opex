@@ -8,7 +8,7 @@ import { runAfterResponse } from "@/lib/after-response"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_HISTORY_LIMIT, type ArchitectOrigin, type ArchitectPhase } from "../constants"
-import { approvedPlanVersionOf } from "../plan-version"
+import { diagramPlanVersionOf } from "../plan-version"
 import type { ArchitectGenerateInput } from "../schemas"
 import type { ArchitectDiagramDto, WorkbenchArchitectDto } from "../types"
 import { retryPendingDeletions, runDiagram } from "./generate"
@@ -20,8 +20,8 @@ import { emptyDraft } from "../stream-parser"
 import { architectAvailability, loadArchitectSettings, settingsApply } from "./settings"
 
 /**
- * Versões do diagrama de arquitetura das mesas (SOMENTE servidor): pedido (automático na aprovação do
- * plano, manual pelo botão ou ajuste), nova tentativa, leitura, histórico e limpeza na exclusão da
+ * Versões do diagrama de arquitetura das mesas (SOMENTE servidor): pedido (automático quando o plano
+ * fica pronto — a aprovação é só a reserva —, manual pelo botão ou ajuste), nova tentativa, leitura, histórico e limpeza na exclusão da
  * mesa. Nada aqui altera o estado da mesa.
  */
 
@@ -151,7 +151,7 @@ function launch(diagramId: string, controller: AbortController): void {
 }
 
 /**
- * Cria uma versão e dispara a geração em segundo plano. `auto` (aprovação do plano) substitui a
+ * Cria uma versão e dispara a geração em segundo plano. `auto` (plano pronto ou a reserva na aprovação) substitui a
  * geração em curso de um plano anterior; pedido manual ou ajuste com geração em curso é recusado.
  */
 export async function requestDiagram(workbenchId: string, input: ArchitectGenerateInput, origin: ArchitectOrigin): Promise<ArchitectDiagramDto> {
@@ -161,8 +161,8 @@ export async function requestDiagram(workbenchId: string, input: ArchitectGenera
 async function createDiagram(workbenchId: string, input: ArchitectGenerateInput, origin: ArchitectOrigin): Promise<ArchitectDiagramDto> {
     const workbench = await loadWorkbench(workbenchId)
     if (origin !== "auto") await assertReady(workbench.centralId)
-    const planVersion = approvedPlanVersionOf(workbench)
-    if (!planVersion) throw new DomainError(409, "A mesa ainda não tem plano aprovado: aprove o plano (Implementar) antes de gerar a arquitetura.", "ARCHITECT_NO_PLAN")
+    const planVersion = diagramPlanVersionOf({ plans: workbench.plans ?? [] })
+    if (!planVersion) throw new DomainError(409, "A mesa ainda não tem plano: aguarde o planejador entregar o plano para gerar a arquitetura.", "ARCHITECT_NO_PLAN")
     await reconcileOrphans({ workbenchId })
     const running = await ArchitectDiagram.find({ workbenchId, state: "running" }, { _id: 1, planVersion: 1 }).lean()
     if (running.length) {
@@ -269,24 +269,36 @@ async function restartDiagram(id: string, doc: IArchitectDiagram & { _id: unknow
 }
 
 /**
- * Aprovação do plano (botão Implementar), depois da resposta: gera a arquitetura do plano aprovado
- * quando o arquiteto se aplica e o disparo é automático. Nunca lança; cada pulo fica no log.
+ * Disparo automático. `ready` = o planejador acabou de entregar um plano (o gatilho: o dono analisa o
+ * plano com o diagrama); `approved` = Implementar, só a reserva — gera apenas se o plano ainda não tem
+ * versão gerando ou pronta (ligado depois, ou a geração do plano pronto falhou). Nunca lança.
  */
-export async function onPlanApproved(workbenchId: string): Promise<void> {
+async function autoGenerate(workbenchId: string, moment: "ready" | "approved"): Promise<void> {
+    const when = moment === "ready" ? "no plano pronto" : "na aprovação"
     try {
         const { settings } = await loadArchitectSettings()
         const workbench = await loadWorkbench(workbenchId)
-        if (!settingsApply(settings, workbench.centralId)) return void log.info({ workbenchId }, "[architect] desativado para a central: sem diagrama na aprovação")
-        if (settings.trigger !== "auto") return void log.info({ workbenchId }, "[architect] disparo manual: sem diagrama automático na aprovação")
+        if (!settingsApply(settings, workbench.centralId)) return void log.info({ workbenchId }, `[architect] desativado para a central: sem diagrama ${when}`)
+        if (settings.trigger !== "auto") return void log.info({ workbenchId }, `[architect] disparo manual: sem diagrama automático ${when}`)
         const availability = await architectAvailability(settings)
-        if (!availability.available) return void log.info({ workbenchId, reason: availability.reason }, "[architect] indisponível: sem diagrama na aprovação")
-        const planVersion = approvedPlanVersionOf(workbench)
-        if (!planVersion) return void log.info({ workbenchId }, "[architect] sem plano aprovado: nada a gerar")
-        if (await ArchitectDiagram.exists({ workbenchId, planVersion, state: { $in: ["running", "done"] } })) return void log.info({ workbenchId, planVersion }, "[architect] o plano já tem diagrama: aprovação repetida ignorada")
+        if (!availability.available) return void log.info({ workbenchId, reason: availability.reason }, `[architect] indisponível: sem diagrama ${when}`)
+        const planVersion = diagramPlanVersionOf({ plans: workbench.plans ?? [] })
+        if (!planVersion) return void log.info({ workbenchId }, "[architect] sem plano: nada a gerar")
+        if (await ArchitectDiagram.exists({ workbenchId, planVersion, state: { $in: ["running", "done"] } })) return void log.info({ workbenchId, planVersion }, `[architect] o plano v${planVersion} já tem diagrama: nada a gerar ${when}`)
         await requestDiagram(workbenchId, {}, "auto")
     } catch (error) {
-        log.warn({ err: errorText(error), workbenchId }, "[architect] não foi possível gerar a arquitetura na aprovação do plano")
+        log.warn({ err: errorText(error), workbenchId }, `[architect] não foi possível gerar a arquitetura ${when}`)
     }
+}
+
+/** O planejador entregou um plano (mesa em "Plano em revisão"): diagrama novo; a geração de um plano anterior é descartada. */
+export async function onPlanReady(workbenchId: string): Promise<void> {
+    await autoGenerate(workbenchId, "ready")
+}
+
+/** Implementar: reserva do disparo (o plano sem diagrama gerando ou pronto). */
+export async function onPlanApproved(workbenchId: string): Promise<void> {
+    await autoGenerate(workbenchId, "approved")
 }
 
 /** Exclusão da mesa: aborta as gerações e exclui as sessões pendentes (melhor esforço; as versões ficam no histórico). */
@@ -302,13 +314,13 @@ export async function cleanupWorkbenchDiagrams(workbenchId: string): Promise<voi
 }
 
 /** Estado do arquiteto para o DTO da mesa. Nunca lança. */
-export async function workbenchArchitect(doc: { centralId: string; stage: string; plans: readonly unknown[]; branch: string | null; approvedPlanVersion?: number | null }): Promise<WorkbenchArchitectDto> {
+export async function workbenchArchitect(doc: { centralId: string; plans: readonly unknown[] }): Promise<WorkbenchArchitectDto> {
     let applies = false
     try {
         applies = settingsApply((await loadArchitectSettings()).settings, doc.centralId)
     } catch (error) {
         log.warn({ err: errorText(error) }, "[architect] configuração ilegível no DTO da mesa")
     }
-    return { applies, approvedPlanVersion: approvedPlanVersionOf(doc) }
+    return { applies, planVersion: diagramPlanVersionOf(doc) }
 }
 

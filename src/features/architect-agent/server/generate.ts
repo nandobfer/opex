@@ -15,12 +15,12 @@ import type { TaskDetailDto } from "@/features/tasks/types"
 import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_DRAFT_SAVE_MS, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
 import { architectGraphSchema, type ArchitectGraph, type RawGraph } from "../graph"
 import { parseArchitectOutput } from "../parse"
-import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt } from "../prompt"
+import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt, type PlanSource } from "../prompt"
 import { runDirectTurn } from "./direct-turn"
 import { sanitizeGraph, needsIdeaRepair, normalizeLegacyGraph } from "../sanitize"
 import { createGraphAssembler, emptyDraft, type AppliedOp, type GraphAssembler } from "../stream-parser"
 import { closeLive, emitOps, emitProgress, openLive } from "./live-hub"
-import { approvedPlanVersionOf } from "../plan-version"
+import { diagramPlanVersionOf } from "../plan-version"
 import { publishDiagrams } from "./publish"
 import { abortReasonOf, releaseDiagram } from "./registry"
 import { ArchitectDiagram, architectDb, type IArchitectDiagram } from "./models"
@@ -40,6 +40,7 @@ import { loadArchitectSettings } from "./settings"
 const log = loggerFor({ module: "architect-agent" })
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const DELETE_TIMEOUT_MS = 15_000
+const SUPERSEDED_ERROR = "Descartada: um plano mais novo ficou pronto"
 const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`
 
 /**
@@ -216,7 +217,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
     }
     const fail = async (message: string) => {
         const reason = abortReasonOf(diagramId)
-        if (reason === "superseded") return finish({ state: "superseded", error: "Descartada: um plano mais novo foi aprovado" })
+        if (reason === "superseded") return finish({ state: "superseded", error: SUPERSEDED_ERROR })
         if (signal.aborted) return finish({ state: "interrupted", error: reason === "deleted" ? "A mesa foi excluída durante a geração" : message })
         return finish({ state: "failed", error: message })
     }
@@ -228,8 +229,9 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         const { settings } = await loadArchitectSettings()
         const workbench = await AgenticWorkbench.findById(doc.workbenchId).lean()
         if (!workbench) return void (await fail("a mesa de trabalho não existe mais"))
-        const plan = workbench.plans?.[doc.planVersion - 1]?.text
-        if (!plan) return void (await fail(`o plano v${doc.planVersion} não foi encontrado na mesa`))
+        // Todos os planos até a versão do diagrama: ele consolida a funcionalidade (o último pode ser só uma correção).
+        const plans: PlanSource[] = (workbench.plans ?? []).slice(0, doc.planVersion).map((item, index) => ({ version: item.version ?? index + 1, feedback: item.feedback ?? null, text: item.text ?? "" }))
+        if (plans.length < doc.planVersion || !plans.at(-1)?.text.trim()) return void (await fail(`o plano v${doc.planVersion} não foi encontrado na mesa`))
         const provider = settings.provider
         const direct = provider !== "opencode"
         // A versão guarda com o que foi gerada; provedor direto não informa custo (valem os tokens).
@@ -282,7 +284,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             if (notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${notice}`)
             log.info({ diagramId, provider }, "[architect] provedor direto: sem aprendizado autônomo (as ferramentas de memória são do OpenCode)")
             const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories, selfMemory: false, codeAccess: false })
-            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory: null, worktree: false, depth, adjust })
+            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plans, directory: null, worktree: false, depth, adjust })
             const call = (text: string) =>
                 runDirectTurn(
                     { provider, model: settings.agent.model ?? "", variant: settings.agent.variant, instructions, prompt: text, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId } },
@@ -319,7 +321,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             sessionId = session.id
             await ArchitectDiagram.updateOne(filter, { $set: { sessionId } })
             const applied = await withTimeout(applyInstructions(opencodeClient, sessionId, instructions), "A gravação das instruções da sessão", signal)
-            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory, worktree, depth, adjust })
+            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plans, directory, worktree, depth, adjust })
             const opencode = opencodeClient
             const sid = sessionId
             const turn = (text: string, title: string): Promise<TurnResult> =>
@@ -390,12 +392,12 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         architectGraphSchema.parse(sanitized.graph)
         const warnings = [...graphAssembler.warnings, ...sanitized.warnings]
 
-        // Resultado atrasado: um plano mais novo foi aprovado enquanto o agente trabalhava.
-        const latest = await AgenticWorkbench.findById(doc.workbenchId, { stage: 1, plans: 1, branch: 1, approvedPlanVersion: 1 }).lean()
-        const approved = latest ? approvedPlanVersionOf(latest) : null
-        if (abortReasonOf(diagramId) === "superseded" || (doc.origin === "auto" && approved !== null && approved > doc.planVersion)) {
-            log.info({ diagramId, planVersion: doc.planVersion, approved }, "[architect] resultado de um plano antigo descartado")
-            return void (await finish({ state: "superseded", error: "Descartada: um plano mais novo foi aprovado", report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
+        // Resultado atrasado: um plano mais novo ficou pronto enquanto o agente trabalhava.
+        const latest = await AgenticWorkbench.findById(doc.workbenchId, { plans: 1 }).lean()
+        const newest = latest ? diagramPlanVersionOf({ plans: latest.plans ?? [] }) : null
+        if (abortReasonOf(diagramId) === "superseded" || (doc.origin === "auto" && newest !== null && newest > doc.planVersion)) {
+            log.info({ diagramId, planVersion: doc.planVersion, newest }, "[architect] resultado de um plano antigo descartado")
+            return void (await finish({ state: "superseded", error: SUPERSEDED_ERROR, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
         }
         // Quem está com o stream aberto passa direto ao grafo final (os cortes saem animados).
         live([{ op: "reset", graph: sanitized.graph }])

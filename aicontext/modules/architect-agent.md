@@ -1,16 +1,16 @@
 # Módulo: Agente Arquiteto (`src/features/architect-agent/`)
 
-Agente **paralelo** ao desenvolvimento agêntico (OPE-105): quando o plano de uma mesa é aprovado
-(**Implementar**), um agente do OpenCode **somente leitura** lê o plano aprovado e a tarefa e desenha a
-**arquitetura da ideia do plano** como um grafo semântico de **alto nível**: quem participa, quais
+Agente **paralelo** ao desenvolvimento agêntico (OPE-105): quando o planejador entrega um plano (mesa
+em "Plano em revisão"), um agente (OpenCode somente leitura ou um provedor direto) lê **todos os planos
+da mesa** e a tarefa e desenha a **arquitetura da funcionalidade** como um grafo semântico de **alto nível**: quem participa, quais
 processos acontecem, quais estruturas e informações existem e como se ligam — para quem não lê código,
 como num quadro branco. **Nunca** traz nomes de arquivos, diretórios, funções, componentes, rotas,
 coleções nem variáveis. O diagrama aparece na aba **"Arquitetura (N)"** da mesa, em tempo real.
 
 ## Diagrama de ideias (não de código)
 
-- **Fonte**: o plano aprovado. O agente só lê o código para entender um processo que já existe e nunca
-  o cita.
+- **Fonte**: todos os planos da mesa, consolidados (ver "Fonte: os planos da tarefa"). O agente só lê o
+  código para entender um processo que os planos citam e nunca o cita.
 - **Vocabulário** (`constants.ts`): tipos de nó `objective` (Objetivo), `actor` (Pessoa/ator),
   `process` (Processo), `structure` (Estrutura: uma parte do sistema vista como ideia), `information`
   (Informação guardada ou trocada), `external` (Serviço externo), `decision` e `risk`; camadas `people`
@@ -44,26 +44,52 @@ esgotado ou resposta inválida ficam só na versão do diagrama (aba com "Tentar
 ## Fluxo
 
 ```
-Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), como sempre
-            └► runAfterResponse ─► onPlanApproved ─► versão "gerando" ─► sessão nova (só leitura) ─► grafo saneado ─► "pronto"
-                                                                                                └─► falha/tempo/JSON inválido ─► "falhou" (Tentar novamente)
+Planejador entrega o plano ─► mesa em plan_review ─► runAfterResponse ─► onPlanReady ─► versão "gerando" ─► grafo saneado ─► "pronto"
+Implementar (reserva)      ─► runAfterResponse ─► onPlanApproved ─► só gera se o plano ainda não tem versão gerando/pronta
+                                                                    falha/tempo/JSON inválido ─► "falhou" (Tentar novamente)
 ```
 
-- `implement()` (`agentic/server/workflow.ts`) grava `approvedPlanVersion` na mesa **na hora** (também
-  com a mesa aguardando vaga) e agenda `onPlanApproved` depois da resposta, por import dinâmico
-  (`server/workflow-hook.ts`). A resposta do Implementar nunca espera o arquiteto, e uma exceção dele
-  não chega à mesa.
-- `onPlanApproved` (`server/diagrams.ts`) nunca lança; cada pulo vai ao log informativo: arquiteto
-  desativado ou central fora do escopo, disparo **manual**, modelo indisponível, sem plano aprovado ou
-  o plano já tem diagrama (aprovação repetida). Erro de configuração vira aviso no log.
-- **Plano corrigido e aprovado de novo** (plano v2): a geração em curso do plano anterior é abortada e
-  marcada **Descartada** (`superseded`), e a v2 começa. Resultado que chega atrasado de um plano antigo
-  (pedido automático) também é descartado. As descartadas ficam fora da aba e de N, mas aparecem no
-  Histórico.
+- **Gatilho: o plano pronto.** No fim do turno de planejamento (`afterTurn`, caso `planning`, em
+  `agentic/server/workflow.ts`), depois de gravar o plano e a mesa ir para `plan_review`, o fluxo agenda
+  `onPlanReady` por import dinâmico (`server/workflow-hook.ts`). O dono analisa o plano já com o diagrama
+  (a aba aparece com o plano pronto). Vale para o primeiro plano e para cada rodada (v2, v3…).
+- **Reserva: a aprovação.** `implement()` grava `approvedPlanVersion` na mesa (histórico) e agenda
+  `onPlanApproved`, que só gera quando o plano mais recente não tem versão `running` nem `done` (o
+  arquiteto foi ligado depois, ou a geração do plano pronto falhou). A resposta do Implementar nunca
+  espera o arquiteto, e uma exceção dele não chega à mesa.
+- `onPlanReady`/`onPlanApproved` (`server/diagrams.ts`, `autoGenerate`) nunca lançam; cada pulo vai ao
+  log informativo: arquiteto desativado ou central fora do escopo, disparo **manual**, modelo
+  indisponível, sem plano ou o plano já tem diagrama. Erro de configuração vira aviso no log.
+- **Plano novo pronto** (v2, v3…): a geração em curso do plano anterior é abortada e marcada
+  **Descartada** (`superseded`, "um plano mais novo ficou pronto"), e a do plano novo começa. Resultado
+  que chega atrasado de um plano antigo (pedido automático) também é descartado. As descartadas ficam
+  fora da aba e de N, mas aparecem no Histórico.
 - **Pedido manual** ("Gerar arquitetura") e **ajuste** ("Pedir ajustes") exigem o arquiteto ativo para a
-  central e disponível (409 `ARCHITECT_DISABLED`/`ARCHITECT_UNAVAILABLE`), um plano aprovado (409
-  `ARCHITECT_NO_PLAN`) e nenhuma geração em curso na mesa (409 `ARCHITECT_BUSY`). O botão manual também
-  serve para mesas antigas, que já passaram da aprovação.
+  central e disponível (409 `ARCHITECT_DISABLED`/`ARCHITECT_UNAVAILABLE`), a mesa com ao menos um plano
+  (409 `ARCHITECT_NO_PLAN`; vale em "Plano em revisão", sem aprovação) e nenhuma geração em curso na mesa
+  (409 `ARCHITECT_BUSY`).
+- **Versão do plano** (`diagramPlanVersionOf`, `plan-version.ts`): o plano mais recente da mesa, em
+  qualquer etapa. `WorkbenchDto.architect` = `{ applies, planVersion }`.
+
+## Fonte: os planos da tarefa (`prompt.ts`)
+
+O diagrama mostra a **funcionalidade consolidada** (decisão do plano v6 da OPE-105, depois de a CIL-4
+sair com um diagrama da prévia: o último plano era só a rodada "ChunkLoadError na prévia").
+
+- O pedido leva **todos os planos** até a versão do diagrama, em ordem (`plansSection`): "Plano v1
+  (original)", as rodadas com o pedido que gerou cada uma, e o mais recente marcado como o que vale nos
+  conflitos; a marca do histórico (`§N§`) do começo do texto sai. Acima de 150.000 caracteres somados
+  (`ARCHITECT_PLANS_MAX_CHARS`), o primeiro e o último plano ficam inteiros e os do meio são encurtados
+  (com a marca do corte, ao menos o começo de cada um).
+- As instruções (`SOURCE_RULES`, nos dois caminhos de provedor) mandam consolidar (o mais recente vence),
+  deixar de fora o **processo de entrega** (merge da principal, conflitos, prévia, build, deploy, CI,
+  testes, versão, erros de publicação, endereço da prévia) a menos que mude o que a funcionalidade faz, e
+  não acrescentar **nada** que não esteja nos planos ou na tarefa: as memórias só servem para vocabulário
+  e estilo; o código, só para entender um processo que os planos citam.
+- O exemplo do formato só tem marcadores ("objetivo da tarefa", "processo dos planos"), sem um assunto
+  concreto que o modelo possa copiar.
+- O ⓘ do cabeçalho diz "Consolida os planos v1 a vN" quando há mais de um plano.
+
 - **Sem corrida**: a conferência "há geração em curso?" e a gravação da versão como gerando rodam sob uma
   trava por mesa (`withWorkbenchLock`, processo único): dois cliques ou duas abas criam UMA versão (o
   outro recebe 409). O "Tentar novamente" ainda grava a transição de forma atômica (só uma versão que
@@ -72,9 +98,6 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
   ser gravada como "gerando"; a listagem disparada pelo evento nunca a toma por órfã ("o app
   reiniciou") e o stream já a encontra viva. Se a gravação, a auditoria ou o evento falharem, o
   registro é desfeito.
-- Versão aprovada de mesas antigas (sem `approvedPlanVersion`): `approvedPlanVersionOf`
-  (`plan-version.ts`): fora do planejamento, o último plano; em `planning` com worktree, o último
-  plano; em `plan_review` com worktree e mais de um plano, o anterior; senão nenhuma.
 - **Exclusão da mesa** (`finalizeDeletion`): `cleanupWorkbenchDiagrams` aborta as gerações (viram
   interrompidas: "A mesa foi excluída durante a geração") e exclui as sessões pendentes. As versões
   ficam no histórico.
@@ -231,8 +254,8 @@ vale só para aquele pedido.
 
 ## Aba "Arquitetura (N)" da mesa (`components/workbench/`)
 
-- Aparece depois de "Adversário (N)" quando a mesa tem versões ou quando o arquiteto se aplica e há
-  plano aprovado (`useArchitectTab`). N = versões da mesa (sem as descartadas).
+- Aparece depois de "Adversário (N)" quando a mesa tem versões ou quando o arquiteto se aplica e a
+  mesa já tem um plano, inclusive em "Plano em revisão" (`useArchitectTab`). N = versões da mesa (sem as descartadas).
 - Estados: **gerando antes do primeiro nó** (o canvas no formato final com o objetivo "fantasma"
   pulsando e a faixa de progresso), **ao vivo** (o diagrama crescendo), **pronto**,
   **falhou/interrompido** (erro, "A mesa segue normalmente", **Tentar novamente** e **Regerar com

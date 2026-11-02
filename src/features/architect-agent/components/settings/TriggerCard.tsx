@@ -27,8 +27,8 @@ export function TriggerCard({ form }: { form: UseFormReturn<ArchitectSettings> }
                 />
                 <p className="text-xs text-muted-foreground">
                     {trigger === "auto"
-                        ? "Ao aprovar o plano (Implementar), o agente gera a arquitetura do plano aprovado. Plano corrigido e aprovado de novo gera uma versão nova; o resultado atrasado do plano antigo é descartado."
-                        : 'Nada roda sozinho: use "Gerar arquitetura" na aba da mesa (vale também para mesas que já passaram da aprovação).'}
+                        ? "Quando o planejador entrega um plano, o agente gera a arquitetura da funcionalidade (consolidando todos os planos da mesa) para a análise do plano. Cada plano novo gera uma versão nova; a geração de um plano anterior é descartada. Ao aprovar (Implementar), só gera se o plano ainda não tiver diagrama."
+                        : 'Nada roda sozinho: use "Gerar arquitetura" na aba da mesa (disponível assim que a mesa tem um plano).'}
                 </p>
             </CardContent>
         </Card>

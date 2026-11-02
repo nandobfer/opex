@@ -52,7 +52,8 @@ export interface ArchitectDiagramDto {
 export interface WorkbenchArchitectDto {
     /** Agente ativo e a central no escopo: a aba oferece "Gerar arquitetura". */
     applies: boolean
-    approvedPlanVersion: number | null
+    /** Plano mais recente da mesa (o diagrama consolida os planos até ele); `null` = ainda sem plano. */
+    planVersion: number | null
 }
 
 /** Progresso da geração ao vivo (stream NDJSON). */

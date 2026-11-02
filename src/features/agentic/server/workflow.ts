@@ -1101,6 +1101,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             await update(doc, { stage: "plan_review", runState: "idle", pendingFeedback: null }, { $push: { plans: { version, text, feedback: doc.pendingFeedback ?? null, createdAt: new Date() } } })
             // Plano pronto não ocupa vaga: a próxima mesa da central pode executar.
             pumpQueue(doc.centralId)
+            // Agente Arquiteto: diagrama do plano pronto, para a análise do plano (em paralelo; nunca atrasa a mesa).
+            runAfterResponse("architect-plan-ready", async () => (await architectModule()).onPlanReady(id))
             return null
         }
         case "implementing": {
@@ -1453,7 +1455,7 @@ export async function implement(id: string, additionalInfo?: string, fileIds?: s
     // A versão aprovada vale na hora, mesmo com a mesa aguardando vaga (o Agente Arquiteto lê dela).
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { approvedPlanVersion } })
     await claimAgenticFiles(files, { workbenchId: id })
-    // Agente Arquiteto: diagrama do plano aprovado em paralelo, depois da resposta (nunca atrasa a implementação).
+    // Agente Arquiteto: reserva do disparo do plano pronto (só gera se o plano ainda não tem diagrama).
     runAfterResponse("architect-plan-approved", async () => (await architectModule()).onPlanApproved(id))
     return getWorkbench(id)
 }

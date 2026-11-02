@@ -91,7 +91,7 @@ export function ArchitectHeader({ diagrams, diagram, graph, onSelect, showNotes 
         <div className={ARCHITECT_HEADER_CLASS} data-testid="architect-header">
             <div className={ARCHITECT_HEADER_ROW_CLASS}>
                 <p className="min-w-0 truncate text-sm font-medium">{graph.title || "Desenhando a arquitetura do plano…"}</p>
-                {graph.summary && <InfoTooltip text={graph.summary} label="o diagrama" side="bottom" contentClassName="max-h-80 max-w-md overflow-y-auto" />}
+                {(graph.summary || diagram.planVersion > 1) && <InfoTooltip text={[graph.summary, diagram.planVersion > 1 ? `Consolida os planos v1 a v${diagram.planVersion}.` : ""].filter(Boolean).join("\n\n")} label="o diagrama" side="bottom" contentClassName="max-h-80 max-w-md overflow-y-auto whitespace-pre-line" />}
                 <div className="ml-auto">
                     <ArchitectVersionSelect diagrams={diagrams} diagram={diagram} onSelect={onSelect} />
                 </div>

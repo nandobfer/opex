@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { architectPhaseLabel } from '@/features/architect-agent/constants'
 import { parseArchitectOutput } from '@/features/architect-agent/parse'
-import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt, depthDirective } from '@/features/architect-agent/prompt'
+import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt, depthDirective, plansSection } from '@/features/architect-agent/prompt'
 import { sampleGraph } from './fixtures'
 
 /** Leitura da resposta do arquiteto e as mensagens da sessão (instruções, pedido e correção). */
@@ -52,7 +52,7 @@ describe('prompts do arquiteto', () => {
   })
 
   it('o pedido traz a diretiva e o teto do nível, a tarefa, o plano e o diretório', () => {
-    const text = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: 'Desc', technicalSpec: 'Spec', planVersion: 2, plan: '# Plano v2', directory: '/repo/worktrees/ope-1', worktree: true, depth: 4 })
+    const text = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: 'Desc', technicalSpec: 'Spec', planVersion: 2, plans: [{ version: 1, feedback: null, text: '# Plano v1' }, { version: 2, feedback: 'ajuste', text: '# Plano v2' }], directory: '/repo/worktrees/ope-1', worktree: true, depth: 4 })
     expect(text).toContain('nível 4 — Detalhado')
     expect(text).toContain('No máximo 18 nós')
     expect(text).toContain('# Plano v2')
@@ -63,7 +63,7 @@ describe('prompts do arquiteto', () => {
   })
 
   it('sem worktree, manda ler a base; no ajuste, leva o grafo anterior e o pedido', () => {
-    const text = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: null, technicalSpec: null, planVersion: 1, plan: 'P', directory: '/repo', worktree: false, depth: 3, adjust: { graph: sampleGraph(), feedback: 'expanda o fluxo de autenticação' } })
+    const text = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: null, technicalSpec: null, planVersion: 1, plans: [{ version: 1, feedback: null, text: 'P' }], directory: '/repo', worktree: false, depth: 3, adjust: { graph: sampleGraph(), feedback: 'expanda o fluxo de autenticação' } })
     expect(text).toContain('base do repositório em /repo')
     expect(text).toContain('expanda o fluxo de autenticação')
     expect(text).toContain('"id":"tab"')
@@ -106,7 +106,7 @@ describe('prompts do arquiteto', () => {
     expect(instructions).toContain('NÃO tem acesso ao repositório')
     expect(instructions).not.toContain('Leia o código')
     expect(instructions).not.toContain('NUNCA rode testes')
-    const prompt = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: null, technicalSpec: null, planVersion: 1, plan: 'P', directory: null, worktree: false, depth: 3 })
+    const prompt = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: null, technicalSpec: null, planVersion: 1, plans: [{ version: 1, feedback: null, text: 'P' }], directory: null, worktree: false, depth: 3 })
     expect(prompt).toContain('Você não tem acesso ao código')
     expect(prompt).not.toContain('worktree')
     expect(prompt).not.toContain('base do repositório')
@@ -129,5 +129,48 @@ describe('prompts do arquiteto', () => {
     expect(architectPhaseLabel('reading', 'anthropic')).toBe('Lendo o plano…')
     expect(architectPhaseLabel('starting', 'gemini')).toBe('Chamando o modelo…')
     expect(architectPhaseLabel('writing', 'gemini')).toBe('Desenhando o diagrama…')
+  })
+
+  it('o pedido traz TODOS os planos em ordem, com o pedido de cada rodada e sem a marca do histórico', () => {
+    const plans = [
+      { version: 1, feedback: null, text: '§49§ # Calendário de trabalhos' },
+      { version: 2, feedback: 'traga a main e gere a prévia', text: '§297§ # Trazer a main para a branch' },
+      { version: 3, feedback: 'a prévia dá Application error', text: '§381§ # ChunkLoadError na prévia' },
+    ]
+    const text = buildDiagramPrompt({ code: 'CIL-4', title: 'Calendário', description: null, technicalSpec: null, planVersion: 3, plans, directory: null, worktree: false, depth: 3 })
+    const order = ['# Calendário de trabalhos', '# Trazer a main para a branch', '# ChunkLoadError na prévia'].map((part) => text.indexOf(part))
+    expect(order.every((index) => index >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(text).toContain('### Plano v1 (original)')
+    expect(text).toContain('### Plano v3 (o mais recente: vale nos conflitos)')
+    expect(text).toContain('Pedido que gerou esta rodada: traga a main e gere a prévia')
+    expect(text).not.toMatch(/§\d+§/)
+    expect(text).toContain('planos v1 a v3')
+  })
+
+  it('acima do limite, o primeiro e o último plano ficam inteiros e os do meio são encurtados', () => {
+    const big = (mark: string) => mark + 'x'.repeat(80_000) + mark
+    const section = plansSection([
+      { version: 1, feedback: null, text: big('PRIMEIRO') },
+      { version: 2, feedback: null, text: big('MEIO') },
+      { version: 3, feedback: null, text: big('ULTIMO') },
+    ])
+    expect(section.match(/PRIMEIRO/g)).toHaveLength(2)
+    expect(section.match(/ULTIMO/g)).toHaveLength(2)
+    expect(section.match(/MEIO/g)).toHaveLength(1)
+    expect(section).toContain('plano encurtado')
+  })
+
+  it('as instruções mandam consolidar a funcionalidade, deixar o processo de entrega de fora e nada além dos planos', () => {
+    for (const codeAccess of [true, false]) {
+      const text = buildArchitectInstructions({ instructions: '', memories: '', codeAccess })
+      expect(text).toContain('FUNCIONALIDADE da tarefa como ela fica depois de TODOS os planos')
+      expect(text).toContain('vale o plano mais recente')
+      expect(text).toContain('processo de ENTREGA')
+      expect(text).toContain('prévia')
+      expect(text).toContain('NADA entra no diagrama sem estar nos planos ou na tarefa')
+      // O exemplo do formato não traz um assunto concreto que o modelo possa copiar.
+      for (const subject of ['Diagrama do plano aprovado', 'Dono aprova o plano', 'Geração do diagrama', 'Versões do diagrama']) expect(text).not.toContain(subject)
+    }
   })
 })

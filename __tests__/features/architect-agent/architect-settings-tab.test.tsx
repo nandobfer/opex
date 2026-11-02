@@ -74,7 +74,8 @@ describe('ArchitectAgentTab', () => {
   it('disparo manual muda a explicação; salvar envia a configuração', async () => {
     mocks.settings = { ...DEFAULT_ARCHITECT_SETTINGS, agent: { agent: null, model: 'anthropic/opus', variant: null, fallbacks: [] } }
     render(<ArchitectAgentTab onDirtyChange={vi.fn()} />)
-    expect(screen.getByText(/Ao aprovar o plano \(Implementar\)/)).toBeTruthy()
+    expect(screen.getByText(/Quando o planejador entrega um plano/)).toBeTruthy()
+    expect(screen.getByText(/só gera se o plano ainda não tiver diagrama/)).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /^Manual/ }))
     expect(screen.getByText(/Nada roda sozinho/)).toBeTruthy()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /Salvar/ })))

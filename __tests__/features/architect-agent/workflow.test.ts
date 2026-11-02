@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Agente Arquiteto no fluxo da mesa: aprovar o plano (Implementar) grava a versão aprovada e dispara
- * o arquiteto DEPOIS da resposta, sem esperar por ele nem alterar a etapa ou a vaga da mesa — também
- * quando a mesa aguarda vaga.
+ * Agente Arquiteto no fluxo da mesa: o plano pronto (fim do turno de planejamento) dispara o arquiteto;
+ * aprovar o plano (Implementar) grava a versão aprovada e dispara a reserva DEPOIS da resposta, sem
+ * esperar por ele nem alterar a etapa ou a vaga da mesa — também quando a mesa aguarda vaga.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -69,8 +69,8 @@ vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig, DEFAULT_AGENTIC_SETTINGS } from '@/features/agentic/schemas'
-import { implement } from '@/features/agentic/server/workflow'
-import { onPlanApproved } from '@/features/architect-agent/server/workflow-hook'
+import { implement, revisePlan } from '@/features/agentic/server/workflow'
+import { onPlanApproved, onPlanReady } from '@/features/architect-agent/server/workflow-hook'
 
 const model = AgenticWorkbench as unknown as { docs: Record<string, unknown>[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }
 const state = (id: string) => model.docs.find((doc) => String(doc._id) === id) as Record<string, unknown>
@@ -148,5 +148,31 @@ describe('Agente Arquiteto na aprovação do plano', () => {
     vi.mocked(onPlanApproved).mockRejectedValue(new Error('Engramind fora do ar'))
     const id = await workbench()
     await expect(implement(id)).resolves.toMatchObject({ stage: 'implementing' })
+  })
+})
+
+describe('Agente Arquiteto no plano pronto', () => {
+  it('o fim do turno de planejamento (nova rodada do plano) dispara o arquiteto com a mesa já em revisão e o plano novo gravado', async () => {
+    let seen: Record<string, unknown> | null = null
+    const id = await workbench()
+    vi.mocked(onPlanReady).mockImplementation(async (target: string) => {
+      seen = { ...state(target) }
+    })
+    mocks.runTurn.mockResolvedValue({ outcome: 'succeeded', text: '# Plano v3', message: null, costUsd: 0, durationMs: 1 })
+    await revisePlan(id, 'Inclua a visão mensal')
+    await waitFor(() => vi.mocked(onPlanReady).mock.calls.length > 0)
+    expect(onPlanReady).toHaveBeenCalledWith(id)
+    expect(seen).toMatchObject({ stage: 'plan_review' })
+    expect((seen!.plans as unknown[]).length).toBe(3)
+    expect(onPlanApproved).not.toHaveBeenCalled()
+  })
+
+  it('uma falha do arquiteto no plano pronto não chega à mesa', async () => {
+    vi.mocked(onPlanReady).mockRejectedValue(new Error('Engramind fora do ar'))
+    const id = await workbench()
+    mocks.runTurn.mockResolvedValue({ outcome: 'succeeded', text: '# Plano v3', message: null, costUsd: 0, durationMs: 1 })
+    await revisePlan(id, 'Inclua a visão mensal')
+    await waitFor(() => state(id).stage === 'plan_review' && (state(id).plans as unknown[]).length === 3)
+    expect(state(id).stage).toBe('plan_review')
   })
 })

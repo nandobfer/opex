@@ -193,3 +193,24 @@ describe('runDiagram num provedor direto', () => {
     expect(doc(id).usage).toMatchObject({ costUsd: 0 })
   })
 })
+
+describe('fonte: todos os planos da mesa (provedor direto)', () => {
+  it('três planos: o pedido leva os três, na ordem, e as instruções deixam o processo de entrega de fora', async () => {
+    mocks.streamAi.mockImplementationOnce(answer(ideas))
+    const { id, controller } = await seed({ planVersion: 3 })
+    Object.assign(workbenches.docs[0]!, {
+      plans: [
+        { version: 1, text: '# Calendário de trabalhos', feedback: null },
+        { version: 2, text: '# Trazer a main para a branch', feedback: 'traga a main' },
+        { version: 3, text: '# ChunkLoadError na prévia', feedback: 'a prévia quebrou' },
+      ],
+    })
+    await runDiagram(id, controller)
+    const request = mocks.streamAi.mock.calls[0]![0] as { prompt: string; instructions: string }
+    const order = ['# Calendário de trabalhos', '# Trazer a main para a branch', '# ChunkLoadError na prévia'].map((part) => request.prompt.indexOf(part))
+    expect(order.every((index) => index >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(request.instructions).toContain('processo de ENTREGA')
+    expect(doc(id).state).toBe('done')
+  })
+})

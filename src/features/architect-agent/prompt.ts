@@ -1,6 +1,6 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
-import { ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS, ARCHITECT_STREAM_FENCE, ARCHITECT_TEXT_LIMITS, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS, ARCHITECT_PLANS_MAX_CHARS, ARCHITECT_STREAM_FENCE, ARCHITECT_TEXT_LIMITS, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import type { ArchitectGraph } from "./graph"
 
 /**
@@ -11,16 +11,20 @@ import type { ArchitectGraph } from "./graph"
 /** Prefixo das ferramentas do MCP "Memória própria" no OpenCode (`opex_memorias_<ferramenta>`). */
 const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
-/** Uma linha de exemplo por operação do formato ao vivo (`stream-parser.ts`). */
+/**
+ * Uma linha de exemplo por operação do formato ao vivo (`stream-parser.ts`). Só marcadores, sem um
+ * assunto de exemplo: um exemplo concreto (antes, o próprio diagrama do arquiteto) puxa o modelo para
+ * um tema que não está nos planos.
+ */
 const FORMAT_LINES = [
     { op: "meta", title: "título curto do diagrama", summary: "a ideia do plano em 1 a 3 frases" },
-    { op: "node", id: "objective", label: "Diagrama do plano aprovado", kind: "objective", status: "new", detail: "o que o plano entrega, em linguagem comum" },
+    { op: "node", id: "objective", label: "objetivo da tarefa", kind: "objective", status: "new", detail: "o que os planos entregam, em linguagem comum" },
     { op: "group", id: "g-pessoas", label: "Quem participa", layer: ARCHITECT_GROUP_LAYERS.join("|") },
-    { op: "node", id: "dono", label: "Dono aprova o plano", groupId: "g-pessoas", kind: "actor", status: "existing", detail: "quem dispara o processo" },
-    { op: "node", id: "geracao", label: "Geração do diagrama", kind: ARCHITECT_NODE_KINDS.join("|"), status: ARCHITECT_NODE_STATUSES.join("|"), detail: "o que acontece e por quê, em 1 a 3 frases" },
-    { op: "node", id: "versoes", label: "Versões do diagrama", kind: "information", status: "new", detail: "o que fica guardado" },
-    { op: "edge", source: "dono", target: "geracao", kind: ARCHITECT_EDGE_KINDS.join("|"), label: "opcional, 1 a 3 palavras" },
-    { op: "edge", source: "geracao", target: "versoes", kind: "produces" },
+    { op: "node", id: "ator", label: "quem usa ou dispara", groupId: "g-pessoas", kind: "actor", status: "existing", detail: "quem participa do processo" },
+    { op: "node", id: "processo", label: "processo dos planos", kind: ARCHITECT_NODE_KINDS.join("|"), status: ARCHITECT_NODE_STATUSES.join("|"), detail: "o que acontece e por quê, em 1 a 3 frases" },
+    { op: "node", id: "informacao", label: "o que fica guardado", kind: "information", status: "new", detail: "a informação e para que serve" },
+    { op: "edge", source: "ator", target: "processo", kind: ARCHITECT_EDGE_KINDS.join("|"), label: "opcional, 1 a 3 palavras" },
+    { op: "edge", source: "processo", target: "informacao", kind: "produces" },
     { op: "note", kind: ARCHITECT_NOTE_KINDS.join("|"), text: "decisão, risco ou dúvida do plano" },
     { op: "remove", id: "id de um nó, aresta ou grupo emitido antes (só para corrigir)" },
     { op: "done" },
@@ -42,6 +46,19 @@ export function depthDirective(depth: ArchitectDepth): string {
     return [`## Profundidade: nível ${depth} — ${def.label} (${def.content})`, def.directive, `- No máximo ${def.maxNodes} nós e ${def.maxEdges} arestas (o excedente é cortado pelo sistema).`].join("\n")
 }
 
+/**
+ * Fonte do diagrama: TODOS os planos da mesa consolidados (plano v6 da OPE-105). Uma rodada de
+ * correção costuma descrever só o ajuste; sem o histórico, o diagrama perde a funcionalidade da tarefa
+ * e passa a desenhar outro assunto (ex.: a prévia).
+ */
+const SOURCE_RULES = [
+    "## Fonte: os planos da tarefa",
+    "- O diagrama mostra a FUNCIONALIDADE da tarefa como ela fica depois de TODOS os planos da mesa, que vêm em ordem no pedido (o primeiro é o plano original; os seguintes, as rodadas de ajuste, com o pedido que gerou cada uma).",
+    "- Consolide: em caso de conflito, vale o plano mais recente. Uma rodada que só ajusta um detalhe atualiza o diagrama da funcionalidade; não troca o assunto do diagrama.",
+    "- Fica FORA do diagrama o processo de ENTREGA da tarefa: integrar a branch principal, conflitos de merge, prévia, build, deploy, CI, testes, versão, erros de publicação e endereço da prévia — a menos que a rodada mude o que a funcionalidade faz para quem a usa. Uma rodada só de entrega não acrescenta nós.",
+    "- NADA entra no diagrama sem estar nos planos ou na tarefa. As memórias servem só para vocabulário e estilo, nunca para acrescentar assuntos.",
+]
+
 export function buildArchitectInstructions(input: { instructions: string; memories: string; selfMemory?: boolean; /** Sessão do OpenCode no repositório (`false` = provedor direto, sem acesso ao código). */ codeAccess?: boolean }): string {
     const extra = input.instructions.trim()
     const codeAccess = input.codeAccess ?? true
@@ -52,27 +69,26 @@ export function buildArchitectInstructions(input: { instructions: string; memori
               "- NUNCA rode testes, build, typecheck, lint, servidores nem instale dependências.",
               "- Não pergunte nada: ninguém responde durante a geração.",
               "",
-              "## Fonte: o plano",
-              "- O plano aprovado é a fonte principal. Leia o código só se precisar entender um processo que já existe — e NUNCA cite o que leu (nada de arquivos, funções ou rotas no diagrama).",
+              ...SOURCE_RULES,
+              "- Leia o código só se precisar entender um processo que os planos citam — e NUNCA cite o que leu (nada de arquivos, funções ou rotas no diagrama).",
           ]
         : [
               "## Regras invioláveis",
               "- Você NÃO tem acesso ao repositório nem a ferramentas: trabalhe só com o plano, a tarefa e (num ajuste) o diagrama anterior que vêm no pedido.",
               "- Não pergunte nada: ninguém responde durante a geração.",
               "",
-              "## Fonte: o plano",
-              "- O plano aprovado é a fonte única. Não invente partes que o plano não menciona.",
+              ...SOURCE_RULES,
           ]
     return [
-        "Você é o AGENTE ARQUITETO: lê o plano aprovado de uma tarefa e desenha a ARQUITETURA DA IDEIA do plano — quem participa, quais processos acontecem, quais estruturas e informações existem e como se ligam — para quem NÃO lê código. É um diagrama de quadro branco, de alto nível, nunca um mapa de arquivos.",
+        "Você é o AGENTE ARQUITETO: lê os planos de uma tarefa e desenha a ARQUITETURA DA IDEIA da funcionalidade — quem participa, quais processos acontecem, quais estruturas e informações existem e como se ligam — para quem NÃO lê código. É um diagrama de quadro branco, de alto nível, nunca um mapa de arquivos.",
         "",
         ...rules,
         "",
         "## Escopo e vocabulário: ideias, processos e estruturas",
         "- Parta do OBJETIVO do plano (um nó `kind: \"objective\"`) e mostre só as partes que o plano CRIA, ALTERA ou de que depende diretamente. NÃO desenhe o sistema inteiro: o que já existe e não muda aparece só como contexto mínimo (`status: \"existing\"`).",
         "- `status`: `new` = o plano cria; `changed` = o plano altera; `existing` = só contexto.",
-        "- Tipos de nó (`kind`): `objective` (o objetivo), `actor` (pessoa ou ator: o dono, o cliente, um agente), `process` (processo ou etapa), `structure` (uma parte do sistema vista como ideia, ex.: \"Mesa de trabalho\", \"Configuração do agente\"), `information` (o que é guardado ou trocado, ex.: \"Plano aprovado\"), `external` (serviço externo), `decision` e `risk`.",
-        "- Rótulos de 2 a 5 palavras em português comum (\"Aprovação do plano\", \"Geração do diagrama\", \"Histórico de versões\"). Descrição: o que o bloco faz e por quê, em 1 a 3 frases.",
+        "- Tipos de nó (`kind`): `objective` (o objetivo), `actor` (pessoa ou ator: o dono, o cliente, um agente), `process` (processo ou etapa), `structure` (uma parte do sistema vista como ideia), `information` (o que é guardado ou trocado), `external` (serviço externo), `decision` e `risk`.",
+        "- Rótulos de 2 a 5 palavras em português comum, com os nomes que os PLANOS usam para as coisas (nunca nomes de código). Descrição: o que o bloco faz e por quê, em 1 a 3 frases.",
         NO_CODE_RULE,
         "- Agrupe em camadas (`groups`: `people` Pessoas e canais, `processes` Processos, `structures` Estruturas, `information` Informação, `external` Serviços externos, `other`) e ligue com arestas tipadas (`contains` contém, `triggers` dispara, `flow` segue para, `uses` usa, `produces` gera/grava, `notifies` avisa).",
         "- Registre em `notes` as decisões, os riscos e as dúvidas do plano (também sem nomes de código).",
@@ -95,13 +111,50 @@ export function buildArchitectInstructions(input: { instructions: string; memori
         .join("\n")
 }
 
+export interface PlanSource {
+    version: number
+    /** Pedido do dono que gerou esta rodada (`null` no plano original). */
+    feedback: string | null
+    text: string
+}
+
+/** Marca de mensagem do histórico (`§49§ `) que às vezes abre o texto do plano. */
+const cleanPlan = (text: string) => text.replace(/^\s*§\d+§\s*/, "").trim()
+
+/**
+ * Seção dos planos em ordem. Acima de `ARCHITECT_PLANS_MAX_CHARS`, o primeiro e o último ficam
+ * inteiros e os do meio são encurtados (com a marca do corte), divididos igualmente na sobra.
+ */
+export function plansSection(plans: readonly PlanSource[]): string {
+    const texts = plans.map((plan) => cleanPlan(plan.text))
+    const total = texts.reduce((sum, text) => sum + text.length, 0)
+    if (total > ARCHITECT_PLANS_MAX_CHARS && texts.length > 2) {
+        const middle = texts.length - 2
+        const spare = Math.max(0, ARCHITECT_PLANS_MAX_CHARS - texts[0]!.length - texts.at(-1)!.length)
+        // Cada plano do meio guarda ao menos o começo (o resumo da rodada), mesmo sem sobra.
+        const each = Math.max(2_000, Math.floor(spare / middle))
+        for (let index = 1; index < texts.length - 1; index++) {
+            if (texts[index]!.length > each) texts[index] = `${texts[index]!.slice(0, each)}\n[… plano encurtado: o texto passou do limite do pedido]`
+        }
+    }
+    return plans
+        .map((plan, index) => {
+            const last = index === plans.length - 1
+            const heading = index === 0 ? `### Plano v${plan.version} (original)${last ? " — o atual" : ""}` : `### Plano v${plan.version}${last ? " (o mais recente: vale nos conflitos)" : ""}`
+            const asked = plan.feedback?.trim() ? `Pedido que gerou esta rodada: ${plan.feedback.trim()}\n\n` : ""
+            return `${heading}\n${asked}${texts[index]}`
+        })
+        .join("\n\n")
+}
+
 export interface DiagramPromptInput {
     code: string
     title: string
     description: string | null
     technicalSpec: string | null
     planVersion: number
-    plan: string
+    /** Todos os planos da mesa até `planVersion`, em ordem (o diagrama os consolida). */
+    plans: readonly PlanSource[]
     /** `null` = provedor direto, sem acesso ao código. */
     directory: string | null
     /** O diretório é o worktree da mesa (`false` = a base do repositório: o worktree ainda não existe). */
@@ -113,12 +166,12 @@ export interface DiagramPromptInput {
 
 export function buildDiagramPrompt(input: DiagramPromptInput): string {
     const where = !input.directory
-        ? "Você não tem acesso ao código: o diagrama sai do plano e da tarefa abaixo."
+        ? "Você não tem acesso ao código: o diagrama sai dos planos e da tarefa abaixo."
         : input.worktree
-        ? `Se precisar entender um processo que já existe, o código está no worktree da mesa: ${input.directory} (o que vale é o plano; nunca cite o código no diagrama).`
-        : `Se precisar entender um processo que já existe, o código está na base do repositório em ${input.directory} (o worktree da mesa ainda não existe; o plano descreve as mudanças sobre esta base; nunca cite o código no diagrama).`
+        ? `Se precisar entender um processo que já existe, o código está no worktree da mesa: ${input.directory} (o que vale são os planos; nunca cite o código no diagrama).`
+        : `Se precisar entender um processo que já existe, o código está na base do repositório em ${input.directory} (o worktree da mesa ainda não existe; os planos descrevem as mudanças sobre esta base; nunca cite o código no diagrama).`
     return [
-        `# Arquitetura do plano v${input.planVersion} da tarefa ${input.code}: ${input.title}`,
+        `# Arquitetura da tarefa ${input.code}: ${input.title} (planos v1 a v${input.planVersion})`,
         "",
         where,
         "",
@@ -128,8 +181,8 @@ export function buildDiagramPrompt(input: DiagramPromptInput): string {
         input.description?.trim() ? `### Descrição\n${input.description.trim()}` : "(sem descrição)",
         input.technicalSpec?.trim() ? `\n### Especificação técnica\n${input.technicalSpec.trim()}` : "",
         "",
-        `## Plano aprovado (v${input.planVersion})`,
-        input.plan.trim(),
+        `## Planos da tarefa (${input.plans.length}, em ordem; consolide a funcionalidade, fora o processo de entrega)`,
+        plansSection(input.plans),
         input.adjust
             ? [
                   "",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { collapsedId, filterGraph, neighborsOf, toViewGraph } from '@/features/architect-agent/filters'
 import { layoutArchitecture, layoutMindMap } from '@/features/architect-agent/layout'
-import { approvedPlanVersionOf } from '@/features/architect-agent/plan-version'
+import { diagramPlanVersionOf } from '@/features/architect-agent/plan-version'
 import { ARCHITECT_NODE_KINDS } from '@/features/architect-agent/constants'
 import { sampleGraph } from './fixtures'
 
@@ -82,17 +82,14 @@ describe('layoutMindMap', () => {
   })
 })
 
-describe('approvedPlanVersionOf', () => {
-  it('usa a versão gravada na aprovação', () => {
-    expect(approvedPlanVersionOf({ approvedPlanVersion: 2, stage: 'plan_review', plans: [1, 2, 3], branch: 'b' })).toBe(2)
+describe('diagramPlanVersionOf', () => {
+  it('o plano mais recente vale em qualquer etapa, inclusive em revisão sem aprovação', () => {
+    expect(diagramPlanVersionOf({ plans: [1] })).toBe(1)
+    expect(diagramPlanVersionOf({ plans: [1, 2, 3] })).toBe(3)
   })
 
-  it('deriva nas mesas antigas pelo estado', () => {
-    expect(approvedPlanVersionOf({ stage: 'implementing', plans: [1, 2], branch: 'b' })).toBe(2)
-    expect(approvedPlanVersionOf({ stage: 'plan_review', plans: [1], branch: null })).toBeNull()
-    expect(approvedPlanVersionOf({ stage: 'plan_review', plans: [1, 2], branch: 'b' })).toBe(1)
-    expect(approvedPlanVersionOf({ stage: 'planning', plans: [1], branch: 'b' })).toBe(1)
-    expect(approvedPlanVersionOf({ stage: 'planning', plans: [], branch: null })).toBeNull()
+  it('sem plano: nada a desenhar', () => {
+    expect(diagramPlanVersionOf({ plans: [] })).toBeNull()
   })
 })
 

@@ -90,7 +90,7 @@ const diagram = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const workbench = (architect: { applies: boolean; approvedPlanVersion: number | null } | null = { applies: true, approvedPlanVersion: 1 }) => ({ id: 'w1', taskCode: 'OPE-9', architect })
+const workbench = (architect: { applies: boolean; planVersion: number | null } | null = { applies: true, planVersion: 1 }) => ({ id: 'w1', taskCode: 'OPE-9', architect })
 
 beforeEach(() => {
   mocks.diagrams = []
@@ -103,12 +103,21 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('useArchitectTab', () => {
-  it('aparece com versões ou com o arquiteto aplicável e plano aprovado; some sem nada', () => {
+  it('aparece com versões ou com o arquiteto aplicável e um plano; some sem nada', () => {
     expect(renderHook(() => useArchitectTab(workbench(null))).result.current).toEqual({ visible: false, count: 0 })
-    expect(renderHook(() => useArchitectTab(workbench({ applies: true, approvedPlanVersion: null }))).result.current.visible).toBe(false)
+    expect(renderHook(() => useArchitectTab(workbench({ applies: true, planVersion: null }))).result.current.visible).toBe(false)
     expect(renderHook(() => useArchitectTab(workbench())).result.current).toEqual({ visible: true, count: 0 })
     mocks.diagrams = [diagram(), diagram({ id: 'd2', version: 2, planSeq: 2 })]
     expect(renderHook(() => useArchitectTab(workbench(null))).result.current).toEqual({ visible: true, count: 2 })
+  })
+
+  it('aparece assim que o plano fica pronto (em revisão, sem aprovação), sem recarregar a página', () => {
+    const { result, rerender } = renderHook(({ planVersion }: { planVersion: number | null }) => useArchitectTab(workbench({ applies: true, planVersion })), { initialProps: { planVersion: null as number | null } })
+    expect(result.current.visible).toBe(false)
+    rerender({ planVersion: 1 })
+    expect(result.current.visible).toBe(true)
+    rerender({ planVersion: null })
+    expect(result.current.visible).toBe(false)
   })
 })
 
@@ -117,7 +126,7 @@ describe('ArchitectTab', () => {
     const { rerender } = render(<ArchitectTab workbench={workbench()} />)
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar arquitetura/ })))
     expect(mocks.generate).toHaveBeenCalledWith({ depth: 3 })
-    rerender(<ArchitectTab workbench={workbench({ applies: false, approvedPlanVersion: 1 })} />)
+    rerender(<ArchitectTab workbench={workbench({ applies: false, planVersion: 1 })} />)
     expect(screen.queryByRole('button', { name: /Gerar arquitetura/ })).toBeNull()
     expect(screen.getByText(/desativado para esta central/)).toBeTruthy()
   })
@@ -211,7 +220,7 @@ describe('ArchitectTab', () => {
 
   it('versões: o seletor mostra "Plano vX · arquitetura vY" e a atual', () => {
     mocks.diagrams = [diagram(), diagram({ id: 'd2', version: 2, planVersion: 2, planSeq: 1 })]
-    render(<ArchitectTab workbench={workbench({ applies: true, approvedPlanVersion: 2 })} />)
+    render(<ArchitectTab workbench={workbench({ applies: true, planVersion: 2 })} />)
     const select = screen.getByLabelText('Versão da arquitetura') as HTMLSelectElement
     expect([...select.options].map((option) => option.textContent)).toEqual(['Plano v2 · arquitetura v1 (atual)', 'Plano v1 · arquitetura v1'])
     fireEvent.change(select, { target: { value: 'd1' } })
@@ -251,7 +260,7 @@ describe('ArchitectTab', () => {
 
   it('sem o arquiteto aplicável, o diagrama pronto continua visível, sem pedir ajustes', () => {
     mocks.diagrams = [diagram()]
-    render(<ArchitectTab workbench={workbench({ applies: false, approvedPlanVersion: 1 })} />)
+    render(<ArchitectTab workbench={workbench({ applies: false, planVersion: 1 })} />)
     expect(screen.getByTestId('architect-canvas')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Pedir ajustes/ })).toBeNull()
   })

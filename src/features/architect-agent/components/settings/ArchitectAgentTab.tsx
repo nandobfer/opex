@@ -100,7 +100,7 @@ export function ArchitectAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                                         name="enabled"
                                         id="architect-enabled"
                                         label="Agente Arquiteto"
-                                        description="Ao aprovar o plano de uma mesa, um agente do OpenCode só leitura desenha a arquitetura do plano (camadas, módulos, rotas, dados e eventos) numa aba nova da mesa. Nunca bloqueia nem altera o desenvolvimento."
+                                        description="Quando o plano de uma mesa fica pronto, um agente desenha a arquitetura da funcionalidade (pessoas, processos, estruturas e informações), consolidando todos os planos, numa aba da mesa. Nunca bloqueia nem altera o desenvolvimento."
                                     />
                                     <AnimatePresence initial={false}>
                                         {!dirty && !availability.available && availability.reason && (

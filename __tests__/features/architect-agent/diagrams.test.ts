@@ -42,7 +42,7 @@ vi.mock('@/features/architect-agent/server/settings', async (importOriginal) => 
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { ArchitectDiagram } from '@/features/architect-agent/server/models'
-import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
+import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, onPlanReady, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
 import { isDiagramLive, registerDiagram, releaseDiagram, liveDiagramIds, abortReasonOf } from '@/features/architect-agent/server/registry'
 import { subscribeLive } from '@/features/architect-agent/server/live-hub'
 import { legacyGraph } from './fixtures'
@@ -79,6 +79,52 @@ beforeEach(() => {
   use()
 })
 
+describe('onPlanReady (plano pronto: o gatilho)', () => {
+  it('automático em "Plano em revisão", sem aprovação: cria a versão "gerando" do plano e dispara a geração', async () => {
+    seedWorkbench({ stage: 'plan_review', branch: null, approvedPlanVersion: null })
+    await onPlanReady(WB)
+    await flush()
+    expect(diagrams.docs).toHaveLength(1)
+    expect(diagrams.docs[0]).toEqual(expect.objectContaining({ state: 'running', planVersion: 1, origin: 'auto' }))
+    expect(mocks.runDiagram).toHaveBeenCalledWith(String(diagrams.docs[0]!._id), expect.any(AbortController))
+  })
+
+  it('plano v2 pronto com o v1 ainda gerando: descarta a do v1 e gera a do v2', async () => {
+    seedWorkbench({ stage: 'plan_review', branch: null, approvedPlanVersion: null })
+    await onPlanReady(WB)
+    const first = String(diagrams.docs[0]!._id)
+    Object.assign(workbenches.docs[0]!, { plans: [{ version: 1, text: 'v1' }, { version: 2, text: 'v2' }] })
+    await onPlanReady(WB)
+    expect(abortReasonOf(first)).toBe('superseded')
+    expect(diagrams.docs[1]).toEqual(expect.objectContaining({ planVersion: 2, version: 2 }))
+  })
+
+  it('a aprovação depois do plano pronto não gera uma segunda versão (reserva)', async () => {
+    seedWorkbench({ stage: 'plan_review', branch: null, approvedPlanVersion: null })
+    await onPlanReady(WB)
+    Object.assign(workbenches.docs[0]!, { stage: 'implementing', approvedPlanVersion: 1 })
+    await onPlanApproved(WB)
+    expect(diagrams.docs).toHaveLength(1)
+    expect(mocks.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('já tem diagrama: nada a gerar na aprovação'))
+  })
+
+  it('a aprovação gera quando o plano não tem versão gerando nem pronta (a do plano pronto falhou)', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'a'.repeat(24), workbenchId: WB, version: 1, planVersion: 1, planSeq: 1, state: 'failed', createdAt: new Date() })
+    await onPlanApproved(WB)
+    expect(diagrams.docs).toHaveLength(2)
+    expect(diagrams.docs[1]).toEqual(expect.objectContaining({ state: 'running', planVersion: 1, origin: 'auto' }))
+  })
+
+  it('disparo manual no plano pronto: não gera e registra o motivo', async () => {
+    seedWorkbench({ stage: 'plan_review' })
+    use({ trigger: 'manual' })
+    await onPlanReady(WB)
+    expect(diagrams.docs).toHaveLength(0)
+    expect(mocks.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('disparo manual: sem diagrama automático no plano pronto'))
+  })
+})
+
 describe('onPlanApproved', () => {
   it('automático: cria a versão "gerando" do plano aprovado e dispara a geração em segundo plano', async () => {
     seedWorkbench()
@@ -107,7 +153,7 @@ describe('onPlanApproved', () => {
     await onPlanApproved(WB)
     await onPlanApproved(WB)
     expect(diagrams.docs).toHaveLength(1)
-    expect(mocks.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('aprovação repetida'))
+    expect(mocks.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('já tem diagrama'))
   })
 
   it('plano v2 aprovado com a geração do v1 em curso: aborta a antiga (descartada) e gera a v2', async () => {
@@ -135,8 +181,14 @@ describe('requestDiagram (manual e ajuste)', () => {
     await expect(requestDiagram(WB, { depth: 5 }, 'manual')).rejects.toMatchObject({ status: 409, code: 'ARCHITECT_BUSY' })
   })
 
-  it('agente desativado ou mesa sem plano aprovado: 409 com mensagem acionável', async () => {
+  it('"Gerar arquitetura" funciona com o plano em revisão, sem aprovação', async () => {
     seedWorkbench({ stage: 'plan_review', branch: null, approvedPlanVersion: null })
+    const created = await requestDiagram(WB, {}, 'manual')
+    expect(created).toEqual(expect.objectContaining({ state: 'running', planVersion: 1, origin: 'manual' }))
+  })
+
+  it('agente desativado ou mesa sem plano: 409 com mensagem acionável', async () => {
+    seedWorkbench({ stage: 'planning', branch: null, approvedPlanVersion: null, plans: [] })
     await expect(requestDiagram(WB, {}, 'manual')).rejects.toMatchObject({ status: 409, code: 'ARCHITECT_NO_PLAN' })
     use({ enabled: false })
     await expect(requestDiagram(WB, {}, 'manual')).rejects.toMatchObject({ status: 409, code: 'ARCHITECT_DISABLED' })
@@ -211,10 +263,11 @@ describe('mesa', () => {
     expect(abortReasonOf('f'.repeat(24))).toBe('deleted')
   })
 
-  it('o DTO da mesa diz se o arquiteto se aplica e a versão aprovada', async () => {
-    expect(await workbenchArchitect({ centralId: 'c1', stage: 'implementing', plans: [1, 2], branch: 'b', approvedPlanVersion: 2 })).toEqual({ applies: true, approvedPlanVersion: 2 })
+  it('o DTO da mesa diz se o arquiteto se aplica e o plano mais recente (inclusive em revisão)', async () => {
+    expect(await workbenchArchitect({ centralId: 'c1', plans: [1, 2] })).toEqual({ applies: true, planVersion: 2 })
+    expect(await workbenchArchitect({ centralId: 'c1', plans: [1] })).toEqual({ applies: true, planVersion: 1 })
     use({ enabled: false })
-    expect(await workbenchArchitect({ centralId: 'c1', stage: 'plan_review', plans: [1], branch: null })).toEqual({ applies: false, approvedPlanVersion: null })
+    expect(await workbenchArchitect({ centralId: 'c1', plans: [] })).toEqual({ applies: false, planVersion: null })
   })
 })
 

@@ -21,11 +21,11 @@ import { asDepth } from "./DepthControl"
 
 type ArchitectWorkbench = Pick<WorkbenchDto, "id" | "taskCode" | "architect">
 
-const canGenerateOn = (workbench: ArchitectWorkbench) => Boolean(workbench.architect?.applies && workbench.architect.approvedPlanVersion)
+const canGenerateOn = (workbench: ArchitectWorkbench) => Boolean(workbench.architect?.applies && workbench.architect.planVersion)
 
 /**
  * Aba "Arquitetura (N)" da mesa: aparece quando a mesa tem diagrama (ou geração em andamento) ou
- * quando o arquiteto se aplica e há plano aprovado (estado vazio com "Gerar arquitetura").
+ * quando o arquiteto se aplica e a mesa já tem um plano (inclusive em revisão) (estado vazio com "Gerar arquitetura").
  */
 export function useArchitectTab(workbench: ArchitectWorkbench): { visible: boolean; count: number } {
     const query = useWorkbenchDiagrams(workbench.id)
@@ -36,9 +36,9 @@ export function useArchitectTab(workbench: ArchitectWorkbench): { visible: boole
 
 const emptyReason = (workbench: ArchitectWorkbench) =>
     canGenerateOn(workbench)
-        ? "Gere o diagrama de arquitetura do plano aprovado. A implementação segue normalmente enquanto o agente desenha."
+        ? "Gere o diagrama de arquitetura do plano. A análise e a implementação seguem normalmente enquanto o agente desenha."
         : workbench.architect?.applies
-          ? "A mesa ainda não tem plano aprovado: o diagrama é gerado a partir do plano aprovado."
+          ? "A mesa ainda não tem plano: o diagrama é gerado quando o plano fica pronto."
           : "O Agente Arquiteto está desativado para esta central (Integrações › Inteligência Artificial › Agente Arquiteto)."
 
 export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {

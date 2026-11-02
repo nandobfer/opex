@@ -120,7 +120,7 @@ export const ARCHITECT_VIEW_LABELS: Record<ArchitectView, string> = { architectu
 
 export const ARCHITECT_TRIGGERS = ["auto", "manual"] as const
 export type ArchitectTrigger = (typeof ARCHITECT_TRIGGERS)[number]
-export const ARCHITECT_TRIGGER_LABELS: Record<ArchitectTrigger, string> = { auto: "Automático ao aprovar o plano", manual: "Manual (botão Gerar arquitetura)" }
+export const ARCHITECT_TRIGGER_LABELS: Record<ArchitectTrigger, string> = { auto: "Automático quando o plano fica pronto", manual: "Manual (botão Gerar arquitetura)" }
 
 /** Origem de uma versão: automática (aprovação), manual (botão) ou ajuste (composer da aba). */
 export const ARCHITECT_ORIGINS = ["auto", "manual", "adjust"] as const
@@ -158,3 +158,6 @@ export function architectPhaseLabel(phase: ArchitectPhase, provider: string | nu
 
 /** Correção num provedor direto (sem conversa): quanto do fim da resposta anterior vai junto. */
 export const ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS = 20_000
+
+/** Teto dos planos somados no pedido: acima, os planos do meio são encurtados (o primeiro e o último ficam inteiros). */
+export const ARCHITECT_PLANS_MAX_CHARS = 150_000
