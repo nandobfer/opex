@@ -86,7 +86,8 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
     }, [missing, universe, back])
 
     const agentChannels = useMemo(() => (agent ? [...new Set(links.filter((link) => link.agent === agent.id && (includeArchived || !data.channels.find((item) => item.slug === link.channel)?.archived)).map((link) => link.channel))] : []), [agent, links, includeArchived, data.channels])
-    // Cores sobre todos os canais (estáveis entre universos); o universo só lê as dos seus canais.
+    // Cores sobre todos os canais (estáveis entre universos); o universo só lê as dos seus canais e dá o
+    // roxo primário ao canal com mais memórias nele (`universeChannelColors`, no MemoryUniverse).
     const allColors = useMemo(() => channelColors(data.channels.map((item) => item.slug)), [data.channels])
     const colors = useMemo(() => pickChannelColors(allColors, agentChannels), [allColors, agentChannels])
     const universeMemories = useMemo(() => {

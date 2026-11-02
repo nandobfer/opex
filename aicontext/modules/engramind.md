@@ -220,15 +220,22 @@ rede (teste estático).
   `useCentrals`; `centralChannelLabels` em `network/channel-labels.ts`); central desconhecida mostra
   o id.
 - **Universo do canal** (`MemoryUniverse`): o canal no centro e uma partícula por memória (ativas,
-  fixadas e inativas) em órbitas (`layoutUniverse`: as mais usadas mais perto), com links fracos ao
-  centro. Anéis concêntricos a partir do raio 150 (+58 por anel, ~46 px entre vizinhas): o número de
+  fixadas e inativas) em órbitas pela **idade** (`layoutUniverse`, OPE-114: as mais novas, pela
+  criação, mais perto; as mais antigas mais longe; data inválida no anel externo), com links fracos ao
+  centro. Todas as partículas do universo do canal usam o **roxo primário** (o canal é o maior do seu
+  universo), também em `/integracoes/ia`. Anéis concêntricos a partir do raio 150 (+58 por anel, ~46 px entre vizinhas): o número de
   anéis é o mínimo que comporta todas, e elas são distribuídas proporcionalmente às vagas de cada anel
   (`universeRingCounts`; 15 → 1 anel, 50 → 12/17/21, 100 → 4 anéis), então o universo cresce para fora
   com densidade constante e o último anel não fica quase vazio. Canal arquivado abre apagado e somente leitura, sem Nova memória.
-- **Universo do agente**: as memórias de todos os canais que ele assina; o link de cada partícula tem
-  a **cor do canal** (`channelColors` calculado sobre **todos** os canais e lido por universo com
-  `pickChannelColors`: base `--chart-1..6` pelo hash do slug; canais que caem na mesma base ganham
-  variação de tom, e o mesmo canal tem a mesma cor em qualquer universo) e a legenda "Por canal" mostra cor e total.
+- **Universo do agente**: as memórias de todos os canais que ele assina, nas mesmas órbitas por idade
+  (o agente no centro). A **partícula**, o link e a legenda "Por canal" (cor e total) têm a **cor do
+  canal** (OPE-114). A cor estável vem de `channelColors`, calculado sobre **todos** os canais e lido por
+  universo com `pickChannelColors`: base `--chart-2..6` pelo hash do slug (o `--chart-1` é o roxo
+  primário e fica fora da paleta); canais que caem na mesma base ganham variação de tom. Por cima dela,
+  `universeChannelColors` dá o **roxo primário** (`var(--color-primary)`) ao canal com **mais memórias
+  naquele universo** (todas, inclusive inativas; empate pelo slug, então é sempre a primeira linha da
+  legenda). O roxo é por universo: um canal pode ser roxo num agente e ter a sua cor estável em outro;
+  os demais canais têm a mesma cor em qualquer universo.
 - **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
   **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
@@ -239,7 +246,8 @@ rede (teste estático).
 
 | Atributo | Regra |
 |---|---|
-| Cor | Relativa ao universo: a mais nova verde (`--color-success`), a mais antiga o roxo primário, gradiente pela criação (`color-mix`). Uma só ou datas iguais: verde. |
+| Cor | A do canal da memória (`universeChannelColors`): roxo primário para o canal com mais memórias do universo (e em todo universo de canal), cor estável `--chart-2..6` para os demais. Apagada em direção ao cinza pelo brilho (`particleColor`); a bolinha do card usa a cor do canal sem o brilho (`baseColor`). |
+| Distância | A idade (criação): mais nova no anel interno, mais antiga no externo (data inválida conta como a mais antiga). Anéis e `universeRingCounts` como descrito no universo do canal; vale com o agente ou o canal no centro. |
 | Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
 | Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = maior entre `last_retrieved_at` e o registro do Opex (`engramind_memory_usage`), ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação). `stale_candidate` → 0, exceto se consumida ao vivo desde a última leitura (volta ao brilho cheio na hora; a releitura traz o estado do Engramind). |
 | Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
@@ -276,7 +284,8 @@ dados não mudam, para o layout e os nodes não recalcularem a cada render.
 
 **Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
 `useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
-crescendo de 0 (mola), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
+crescendo de 0 (mola) até a sua órbita pela idade (a recém-criada, aqui ou por outra origem, vai ao anel
+interno; a movida mantém a criação original e vai ao anel da sua idade), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
 órbita mudou com o recálculo deslizam da posição antiga para a nova (~450 ms). A animação de entrada
 espera o React Flow medir e mostrar o node (dois quadros). Na lista otimista de `/integracoes/ia`, a
 provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento reduzido: aparece direto.
