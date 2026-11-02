@@ -692,7 +692,7 @@ describe('OPE-113', () => {
   it('regressão: no universo do agente a busca cita os canais dele e destaca só o que o texto também encontrou (o ramo vetorial devolve tudo)', async () => {
     nav.params = new URLSearchParams('universo=agente:opex/opex')
     net.post.mockResolvedValue({
-      data: { data: { mode: 'hybrid', results: [{ memory: memories[0], rank: 1, score: 0.0325 }, { memory: memories[1], rank: 1, score: 0.016393 }, { memory: memories[2], rank: 3, score: 0.0161 }] } },
+      data: { data: { mode: 'hybrid', results: [{ memory: memories[0], rank: 1, score: 0.0325 }, { memory: memories[1], rank: 2, score: 0.0102 }, { memory: memories[2], rank: 3, score: 0.0101 }] } },
     })
     mount()
     await screen.findByTestId('memory-node-m_1')
@@ -702,6 +702,42 @@ describe('OPE-113', () => {
     await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-matched')).toBe('true'))
     expect(screen.getByTestId('memory-node-m_2').getAttribute('data-matched')).toBe('false')
     expect(screen.getByTestId('memory-node-m_3').getAttribute('data-matched')).toBe('false')
+  })
+
+  it('busca que falha avisa com Tentar novamente e não reaproveita o destaque do termo anterior', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    net.post.mockResolvedValueOnce({ data: { data: { mode: 'text', results: [{ memory: memories[0], rank: 1, score: 1 }] } } })
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    await expandFilters()
+    fireEvent.change(screen.getByLabelText('Buscar memórias'), { target: { value: 'pnpm' } })
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-matched')).toBe('true'), { timeout: 2000 })
+    net.post.mockRejectedValueOnce(new Error('Engramind fora do ar'))
+    fireEvent.change(screen.getByLabelText('Buscar memórias'), { target: { value: 'outro termo' } })
+    const notice = await screen.findByTestId('network-search-error', {}, { timeout: 2000 })
+    expect(notice.textContent).toContain('Engramind fora do ar')
+    expect(toast.error).toHaveBeenCalledWith('Busca falhou: Engramind fora do ar')
+    expect(screen.getByTestId('memory-node-m_1').getAttribute('data-matched')).toBeNull()
+    net.post.mockResolvedValueOnce({ data: { data: { mode: 'text', results: [{ memory: memories[2], rank: 1, score: 1 }] } } })
+    fireEvent.click(within(notice).getByRole('button', { name: /Tentar novamente/ }))
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_3').getAttribute('data-matched')).toBe('true'))
+    expect(screen.queryByTestId('network-search-error')).toBeNull()
+  })
+
+  it('a busca não se refaz sozinha com o tempo real nem com o foco (cada busca conta como consulta no Engramind)', async () => {
+    nav.params = new URLSearchParams('universo=canal:opex')
+    net.post.mockResolvedValue({ data: { data: { mode: 'text', results: [{ memory: memories[0], rank: 1, score: 1 }] } } })
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    await expandFilters()
+    fireEvent.change(screen.getByLabelText('Buscar memórias'), { target: { value: 'pnpm' } })
+    await waitFor(() => expect(net.post).toHaveBeenCalledTimes(1), { timeout: 2000 })
+    memories = [...memories, memory('m_9', 'opex')]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await screen.findByTestId('memory-node-m_9')
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await sleep(100)
+    expect(net.post).toHaveBeenCalledTimes(1)
   })
 
   it('memória criada por um agente: partícula verde do agente até o canal na visão inicial; a do dono não', async () => {

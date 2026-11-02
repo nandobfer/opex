@@ -2,7 +2,7 @@
 
 import { useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { FileUp, Info, Plus, Search, X } from "lucide-react"
+import { AlertTriangle, FileUp, Info, Plus, RotateCw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SEARCH_DEBOUNCE_MS } from "@/components/list/ListFilters"
@@ -19,6 +19,9 @@ export interface NetworkToolbarProps extends NetworkFilterFieldsProps {
     /** Memórias que casam na visão atual (total do cartão de filtros). */
     total: number
     textOnly: boolean
+    /** Falha da busca automática (mensagem pt-BR) ou `null`. */
+    searchError?: string | null
+    onRetrySearch?: () => void
     onNewChannel: () => void
     onImport: () => void
     importDisabled: boolean
@@ -44,8 +47,27 @@ export function NetworkToolbar(props: NetworkToolbarProps) {
                 </span>
             </div>
             <NetworkFiltersBar filters={props.filters} onFilters={props.onFilters} options={props.options} onClear={props.onClear} total={props.total} />
+            <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />
             <TextOnlyNotice show={props.textOnly} />
         </div>
+    )
+}
+
+/** Busca automática que falhou: a mensagem e "Tentar novamente" (nada fica destacado enquanto isso). */
+function SearchErrorNotice({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
+    return (
+        <AnimatePresence initial={false}>
+            {error && (
+                <motion.div key="search-error" role="alert" data-testid="network-search-error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> Busca falhou: {error}
+                    {onRetry && (
+                        <Button type="button" variant="outline" size="sm" className="h-7 bg-transparent" onClick={onRetry}>
+                            <RotateCw className="mr-1 h-3.5 w-3.5" aria-hidden /> Tentar novamente
+                        </Button>
+                    )}
+                </motion.div>
+            )}
+        </AnimatePresence>
     )
 }
 
@@ -102,6 +124,7 @@ function MobileToolbar(props: NetworkToolbarProps) {
                 </span>
             </div>
             <TextOnlyNotice show={props.textOnly} />
+            <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />
         </div>
     )
 }

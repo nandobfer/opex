@@ -350,16 +350,22 @@ inválido cai no padrão campo a campo).
 
 **Busca automática** (`useNetworkSearch`): roda sozinha 500 ms depois de parar de digitar (a espera é
 do `ListFilters`, `useDebouncedSearch`), sem botão nem Enter, por TanStack Query (resultado anterior
-mantido enquanto busca de novo; chave sob a área `memories`, então memória alterada pelo tempo real
-refaz a busca). Ela **cita os canais da visão atual** (o do universo, os do agente ou os visíveis na
+mantido enquanto busca de novo). **Cada busca conta como consulta no Engramind** (`retrieval_count` e
+`last_retrieved_at` das memórias devolvidas, que alimentam tamanho e brilho das partículas), então ela
+só roda quando o termo, os canais citados ou as categorias mudam: a chave fica **fora** da área
+`memories` (memória alterada pelo tempo real não refaz a busca; ela entra na próxima mudança do termo)
+e a consulta não se refaz por foco, reconexão nem idade do cache, nem repete sozinha na falha.
+**Falha** (Engramind fora do ar, 4xx/5xx): toast "Busca falhou: …", aviso na barra com **Tentar
+novamente** e nenhum destaque (o resultado do termo anterior não é reaproveitado). Ela **cita os canais da visão atual** (o do universo, os do agente ou os visíveis na
 visão inicial, cortados pelo filtro de Canal) em lotes de 50 (`channelBatches`), porque o Engramind só
 busca nos canais `manage` e arquivados quando citados. **Destaque só do que é relevante**
 (`relevantSearchIds`): o ramo vetorial do Engramind não tem limiar e devolve as memórias mais próximas
 até o `limit` mesmo sem relação com o termo (com poucas memórias, todas), o que deixava a busca sem
-destacar nada; no modo `hybrid` só destacam os resultados acima do maior score possível de um ramo
-sozinho (`max(search.vector_weight, search.text_weight) / (search.rrf_k + 1)`, lidos das
-configurações, padrão 1/1/60), isto é, os que o texto também encontrou; no modo `text` ("Busca só
-textual"), todos.
+destacar nada. No modo `hybrid` destacam os resultados que os **dois ramos** encontraram (sentido e
+texto) e os que **um ramo sozinho** pôs nas 3 primeiras posições (`SEARCH_SINGLE_BRANCH_TOP`; acerto
+forte só pelo sentido ou só pelo texto): score ≥ `max(search.vector_weight, search.text_weight) /
+(search.rrf_k + 3)`, com os pesos das configurações (padrão 1/1/60). Um termo sem relação nenhuma
+ainda destaca as 3 memórias mais próximas pelo sentido. No modo `text` ("Busca só textual"), todos.
 
 **Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
 destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na

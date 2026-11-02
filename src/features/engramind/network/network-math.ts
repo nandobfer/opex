@@ -355,16 +355,20 @@ export interface SearchFusion {
 
 export const DEFAULT_SEARCH_FUSION: SearchFusion = { vectorWeight: 1, textWeight: 1, k: 60 }
 
+/** Acertos de um ramo sozinho que ainda destacam: as primeiras posições (as mais próximas pelo sentido). */
+export const SEARCH_SINGLE_BRANCH_TOP = 3
+
 /**
  * Ids que a busca destaca. O ramo vetorial do Engramind não tem limiar: devolve as memórias mais
  * próximas até o `limit`, mesmo sem relação com o termo, e com poucas memórias elas são todas. No modo
- * `hybrid`, só destacam as que passam do maior score possível de um ramo sozinho
- * (`max(peso) / (k + 1)`), isto é, as que o texto também encontrou. No modo `text`, todas.
+ * `hybrid`, destacam as que os dois ramos encontraram (sentido e texto) e as que um ramo sozinho pôs
+ * nas `SEARCH_SINGLE_BRANCH_TOP` primeiras posições: score ≥ `max(peso) / (k + top)`. Como o acerto dos
+ * dois ramos vale no mínimo `(pesoV + pesoT) / (k + limit)`, ele sempre passa. No modo `text`, todas.
  */
 export function relevantSearchIds(results: readonly { score: number; memory: { id: string } }[], mode: "hybrid" | "text", fusion: SearchFusion = DEFAULT_SEARCH_FUSION): string[] {
     if (mode === "text") return results.map((hit) => hit.memory.id)
-    const single = Math.max(fusion.vectorWeight, fusion.textWeight) / (fusion.k + 1)
-    return results.filter((hit) => hit.score > single + 1e-6).map((hit) => hit.memory.id)
+    const threshold = Math.max(fusion.vectorWeight, fusion.textWeight) / (fusion.k + SEARCH_SINGLE_BRANCH_TOP)
+    return results.filter((hit) => hit.score >= threshold - 1e-6).map((hit) => hit.memory.id)
 }
 
 export interface UniverseStats {

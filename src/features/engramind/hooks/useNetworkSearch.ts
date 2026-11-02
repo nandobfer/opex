@@ -27,18 +27,24 @@ export function channelBatches(channels: readonly string[], size = SEARCH_CHANNE
 /**
  * Busca da rede (OPE-113): roda sozinha com o termo (a espera de digitação fica no campo), cita os
  * canais da visão atual (o Engramind só busca nos canais `manage` e arquivados quando citados), em lotes
- * de 50, e destaca só os resultados relevantes (`relevantSearchIds`). A chave fica sob a área
- * `memories`: memória alterada pelo tempo real refaz a busca.
+ * de 50, e destaca só os resultados relevantes (`relevantSearchIds`).
  */
 export function useNetworkSearch({ query, channels, categories, fusion, enabled = true }: { query: string; channels: readonly string[]; categories: readonly string[]; fusion: SearchFusion; enabled?: boolean }) {
     const text = query.trim()
     const batches = channelBatches(channels)
     const sortedCategories = [...new Set(categories)].sort()
     return useQuery({
-        queryKey: [ENGRAMIND_QUERY_KEY, "memories", "network-search", text, batches, sortedCategories, fusion.vectorWeight, fusion.textWeight, fusion.k],
+        // Fora da área `memories`: memória alterada pelo tempo real não refaz a busca. Cada busca conta como
+        // consulta no Engramind (`retrieval_count`, `last_retrieved_at`), então ela só roda quando o termo,
+        // os canais citados ou as categorias mudam: sem refazer por foco, reconexão ou idade do cache.
+        queryKey: [ENGRAMIND_QUERY_KEY, "network-search", text, batches, sortedCategories, fusion.vectorWeight, fusion.textWeight, fusion.k],
         enabled: enabled && text.length > 0,
         placeholderData: keepPreviousData,
-        staleTime: 30_000,
+        staleTime: Number.POSITIVE_INFINITY,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
+        retry: false,
         queryFn: async (): Promise<NetworkSearchResult> => {
             const responses = await Promise.all(
                 batches.map((batch) =>

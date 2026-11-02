@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { toast } from "sonner"
 import { usePersistentState } from "@/hooks/usePersistentState"
+import { apiErrorMessage } from "@/lib/api"
 import { channelColors, pickChannelColors, subscriptionLinks } from "../../network/network-math"
 import { clearNetworkFilters, DEFAULT_NETWORK_FILTERS, hasActiveFilters, matchesFilters, NETWORK_FILTERS_STORAGE_KEY, networkFiltersSchema, type NetworkFilters } from "../../network/filters"
 import type { NetworkMemory } from "../../network/types"
@@ -78,7 +79,15 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
     const searchChannels = useMemo(() => (filters.channels.length ? viewChannels.filter((slug) => filters.channels.includes(slug)) : viewChannels), [viewChannels, filters.channels])
     const searching = filters.search.trim().length > 0
     const search = useNetworkSearch({ query: filters.search, channels: searchChannels, categories: filters.categories, fusion: data.searchFusion, enabled: searchChannels.length > 0 })
-    const searchIds = useMemo<ReadonlySet<string> | null>(() => (!searching ? null : searchChannels.length ? (search.data?.ids ?? null) : new Set<string>()), [searching, searchChannels.length, search.data])
+    // Busca que falhou não reaproveita o destaque do termo anterior: nada destaca e a barra avisa.
+    const searchFailed = searching && searchChannels.length > 0 && search.isError
+    const searchError = searchFailed ? apiErrorMessage(search.error, "Não foi possível buscar as memórias.") : null
+    const searchIds = useMemo<ReadonlySet<string> | null>(() => (!searching || searchFailed ? null : searchChannels.length ? (search.data?.ids ?? null) : new Set<string>()), [searching, searchFailed, searchChannels.length, search.data])
+    useEffect(() => {
+        if (search.errorUpdatedAt && searchFailed) toast.error(`Busca falhou: ${apiErrorMessage(search.error, "Não foi possível buscar as memórias.")}`)
+        // Um aviso por falha (o `errorUpdatedAt` muda a cada erro).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search.errorUpdatedAt])
 
     const filtering = hasActiveFilters(filters, searchIds)
     const isMatch = useMemo(() => (filtering ? (memory: NetworkMemory) => matchesFilters(memory, filters, searchIds) : null), [filtering, filters, searchIds])
@@ -108,7 +117,9 @@ function EngramindNetworkContent({ onConfigure }: { onConfigure: () => void }) {
                 options={filterOptions}
                 onClear={clearFilters}
                 total={total}
-                textOnly={searching && search.data?.textOnly === true}
+                textOnly={searching && !searchFailed && search.data?.textOnly === true}
+                searchError={searchError}
+                onRetrySearch={() => void search.refetch()}
                 onNewChannel={() => setDialog("channel")}
                 onImport={() => setDialog("import")}
                 importDisabled={data.channels.every((item) => item.archived)}

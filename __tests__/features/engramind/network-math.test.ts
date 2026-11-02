@@ -362,17 +362,19 @@ describe('filtros e estatísticas', () => {
     expect(agentWritesOf([], list, at)).toEqual([])
   })
 
-  it('OPE-113: busca híbrida destaca só o que passa do maior score de um ramo sozinho; modo texto destaca tudo', () => {
+  it('OPE-113: busca híbrida destaca o que os dois ramos acharam e o top 3 de um ramo sozinho (sentido forte); o resto do vetorial não; modo texto destaca tudo', () => {
     const hits = [
       { score: 0.0325, memory: { id: 'both' } },
-      { score: 0.016393, memory: { id: 'vector-first' } },
+      { score: 1 / 61, memory: { id: 'vector-1st' } },
+      { score: 1 / 63, memory: { id: 'vector-3rd' } },
+      { score: 1 / 64, memory: { id: 'vector-4th' } },
       { score: 0.0102, memory: { id: 'vector-last' } },
       { score: 2 / 110, memory: { id: 'both-last' } },
     ]
-    expect(relevantSearchIds(hits, 'hybrid')).toEqual(['both', 'both-last'])
-    expect(relevantSearchIds(hits, 'text')).toEqual(['both', 'vector-first', 'vector-last', 'both-last'])
-    // Pesos da configuração: com o vetor valendo 2, o teto de um ramo sozinho é 2/61.
-    expect(relevantSearchIds([{ score: 0.04, memory: { id: 'both' } }, { score: 2 / 61, memory: { id: 'vector' } }], 'hybrid', { vectorWeight: 2, textWeight: 1, k: 60 })).toEqual(['both'])
+    expect(relevantSearchIds(hits, 'hybrid')).toEqual(['both', 'vector-1st', 'vector-3rd', 'both-last'])
+    expect(relevantSearchIds(hits, 'text')).toHaveLength(6)
+    // Pesos da configuração: com o vetor valendo 2, o corte do top 3 de um ramo é 2/63.
+    expect(relevantSearchIds([{ score: 2 / 61, memory: { id: 'vector-1st' } }, { score: 2 / 70, memory: { id: 'vector-10th' } }], 'hybrid', { vectorWeight: 2, textWeight: 1, k: 60 })).toEqual(['vector-1st'])
   })
 
   it('estatísticas do universo: ativas, inativas, fixadas, usos, última consulta e esquecidas', () => {
