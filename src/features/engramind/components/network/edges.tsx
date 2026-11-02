@@ -1,20 +1,26 @@
 "use client"
 
 import { memo, useEffect, useRef, useState } from "react"
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, getStraightPath, type Edge, type EdgeProps } from "@xyflow/react"
+import { BaseEdge, EdgeLabelRenderer, getStraightPath, type Edge, type EdgeProps } from "@xyflow/react"
 import { motion, useReducedMotion } from "framer-motion"
 import { SUBSCRIPTION_MODE_LABEL } from "./network-labels"
 import { TravelDots } from "./live"
+import { OVERVIEW_LINK_BEND, overviewLinkMidpoint, overviewLinkPath } from "../../network/overview-layout"
 import type { SubscriptionMode } from "../../network/types"
 
-export type LinkEdgeData = { mode: SubscriptionMode; dimmed?: boolean }
-export type OrbitEdgeData = { color?: string; dimmed?: boolean; entering?: boolean }
+/** `bend`: curvatura do link (o sinal alterna entre links vizinhos, para não se sobreporem). */
+export type LinkEdgeData = { mode: SubscriptionMode; dimmed?: boolean; bend?: number }
+/** `color`: cor do canal (universo do agente); `authored`: memória escrita pelo agente do centro (link destacado). */
+export type OrbitEdgeData = { color?: string; authored?: boolean; dimmed?: boolean; entering?: boolean }
+
+/** Traço do link ao centro: normal e destacado (memória escrita pelo agente do centro). */
+export const ORBIT_STROKE_WIDTH = { normal: 1, authored: 2.25 } as const
 
 /** Tempo que o modo do link fica à mostra depois de um toque (no toque não há "passar o mouse"). */
 export const LINK_TOUCH_LABEL_MS = 1500
 
 /** Link agente ↔ canal (uma assinatura): o modo aparece ao passar o mouse ou, no toque, por um instante. */
-export const LinkEdge = memo(function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<Edge<LinkEdgeData, "link">>) {
+export const LinkEdge = memo(function LinkEdge({ id, sourceX, sourceY, targetX, targetY, data }: EdgeProps<Edge<LinkEdgeData, "link">>) {
     const [hover, setHover] = useState(false)
     const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => () => void (touchTimer.current && clearTimeout(touchTimer.current)), [])
@@ -24,7 +30,9 @@ export const LinkEdge = memo(function LinkEdge({ id, sourceX, sourceY, targetX, 
         setHover(true)
         touchTimer.current = setTimeout(() => setHover(false), LINK_TOUCH_LABEL_MS)
     }
-    const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+    const bend = data?.bend ?? OVERVIEW_LINK_BEND
+    const path = overviewLinkPath({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }, bend)
+    const { x: labelX, y: labelY } = overviewLinkMidpoint({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }, bend)
     return (
         <>
             <BaseEdge id={id} path={path} style={{ stroke: "var(--color-primary)", strokeOpacity: data?.dimmed ? 0.12 : hover ? 0.9 : 0.4, strokeWidth: hover ? 2 : 1.25 }} />
@@ -49,14 +57,17 @@ export const LinkEdge = memo(function LinkEdge({ id, sourceX, sourceY, targetX, 
 export const OrbitEdge = memo(function OrbitEdge({ id, sourceX, sourceY, targetX, targetY, data }: EdgeProps<Edge<OrbitEdgeData, "orbit">>) {
     const reducedMotion = useReducedMotion()
     const [path] = getStraightPath({ sourceX, sourceY, targetX, targetY })
-    const style = { stroke: data?.color ?? "var(--color-primary)", strokeOpacity: data?.dimmed ? 0.04 : data?.color ? 0.32 : 0.14, strokeWidth: 1 }
+    const authored = data?.authored === true
+    const opacity = data?.dimmed ? 0.04 : authored ? 0.6 : data?.color ? 0.32 : 0.14
+    const style = { stroke: data?.color ?? "var(--color-primary)", strokeOpacity: opacity, strokeWidth: authored ? ORBIT_STROKE_WIDTH.authored : ORBIT_STROKE_WIDTH.normal }
+    const marks = { "data-authored": authored || undefined }
     return (
         <>
             {data?.entering && !reducedMotion ? (
                 // Memória nova: o link se desenha entre a partícula e o centro enquanto ela nasce.
-                <motion.path data-testid={`orbit-entering-${id}`} d={path} fill="none" style={style} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.5, ease: "easeOut" }} />
+                <motion.path data-testid={`orbit-entering-${id}`} {...marks} d={path} fill="none" style={style} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.5, ease: "easeOut" }} />
             ) : (
-                <BaseEdge id={id} path={path} style={style} />
+                <BaseEdge id={id} path={path} style={style} {...marks} />
             )}
             <TravelDots edgeId={id} path={path} />
         </>

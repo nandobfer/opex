@@ -3,23 +3,18 @@ import { deliveredChannels, parseTaggedContext } from '@/features/engramind/cont
 import {
   agentDisplayName,
   agentReach,
+  agentWritesOf,
+  AGENT_WRITE_WINDOW_MS,
+  isAuthoredByCenter,
+  relevantSearchIds,
   clampCardRect,
-  OVERVIEW_AGENT_BOX,
-  OVERVIEW_AGENT_GAP,
-  OVERVIEW_CHANNEL_BOX,
-  OVERVIEW_CHANNEL_GAP,
-  OVERVIEW_FIT_MARGIN,
-  OVERVIEW_ROW_GAP,
-  overviewInitialBounds,
   channelColors,
   PRIMARY_CHANNEL_COLOR,
   universeChannelColors,
   pickChannelColors,
   lastRealUseOf,
   lastUseOf,
-  layoutOverview,
   layoutUniverse,
-  matchesFilters,
   particleBrightness,
   particleSize,
   PARTICLE_MAX_PX,
@@ -259,29 +254,6 @@ describe('links das assinaturas', () => {
 })
 
 describe('layout', () => {
-  it('visão inicial horizontal: agentes numa linha em cima e canais numa linha embaixo, centralizadas', () => {
-    const layout = layoutOverview([{ id: 'opex/opex', app: 'opex' }, { id: 'x/a', app: 'x' }, { id: 'x/b', app: 'x' }], [{ slug: 'opex' }, { slug: 'b' }])
-    const agents = [...layout.agents.values()]
-    const channels = [...layout.channels.values()]
-    expect(agents.every((point) => point.y === 0)).toBe(true)
-    expect(channels.every((point) => point.y === OVERVIEW_ROW_GAP)).toBe(true)
-    expect(agents.reduce((sum, point) => sum + point.x, 0)).toBe(0)
-    expect(channels.reduce((sum, point) => sum + point.x, 0)).toBe(0)
-    expect(layout.agents.get('x/b')!.x - layout.agents.get('x/a')!.x).toBe(OVERVIEW_AGENT_GAP)
-    expect(Math.abs(layout.channels.get('opex')!.x - layout.channels.get('b')!.x)).toBe(OVERVIEW_CHANNEL_GAP)
-  })
-
-  it('enquadramento inicial: a linha de agentes com folga e a altura até a linha de canais; sem agentes, tudo', () => {
-    const agents = [{ x: -210, y: 0 }, { x: 0, y: 0 }, { x: 210, y: 0 }]
-    const bounds = overviewInitialBounds(agents)!
-    const rowWidth = 420 + OVERVIEW_AGENT_BOX.width
-    expect(bounds.width).toBeCloseTo(rowWidth * (1 + 2 * OVERVIEW_FIT_MARGIN))
-    expect(bounds.x).toBeCloseTo(-rowWidth / 2 - rowWidth * OVERVIEW_FIT_MARGIN)
-    expect(bounds.y).toBeLessThan(-OVERVIEW_AGENT_BOX.height / 2 + 1)
-    expect(bounds.y + bounds.height).toBeGreaterThanOrEqual(OVERVIEW_ROW_GAP + OVERVIEW_CHANNEL_BOX.height / 2)
-    expect(overviewInitialBounds([])).toBeNull()
-  })
-
   it('card da memória: centralizado sobre a partícula e sempre inteiro dentro do quadro', () => {
     const canvas = { width: 800, height: 600 }
     const card = { width: 288, height: 300 }
@@ -372,13 +344,37 @@ describe('layout', () => {
 })
 
 describe('filtros e estatísticas', () => {
-  it('filtros destacam: canal, status, categoria, autor, desde e a busca', () => {
-    const memory = mem('a', { updatedAt: '2026-10-20T10:00:00Z' })
-    expect(matchesFilters(memory, {}, null)).toBe(true)
-    expect(matchesFilters(memory, { status: 'archived' }, null)).toBe(false)
-    expect(matchesFilters(memory, { author: 'OPEX/' }, null)).toBe(true)
-    expect(matchesFilters(memory, { since: '2026-10-21' }, null)).toBe(false)
-    expect(matchesFilters(memory, {}, new Set(['b']))).toBe(false)
+  it('OPE-113: link destacado só quando o agente do centro escreveu a memória', () => {
+    expect(isAuthoredByCenter({ authorAgent: 'opex/opex' }, { kind: 'agent', id: 'opex/opex' })).toBe(true)
+    expect(isAuthoredByCenter({ authorAgent: 'outro/bot' }, { kind: 'agent', id: 'opex/opex' })).toBe(false)
+    expect(isAuthoredByCenter({ authorAgent: null }, { kind: 'agent', id: 'opex/opex' })).toBe(false)
+    expect(isAuthoredByCenter({ authorAgent: 'opex/opex' }, { kind: 'channel', id: 'opex/opex' })).toBe(false)
+  })
+
+  it('OPE-113: criação por agente só conta para memória nova com agente autor criada há pouco', () => {
+    const at = Date.parse('2026-11-02T12:00:00Z')
+    const list = [
+      { id: 'a', authorAgent: 'opex/opex', channel: 'opex', createdAt: '2026-11-02T11:59:30Z' },
+      { id: 'b', authorAgent: null, channel: 'opex', createdAt: '2026-11-02T11:59:30Z' },
+      { id: 'c', authorAgent: 'opex/opex', channel: 'opex', createdAt: new Date(at - AGENT_WRITE_WINDOW_MS - 1000).toISOString() },
+    ]
+    expect(agentWritesOf(['a', 'b', 'c', 'x'], list, at)).toEqual([{ id: 'a', agent: 'opex/opex', channel: 'opex' }])
+    expect(agentWritesOf([], list, at)).toEqual([])
+  })
+
+  it('OPE-113: busca híbrida destaca o que os dois ramos acharam e o top 3 de um ramo sozinho (sentido forte); o resto do vetorial não; modo texto destaca tudo', () => {
+    const hits = [
+      { score: 0.0325, memory: { id: 'both' } },
+      { score: 1 / 61, memory: { id: 'vector-1st' } },
+      { score: 1 / 63, memory: { id: 'vector-3rd' } },
+      { score: 1 / 64, memory: { id: 'vector-4th' } },
+      { score: 0.0102, memory: { id: 'vector-last' } },
+      { score: 2 / 110, memory: { id: 'both-last' } },
+    ]
+    expect(relevantSearchIds(hits, 'hybrid')).toEqual(['both', 'vector-1st', 'vector-3rd', 'both-last'])
+    expect(relevantSearchIds(hits, 'text')).toHaveLength(6)
+    // Pesos da configuração: com o vetor valendo 2, o corte do top 3 de um ramo é 2/63.
+    expect(relevantSearchIds([{ score: 2 / 61, memory: { id: 'vector-1st' } }, { score: 2 / 70, memory: { id: 'vector-10th' } }], 'hybrid', { vectorWeight: 2, textWeight: 1, k: 60 })).toEqual(['vector-1st'])
   })
 
   it('estatísticas do universo: ativas, inativas, fixadas, usos, última consulta e esquecidas', () => {

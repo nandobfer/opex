@@ -50,6 +50,8 @@ export function TravelDots({ edgeId, path }: { edgeId: string; path: string }) {
     )
 }
 
+const TRAVEL_FILL: Record<Travel["tone"], string> = { primary: "fill-primary", white: "fill-foreground", success: "fill-success" }
+
 function TravelDot({ travel, path, onDone }: { travel: Travel; path: string; onDone: () => void }) {
-    return <PathTraveler path={path} reverse={travel.reverse} delayMs={travel.delayMs} radius={travel.tone === "white" ? 2.5 : 4} className={travel.tone === "white" ? "fill-foreground" : "fill-primary"} onDone={onDone} />
+    return <PathTraveler path={path} reverse={travel.reverse} delayMs={travel.delayMs} radius={travel.tone === "white" ? 2.5 : 4} className={TRAVEL_FILL[travel.tone]} edge={travel.edge} tone={travel.tone} onDone={onDone} />
 }

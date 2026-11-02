@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { ENGRAMIND_QUERY_KEY } from "../constants"
-import { agentDisplayName, DEFAULT_STALE_AFTER_DAYS, type SubscriptionInput } from "../network/network-math"
+import { agentDisplayName, DEFAULT_SEARCH_FUSION, DEFAULT_STALE_AFTER_DAYS, type SearchFusion, type SubscriptionInput } from "../network/network-math"
 import type { MemoryUsageMap, NetworkAgent, NetworkChannel, NetworkMemory } from "../network/types"
 import type { Category, EngramindAgent, EngramindApp, EngramindChannel, EngramindMemory, EngramindSubscription, SettingMeta } from "../types"
 import { useEngramindList, useEngramindQuery } from "./useEngramind"
@@ -38,7 +38,17 @@ export function toNetworkMemory(memory: EngramindMemory): NetworkMemory {
         verifiedAt: memory.verified_at ?? null,
         stale: memory.stale_candidate === true,
         author: memory.author?.agent ?? memory.author?.app ?? null,
+        authorAgent: memory.author?.agent ?? null,
     }
+}
+
+/** Pesos da fusão da busca nas configurações do Engramind (padrão 1/1/60). */
+export function searchFusionOf(setting: (key: string) => unknown): SearchFusion {
+    const number = (key: string, fallback: number) => {
+        const value = setting(key)
+        return typeof value === "number" && value >= 0 ? value : fallback
+    }
+    return { vectorWeight: number("search.vector_weight", DEFAULT_SEARCH_FUSION.vectorWeight), textWeight: number("search.text_weight", DEFAULT_SEARCH_FUSION.textWeight), k: number("search.rrf_k", DEFAULT_SEARCH_FUSION.k) }
 }
 
 export function firstSentence(text: string): string {
@@ -86,7 +96,9 @@ export function useEngramindNetwork() {
             mode: subscription.mode,
             reaches: subscription.reaches ?? [],
         }))
-        return { agents: networkAgents, channels: networkChannels, subscriptions: subscriptionInputs, memories: memories.items.map(toNetworkMemory) }
+        // Nome de todos os agentes (inclusive os desligados): chip do autor no card da memória.
+        const agentNames = new Map(agents.items.map((agent) => [agent.qualified_slug, agentDisplayName(agent.name)]))
+        return { agents: networkAgents, agentNames, channels: networkChannels, subscriptions: subscriptionInputs, memories: memories.items.map(toNetworkMemory) }
     }, [agents.items, channels.items, subscriptions.items, memories.items])
 
     // Referências estáveis enquanto os dados não mudam (o layout e os nodes da rede derivam delas).
@@ -106,6 +118,7 @@ export function useEngramindNetwork() {
         categories,
         limits,
         maxBatch: typeof maxBatch === "number" ? maxBatch : null,
+        searchFusion: searchFusionOf(setting),
         staleAfterDays: typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS,
         memoriesUpdatedAt: memories.dataUpdatedAt,
         isLoading: loading && !error,

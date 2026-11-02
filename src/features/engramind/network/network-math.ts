@@ -200,49 +200,6 @@ export interface Rect {
     height: number
 }
 
-/** Distância vertical entre a linha de agentes (em cima) e a de canais (embaixo). */
-export const OVERVIEW_ROW_GAP = 320
-/** Passo horizontal entre agentes (pílula de até ~180 px). */
-export const OVERVIEW_AGENT_GAP = 210
-/** Passo horizontal entre canais (card de até 288 px, `max-w-72`: o prefixo cabe numa linha). */
-export const OVERVIEW_CHANNEL_GAP = 310
-/** Caixa aproximada dos nodes, para o enquadramento inicial. */
-export const OVERVIEW_AGENT_BOX = { width: 180, height: 48 }
-export const OVERVIEW_CHANNEL_BOX = { width: 288, height: 64 }
-/** Folga do enquadramento inicial em cada lado da linha de agentes (fração da largura). */
-export const OVERVIEW_FIT_MARGIN = 0.15
-
-/**
- * Visão inicial na horizontal: os agentes numa linha em cima (agrupados por app) e os canais numa
- * linha embaixo, as duas centralizadas em x = 0.
- */
-export function layoutOverview(agents: readonly { id: string; app: string }[], channels: readonly { slug: string }[]): { agents: Map<string, Point>; channels: Map<string, Point> } {
-    const sortedAgents = [...agents].sort((a, b) => a.app.localeCompare(b.app) || a.id.localeCompare(b.id))
-    const sortedChannels = [...channels].sort((a, b) => a.slug.localeCompare(b.slug))
-    const row = (count: number, index: number, gap: number) => (index - (count - 1) / 2) * gap
-    return {
-        agents: new Map(sortedAgents.map((agent, index) => [agent.id, { x: row(sortedAgents.length, index, OVERVIEW_AGENT_GAP), y: 0 }])),
-        channels: new Map(sortedChannels.map((channel, index) => [channel.slug, { x: row(sortedChannels.length, index, OVERVIEW_CHANNEL_GAP), y: OVERVIEW_ROW_GAP }])),
-    }
-}
-
-/**
- * Enquadramento inicial da visão horizontal: a largura da linha de agentes com uma folga de
- * `OVERVIEW_FIT_MARGIN` de cada lado e a altura dos agentes até a linha de canais (os links ficam
- * visíveis; canais além da largura dos agentes ficam fora, a um arrastar). Sem agentes: `null`
- * (enquadra tudo).
- */
-export function overviewInitialBounds(agents: readonly Point[]): Rect | null {
-    if (!agents.length) return null
-    const xs = agents.map((point) => point.x)
-    const left = Math.min(...xs) - OVERVIEW_AGENT_BOX.width / 2
-    const right = Math.max(...xs) + OVERVIEW_AGENT_BOX.width / 2
-    const margin = (right - left) * OVERVIEW_FIT_MARGIN
-    const top = -OVERVIEW_AGENT_BOX.height / 2 - margin / 4
-    const bottom = OVERVIEW_ROW_GAP + OVERVIEW_CHANNEL_BOX.height / 2 + margin / 4
-    return { x: left - margin, y: top, width: right - left + margin * 2, height: bottom - top }
-}
-
 /** Zoom mínimo do enquadramento inicial no celular: os nomes continuam legíveis. */
 export const MOBILE_FIT_MIN_ZOOM = 0.5
 
@@ -356,27 +313,62 @@ export function repelOffset(from: Point, focus: Point, strength = 18, radius = 2
     return { x: dx * factor, y: dy * factor }
 }
 
-export interface MemoryFilters {
-    channel?: string
-    status?: string
-    category?: string
-    author?: string
-    /** Dia (`yyyy-mm-dd`): só as alteradas desde então. */
-    since?: string
+/** Link partícula ↔ centro destacado: só no universo do agente, quando ele escreveu a memória. */
+export function isAuthoredByCenter(memory: Pick<NetworkMemory, "authorAgent">, center: { kind: "channel" | "agent"; id: string }): boolean {
+    return center.kind === "agent" && Boolean(memory.authorAgent) && memory.authorAgent === center.id
 }
 
-export const hasActiveFilters = (filters: MemoryFilters, searchIds: ReadonlySet<string> | null): boolean => Boolean(searchIds || filters.channel || filters.status || filters.category || filters.author?.trim() || filters.since)
+/** Janela em que uma memória nova conta como "acabou de ser criada" (partícula de criação). */
+export const AGENT_WRITE_WINDOW_MS = 2 * 60 * 1000
 
-/** A memória casa com a busca e os filtros? (Destaque: as demais ficam apagadas, nada sai do universo.) */
-export function matchesFilters(memory: NetworkMemory, filters: MemoryFilters, searchIds: ReadonlySet<string> | null): boolean {
-    if (searchIds && !searchIds.has(memory.id)) return false
-    if (filters.channel && memory.channel !== filters.channel) return false
-    if (filters.status && memory.status !== filters.status) return false
-    if (filters.category && memory.category !== filters.category) return false
-    const author = filters.author?.trim().toLowerCase()
-    if (author && !(memory.author ?? "").toLowerCase().includes(author)) return false
-    if (filters.since && time(memory.updatedAt) < time(`${filters.since}T00:00:00`)) return false
-    return true
+export interface AgentWrite {
+    id: string
+    agent: string
+    channel: string
+}
+
+/**
+ * Criações por agente entre os ids que acabaram de aparecer: só memórias com agente autor
+ * (`authorAgent`) criadas há pouco. Ids que só apareceram agora por outro motivo (Mostrar arquivados,
+ * filtro de app, memória movida) não contam.
+ */
+export function agentWritesOf(fresh: readonly string[], memories: readonly Pick<NetworkMemory, "id" | "authorAgent" | "channel" | "createdAt">[], now: number = Date.now()): AgentWrite[] {
+    if (!fresh.length) return []
+    const byId = new Map(memories.map((memory) => [memory.id, memory]))
+    const writes: AgentWrite[] = []
+    for (const id of fresh) {
+        const memory = byId.get(id)
+        if (!memory?.authorAgent) continue
+        const age = now - time(memory.createdAt)
+        if (Number.isNaN(age) || age > AGENT_WRITE_WINDOW_MS || age < -AGENT_WRITE_WINDOW_MS) continue
+        writes.push({ id, agent: memory.authorAgent, channel: memory.channel })
+    }
+    return writes
+}
+
+/** Pesos da fusão da busca do Engramind (`search.vector_weight`, `search.text_weight`, `search.rrf_k`). */
+export interface SearchFusion {
+    vectorWeight: number
+    textWeight: number
+    k: number
+}
+
+export const DEFAULT_SEARCH_FUSION: SearchFusion = { vectorWeight: 1, textWeight: 1, k: 60 }
+
+/** Acertos de um ramo sozinho que ainda destacam: as primeiras posições (as mais próximas pelo sentido). */
+export const SEARCH_SINGLE_BRANCH_TOP = 3
+
+/**
+ * Ids que a busca destaca. O ramo vetorial do Engramind não tem limiar: devolve as memórias mais
+ * próximas até o `limit`, mesmo sem relação com o termo, e com poucas memórias elas são todas. No modo
+ * `hybrid`, destacam as que os dois ramos encontraram (sentido e texto) e as que um ramo sozinho pôs
+ * nas `SEARCH_SINGLE_BRANCH_TOP` primeiras posições: score ≥ `max(peso) / (k + top)`. Como o acerto dos
+ * dois ramos vale no mínimo `(pesoV + pesoT) / (k + limit)`, ele sempre passa. No modo `text`, todas.
+ */
+export function relevantSearchIds(results: readonly { score: number; memory: { id: string } }[], mode: "hybrid" | "text", fusion: SearchFusion = DEFAULT_SEARCH_FUSION): string[] {
+    if (mode === "text") return results.map((hit) => hit.memory.id)
+    const threshold = Math.max(fusion.vectorWeight, fusion.textWeight) / (fusion.k + SEARCH_SINGLE_BRANCH_TOP)
+    return results.filter((hit) => hit.score >= threshold - 1e-6).map((hit) => hit.memory.id)
 }
 
 export interface UniverseStats {

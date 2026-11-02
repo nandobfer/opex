@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { xyflowMock } from '../../helpers/xyflow'
+import { flowItems, xyflowMock } from '../../helpers/xyflow'
 
 /**
  * Memórias dos agentes em `/integracoes/ia` como universo do canal da lista (OPE-109; antes a lista
@@ -54,8 +54,10 @@ const mount = (canEdit = true, queryClient = client()) =>
     </QueryClientProvider>,
   )
 const particle = async (id: string) => (await screen.findByTestId(`memory-node-${id}`)) as HTMLElement
+/** OPE-113: o card abre só pelo clique (clicar de novo fecha; por isso só clica se estiver fechado). */
 const openCard = async (id: string) => {
-  fireEvent.pointerEnter(await particle(id))
+  const node = await particle(id)
+  if (!screen.queryByTestId(`memory-card-${id}`)) fireEvent.click(node)
   return screen.findByTestId(`memory-card-${id}`)
 }
 
@@ -85,7 +87,7 @@ describe('memoryDtoToNetwork', () => {
 })
 
 describe('universo de uma lista de memórias', () => {
-  it('uma partícula por memória (inclusive inativa) e o canal no centro; hover abre o card com os campos', async () => {
+  it('uma partícula por memória (inclusive inativa) e o canal no centro; clique abre o card com os campos', async () => {
     rows = [memory, { ...memory, id: 'm_bbb', resumo: 'Antiga', ativa: false }, { ...memory, id: 'm_ccc', resumo: 'Fixa', fixada: true }]
     mount()
     expect((await screen.findByTestId('universe-center')).textContent).toContain('agentes/opex/global')
@@ -198,6 +200,15 @@ describe('universo de uma lista de memórias', () => {
     expect((screen.getByRole('button', { name: 'Editar' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('checkbox', { name: 'Ativa' }) as HTMLInputElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: /Nova memória/ })).toBeNull()
+  })
+
+  it('OPE-113: passar o mouse não recria os nodes (sem piscar)', async () => {
+    mount()
+    const node = await particle('m_aaa')
+    const before = flowItems.nodes
+    fireEvent.pointerEnter(node)
+    fireEvent.pointerLeave(node)
+    flowItems.nodes.forEach((item, index) => expect(item).toBe(before[index]))
   })
 })
 

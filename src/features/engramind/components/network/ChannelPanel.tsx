@@ -12,6 +12,7 @@ import { engramindSend, route, useEngramindMutation } from "../../hooks/useEngra
 import { ChannelDialog } from "../page/channels/ChannelDialog"
 import { ChannelSettingsCard } from "../page/channels/ChannelSettingsCard"
 import { SubscribersCard } from "../page/channels/SubscribersCard"
+import { ChannelDisplayName } from "./ChannelName"
 
 type ChannelAction = "archive" | "restore" | "delete"
 
@@ -41,7 +42,7 @@ export function ChannelPanel({ channel, onOpenChange, onDeleted }: { channel: En
                             <SheetHeader>
                                 <SheetTitle>{channel.name}</SheetTitle>
                                 <SheetDescription>
-                                    Canal {channel.slug}
+                                    Canal <ChannelDisplayName slug={channel.slug} />
                                     {archived ? " (arquivado)" : ""}
                                 </SheetDescription>
                             </SheetHeader>

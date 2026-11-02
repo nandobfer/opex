@@ -21,6 +21,8 @@ export interface NetworkMemory {
     /** `stale_candidate`: candidata a esquecimento pelo consolidador. */
     stale: boolean
     author: string | null
+    /** Agente autor (`app/agente`, `author.agent` do Engramind); `null` = gravada sem agente (dono, Mentor, app). */
+    authorAgent?: string | null
     /** Memória escrita pelo dono (listas dos agentes em `/integracoes/ia`). */
     fromOwner?: boolean
     /** Quem gravou, quando não foi o dono (Mentor, agente): o selo de origem da antiga lista. */

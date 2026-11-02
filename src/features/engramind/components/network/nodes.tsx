@@ -1,6 +1,7 @@
 "use client"
 
 import { memo } from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react"
 import { Archive, Hash, MoreHorizontal, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,6 +9,8 @@ import { cn } from "@/lib/utils"
 import { AgentIcon } from "./agent-icons"
 import { ChannelName } from "./ChannelName"
 import { PulseRing } from "./live"
+import { usePositionSlide } from "./usePositionSlide"
+import type { Point } from "../../network/network-math"
 
 /** Zoom abaixo do qual os rótulos somem (visão muito afastada). */
 export const LABEL_MIN_ZOOM = 0.45
@@ -15,25 +18,40 @@ export const useZoom = () => useStore((state) => state.transform[2])
 
 const HANDLE_STYLE: React.CSSProperties = { left: "50%", top: "50%", width: 1, height: 1, minWidth: 0, minHeight: 0, opacity: 0, border: 0, transform: "translate(-50%, -50%)", pointerEvents: "none" }
 
-/**
- * Arestas saem e chegam pelo centro do node. `vertical`: visão inicial horizontal (agentes em cima,
- * canais embaixo), com a saída para baixo e a entrada por cima.
- */
-export function CenterHandles({ vertical = false }: { vertical?: boolean }) {
+/** Arestas saem e chegam pelo centro do node (o caminho é desenhado pela própria aresta). */
+export function CenterHandles() {
     return (
         <>
-            <Handle type="source" position={vertical ? Position.Bottom : Position.Right} style={HANDLE_STYLE} isConnectable={false} />
-            <Handle type="target" position={vertical ? Position.Top : Position.Left} style={HANDLE_STYLE} isConnectable={false} />
+            <Handle type="source" position={Position.Right} style={HANDLE_STYLE} isConnectable={false} />
+            <Handle type="target" position={Position.Left} style={HANDLE_STYLE} isConnectable={false} />
         </>
     )
 }
 
-export type AgentNodeData = { id: string; name: string; app: string; dimmed?: boolean }
+/** Visão inicial (OPE-113): `scale` pelo tamanho (alcance do agente, memórias do canal) e `point` (desliza ao trocar a distribuição). */
+type OverviewNodeLook = { scale?: number; point?: Point }
+
+/** Card da visão inicial escalado a partir do centro, deslizando quando a posição muda. */
+function OverviewNodeShell({ look, children }: { look: OverviewNodeLook; children: React.ReactNode }) {
+    const reducedMotion = useReducedMotion()
+    const slide = usePositionSlide(look.point ?? ORIGIN, reducedMotion === true, 0.3)
+    const scale = look.scale ?? 1
+    return (
+        <motion.div style={{ x: slide.x, y: slide.y }} data-scale={scale}>
+            <div style={scale === 1 ? undefined : { transform: `scale(${scale})`, transformOrigin: "center" }}>{children}</div>
+            <CenterHandles />
+        </motion.div>
+    )
+}
+const ORIGIN: Point = { x: 0, y: 0 }
+
+export type AgentNodeData = { id: string; name: string; app: string; dimmed?: boolean } & OverviewNodeLook
 
 export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentNodeData, "agent">>) {
     const showLabel = useZoom() >= LABEL_MIN_ZOOM
     return (
-        <div data-testid={`agent-node-${data.id}`} title={data.id} className={cn("relative flex max-w-[11.25rem] cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
+        <OverviewNodeShell look={data}>
+        <div data-testid={`agent-node-${data.id}`} data-scale={data.scale ?? 1} title={data.id} className={cn("relative flex max-w-[11.25rem] cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
             <PulseRing nodeKey={`agent:${data.id}`} />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <AgentIcon agent={data.id} className="h-4 w-4" />
@@ -44,18 +62,20 @@ export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentN
                     <span className="truncate text-[10px] text-muted-foreground">{data.app}</span>
                 </span>
             )}
-            <CenterHandles vertical />
         </div>
+        </OverviewNodeShell>
     )
 })
 
-export type ChannelNodeData = { slug: string; name: string; count: number; archived: boolean; hits?: number | null; dimmed?: boolean; onMenu?: (slug: string) => void }
+export type ChannelNodeData = { slug: string; name: string; count: number; archived: boolean; hits?: number | null; dimmed?: boolean; onMenu?: (slug: string) => void } & OverviewNodeLook
 
 export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<ChannelNodeData, "channel">>) {
     const showLabel = useZoom() >= LABEL_MIN_ZOOM
     return (
+        <OverviewNodeShell look={data}>
         <div
             data-testid={`channel-node-${data.slug}`}
+            data-scale={data.scale ?? 1}
             data-archived={data.archived || undefined}
             className={cn("relative flex min-w-48 max-w-72 cursor-pointer items-center gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.archived && "border-dashed opacity-60", data.dimmed && "opacity-30")}
         >
@@ -85,8 +105,8 @@ export const ChannelNode = memo(function ChannelNode({ data }: NodeProps<Node<Ch
                     <MoreHorizontal className="h-4 w-4" aria-hidden />
                 </Button>
             )}
-            <CenterHandles vertical />
         </div>
+        </OverviewNodeShell>
     )
 })
 

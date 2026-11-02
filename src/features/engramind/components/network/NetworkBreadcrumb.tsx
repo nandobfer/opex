@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 
 /**
  * Trilha "Rede › Canal X" / "Rede › Agente Y" com Voltar (o Esc também volta). No celular, só Voltar e o
- * nome atual (cortado no fim).
+ * nome atual (cortado no fim). `actions` (Importar e Novo canal) ficam à direita, na mesma linha.
  */
-export function NetworkBreadcrumb({ current, onBack }: { current: { kind: "channel" | "agent"; label: string } | null; onBack: () => void }) {
+export function NetworkBreadcrumb({ current, onBack, actions }: { current: { kind: "channel" | "agent"; label: string } | null; onBack: () => void; actions?: React.ReactNode }) {
     return (
-        <nav aria-label="Trilha da rede" className="flex min-h-8 min-w-0 items-center gap-2 text-sm">
+        <nav aria-label="Trilha da rede" className="flex min-h-8 min-w-0 items-center gap-2 text-sm" data-testid="network-breadcrumb">
             <AnimatePresence initial={false}>
                 {current && (
                     <motion.span key="back" className="shrink-0" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.15 }}>
@@ -37,6 +37,7 @@ export function NetworkBreadcrumb({ current, onBack }: { current: { kind: "chann
                     </span>
                 </>
             )}
+            {actions}
         </nav>
     )
 }

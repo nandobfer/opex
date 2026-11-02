@@ -19,8 +19,14 @@ export const setCenter = { calls: [] as { x: number; y: number; options: unknown
 /** Estado lido por `useStore`: zoom/deslocamento e o tamanho do canvas (mude no teste e re-renderize). */
 export const flowState = { transform: [0, 0, 1] as [number, number, number], width: 800, height: 600 }
 
+/** Últimos arrays de nodes e arestas recebidos pelo React Flow (regressão do piscar: identidade dos objetos). */
+export const flowItems = { nodes: [] as MockNode[], edges: [] as MockEdge[] }
+
 export function xyflowMock() {
-  const ReactFlow = ({ nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, onNodeClick, onNodeContextMenu, onPaneClick, children, style }: AnyProps & { style?: React.CSSProperties; nodes?: MockNode[]; edges?: MockEdge[]; nodeTypes?: Record<string, React.FC<AnyProps>>; edgeTypes?: Record<string, React.FC<AnyProps>>; onNodeClick?: (event: unknown, node: MockNode) => void; onNodeContextMenu?: (event: unknown, node: MockNode) => void; onPaneClick?: () => void; children?: React.ReactNode }) => (
+  const ReactFlow = ({ nodes = [], edges = [], nodeTypes = {}, edgeTypes = {}, onNodeClick, onNodeContextMenu, onPaneClick, children, style }: AnyProps & { style?: React.CSSProperties; nodes?: MockNode[]; edges?: MockEdge[]; nodeTypes?: Record<string, React.FC<AnyProps>>; edgeTypes?: Record<string, React.FC<AnyProps>>; onNodeClick?: (event: unknown, node: MockNode) => void; onNodeContextMenu?: (event: unknown, node: MockNode) => void; onPaneClick?: () => void; children?: React.ReactNode }) => {
+    flowItems.nodes = nodes
+    flowItems.edges = edges
+    return (
     <div data-testid="react-flow" data-style={JSON.stringify(style ?? {})}>
       <div data-testid="react-flow-pane" onClick={() => onPaneClick?.()} />
       <svg>
@@ -39,7 +45,8 @@ export function xyflowMock() {
       })}
       {children}
     </div>
-  )
+    )
+  }
   return {
     ReactFlow,
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -48,7 +55,7 @@ export function xyflowMock() {
     Handle: () => null,
     Position: { Left: 'left', Right: 'right', Top: 'top', Bottom: 'bottom' },
     Panel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    BaseEdge: ({ id, path }: { id: string; path: string }) => <path data-testid={`edge-${id}`} d={path} />,
+    BaseEdge: ({ id, path, style, ...rest }: { id: string; path: string; style?: React.CSSProperties } & AnyProps) => <path data-testid={`edge-${id}`} d={path} data-stroke={style?.stroke as string | undefined} data-tone={rest['data-tone'] as string | undefined} data-authored={rest['data-authored'] as string | undefined} data-stroke-width={style?.strokeWidth as number | undefined} data-route={rest['data-route'] as string | undefined} />,
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject>{children}</foreignObject>,
     getBezierPath: () => ['M0,0 C5,5 5,5 10,10', 5, 5],
     getStraightPath: () => ['M0,0 L10,10', 5, 5],

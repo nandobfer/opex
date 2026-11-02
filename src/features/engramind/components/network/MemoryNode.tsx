@@ -1,8 +1,8 @@
 "use client"
 
-import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createContext, memo, useContext, useEffect, useState } from "react"
 import type { Node, NodeProps } from "@xyflow/react"
-import { animate, motion, useMotionValue, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { repelOffset, type Point } from "../../network/network-math"
 import type { ParticleVisual } from "../../network/particles"
@@ -10,13 +10,17 @@ import type { NetworkMemory } from "../../network/types"
 import { PulseRing } from "./live"
 import type { MemoryCardActions } from "./MemoryCard"
 import { CenterHandles, LABEL_MIN_ZOOM, useZoom } from "./nodes"
+import { usePositionSlide } from "./usePositionSlide"
 
 /** Zoom mínimo para o card abrir (visão afastada demais só destaca a partícula). */
 export const CARD_MIN_ZOOM = 0.6
 
 interface UniverseFocus {
-    activeId: string | null
-    activePoint: Point | null
+    /** Memória com o card aberto (só por clique ou toque). */
+    openId: string | null
+    /** Foco do afastamento e do leve aumento: a aberta ou, sem card, a que está sob o cursor. */
+    focusId: string | null
+    focusPoint: Point | null
     hover: (id: string | null) => void
     actions: MemoryCardActions
 }
@@ -29,7 +33,6 @@ export type MemoryNodeData = {
     point: Point
     /** `false` = apagada pela busca/filtros; `null` = sem filtro. */
     matched: boolean | null
-    channelColor?: string
     leaving?: boolean
     /** Memória que acabou de chegar: nasce do centro com o link se desenhando. */
     entering?: boolean
@@ -41,17 +44,17 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
     const zoom = useZoom()
     const reducedMotion = useReducedMotion()
     const { memory, visual, point } = data
-    const isActive = focus?.activeId === memory.id
-    const expanded = isActive && zoom >= CARD_MIN_ZOOM
-    const offset = !isActive && focus?.activePoint ? repelOffset(point, focus.activePoint) : { x: 0, y: 0 }
+    const isFocused = focus?.focusId === memory.id
+    const expanded = focus?.openId === memory.id && zoom >= CARD_MIN_ZOOM
+    const offset = !isFocused && focus?.focusPoint ? repelOffset(point, focus.focusPoint) : { x: 0, y: 0 }
     const glow = visual.archived ? 0 : Math.round(4 + 14 * visual.brightness)
     const dimmed = data.matched === false
     const ready = useAfterMeasure()
-    const slide = useOrbitSlide(point, reducedMotion === true)
+    const slide = usePositionSlide(point, reducedMotion === true)
     // Nascimento: começa no centro (0,0 da rede), invisível e sem tamanho, até a própria órbita.
     const born = data.entering && !reducedMotion
     const hidden = { scale: 0, opacity: 0, x: born ? -point.x : 0, y: born ? -point.y : 0 }
-    const shown = { scale: data.leaving ? 0 : isActive && !expanded ? 1.35 : 1, opacity: data.leaving || expanded ? 0 : dimmed ? 0.18 : 1, x: offset.x, y: offset.y }
+    const shown = { scale: data.leaving ? 0 : isFocused && !expanded ? 1.35 : 1, opacity: data.leaving || expanded ? 0 : dimmed ? 0.18 : 1, x: offset.x, y: offset.y }
     return (
         <motion.div style={{ x: slide.x, y: slide.y }} className="relative">
             <motion.div
@@ -60,13 +63,14 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
                 data-pinned={visual.pinned || undefined}
                 data-archived={visual.archived || undefined}
                 data-expanded={expanded || undefined}
+                data-focused={isFocused || undefined}
                 data-entering={data.entering || undefined}
                 data-matched={data.matched === null ? undefined : String(data.matched)}
                 className="relative"
                 initial={hidden}
                 animate={ready ? shown : hidden}
                 transition={born ? { type: "spring", stiffness: 140, damping: 18, mass: 0.9 } : { duration: expanded ? 0.12 : 0.22 }}
-                // No toque, o card abre e fecha só pelo toque (clique), sem os sinais de "passar o mouse".
+                // O card abre só pelo clique/toque; passar o mouse (fora do toque) só afasta as vizinhas.
                 onPointerEnter={(event) => event.pointerType !== "touch" && focus?.hover(memory.id)}
                 onPointerLeave={(event) => event.pointerType !== "touch" && focus?.hover(null)}
             >
@@ -78,7 +82,7 @@ export const MemoryNode = memo(function MemoryNode({ data }: NodeProps<Node<Memo
                     <PulseRing nodeKey={`memory:${memory.id}`} />
                     <CenterHandles />
                 </span>
-                {zoom >= LABEL_MIN_ZOOM * 2 && !isActive && <span className="pointer-events-none absolute left-1/2 top-full mt-1 w-28 -translate-x-1/2 truncate text-center text-[9px] text-muted-foreground">{memory.title}</span>}
+                {zoom >= LABEL_MIN_ZOOM * 2 && !isFocused && <span className="pointer-events-none absolute left-1/2 top-full mt-1 w-28 -translate-x-1/2 truncate text-center text-[9px] text-muted-foreground">{memory.title}</span>}
             </motion.div>
         </motion.div>
     )
@@ -103,19 +107,3 @@ function useAfterMeasure(): boolean {
     return ready
 }
 
-/** Órbita recalculada (memória nova ou removida): a partícula desliza da posição antiga para a nova. */
-function useOrbitSlide(point: Point, reduced: boolean) {
-    const x = useMotionValue(0)
-    const y = useMotionValue(0)
-    const previous = useRef(point)
-    useLayoutEffect(() => {
-        const before = previous.current
-        previous.current = point
-        if (reduced || (before.x === point.x && before.y === point.y)) return
-        x.set(before.x - point.x + x.get())
-        y.set(before.y - point.y + y.get())
-        const controls = [animate(x, 0, { duration: 0.45, ease: "easeInOut" }), animate(y, 0, { duration: 0.45, ease: "easeInOut" })]
-        return () => controls.forEach((control) => control.stop())
-    }, [point, reduced, x, y])
-    return { x, y }
-}

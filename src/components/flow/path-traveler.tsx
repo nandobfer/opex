@@ -7,7 +7,7 @@ import { animate, motion, useMotionValue, useTransform } from "framer-motion"
  * Partícula que percorre um caminho SVG uma vez (Framer Motion) e avisa ao chegar. Usada nas redes do
  * Engramind (memórias viajando) e nos diagramas do Agente Arquiteto (pulso da aresta que nasce).
  */
-export function PathTraveler({ path, reverse = false, delayMs = 0, durationMs = 900, radius = 4, className = "fill-primary", testId = "travel-dot", onDone }: { path: string; reverse?: boolean; delayMs?: number; durationMs?: number; radius?: number; className?: string; testId?: string; onDone?: () => void }) {
+export function PathTraveler({ path, reverse = false, delayMs = 0, durationMs = 900, radius = 4, className = "fill-primary", testId = "travel-dot", edge, tone, onDone }: { path: string; reverse?: boolean; delayMs?: number; durationMs?: number; radius?: number; className?: string; testId?: string; /** `data-edge` do grupo e `data-tone` do círculo (testes e estilo). */ edge?: string; tone?: string; onDone?: () => void }) {
     const ref = useRef<SVGPathElement>(null)
     const progress = useMotionValue(0)
     const point = (value: number) => {
@@ -26,9 +26,9 @@ export function PathTraveler({ path, reverse = false, delayMs = 0, durationMs = 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
     return (
-        <g data-testid={testId}>
+        <g data-testid={testId} data-edge={edge}>
             <path ref={ref} d={path} fill="none" stroke="none" />
-            <motion.circle cx={cx} cy={cy} r={radius} className={className} />
+            <motion.circle cx={cx} cy={cy} r={radius} className={className} data-tone={tone} />
         </g>
     )
 }

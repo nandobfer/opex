@@ -1,81 +1,94 @@
 "use client"
 
+import { useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { FileUp, Info, Plus, Search, X } from "lucide-react"
+import { AlertTriangle, FileUp, Info, Plus, RotateCw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { MEMORY_HELP } from "../../help/identities"
-import type { MemoryFilters } from "../../network/network-math"
+import { SEARCH_DEBOUNCE_MS } from "@/components/list/ListFilters"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch"
 import { useIsMobile } from "@/hooks/useMediaQuery"
-import { NetworkFilterFields, NetworkFiltersSheet } from "./NetworkFiltersSheet"
-import { NETWORK_TOOLBAR_CLASS } from "./layout-classes"
+import { MEMORY_HELP } from "../../help/identities"
+import { NetworkFiltersBar } from "./NetworkFiltersBar"
+import { NetworkFiltersSheet, type NetworkFilterFieldsProps } from "./NetworkFiltersSheet"
 
-export interface NetworkToolbarProps {
-    filters: MemoryFilters
-    onFilters: (next: MemoryFilters) => void
-    channels: readonly string[]
-    categories: readonly string[]
-    query: string
-    onQuery: (value: string) => void
-    onSearch: () => void
-    onClearSearch: () => void
-    searching: boolean
-    hasSearch: boolean
+export interface NetworkToolbarProps extends NetworkFilterFieldsProps {
+    onClear: () => void
+    /** Memórias que casam na visão atual (total do cartão de filtros). */
+    total: number
     textOnly: boolean
-    includeArchived: boolean
-    onIncludeArchived: (value: boolean) => void
+    /** Falha da busca automática (mensagem pt-BR) ou `null`. */
+    searchError?: string | null
+    onRetrySearch?: () => void
+}
+
+export interface NetworkActionsProps {
     onNewChannel: () => void
     onImport: () => void
     importDisabled: boolean
 }
 
-/** Barra da rede: Novo canal, Importar, busca, filtros (destacam sem remover) e Mostrar arquivados. */
+/**
+ * Importar e Novo canal, na linha da trilha (à direita do Voltar / Rede / nome, OPE-113). No celular, só
+ * com ícone e dica.
+ */
+export function NetworkActions({ onNewChannel, onImport, importDisabled }: NetworkActionsProps) {
+    const mobile = useIsMobile()
+    if (mobile)
+        return (
+            <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+                <TooltipIconButton label="Importar" className="h-10 min-w-10 bg-transparent" disabledReason={importDisabled ? "Nenhum canal ativo para importar" : null} onClick={onImport}>
+                    <FileUp aria-hidden />
+                </TooltipIconButton>
+                <TooltipIconButton label="Novo canal" className="h-10 min-w-10 bg-transparent" onClick={onNewChannel}>
+                    <Plus aria-hidden />
+                </TooltipIconButton>
+            </span>
+        )
+    return (
+        <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+            <Button type="button" variant="outline" onClick={onImport} disabled={importDisabled}>
+                <FileUp className="mr-1.5 h-4 w-4" aria-hidden /> Importar
+            </Button>
+            <Button type="button" onClick={onNewChannel}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Novo canal
+            </Button>
+        </span>
+    )
+}
+
+/**
+ * Barra da rede: a busca e os filtros no padrão de `/tarefas` (`NetworkFiltersBar`, recolhível). A busca
+ * roda sozinha ao digitar; filtros destacam sem remover. Importar e Novo canal ficam na trilha.
+ */
 export function NetworkToolbar(props: NetworkToolbarProps) {
-    const { filters, onFilters } = props
     const mobile = useIsMobile()
     if (mobile) return <MobileToolbar {...props} />
     return (
         <div className="flex flex-col gap-2" data-testid="network-toolbar">
-            <div className={NETWORK_TOOLBAR_CLASS}>
-                <form
-                    className="flex min-w-64 flex-1 items-center gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault()
-                        props.onSearch()
-                    }}
-                >
-                    <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                        <Input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Buscar por sentido e por texto" aria-label="Buscar memórias" className="bg-transparent pl-9" />
-                    </div>
-                    <Button type="submit" variant="outline" className="bg-transparent" disabled={props.searching || !props.query.trim()}>
-                        Buscar
-                    </Button>
-                    {props.hasSearch && (
-                        <Button type="button" variant="ghost" onClick={props.onClearSearch}>
-                            <X className="mr-1 h-4 w-4" aria-hidden /> Limpar busca
-                        </Button>
-                    )}
-                </form>
-                <span className="flex items-center gap-2 text-sm">
-                    <Switch id="network-archived" checked={props.includeArchived} onCheckedChange={props.onIncludeArchived} />
-                    <Label htmlFor="network-archived">Mostrar arquivados</Label>
-                </span>
-                <span className="ml-auto flex items-center gap-2">
-                    <Button type="button" variant="outline" onClick={props.onImport} disabled={props.importDisabled}>
-                        <FileUp className="mr-1.5 h-4 w-4" aria-hidden /> Importar
-                    </Button>
-                    <Button type="button" onClick={props.onNewChannel}>
-                        <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Novo canal
-                    </Button>
-                </span>
-            </div>
-            <NetworkFilterFields filters={filters} onFilters={onFilters} channels={props.channels} categories={props.categories} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5" />
+            <NetworkFiltersBar filters={props.filters} onFilters={props.onFilters} options={props.options} onClear={props.onClear} total={props.total} />
+            <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />
             <TextOnlyNotice show={props.textOnly} />
         </div>
+    )
+}
+
+/** Busca automática que falhou: a mensagem e "Tentar novamente" (nada fica destacado enquanto isso). */
+function SearchErrorNotice({ error, onRetry }: { error: string | null; onRetry?: () => void }) {
+    return (
+        <AnimatePresence initial={false}>
+            {error && (
+                <motion.div key="search-error" role="alert" data-testid="network-search-error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden /> Busca falhou: {error}
+                    {onRetry && (
+                        <Button type="button" variant="outline" size="sm" className="h-7 bg-transparent" onClick={onRetry}>
+                            <RotateCw className="mr-1 h-3.5 w-3.5" aria-hidden /> Tentar novamente
+                        </Button>
+                    )}
+                </motion.div>
+            )}
+        </AnimatePresence>
     )
 }
 
@@ -92,48 +105,39 @@ function TextOnlyNotice({ show }: { show: boolean }) {
 }
 
 /**
- * Celular: a busca ocupa a linha inteira (Buscar só com ícone); embaixo, Mostrar arquivados, o botão
- * Filtros (gaveta) e Importar/Novo canal só com ícone e dica.
+ * Celular: a busca ocupa a linha inteira (roda sozinha ao digitar; o × limpa); embaixo, o botão
+ * Filtros (gaveta com os mesmos campos). Importar/Novo canal ficam na trilha, só com ícone e dica.
  */
 function MobileToolbar(props: NetworkToolbarProps) {
+    const { onFilters } = props
+    const pushSearch = useCallback((value: string) => onFilters({ search: value }), [onFilters])
+    const [search, setSearch] = useDebouncedSearch(props.filters.search, pushSearch, SEARCH_DEBOUNCE_MS)
     return (
         <div className="flex flex-col gap-2" data-testid="network-toolbar" data-mobile="">
-            <form
-                className="flex w-full items-center gap-2"
-                onSubmit={(event) => {
-                    event.preventDefault()
-                    props.onSearch()
-                }}
-            >
-                <div className="relative min-w-0 flex-1">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                    <Input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Buscar memórias" aria-label="Buscar memórias" className="h-10 bg-transparent pl-9" />
-                </div>
-                <Button type="submit" variant="outline" size="icon" aria-label="Buscar" className="h-10 w-10 shrink-0 bg-transparent" disabled={props.searching || !props.query.trim()}>
-                    <Search className="h-4 w-4" aria-hidden />
-                </Button>
-                {props.hasSearch && (
-                    <Button type="button" variant="ghost" size="icon" aria-label="Limpar busca" className="h-10 w-10 shrink-0" onClick={props.onClearSearch}>
+            <div className="relative w-full">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar memórias" aria-label="Buscar memórias" className="h-10 bg-transparent pl-9 pr-10" />
+                {search && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Limpar busca"
+                        className="absolute right-0 top-0 h-10 w-10"
+                        onClick={() => {
+                            setSearch("")
+                            props.onFilters({ search: "" })
+                        }}
+                    >
                         <X className="h-4 w-4" aria-hidden />
                     </Button>
                 )}
-            </form>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-                <NetworkFiltersSheet filters={props.filters} onFilters={props.onFilters} channels={props.channels} categories={props.categories} />
-                <span className="flex items-center gap-2 text-sm">
-                    <Switch id="network-archived" checked={props.includeArchived} onCheckedChange={props.onIncludeArchived} />
-                    <Label htmlFor="network-archived">Arquivados</Label>
-                </span>
-                <span className="ml-auto flex items-center gap-2">
-                    <TooltipIconButton label="Importar" className="h-10 min-w-10 bg-transparent" disabledReason={props.importDisabled ? "Nenhum canal ativo para importar" : null} onClick={props.onImport}>
-                        <FileUp aria-hidden />
-                    </TooltipIconButton>
-                    <TooltipIconButton label="Novo canal" className="h-10 min-w-10 bg-transparent" onClick={props.onNewChannel}>
-                        <Plus aria-hidden />
-                    </TooltipIconButton>
-                </span>
+                <NetworkFiltersSheet filters={props.filters} onFilters={props.onFilters} options={props.options} onClear={props.onClear} />
             </div>
             <TextOnlyNotice show={props.textOnly} />
+            <SearchErrorNotice error={props.searchError ?? null} onRetry={props.onRetrySearch} />
         </div>
     )
 }
