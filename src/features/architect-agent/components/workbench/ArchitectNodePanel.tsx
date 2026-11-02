@@ -1,11 +1,9 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowLeft, ArrowRight, Copy, FileCode2, FoldVertical, X } from "lucide-react"
-import { toast } from "sonner"
+import { ArrowLeft, ArrowRight, FoldVertical, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { copyText } from "@/lib/clipboard"
 import { ARCHITECT_EDGE_KIND_LABELS, ARCHITECT_NODE_KIND_LABELS, ARCHITECT_NODE_STATUS_LABELS } from "../../constants"
 import { neighborsOf } from "../../filters"
 import type { ArchitectGraph } from "../../graph"
@@ -14,22 +12,20 @@ import { ARCHITECT_NODE_KIND_ICONS } from "../icons"
 interface ArchitectNodePanelProps {
     graph: ArchitectGraph
     nodeId: string | null
-    showFiles: boolean
     onClose: () => void
     onSelect: (id: string) => void
     onCollapseGroup: (groupId: string) => void
 }
 
 /**
- * Painel lateral do nó clicado: descrição, arquivos e vizinhos. Fica numa camada sobre o canvas,
+ * Painel lateral do nó clicado: descrição e vizinhos. Fica numa camada sobre o canvas,
  * fora do viewport transformado (não herda o zoom).
  */
-export function ArchitectNodePanel({ graph, nodeId, showFiles, onClose, onSelect, onCollapseGroup }: ArchitectNodePanelProps) {
+export function ArchitectNodePanel({ graph, nodeId, onClose, onSelect, onCollapseGroup }: ArchitectNodePanelProps) {
     const node = nodeId ? graph.nodes.find((item) => item.id === nodeId) : undefined
     const group = node?.groupId ? graph.groups.find((item) => item.id === node.groupId) : undefined
     const neighbors = node ? neighborsOf(graph, node.id) : []
     const Icon = node ? ARCHITECT_NODE_KIND_ICONS[node.kind] : null
-    const copy = async (file: string) => ((await copyText(file)) ? toast.success("Caminho copiado") : toast.error("Não foi possível copiar: selecione e copie manualmente."))
     return (
         <AnimatePresence>
             {node && Icon && (
@@ -59,22 +55,6 @@ export function ArchitectNodePanel({ graph, nodeId, showFiles, onClose, onSelect
                     </div>
                     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 text-sm">
                         {node.detail ? <p className="whitespace-pre-wrap text-muted-foreground">{node.detail}</p> : <p className="text-muted-foreground">Sem descrição.</p>}
-                        {showFiles && node.files.length > 0 && (
-                            <section className="space-y-1">
-                                <h4 className="text-xs font-medium text-muted-foreground">Arquivos</h4>
-                                <ul className="space-y-1">
-                                    {node.files.map((file) => (
-                                        <li key={file} className="flex items-center gap-1.5">
-                                            <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                                            <code className="min-w-0 flex-1 truncate font-mono text-xs" title={file}>{file}</code>
-                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => void copy(file)} aria-label={`Copiar ${file}`}>
-                                                <Copy className="h-3 w-3" aria-hidden />
-                                            </Button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </section>
-                        )}
                         <section className="space-y-1">
                             <h4 className="text-xs font-medium text-muted-foreground">Vizinhos ({neighbors.length})</h4>
                             {neighbors.length === 0 ? (

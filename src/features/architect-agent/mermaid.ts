@@ -20,17 +20,16 @@ export function mermaidText(value: string): string {
 
 const SHAPES: Record<ArchitectNodeKind, [string, string]> = {
     objective: ["([", "])"],
-    module: ["[", "]"],
-    route: ["[/", "/]"],
-    feature: ["[", "]"],
-    lib: ["[[", "]]"],
-    data: ["[(", ")]"],
+    actor: ["([", "])"],
+    process: ["[/", "/]"],
+    structure: ["[", "]"],
+    information: ["[(", ")]"],
     external: ["{{", "}}"],
     decision: ["{", "}"],
     risk: [">", "]"],
 }
 
-const ARROWS: Record<ArchitectEdgeKind, string> = { contains: "---", uses: "-->", flow: "==>", event: "-.->", data: "-->" }
+const ARROWS: Record<ArchitectEdgeKind, string> = { contains: "---", triggers: "==>", flow: "==>", uses: "-->", produces: "-->", notifies: "-.->" }
 
 export function toMermaid(graph: ArchitectGraph): string {
     const nodeIds = new Map(graph.nodes.map((node, index) => [node.id, `n${index + 1}`]))
@@ -71,10 +70,8 @@ export function toMarkdown(graph: ArchitectGraph): string {
     if (graph.notes.length) {
         parts.push("", "### Notas", ...graph.notes.map((note) => `- **${ARCHITECT_NOTE_KIND_LABELS[note.kind]}:** ${cell(note.text)}`))
     }
-    parts.push("", "### Nós", "", "| Nó | Tipo | Situação | Arquivos |", "|---|---|---|---|")
-    for (const node of graph.nodes) {
-        const files = node.files.length ? node.files.map((file) => `\`${cell(file)}\``).join(", ") : "—"
-        parts.push(`| ${cell(node.label)} | ${ARCHITECT_NODE_KIND_LABELS[node.kind]} | ${ARCHITECT_NODE_STATUS_LABELS[node.status]} | ${files} |`)
-    }
+    // Diagrama de ideias: a tabela traz o que cada bloco faz, nunca arquivos.
+    parts.push("", "### Nós", "", "| Nó | Tipo | Situação | O que faz |", "|---|---|---|---|")
+    for (const node of graph.nodes) parts.push(`| ${cell(node.label)} | ${ARCHITECT_NODE_KIND_LABELS[node.kind]} | ${ARCHITECT_NODE_STATUS_LABELS[node.status]} | ${cell(node.detail) || "—"} |`)
     return parts.join("\n")
 }

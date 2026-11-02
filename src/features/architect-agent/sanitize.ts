@@ -1,4 +1,4 @@
-import { ARCHITECT_TEXT_LIMITS, type ArchitectTextField, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_NODE_FILES_MAX, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_TEXT_LIMITS, type ArchitectTextField, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_LEGACY_EDGE_KINDS, ARCHITECT_LEGACY_GROUP_LAYERS, ARCHITECT_LEGACY_NODE_KINDS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import { architectGraphSchema, type ArchitectEdge, type ArchitectGraph, type ArchitectGroup, type ArchitectNode, type ArchitectNote, type RawGraph } from "./graph"
 
 /**
@@ -12,6 +12,8 @@ export interface SanitizedGraph {
     /** Quantos nós/arestas foram cortados pelo teto do nível. */
     trimmed: { nodes: number; edges: number }
     warnings: string[]
+    /** Rótulos de nó com cara de código (nome de arquivo, função, rota…): pedem a correção. */
+    codeLabels: string[]
 }
 
 export type Rec = Record<string, unknown>
@@ -40,15 +42,34 @@ export const oneOf = <T extends string>(value: unknown, list: readonly T[], fall
 const OBJECTIVE_ID = "objective"
 const STATUS_RANK = { new: 1, changed: 2, existing: 3 } as const
 
-function cleanFiles(value: unknown): string[] {
-    if (!Array.isArray(value)) return []
-    const files = value.map((item) => str(item, 300).replace(/^\.\//, "")).filter(Boolean)
-    return [...new Set(files)].slice(0, ARCHITECT_NODE_FILES_MAX)
+/** Valor do vocabulário atual, aceitando o equivalente do vocabulário antigo (diagrama de código). */
+const legacyOneOf = <T extends string>(value: unknown, list: readonly T[], legacy: Record<string, T>, fallback: T): T =>
+    typeof value === "string" && Object.hasOwn(legacy, value) ? (legacy[value] as T) : oneOf(value, list, fallback)
+
+export const nodeKindOf = (value: unknown) => legacyOneOf(value, ARCHITECT_NODE_KINDS, ARCHITECT_LEGACY_NODE_KINDS, "structure")
+export const edgeKindOf = (value: unknown) => legacyOneOf(value, ARCHITECT_EDGE_KINDS, ARCHITECT_LEGACY_EDGE_KINDS, "uses")
+const layerOf = (value: unknown) => legacyOneOf(value, ARCHITECT_GROUP_LAYERS, ARCHITECT_LEGACY_GROUP_LAYERS, "other")
+
+/**
+ * Texto com cara de CÓDIGO (o diagrama é de ideias): caminho ou arquivo, chamada `x()`, `snake_case`,
+ * `camelCase` que começa minúsculo (`useTab`, `runDiagram`), método HTTP com rota ou `kebab-case` de
+ * diretório. Nomes próprios de produto ("OpenCode", "GitHub", "Pusher") e texto comum não contam.
+ */
+export function looksLikeCode(text: string): boolean {
+    const value = text.trim()
+    if (!value) return false
+    if (/(^|[\s(])\.?\.?\/[\w.-]|[\w-]+\/[\w.-]+\/|\b[\w-]+\.(tsx?|jsx?|json|md|css|ya?ml|py|sh|env)\b/i.test(value)) return true
+    if (/\b[\w.]+\([^)]*\)/.test(value)) return true
+    if (/\b[a-z][a-z0-9]*_[a-z0-9_]+\b/.test(value)) return true
+    if (/\b[a-z]+[A-Z][A-Za-z0-9]*\b/.test(value)) return true
+    if (/\b(GET|POST|PUT|PATCH|DELETE)\s+\//.test(value)) return true
+    if (/\b(src|app|api|lib|features|components)[/-][a-z]/.test(value)) return true
+    return false
 }
 
 /** Normaliza um grupo do modelo (o id já resolvido). */
 export function toGroup(item: Rec, id: string, cuts?: TextCuts): ArchitectGroup {
-    return { id, label: clip(item.label, "groupLabel", cuts, true) || id, layer: oneOf(item.layer, ARCHITECT_GROUP_LAYERS, "other"), detail: clip(item.detail, "groupDetail", cuts) }
+    return { id, label: clip(item.label, "groupLabel", cuts, true) || id, layer: layerOf(item.layer), detail: clip(item.detail, "groupDetail", cuts) }
 }
 
 /** Normaliza um nó do modelo (id e rótulo já resolvidos); grupo inexistente vira nenhum. */
@@ -58,9 +79,10 @@ export function toNode(item: Rec, id: string, label: string, groupIds: ReadonlyS
         id,
         label,
         groupId: groupId && groupIds.has(groupId) ? groupId : null,
-        kind: oneOf(item.kind, ARCHITECT_NODE_KINDS, "module"),
+        kind: nodeKindOf(item.kind),
         detail: clip(item.detail, "detail", cuts),
-        files: cleanFiles(item.files),
+        // Diagrama de ideias: nunca arquivos, mesmo que o modelo os mande.
+        files: [],
         status: oneOf(item.status, ARCHITECT_NODE_STATUSES, "existing"),
     }
 }
@@ -161,7 +183,7 @@ function cleanEdges(raw: readonly unknown[], nodeIds: ReadonlySet<string>, warni
             return
         }
         if (source === target) return
-        const kind = oneOf(item.kind, ARCHITECT_EDGE_KINDS, "uses")
+        const kind = edgeKindOf(item.kind)
         const pair = `${source}->${target}:${kind}`
         if (pairs.has(pair)) return
         pairs.add(pair)
@@ -223,5 +245,26 @@ export function sanitizeGraph(raw: RawGraph, depth: ArchitectDepth): SanitizedGr
     if (nodeCap.cut) warnings.push(`${nodeCap.cut} nó(s) acima do teto de ${limits.maxNodes} do nível "${limits.label}" cortado(s)`)
     if (edgeCap.cut) warnings.push(`${edgeCap.cut} aresta(s) acima do teto de ${limits.maxEdges} cortada(s)`)
     if (groupCap.cut) warnings.push(`${groupCap.cut} grupo(s) acima do teto de ${ARCHITECT_GROUPS_MAX} desfeito(s): os nós deles ficaram sem grupo`)
-    return { graph, trimmed: { nodes: nodeCap.cut, edges: edgeCap.cut }, warnings }
+    const codeLabels = graph.nodes.filter((node) => looksLikeCode(node.label)).map((node) => node.label)
+    if (codeLabels.length) warnings.push(`${codeLabels.length} rótulo(s) com nome de código (o diagrama deveria trazer ideias, não arquivos ou funções)`)
+    const codeDetails = graph.nodes.filter((node) => looksLikeCode(node.detail)).length
+    if (codeDetails) warnings.push(`${codeDetails} descrição(ões) com nome de código`)
+    return { graph, trimmed: { nodes: nodeCap.cut, edges: edgeCap.cut }, warnings, codeLabels }
+}
+
+/** A resposta pede a correção quando um terço ou mais dos nós tem rótulo com cara de código. */
+export const ARCHITECT_CODE_LABEL_RATIO = 1 / 3
+export const needsIdeaRepair = (sanitized: SanitizedGraph) => sanitized.codeLabels.length > 0 && sanitized.codeLabels.length >= sanitized.graph.nodes.length * ARCHITECT_CODE_LABEL_RATIO
+
+/**
+ * Versão gravada no vocabulário antigo (diagrama de código): mapeia tipos, camadas e ligações para o
+ * vocabulário de ideias e esvazia os arquivos. NÃO corta pelos tetos novos (vale só para gerar).
+ */
+export function normalizeLegacyGraph(graph: ArchitectGraph): ArchitectGraph {
+    return {
+        ...graph,
+        groups: graph.groups.map((group) => ({ ...group, layer: layerOf(group.layer) })),
+        nodes: graph.nodes.map((node) => ({ ...node, kind: nodeKindOf(node.kind), files: [] })),
+        edges: graph.edges.map((edge) => ({ ...edge, kind: edgeKindOf(edge.kind) })),
+    }
 }

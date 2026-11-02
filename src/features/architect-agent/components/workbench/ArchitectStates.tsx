@@ -19,7 +19,7 @@ import { ARCHITECT_HEADER_CLASS, ARCHITECT_HEADER_ROW_CLASS } from "./ArchitectH
  * Classes do contêiner da aba (o skeleton usa as mesmas do resultado final). A aba rola quando a tela é
  * baixa demais: o canvas nunca vaza por baixo da barra de ações da mesa.
  */
-export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+export const ARCHITECT_TAB_CLASS = "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4"
 /** O canvas fica com todo o resto da altura da aba; o piso só vale em telas muito baixas. */
 export const ARCHITECT_CANVAS_WRAP_CLASS = "flex min-h-[360px] flex-1 flex-col"
 export const ARCHITECT_CANVAS_CLASS = `${FLOW_SURFACE_CLASS} min-h-0 flex-1`

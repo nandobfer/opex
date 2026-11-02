@@ -50,6 +50,7 @@ vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('
 vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
+import { legacyGraph } from './fixtures'
 import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { runDiagram } from '@/features/architect-agent/server/generate'
 import { registerDiagram, abortWorkbenchDiagrams, isDiagramLive } from '@/features/architect-agent/server/registry'
@@ -178,12 +179,46 @@ describe('runDiagram', () => {
   })
 
   it('o teto do nível de profundidade é aplicado ao grafo gravado', async () => {
-    const nodes = [{ id: 'objective', label: 'O', kind: 'objective' }, ...Array.from({ length: 15 }, (_, index) => ({ id: `n${index}`, label: `N${index}`, kind: 'module', status: 'existing' }))]
+    const nodes = [{ id: 'objective', label: 'O', kind: 'objective' }, ...Array.from({ length: 15 }, (_, index) => ({ id: `n${index}`, label: `N${index}`, kind: 'structure', status: 'existing' }))]
     mocks.runTurn.mockResolvedValueOnce(succeeded(graphJson(nodes, [])))
     const { id, controller } = await seed({ depth: 1 })
     await runDiagram(id, controller)
-    expect((doc(id).graph as { nodes: unknown[] }).nodes).toHaveLength(8)
-    expect(doc(id).trimmed).toEqual({ nodes: 8, edges: 0 })
+    expect((doc(id).graph as { nodes: unknown[] }).nodes).toHaveLength(5)
+    expect(doc(id).trimmed).toEqual({ nodes: 11, edges: 0 })
+  })
+
+  it('diagrama com cara de código (um terço dos rótulos ou mais): pede uma correção com esses rótulos e grava a segunda resposta', async () => {
+    const code = [{ id: 'objective', label: 'Objetivo', kind: 'objective', status: 'new' }, { id: 'a', label: 'useArchitectTab', status: 'new' }, { id: 'b', label: 'runDiagram()', status: 'new' }, { id: 'c', label: 'Aprovação do plano', status: 'new' }]
+    const ideas = [{ id: 'objective', label: 'Objetivo', kind: 'objective', status: 'new' }, { id: 'a', label: 'Aba de arquitetura', kind: 'structure', status: 'new' }, { id: 'b', label: 'Geração do diagrama', kind: 'process', status: 'new' }]
+    mocks.runTurn.mockResolvedValueOnce(succeeded(graphJson(code, []))).mockResolvedValueOnce(succeeded(graphJson(ideas, [])))
+    const { id, controller } = await seed()
+    await runDiagram(id, controller)
+    const repair = (mocks.runTurn.mock.calls[1]![1] as { text: string }).text
+    expect(repair).toContain('nomes de CÓDIGO')
+    expect(repair).toContain('- useArchitectTab')
+    expect(repair).toContain('- runDiagram()')
+    expect(doc(id).state).toBe('done')
+    expect(doc(id).repaired).toBe(true)
+    expect((doc(id).graph as { nodes: { label: string }[] }).nodes.map((node) => node.label)).toEqual(['Objetivo', 'Aba de arquitetura', 'Geração do diagrama'])
+  })
+
+  it('a correção que ainda vem com código é gravada com o aviso, sem falhar', async () => {
+    const code = [{ id: 'objective', label: 'Objetivo', kind: 'objective', status: 'new' }, { id: 'a', label: 'useArchitectTab', status: 'new' }, { id: 'b', label: 'src/a.tsx', status: 'new' }]
+    mocks.runTurn.mockResolvedValueOnce(succeeded(graphJson(code, []))).mockResolvedValueOnce(succeeded(graphJson(code, [])))
+    const { id, controller } = await seed()
+    await runDiagram(id, controller)
+    expect(mocks.runTurn).toHaveBeenCalledTimes(2)
+    expect(doc(id).state).toBe('done')
+    expect((doc(id).warnings as string[]).some((warning) => warning.includes('2 rótulo(s) com nome de código'))).toBe(true)
+  })
+
+  it('com poucos rótulos de código, não pede correção (só avisa)', async () => {
+    const nodes = [{ id: 'objective', label: 'Objetivo', kind: 'objective', status: 'new' }, { id: 'a', label: 'useArchitectTab', status: 'new' }, { id: 'b', label: 'Aprovação do plano', status: 'new' }, { id: 'c', label: 'Geração do diagrama', status: 'new' }]
+    mocks.runTurn.mockResolvedValueOnce(succeeded(graphJson(nodes, [])))
+    const { id, controller } = await seed()
+    await runDiagram(id, controller)
+    expect(mocks.runTurn).toHaveBeenCalledTimes(1)
+    expect((doc(id).warnings as string[]).some((warning) => warning.includes('1 rótulo(s) com nome de código'))).toBe(true)
   })
 
   it('resultado atrasado de um plano antigo é descartado', async () => {
@@ -316,6 +351,22 @@ describe('runDiagram ao vivo', () => {
     })
     await runDiagram(id, controller)
     expect((doc(id).graph as { nodes: { id: string }[] }).nodes.map((node) => node.id)).toEqual(['objective', 'novo'])
+  })
+
+  it('ajuste sobre uma versão antiga (diagrama de código): começa do grafo normalizado, sem arquivos', async () => {
+    diagrams.docs.push({ _id: 'c'.repeat(24), graph: legacyGraph() })
+    const { id, controller } = await seed({ feedback: 'junte as estruturas', baseDiagramId: 'c'.repeat(24), origin: 'adjust' })
+    mocks.runTurn.mockImplementationOnce(async (_client: unknown, request: { text: string }, hooks: Hooks) => {
+      expect(request.text).not.toContain('src/')
+      expect(request.text).not.toContain('"kind":"module"')
+      const text = '```architect\n' + opLine({ op: 'remove', id: 'lib' }) + '```\n'
+      hooks.publish({ type: 'text', text })
+      return succeeded(text)
+    })
+    await runDiagram(id, controller)
+    const graph = doc(id).graph as { nodes: { id: string; kind: string; files: string[] }[] }
+    expect(graph.nodes.map((node) => node.kind)).toEqual(['objective', 'structure', 'process', 'information'])
+    expect(graph.nodes.every((node) => node.files.length === 0)).toBe(true)
   })
 
   it('reparo de um ajuste: pede de novo só as diferenças sobre o grafo anterior, sem duplicar nós', async () => {

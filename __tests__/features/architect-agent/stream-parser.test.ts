@@ -59,7 +59,7 @@ describe('createGraphAssembler', () => {
     assembler.push(block({ op: 'node', id: 'a', label: 'Aba', groupId: 'g-ui', status: 'existing', detail: 'antes' }))
     expect(assembler.draft.nodes[0]).toEqual(expect.objectContaining({ groupId: null, status: 'existing' }))
     assembler.push(block({ op: 'group', id: 'g-ui', label: 'UI', layer: 'ui' }, { op: 'node', id: 'a', status: 'changed', files: ['src/a.tsx'] }))
-    expect(assembler.draft.nodes).toEqual([expect.objectContaining({ id: 'a', label: 'Aba', groupId: 'g-ui', status: 'changed', detail: 'antes', files: ['src/a.tsx'] })])
+    expect(assembler.draft.nodes).toEqual([expect.objectContaining({ id: 'a', label: 'Aba', groupId: 'g-ui', status: 'changed', detail: 'antes', files: [] })])
   })
 
   it('remove tira o nó e as arestas dele', () => {
@@ -103,15 +103,15 @@ describe('createGraphAssembler', () => {
     expect(assembler.warnings).toEqual([])
   })
 
-  it('grupos acima do teto de 40 não entram ao vivo (os nós ficam soltos) e viram aviso', () => {
+  it('grupos acima do teto de 8 não entram ao vivo (os nós ficam soltos) e viram aviso', () => {
     const assembler = createGraphAssembler({ depth: 5 })
-    const items = Array.from({ length: 45 }, (_, index) => [{ op: 'group', id: `g${index}`, label: `G${index}`, layer: 'features' }, { op: 'node', id: `n${index}`, label: `N${index}`, groupId: `g${index}` }]).flat()
+    const items = Array.from({ length: 12 }, (_, index) => [{ op: 'group', id: `g${index}`, label: `G${index}`, layer: 'structures' }, { op: 'node', id: `n${index}`, label: `N${index}`, groupId: `g${index}` }]).flat()
     assembler.push(block(...items))
     assembler.finish()
-    expect(assembler.draft.groups).toHaveLength(40)
-    expect(assembler.draft.nodes).toHaveLength(45)
-    expect(assembler.draft.nodes.find((node) => node.id === 'n44')!.groupId).toBeNull()
-    expect(assembler.warnings.some((warning) => warning.includes('5 grupo(s) acima do teto de 40'))).toBe(true)
+    expect(assembler.draft.groups).toHaveLength(8)
+    expect(assembler.draft.nodes).toHaveLength(12)
+    expect(assembler.draft.nodes.find((node) => node.id === 'n11')!.groupId).toBeNull()
+    expect(assembler.warnings.some((warning) => warning.includes('4 grupo(s) acima do teto de 8'))).toBe(true)
   })
 
   it('a tela chega ao mesmo rascunho aplicando as operações devolvidas', () => {
@@ -128,10 +128,10 @@ describe('createGraphAssembler', () => {
 describe('cortes de texto ao vivo', () => {
   it('o corte acima do teto de proteção vira aviso no fim, uma vez por linha recebida', () => {
     const assembler = createGraphAssembler({ depth: 5 })
-    const long = 'x'.repeat(9_000)
+    const long = 'x'.repeat(2_000)
     assembler.push(block({ op: 'node', id: 'a', label: 'A', detail: long }, { op: 'node', id: 'a', status: 'changed' }, { op: 'note', kind: 'risk', text: 'r'.repeat(1_200) }))
     assembler.finish()
-    expect(assembler.draft.nodes[0]!.detail).toHaveLength(8_000)
-    expect(assembler.warnings).toEqual(expect.arrayContaining(['descrição de nó: 1 corte(s) no teto de proteção de 8.000 caracteres', 'nota: 1 corte(s) no teto de proteção de 1.000 caracteres']))
+    expect(assembler.draft.nodes[0]!.detail).toHaveLength(1_500)
+    expect(assembler.warnings).toEqual(expect.arrayContaining(['descrição de nó: 1 corte(s) no teto de proteção de 1.500 caracteres', 'nota: 1 corte(s) no teto de proteção de 1.000 caracteres']))
   })
 })

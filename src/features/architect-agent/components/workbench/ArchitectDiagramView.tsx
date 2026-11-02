@@ -23,11 +23,12 @@ interface ArchitectDiagramViewProps {
     graph: ArchitectGraph
     view: ArchitectView
     filter: GraphFilter
-    showFiles: boolean
     /** Geração ao vivo: o grafo cresce sem remontar, a câmera acompanha e o arrasto fica desligado. */
     live?: { progress: ArchitectLiveProgress | null; connected: boolean } | null
     /** Controles que abrem a barra dentro do canvas (visão, filtros, exportar), antes de "Ajustar visão". */
     controls?: ReactNode
+    /** Controles no fim da barra, depois de "Restaurar layout" (ex.: "Pedir ajustes"). */
+    trailing?: ReactNode
 }
 
 /**
@@ -35,7 +36,7 @@ interface ArchitectDiagramViewProps {
  * clique abre o painel lateral, arrastar reorganiza (posição salva no navegador), grupos recolhem e
  * expandem, "Ajustar visão" e "Restaurar layout". Precisa estar dentro de um `ReactFlowProvider`.
  */
-export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, view, filter, showFiles, live = null, controls = null }: ArchitectDiagramViewProps) {
+export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, view, filter, live = null, controls = null, trailing = null }: ArchitectDiagramViewProps) {
     const isLive = Boolean(live)
     const graph = useSettledGraph(incoming, isLive)
     const [follow, setFollow] = useState(true)
@@ -67,9 +68,9 @@ export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, 
                 relatedNodes.add(edge.source === focusedId ? edge.target : edge.source)
             }
         }
-        return { focusedId, relatedNodes, relatedEdges, selectedId, reducedMotion, live: isLive, showFiles, onToggleGroup: toggleGroup }
+        return { focusedId, relatedNodes, relatedEdges, selectedId, reducedMotion, live: isLive, onToggleGroup: toggleGroup }
         // `toggleGroup` só usa setters estáveis.
-    }, [focusedId, selectedId, viewGraph, reducedMotion, isLive, showFiles])
+    }, [focusedId, selectedId, viewGraph, reducedMotion, isLive])
     const canvasKey = `${diagramId}:${view}:${filter.kinds.join(",")}:${filter.onlyChanges}:${[...collapsed].sort().join(",")}:${layoutRun}`
     const fit = () => void flow.fitView({ padding: 0.15, duration: reducedMotion ? 0 : 300 })
     // Ao vivo, a câmera acompanha o grafo crescendo até o usuário mover a visão.
@@ -111,8 +112,9 @@ export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, 
                     >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar layout
                     </Button>
+                    {trailing}
                 </ArchitectCanvasToolbar>
-                <ArchitectNodePanel graph={graph} nodeId={selectedId} showFiles={showFiles} onClose={() => setSelected(null)} onSelect={setSelected} onCollapseGroup={toggleGroup} />
+                <ArchitectNodePanel graph={graph} nodeId={selectedId} onClose={() => setSelected(null)} onSelect={setSelected} onCollapseGroup={toggleGroup} />
             </div>
         </DiagramHighlightContext.Provider>
     )

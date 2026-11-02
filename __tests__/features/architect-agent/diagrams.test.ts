@@ -45,6 +45,7 @@ import { ArchitectDiagram } from '@/features/architect-agent/server/models'
 import { cleanupWorkbenchDiagrams, listWorkbenchDiagrams, onPlanApproved, requestDiagram, retryDiagram, workbenchArchitect } from '@/features/architect-agent/server/diagrams'
 import { isDiagramLive, registerDiagram, releaseDiagram, liveDiagramIds, abortReasonOf } from '@/features/architect-agent/server/registry'
 import { subscribeLive } from '@/features/architect-agent/server/live-hub'
+import { legacyGraph } from './fixtures'
 import { openDiagramStream } from '@/features/architect-agent/server/stream'
 import { splitLiveLines } from '@/features/architect-agent/hooks/useLiveDiagram'
 
@@ -296,5 +297,14 @@ describe('corridas entre a gravação da versão e o início da geração', () =
     await openDiagramStream(id, controller.signal)
     controller.abort()
     expect(diagrams.docs[0]!.state).toBe('running')
+  })
+
+  it('versão antiga (diagrama de código) chega à tela no vocabulário de ideias, sem arquivos e sem cortes', async () => {
+    seedWorkbench()
+    diagrams.docs.push({ _id: 'e'.repeat(24), workbenchId: WB, version: 1, planVersion: 1, planSeq: 1, state: 'done', graph: legacyGraph(), createdAt: new Date() })
+    const [dto] = await listWorkbenchDiagrams(WB)
+    expect(dto!.graph!.nodes.map((node) => node.kind)).toEqual(['objective', 'structure', 'process', 'information', 'structure'])
+    expect(dto!.graph!.nodes.every((node) => node.files.length === 0)).toBe(true)
+    expect(dto!.graph!.edges.map((edge) => edge.kind)).toEqual(['notifies', 'produces'])
   })
 })

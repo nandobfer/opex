@@ -47,8 +47,11 @@ describe('ArchitectAgentTab', () => {
     expect(screen.getByText('Centrais')).toBeTruthy()
     fireEvent.click(tab('Diagrama'))
     expect(screen.getByText('Profundidade padrão')).toBeTruthy()
-    expect(screen.getByText(/até 35 nós/)).toBeTruthy()
+    expect(screen.getByText(/até 12 nós/)).toBeTruthy()
     expect(screen.getByLabelText('Decisão')).toBeTruthy()
+    expect(screen.getByLabelText('Processo')).toBeTruthy()
+    // "Mostrar arquivos" saiu: o diagrama é de ideias.
+    expect(screen.queryByText('Mostrar arquivos')).toBeNull()
     fireEvent.click(tab('Agente'))
     expect(screen.getByLabelText('Tempo máximo da geração (minutos)')).toBeTruthy()
     fireEvent.click(tab('Memórias'))

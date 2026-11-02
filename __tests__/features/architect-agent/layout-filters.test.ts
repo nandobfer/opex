@@ -18,7 +18,7 @@ describe('filterGraph', () => {
   })
 
   it('filtra por tipo, mantém o objetivo e remove grupos vazios', () => {
-    const graph = filterGraph(sampleGraph(), { kinds: ['module'], onlyChanges: false })
+    const graph = filterGraph(sampleGraph(), { kinds: ['structure'], onlyChanges: false })
     expect(graph.nodes.map((node) => node.id).sort()).toEqual(['objective', 'tab', 'view'])
     expect(graph.groups.map((group) => group.id)).toEqual(['g-ui'])
   })
@@ -30,7 +30,7 @@ describe('toViewGraph', () => {
     const ids = view.nodes.map((node) => node.id)
     expect(ids).toContain(collapsedId('g-ui'))
     expect(ids).not.toContain('tab')
-    expect(view.nodes.find((node) => node.id === collapsedId('g-ui'))!.collapsed).toEqual({ groupId: 'g-ui', label: 'UI', count: 2 })
+    expect(view.nodes.find((node) => node.id === collapsedId('g-ui'))!.collapsed).toEqual({ groupId: 'g-ui', label: 'Quem participa', count: 2 })
     // view→tab é interna (some); objective→tab e tab→route viram arestas do grupo.
     expect(view.edges.map((edge) => `${edge.source}->${edge.target}`)).toEqual(expect.arrayContaining(['objective->group:g-ui', 'group:g-ui->route']))
     expect(view.groups.map((group) => group.id)).not.toContain('g-ui')
@@ -102,7 +102,7 @@ describe('layoutMindMap sem sobreposição', () => {
     const graph = sampleGraph()
     type GraphNode = (typeof graph.nodes)[number]
     type GraphEdge = (typeof graph.edges)[number]
-    const node = (id: string, kind: GraphNode['kind'] = 'module'): GraphNode => ({ id, label: id.toUpperCase(), groupId: null, kind, detail: '', files: [], status: 'new' })
+    const node = (id: string, kind: GraphNode['kind'] = 'structure'): GraphNode => ({ id, label: id.toUpperCase(), groupId: null, kind, detail: '', files: [], status: 'new' })
     const nodes: GraphNode[] = [node('objective', 'objective')]
     const edges: GraphEdge[] = []
     for (let index = 0; index < leaves; index++) {
@@ -117,8 +117,9 @@ describe('layoutMindMap sem sobreposição', () => {
   }
 
   it.each([
-    ['estrela de 35 nós (Equilibrado)', 35, 0],
-    ['120 nós em dois anéis (Minucioso)', 40, 79],
+    ['estrela de 24 nós (Minucioso)', 24, 0],
+    ['estrela de 35 nós (versão antiga)', 35, 0],
+    ['120 nós em dois anéis (versão antiga)', 40, 79],
   ])('%s: nenhum cartão cobre outro', (_label, leaves, grandchildren) => {
     const { items } = layoutMindMap(toViewGraph(star(leaves, grandchildren)))
     expect(items).toHaveLength(1 + leaves + grandchildren)

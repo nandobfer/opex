@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { ARCHITECT_DEPTH_DEFS, ARCHITECT_NODE_DETAIL_MAX, ARCHITECT_TEXT_LIMITS } from '@/features/architect-agent/constants'
 import { architectGraphSchema } from '@/features/architect-agent/graph'
-import { sanitizeGraph } from '@/features/architect-agent/sanitize'
+import { looksLikeCode, needsIdeaRepair, normalizeLegacyGraph, sanitizeGraph } from '@/features/architect-agent/sanitize'
+import { legacyGraph } from './fixtures'
+import type { ArchitectGraph } from '@/features/architect-agent/graph'
 
 /** Saneamento do grafo do modelo: ids, deduplicação, arestas soltas, objetivo e teto do nível. */
 
-const node = (id: string, extra: Record<string, unknown> = {}) => ({ id, label: `Nó ${id}`, kind: 'module', status: 'existing', ...extra })
+const node = (id: string, extra: Record<string, unknown> = {}) => ({ id, label: `Nó ${id}`, kind: 'structure', status: 'existing', ...extra })
 
 describe('sanitizeGraph', () => {
   it('descarta arestas com nó inexistente, laços e duplicadas', () => {
@@ -37,17 +39,17 @@ describe('sanitizeGraph', () => {
     expect(warnings.some((warning) => warning.includes('id repetido'))).toBe(true)
   })
 
-  it('mais de 40 grupos com nós: fica o teto do schema, priorizando os grupos com nós novos/alterados, sem descartar nós', () => {
-    const groups = Array.from({ length: 45 }, (_, index) => ({ id: `g${index}`, label: `G${index}`, layer: 'features' }))
-    // Os 5 primeiros grupos só têm nós existentes; os demais, nós novos.
-    const nodes = groups.map((group, index) => ({ id: `n${index}`, label: `N${index}`, groupId: group.id, kind: 'module', status: index < 5 ? 'existing' : 'new' }))
+  it('mais de 8 grupos com nós: fica o teto do schema, priorizando os grupos com nós novos/alterados, sem descartar nós', () => {
+    const groups = Array.from({ length: 12 }, (_, index) => ({ id: `g${index}`, label: `G${index}`, layer: 'structures' }))
+    // Os 4 primeiros grupos só têm nós existentes; os demais, nós novos.
+    const nodes = groups.map((group, index) => ({ id: `n${index}`, label: `N${index}`, groupId: group.id, kind: 'structure', status: index < 4 ? 'existing' : 'new' }))
     const result = sanitizeGraph({ title: 'T', groups, nodes: [{ id: 'objective', label: 'O', kind: 'objective' }, ...nodes] }, 5)
     expect(() => architectGraphSchema.parse(result.graph)).not.toThrow()
-    expect(result.graph.groups).toHaveLength(40)
+    expect(result.graph.groups).toHaveLength(8)
     expect(result.graph.groups.map((group) => group.id)).not.toContain('g0')
-    expect(result.graph.nodes).toHaveLength(46)
+    expect(result.graph.nodes).toHaveLength(13)
     expect(result.graph.nodes.find((node) => node.id === 'n0')!.groupId).toBeNull()
-    expect(result.warnings.some((warning) => warning.includes('5 grupo(s) acima do teto de 40'))).toBe(true)
+    expect(result.warnings.some((warning) => warning.includes('4 grupo(s) acima do teto de 8'))).toBe(true)
   })
 
   it('id de aresta repetido gera um id novo sem passar do tamanho máximo do schema', () => {
@@ -82,32 +84,47 @@ describe('sanitizeGraph', () => {
   })
 
   it('corta acima do teto de arestas priorizando as relações sobre o "contém"', () => {
-    const nodes = Array.from({ length: 8 }, (_, index) => node(`n${index}`))
+    const nodes = Array.from({ length: 4 }, (_, index) => node(`n${index}`))
     const edges = [
-      ...Array.from({ length: 7 }, (_, index) => ({ source: 'n0', target: `n${index + 1}`, kind: 'contains' })),
-      ...Array.from({ length: 7 }, (_, index) => ({ source: `n${index + 1}`, target: 'n0', kind: 'uses' })),
+      ...Array.from({ length: 3 }, (_, index) => ({ source: 'n0', target: `n${index + 1}`, kind: 'contains' })),
+      ...Array.from({ length: 3 }, (_, index) => ({ source: `n${index + 1}`, target: 'n0', kind: 'uses' })),
+      { source: 'objective', target: 'n0', kind: 'flow' },
     ]
-    const { graph, trimmed } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), ...nodes.slice(0, 7)], edges }, 1)
+    const { graph, trimmed } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), ...nodes], edges }, 1)
     expect(graph.edges.length).toBeLessThanOrEqual(ARCHITECT_DEPTH_DEFS[1].maxEdges)
     expect(trimmed.nodes).toBe(0)
     expect(graph.edges.filter((edge) => edge.kind === 'uses').length).toBeGreaterThan(0)
   })
 
-  it('normaliza valores fora da enumeração e corta arquivos repetidos', () => {
+  it('normaliza valores fora da enumeração e nunca guarda arquivos (diagrama de ideias)', () => {
     const { graph } = sanitizeGraph({ nodes: [node('a', { kind: 'componente', status: 'novo', files: ['./src/a.ts', 'src/a.ts', 3] })] }, 3)
     const a = graph.nodes.find((item) => item.id === 'a')!
-    expect(a.kind).toBe('module')
+    expect(a.kind).toBe('structure')
     expect(a.status).toBe('existing')
-    expect(a.files).toEqual(['src/a.ts', '3'])
+    expect(a.files).toEqual([])
+  })
+
+  it('tipos, camadas e ligações do vocabulário antigo viram os equivalentes de ideias', () => {
+    const { graph } = sanitizeGraph({ groups: [{ id: 'g', label: 'UI', layer: 'ui' }], nodes: [node('objective', { kind: 'objective' }), node('a', { kind: 'route', groupId: 'g' }), node('b', { kind: 'data' })], edges: [{ source: 'a', target: 'b', kind: 'event' }] }, 3)
+    expect(graph.groups[0]!.layer).toBe('people')
+    expect(graph.nodes.map((item) => item.kind)).toEqual(['objective', 'process', 'information'])
+    expect(graph.edges[0]!.kind).toBe('notifies')
+  })
+
+  it('rótulos e descrições com nome de código viram aviso e são devolvidos para a correção', () => {
+    const { codeLabels, warnings } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective', label: 'Diagrama do plano' }), node('a', { label: 'useArchitectTab' }), node('b', { label: 'Aprovação do plano', detail: 'grava em architect_diagrams' })] }, 3)
+    expect(codeLabels).toEqual(['useArchitectTab'])
+    expect(warnings.some((warning) => warning.includes('1 rótulo(s) com nome de código'))).toBe(true)
+    expect(warnings.some((warning) => warning.includes('1 descrição(ões) com nome de código'))).toBe(true)
   })
 
   it('nível Minucioso: detalhe acima do limite é cortado e avisado; abaixo dele, fica inteiro', () => {
     const long = 'x'.repeat(ARCHITECT_NODE_DETAIL_MAX + 500)
-    const fits = 'campo: validação; '.repeat(150)
+    const fits = 'regra do bloco; '.repeat(60)
     const { graph, warnings } = sanitizeGraph({ nodes: [node('objective', { kind: 'objective' }), node('a', { detail: long }), node('b', { detail: fits })] }, 5)
     expect(graph.nodes.find((item) => item.id === 'a')!.detail).toHaveLength(ARCHITECT_NODE_DETAIL_MAX)
     expect(graph.nodes.find((item) => item.id === 'b')!.detail).toBe(fits.trim())
-    expect(warnings).toContain('descrição de nó: 1 corte(s) no teto de proteção de 8.000 caracteres')
+    expect(warnings).toContain('descrição de nó: 1 corte(s) no teto de proteção de 1.500 caracteres')
     expect(architectGraphSchema.safeParse(graph).success).toBe(true)
   })
 
@@ -125,7 +142,7 @@ describe('sanitizeGraph', () => {
       {
         title: over('title'),
         summary: over('summary'),
-        groups: [{ id: 'g', label: over('groupLabel'), layer: 'ui', detail: over('groupDetail') }],
+        groups: [{ id: 'g', label: over('groupLabel'), layer: 'people', detail: over('groupDetail') }],
         nodes: [node('objective', { kind: 'objective' }), node('a', { label: over('nodeLabel'), groupId: 'g' })],
         edges: [{ source: 'objective', target: 'a', label: over('edgeLabel') }],
         notes: [{ kind: 'risk', text: over('note') }, { kind: 'decision', text: over('note') }],
@@ -146,5 +163,33 @@ describe('sanitizeGraph', () => {
         'nota: 2 corte(s) no teto de proteção de 1.000 caracteres',
       ]),
     )
+  })
+})
+
+describe('diagrama de ideias', () => {
+  it.each(['src/a.tsx', 'useArchitectTab', 'runDiagram()', 'architect_diagrams', 'GET /api/x', 'ArchitectTab.tsx', 'features/architect-agent'])('reconhece código: %s', (text) => {
+    expect(looksLikeCode(text)).toBe(true)
+  })
+
+  it.each(['Aprovação do plano', 'Pusher', 'Histórico de versões', 'OpenCode', 'GitHub', 'Dono aprova o plano', 'Serviço de e-mail'])('não marca texto comum: %s', (text) => {
+    expect(looksLikeCode(text)).toBe(false)
+  })
+
+  it('a correção é pedida com um terço ou mais dos rótulos com cara de código', () => {
+    const code = (count: number, total: number) => sanitizeGraph({ nodes: [node('objective', { kind: 'objective', label: 'Objetivo do plano' }), ...Array.from({ length: total - 1 }, (_, index) => node(`n${index}`, { label: index < count ? `runStep${index}` : `Etapa ${index}` }))] }, 5)
+    expect(needsIdeaRepair(code(4, 12))).toBe(true)
+    expect(needsIdeaRepair(code(2, 12))).toBe(false)
+    expect(needsIdeaRepair(code(0, 12))).toBe(false)
+  })
+
+  it('versão antiga (diagrama de código) é normalizada ao ler, sem arquivos e sem cortar pelos tetos novos', () => {
+    const old = legacyGraph() as unknown as ArchitectGraph
+    const big = { ...old, nodes: [...old.nodes, ...Array.from({ length: 30 }, (_, index) => ({ id: `x${index}`, label: `X${index}`, groupId: null, kind: 'module', detail: '', files: ['src/x.ts'], status: 'existing' }))] } as unknown as ArchitectGraph
+    const normalized = normalizeLegacyGraph(big)
+    expect(normalized.nodes).toHaveLength(35)
+    expect(normalized.nodes.every((item) => item.files.length === 0)).toBe(true)
+    expect(normalized.nodes.slice(0, 5).map((item) => item.kind)).toEqual(['objective', 'structure', 'process', 'information', 'structure'])
+    expect(normalized.groups.map((group) => group.layer)).toEqual(['people', 'processes', 'information'])
+    expect(normalized.edges.map((edge) => edge.kind)).toEqual(['notifies', 'produces'])
   })
 })

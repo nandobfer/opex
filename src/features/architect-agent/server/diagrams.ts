@@ -1,4 +1,5 @@
 import { isValidObjectId, Types } from "mongoose"
+import { normalizeLegacyGraph } from "../sanitize"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
@@ -45,8 +46,9 @@ export function toDiagramDto(doc: IArchitectDiagram, options: { graph?: boolean 
         state: doc.state,
         phase: (doc.progress?.phase as ArchitectPhase | null) ?? null,
         tools: doc.progress?.tools ?? 0,
-        graph: options.graph === false ? null : (doc.graph ?? null),
-        draft: options.graph === false || doc.state === "done" || doc.state === "superseded" ? null : (doc.draft ?? null),
+        // Versões antigas (diagrama de código) chegam à tela no vocabulário de ideias, sem arquivos.
+        graph: options.graph === false || !doc.graph ? null : normalizeLegacyGraph(doc.graph),
+        draft: options.graph === false || doc.state === "done" || doc.state === "superseded" || !doc.draft ? null : normalizeLegacyGraph(doc.draft),
         trimmed: { nodes: doc.trimmed?.nodes ?? 0, edges: doc.trimmed?.edges ?? 0 },
         warnings: doc.warnings ?? [],
         repaired: Boolean(doc.repaired),

@@ -8,14 +8,28 @@ import { contextChannelsFor, writableListsFor } from '@/features/ai/agents'
 
 describe('configuração do Agente Arquiteto', () => {
   it('padrões: desativado, disparo automático, todas as centrais, nível 3 e visão de arquitetura', () => {
-    expect(DEFAULT_ARCHITECT_SETTINGS).toMatchObject({ enabled: false, trigger: 'auto', scope: { all: true }, diagram: { depth: 3, defaultView: 'architecture', showFiles: true, showNotes: true } })
+    expect(DEFAULT_ARCHITECT_SETTINGS).toMatchObject({ enabled: false, trigger: 'auto', scope: { all: true }, diagram: { depth: 3, defaultView: 'architecture', showNotes: true } })
+    expect(DEFAULT_ARCHITECT_SETTINGS.diagram).not.toHaveProperty('showFiles')
     expect(architectSettingsSchema.safeParse(DEFAULT_ARCHITECT_SETTINGS).success).toBe(true)
   })
 
   it('configuração salva antes de um campo existir recebe o padrão dele', () => {
     const parsed = architectSettingsSchema.parse(withDefaults({ enabled: false, diagram: { depth: 5 } }))
-    expect(parsed.diagram).toMatchObject({ depth: 5, defaultView: 'architecture', showFiles: true })
+    expect(parsed.diagram).toMatchObject({ depth: 5, defaultView: 'architecture', showNotes: true })
     expect(parsed.trigger).toBe('auto')
+  })
+
+  it('configuração salva no vocabulário antigo (tipos de código e "Mostrar arquivos") carrega com os equivalentes de ideias', () => {
+    const parsed = architectSettingsSchema.parse(withDefaults({ enabled: false, diagram: { depth: 2, nodeKinds: ['objective', 'module', 'route', 'data', 'risk'], showFiles: false, showNotes: true, defaultView: 'mindmap' } }))
+    expect(parsed.diagram).not.toHaveProperty('showFiles')
+    expect(parsed.diagram.nodeKinds).toEqual(expect.arrayContaining(['objective', 'structure', 'process', 'information', 'risk', 'actor']))
+    expect(parsed.diagram.nodeKinds).not.toContain('module')
+    expect(parsed.diagram.defaultView).toBe('mindmap')
+  })
+
+  it('tipos salvos que não existem mais e sem equivalente: todos os tipos', () => {
+    const parsed = architectSettingsSchema.parse(withDefaults({ enabled: false, diagram: { nodeKinds: ['componente', 'xyz'] } }))
+    expect(parsed.diagram.nodeKinds).toEqual([...DEFAULT_ARCHITECT_SETTINGS.diagram.nodeKinds])
   })
 
   it('ativo exige modelo e, com centrais escolhidas, ao menos uma', () => {
@@ -33,9 +47,9 @@ describe('configuração do Agente Arquiteto', () => {
   })
 
   it('normaliza escopo "todas" e tipos repetidos', () => {
-    const next = normalizeArchitectSettings({ ...DEFAULT_ARCHITECT_SETTINGS, scope: { all: true, centralIds: ['c1'] }, diagram: { ...DEFAULT_ARCHITECT_SETTINGS.diagram, nodeKinds: ['module', 'module', 'route'] } })
+    const next = normalizeArchitectSettings({ ...DEFAULT_ARCHITECT_SETTINGS, scope: { all: true, centralIds: ['c1'] }, diagram: { ...DEFAULT_ARCHITECT_SETTINGS.diagram, nodeKinds: ['process', 'process', 'actor'] } })
     expect(next.scope.centralIds).toEqual([])
-    expect(next.diagram.nodeKinds).toEqual(['module', 'route'])
+    expect(next.diagram.nodeKinds).toEqual(['process', 'actor'])
   })
 })
 

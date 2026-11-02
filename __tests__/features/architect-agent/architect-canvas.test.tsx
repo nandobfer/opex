@@ -26,7 +26,7 @@ import { layoutArchitecture } from '@/features/architect-agent/layout'
 
 const allKinds = { kinds: [...ARCHITECT_NODE_KINDS], onlyChanges: false }
 const view = (props: { view?: ArchitectView; filter?: typeof allKinds; diagramId?: string } = {}) => (
-  <ArchitectDiagramView workbenchId="w1" diagramId={props.diagramId ?? 'd1'} graph={sampleGraph()} view={props.view ?? 'architecture'} filter={props.filter ?? allKinds} showFiles />
+  <ArchitectDiagramView workbenchId="w1" diagramId={props.diagramId ?? 'd1'} graph={sampleGraph()} view={props.view ?? 'architecture'} filter={props.filter ?? allKinds} />
 )
 const node = (id: string) => screen.getByTestId(`architect-node-${id}`)
 
@@ -49,15 +49,14 @@ describe('ArchitectDiagramView', () => {
     expect(node('view').getAttribute('data-dimmed')).toBe('false')
   })
 
-  it('clique abre o painel lateral com descrição, arquivos e vizinhos; clicar num vizinho troca o nó', () => {
+  it('clique abre o painel lateral com descrição e vizinhos; clicar num vizinho troca o nó', () => {
     render(view())
     fireEvent.click(screen.getByTestId('rf-node-tab'))
     const panel = screen.getByRole('complementary', { name: 'Detalhes de Aba "Arquitetura"' })
-    expect(panel.textContent).toContain('React Flow')
-    expect(panel.textContent).toContain('src/features/architect-agent/components/workbench/ArchitectTab.tsx')
+    expect(panel.textContent).toContain('Mostra o diagrama ao vivo')
     expect(panel.textContent).toContain('Vizinhos (3)')
-    fireEvent.click(screen.getByRole('button', { name: /POST \/api\/architect/ }))
-    expect(screen.getByRole('complementary', { name: 'Detalhes de POST /api/architect/…' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Geração do diagrama/ }))
+    expect(screen.getByRole('complementary', { name: 'Detalhes de Geração do diagrama' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Fechar detalhes' }))
     expect(screen.queryByRole('complementary')).toBeNull()
   })
@@ -66,7 +65,7 @@ describe('ArchitectDiagramView', () => {
     const { rerender } = render(view({ filter: { ...allKinds, onlyChanges: true } }))
     expect(screen.queryByTestId('architect-node-pusher')).toBeNull()
     expect(node('objective')).toBeTruthy()
-    rerender(view({ filter: { kinds: ['route'], onlyChanges: false } }))
+    rerender(view({ filter: { kinds: ['process'], onlyChanges: false } }))
     expect(screen.queryByTestId('architect-node-tab')).toBeNull()
     expect(node('route')).toBeTruthy()
   })
@@ -74,10 +73,10 @@ describe('ArchitectDiagramView', () => {
   it('recolhe e expande um grupo', () => {
     render(view())
     expect(screen.getByTestId('rf-node-tab').getAttribute('data-parent')).toBe('cluster:g-ui')
-    fireEvent.click(screen.getByRole('button', { name: 'Recolher o grupo UI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher o grupo Quem participa' }))
     expect(screen.queryByTestId('architect-node-tab')).toBeNull()
     expect(screen.getByTestId('architect-collapsed-g-ui').textContent).toContain('2 nós')
-    fireEvent.click(screen.getByRole('button', { name: 'Expandir o grupo UI' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir o grupo Quem participa' }))
     expect(node('tab')).toBeTruthy()
   })
 
@@ -109,12 +108,12 @@ describe('ArchitectDiagramView ao vivo', () => {
   const live = { progress: { phase: 'writing' as const, tools: 3, nodes: 6, edges: 5 }, connected: true }
 
   it('sem arrasto durante a geração; ao terminar, volta a arrastar no mesmo canvas', () => {
-    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles live={live} />)
+    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} live={live} />)
     const flow = screen.getByTestId('rf')
     expect(flow.getAttribute('data-draggable')).toBe('false')
     expect(screen.getByTestId('architect-live-bar').textContent).toContain('6 nós')
     expect(screen.getByRole('button', { name: /Restaurar layout/ }).hasAttribute('disabled')).toBe(true)
-    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles />)
+    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} />)
     expect(screen.getByTestId('rf')).toBe(flow)
     expect(flow.getAttribute('data-draggable')).toBe('true')
     expect(screen.queryByTestId('architect-live-bar')).toBeNull()
@@ -122,7 +121,7 @@ describe('ArchitectDiagramView ao vivo', () => {
 
   it('a câmera acompanha até o usuário mover a visão; "Acompanhar" religa', async () => {
     flowSpies.fitView.mockClear()
-    render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} showFiles live={live} />)
+    render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={sampleGraph()} view="architecture" filter={allKinds} live={live} />)
     await vi.waitFor(() => expect(flowSpies.fitView).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /Acompanhar/ })).toBeNull()
     fireEvent.click(screen.getByTestId('rf-user-move'))
@@ -132,10 +131,10 @@ describe('ArchitectDiagramView ao vivo', () => {
 
   it('nós que saem do grafo somem e os novos aparecem sem remontar', async () => {
     const graph = sampleGraph()
-    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={graph} view="mindmap" filter={allKinds} showFiles live={live} />)
+    const { rerender } = render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={graph} view="mindmap" filter={allKinds} live={live} />)
     const flow = screen.getByTestId('rf')
-    const next = { ...graph, nodes: [...graph.nodes.filter((item) => item.id !== 'pusher'), { id: 'auth', label: 'Autenticação', groupId: null, kind: 'feature' as const, detail: '', files: [], status: 'new' as const }], edges: graph.edges.filter((edge) => edge.target !== 'pusher') }
-    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={next} view="mindmap" filter={allKinds} showFiles live={live} />)
+    const next = { ...graph, nodes: [...graph.nodes.filter((item) => item.id !== 'pusher'), { id: 'auth', label: 'Autenticação', groupId: null, kind: 'process' as const, detail: '', files: [], status: 'new' as const }], edges: graph.edges.filter((edge) => edge.target !== 'pusher') }
+    rerender(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={next} view="mindmap" filter={allKinds} live={live} />)
     expect(await screen.findByTestId('architect-node-auth')).toBeTruthy()
     expect(screen.queryByTestId('architect-node-pusher')).toBeNull()
     expect(screen.getByTestId('rf')).toBe(flow)
@@ -160,6 +159,20 @@ describe('ArchitectDiagramView ao vivo', () => {
     render(view())
     const group = screen.getAllByTestId(/^architect-group-/)[0]!
     expect(group.className).toContain('bg-primary/[0.03]')
+  })
+})
+
+describe('diagrama de ideias na tela', () => {
+  it('nem o nó nem o painel mostram arquivos, mesmo numa versão antiga que os tinha', () => {
+    const graph = sampleGraph()
+    const old = { ...graph, nodes: graph.nodes.map((item) => (item.id === 'tab' ? { ...item, files: ['src/features/architect-agent/components/workbench/ArchitectTab.tsx'] } : item)) }
+    render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={old} view="architecture" filter={allKinds} />)
+    expect(node('tab').textContent).not.toContain('src/')
+    expect(node('tab').textContent).toContain('Mostra o diagrama ao vivo')
+    fireEvent.click(screen.getByTestId('rf-node-tab'))
+    const panel = screen.getByRole('complementary', { name: 'Detalhes de Aba "Arquitetura"' })
+    expect(panel.textContent).not.toContain('src/')
+    expect(panel.textContent).not.toContain('Arquivos')
   })
 })
 

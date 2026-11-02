@@ -1,9 +1,41 @@
 # Módulo: Agente Arquiteto (`src/features/architect-agent/`)
 
 Agente **paralelo** ao desenvolvimento agêntico (OPE-105): quando o plano de uma mesa é aprovado
-(**Implementar**), um agente do OpenCode **somente leitura** lê o plano aprovado, a tarefa e o código e
-desenha a **arquitetura do plano** como um grafo semântico. O diagrama aparece na aba
-**"Arquitetura (N)"** da mesa, em tempo real.
+(**Implementar**), um agente do OpenCode **somente leitura** lê o plano aprovado e a tarefa e desenha a
+**arquitetura da ideia do plano** como um grafo semântico de **alto nível**: quem participa, quais
+processos acontecem, quais estruturas e informações existem e como se ligam — para quem não lê código,
+como num quadro branco. **Nunca** traz nomes de arquivos, diretórios, funções, componentes, rotas,
+coleções nem variáveis. O diagrama aparece na aba **"Arquitetura (N)"** da mesa, em tempo real.
+
+## Diagrama de ideias (não de código)
+
+- **Fonte**: o plano aprovado. O agente só lê o código para entender um processo que já existe e nunca
+  o cita.
+- **Vocabulário** (`constants.ts`): tipos de nó `objective` (Objetivo), `actor` (Pessoa/ator),
+  `process` (Processo), `structure` (Estrutura: uma parte do sistema vista como ideia), `information`
+  (Informação guardada ou trocada), `external` (Serviço externo), `decision` e `risk`; camadas `people`
+  (Pessoas e canais), `processes`, `structures`, `information`, `external`, `other`; ligações
+  `contains` (contém), `triggers` (dispara), `flow` (segue para), `uses` (usa), `produces` (gera/grava)
+  e `notifies` (avisa).
+- **Proibição no prompt** (`NO_CODE_RULE`): nenhum texto do diagrama (rótulo, descrição, grupo, ligação
+  e nota) traz arquivos, caminhos, funções, componentes, hooks, rotas, coleções, variáveis, bibliotecas,
+  `camelCase`, `snake_case`, `/`, extensão ou `()`. Nomes de produtos (GitHub, OpenCode, Pusher) podem.
+  Rótulos de 2 a 5 palavras em português comum; descrição de 1 a 3 frases (pedido de até 400 caracteres).
+- **Sem arquivos**: o saneamento sempre esvazia `files` (o campo segue no schema só por compatibilidade,
+  sempre vazio); a tela, o painel e a exportação não mostram arquivos, e a opção "Mostrar arquivos" da
+  configuração saiu.
+- **Guarda** (`looksLikeCode`, puro): rótulo ou descrição com cara de código (caminho, extensão, `x()`,
+  `snake_case`, `camelCase` iniciado em minúscula, método HTTP com rota, diretório) vira aviso da
+  versão. Com **um terço ou mais** dos rótulos assim (`needsIdeaRepair`), o servidor usa a **correção
+  única** com um pedido próprio (`buildIdeaRepairPrompt`: lista os rótulos e pede ideias; num ajuste,
+  só as diferenças). Se a correção ainda vier assim, ou não vier legível, a versão é gravada com os
+  avisos, sem falhar.
+- **Versões antigas** (gravadas no vocabulário de código): `normalizeLegacyGraph` mapeia na leitura
+  (`toDiagramDto`, rascunho e grafo base de ajuste) `module`/`feature`/`lib` → `structure`, `route` →
+  `process`, `data` → `information`; camadas `ui` → `people`, `routes` → `processes`, `features`/`lib`
+  → `structures`, `data` → `information`; ligações `event` → `notifies`, `data` → `produces`; e esvazia
+  os arquivos. Não corta pelos tetos novos (eles valem só para gerar). A configuração salva com tipos
+  antigos carrega com os equivalentes (`withDefaults`), e `showFiles` é descartado.
 
 O arquiteto **nunca bloqueia nem altera a mesa**: não é etapa (fora da trilha e de `WORKBENCH_STAGES`),
 não ocupa vaga da central, não publica na Saída da IA e não muda `stage`/`runState`. Falha, tempo
@@ -89,8 +121,8 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
 O diagrama é construído na tela enquanto o agente trabalha.
 
 - **Formato**: o agente escreve OPERAÇÕES, uma linha JSON por operação, em blocos ` ```architect `
-  (vários ao longo do turno, aos poucos: o objetivo, as camadas e os módulos logo depois de ler o
-  plano; depois os nós e as arestas conforme confirma os caminhos): `meta`, `group`, `node`, `edge`,
+  (vários ao longo do turno, aos poucos: o objetivo e as grandes partes logo depois de ler o plano;
+  depois processos, estruturas e ligações): `meta`, `group`, `node`, `edge`,
   `note`, `remove` (corrigir algo emitido) e `done`. Sem nenhum bloco, vale o formato antigo (um JSON
   no fim, `parse.ts`).
 - **Montador** (`createGraphAssembler`, puro, o mesmo `applyOps` no servidor e na tela): só aplica
@@ -128,21 +160,21 @@ O diagrama é construído na tela enquanto o agente trabalha.
 Schema Zod único (`architectGraphSchema`), o mesmo no servidor e na tela:
 
 - `title`, `summary`;
-- `groups[]`: `id`, `label`, `layer` (`ui`, `routes`, `features`, `lib`, `data`, `external`, `other`), `detail`;
-- `nodes[]`: `id`, `label`, `groupId`, `kind` (objetivo, módulo, rota, feature, lib, dado, externo,
-  decisão, risco), `detail`, `files[]` (caminhos reais) e `status` (`new`, `changed`, `existing`);
-- `edges[]`: `source`, `target`, `label` opcional e `kind` (`contains`, `uses`, `flow`, `event`, `data`);
+- `groups[]`: `id`, `label`, `layer` (`people`, `processes`, `structures`, `information`, `external`, `other`), `detail`;
+- `nodes[]`: `id`, `label`, `groupId`, `kind` (objetivo, pessoa/ator, processo, estrutura, informação,
+  serviço externo, decisão, risco), `detail`, `files[]` (sempre vazio) e `status` (`new`, `changed`, `existing`);
+- `edges[]`: `source`, `target`, `label` opcional e `kind` (`contains`, `triggers`, `flow`, `uses`, `produces`, `notifies`);
 - `notes[]`: decisões, riscos e dúvidas do plano.
 
 Saneamento (`sanitizeGraph`): normaliza textos e ids, deduplica (vale o primeiro), troca grupo
-inexistente por nenhum, valores fora da enumeração caem no padrão (`module`, `existing`, `uses`,
-`other`), descarta arestas com ponta inexistente, laços e duplicadas, garante o nó do **objetivo**
+inexistente por nenhum, valores fora da enumeração caem no padrão (`structure`, `existing`, `uses`,
+`other`; os do vocabulário antigo, no equivalente), descarta arestas com ponta inexistente, laços e duplicadas, garante o nó do **objetivo**
 (criado a partir do título), corta acima do teto do nível — prioridade: objetivo, depois o que o plano
 cria, altera e o contexto existente; nas arestas, as relações antes do "contém" — e remove grupos
-vazios. Grupos acima do teto do schema (40, `ARCHITECT_GROUPS_MAX`) são desfeitos, ficando os que têm os
+vazios. Grupos acima do teto do schema (8, `ARCHITECT_GROUPS_MAX`) são desfeitos, ficando os que têm os
 nós mais importantes; os nós deles ficam soltos (nunca descartados) e o corte vira aviso — o mesmo teto
 vale ao vivo. Id repetido ganha sufixo `_2`, `_3`… sem passar dos 80 caracteres do schema. Textos do modelo (`ARCHITECT_TEXT_LIMITS`): o prompt pede um tamanho (ex.: descrição do nó até
-4.000, nota até 500, resumo até 600) e o schema tem um **teto de proteção** separado e folgado (8.000,
+400, nota até 500, resumo até 600) e o schema tem um **teto de proteção** separado e folgado (1.500,
 1.000, 2.000…); só o que passa do teto é cortado, e todo corte — título, resumo, rótulos, descrições,
 notas — vira aviso da versão ("nota: 2 corte(s) no teto de proteção de 1.000 caracteres"). O texto bruto guardado em `report` são os últimos 50.000
 caracteres da resposta (`ARCHITECT_REPORT_MAX_CHARS`). Os cortes ficam em `trimmed` e `warnings` ("N nó(s) cortado(s) pelo teto do nível").
@@ -151,11 +183,11 @@ caracteres da resposta (`ARCHITECT_REPORT_MAX_CHARS`). Os cortes ficam em `trimm
 
 | Nível | Rótulo | Conteúdo | Teto de nós | Teto de arestas |
 |---|---|---|---|---|
-| 1 | Visão geral | camadas e módulos principais | 8 | 12 |
-| 2 | Resumido | módulos + integrações | 18 | 30 |
-| 3 | Equilibrado (padrão) | + rotas, modelos e decisões | 35 | 60 |
-| 4 | Detalhado | + componentes/arquivos e eventos | 70 | 120 |
-| 5 | Minucioso | + campos, validações e riscos por nó | 120 | 200 |
+| 1 | Visão geral | objetivo e as grandes partes | 5 | 6 |
+| 2 | Resumido | + os processos principais | 8 | 10 |
+| 3 | Equilibrado (padrão) | + estruturas, informações e serviços externos | 12 | 16 |
+| 4 | Detalhado | + etapas dos processos e decisões | 18 | 26 |
+| 5 | Minucioso | + regras e riscos de cada bloco | 25 | 36 |
 
 O nível vira diretiva do prompt e teto validado no servidor. O padrão é da configuração; na aba da
 mesa, o slider (`DepthControl`, sobre o `LeveledSlider` compartilhado com a criticidade do Adversário)
@@ -170,8 +202,8 @@ vale só para aquele pedido.
   **falhou/interrompido** (erro, "A mesa segue normalmente", **Tentar novamente** e **Regerar com
   profundidade maior**) e **vazio** (slider + **Gerar arquitetura**, ou o motivo quando o arquiteto não
   se aplica).
-- **Cabeçalho compacto** (`ArchitectHeader`, duas linhas finas, para o canvas ficar com o resto da
-  altura):
+- **Cabeçalho compacto** (`ArchitectHeader`, duas linhas de 28 px coladas — `gap-0`, `min-h-7`, seletor
+  `h-7` — e só 8 px até o canvas, `gap-2` da aba, para o canvas ficar com o resto da altura):
   - linha do título: o título do diagrama, um ícone **ⓘ "Sobre o diagrama"** com o **resumo na dica**
     (`InfoTooltip`, dica larga com rolagem) e, à direita, o seletor de versão quando há mais de uma
     ("Plano v2 · arquitetura v1", "(atual)" na mais recente);
@@ -182,8 +214,8 @@ vale só para aquele pedido.
 - **Barra dentro do canvas** (`ArchitectCanvasToolbar`, canto superior esquerdo, fora do viewport
   transformado e fora do PNG): visão (**Arquitetura** · **Mapa mental**, `OptionTabs` `xs`),
   **Filtros** (tipos de nó e "Só o que o plano cria/altera"; o objetivo fica sempre), **Exportar**
-  (Copiar Mermaid, Copiar Markdown, Baixar imagem), **Ajustar visão**, **Restaurar layout** e, ao vivo,
-  **Acompanhar**; quebra linha em tela estreita. A faixa de progresso ao vivo fica embaixo, no centro.
+  (Copiar Mermaid, Copiar Markdown, Baixar imagem), **Ajustar visão**, **Restaurar layout**, **Pedir
+  ajustes** e, ao vivo, **Acompanhar**; quebra linha em tela estreita. A faixa de progresso ao vivo fica embaixo, no centro.
 - **Altura**: o canvas ocupa todo o resto da aba (`flex-1`, piso de 360 px só em telas muito baixas) e a
   aba rola (`overflow-y-auto`) em vez de deixar o canvas vazar por baixo da barra de ações da mesa. O
   skeleton e a espera ao vivo usam as mesmas classes (cabeçalho e barra).
@@ -210,7 +242,7 @@ vale só para aquele pedido.
     cada anel cresce com a quantidade de nós dele (`ringRadii`: os vizinhos mais próximos ficam a pelo
     menos a largura de um cartão), então os cartões nunca se sobrepõem — nem em estrela de 120 nós;
   - nós com ícone por tipo e selo **Novo**/**Alterado**; hover destaca o nó, os vizinhos e as arestas
-    dele e esmaece o resto; clique abre o **painel lateral** (descrição, arquivos com copiar, vizinhos
+    dele e esmaece o resto; clique abre o **painel lateral** (descrição, vizinhos
     clicáveis e "Recolher o grupo"), numa camada fora do viewport transformado; grupos recolhem pelo
     cabeçalho e expandem pelo nó recolhido (arestas agregadas "×N"); zoom, pan, minimapa, **Ajustar
     visão** e **Restaurar layout**;
@@ -218,8 +250,11 @@ vale só para aquele pedido.
     `opex:architect-positions:v1:<mesa>:<versão>:<visão>`), nunca no banco.
 - Animações com Framer Motion: entrada dos nós por camada/anel, arestas se desenhando (`pathLength`),
   painel lateral e troca de visão/estado, todas respeitando movimento reduzido.
-- **Pedir ajustes** (rodapé, mesmo padrão do feedback do plano, `FeedbackComposer` com o slider ao lado):
-  cada envio gera uma versão nova com o grafo exibido como contexto. Só com o arquiteto aplicável.
+- **Pedir ajustes** (`ArchitectAdjustButton`, na barra dentro do canvas — sem faixa de rodapé): abre um
+  painel preso ao próprio botão (Popover, limitado à janela, fora do viewport transformado) com o
+  `FeedbackComposer` e o slider ao lado; cada envio gera uma versão nova com o grafo exibido como
+  contexto e fecha o painel. O texto em edição fica guardado com o painel fechado. Desligado durante a
+  geração; só com o arquiteto aplicável.
 - Mutações com resposta otimista (versão "gerando" na hora) e reversão com toast.
 
 ## Exportação (`mermaid.ts`)
@@ -227,7 +262,8 @@ vale só para aquele pedido.
 - `toMermaid`: `flowchart LR`, um `subgraph` por grupo, ids seguros (`n1…`, `g1…`), forma do nó pelo
   tipo, setas pelo tipo da aresta e classes `new`/`changed`; rótulos entre aspas com `#quot;`, `#35;`,
   `#lt;`/`#gt;` e sem quebras de linha (o GitHub renderiza em issue/PR).
-- `toMarkdown`: título, resumo, a cerca ` ```mermaid `, notas e a tabela de nós com arquivos.
+- `toMarkdown`: título, resumo, a cerca ` ```mermaid `, notas e a tabela de nós (tipo, situação e o que
+  cada bloco faz — nunca arquivos).
 - PNG do diagrama inteiro com `html-to-image` (`getNodesBounds` + `getViewportForBounds`), fundo do token.
   A seta de cada aresta é um `<marker>` dentro do SVG da própria aresta (dentro do viewport que o PNG
   clona), então a imagem leva as setas.
@@ -242,7 +278,7 @@ de validação leva à seção do campo).
 
 - **Geral**: ativação + disponibilidade, **Disparo** (Automático ao aprovar o plano — padrão — ou Manual)
   e **Centrais** (`ScopeCard` compartilhado com o Adversário e o Mentor).
-- **Diagrama**: profundidade padrão, tipos de nó exibidos, mostrar arquivos, mostrar riscos/decisões e
+- **Diagrama**: profundidade padrão, tipos de nó exibidos, mostrar riscos/decisões e
   visão padrão.
 - **Agente**: `AgentCard` compartilhado (agente, modelo, variante, fallbacks, tempo máximo e
   instruções adicionais).

@@ -1,6 +1,6 @@
-import { ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_LIVE_CAP_FACTOR, ARCHITECT_STREAM_FENCE, type ArchitectDepth } from "./constants"
+import { ARCHITECT_DEPTH_DEFS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_LIVE_CAP_FACTOR, ARCHITECT_STREAM_FENCE, type ArchitectDepth } from "./constants"
 import type { ArchitectEdge, ArchitectGraph, ArchitectGroup, ArchitectNode, ArchitectNote } from "./graph"
-import { clip, cutWarnings, isRec, nodeLabelOf, oneOf, str, toGroup, toNode, toNote, uniqueId, type Rec, type TextCuts } from "./sanitize"
+import { clip, cutWarnings, edgeKindOf, isRec, nodeLabelOf, normalizeLegacyGraph, str, toGroup, toNode, toNote, uniqueId, type Rec, type TextCuts } from "./sanitize"
 
 /**
  * Diagrama ao vivo (módulo PURO, servidor e tela). O agente escreve o grafo como operações, uma linha
@@ -90,7 +90,8 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
     const limits = ARCHITECT_DEPTH_DEFS[depth]
     const maxNodes = Math.ceil(limits.maxNodes * ARCHITECT_LIVE_CAP_FACTOR)
     const maxEdges = Math.ceil(limits.maxEdges * ARCHITECT_LIVE_CAP_FACTOR)
-    const start = () => (base ? cloneGraph(base) : emptyDraft())
+    // O grafo base de um ajuste pode estar no vocabulário antigo (diagrama de código): normaliza.
+    const start = () => (base ? cloneGraph(normalizeLegacyGraph(base)) : emptyDraft())
     let draft = start()
     let buffer = ""
     let inBlock = false
@@ -127,7 +128,7 @@ export function createGraphAssembler({ depth, base = null }: { depth: ArchitectD
         if (!source || !target || source === target) return "skip"
         const nodeIds = new Set(draft.nodes.map((node) => node.id))
         if (!nodeIds.has(source) || !nodeIds.has(target)) return "pending"
-        const kind = oneOf(item.kind, ARCHITECT_EDGE_KINDS, "uses")
+        const kind = edgeKindOf(item.kind)
         if (draft.edges.some((edge) => edge.source === source && edge.target === target && edge.kind === kind)) return "skip"
         if (draft.edges.length >= maxEdges) return "skip"
         const ids = new Set(draft.edges.map((edge) => edge.id))

@@ -2,22 +2,37 @@ import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { loggerFor } from "@/lib/logger"
-import { ARCHITECT_FEATURE } from "../constants"
+import { ARCHITECT_FEATURE, ARCHITECT_LEGACY_NODE_KINDS, ARCHITECT_NODE_KINDS, type ArchitectNodeKind } from "../constants"
 import { DEFAULT_ARCHITECT_SETTINGS, architectSettingsSchema, type ArchitectSettings } from "../schemas"
 import type { ArchitectSettingsDto } from "../types"
 
 const log = loggerFor({ module: "architect-agent" })
+
+/**
+ * Tipos de nó salvos no vocabulário antigo (diagrama de código) viram os equivalentes de ideias; sem
+ * nenhum válido, todos. Os demais tipos novos (pessoa/ator) entram junto, para não sumirem do filtro.
+ */
+function migrateNodeKinds(saved: unknown): ArchitectNodeKind[] {
+    if (!Array.isArray(saved)) return [...ARCHITECT_NODE_KINDS]
+    const legacy = saved.some((kind) => typeof kind === "string" && Object.hasOwn(ARCHITECT_LEGACY_NODE_KINDS, kind))
+    const kinds = saved.map((kind) => (typeof kind === "string" && Object.hasOwn(ARCHITECT_LEGACY_NODE_KINDS, kind) ? ARCHITECT_LEGACY_NODE_KINDS[kind] : kind)).filter((kind): kind is ArchitectNodeKind => (ARCHITECT_NODE_KINDS as readonly unknown[]).includes(kind))
+    if (!kinds.length) return [...ARCHITECT_NODE_KINDS]
+    return [...new Set(legacy ? [...kinds, "actor" as const, "objective" as const] : kinds)]
+}
 
 /** Configuração salva antes de um campo novo existir recebe o padrão dele antes de validar. */
 export function withDefaults(saved: unknown): unknown {
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return saved
     const value = saved as Partial<ArchitectSettings>
     const defaults = DEFAULT_ARCHITECT_SETTINGS
+    // "Mostrar arquivos" saiu (o diagrama é de ideias): a chave antiga é descartada.
+    const { showFiles: _showFiles, ...diagram } = (value.diagram ?? {}) as Partial<ArchitectSettings["diagram"]> & { showFiles?: unknown }
+    void _showFiles
     return {
         ...defaults,
         ...value,
         scope: { ...defaults.scope, ...(value.scope ?? {}) },
-        diagram: { ...defaults.diagram, ...(value.diagram ?? {}) },
+        diagram: { ...defaults.diagram, ...diagram, ...(value.diagram ? { nodeKinds: migrateNodeKinds(diagram.nodeKinds) } : {}) },
     }
 }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { ReactFlowProvider } from "@xyflow/react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ErrorState } from "@/components/feedback/ErrorState"
@@ -13,7 +13,7 @@ import { DEFAULT_ARCHITECT_SETTINGS } from "../../schemas"
 import type { ArchitectGraph } from "../../graph"
 import { useLiveDiagram } from "../../hooks/useLiveDiagram"
 import type { ArchitectDiagramDto, ArchitectLiveProgress } from "../../types"
-import { ArchitectAdjustComposer } from "./ArchitectAdjustComposer"
+import { ArchitectAdjustButton } from "./ArchitectAdjustButton"
 import { ArchitectDiagramPane } from "./ArchitectDiagramPane"
 import { ArchitectCanvasSkeleton, ArchitectEmpty, ArchitectFailed, ArchitectLiveWaiting } from "./ArchitectStates"
 import { ArchitectVersionSelect } from "./ArchitectHeader"
@@ -70,7 +70,7 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
 
     if (!diagram) return <ArchitectEmpty canGenerate={canGenerate} reason={emptyReason(workbench)} defaultDepth={asDepth(defaults.depth)} pending={generate.isPending} onGenerate={(depth) => void request({ depth })} />
 
-    const pane = (current: ArchitectDiagramDto, graph: ArchitectGraph, liveInfo: { progress: ArchitectLiveProgress | null; connected: boolean } | null) => (
+    const pane = (current: ArchitectDiagramDto, graph: ArchitectGraph, liveInfo: { progress: ArchitectLiveProgress | null; connected: boolean } | null, adjust: ReactNode = null) => (
         <ArchitectDiagramPane
             workbenchId={workbench.id}
             taskCode={workbench.taskCode}
@@ -82,9 +82,9 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
             filter={filter}
             onFilterChange={setFilter}
             onSelect={setSelected}
-            showFiles={defaults.showFiles}
             showNotes={defaults.showNotes}
             live={liveInfo}
+            adjust={adjust}
         />
     )
     const picker = (current: ArchitectDiagramDto) =>
@@ -103,8 +103,13 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
         if (mode === "diagram" && shown)
             return (
                 <ReactFlowProvider>
-                    {pane(diagram, shown, running ? { progress: live.progress ?? { phase: diagram.phase, tools: diagram.tools, nodes: shown.nodes.length, edges: shown.edges.length }, connected: live.connected || live.graph === null } : null)}
-                    {canGenerate && <ArchitectAdjustComposer defaultDepth={asDepth(diagram.depth)} pending={generate.isPending} disabled={busy} onSubmit={({ feedback, depth }) => request({ feedback, depth, baseDiagramId: diagram.id })} />}
+                    {pane(
+                        diagram,
+                        shown,
+                        running ? { progress: live.progress ?? { phase: diagram.phase, tools: diagram.tools, nodes: shown.nodes.length, edges: shown.edges.length }, connected: live.connected || live.graph === null } : null,
+                        // "Pedir ajustes" fica na barra dentro do canvas (sem faixa de rodapé).
+                        canGenerate ? <ArchitectAdjustButton defaultDepth={asDepth(diagram.depth)} pending={generate.isPending} disabled={busy} onSubmit={({ feedback, depth }) => request({ feedback, depth, baseDiagramId: diagram.id })} /> : null,
+                    )}
                 </ReactFlowProvider>
             )
         if (mode === "waiting")

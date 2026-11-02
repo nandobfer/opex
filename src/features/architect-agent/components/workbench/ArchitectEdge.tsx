@@ -12,7 +12,7 @@ import { enterDelay, useDiagramHighlight } from "./diagram-context"
 
 export type DiagramEdge = Edge<{ kind: ArchitectEdgeKind; label: string | null; count: number; edgeIds: string[]; secondary: boolean; rank: number }, "architect">
 
-const DASH: Partial<Record<ArchitectEdgeKind, string>> = { event: "6 4", contains: "2 4", data: "1 3" }
+const DASH: Partial<Record<ArchitectEdgeKind, string>> = { notifies: "6 4", contains: "2 4", produces: "1 3" }
 
 function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps<DiagramEdge>) {
     const highlight = useDiagramHighlight()

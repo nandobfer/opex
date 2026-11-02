@@ -22,8 +22,8 @@ import type { ArchitectDiagramDto } from "../../types"
  */
 
 /** Classes do cabeçalho (o skeleton usa as mesmas). */
-export const ARCHITECT_HEADER_CLASS = "flex flex-col gap-1"
-export const ARCHITECT_HEADER_ROW_CLASS = "flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1"
+export const ARCHITECT_HEADER_CLASS = "flex flex-col gap-0"
+export const ARCHITECT_HEADER_ROW_CLASS = "flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1"
 
 /** Rótulo de uma versão: "Plano v2 · arquitetura v1". */
 export const diagramVersionLabel = (diagram: Pick<ArchitectDiagramDto, "planVersion" | "planSeq">) => `Plano v${diagram.planVersion} · arquitetura v${diagram.planSeq}`
@@ -34,7 +34,7 @@ export function ArchitectVersionSelect({ diagrams, diagram, onSelect }: { diagra
     if (diagrams.length < 2 || !latest) return null
     return (
         <Select value={diagram.id} onValueChange={(value) => value && onSelect(value)}>
-            <SelectTrigger className="h-8 w-60" aria-label="Versão da arquitetura">
+            <SelectTrigger className="h-7 w-60" aria-label="Versão da arquitetura">
                 <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -3,7 +3,7 @@
 import { memo } from "react"
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { motion } from "framer-motion"
-import { ChevronDown, ChevronRight, FileCode2 } from "lucide-react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { ARCHITECT_GROUP_LAYER_LABELS, ARCHITECT_NODE_KIND_LABELS, ARCHITECT_NODE_STATUS_LABELS } from "../../constants"
@@ -74,12 +74,12 @@ function ItemNodeView({ id, data }: NodeProps<ItemNode>) {
                 </span>
                 <StatusBadge status={node.status} />
             </div>
+            {/* Diagrama de ideias: o tipo e o começo da descrição (nunca arquivos). */}
             <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span>{ARCHITECT_NODE_KIND_LABELS[node.kind]}</span>
-                {highlight.showFiles && node.files.length > 0 && (
-                    <span className="flex min-w-0 items-center gap-0.5 truncate font-mono" title={node.files.join("\n")}>
-                        <FileCode2 className="h-3 w-3 shrink-0" aria-hidden />
-                        {node.files.length === 1 ? node.files[0] : `${node.files.length} arquivos`}
+                <span className="shrink-0">{ARCHITECT_NODE_KIND_LABELS[node.kind]}</span>
+                {node.detail && (
+                    <span className="min-w-0 truncate" title={node.detail}>
+                        · {node.detail}
                     </span>
                 )}
             </div>

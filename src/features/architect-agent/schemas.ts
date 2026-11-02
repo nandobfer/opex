@@ -15,7 +15,6 @@ export const architectDepthSchema = int(1, 5).transform((value) => value as Arch
 export const architectDiagramSettingsSchema = z.object({
     depth: int(1, 5),
     nodeKinds: z.array(z.enum(ARCHITECT_NODE_KINDS)).min(1, "Escolha ao menos um tipo de nó"),
-    showFiles: z.boolean(),
     showNotes: z.boolean(),
     defaultView: z.enum(ARCHITECT_VIEWS),
 })
@@ -50,7 +49,7 @@ export const DEFAULT_ARCHITECT_SETTINGS: ArchitectSettings = {
     agent: { agent: null, model: null, variant: null, fallbacks: [] },
     timeoutMinutes: ARCHITECT_TIMEOUT_DEFAULT,
     instructions: "",
-    diagram: { depth: ARCHITECT_DEPTH_DEFAULT, nodeKinds: [...ARCHITECT_NODE_KINDS], showFiles: true, showNotes: true, defaultView: "architecture" },
+    diagram: { depth: ARCHITECT_DEPTH_DEFAULT, nodeKinds: [...ARCHITECT_NODE_KINDS], showNotes: true, defaultView: "architecture" },
 }
 
 /** "Gerar arquitetura" / "Pedir ajustes" na aba da mesa. */

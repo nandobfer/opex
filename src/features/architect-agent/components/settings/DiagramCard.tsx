@@ -58,7 +58,6 @@ export function DiagramCard({ form }: { form: UseFormReturn<ArchitectSettings> }
                             )}
                         />
                     </Field>
-                    <FormToggleCard<ArchitectSettings> control={form.control} name="diagram.showFiles" id="architect-show-files" label="Mostrar arquivos" description="Os caminhos reais do repositório em cada nó e no painel lateral." />
                     <FormToggleCard<ArchitectSettings> control={form.control} name="diagram.showNotes" id="architect-show-notes" label="Mostrar riscos e decisões" description="As notas do plano (decisões, riscos e dúvidas) acima do diagrama." />
                 </CardContent>
             </Card>

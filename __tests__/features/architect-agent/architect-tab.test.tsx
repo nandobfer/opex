@@ -122,10 +122,10 @@ describe('ArchitectTab', () => {
   it('vazio: a profundidade padrão configurada vale, inclusive quando a configuração chega depois da montagem', async () => {
     const withDepth = (depth: number) => ({ settings: { ...DEFAULT_ARCHITECT_SETTINGS, diagram: { ...DEFAULT_ARCHITECT_SETTINGS.diagram, depth } } })
     const { rerender } = render(<ArchitectTab workbench={workbench()} />)
-    expect(screen.getByText(/até 35 nós/)).toBeTruthy()
+    expect(screen.getByText(/até 12 nós/)).toBeTruthy()
     mocks.settings = withDepth(5)
     rerender(<ArchitectTab workbench={workbench()} />)
-    expect(screen.getByText(/até 120 nós/)).toBeTruthy()
+    expect(screen.getByText(/até 25 nós/)).toBeTruthy()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar arquitetura/ })))
     expect(mocks.generate).toHaveBeenLastCalledWith({ depth: 5 })
     cleanup()
@@ -215,13 +215,35 @@ describe('ArchitectTab', () => {
     expect(screen.getAllByText(/Plano v1 · arquitetura v1 · Equilibrado/).length).toBeGreaterThan(0)
   })
 
-  it('"Pedir ajustes" envia o pedido, a profundidade e a versão exibida como base', async () => {
+  it('"Pedir ajustes" fica na barra dentro do canvas e abre um painel preso ao botão que envia o pedido, a profundidade e a versão base', async () => {
     mocks.diagrams = [diagram()]
     render(<ArchitectTab workbench={workbench()} />)
-    fireEvent.click(screen.getByRole('button', { name: /Pedir ajustes/ }))
+    const toolbar = screen.getByTestId('architect-canvas-toolbar')
+    const button = screen.getByRole('button', { name: /Pedir ajustes/ })
+    expect(toolbar.contains(button)).toBe(true)
+    // Vem depois de "Restaurar layout" na barra.
+    const restore = screen.getByRole('button', { name: /Restaurar layout/ })
+    expect(restore.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(button)
+    })
+    const panel = await screen.findByTestId('architect-adjust-panel')
+    // O painel abre por portal, fora do canvas transformado.
+    expect(screen.getByTestId('architect-canvas-frame').contains(panel)).toBe(false)
     fireEvent.change(screen.getByLabelText('Pedir ajustes no diagrama'), { target: { value: 'expanda o fluxo de autenticação' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar nova versão/ })))
     expect(mocks.generate).toHaveBeenCalledWith({ feedback: 'expanda o fluxo de autenticação', depth: 3, baseDiagramId: 'd1' })
+    expect(screen.queryByTestId('architect-adjust-panel')).toBeNull()
+  })
+
+  it('sem faixa de rodapé: o "Pedir ajustes" não fica fora do canvas, e fica desligado durante a geração', () => {
+    mocks.diagrams = [diagram({ state: 'running', phase: 'writing', graph: null })]
+    mocks.live = { graph: sampleGraph(), progress: { phase: 'writing', tools: 1, nodes: 6, edges: 5 }, seq: 1, connected: true, ended: false }
+    render(<ArchitectTab workbench={workbench()} />)
+    const buttons = screen.getAllByRole('button', { name: /Pedir ajustes/ })
+    expect(buttons).toHaveLength(1)
+    expect(screen.getByTestId('architect-canvas-toolbar').contains(buttons[0]!)).toBe(true)
+    expect(buttons[0]!.hasAttribute('disabled')).toBe(true)
   })
 
   it('sem o arquiteto aplicável, o diagrama pronto continua visível, sem pedir ajustes', () => {
@@ -294,6 +316,19 @@ describe('ArchitectTab', () => {
     const wrap = frame.parentElement!
     expect(wrap.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'min-h-[360px]']))
     const tab = wrap.parentElement!
-    expect(tab.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'overflow-y-auto', 'min-h-0']))
+    expect(tab.className.split(' ')).toEqual(expect.arrayContaining(['flex-1', 'overflow-y-auto', 'min-h-0', 'gap-2']))
+  })
+
+  it('cabeçalho junto: sem espaço entre o título e os dados da versão, linhas de 28 px', () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const header = screen.getByTestId('architect-header')
+    expect(header.className.split(' ')).toContain('gap-0')
+    const rows = Array.from(header.children)
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.className.split(' ')).toContain('min-h-7')
+      expect(row.className.split(' ')).not.toContain('min-h-8')
+    }
   })
 })

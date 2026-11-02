@@ -15,8 +15,8 @@ import type { TaskDetailDto } from "@/features/tasks/types"
 import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_DRAFT_SAVE_MS, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
 import { architectGraphSchema, type ArchitectGraph, type RawGraph } from "../graph"
 import { parseArchitectOutput } from "../parse"
-import { buildArchitectInstructions, buildDiagramPrompt, buildRepairPrompt } from "../prompt"
-import { sanitizeGraph } from "../sanitize"
+import { buildArchitectInstructions, buildDiagramPrompt, buildIdeaRepairPrompt, buildRepairPrompt } from "../prompt"
+import { sanitizeGraph, needsIdeaRepair, normalizeLegacyGraph } from "../sanitize"
 import { createGraphAssembler, emptyDraft, type AppliedOp, type GraphAssembler } from "../stream-parser"
 import { closeLive, emitOps, emitProgress, openLive } from "./live-hub"
 import { approvedPlanVersionOf } from "../plan-version"
@@ -227,7 +227,8 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         await ArchitectDiagram.updateOne(filter, { $set: { directory } })
         const task = await withTimeout(loadTaskSafe(doc.taskId), "A leitura da tarefa", signal)
         const base = doc.baseDiagramId ? await ArchitectDiagram.findById(doc.baseDiagramId, { graph: 1 }).lean() : null
-        const adjust = doc.feedback && base?.graph ? { graph: base.graph, feedback: doc.feedback } : null
+        // O grafo base pode ser de uma versão antiga (diagrama de código): segue normalizado para o agente.
+        const adjust = doc.feedback && base?.graph ? { graph: normalizeLegacyGraph(base.graph), feedback: doc.feedback } : null
         const startGraph: ArchitectGraph | null = adjust?.graph ?? null
         const graphAssembler = createGraphAssembler({ depth: doc.depth as ArchitectDepth, base: startGraph })
         assembler = graphAssembler
@@ -325,7 +326,24 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         }
         await saveDraft(true)
         if (!parsed.ok) return void (await finish({ state: "failed", error: `Resposta inválida depois de uma nova tentativa: ${parsed.error}`, report: result.text.slice(-ARCHITECT_REPORT_MAX_CHARS) }))
-        const sanitized = sanitizeGraph(parsed.raw, depth)
+        let sanitized = sanitizeGraph(parsed.raw, depth)
+        // Diagrama com cara de código (um terço dos rótulos ou mais): a correção única pede os mesmos
+        // blocos reescritos como ideias. Se ainda vier assim, grava com o aviso (o diagrama existe).
+        if (!repaired && needsIdeaRepair(sanitized)) {
+            log.info({ diagramId, codeLabels: sanitized.codeLabels.length, nodes: sanitized.graph.nodes.length }, "[architect] rótulos com nome de código: pedindo a correção uma vez")
+            await setPhase("retrying")
+            live(graphAssembler.reset())
+            const retried = await turn(buildIdeaRepairPrompt(sanitized.codeLabels, depth, Boolean(adjust)), `Agente Arquiteto · v${doc.version} (correção)`)
+            repaired = true
+            if (retried.outcome === "succeeded") {
+                const reparsed = readGraph(retried.text)
+                if (reparsed.ok) {
+                    result = retried
+                    sanitized = sanitizeGraph(reparsed.raw, depth)
+                } else log.info({ diagramId, err: reparsed.error }, "[architect] correção sem diagrama legível: fica a primeira resposta")
+            } else log.info({ diagramId, err: retried.message }, "[architect] correção não concluída: fica a primeira resposta")
+            await saveDraft(true)
+        }
         architectGraphSchema.parse(sanitized.graph)
         const warnings = [...graphAssembler.warnings, ...sanitized.warnings]
 

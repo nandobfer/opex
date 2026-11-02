@@ -13,15 +13,22 @@ const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
 /** Uma linha de exemplo por operação do formato ao vivo (`stream-parser.ts`). */
 const FORMAT_LINES = [
-    { op: "meta", title: "título curto do diagrama", summary: "leitura arquitetural de 1 a 3 frases" },
-    { op: "node", id: "objective", label: "objetivo do plano", kind: "objective", status: "new", detail: "o que o plano entrega" },
-    { op: "group", id: "g-ui", label: "UI", layer: ARCHITECT_GROUP_LAYERS.join("|") },
-    { op: "node", id: "n-tab", label: "Aba X da mesa", groupId: "g-ui", kind: ARCHITECT_NODE_KINDS.join("|"), status: ARCHITECT_NODE_STATUSES.join("|"), detail: "o que muda e por quê", files: ["src/caminho/real/Arquivo.tsx"] },
-    { op: "edge", source: "objective", target: "n-tab", kind: ARCHITECT_EDGE_KINDS.join("|"), label: "opcional" },
+    { op: "meta", title: "título curto do diagrama", summary: "a ideia do plano em 1 a 3 frases" },
+    { op: "node", id: "objective", label: "Diagrama do plano aprovado", kind: "objective", status: "new", detail: "o que o plano entrega, em linguagem comum" },
+    { op: "group", id: "g-pessoas", label: "Quem participa", layer: ARCHITECT_GROUP_LAYERS.join("|") },
+    { op: "node", id: "dono", label: "Dono aprova o plano", groupId: "g-pessoas", kind: "actor", status: "existing", detail: "quem dispara o processo" },
+    { op: "node", id: "geracao", label: "Geração do diagrama", kind: ARCHITECT_NODE_KINDS.join("|"), status: ARCHITECT_NODE_STATUSES.join("|"), detail: "o que acontece e por quê, em 1 a 3 frases" },
+    { op: "node", id: "versoes", label: "Versões do diagrama", kind: "information", status: "new", detail: "o que fica guardado" },
+    { op: "edge", source: "dono", target: "geracao", kind: ARCHITECT_EDGE_KINDS.join("|"), label: "opcional, 1 a 3 palavras" },
+    { op: "edge", source: "geracao", target: "versoes", kind: "produces" },
     { op: "note", kind: ARCHITECT_NOTE_KINDS.join("|"), text: "decisão, risco ou dúvida do plano" },
     { op: "remove", id: "id de um nó, aresta ou grupo emitido antes (só para corrigir)" },
     { op: "done" },
 ]
+
+/** O que NUNCA aparece em nenhum texto do diagrama (é de ideias, não de código). */
+const NO_CODE_RULE =
+    "- PROIBIDO em qualquer texto (rótulo, descrição, grupo, ligação e nota): nomes de arquivos, diretórios ou caminhos; funções, componentes, classes, hooks; rotas e endpoints; coleções e tabelas; variáveis, campos técnicos e bibliotecas; e qualquer coisa em `camelCase`, `snake_case`, com `/`, extensão (`.ts`, `.tsx`…) ou `()`. Nomes de produtos e serviços (GitHub, OpenCode, Pusher) podem aparecer."
 
 const FENCE = "```" + ARCHITECT_STREAM_FENCE
 
@@ -38,20 +45,24 @@ export function depthDirective(depth: ArchitectDepth): string {
 export function buildArchitectInstructions(input: { instructions: string; memories: string; selfMemory?: boolean }): string {
     const extra = input.instructions.trim()
     return [
-        "Você é o AGENTE ARQUITETO: lê o plano aprovado de uma tarefa e o código do repositório e desenha a arquitetura DO PLANO como um grafo semântico (camadas, módulos, rotas, dados, integrações, eventos, decisões e riscos).",
+        "Você é o AGENTE ARQUITETO: lê o plano aprovado de uma tarefa e desenha a ARQUITETURA DA IDEIA do plano — quem participa, quais processos acontecem, quais estruturas e informações existem e como se ligam — para quem NÃO lê código. É um diagrama de quadro branco, de alto nível, nunca um mapa de arquivos.",
         "",
         "## Regras invioláveis",
         "- Você só LÊ: NUNCA altere arquivos, NUNCA faça commit, checkout, stash ou qualquer operação que mude o repositório.",
         "- NUNCA rode testes, build, typecheck, lint, servidores nem instale dependências.",
         "- Não pergunte nada: ninguém responde durante a geração.",
         "",
-        "## Escopo: somente o que o plano toca",
-        "- Parta do OBJETIVO do plano (um nó `kind: \"objective\"`) e mostre os módulos, rotas, modelos, integrações e eventos que o plano CRIA, ALTERA ou de que depende diretamente.",
-        "- NÃO desenhe o sistema inteiro. O que já existe e não muda aparece só como contexto mínimo, com `status: \"existing\"`.",
+        "## Fonte: o plano",
+        "- O plano aprovado é a fonte principal. Leia o código só se precisar entender um processo que já existe — e NUNCA cite o que leu (nada de arquivos, funções ou rotas no diagrama).",
+        "",
+        "## Escopo e vocabulário: ideias, processos e estruturas",
+        "- Parta do OBJETIVO do plano (um nó `kind: \"objective\"`) e mostre só as partes que o plano CRIA, ALTERA ou de que depende diretamente. NÃO desenhe o sistema inteiro: o que já existe e não muda aparece só como contexto mínimo (`status: \"existing\"`).",
         "- `status`: `new` = o plano cria; `changed` = o plano altera; `existing` = só contexto.",
-        "- `files`: caminhos REAIS do repositório (confirme lendo o código); para arquivos que o plano cria, use o caminho previsto no plano.",
-        "- Agrupe os nós em camadas (`groups`, ex.: UI, Rotas/API, Features, Lib, Banco, Externo) e ligue-os com arestas tipadas (`contains`, `uses`, `flow`, `event`, `data`).",
-        "- Registre em `notes` as decisões, os riscos e as dúvidas do plano.",
+        "- Tipos de nó (`kind`): `objective` (o objetivo), `actor` (pessoa ou ator: o dono, o cliente, um agente), `process` (processo ou etapa), `structure` (uma parte do sistema vista como ideia, ex.: \"Mesa de trabalho\", \"Configuração do agente\"), `information` (o que é guardado ou trocado, ex.: \"Plano aprovado\"), `external` (serviço externo), `decision` e `risk`.",
+        "- Rótulos de 2 a 5 palavras em português comum (\"Aprovação do plano\", \"Geração do diagrama\", \"Histórico de versões\"). Descrição: o que o bloco faz e por quê, em 1 a 3 frases.",
+        NO_CODE_RULE,
+        "- Agrupe em camadas (`groups`: `people` Pessoas e canais, `processes` Processos, `structures` Estruturas, `information` Informação, `external` Serviços externos, `other`) e ligue com arestas tipadas (`contains` contém, `triggers` dispara, `flow` segue para, `uses` usa, `produces` gera/grava, `notifies` avisa).",
+        "- Registre em `notes` as decisões, os riscos e as dúvidas do plano (também sem nomes de código).",
         `- Tamanho dos textos (em caracteres): ${TEXT_GUIDANCE}.`,
         "- Ids curtos, únicos e estáveis (letras, números e hífen). Toda aresta liga dois ids existentes.",
         "",
@@ -60,8 +71,8 @@ export function buildArchitectInstructions(input: { instructions: string; memori
         FENCE,
         ...FORMAT_LINES.map((line) => JSON.stringify(line)),
         "```",
-        "- Escreva aos POUCOS: logo depois de ler o plano, um primeiro bloco com `meta`, o objetivo, as camadas e os módulos principais; depois, conforme confirmar os caminhos no código, novos blocos acrescentando ou refinando nós e arestas. Vários blocos ao longo da resposta são esperados.",
-        "- Repetir um `node` com o mesmo id ATUALIZA os campos enviados (ex.: trocar `status` ou acrescentar `files`). Uma aresta pode vir antes do nó de destino.",
+        "- Escreva aos POUCOS: logo depois de ler o plano, um primeiro bloco com `meta`, o objetivo e as grandes partes; depois, novos blocos acrescentando ou refinando processos, estruturas e ligações. Vários blocos ao longo da resposta são esperados.",
+        "- Repetir um `node` com o mesmo id ATUALIZA os campos enviados (ex.: trocar `status` ou melhorar a descrição). Uma aresta pode vir antes do nó de destino.",
         "- Termine o último bloco com `{\"op\":\"done\"}`. Não escreva o grafo de outra forma (nada de JSON único no fim).",
         extra ? `\n## Instruções adicionais\n${extra}` : "",
         memoriesSection(input.memories),
@@ -88,8 +99,8 @@ export interface DiagramPromptInput {
 
 export function buildDiagramPrompt(input: DiagramPromptInput): string {
     const where = input.worktree
-        ? `Leia o código no worktree da mesa: ${input.directory} (a implementação pode estar em andamento; o que vale é o plano).`
-        : `O worktree da mesa ainda não existe: leia o código da base do repositório em ${input.directory}. O plano descreve as mudanças sobre esta base.`
+        ? `Se precisar entender um processo que já existe, o código está no worktree da mesa: ${input.directory} (o que vale é o plano; nunca cite o código no diagrama).`
+        : `Se precisar entender um processo que já existe, o código está na base do repositório em ${input.directory} (o worktree da mesa ainda não existe; o plano descreve as mudanças sobre esta base; nunca cite o código no diagrama).`
     return [
         `# Arquitetura do plano v${input.planVersion} da tarefa ${input.code}: ${input.title}`,
         "",
@@ -134,4 +145,22 @@ export function buildRepairPrompt(error: string, depth: ArchitectDepth, adjustin
         ? `O diagrama anterior voltou a ser o ponto de partida na tela (o que você emitiu foi descartado). Emita de novo só as DIFERENÇAS do pedido de ajuste sobre ele, em blocos ${FENCE} com uma operação JSON por linha: \`node\` para criar ou atualizar (mesmo id), \`edge\` para ligações novas e \`remove\` para o que sai (no máximo ${def.maxNodes} nós no total), e termine com {"op":"done"}. Não leia mais nada do repositório.`
         : `Reescreva o diagrama COMPLETO de novo, em blocos ${FENCE} com uma operação JSON por linha, no formato das instruções (no máximo ${def.maxNodes} nós, ao menos o objetivo, e termine com {"op":"done"}). Não leia mais nada do repositório.`
     return [`A sua resposta não pôde ser lida: ${error}.`, ask].join("\n")
+}
+
+/**
+ * Correção (a mesma tentativa única) quando o diagrama veio com cara de código: lista os rótulos e pede
+ * os blocos reescritos como ideias. Num ajuste, só as diferenças sobre o grafo anterior.
+ */
+export function buildIdeaRepairPrompt(codeLabels: readonly string[], depth: ArchitectDepth, adjusting = false): string {
+    const def = ARCHITECT_DEPTH_DEFS[depth]
+    const how = adjusting
+        ? `O diagrama anterior voltou a ser o ponto de partida na tela (o que você emitiu foi descartado). Emita de novo só as DIFERENÇAS do pedido de ajuste, já como ideias: \`node\`, \`edge\` e \`remove\`, em blocos ${FENCE}, e termine com {"op":"done"}.`
+        : `Reescreva o diagrama COMPLETO de novo como ideias, em blocos ${FENCE} com uma operação JSON por linha (no máximo ${def.maxNodes} nós, ao menos o objetivo), e termine com {"op":"done"}.`
+    return [
+        "O diagrama veio com nomes de CÓDIGO, e ele deve mostrar ideias, processos e estruturas para quem não lê código. Rótulos a reescrever:",
+        ...codeLabels.slice(0, 30).map((label) => `- ${label}`),
+        NO_CODE_RULE,
+        "- Rótulos de 2 a 5 palavras em português comum; descrições de 1 a 3 frases sobre o que o bloco faz e por quê.",
+        `${how} Não leia mais nada do repositório.`,
+    ].join("\n")
 }

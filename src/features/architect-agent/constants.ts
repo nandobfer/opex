@@ -17,10 +17,11 @@ export const ARCHITECT_TIMEOUT_MAX = 60
 export const ARCHITECT_TIMEOUT_DEFAULT = 15
 /** Versões listadas no Histórico da configuração. */
 export const ARCHITECT_HISTORY_LIMIT = 50
-/** Arquivos guardados por nó (o resto é cortado no saneamento). */
-export const ARCHITECT_NODE_FILES_MAX = 20
-/** Teto de grupos (camadas) de um diagrama e tamanho máximo de um id (os mesmos do schema estrito). */
-export const ARCHITECT_GROUPS_MAX = 40
+/**
+ * Teto de grupos (camadas) de um diagrama e tamanho máximo de um id (os mesmos do schema estrito). O
+ * diagrama é de ideias (6 camadas possíveis): 8 grupos bastam com folga.
+ */
+export const ARCHITECT_GROUPS_MAX = 8
 export const ARCHITECT_ID_MAX = 80
 /**
  * Textos do grafo vindos do modelo: `prompt` é o tamanho PEDIDO nas instruções; `max` é o teto de
@@ -31,7 +32,7 @@ export const ARCHITECT_TEXT_LIMITS = {
     title: { label: "título", prompt: 100, max: 160 },
     summary: { label: "resumo", prompt: 600, max: 2_000 },
     nodeLabel: { label: "rótulo de nó", prompt: 60, max: 120 },
-    detail: { label: "descrição de nó", prompt: 4_000, max: 8_000 },
+    detail: { label: "descrição de nó", prompt: 400, max: 1_500 },
     groupLabel: { label: "rótulo de grupo", prompt: 40, max: 80 },
     groupDetail: { label: "descrição de grupo", prompt: 300, max: 600 },
     edgeLabel: { label: "rótulo de aresta", prompt: 40, max: 80 },
@@ -64,40 +65,50 @@ export const ARCHITECT_DEPTHS = [1, 2, 3, 4, 5] as const
 export type ArchitectDepth = (typeof ARCHITECT_DEPTHS)[number]
 export const ARCHITECT_DEPTH_DEFAULT: ArchitectDepth = 3
 
+/**
+ * O diagrama é de IDEIAS, processos e estruturas (alto nível, para quem não lê código): poucos nós por
+ * nível. Os tetos valem para as gerações novas; versões antigas não são cortadas ao ler.
+ */
 export const ARCHITECT_DEPTH_DEFS: Record<ArchitectDepth, { label: string; content: string; maxNodes: number; maxEdges: number; directive: string }> = {
-    1: { label: "Visão geral", content: "camadas e módulos principais", maxNodes: 8, maxEdges: 12, directive: "Mostre só as camadas e os módulos principais que o plano toca. Nada de arquivos, rotas ou campos." },
-    2: { label: "Resumido", content: "módulos + integrações", maxNodes: 18, maxEdges: 30, directive: "Mostre os módulos tocados e as integrações (serviços externos, eventos de tempo real, banco) de que eles dependem." },
-    3: { label: "Equilibrado", content: "+ rotas, modelos e decisões", maxNodes: 35, maxEdges: 60, directive: "Além dos módulos e integrações, mostre as rotas/APIs, os modelos de dados e as decisões do plano." },
-    4: { label: "Detalhado", content: "+ componentes/arquivos e eventos", maxNodes: 70, maxEdges: 120, directive: "Além do nível equilibrado, mostre os componentes e arquivos principais e os eventos (Pusher, rotinas, ganchos) que ligam as partes." },
-    5: { label: "Minucioso", content: "+ campos, validações e riscos por nó", maxNodes: 120, maxEdges: 200, directive: "Detalhe ao máximo: em cada nó, descreva campos, validações e riscos no `detail`; inclua os riscos e decisões como nós próprios." },
+    1: { label: "Visão geral", content: "objetivo e as grandes partes", maxNodes: 5, maxEdges: 6, directive: "Mostre só o objetivo e as grandes partes envolvidas (quem participa e os blocos principais), como num quadro branco." },
+    2: { label: "Resumido", content: "+ os processos principais", maxNodes: 8, maxEdges: 10, directive: "Mostre o objetivo, as grandes partes e os processos principais que o plano cria ou muda, com o fluxo entre eles." },
+    3: { label: "Equilibrado", content: "+ estruturas, informações e serviços externos", maxNodes: 12, maxEdges: 16, directive: "Além dos processos principais, mostre as estruturas envolvidas, as informações guardadas ou trocadas e os serviços externos de que dependem." },
+    4: { label: "Detalhado", content: "+ etapas dos processos e decisões", maxNodes: 18, maxEdges: 26, directive: "Além do nível equilibrado, quebre os processos principais em etapas e mostre as decisões do plano como nós próprios." },
+    5: { label: "Minucioso", content: "+ regras e riscos de cada bloco", maxNodes: 25, maxEdges: 36, directive: "Detalhe ao máximo SEM descer a código: descreva as regras de cada bloco no `detail` e inclua os riscos e as decisões como nós próprios." },
 }
 
-export const ARCHITECT_NODE_KINDS = ["objective", "module", "route", "feature", "lib", "data", "external", "decision", "risk"] as const
+export const ARCHITECT_NODE_KINDS = ["objective", "actor", "process", "structure", "information", "external", "decision", "risk"] as const
 export type ArchitectNodeKind = (typeof ARCHITECT_NODE_KINDS)[number]
 
 export const ARCHITECT_NODE_KIND_LABELS: Record<ArchitectNodeKind, string> = {
     objective: "Objetivo",
-    module: "Módulo",
-    route: "Rota",
-    feature: "Feature",
-    lib: "Lib",
-    data: "Dado",
-    external: "Externo",
+    actor: "Pessoa/ator",
+    process: "Processo",
+    structure: "Estrutura",
+    information: "Informação",
+    external: "Serviço externo",
     decision: "Decisão",
     risk: "Risco",
 }
+
+/** Tipos de nó do vocabulário antigo (diagrama de código) → o equivalente de ideias. */
+export const ARCHITECT_LEGACY_NODE_KINDS: Record<string, ArchitectNodeKind> = { module: "structure", feature: "structure", lib: "structure", route: "process", data: "information" }
 
 export const ARCHITECT_NODE_STATUSES = ["new", "changed", "existing"] as const
 export type ArchitectNodeStatus = (typeof ARCHITECT_NODE_STATUSES)[number]
 export const ARCHITECT_NODE_STATUS_LABELS: Record<ArchitectNodeStatus, string> = { new: "Novo", changed: "Alterado", existing: "Existente" }
 
-export const ARCHITECT_EDGE_KINDS = ["contains", "uses", "flow", "event", "data"] as const
+export const ARCHITECT_EDGE_KINDS = ["contains", "triggers", "flow", "uses", "produces", "notifies"] as const
 export type ArchitectEdgeKind = (typeof ARCHITECT_EDGE_KINDS)[number]
-export const ARCHITECT_EDGE_KIND_LABELS: Record<ArchitectEdgeKind, string> = { contains: "contém", uses: "usa", flow: "fluxo", event: "evento", data: "dados" }
+export const ARCHITECT_EDGE_KIND_LABELS: Record<ArchitectEdgeKind, string> = { contains: "contém", triggers: "dispara", flow: "segue para", uses: "usa", produces: "gera/grava", notifies: "avisa" }
+/** Ligações do vocabulário antigo → o equivalente atual. */
+export const ARCHITECT_LEGACY_EDGE_KINDS: Record<string, ArchitectEdgeKind> = { event: "notifies", data: "produces" }
 
-export const ARCHITECT_GROUP_LAYERS = ["ui", "routes", "features", "lib", "data", "external", "other"] as const
+export const ARCHITECT_GROUP_LAYERS = ["people", "processes", "structures", "information", "external", "other"] as const
 export type ArchitectGroupLayer = (typeof ARCHITECT_GROUP_LAYERS)[number]
-export const ARCHITECT_GROUP_LAYER_LABELS: Record<ArchitectGroupLayer, string> = { ui: "UI", routes: "Rotas/API", features: "Features", lib: "Lib", data: "Banco", external: "Externo", other: "Outros" }
+export const ARCHITECT_GROUP_LAYER_LABELS: Record<ArchitectGroupLayer, string> = { people: "Pessoas e canais", processes: "Processos", structures: "Estruturas", information: "Informação", external: "Serviços externos", other: "Outros" }
+/** Camadas do vocabulário antigo → o equivalente atual. */
+export const ARCHITECT_LEGACY_GROUP_LAYERS: Record<string, ArchitectGroupLayer> = { ui: "people", routes: "processes", features: "structures", lib: "structures", data: "information" }
 
 export const ARCHITECT_NOTE_KINDS = ["decision", "risk", "question"] as const
 export type ArchitectNoteKind = (typeof ARCHITECT_NOTE_KINDS)[number]

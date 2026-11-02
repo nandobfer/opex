@@ -1,9 +1,10 @@
 import { z } from "zod"
-import { ARCHITECT_TEXT_LIMITS as LIMITS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX } from "./constants"
+import { ARCHITECT_TEXT_LIMITS as LIMITS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, ARCHITECT_GROUPS_MAX, ARCHITECT_ID_MAX, ARCHITECT_DEPTH_DEFS } from "./constants"
 
 /**
- * Grafo semântico do Agente Arquiteto (módulo PURO): o mesmo schema valida o que o servidor grava e o
- * que a tela desenha. O modelo responde num formato tolerante (`rawGraphSchema`); o saneamento
+ * Grafo semântico do Agente Arquiteto (módulo PURO): o schema estrito valida o que o servidor GRAVA
+ * (gerações novas); versões antigas, gravadas no vocabulário de código, são normalizadas ao ler
+ * (`normalizeLegacyGraph`) sem passar pelos tetos novos. O modelo responde num formato tolerante (`rawGraphSchema`); o saneamento
  * (`sanitize.ts`) o converte neste formato estrito.
  */
 
@@ -23,7 +24,8 @@ export const architectNodeSchema = z.object({
     groupId: id.nullable(),
     kind: z.enum(ARCHITECT_NODE_KINDS),
     detail: text(LIMITS.detail.max),
-    files: z.array(text(300).min(1)).max(20),
+    /** Compatibilidade: o diagrama é de ideias e nunca leva arquivos (o saneamento sempre esvazia). */
+    files: z.array(text(300).min(1)).max(0),
     status: z.enum(ARCHITECT_NODE_STATUSES),
 })
 
@@ -44,8 +46,8 @@ export const architectGraphSchema = z.object({
     title: text(LIMITS.title.max),
     summary: text(LIMITS.summary.max),
     groups: z.array(architectGroupSchema).max(ARCHITECT_GROUPS_MAX),
-    nodes: z.array(architectNodeSchema).min(1).max(120),
-    edges: z.array(architectEdgeSchema).max(200),
+    nodes: z.array(architectNodeSchema).min(1).max(ARCHITECT_DEPTH_DEFS[5].maxNodes),
+    edges: z.array(architectEdgeSchema).max(ARCHITECT_DEPTH_DEFS[5].maxEdges),
     notes: z.array(architectNoteSchema).max(40),
 })
 
