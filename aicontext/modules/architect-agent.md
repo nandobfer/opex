@@ -153,7 +153,11 @@ O diagrama é construído na tela enquanto o agente trabalha.
   (`seq` repetido ou antigo é ignorado); caiu, reconecta (novo retrato, nada se perde) e a faixa mostra
   "Reconectando…"; no `end`, relê as versões da mesa.
   Um `end` com a versão ainda `running` (o stream abriu antes de a geração estar viva) não é fim: o
-  cliente reconecta.
+  cliente reconecta. Um `end` com estado final relê a lista da mesa; quando ela confirma o fim, a aba
+  para de pedir o stream. Se a aba ainda considera a versão "gerando" com o mesmo id — o **Tentar
+  novamente** otimista, cujo stream chega antes de o servidor reiniciar a versão e recebe
+  `end(failed)` —, o hook volta a conectar com espera crescente (2, 4, 8, 16 e 30 s) e recebe o desenho
+  ao vivo.
 
 ## Grafo (`graph.ts`, `sanitize.ts`, `parse.ts`)
 

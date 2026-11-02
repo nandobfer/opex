@@ -9,6 +9,12 @@ import type { ArchitectLiveProgress, ArchitectStreamLine } from "../types"
 import { workbenchDiagramsKey } from "./useArchitect"
 
 const RETRY_MS = 2_000
+/**
+ * Depois de um `end` com estado final, a lista da mesa é relida e o hook só continua montado enquanto
+ * a tela ainda acha a versão "gerando" — ex.: "Tentar novamente" otimista, com o stream chegando antes
+ * de o servidor reiniciar a versão (`end(failed)`). Nesse caso volta a conectar, com espera crescente.
+ */
+const ENDED_RETRY_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const
 /** Sem nada (nem `ping`) por este tempo, a conexão é refeita. */
 const STALE_MS = 45_000
 
@@ -56,7 +62,8 @@ export function reduceLiveLine(state: LiveDiagramState, line: ArchitectStreamLin
 /**
  * Diagrama ao vivo de uma versão em geração (`GET /api/architect/diagrams/[id]/stream`, NDJSON). Cada
  * conexão começa pelo retrato; caiu, reconecta sozinho. No `end`, relê as versões da mesa (o grafo
- * final gravado) e não reconecta mais.
+ * final gravado): quando a lista confirma o fim, a tela para de pedir o stream (`diagramId` nulo); se
+ * ela ainda diz "gerando" (a versão acabou de ser reiniciada com o mesmo id), o hook reconecta.
  */
 export function useLiveDiagram(workbenchId: string, diagramId: string | null): LiveDiagramState {
     const queryClient = useQueryClient()
@@ -66,6 +73,7 @@ export function useLiveDiagram(workbenchId: string, diagramId: string | null): L
         if (!diagramId) return
         let disposed = false
         let ended = false
+        let endings = 0
         let controller: AbortController | null = null
         let retry: ReturnType<typeof setTimeout> | null = null
         let watchdog: ReturnType<typeof setTimeout> | null = null
@@ -105,8 +113,14 @@ export function useLiveDiagram(workbenchId: string, diagramId: string | null): L
             update((value) => ({ ...value, connected: false }))
             if (ended) {
                 void queryClient.invalidateQueries({ queryKey: workbenchDiagramsKey(workbenchId) })
+                // Fim visto: se a tela continuar com esta versão "gerando", confere de novo mais tarde.
+                const delay = ENDED_RETRY_MS[Math.min(endings, ENDED_RETRY_MS.length - 1)]!
+                endings++
+                ended = false
+                retry = setTimeout(() => void connect(), delay)
                 return
             }
+            endings = 0
             retry = setTimeout(() => void connect(), RETRY_MS)
         }
 
