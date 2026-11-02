@@ -219,6 +219,21 @@ describe('retryDiagram e órfãos', () => {
     expect(isDiagramLive('c'.repeat(24))).toBe(true)
   })
 
+  it('"Tentar novamente" de uma versão automática de um plano já substituído é recusado, sem gerar nem mudar o estado', async () => {
+    seedWorkbench({ plans: [{ version: 1, text: 'v1' }, { version: 2, text: 'v2' }] })
+    diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, origin: 'auto', state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })
+    await expect(retryDiagram('c'.repeat(24))).rejects.toMatchObject({ status: 409, code: 'ARCHITECT_PLAN_OUTDATED', message: expect.stringContaining('plano v2') })
+    expect(diagrams.docs[0]!.state).toBe('failed')
+    expect(mocks.runDiagram).not.toHaveBeenCalled()
+    expect(isDiagramLive('c'.repeat(24))).toBe(false)
+  })
+
+  it('"Tentar novamente" de uma versão manual de um plano antigo continua valendo (o resultado não é descartado)', async () => {
+    seedWorkbench({ plans: [{ version: 1, text: 'v1' }, { version: 2, text: 'v2' }] })
+    diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, origin: 'manual', state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })
+    expect((await retryDiagram('c'.repeat(24))).state).toBe('running')
+  })
+
   it('"Tentar novamente" com a execução anterior ainda encerrando é recusado e não perde o registro', async () => {
     seedWorkbench()
     diagrams.docs.push({ _id: 'c'.repeat(24), workbenchId: WB, centralId: 'c1', version: 1, planVersion: 1, planSeq: 1, state: 'failed', error: 'x', startedAt: new Date(), createdAt: new Date() })

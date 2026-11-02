@@ -125,7 +125,9 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
                 diagram={diagram}
                 pending={retry.isPending || busy}
                 canRetry={canGenerate}
+                currentPlan={workbench.architect?.planVersion ?? null}
                 onRetry={() => retry.mutate(diagram.id)}
+                onCurrent={() => void request({ depth })}
                 onDeeper={depth < 5 ? () => void request({ depth: asDepth(depth + 1) }) : null}
             />
         )

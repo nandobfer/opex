@@ -233,7 +233,13 @@ export async function retryDiagram(id: string): Promise<ArchitectDiagramDto> {
     await architectDb()
     const doc = await ArchitectDiagram.findById(id).lean()
     if (!doc) throw new DomainError(404, "Versão do diagrama não encontrada", "ARCHITECT_DIAGRAM_NOT_FOUND")
-    await loadWorkbench(doc.workbenchId)
+    const workbench = await loadWorkbench(doc.workbenchId)
+    // Versão automática de um plano já substituído: refazê-la gastaria uma geração inteira que, no fim,
+    // seria descartada (o resultado atrasado de um plano antigo vira "Descartada").
+    const newest = diagramPlanVersionOf({ plans: workbench.plans ?? [] })
+    if (doc.origin === "auto" && newest !== null && newest > doc.planVersion) {
+        throw new DomainError(409, `Esta versão é do plano v${doc.planVersion}, e o plano v${newest} já é o mais novo: gere a arquitetura do plano atual.`, "ARCHITECT_PLAN_OUTDATED")
+    }
     return withWorkbenchLock(doc.workbenchId, () => restartDiagram(id, doc))
 }
 

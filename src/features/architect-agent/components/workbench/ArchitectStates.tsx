@@ -112,7 +112,12 @@ export function ArchitectLiveWaiting({ phase, tools, connected, provider = null 
     )
 }
 
-export function ArchitectFailed({ diagram, pending, canRetry, onRetry, onDeeper }: { diagram: ArchitectDiagramDto; pending: boolean; canRetry: boolean; onRetry: () => void; onDeeper: (() => void) | null }) {
+/**
+ * `currentPlan`: plano mais novo da mesa. Uma versão automática de um plano já substituído não oferece
+ * "Tentar novamente" (o resultado seria descartado): oferece gerar do plano atual.
+ */
+export function ArchitectFailed({ diagram, pending, canRetry, currentPlan = null, onRetry, onCurrent, onDeeper }: { diagram: ArchitectDiagramDto; pending: boolean; canRetry: boolean; currentPlan?: number | null; onRetry: () => void; onCurrent?: () => void; onDeeper: (() => void) | null }) {
+    const outdated = diagram.origin === "auto" && currentPlan !== null && currentPlan > diagram.planVersion
     return (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
             <div className="rounded-full bg-destructive/10 p-3">
@@ -121,11 +126,18 @@ export function ArchitectFailed({ diagram, pending, canRetry, onRetry, onDeeper 
             <p className="font-medium">{diagram.state === "interrupted" ? "A geração da arquitetura foi interrompida" : "Não foi possível gerar a arquitetura"}</p>
             {diagram.error && <p className="max-w-xl text-sm text-muted-foreground">{diagram.error}</p>}
             <p className="text-xs text-muted-foreground">A mesa segue normalmente: o diagrama não bloqueia o desenvolvimento.</p>
+            {outdated && <p className="text-xs text-muted-foreground">Esta versão é do plano v{diagram.planVersion}; o plano v{currentPlan} já é o mais novo.</p>}
             {canRetry && (
                 <div className="flex flex-wrap justify-center gap-2">
-                    <Button type="button" size="sm" className="gap-1.5" disabled={pending} onClick={onRetry}>
-                        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RotateCcw className="h-3.5 w-3.5" aria-hidden />} Tentar novamente
-                    </Button>
+                    {outdated ? (
+                        <Button type="button" size="sm" className="gap-1.5" disabled={pending} onClick={onCurrent}>
+                            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RotateCcw className="h-3.5 w-3.5" aria-hidden />} Gerar do plano atual
+                        </Button>
+                    ) : (
+                        <Button type="button" size="sm" className="gap-1.5" disabled={pending} onClick={onRetry}>
+                            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RotateCcw className="h-3.5 w-3.5" aria-hidden />} Tentar novamente
+                        </Button>
+                    )}
                     {onDeeper && (
                         <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={onDeeper}>
                             <ZoomIn className="h-3.5 w-3.5" aria-hidden /> Regerar com profundidade maior

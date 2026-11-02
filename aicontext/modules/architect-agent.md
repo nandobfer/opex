@@ -94,6 +94,10 @@ sair com um diagrama da prévia: o último plano era só a rodada "ChunkLoadErro
   trava por mesa (`withWorkbenchLock`, processo único): dois cliques ou duas abas criam UMA versão (o
   outro recebe 409). O "Tentar novamente" ainda grava a transição de forma atômica (só uma versão que
   continua `failed`/`interrupted` volta a `running`; senão 409 `ARCHITECT_BUSY`).
+- **Tentar novamente de um plano já substituído**: uma versão **automática** que falhou num plano que
+  já não é o mais novo é recusada (409 `ARCHITECT_PLAN_OUTDATED`), porque o resultado seria descartado
+  no fim. A aba troca o botão por "Gerar do plano atual" (pedido manual com a mesma profundidade) e diz
+  qual plano é o mais novo. Versão manual ou de ajuste de um plano antigo continua podendo ser refeita.
 - **Registro antes da gravação**: a geração é registrada (e o diagrama vivo aberto) ANTES de a versão
   ser gravada como "gerando"; a listagem disparada pelo evento nunca a toma por órfã ("o app
   reiniciou") e o stream já a encontra viva. Se a gravação, a auditoria ou o evento falharem, o

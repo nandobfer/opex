@@ -219,6 +219,16 @@ describe('ArchitectTab', () => {
     expect(mocks.generate).toHaveBeenCalledWith({ depth: 4 })
   })
 
+  it('falhou numa versão automática de um plano já substituído: sem "Tentar novamente", oferece gerar do plano atual', async () => {
+    mocks.diagrams = [diagram({ state: 'failed', graph: null, error: 'Tempo esgotado', origin: 'auto', planVersion: 1 })]
+    render(<ArchitectTab workbench={workbench({ applies: true, planVersion: 2 })} />)
+    expect(screen.queryByRole('button', { name: /Tentar novamente/ })).toBeNull()
+    expect(screen.getByText(/o plano v2 já é o mais novo/)).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Gerar do plano atual/ })))
+    expect(mocks.generate).toHaveBeenCalledWith({ depth: 3 })
+    expect(mocks.retry).not.toHaveBeenCalled()
+  })
+
   it('versões: o seletor mostra "Plano vX · arquitetura vY" e a atual', () => {
     mocks.diagrams = [diagram(), diagram({ id: 'd2', version: 2, planVersion: 2, planSeq: 1 })]
     render(<ArchitectTab workbench={workbench({ applies: true, planVersion: 2 })} />)
