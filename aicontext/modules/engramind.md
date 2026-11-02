@@ -217,7 +217,8 @@ rede (teste estático).
     perto do meio); canais sem assinante vão para um anel de fora;
   - **Radial** (`agents-center`): agentes num círculo no meio (ordem por app e id) e os canais em
     anéis em volta (mais anéis quando não cabem), cada anel girado para o **ângulo médio** dos agentes
-    de cada canal; sem agente, no fim do anel. Um pouco compacta (rodada 3): primeiro anel a 0,85× da
+    de cada canal (quando os ângulos se anulam, como em agentes opostos, o do primeiro agente do canal,
+    para ele ficar ao lado de um dos seus); sem agente, no fim do anel. Um pouco compacta (rodada 3): primeiro anel a 0,85× da
     distância do círculo de agentes, espaço entre anéis `0,8 × largura máxima + folga` e espaço de cada
     canal no anel `1,7 ×` a meia diagonal.
 

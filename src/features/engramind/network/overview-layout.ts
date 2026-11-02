@@ -275,7 +275,14 @@ function placeAgentsCenter({ agents, channels, usersOf, boxes, spread }: PlaceIn
     const agentRadius = radius * spread
     const angleOf = new Map(agents.map((agent, index) => [agent.id, angles[index]!]))
     const bodies: Body[] = agents.map((agent, index) => body(`agent:${agent.id}`, { x: agentRadius * Math.cos(angles[index]!), y: agentRadius * Math.sin(angles[index]!) }, agentBoxes[index]!, true))
-    const preferredOf = (slug: string) => (agents.length > 1 ? meanAngle((usersOf.get(slug) ?? []).map((agent) => angleOf.get(agent)!)) : null)
+    // Ângulo médio dos agentes do canal; quando eles se anulam (agentes opostos, ou três a 120°), o do
+    // primeiro agente: o canal fica ao lado de um dos seus, nunca no fim do anel longe de todos.
+    const preferredOf = (slug: string) => {
+        if (agents.length < 2) return null
+        const users = (usersOf.get(slug) ?? []).filter((agent) => angleOf.has(agent)).sort()
+        if (!users.length) return null
+        return meanAngle(users.map((agent) => angleOf.get(agent)!)) ?? angleOf.get(users[0]!)!
+    }
     // Ordem no anel: pelo ângulo preferido; os sem agente (ou sem direção) no fim, pelo slug.
     const ordered = [...channels].sort((a, b) => {
         const pa = preferredOf(a.slug)
@@ -408,11 +415,4 @@ export function overviewInitialBounds(layout: Pick<OverviewLayout, "agents" | "c
     const mx = width * OVERVIEW_FIT_MARGIN
     const my = height * OVERVIEW_FIT_MARGIN
     return { x: minX - mx, y: minY - my, width: width + 2 * mx, height: height + 2 * my }
-}
-
-/** Centroide dos agentes (celular: centraliza nele com o zoom mínimo legível). */
-export function overviewAgentsCenter(layout: Pick<OverviewLayout, "agents">): Point | null {
-    const points = [...layout.agents.values()]
-    if (!points.length) return null
-    return { x: points.reduce((sum, point) => sum + point.x, 0) / points.length, y: points.reduce((sum, point) => sum + point.y, 0) / points.length }
 }

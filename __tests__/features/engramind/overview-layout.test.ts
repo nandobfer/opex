@@ -248,3 +248,25 @@ describe('OPE-113 rodada 3: Órbita e Radial compactas', () => {
     expect(clearDistance(a, c, 0)).toBeCloseTo((180 + 288) / 2 + OVERVIEW_PADDING)
   })
 })
+
+describe('Radial: canal de agentes opostos (critério aprovado: links minimizam cruzamentos)', () => {
+  it('canal compartilhado por agentes opostos fica ao lado de um dos seus, não no fim do anel', () => {
+    const agents = Array.from({ length: 4 }, (_, i) => agent(`a${i}`))
+    const channels = [channel('aa-opostos'), ...Array.from({ length: 8 }, (_, k) => channel(`z${k}`))]
+    const links = [
+      { agent: 'app/a0', channel: 'aa-opostos' },
+      { agent: 'app/a2', channel: 'aa-opostos' },
+      ...channels.slice(1).map((item, k) => ({ agent: agents[k % 4]!.id, channel: item.slug })),
+    ]
+    const layout = layoutOverview({ agents, channels, links, mode: 'agents-center' })
+    const shared = layout.channels.get('aa-opostos')!
+    const angle = (point: { x: number; y: number }) => Math.atan2(point.y, point.x)
+    const gap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))
+    // No primeiro anel (não empurrado para o fim, no anel de fora) e do lado de um dos seus agentes.
+    const firstRing = Math.min(...[...layout.channels.values()].map((point) => Math.hypot(point.x, point.y)))
+    expect(Math.hypot(shared.x, shared.y)).toBeLessThan(firstRing * 1.2)
+    const own = Math.min(gap(angle(shared), angle(layout.agents.get('app/a0')!)), gap(angle(shared), angle(layout.agents.get('app/a2')!)))
+    expect(own).toBeLessThan(Math.PI / 2)
+    expect(overlaps(layout)).toEqual([])
+  })
+})
