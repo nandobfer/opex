@@ -133,8 +133,14 @@ as têm no histórico). Falha ao ler as memórias não derruba o
 - **Aprendizado autônomo** (OPE-104): com ele ligado, a mesa e o fork registram o MCP `opex_memorias` no
   diretório da sessão (`ensureAgentMemoryMcp`) e a instrução "Memória própria" entra junto das memórias:
   o agente grava, edita e consolida sozinho nas listas globais e na da central (inativar/excluir pedem a
-  confirmação do dono e, sem chat, são recusadas). Registro falhou → aviso "Aprendizado autônomo
-  indisponível neste turno" e o turno segue. Excluir a central arquiva o canal dela no Engramind.
+  confirmação do dono e, sem chat, são recusadas). O registro é por diretório (central, diretório da
+  sessão e worktree): diretório que **ainda não existe** — o worktree no turno de **Implementar**, antes de
+  o agente criá-lo — é **pulado sem aviso** (log `info`) e um diretório com erro não derruba os outros;
+  quando a sessão muda para o worktree no meio do turno (hook `onMoved`), o MCP é registrado lá
+  (`registerDeveloperMemoryMcpAt`, sem aviso nem bloqueio) e as ferramentas seguem no mesmo turno
+  (OPE-115). Só falha real (sem URL pública do Opex, sem `INTEGRATIONS_ENCRYPTION_KEY` ou nenhum
+  diretório registrado por erro) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
+  segue sempre. Excluir a central arquiva o canal dela no Engramind.
 - O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
   adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista
   entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver

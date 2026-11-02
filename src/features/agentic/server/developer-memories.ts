@@ -9,7 +9,9 @@ import { DEVELOPER_MEMORIES_INSTRUCTIONS_KEY } from "../constants"
  * (Memórias do Opex, globais e da central) vira uma entrada durável de instrução da sessão do
  * OpenCode, regravada a cada turno da mesa e do fork — assim a memória criada, editada ou excluída
  * vale a partir do próximo turno. Com o aprendizado autônomo ligado, o MCP "Memória própria" é
- * registrado nos diretórios da sessão e a instrução dele entra junto. Sem memórias nem aprendizado,
+ * registrado nos diretórios da sessão e a instrução dele entra junto (diretório que ainda não existe,
+ * como o worktree antes de o agente de implementação criá-lo, é pulado sem aviso; quando a sessão
+ * muda para ele, `registerDeveloperMemoryMcpAt` registra o MCP lá). Sem memórias nem aprendizado,
  * a entrada sai da sessão. Se o servidor recusar a gravação, quem chamou prefixa `section` no prompt.
  */
 
@@ -73,6 +75,23 @@ export async function syncDeveloperMemories(client: OpencodeClient, sessionId: s
     } catch (error) {
         logger.warn({ err: error, sessionId, centralId }, "[agentic] não foi possível gravar as memórias do agente desenvolvedor na sessão; vão no prompt do turno")
         return { applied: false, section }
+    }
+}
+
+/**
+ * A sessão da mesa mudou de diretório no meio do turno (o agente criou o worktree e moveu a sessão):
+ * com o aprendizado autônomo ligado, o MCP de memórias passa a valer também no diretório novo.
+ * Nunca lança e nunca avisa na mesa (o próximo turno registra de novo).
+ */
+export async function registerDeveloperMemoryMcpAt(client: OpencodeClient, directory: string): Promise<void> {
+    try {
+        const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
+        if (!(await selfMemoryEnabled("desenvolvedor"))) return
+        const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+        const registered = await ensureAgentMemoryMcp(client, [directory])
+        if (!registered.ok) logger.warn({ directory, err: registered.error }, "[agentic] MCP de memórias não registrado no novo diretório da sessão")
+    } catch (error) {
+        logger.warn({ err: error, directory }, "[agentic] falha ao registrar o MCP de memórias no novo diretório da sessão")
     }
 }
 
