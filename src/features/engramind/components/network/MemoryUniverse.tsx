@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Edge, Node } from "@xyflow/react"
 import { Hash, type LucideIcon } from "lucide-react"
 import { toast } from "sonner"
-import { agentWritesOf, layoutUniverse, orbitLinkTone } from "../../network/network-math"
+import { agentWritesOf, layoutUniverse, orbitLinkTone, universeChannelColors } from "../../network/network-math"
 import { buildParticles } from "../../network/particles"
 import type { ConsumptionEvent, MemoryUsageMap, NetworkMemory } from "../../network/types"
 import { useEngramindConsumption, useLiveEffects } from "../../hooks/useEngramindConsumption"
@@ -40,7 +40,7 @@ export interface MemoryUniverseProps {
     memories: NetworkMemory[]
     usage?: MemoryUsageMap
     staleAfterDays: number
-    /** Cor de cada canal (universo do agente: links e legenda). */
+    /** Cor estável de cada canal (universo do agente); o universo marca o maior canal com o roxo primário. */
     channelColors?: Map<string, string>
     /** Destaque da busca/filtros (`null` = sem filtro). */
     isMatch?: ((memory: NetworkMemory) => boolean) | null
@@ -62,10 +62,10 @@ export interface MemoryUniverseProps {
 
 /**
  * Universo de um canal ou de um agente (OPE-109): o node central e uma partícula por memória, em
- * órbitas (mais usadas mais perto), com cor pela idade, tamanho pelo uso e brilho pelo último uso.
- * Clique ou toque abre o card (passar o mouse só afasta as vizinhas); o consumo ao vivo pulsa a
- * memória e manda uma partícula ao centro. Links ao centro em roxo; no universo do agente, verdes nas
- * memórias que ele escreveu.
+ * órbitas (mais novas mais perto), com a cor do canal (o com mais memórias no roxo primário), tamanho pelo
+ * uso e brilho pelo último uso. Clique ou toque abre o card (passar o mouse só afasta as vizinhas); o
+ * consumo ao vivo pulsa a memória e manda uma partícula ao centro. Links ao centro em roxo; no universo
+ * do agente, verdes nas memórias que ele escreveu (OPE-113).
  */
 export function MemoryUniverse({
     center,
@@ -114,7 +114,11 @@ export function MemoryUniverse({
         },
     })
 
-    const visuals = useMemo(() => buildParticles(memories, { usage, staleAfterDays, bumps: live.bumps }), [memories, usage, staleAfterDays, live.bumps])
+    const particleColors = useMemo(() => universeChannelColors(channelColors, memories), [channelColors, memories])
+    // Legenda e selo do card com a cor do canal: só no universo do agente. Os links ao centro não usam a
+    // cor do canal (OPE-113): roxo primário, verde nas memórias que o agente do centro escreveu.
+    const legendColors = center.kind === "agent" ? particleColors : undefined
+    const visuals = useMemo(() => buildParticles(memories, { channelColors: particleColors, usage, staleAfterDays, bumps: live.bumps }), [memories, particleColors, usage, staleAfterDays, live.bumps])
     const positions = useMemo(() => layoutUniverse(items), [items])
     // Só vale o que ainda está no universo: a memória que saiu fecha o card sozinha.
     const openId = opened !== null && ids.has(opened) ? opened : null
@@ -150,14 +154,14 @@ export function MemoryUniverse({
         }
         const list: Node[] = [{ id: CENTER_ID, type: "center", position: { x: 0, y: 0 }, data: centerData, zIndex: 5 }]
         for (const memory of items) {
-            const visual = visuals.get(memory.id) ?? buildParticles([memory], { usage, staleAfterDays }).get(memory.id)
+            const visual = visuals.get(memory.id) ?? buildParticles([memory], { channelColors: particleColors, usage, staleAfterDays }).get(memory.id)
             const point = positions.get(memory.id) ?? { x: 0, y: 0 }
             if (!visual) continue
             const data: MemoryNodeData = { memory, visual, point, matched: isMatch ? isMatch(memory) : null, leaving: memory.leaving, entering: entering.has(memory.id) }
             list.push({ id: memory.id, type: "memory", position: point, data, zIndex: focusId === memory.id ? 20 : 1 })
         }
         return list
-    }, [items, visuals, positions, isMatch, focusId, center, memories.length, usage, staleAfterDays, entering])
+    }, [items, visuals, positions, isMatch, particleColors, focusId, center, memories.length, usage, staleAfterDays, entering])
 
     const edges = useMemo<Edge[]>(
         () =>
@@ -189,12 +193,12 @@ export function MemoryUniverse({
                     onPaneClick={() => setOpened(null)}
                     className={className}
                 >
-                    <UniverseStatsCard kind={center.kind} memories={memories} visuals={visuals} usage={usage} subscribers={subscribers} liveCount={live.liveCount} channelColors={channelColors} />
+                    <UniverseStatsCard kind={center.kind} memories={memories} visuals={visuals} usage={usage} subscribers={subscribers} liveCount={live.liveCount} channelColors={legendColors} />
                     <ActiveMemoryCard
                         memory={openId ? (memories.find((memory) => memory.id === openId) ?? null) : null}
                         visual={openId ? visuals.get(openId) : undefined}
                         point={openId ? positions.get(openId) : undefined}
-                        channelColors={channelColors}
+                        channelColors={legendColors}
                         actions={wrapped}
                         pinned={openId !== null}
                     />

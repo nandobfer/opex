@@ -41,7 +41,7 @@ vi.mock('@/lib/pusher/client', () => ({
 
 import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
 import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
-import { channelColors } from '@/features/engramind/network/network-math'
+import { channelColors, PRIMARY_CHANNEL_COLOR } from '@/features/engramind/network/network-math'
 
 const now = new Date().toISOString()
 const ref = (id: string, slug: string) => ({ id, slug })
@@ -276,15 +276,35 @@ describe('universos', () => {
     expect(nav.push).not.toHaveBeenCalled()
   })
 
-  it('regressão: a cor de um canal no universo do agente vem do mapa de todos os canais', async () => {
+  it('regressão: a cor de um canal no universo do agente vem do mapa de todos os canais, e o maior fica roxo', async () => {
     nav.params = new URLSearchParams('universo=agente:opex/opex')
     mount()
     await screen.findByTestId('memory-node-m_1')
     const all = channelColors(channels.map((item) => item.slug))
     const legend = screen.getByTestId('channel-legend')
     const styles = [...legend.querySelectorAll('span[aria-hidden]')].map((dot) => dot.getAttribute('style') ?? '').join(' | ')
-    expect(styles).toContain(all.get('opex')!)
+    // `opex` tem 2 memórias (uma inativa) e `agentes/opex/global` tem 1: o roxo primário vai para `opex`.
+    expect(styles).toContain(PRIMARY_CHANNEL_COLOR)
     expect(styles).toContain(all.get('agentes/opex/global')!)
+    expect(styles).not.toContain(all.get('opex')!)
+  })
+
+  it('OPE-114: no universo do agente cada partícula tem a cor do canal dela', async () => {
+    nav.params = new URLSearchParams('universo=agente:opex/opex')
+    mount()
+    const particle = (id: string) => (screen.getByTestId(`memory-node-${id}`).querySelector('span[aria-label]') as HTMLElement).getAttribute('style') ?? ''
+    await screen.findByTestId('memory-node-m_1')
+    const all = channelColors(channels.map((item) => item.slug))
+    expect(particle('m_1')).toContain(PRIMARY_CHANNEL_COLOR)
+    expect(particle('m_2')).toContain(all.get('agentes/opex/global')!)
+    expect(particle('m_2')).not.toContain(PRIMARY_CHANNEL_COLOR)
+  })
+
+  it('OPE-114: no universo do canal as partículas usam o roxo primário', async () => {
+    nav.params = new URLSearchParams('universo=canal:agentes/opex/global')
+    mount()
+    const node = await screen.findByTestId('memory-node-m_2')
+    expect((node.querySelector('span[aria-label]') as HTMLElement).getAttribute('style') ?? '').toContain(PRIMARY_CHANNEL_COLOR)
   })
 
   it('universo do agente: memórias de todos os canais assinados e a legenda por canal', async () => {
