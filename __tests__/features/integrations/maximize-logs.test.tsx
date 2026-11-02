@@ -23,7 +23,7 @@ import {
     applyFrame,
     dashboardContentRect,
     useMaximizedFrame,
-} from "@/features/integrations/hooks/useMaximizedFrame"
+} from "@/hooks/useMaximizedFrame"
 import { isSearchEscape } from "@/features/integrations/components/DebugSearchBar"
 
 type RectLike = { top: number; left: number; width: number; height: number }

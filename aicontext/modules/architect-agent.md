@@ -314,6 +314,16 @@ vale só para aquele pedido.
   `FeedbackComposer` e o slider ao lado; cada envio gera uma versão nova com o grafo exibido como
   contexto e fecha o painel. O texto em edição fica guardado com o painel fechado. Desligado durante a
   geração; só com o arquiteto aplicável.
+- **Tela cheia** (`ArchitectFullscreenButton`, o último da barra do canvas, depois de "Pedir ajustes"):
+  leva o QUADRO do diagrama (canvas, barra, faixa ao vivo e painel do nó) à tela cheia do navegador
+  (`useFullscreen`), sem remontar — o desenho ao vivo e a câmera seguem. O botão vira "Sair da tela
+  cheia" (`aria-pressed`); Esc ou a saída pelo navegador também saem (o estado segue o
+  `fullscreenchange`). Em tela cheia o quadro perde borda e cantos (`data-fullscreen`), os painéis
+  flutuantes (visão, filtros, exportar, pedir ajustes, dicas) abrem dentro dele
+  (`PortalContainerProvider`) e um `Toaster` próprio mostra os avisos; entrar e sair recentraliza o
+  diagrama. Sem tela cheia de elemento no navegador (ex.: iPhone) ou com o pedido recusado, o quadro é
+  maximizado sobre a área de conteúdo do app (`useMaximizedFrame`; Esc restaura). O cabeçalho da aba
+  fica fora.
 - Mutações com resposta otimista (versão "gerando" na hora) e reversão com toast.
 
 ## Exportação (`mermaid.ts`)

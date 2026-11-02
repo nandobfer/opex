@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useMaximizedFrame } from "../../hooks/useMaximizedFrame"
+import { useMaximizedFrame } from "@/hooks/useMaximizedFrame"
 import { isSearchEscape } from "../DebugSearchBar"
 
 /** Estado "maximizado" do painel de logs: moldura sobre `[data-dashboard-content]` e Esc para restaurar. */

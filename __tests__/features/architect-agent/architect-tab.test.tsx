@@ -57,6 +57,7 @@ vi.mock('@/components/agent-reply/ReplyTextarea', () => ({ ReplyTextarea: (props
 
 import { ArchitectTab, useArchitectTab } from '@/features/architect-agent/components/workbench/ArchitectTab'
 import { DEFAULT_ARCHITECT_SETTINGS } from '@/features/architect-agent/schemas'
+import { ArchitectCanvasSkeleton } from '@/features/architect-agent/components/workbench/ArchitectStates'
 
 const diagram = (overrides: Record<string, unknown> = {}) => ({
   id: 'd1',
@@ -357,3 +358,78 @@ describe('ArchitectTab', () => {
     }
   })
 })
+
+describe('tela cheia do diagrama', () => {
+  const fullscreenDoc = document as Document & { fullscreenElement: Element | null }
+  const request = vi.fn(async () => undefined)
+  const requested = () => request.mock.contexts.at(-1) as Element | undefined
+  beforeEach(() => {
+    request.mockClear()
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null, writable: true })
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: vi.fn(async () => setFullscreen(null)) })
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: request,
+    })
+  })
+  afterEach(() => {
+    delete (HTMLElement.prototype as { requestFullscreen?: unknown }).requestFullscreen
+  })
+  const setFullscreen = (element: Element | null) => {
+    fullscreenDoc.fullscreenElement = element
+    document.dispatchEvent(new Event('fullscreenchange'))
+  }
+
+  it('o botão fica no fim da barra, pede tela cheia no próprio quadro, e lá dentro os painéis flutuantes abrem no quadro; ao sair, voltam ao body', async () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const frame = screen.getByTestId('architect-canvas-frame')
+    const toolbar = screen.getByTestId('architect-canvas-toolbar')
+    const button = screen.getByRole('button', { name: /^Tela cheia/ })
+    expect(toolbar.contains(button)).toBe(true)
+    expect(toolbar.lastElementChild).toBe(button)
+    const adjust = screen.getByRole('button', { name: /Pedir ajustes/ })
+    expect(adjust.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(frame.hasAttribute('data-fullscreen')).toBe(false)
+
+    await act(async () => fireEvent.click(button))
+    expect(requested()).toBe(frame)
+    await act(async () => setFullscreen(frame))
+    expect(frame.hasAttribute('data-fullscreen')).toBe(true)
+    const exitButton = screen.getByRole('button', { name: /Sair da tela cheia/ })
+    expect(exitButton.getAttribute('aria-pressed')).toBe('true')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Pedir ajustes/ })))
+    expect(frame.contains(await screen.findByTestId('architect-adjust-panel'))).toBe(true)
+    await act(async () => fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }))
+
+    // Saída pelo navegador (Esc): o estado acompanha o evento, não só o clique.
+    await act(async () => setFullscreen(null))
+    expect(frame.hasAttribute('data-fullscreen')).toBe(false)
+    expect(screen.getByRole('button', { name: /^Tela cheia/ }).getAttribute('aria-pressed')).toBe('false')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Pedir ajustes/ })))
+    const panel = await screen.findByTestId('architect-adjust-panel')
+    expect(frame.contains(panel)).toBe(false)
+  })
+
+  it('o botão em tela cheia sai dela', async () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const frame = screen.getByTestId('architect-canvas-frame')
+    await act(async () => setFullscreen(frame))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Sair da tela cheia/ })))
+    expect(document.exitFullscreen).toHaveBeenCalled()
+    expect(frame.hasAttribute('data-fullscreen')).toBe(false)
+  })
+
+  it('o skeleton da barra tem um bloco por controle da barra final', () => {
+    mocks.diagrams = [diagram()]
+    render(<ArchitectTab workbench={workbench()} />)
+    const controls = screen.getByTestId('architect-canvas-toolbar').children.length
+    cleanup()
+    render(<ArchitectCanvasSkeleton />)
+    const skeleton = screen.getByTestId('architect-skeleton').querySelector('[class*="left-2"][class*="top-2"]')!
+    expect(skeleton.children.length).toBe(controls)
+  })
+})
+

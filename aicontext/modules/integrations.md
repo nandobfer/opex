@@ -169,7 +169,7 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - O **Pusher não retransmite os próprios logs** (recursão).
 - Painel/modal **Logs** com busca (`DebugSearchBar` + `@xterm/addon-search`: Enter/Shift+Enter,
   ↑/↓, contador, Esc limpa), Maximizar/Restaurar só no painel do formulário
-  (`useMaximizedFrame`), Atualizar (`GET /api/integrations/[id]/logs?after=`) e Testar conexão
+  (`useMaximizedFrame`, em `src/hooks/`), Atualizar (`GET /api/integrations/[id]/logs?after=`) e Testar conexão
   no próprio terminal. **Escopo**: linhas com `data.scope` podem ser filtradas
   (`?scope=` na rota de logs; `IntegrationDebugConsole scope=…`, que também aceita um teste próprio
   em `onTest`) — usado pelo terminal de cada central de desenvolvimento. Ordem do Esc: limpa a busca → restaura (formulário) / fecha (modal).

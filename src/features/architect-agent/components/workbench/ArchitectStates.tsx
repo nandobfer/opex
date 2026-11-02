@@ -40,6 +40,7 @@ function HeaderSkeleton() {
     )
 }
 
+/** Um bloco por controle da barra final: visão, filtros, exportar, ajustar visão, restaurar layout, pedir ajustes e tela cheia. */
 function ToolbarSkeleton() {
     return (
         <div className={ARCHITECT_CANVAS_TOOLBAR_CLASS}>
@@ -48,6 +49,8 @@ function ToolbarSkeleton() {
             <Skeleton className="h-7 w-24" />
             <Skeleton className="h-7 w-28" />
             <Skeleton className="h-7 w-36" />
+            <Skeleton className="h-7 w-28" />
+            <Skeleton className="h-7 w-28" />
         </div>
     )
 }
