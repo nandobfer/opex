@@ -81,9 +81,41 @@ Implementar ─► (resposta) ─► mesa em implementing (ou aguardando vaga), 
 - **Reinício do app**: versão "gerando" sem geração viva neste processo (`server/registry.ts`) vira
   **interrompida** ao listar ("o app reiniciou durante a geração"), com Tentar novamente.
 
+## Provedor (`settings.provider`)
+
+O arquiteto aceita qualquer provedor de texto do app (`AI_TEXT_PROVIDER_IDS`: OpenCode, Gemini,
+Anthropic, OpenAI e DeepSeek; o JEV fica de fora). O padrão é o **OpenCode**, e toda configuração
+salva antes da escolha carrega como OpenCode (`withDefaults`). Provedor fora da lista é recusado
+pelo schema com a lista dos válidos.
+
+- **OpenCode**: como descrito em "Execução" — sessão somente leitura no worktree (ou na base),
+  agente, modelo, variante e fallbacks, MCP de memória e aprendizado autônomo.
+- **Provedor direto** (`server/direct-turn.ts`): uma chamada `streamAi` por turno, sem sessão,
+  ferramentas nem acesso ao código. As instruções dizem que não há acesso ao repositório
+  (`buildArchitectInstructions({ codeAccess: false })`) e o pedido não traz diretório
+  (`buildDiagramPrompt({ directory: null })`): o diagrama sai do plano, da tarefa e (num ajuste) do
+  diagrama anterior. O texto chega em pedaços e alimenta o **mesmo** montador ao vivo. As memórias do
+  arquiteto entram nas instruções; o aprendizado autônomo (ferramentas do MCP do OpenCode) não existe
+  aqui (log informativo). Tempo máximo da configuração no `signal` da chamada (estourou: "falhou" com
+  o motivo); plano novo, mesa excluída ou reinício abortam pelo registro, como no OpenCode.
+- **Correção sem conversa**: a chamada direta não guarda a conversa, então a correção (resposta
+  ilegível ou nomes de código, no máximo uma por versão) é uma chamada nova com o pedido original, o
+  fim da resposta anterior (até 20.000 caracteres, `ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS`) e o pedido
+  de correção (`buildDirectFollowUp`).
+- **Configuração**: só modelo e raciocínio (a variante do provedor); salvar zera agente e fallbacks
+  (`normalizeArchitectSettings`) e confere o modelo no catálogo **do provedor escolhido**; a
+  disponibilidade (ativar, gerar) também confere esse provedor conectado.
+- **Versão**: grava `provider` e `model`. O provedor direto não informa custo: `usage.costUsd` fica
+  nulo e a tela mostra os **tokens** ("12,3k tokens") no lugar de "US$" (`diagramUsageLabel`). Um
+  "Tentar novamente" no OpenCode depois de uma tentativa direta volta o custo a número. Versões
+  antigas, sem provedor gravado, contam como OpenCode. Consumo no painel pela própria `streamAi`
+  (origem `architect-agent`).
+- **Faixa ao vivo**: num provedor direto as fases dizem "Chamando o modelo…" e "Lendo o plano…"
+  (`architectPhaseLabel`), sem contador de leituras.
+
 ## Execução (`server/generate.ts`)
 
-- Cada versão abre uma **sessão nova** do OpenCode (`metadata: { app: "opex", kind:
+- Com o OpenCode, cada versão abre uma **sessão nova** do OpenCode (`metadata: { app: "opex", kind:
   "architect-diagram" }`) com as permissões só de leitura do Agente Adversário
   (`adversarial-agent/permission-policy.ts`); pedidos de permissão são decididos na hora pelo mesmo
   critério e perguntas são canceladas. A sessão é excluída no fim; se falhar, fica em
@@ -284,11 +316,16 @@ de validação leva à seção do campo).
   e **Centrais** (`ScopeCard` compartilhado com o Adversário e o Mentor).
 - **Diagrama**: profundidade padrão, tipos de nó exibidos, mostrar riscos/decisões e
   visão padrão.
-- **Agente**: `AgentCard` compartilhado (agente, modelo, variante, fallbacks, tempo máximo e
-  instruções adicionais).
+- **Agente**: `AgentCard` compartilhado com `providerSelect` — título "Provedor e modelo", o seletor
+  **Provedor** (`AiProviderTabs`, só os conectados) e, no OpenCode, agente, modelo, variante e
+  fallbacks; nos provedores diretos, modelo e raciocínio (`DirectModelFields`), com o aviso "Sem
+  acesso ao código". Trocar de provedor limpa modelo, variante, agente e fallbacks. Tempo máximo e
+  instruções adicionais valem para todos. O Agente Adversário usa o mesmo cartão sem
+  `providerSelect` (sempre OpenCode).
 - **Memórias**: aprendizado autônomo (`arquiteto`), a lista `architect` (canal `agentes/arquiteto` do
   Engramind, agente `opex/arquiteto`) e as Memórias do Opex.
-- **Histórico**: as 50 versões mais recentes (tarefa, versão, nível, origem, situação, custo e duração).
+- **Histórico**: as 50 versões mais recentes (tarefa, versão, nível, origem, provedor e modelo,
+  situação, custo ou tokens e duração).
 
 ## APIs
 

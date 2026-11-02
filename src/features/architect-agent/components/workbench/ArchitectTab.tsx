@@ -70,7 +70,7 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
 
     if (!diagram) return <ArchitectEmpty canGenerate={canGenerate} reason={emptyReason(workbench)} defaultDepth={asDepth(defaults.depth)} pending={generate.isPending} onGenerate={(depth) => void request({ depth })} />
 
-    const pane = (current: ArchitectDiagramDto, graph: ArchitectGraph, liveInfo: { progress: ArchitectLiveProgress | null; connected: boolean } | null, adjust: ReactNode = null) => (
+    const pane = (current: ArchitectDiagramDto, graph: ArchitectGraph, liveInfo: { progress: ArchitectLiveProgress | null; connected: boolean; provider?: string | null } | null, adjust: ReactNode = null) => (
         <ArchitectDiagramPane
             workbenchId={workbench.id}
             taskCode={workbench.taskCode}
@@ -106,7 +106,7 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
                     {pane(
                         diagram,
                         shown,
-                        running ? { progress: live.progress ?? { phase: diagram.phase, tools: diagram.tools, nodes: shown.nodes.length, edges: shown.edges.length }, connected: live.connected || live.graph === null } : null,
+                        running ? { progress: live.progress ?? { phase: diagram.phase, tools: diagram.tools, nodes: shown.nodes.length, edges: shown.edges.length }, connected: live.connected || live.graph === null, provider: diagram.provider } : null,
                         // "Pedir ajustes" fica na barra dentro do canvas (sem faixa de rodapé).
                         canGenerate ? <ArchitectAdjustButton defaultDepth={asDepth(diagram.depth)} pending={generate.isPending} disabled={busy} onSubmit={({ feedback, depth }) => request({ feedback, depth, baseDiagramId: diagram.id })} /> : null,
                     )}
@@ -116,7 +116,7 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
             return (
                 <>
                     {picker(diagram)}
-                    <ArchitectLiveWaiting phase={live.progress?.phase ?? diagram.phase} tools={live.progress?.tools ?? diagram.tools} connected={live.connected || live.graph === null} />
+                    <ArchitectLiveWaiting phase={live.progress?.phase ?? diagram.phase} tools={live.progress?.tools ?? diagram.tools} connected={live.connected || live.graph === null} provider={diagram.provider} />
                 </>
             )
         const depth = asDepth(diagram.depth)

@@ -1,6 +1,6 @@
 import { memoriesSection } from "@/features/ai/memories-prompt"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
-import { ARCHITECT_STREAM_FENCE, ARCHITECT_TEXT_LIMITS, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
+import { ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS, ARCHITECT_STREAM_FENCE, ARCHITECT_TEXT_LIMITS, ARCHITECT_DEPTH_DEFS, ARCHITECT_EDGE_KINDS, ARCHITECT_GROUP_LAYERS, ARCHITECT_NODE_KINDS, ARCHITECT_NODE_STATUSES, ARCHITECT_NOTE_KINDS, type ArchitectDepth } from "./constants"
 import type { ArchitectGraph } from "./graph"
 
 /**
@@ -42,18 +42,31 @@ export function depthDirective(depth: ArchitectDepth): string {
     return [`## Profundidade: nível ${depth} — ${def.label} (${def.content})`, def.directive, `- No máximo ${def.maxNodes} nós e ${def.maxEdges} arestas (o excedente é cortado pelo sistema).`].join("\n")
 }
 
-export function buildArchitectInstructions(input: { instructions: string; memories: string; selfMemory?: boolean }): string {
+export function buildArchitectInstructions(input: { instructions: string; memories: string; selfMemory?: boolean; /** Sessão do OpenCode no repositório (`false` = provedor direto, sem acesso ao código). */ codeAccess?: boolean }): string {
     const extra = input.instructions.trim()
+    const codeAccess = input.codeAccess ?? true
+    const rules = codeAccess
+        ? [
+              "## Regras invioláveis",
+              "- Você só LÊ: NUNCA altere arquivos, NUNCA faça commit, checkout, stash ou qualquer operação que mude o repositório.",
+              "- NUNCA rode testes, build, typecheck, lint, servidores nem instale dependências.",
+              "- Não pergunte nada: ninguém responde durante a geração.",
+              "",
+              "## Fonte: o plano",
+              "- O plano aprovado é a fonte principal. Leia o código só se precisar entender um processo que já existe — e NUNCA cite o que leu (nada de arquivos, funções ou rotas no diagrama).",
+          ]
+        : [
+              "## Regras invioláveis",
+              "- Você NÃO tem acesso ao repositório nem a ferramentas: trabalhe só com o plano, a tarefa e (num ajuste) o diagrama anterior que vêm no pedido.",
+              "- Não pergunte nada: ninguém responde durante a geração.",
+              "",
+              "## Fonte: o plano",
+              "- O plano aprovado é a fonte única. Não invente partes que o plano não menciona.",
+          ]
     return [
         "Você é o AGENTE ARQUITETO: lê o plano aprovado de uma tarefa e desenha a ARQUITETURA DA IDEIA do plano — quem participa, quais processos acontecem, quais estruturas e informações existem e como se ligam — para quem NÃO lê código. É um diagrama de quadro branco, de alto nível, nunca um mapa de arquivos.",
         "",
-        "## Regras invioláveis",
-        "- Você só LÊ: NUNCA altere arquivos, NUNCA faça commit, checkout, stash ou qualquer operação que mude o repositório.",
-        "- NUNCA rode testes, build, typecheck, lint, servidores nem instale dependências.",
-        "- Não pergunte nada: ninguém responde durante a geração.",
-        "",
-        "## Fonte: o plano",
-        "- O plano aprovado é a fonte principal. Leia o código só se precisar entender um processo que já existe — e NUNCA cite o que leu (nada de arquivos, funções ou rotas no diagrama).",
+        ...rules,
         "",
         "## Escopo e vocabulário: ideias, processos e estruturas",
         "- Parta do OBJETIVO do plano (um nó `kind: \"objective\"`) e mostre só as partes que o plano CRIA, ALTERA ou de que depende diretamente. NÃO desenhe o sistema inteiro: o que já existe e não muda aparece só como contexto mínimo (`status: \"existing\"`).",
@@ -89,7 +102,8 @@ export interface DiagramPromptInput {
     technicalSpec: string | null
     planVersion: number
     plan: string
-    directory: string
+    /** `null` = provedor direto, sem acesso ao código. */
+    directory: string | null
     /** O diretório é o worktree da mesa (`false` = a base do repositório: o worktree ainda não existe). */
     worktree: boolean
     depth: ArchitectDepth
@@ -98,7 +112,9 @@ export interface DiagramPromptInput {
 }
 
 export function buildDiagramPrompt(input: DiagramPromptInput): string {
-    const where = input.worktree
+    const where = !input.directory
+        ? "Você não tem acesso ao código: o diagrama sai do plano e da tarefa abaixo."
+        : input.worktree
         ? `Se precisar entender um processo que já existe, o código está no worktree da mesa: ${input.directory} (o que vale é o plano; nunca cite o código no diagrama).`
         : `Se precisar entender um processo que já existe, o código está na base do repositório em ${input.directory} (o worktree da mesa ainda não existe; o plano descreve as mudanças sobre esta base; nunca cite o código no diagrama).`
     return [
@@ -163,4 +179,13 @@ export function buildIdeaRepairPrompt(codeLabels: readonly string[], depth: Arch
         "- Rótulos de 2 a 5 palavras em português comum; descrições de 1 a 3 frases sobre o que o bloco faz e por quê.",
         `${how} Não leia mais nada do repositório.`,
     ].join("\n")
+}
+
+/**
+ * Pedido de correção num provedor direto (sem conversa): leva o pedido original, o fim da resposta
+ * anterior e a correção, numa chamada nova.
+ */
+export function buildDirectFollowUp(originalPrompt: string, previousAnswer: string, correction: string): string {
+    const tail = previousAnswer.slice(-ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS)
+    return [originalPrompt, "", "---", "## Sua resposta anterior (final)", "", tail || "(vazia)", "", "---", "## Correção pedida", "", correction].join("\n")
 }

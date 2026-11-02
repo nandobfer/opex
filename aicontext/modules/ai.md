@@ -140,7 +140,9 @@ e opções na própria aba da página "Inteligência Artificial".
   `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
   transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
   "Agente Mentor" —, a aba **Agente Arquiteto** (`agente-arquiteto`, ícone `Network`): diagrama da
-  arquitetura do plano aprovado da mesa, em paralelo ao desenvolvimento — ver `modules/architect-agent.md`. O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
+  arquitetura do plano aprovado da mesa, em paralelo ao desenvolvimento, com qualquer provedor de
+  texto (OpenCode, o padrão, com sessão somente leitura no repositório; Gemini, Anthropic, OpenAI e
+  DeepSeek por `streamAi`, só com o plano) — ver `modules/architect-agent.md`. O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista

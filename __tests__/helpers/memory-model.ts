@@ -87,7 +87,8 @@ function applyUpdate(doc: Doc, update: Doc, inserting: boolean): void {
     if (!ops.$set && !ops.$setOnInsert && !ops.$addToSet && !ops.$inc && !ops.$unset && !ops.$pull && !ops.$push) Object.assign(doc, update)
     for (const [key, value] of Object.entries(ops.$set ?? {})) setPath(doc, key, value)
     if (inserting && ops.$setOnInsert) Object.assign(doc, ops.$setOnInsert)
-    for (const [key, value] of Object.entries(ops.$inc ?? {})) doc[key] = ((doc[key] as number) ?? 0) + value
+    // Caminho com pontos (`usage.inputTokens`) como o Mongo: soma no campo aninhado.
+    for (const [key, value] of Object.entries(ops.$inc ?? {})) setPath(doc, key, ((getPath(doc, key) as number | null | undefined) ?? 0) + value)
     for (const key of Object.keys(ops.$unset ?? {})) unsetPath(doc, key)
     for (const [key, value] of Object.entries(ops.$push ?? {})) doc[key] = [...(Array.isArray(doc[key]) ? (doc[key] as unknown[]) : []), value]
     for (const [key, value] of Object.entries(ops.$addToSet ?? {})) {

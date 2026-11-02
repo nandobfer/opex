@@ -80,7 +80,10 @@ const diagram = (overrides: Record<string, unknown> = {}) => ({
   warnings: [],
   repaired: false,
   error: null,
+  provider: 'opencode',
+  model: 'anthropic/opus',
   costUsd: 0.05,
+  tokens: 1500,
   durationMs: 61_000,
   createdAt: '2026-10-31T12:00:00.000Z',
   finishedAt: '2026-10-31T12:01:01.000Z',
@@ -307,6 +310,19 @@ describe('ArchitectTab', () => {
     mocks.diagrams = [diagram({ graph: { ...sampleGraph(), notes: [] } })]
     render(<ArchitectTab workbench={workbench()} />)
     expect(screen.queryByTestId('architect-notes-trigger')).toBeNull()
+  })
+
+  it('custo: com o OpenCode mostra US$; num provedor direto (sem custo informado), os tokens', () => {
+    mocks.diagrams = [diagram()]
+    const { unmount } = render(<ArchitectTab workbench={workbench()} />)
+    const header = screen.getByTestId('architect-header')
+    expect(header.textContent).toMatch(/US\$\s?0,05/)
+    unmount()
+    mocks.diagrams = [diagram({ provider: 'anthropic', model: 'claude-sonnet', costUsd: null, tokens: 12_345 })]
+    render(<ArchitectTab workbench={workbench()} />)
+    const direct = screen.getByTestId('architect-header')
+    expect(direct.textContent).toContain('12,3k tokens')
+    expect(direct.textContent).not.toContain('US$')
   })
 
   it('altura: o canvas ocupa o resto da aba e a aba rola em telas baixas (nada vaza por baixo da barra da mesa)', () => {

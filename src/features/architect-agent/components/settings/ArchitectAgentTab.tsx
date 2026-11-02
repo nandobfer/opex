@@ -33,12 +33,13 @@ const SECTIONS: { value: Section; label: string }[] = [
 ]
 const AGENT_COPY: AgentCardCopy = {
     id: "architect",
-    description: "Cada versão abre uma sessão NOVA do OpenCode no worktree da mesa (ou na base do repositório, se o worktree ainda não existe). O agente só lê o plano, a tarefa e o código.",
+    description: "OpenCode: cada versão abre uma sessão NOVA no worktree da mesa (ou na base do repositório) e o agente só lê o plano, a tarefa e o código. Gemini, Anthropic, OpenAI e DeepSeek: uma chamada direta ao modelo, só com o plano e a tarefa.",
     timeoutLabel: "Tempo máximo da geração (minutos)",
     timeoutMin: ARCHITECT_TIMEOUT_MIN,
     timeoutMax: ARCHITECT_TIMEOUT_MAX,
     placeholder: "Ex.: destaque os eventos do Pusher; agrupe os componentes de UI por tela.",
     notice: "A geração roda sem ninguém para responder: o agente só tem permissão de leitura (edição, subagentes e comandos de teste, build, lint, instalação e escrita no git são negados) e perguntas são dispensadas. Falha, tempo esgotado ou resposta inválida nunca afetam a mesa.",
+    directNotice: "Sem acesso ao código: o diagrama sai só do plano e da tarefa. Sem aprendizado autônomo (as ferramentas de memória são do OpenCode); as memórias do arquiteto entram nas instruções. Falha, tempo esgotado ou resposta inválida nunca afetam a mesa.",
 }
 const sectionMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
@@ -115,7 +116,7 @@ export function ArchitectAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                         </>
                     )}
                     {section === "diagrama" && <DiagramCard form={form} />}
-                    {section === "agente" && <AgentCard form={form} copy={AGENT_COPY} />}
+                    {section === "agente" && <AgentCard form={form} copy={AGENT_COPY} providerSelect />}
                     {section === "memorias" && <MemoriesSection />}
                     {section === "historico" && <HistorySection />}
                 </motion.div>

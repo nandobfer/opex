@@ -38,7 +38,11 @@ export interface IArchitectDiagram {
     sessionId: string | null
     /** Sessão do OpenCode que não pôde ser excluída (tentada de novo na próxima geração da mesa). */
     pendingSessionDeletion: string | null
-    usage: { costUsd: number; inputTokens: number; outputTokens: number; reasoningTokens: number }
+    /** Provedor e modelo com que a versão foi gerada (`null` = antes da escolha do provedor: OpenCode). */
+    provider: string | null
+    model: string | null
+    /** `costUsd` nulo: o provedor não informa custo (provedores diretos); valem os tokens. */
+    usage: { costUsd: number | null; inputTokens: number; outputTokens: number; reasoningTokens: number }
     startedAt: Date
     finishedAt: Date | null
     createdAt: Date
@@ -78,6 +82,8 @@ const ArchitectDiagramSchema = new Schema<IArchitectDiagram>(
         directory: { type: String, default: null },
         sessionId: { type: String, default: null },
         pendingSessionDeletion: { type: String, default: null },
+        provider: { type: String, default: null },
+        model: { type: String, default: null },
         usage: {
             costUsd: { type: Number, default: 0 },
             inputTokens: { type: Number, default: 0 },

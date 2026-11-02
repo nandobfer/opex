@@ -37,7 +37,12 @@ export interface ArchitectDiagramDto {
     warnings: string[]
     repaired: boolean
     error: string | null
-    costUsd: number
+    /** Provedor e modelo da geração (versões antigas: OpenCode, modelo desconhecido). */
+    provider: string
+    model: string | null
+    /** `null`: o provedor não informa custo (mostre os tokens). */
+    costUsd: number | null
+    tokens: number
     durationMs: number | null
     createdAt: string
     finishedAt: string | null

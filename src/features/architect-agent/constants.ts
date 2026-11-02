@@ -146,3 +146,15 @@ export const ARCHITECT_PHASE_LABELS: Record<ArchitectPhase, string> = {
     writing: "Desenhando o diagrama…",
     retrying: "A resposta veio sem diagrama legível: refazendo o diagrama…",
 }
+
+/** Rótulo da fase: num provedor direto (sem sessão nem acesso ao código) o começo e a leitura mudam. */
+export function architectPhaseLabel(phase: ArchitectPhase, provider: string | null | undefined): string {
+    if (provider && provider !== "opencode") {
+        if (phase === "starting") return "Chamando o modelo…"
+        if (phase === "reading") return "Lendo o plano…"
+    }
+    return ARCHITECT_PHASE_LABELS[phase]
+}
+
+/** Correção num provedor direto (sem conversa): quanto do fim da resposta anterior vai junto. */
+export const ARCHITECT_DIRECT_PREVIOUS_MAX_CHARS = 20_000

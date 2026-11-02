@@ -21,7 +21,18 @@ vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   },
   useSaveArchitectSettings: () => ({ mutateAsync: mocks.save, isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiAgents: () => ({ data: [] }), useAiModels: () => ({ data: [] }) }))
+vi.mock('@/features/ai/hooks/useAi', () => ({
+  useAiAgents: () => ({ data: [] }),
+  useAiModels: (provider: string | null) => ({ data: provider === 'anthropic' ? [{ id: 'claude-sonnet', name: 'Claude Sonnet', variants: ['high'] }] : [], isLoading: false, isError: false }),
+  // OpenCode e Anthropic conectados; Gemini configurado mas fora do ar.
+  useAiProviderStatuses: () => ({
+    providers: [
+      { id: 'opencode', name: 'OpenCode', configured: true, connected: true },
+      { id: 'anthropic', name: 'Anthropic', configured: true, connected: true },
+      { id: 'gemini', name: 'Gemini', configured: true, connected: false },
+    ],
+  }),
+}))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [{ id: 'c1', projectName: 'Opex', repo: 'nandobfer/opex' }], isLoading: false }) }))
 vi.mock('@/features/agentic/components/settings/AgentConfigFields', () => ({ AgentConfigFields: ({ error }: { error?: string }) => <div data-testid="agent-fields">{error}</div> }))
 vi.mock('@/features/architect-agent/components/settings/MemoriesSection', () => ({ MemoriesSection: () => <div>Lista de memórias do arquiteto</div> }))
@@ -77,6 +88,36 @@ describe('ArchitectAgentTab', () => {
     expect(mocks.save).not.toHaveBeenCalled()
     expect(tab('Agente').getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('agent-fields').textContent).toBe('Selecione o modelo')
+  })
+})
+
+describe('provedor do Agente Arquiteto', () => {
+  it('OpenCode (padrão) mostra os campos do agente; um provedor direto troca para modelo e raciocínio, sem agente nem fallbacks', async () => {
+    mocks.settings = { ...DEFAULT_ARCHITECT_SETTINGS, agent: { agent: 'build', model: 'anthropic/opus', variant: 'max', fallbacks: [{ model: 'openai/gpt', variant: null }] } }
+    render(<ArchitectAgentTab onDirtyChange={vi.fn()} />)
+    fireEvent.click(tab('Agente'))
+    expect(screen.getByText('Provedor e modelo')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: /OpenCode/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByTestId('agent-fields')).toBeTruthy()
+    expect(screen.getByText(/só tem permissão de leitura/)).toBeTruthy()
+    // Gemini fora do ar não pode ser escolhido.
+    expect(screen.getByRole('radio', { name: /Gemini/ }).hasAttribute('disabled') || screen.getByRole('radio', { name: /Gemini/ }).getAttribute('aria-disabled') === 'true').toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: /Anthropic/ }))
+    expect(screen.queryByTestId('agent-fields')).toBeNull()
+    expect(screen.getByText('Modelo')).toBeTruthy()
+    expect(screen.getByText(/Sem acesso ao código/)).toBeTruthy()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: /Salvar/ })))
+    // Trocar de provedor limpa modelo, variante, agente e fallbacks (os ids não valem entre provedores).
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', agent: { agent: null, model: null, variant: null, fallbacks: [] } }))
+  })
+
+  it('configuração salva num provedor direto abre nele, com o modelo escolhido', () => {
+    mocks.settings = { ...DEFAULT_ARCHITECT_SETTINGS, provider: 'anthropic', agent: { agent: null, model: 'claude-sonnet', variant: null, fallbacks: [] } }
+    render(<ArchitectAgentTab onDirtyChange={vi.fn()} />)
+    fireEvent.click(tab('Agente'))
+    expect(screen.getByRole('radio', { name: /Anthropic/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('Claude Sonnet')).toBeTruthy()
+    expect(screen.queryByTestId('agent-fields')).toBeNull()
   })
 })
 

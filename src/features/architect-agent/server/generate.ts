@@ -15,7 +15,8 @@ import type { TaskDetailDto } from "@/features/tasks/types"
 import { ARCHITECT_AUDIT_ENTITY, ARCHITECT_CONSUMPTION_ORIGIN, ARCHITECT_DRAFT_SAVE_MS, ARCHITECT_INSTRUCTIONS_KEY, ARCHITECT_REPORT_MAX_CHARS, ARCHITECT_SETUP_STEP_TIMEOUT_MS, type ArchitectDepth, type ArchitectPhase } from "../constants"
 import { architectGraphSchema, type ArchitectGraph, type RawGraph } from "../graph"
 import { parseArchitectOutput } from "../parse"
-import { buildArchitectInstructions, buildDiagramPrompt, buildIdeaRepairPrompt, buildRepairPrompt } from "../prompt"
+import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt } from "../prompt"
+import { runDirectTurn } from "./direct-turn"
 import { sanitizeGraph, needsIdeaRepair, normalizeLegacyGraph } from "../sanitize"
 import { createGraphAssembler, emptyDraft, type AppliedOp, type GraphAssembler } from "../stream-parser"
 import { closeLive, emitOps, emitProgress, openLive } from "./live-hub"
@@ -26,7 +27,9 @@ import { ArchitectDiagram, architectDb, type IArchitectDiagram } from "./models"
 import { loadArchitectSettings } from "./settings"
 
 /**
- * Geração de uma versão do diagrama (SOMENTE servidor). Abre uma sessão NOVA do OpenCode, só leitura,
+ * Geração de uma versão do diagrama (SOMENTE servidor). Com um provedor direto (Gemini, Anthropic,
+ * OpenAI, DeepSeek), uma chamada `streamAi` sem acesso ao código, só com o plano e a tarefa. Com o
+ * OpenCode (padrão), abre uma sessão NOVA, só leitura,
  * no worktree da mesa (ou na base do repositório, se o worktree ainda não existe), lê o plano, a
  * tarefa e o código e grava o grafo saneado. O diagrama é montado AO VIVO: cada pedaço do texto do
  * modelo passa pelo montador (`stream-parser.ts`), as operações vão ao hub do stream NDJSON
@@ -118,6 +121,13 @@ async function applyInstructions(client: OpencodeClient, sessionId: string, inst
     } catch {
         return false
     }
+}
+
+/** Memórias do arquiteto para um provedor direto (o bloco nas instruções; sem o MCP do OpenCode). */
+async function directMemories(): Promise<{ memories: string; notice: string | null }> {
+    const { architectMemoryContext } = await import("@/features/ai/server/agent-memory-context")
+    const context = await architectMemoryContext()
+    return { memories: context.block, notice: memoryCacheNotice(context) }
 }
 
 async function memoryInstructions(client: OpencodeClient, directory: string, workbenchId: string): Promise<{ memories: string; selfMemory: boolean; notice: string | null }> {
@@ -220,11 +230,12 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         if (!workbench) return void (await fail("a mesa de trabalho não existe mais"))
         const plan = workbench.plans?.[doc.planVersion - 1]?.text
         if (!plan) return void (await fail(`o plano v${doc.planVersion} não foi encontrado na mesa`))
-        client = await withTimeout(getOpencodeClient(), "O OpenCode", signal)
-        const opencodeClient = client
-        await withTimeout(retryPendingDeletions(opencodeClient, doc.workbenchId), "A exclusão das sessões pendentes", signal)
-        const { directory, worktree } = await withTimeout(resolveDirectory(opencodeClient, { worktreePath: workbench.worktreePath, centralId: workbench.centralId, taskCode: workbench.taskCode }, signal), "A leitura da central", signal)
-        await ArchitectDiagram.updateOne(filter, { $set: { directory } })
+        const provider = settings.provider
+        const direct = provider !== "opencode"
+        // A versão guarda com o que foi gerada; provedor direto não informa custo (valem os tokens).
+        // (Um "Tentar novamente" no OpenCode depois de uma tentativa direta volta o custo a número: o `$inc` exige.)
+        const costUsd = direct ? null : (doc.usage?.costUsd ?? 0)
+        await ArchitectDiagram.updateOne(filter, { $set: { provider, model: settings.agent.model, "usage.costUsd": costUsd } })
         const task = await withTimeout(loadTaskSafe(doc.taskId), "A leitura da tarefa", signal)
         const base = doc.baseDiagramId ? await ArchitectDiagram.findById(doc.baseDiagramId, { graph: 1 }).lean() : null
         // O grafo base pode ser de uma versão antiga (diagrama de código): segue normalizado para o agente.
@@ -234,30 +245,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         assembler = graphAssembler
         // Ajuste: o grafo anterior já é o ponto de partida desenhado na tela.
         if (startGraph) live([{ op: "reset", graph: graphAssembler.draft }])
-        const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId), "As memórias do agente", signal)
-        if (memory.notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${memory.notice}`)
-        const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory })
-        const session = await withTimeout(
-            opencodeClient.session.create({
-                title: `Arquiteto · ${doc.taskCode} · v${doc.version}`.slice(0, 120),
-                location: { directory },
-                metadata: { app: "opex", kind: "architect-diagram", workbenchId: doc.workbenchId, diagramId },
-                permissions: [...ADVERSARIAL_SESSION_PERMISSIONS],
-            }),
-            "A criação da sessão do OpenCode",
-            signal,
-            // Sessão criada depois do prazo: ninguém vai usá-la.
-            (late) => void removeSession(opencodeClient, late.id),
-        )
-        sessionId = session.id
-        await ArchitectDiagram.updateOne(filter, { $set: { sessionId } })
-        const applied = await withTimeout(applyInstructions(opencodeClient, sessionId, instructions), "A gravação das instruções da sessão", signal)
         const depth = doc.depth as ArchitectDepth
-        const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory, worktree, depth, adjust })
-        await setPhase("reading")
-
-        const opencode = client
-        const sid = sessionId
         const current = doc
         let tools = 0
         let writing = false
@@ -284,33 +272,88 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             if (!legacy.ok) return { ok: false, error: "a resposta não trouxe blocos ```architect``` com o diagrama" }
             return legacy
         }
-        const turn = (text: string, title: string): Promise<TurnResult> =>
-            runWithFallback(
-                settings.agent,
-                text,
-                (agent, body) =>
-                    runAgentTurn(
-                        opencode,
-                        { id: `architect:${diagramId}`, sessionId: sid, stage: "architect", title, agent, text: body, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId } },
-                        {
-                            publish: onEvent,
-                            // Ninguém responde durante a geração: a política de leitura decide na hora.
-                            onPermission: async (permission) => {
-                                const decision = decidePermission(permission)
-                                await opencode.permission.reply({ sessionID: sid, requestID: permission.id, decision, ...(decision === "reject" ? { message: "O agente arquiteto só lê o código: não altera arquivos nem roda testes, build, lint ou typecheck." } : {}) }).catch(() => undefined)
-                            },
-                            onForm: async (form) => {
-                                await opencode.session.form.cancel({ sessionID: sid, formID: form.id }).catch(() => undefined)
-                            },
-                            onStep: async ({ costUsd, tokens }) => {
-                                await ArchitectDiagram.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
-                            },
-                        },
-                    ),
-                { signal, onSwitch: (change) => log.warn({ workbenchId: current.workbenchId, diagramId }, `[architect] ${fallbackNotice(change)}`) },
-            )
 
-        let result = await turn(applied ? prompt : `${instructions}\n\n---\n${prompt}`, `Agente Arquiteto · v${doc.version}`)
+        /** Primeiro turno (`first`) e as correções (`followUp`, com a resposta anterior para o provedor direto). */
+        let first: () => Promise<TurnResult>
+        let followUp: (correction: string, previous: string) => Promise<TurnResult>
+        if (direct) {
+            // Provedor direto: sem sessão, ferramentas nem acesso ao código; o diagrama sai do plano.
+            const { memories, notice } = await withTimeout(directMemories(), "As memórias do agente", signal)
+            if (notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${notice}`)
+            log.info({ diagramId, provider }, "[architect] provedor direto: sem aprendizado autônomo (as ferramentas de memória são do OpenCode)")
+            const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories, selfMemory: false, codeAccess: false })
+            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory: null, worktree: false, depth, adjust })
+            const call = (text: string) =>
+                runDirectTurn(
+                    { provider, model: settings.agent.model ?? "", variant: settings.agent.variant, instructions, prompt: text, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId } },
+                    {
+                        onEvent,
+                        onUsage: async (usage) => {
+                            await ArchitectDiagram.updateOne(filter, { $inc: { "usage.inputTokens": usage.inputTokens, "usage.outputTokens": usage.outputTokens } })
+                        },
+                    },
+                )
+            first = () => call(prompt)
+            followUp = (correction, previous) => call(buildDirectFollowUp(prompt, previous, correction))
+        } else {
+            client = await withTimeout(getOpencodeClient(), "O OpenCode", signal)
+            const opencodeClient = client
+            await withTimeout(retryPendingDeletions(opencodeClient, doc.workbenchId), "A exclusão das sessões pendentes", signal)
+            const { directory, worktree } = await withTimeout(resolveDirectory(opencodeClient, { worktreePath: workbench.worktreePath, centralId: workbench.centralId, taskCode: workbench.taskCode }, signal), "A leitura da central", signal)
+            await ArchitectDiagram.updateOne(filter, { $set: { directory } })
+            const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId), "As memórias do agente", signal)
+            if (memory.notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${memory.notice}`)
+            const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory })
+            const session = await withTimeout(
+                opencodeClient.session.create({
+                    title: `Arquiteto · ${doc.taskCode} · v${doc.version}`.slice(0, 120),
+                    location: { directory },
+                    metadata: { app: "opex", kind: "architect-diagram", workbenchId: doc.workbenchId, diagramId },
+                    permissions: [...ADVERSARIAL_SESSION_PERMISSIONS],
+                }),
+                "A criação da sessão do OpenCode",
+                signal,
+                // Sessão criada depois do prazo: ninguém vai usá-la.
+                (late) => void removeSession(opencodeClient, late.id),
+            )
+            sessionId = session.id
+            await ArchitectDiagram.updateOne(filter, { $set: { sessionId } })
+            const applied = await withTimeout(applyInstructions(opencodeClient, sessionId, instructions), "A gravação das instruções da sessão", signal)
+            const prompt = buildDiagramPrompt({ code: doc.taskCode, title: doc.taskTitle, description: task?.description ?? null, technicalSpec: task?.technicalSpec ?? null, planVersion: doc.planVersion, plan, directory, worktree, depth, adjust })
+            const opencode = opencodeClient
+            const sid = sessionId
+            const turn = (text: string, title: string): Promise<TurnResult> =>
+                runWithFallback(
+                    settings.agent,
+                    text,
+                    (agent, body) =>
+                        runAgentTurn(
+                            opencode,
+                            { id: `architect:${diagramId}`, sessionId: sid, stage: "architect", title, agent, text: body, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId } },
+                            {
+                                publish: onEvent,
+                                // Ninguém responde durante a geração: a política de leitura decide na hora.
+                                onPermission: async (permission) => {
+                                    const decision = decidePermission(permission)
+                                    await opencode.permission.reply({ sessionID: sid, requestID: permission.id, decision, ...(decision === "reject" ? { message: "O agente arquiteto só lê o código: não altera arquivos nem roda testes, build, lint ou typecheck." } : {}) }).catch(() => undefined)
+                                },
+                                onForm: async (form) => {
+                                    await opencode.session.form.cancel({ sessionID: sid, formID: form.id }).catch(() => undefined)
+                                },
+                                onStep: async ({ costUsd, tokens }) => {
+                                    await ArchitectDiagram.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
+                                },
+                            },
+                        ),
+                    { signal, onSwitch: (change) => log.warn({ workbenchId: current.workbenchId, diagramId }, `[architect] ${fallbackNotice(change)}`) },
+                )
+            // A sessão guarda a conversa: a correção é só a mensagem nova.
+            first = () => turn(applied ? prompt : `${instructions}\n\n---\n${prompt}`, `Agente Arquiteto · v${current.version}`)
+            followUp = (correction) => turn(correction, `Agente Arquiteto · v${current.version} (correção)`)
+        }
+        await setPhase("reading")
+
+        let result = await first()
         if (result.outcome !== "succeeded") return void (await fail(result.message ?? "o agente não concluiu o diagrama"))
         let parsed = readGraph(result.text)
         let repaired = false
@@ -319,7 +362,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             await setPhase("retrying")
             // O rascunho recomeça do ponto de partida (o grafo base num ajuste, que pede de novo só as diferenças).
             live(graphAssembler.reset())
-            result = await turn(buildRepairPrompt(parsed.error, depth, Boolean(adjust)), `Agente Arquiteto · v${doc.version} (correção)`)
+            result = await followUp(buildRepairPrompt(parsed.error, depth, Boolean(adjust)), result.text)
             if (result.outcome !== "succeeded") return void (await fail(result.message ?? "o agente não concluiu a correção do diagrama"))
             parsed = readGraph(result.text)
             repaired = true
@@ -333,7 +376,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             log.info({ diagramId, codeLabels: sanitized.codeLabels.length, nodes: sanitized.graph.nodes.length }, "[architect] rótulos com nome de código: pedindo a correção uma vez")
             await setPhase("retrying")
             live(graphAssembler.reset())
-            const retried = await turn(buildIdeaRepairPrompt(sanitized.codeLabels, depth, Boolean(adjust)), `Agente Arquiteto · v${doc.version} (correção)`)
+            const retried = await followUp(buildIdeaRepairPrompt(sanitized.codeLabels, depth, Boolean(adjust)), result.text)
             repaired = true
             if (retried.outcome === "succeeded") {
                 const reparsed = readGraph(retried.text)

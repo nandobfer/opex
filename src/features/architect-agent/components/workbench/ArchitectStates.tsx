@@ -85,7 +85,7 @@ export function ArchitectCanvasSkeleton({ label }: { label?: string }) {
  * Geração em curso antes do primeiro nó (o agente lendo o plano e o código): o próprio canvas, no
  * formato final, com o nó do objetivo "fantasma" pulsando no centro. Os nós aparecem aqui ao vivo.
  */
-export function ArchitectLiveWaiting({ phase, tools, connected }: { phase: ArchitectPhase | null; tools: number; connected: boolean }) {
+export function ArchitectLiveWaiting({ phase, tools, connected, provider = null }: { phase: ArchitectPhase | null; tools: number; connected: boolean; provider?: string | null }) {
     const reducedMotion = useReducedMotion()
     return (
         <div className={ARCHITECT_TAB_CLASS} aria-busy="true">
@@ -93,7 +93,7 @@ export function ArchitectLiveWaiting({ phase, tools, connected }: { phase: Archi
             <div className={ARCHITECT_CANVAS_WRAP_CLASS}>
                 <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-live-waiting">
                     <ToolbarSkeleton />
-                    <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} />
+                    <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} provider={provider} />
                     <div className="flex h-full items-center justify-center p-8">
                         <motion.div
                             className="flex h-[68px] w-[220px] items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"

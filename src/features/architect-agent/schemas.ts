@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { agentConfigSchema } from "@/features/agentic/schemas"
+import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { ARCHITECT_DEPTH_DEFAULT, ARCHITECT_NODE_KINDS, ARCHITECT_TIMEOUT_DEFAULT, ARCHITECT_TIMEOUT_MAX, ARCHITECT_TIMEOUT_MIN, ARCHITECT_TRIGGERS, ARCHITECT_VIEWS, type ArchitectDepth } from "./constants"
 
 const int = (min: number, max: number) =>
@@ -29,7 +30,12 @@ export const architectSettingsSchema = z
             all: z.boolean(),
             centralIds: z.array(z.string().trim().min(1).max(40)).max(200),
         }),
-        /** Sempre OpenCode: agente, modelo, variante e modelos de fallback. */
+        /**
+         * Provedor de texto do arquiteto. OpenCode: sessão somente leitura no repositório (agente,
+         * modelo, variante e fallbacks em `agent`). Os demais: só `agent.model`/`agent.variant`, sem
+         * acesso ao código (o diagrama sai do plano e da tarefa).
+         */
+        provider: z.enum(AI_TEXT_PROVIDER_IDS, { error: "Escolha um provedor de texto: OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek" }),
         agent: agentConfigSchema,
         timeoutMinutes: int(ARCHITECT_TIMEOUT_MIN, ARCHITECT_TIMEOUT_MAX),
         instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),
@@ -46,6 +52,7 @@ export const DEFAULT_ARCHITECT_SETTINGS: ArchitectSettings = {
     enabled: false,
     trigger: "auto",
     scope: { all: true, centralIds: [] },
+    provider: "opencode",
     agent: { agent: null, model: null, variant: null, fallbacks: [] },
     timeoutMinutes: ARCHITECT_TIMEOUT_DEFAULT,
     instructions: "",

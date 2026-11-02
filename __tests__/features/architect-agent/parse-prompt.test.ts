@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { architectPhaseLabel } from '@/features/architect-agent/constants'
 import { parseArchitectOutput } from '@/features/architect-agent/parse'
-import { buildArchitectInstructions, buildDiagramPrompt, buildIdeaRepairPrompt, buildRepairPrompt, depthDirective } from '@/features/architect-agent/prompt'
+import { buildArchitectInstructions, buildDiagramPrompt, buildDirectFollowUp, buildIdeaRepairPrompt, buildRepairPrompt, depthDirective } from '@/features/architect-agent/prompt'
 import { sampleGraph } from './fixtures'
 
 /** Leitura da resposta do arquiteto e as mensagens da sessão (instruções, pedido e correção). */
@@ -98,5 +99,35 @@ describe('prompts do arquiteto', () => {
     const adjust = buildIdeaRepairPrompt(['useArchitectTab'], 3, true)
     expect(adjust).toContain('só as DIFERENÇAS')
     expect(adjust).not.toContain('Reescreva o diagrama COMPLETO')
+  })
+
+  it('provedor direto: sem acesso ao código, sem worktree nem leitura do repositório', () => {
+    const instructions = buildArchitectInstructions({ instructions: '', memories: '', selfMemory: false, codeAccess: false })
+    expect(instructions).toContain('NÃO tem acesso ao repositório')
+    expect(instructions).not.toContain('Leia o código')
+    expect(instructions).not.toContain('NUNCA rode testes')
+    const prompt = buildDiagramPrompt({ code: 'OPE-1', title: 'T', description: null, technicalSpec: null, planVersion: 1, plan: 'P', directory: null, worktree: false, depth: 3 })
+    expect(prompt).toContain('Você não tem acesso ao código')
+    expect(prompt).not.toContain('worktree')
+    expect(prompt).not.toContain('base do repositório')
+  })
+
+  it('OpenCode continua com as regras de leitura do repositório', () => {
+    expect(buildArchitectInstructions({ instructions: '', memories: '' })).toContain('Leia o código só se precisar')
+  })
+
+  it('correção no provedor direto (sem conversa): leva o pedido original, o fim da resposta anterior e a correção', () => {
+    const previous = 'a'.repeat(30_000) + 'FIM'
+    const text = buildDirectFollowUp('PEDIDO ORIGINAL', previous, 'CORRIJA ISSO')
+    expect(text.indexOf('PEDIDO ORIGINAL')).toBeLessThan(text.indexOf('FIM'))
+    expect(text.indexOf('FIM')).toBeLessThan(text.indexOf('CORRIJA ISSO'))
+    expect(text.length).toBeLessThan(21_000)
+  })
+
+  it('rótulo da fase: num provedor direto o começo e a leitura falam do modelo e do plano', () => {
+    expect(architectPhaseLabel('reading', 'opencode')).toBe('Lendo o plano e o código…')
+    expect(architectPhaseLabel('reading', 'anthropic')).toBe('Lendo o plano…')
+    expect(architectPhaseLabel('starting', 'gemini')).toBe('Chamando o modelo…')
+    expect(architectPhaseLabel('writing', 'gemini')).toBe('Desenhando o diagrama…')
   })
 })

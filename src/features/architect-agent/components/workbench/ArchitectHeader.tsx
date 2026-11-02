@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { InfoTooltip } from "@/components/ui/info-tooltip"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { formatCost, formatDuration } from "@/features/adversarial-agent/components/ReviewBadges"
+import { formatDuration } from "@/features/adversarial-agent/components/ReviewBadges"
+import { diagramUsageLabel } from "../../format"
 import { ARCHITECT_DEPTH_DEFS, ARCHITECT_NOTE_KIND_LABELS, type ArchitectDepth } from "../../constants"
 import type { ArchitectGraph, ArchitectNote } from "../../graph"
 import type { ArchitectDiagramDto } from "../../types"
@@ -100,7 +101,7 @@ export function ArchitectHeader({ diagrams, diagram, graph, onSelect, showNotes 
                     {diagramVersionLabel(diagram)} · {ARCHITECT_DEPTH_DEFS[(diagram.depth as ArchitectDepth) ?? 3]?.label ?? `Nível ${diagram.depth}`} · gerada em {format(new Date(diagram.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                     <span className="tabular-nums">
                         {" · "}
-                        {formatCost(diagram.costUsd)} · {formatDuration(diagram.durationMs)}
+                        {diagramUsageLabel(diagram)} · {formatDuration(diagram.durationMs)}
                     </span>
                     {diagram.trimmed.nodes > 0 && ` · ${diagram.trimmed.nodes} nó(s) cortado(s) pelo teto do nível`}
                 </p>

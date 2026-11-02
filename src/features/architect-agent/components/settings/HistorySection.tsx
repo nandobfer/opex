@@ -13,7 +13,8 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { workbenchPath } from "@/features/agentic/constants"
-import { formatCost, formatDuration } from "@/features/adversarial-agent/components/ReviewBadges"
+import { formatDuration } from "@/features/adversarial-agent/components/ReviewBadges"
+import { diagramProviderLabel, diagramUsageLabel } from "../../format"
 import { ARCHITECT_DEPTH_DEFS, ARCHITECT_DIAGRAM_STATE_LABELS, ARCHITECT_HISTORY_LIMIT, ARCHITECT_ORIGIN_LABELS, type ArchitectDepth, type ArchitectDiagramState } from "../../constants"
 import { useArchitectHistory, useArchitectRealtime } from "../../hooks/useArchitect"
 import { diagramVersionLabel } from "../workbench/ArchitectHeader"
@@ -49,13 +50,13 @@ export function HistorySection() {
                                         {item.taskTitle}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
-                                        {diagramVersionLabel(item)} · {ARCHITECT_DEPTH_DEFS[item.depth as ArchitectDepth]?.label ?? `Nível ${item.depth}`} · {ARCHITECT_ORIGIN_LABELS[item.origin]}
+                                        {diagramVersionLabel(item)} · {ARCHITECT_DEPTH_DEFS[item.depth as ArchitectDepth]?.label ?? `Nível ${item.depth}`} · {ARCHITECT_ORIGIN_LABELS[item.origin]} · {diagramProviderLabel(item)}
                                     </span>
                                     <Badge variant={STATE_VARIANT[item.state]} title={item.error ?? undefined}>
                                         {ARCHITECT_DIAGRAM_STATE_LABELS[item.state]}
                                     </Badge>
                                     <span className="text-xs tabular-nums text-muted-foreground">
-                                        {formatCost(item.costUsd)} · {formatDuration(item.durationMs)} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
+                                        {diagramUsageLabel(item)} · {formatDuration(item.durationMs)} · {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: ptBR })}
                                     </span>
                                 </motion.li>
                             ))}

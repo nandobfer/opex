@@ -3,12 +3,12 @@
 import { motion } from "framer-motion"
 import { Loader2, WifiOff } from "lucide-react"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
-import { ARCHITECT_PHASE_LABELS } from "../../constants"
+import { architectPhaseLabel } from "../../constants"
 import type { ArchitectLiveProgress } from "../../types"
 
 /** Faixa do diagrama ao vivo: fase, leituras e o tamanho do rascunho (números animados). */
-export function ArchitectLiveBar({ progress, connected }: { progress: ArchitectLiveProgress | null; connected: boolean }) {
-    const phase = ARCHITECT_PHASE_LABELS[progress?.phase ?? "starting"]
+export function ArchitectLiveBar({ progress, connected, provider = null }: { progress: ArchitectLiveProgress | null; connected: boolean; provider?: string | null }) {
+    const phase = architectPhaseLabel(progress?.phase ?? "starting", provider)
     return (
         <motion.div
             initial={{ opacity: 0, y: 4 }}

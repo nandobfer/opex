@@ -24,7 +24,7 @@ interface ArchitectDiagramViewProps {
     view: ArchitectView
     filter: GraphFilter
     /** Geração ao vivo: o grafo cresce sem remontar, a câmera acompanha e o arrasto fica desligado. */
-    live?: { progress: ArchitectLiveProgress | null; connected: boolean } | null
+    live?: { progress: ArchitectLiveProgress | null; connected: boolean; provider?: string | null } | null
     /** Controles que abrem a barra dentro do canvas (visão, filtros, exportar), antes de "Ajustar visão". */
     controls?: ReactNode
     /** Controles no fim da barra, depois de "Restaurar layout" (ex.: "Pedir ajustes"). */
@@ -88,7 +88,7 @@ export function ArchitectDiagramView({ workbenchId, diagramId, graph: incoming, 
                 ) : (
                     <ArchitectCanvas key={canvasKey} layout={layout} view={viewGraph} positions={positions.positions} live={isLive} reducedMotion={reducedMotion} onSavePosition={positions.save} onFocus={setFocused} onSelect={setSelected} onUserMove={() => setFollow(false)} />
                 )}
-                {live && <ArchitectLiveBar progress={live.progress} connected={live.connected} />}
+                {live && <ArchitectLiveBar progress={live.progress} connected={live.connected} provider={live.provider ?? null} />}
                 <ArchitectCanvasToolbar>
                     {controls}
                     <Button type="button" variant="outline" size="sm" className={CANVAS_TOOL_BUTTON_CLASS} onClick={fit}>

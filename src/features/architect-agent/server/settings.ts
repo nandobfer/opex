@@ -31,6 +31,8 @@ export function withDefaults(saved: unknown): unknown {
     return {
         ...defaults,
         ...value,
+        // Configuração salva antes da escolha do provedor era sempre do OpenCode.
+        provider: value.provider ?? "opencode",
         scope: { ...defaults.scope, ...(value.scope ?? {}) },
         diagram: { ...defaults.diagram, ...diagram, ...(value.diagram ? { nodeKinds: migrateNodeKinds(diagram.nodeKinds) } : {}) },
     }
@@ -40,9 +42,9 @@ export async function loadArchitectSettings(): Promise<{ settings: ArchitectSett
     return loadFeature<ArchitectSettings>(ARCHITECT_FEATURE, z.preprocess(withDefaults, architectSettingsSchema), DEFAULT_ARCHITECT_SETTINGS)
 }
 
-/** Exclusivo do OpenCode (sessão com ferramentas de leitura do repositório). */
+/** Provedor escolhido conectado e modelo definido. */
 export async function architectAvailability(settings: ArchitectSettings): Promise<AiFeatureAvailability> {
-    return availability({ enabled: settings.enabled, provider: "opencode", model: settings.agent.model }, '"Agente Arquiteto"')
+    return availability({ enabled: settings.enabled, provider: settings.provider, model: settings.agent.model }, '"Agente Arquiteto"')
 }
 
 export async function getArchitectSettings(): Promise<ArchitectSettingsDto> {
@@ -53,16 +55,20 @@ export async function getArchitectSettings(): Promise<ArchitectSettingsDto> {
 export function normalizeArchitectSettings(input: ArchitectSettings): ArchitectSettings {
     return {
         ...input,
-        agent: { ...input.agent, agent: input.agent.agent || null, variant: input.agent.variant || null },
+        // Fora do OpenCode não há agente nem fallbacks (os ids são do OpenCode).
+        agent:
+            input.provider === "opencode"
+                ? { ...input.agent, agent: input.agent.agent || null, variant: input.agent.variant || null }
+                : { agent: null, model: input.agent.model, variant: input.agent.variant || null, fallbacks: [] },
         scope: { all: input.scope.all, centralIds: input.scope.all ? [] : [...new Set(input.scope.centralIds)] },
         diagram: { ...input.diagram, nodeKinds: [...new Set(input.diagram.nodeKinds)] },
     }
 }
 
-/** Salva conferindo no catálogo o modelo do arquiteto (OpenCode). */
+/** Salva conferindo no catálogo do provedor escolhido o modelo, a variante e (OpenCode) o agente. */
 export async function saveArchitectSettings(input: ArchitectSettings, actorId: string): Promise<ArchitectSettingsDto> {
     const next = normalizeArchitectSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.agent.model, agent: next.agent.agent, variant: next.agent.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: next.enabled, provider: next.provider, model: next.agent.model, agent: next.provider === "opencode" ? next.agent.agent : null, variant: next.agent.variant, temperature: null, maxOutputTokens: null })
     const before = await loadArchitectSettings()
     await persistFeature(ARCHITECT_FEATURE, next, actorId, before)
     return getArchitectSettings()

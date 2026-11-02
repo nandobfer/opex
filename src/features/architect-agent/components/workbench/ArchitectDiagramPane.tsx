@@ -25,7 +25,7 @@ interface ArchitectDiagramPaneProps {
     onSelect: (id: string) => void
     showNotes: boolean
     /** Geração ao vivo (sem exportação até terminar). */
-    live?: { progress: ArchitectLiveProgress | null; connected: boolean } | null
+    live?: { progress: ArchitectLiveProgress | null; connected: boolean; provider?: string | null } | null
     /** "Pedir ajustes" (só com o arquiteto aplicável), no fim da barra de controles do canvas. */
     adjust?: ReactNode
 }

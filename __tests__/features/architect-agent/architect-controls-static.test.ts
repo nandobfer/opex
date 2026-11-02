@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
  */
 
 const ROOT = join(process.cwd(), 'src/features/architect-agent/components')
+/** O cartão compartilhado do agente (provedor, modelo e agente) também é tela do arquiteto. */
+const SHARED = join(process.cwd(), 'src/features/ai/components/agent-settings')
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -17,7 +19,7 @@ function files(dir: string): string[] {
 }
 
 describe('controles das telas do Agente Arquiteto', () => {
-  const sources = files(ROOT).map((path) => ({ path, text: readFileSync(path, 'utf8') }))
+  const sources = [...files(ROOT), ...files(SHARED)].map((path) => ({ path, text: readFileSync(path, 'utf8') }))
 
   it('encontra os componentes', () => {
     expect(sources.length).toBeGreaterThan(5)

@@ -1,6 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const ai = vi.hoisted(() => ({
+  assertCatalog: vi.fn(async () => undefined),
+  availability: vi.fn(async () => ({ available: true, reason: null })),
+  saved: null as unknown,
+}))
+vi.mock('@/features/ai/server/settings', () => ({
+  assertCatalog: ai.assertCatalog,
+  availability: ai.availability,
+  loadFeature: vi.fn(async (_feature: string, schema: { parse: (value: unknown) => unknown }, defaults: unknown) => ({ settings: schema.parse(ai.saved ?? defaults), isDefault: !ai.saved, updatedAt: null })),
+  persistFeature: vi.fn(async (_feature: string, next: unknown) => {
+    ai.saved = next
+  }),
+}))
+
 import { architectSettingsSchema, DEFAULT_ARCHITECT_SETTINGS } from '@/features/architect-agent/schemas'
-import { normalizeArchitectSettings, settingsApply, withDefaults } from '@/features/architect-agent/server/settings'
+import { architectAvailability, normalizeArchitectSettings, saveArchitectSettings, settingsApply, withDefaults } from '@/features/architect-agent/server/settings'
 import { withSelfMemoryDefaults } from '@/features/ai/server/self-memory/settings'
 import { contextChannelsFor, writableListsFor } from '@/features/ai/agents'
 
@@ -50,6 +65,48 @@ describe('configuração do Agente Arquiteto', () => {
     const next = normalizeArchitectSettings({ ...DEFAULT_ARCHITECT_SETTINGS, scope: { all: true, centralIds: ['c1'] }, diagram: { ...DEFAULT_ARCHITECT_SETTINGS.diagram, nodeKinds: ['process', 'process', 'actor'] } })
     expect(next.scope.centralIds).toEqual([])
     expect(next.diagram.nodeKinds).toEqual(['process', 'actor'])
+  })
+})
+
+describe('provedor do Agente Arquiteto', () => {
+  beforeEach(() => {
+    ai.saved = null
+    vi.clearAllMocks()
+  })
+
+  it('o padrão é o OpenCode, e a configuração salva antes da escolha do provedor carrega como OpenCode', () => {
+    expect(DEFAULT_ARCHITECT_SETTINGS.provider).toBe('opencode')
+    const parsed = architectSettingsSchema.parse(withDefaults({ enabled: false, agent: { agent: 'build', model: 'anthropic/opus', variant: null, fallbacks: [] } }))
+    expect(parsed.provider).toBe('opencode')
+    expect(parsed.agent.agent).toBe('build')
+  })
+
+  it('provedor que não gera texto ou inexistente é recusado, listando os válidos', () => {
+    for (const provider of ['jev', 'xyz']) {
+      const result = architectSettingsSchema.safeParse({ ...DEFAULT_ARCHITECT_SETTINGS, provider })
+      expect(result.success).toBe(false)
+      expect(result.error?.issues[0]!.message).toContain('OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek')
+    }
+  })
+
+  it('num provedor direto, salvar zera agente e fallbacks e confere o catálogo do provedor escolhido', async () => {
+    const input = { ...DEFAULT_ARCHITECT_SETTINGS, provider: 'anthropic' as const, agent: { agent: 'build', model: 'claude-sonnet', variant: 'high', fallbacks: [{ model: 'openai/gpt', variant: null }] } }
+    expect(normalizeArchitectSettings(input).agent).toEqual({ agent: null, model: 'claude-sonnet', variant: 'high', fallbacks: [] })
+    await saveArchitectSettings(input, 'local')
+    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', model: 'claude-sonnet', agent: null, variant: 'high' }))
+    expect((ai.saved as { provider: string }).provider).toBe('anthropic')
+  })
+
+  it('no OpenCode, o agente segue para o catálogo e os fallbacks ficam', async () => {
+    const input = { ...DEFAULT_ARCHITECT_SETTINGS, agent: { agent: 'build', model: 'anthropic/opus', variant: null, fallbacks: [{ model: 'openai/gpt', variant: null }] } }
+    expect(normalizeArchitectSettings(input).agent.fallbacks).toHaveLength(1)
+    await saveArchitectSettings(input, 'local')
+    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode', agent: 'build' }))
+  })
+
+  it('a disponibilidade confere o provedor escolhido', async () => {
+    await architectAvailability({ ...DEFAULT_ARCHITECT_SETTINGS, enabled: true, provider: 'gemini', agent: { agent: null, model: 'gemini-2.5-pro', variant: null, fallbacks: [] } })
+    expect(ai.availability).toHaveBeenCalledWith({ enabled: true, provider: 'gemini', model: 'gemini-2.5-pro' }, '"Agente Arquiteto"')
   })
 })
 
