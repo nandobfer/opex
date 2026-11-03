@@ -66,7 +66,8 @@ totalClientHours, totalBillingBrl, tasks }`), `FinanceTotalsDto` (com `serviceCo
 
 Itens criados pelo dono em `/financeiro/servicos/novo` (ver `modules/services.md`) entram **no mesmo
 grupo do cliente**, com **badge "Serviço"** e clique para o detalhe. Entram no período pela
-**`serviceDate`** (início/fim do dia, mesmo `financeQueryRange`), **não** dependem de colunas de
+**`serviceDate`** (início/fim do dia, mesmo `financeQueryRange`; a data é gravada ao meio-dia UTC, então
+o serviço do 1º e do último dia do período entra em qualquer fuso do Brasil, ver `modules/services.md`), **não** dependem de colunas de
 conclusão e participam dos filtros de cliente/repositório (serviço **sem repositório** sai quando há
 filtro de repositório, como a tarefa sem projeto). O cartão de totais mostra o contador
 **"Serviços"** (o `taskCount` continua só tarefas); dentro do grupo os dois itens se ordenam juntos

@@ -15,7 +15,7 @@ import { GithubRepoLabel } from "@/features/github/components/shared"
 import { AttachmentList } from "@/features/tasks/attachments/components/AttachmentList"
 import { useTaskAttachments } from "@/features/tasks/attachments/hooks"
 import { formatBillingBrl, formatHours } from "@/features/finance/format"
-import { formatDate } from "@/features/tasks/format"
+import { formatServiceDate } from "@/features/services/logic"
 import { CLIENTE_COST_LABEL, clienteFinanceiroPath } from "../constants"
 import { repoLabelFrom } from "../logic"
 import { useClienteAttachmentClient, useClienteService } from "./hooks"
@@ -96,7 +96,7 @@ export function ClienteServiceDetailPage({ id }: { id: string }) {
                                     <span className="text-muted-foreground">Data</span>
                                     <span className="inline-flex items-center gap-1.5">
                                         <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-                                        {formatDate(service.serviceDate)}
+                                        {formatServiceDate(service.serviceDate)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-3">
