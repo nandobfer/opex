@@ -59,7 +59,16 @@ const SOURCE_RULES = [
     "- NADA entra no diagrama sem estar nos planos ou na tarefa. As memórias servem só para vocabulário e estilo, nunca para acrescentar assuntos.",
 ]
 
-export function buildArchitectInstructions(input: { instructions: string; memories: string; selfMemory?: boolean; /** Sessão do OpenCode no repositório (`false` = provedor direto, sem acesso ao código). */ codeAccess?: boolean }): string {
+export function buildArchitectInstructions(input: {
+    instructions: string
+    memories: string
+    selfMemory?: boolean
+    /** MCP de memórias registrado (leitura da faixa de títulos, OPE-117); provedor direto não tem. */
+    memoryRead?: boolean
+    counts?: { titles: number; overflow: number } | null
+    /** Sessão do OpenCode no repositório (`false` = provedor direto, sem acesso ao código). */
+    codeAccess?: boolean
+}): string {
     const extra = input.instructions.trim()
     const codeAccess = input.codeAccess ?? true
     const rules = codeAccess
@@ -105,7 +114,9 @@ export function buildArchitectInstructions(input: { instructions: string; memori
         "- Termine o último bloco com `{\"op\":\"done\"}`. Não escreva o grafo de outra forma (nada de JSON único no fim).",
         extra ? `\n## Instruções adicionais\n${extra}` : "",
         memoriesSection(input.memories),
-        input.selfMemory ? selfMemoryInstructions("arquiteto", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX }) : "",
+        input.selfMemory || input.memoryRead
+            ? selfMemoryInstructions("arquiteto", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX, counts: input.counts, write: Boolean(input.selfMemory), read: Boolean(input.memoryRead) })
+            : "",
     ]
         .filter((line) => line !== "")
         .join("\n")

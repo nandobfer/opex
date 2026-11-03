@@ -51,6 +51,7 @@ vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))
 vi.mock('@/features/architect-agent/server/settings', () => ({ loadArchitectSettings: async () => ({ settings: mocks.settings }) }))
 vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('../../helpers/memory-context')).memoryContextModule({ 'agentes/arquiteto': ['Camadas do Opex: app/features/lib'] }))
 vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
+vi.mock('@/features/ai/server/self-memory/mcp', async () => (await import('../../helpers/memory-context')).selfMemoryMcpModule())
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { ArchitectDiagram } from '@/features/architect-agent/server/models'

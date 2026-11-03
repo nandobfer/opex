@@ -8,6 +8,8 @@ import { OptionTabs } from "@/components/ui/option-tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { isCategoryList } from "../../../schemas/settings"
 import { CategoriesEditor } from "./CategoriesEditor"
+import { CategoryPrioritiesEditor } from "./CategoryPrioritiesEditor"
+import { ScheduleSettingControl } from "./ScheduleSettingControl"
 
 const NONE = "__default__"
 
@@ -26,10 +28,20 @@ interface SettingControlProps {
     value: unknown
     onChange: (value: unknown) => void
     disabled?: boolean
+    /** Categorias atuais (rascunho de `categories.list`), para o mapa de prioridades. */
+    categories?: readonly { key: string; label: string }[]
+    /** Próxima execução do agendamento (`status.consolidation.next_run_at`). */
+    nextRunAt?: string | null
+}
+
+/** Passo do campo numérico: inteiro 1; fração em 0,01 quando o intervalo cabe em 0–1. */
+export function numberStep(meta: SettingControlMeta): number | "any" {
+    if (meta.type === "integer") return 1
+    return typeof meta.max === "number" && meta.max <= 1 ? 0.01 : "any"
 }
 
 /** Controle gerado do metadado da configuração (tipo, intervalo e opções). */
-export function SettingControl({ id, meta, value, onChange, disabled }: SettingControlProps) {
+export function SettingControl({ id, meta, value, onChange, disabled, categories = [], nextRunAt }: SettingControlProps) {
     switch (meta.type) {
         case "boolean":
             return <Switch id={id} checked={value === true} onCheckedChange={(checked) => onChange(checked)} disabled={disabled} />
@@ -39,7 +51,7 @@ export function SettingControl({ id, meta, value, onChange, disabled }: SettingC
                 <Input
                     id={id}
                     type="number"
-                    step={meta.type === "integer" ? 1 : "any"}
+                    step={numberStep(meta)}
                     min={meta.min ?? undefined}
                     max={meta.max ?? undefined}
                     value={typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" ? value : ""}
@@ -68,7 +80,24 @@ export function SettingControl({ id, meta, value, onChange, disabled }: SettingC
                 </Select>
             )
         }
+        case "cron":
+            return <ScheduleSettingControl id={id} value={value} onChange={onChange} disabled={disabled} nextRunAt={nextRunAt} />
+        case "map":
+            return <CategoryPrioritiesEditor id={id} value={value} categories={categories} onChange={(next) => onChange(next)} disabled={disabled} />
         case "list":
+            if (meta.choices?.length) {
+                const selected = Array.isArray(value) ? (value as string[]) : []
+                return (
+                    <div id={id} className="flex flex-wrap gap-x-4 gap-y-2" data-testid="choice-list">
+                        {meta.choices.map((choice) => (
+                            <label key={choice} className="flex items-center gap-2 text-xs">
+                                <Switch checked={selected.includes(choice)} aria-label={choice} onCheckedChange={(checked) => onChange(checked ? meta.choices!.filter((item) => item === choice || selected.includes(item)) : selected.filter((item) => item !== choice))} disabled={disabled} />
+                                <span className="font-mono">{choice}</span>
+                            </label>
+                        ))}
+                    </div>
+                )
+            }
             return <ChipInput id={id} aria-label={meta.key} value={Array.isArray(value) ? (value as string[]) : []} onChange={(next) => onChange(next)} max={meta.max ?? 5} placeholder="Digite e tecle Enter" disabled={disabled} />
         case "categories":
             return <CategoriesEditor id={id} value={isCategoryList(value) || Array.isArray(value) ? (value as never) : []} onChange={(next) => onChange(next)} />

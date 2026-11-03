@@ -158,7 +158,9 @@ acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
   autônomo, o runner registra o MCP `opex_memorias` no diretório da sessão e a sessão do OpenCode recebe
   regras próprias (`selfMemorySessionPermissions`: `ask` em inativar/excluir pelo padrão, `deny` nas
   desligadas, conforme o Agente Opex › Ferramentas); no portal o Maddox grava só na lista do cliente da
-  sessão. Ver `modules/ai.md`, "Aprendizado autônomo".
+  sessão. Ver `modules/ai.md`, "Aprendizado autônomo". Desde a OPE-117 o MCP `opex_memorias` é registrado
+  em todo turno (as ferramentas de leitura `opex_memorias_get_hints`/`get_memory`/`search_memories` valem
+  com o aprendizado desligado) e o contexto vai com o **foco** na mensagem do turno.
 - Não há seção de MCPs: o Maddox usa os MCPs configurados no OpenCode.
 - Salvar avisa o portal dos clientes com o Maddox ligado (`maddox-settings-updated` em
   `private-client-{clientId}`).

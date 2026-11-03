@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { NETWORK_CANVAS_CLASS, NETWORK_SKELETON_AREA_CLASS, NETWORK_STATS_CLASS, NETWORK_STATS_TOGGLE_CLASS } from "./layout-classes"
+import { AGENT_NODE_SIZE_CLASS, NETWORK_CANVAS_CLASS, NETWORK_SKELETON_AREA_CLASS, NETWORK_STATS_CLASS, NETWORK_STATS_TOGGLE_CLASS } from "./layout-classes"
 
 /** Agentes em volta do centro e os canais de cada um em órbita ("Canais junto dos agentes", o padrão). */
 const SKELETON_AGENTS = [0, 1, 2].map((index) => {
@@ -21,7 +21,7 @@ export function NetworkSkeleton({ className }: { className?: string }) {
                 <div className="relative h-0 w-0">
                     {SKELETON_AGENTS.map((agent, index) => (
                         <div key={index}>
-                            <Skeleton className="absolute h-11 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: agent.x, top: agent.y }} data-testid="network-skeleton-agent" />
+                            <Skeleton className={cn("absolute -translate-x-1/2 -translate-y-1/2 rounded-full", AGENT_NODE_SIZE_CLASS)} style={{ left: agent.x, top: agent.y }} data-testid="network-skeleton-agent" />
                             {[-0.7, 0.7].map((turn) => (
                                 <Skeleton
                                     key={turn}

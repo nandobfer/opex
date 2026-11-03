@@ -6,16 +6,20 @@ const mocks = vi.hoisted(() => ({
   call: vi.fn(),
   audits: [] as { id: string; acao: string; depois: Record<string, unknown> }[],
   publish: vi.fn(async () => {}),
+  updateIntegration: vi.fn(async () => undefined),
+  stateUpdates: [] as unknown[],
 }))
+vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: mocks.updateIntegration }))
+vi.mock('@/features/engramind/server/models', () => ({ ENGRAMIND_STATE_ID: 'engramind', engramindDb: async () => undefined, EngramindState: { updateOne: async (...args: unknown[]) => mocks.stateUpdates.push(args) } }))
 
 vi.mock('@/features/engramind/server/client', () => ({ engramindCall: mocks.call }))
-vi.mock('@/features/engramind/server/connection', () => ({ fetchWhoami: async () => ({ token_id: 'tk_0e000001', kind: 'admin', scopes: ['read', 'write', 'delete'], app: { id: 'app_0e000001', slug: 'opex' }, agent: null }), resetWhoamiCache: vi.fn() }))
+vi.mock('@/features/engramind/server/connection', () => ({ fetchWhoami: async () => ({ token_id: 'tk_0e000001', kind: 'admin', scopes: ['read', 'write', 'delete'], app: { id: 'app_0e000001', slug: 'opex' }, agent: null }), resetWhoamiCache: vi.fn(), ownTokenRole: async (id: string) => (id === 'tk_0e000001' ? 'admin' : id === 'tk_app0001' ? 'app' : null) }))
 vi.mock('@/features/engramind/server/shared', () => ({
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR', MOVER: 'MOVER', IMPORTAR: 'IMPORTAR' },
   auditEngramind: async (_actor: string, id: string, acao: string, depois: Record<string, unknown>) => {
     mocks.audits.push({ id, acao, depois })
   },
-  engramindLog: { info: vi.fn() },
+  engramindLog: { info: vi.fn(), error: vi.fn() },
   publishEngramind: mocks.publish,
 }))
 
@@ -34,6 +38,42 @@ describe('runEngramindOperation', () => {
     mocks.call.mockReset()
     mocks.audits = []
     mocks.publish.mockClear()
+    mocks.updateIntegration.mockClear()
+    mocks.stateUpdates = []
+  })
+
+  it('OPE-117: rotacionar um token alheio devolve o segredo uma vez e audita sem o segredo', async () => {
+    mocks.call.mockResolvedValue({ token: { id: 'tk_novo', prefix: 'eng.tk_novo' }, secret: 'eng.tk_novo.SEGREDO' })
+    const result = (await runEngramindOperation('rotate_token', { token: 'tk_outro' }, 'local')) as { secret: string | null; own: unknown; savedOwn: boolean }
+    expect(mocks.call).toHaveBeenCalledWith('POST', { path: '/v1/tokens/tk_outro/rotate', body: {} })
+    expect(result).toMatchObject({ secret: 'eng.tk_novo.SEGREDO', own: null, savedOwn: false })
+    expect(mocks.updateIntegration).not.toHaveBeenCalled()
+    expect(JSON.stringify(mocks.audits)).not.toContain('SEGREDO')
+    expect(mocks.publish).toHaveBeenCalledWith({ type: 'identities.updated' })
+  })
+
+  it('OPE-117: rotacionar o token do próprio Opex grava o novo segredo no campo privado (admin e app) e não o devolve', async () => {
+    mocks.call.mockResolvedValue({ token: { id: 'tk_novo', prefix: 'eng.tk_novo' }, secret: 'eng.tk_novo.SEGREDO' })
+    const admin = (await runEngramindOperation('rotate_token', { token: 'tk_0e000001' }, 'local')) as { secret: string | null; savedOwn: boolean }
+    expect(admin).toMatchObject({ secret: null, savedOwn: true, own: 'admin' })
+    expect(mocks.updateIntegration).toHaveBeenLastCalledWith('engramind', { secrets: { adminToken: { action: 'set', value: 'eng.tk_novo.SEGREDO' } } }, 'local')
+    const app = (await runEngramindOperation('rotate_token', { token: 'tk_app0001' }, 'local')) as { savedOwn: boolean }
+    expect(app.savedOwn).toBe(true)
+    expect(mocks.updateIntegration).toHaveBeenLastCalledWith('engramind', { secrets: { appToken: { action: 'set', value: 'eng.tk_novo.SEGREDO' } } }, 'local')
+    expect(JSON.stringify(mocks.stateUpdates)).toContain('tk_novo')
+  })
+
+  it('OPE-117: falha ao gravar o segredo do token próprio rotacionado devolve o segredo uma vez (para colar na Conexão)', async () => {
+    mocks.call.mockResolvedValue({ token: { id: 'tk_novo', prefix: 'eng.tk_novo' }, secret: 'eng.tk_novo.SEGREDO' })
+    mocks.updateIntegration.mockRejectedValueOnce(new Error('mongo fora'))
+    const result = (await runEngramindOperation('rotate_token', { token: 'tk_0e000001' }, 'local')) as { secret: string | null; savedOwn: boolean }
+    expect(result).toMatchObject({ secret: 'eng.tk_novo.SEGREDO', savedOwn: false, own: 'admin' })
+  })
+
+  it('OPE-117: o token de app do Opex também é protegido (não revoga, não rebaixa, sem validade)', async () => {
+    await expect(runEngramindOperation('revoke_token', { token: 'tk_app0001' }, 'local')).rejects.toMatchObject({ code: 'ENGRAMIND_OWN_TOKEN' })
+    await expect(runEngramindOperation('update_token', { token: 'tk_app0001', scopes: ['read'] }, 'local')).rejects.toMatchObject({ code: 'ENGRAMIND_OWN_TOKEN' })
+    expect(mocks.call).not.toHaveBeenCalled()
   })
 
   it('leitura vai direto, sem auditoria nem evento', async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
+import { toEngramindError } from '@/features/engramind/server/errors'
 
 /**
  * Rede das memórias dos agentes no Engramind (OPE-104): cinco identidades (os quatro consumidores e o
@@ -7,7 +8,14 @@ import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engr
  * quando os escopos divergem.
  */
 
-const holder = vi.hoisted(() => ({ fake: null as unknown as FakeEngramind, tokens: {} as Record<string, unknown> }))
+const holder = vi.hoisted(() => ({ fake: null as unknown as FakeEngramind, tokens: {} as Record<string, unknown>, appToken: undefined as string | undefined, updateFails: false }))
+vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ appToken: holder.appToken }) }))
+vi.mock('@/features/integrations/services/integration-service', () => ({
+  updateIntegration: async (_id: string, input: { secrets: { appToken?: { value: string } } }) => {
+    if (holder.updateFails) throw new Error('mongo fora')
+    holder.appToken = input.secrets.appToken?.value
+  },
+}))
 
 vi.mock('@/features/engramind/server/client', () => ({
   engramindCall: (...args: Parameters<FakeEngramind['engramindCall']>) => holder.fake.engramindCall(...args),
@@ -44,6 +52,8 @@ const subscriptionsOf = (agent: string) => holder.fake.state.subscriptions.filte
 beforeEach(() => {
   holder.fake = createFakeEngramind()
   holder.tokens = {}
+  holder.appToken = undefined
+  holder.updateFails = false
   resetMemoryNetworkForTests()
 })
 
@@ -167,5 +177,46 @@ describe('rede das memórias dos agentes', () => {
 
   it('o fake recusa com 405 rota fora do contrato (não existe leitura de token por id)', async () => {
     await expect(holder.fake.engramindCall('GET', { path: '/v1/tokens/tk_x' })).rejects.toMatchObject({ status: 405, code: 'ENGRAMIND_METHOD_NOT_ALLOWED' })
+  })
+
+  it('OPE-117: emite o token de app uma vez com o admin e provisiona agentes, assinaturas e tokens de agente com ele', async () => {
+    await ensureAgentMemoryNetwork('local')
+    const appIssue = holder.fake.state.calls.filter((call) => call.method === 'POST' && call.path === '/v1/tokens' && (call.body as { kind?: string }).kind === 'app')
+    expect(appIssue).toHaveLength(1)
+    expect(appIssue[0]!.token).toBe('admin-token')
+    expect(holder.appToken).toMatch(/^eng\.tk_/)
+    const provisioning = holder.fake.state.calls.filter((call) => call.method === 'POST' && (call.path === '/v1/agents' || call.path === '/v1/subscriptions' || (call.path === '/v1/tokens' && (call.body as { kind?: string }).kind === 'agent')))
+    expect(provisioning.length).toBeGreaterThan(0)
+    expect(provisioning.every((call) => call.token === holder.appToken)).toBe(true)
+    // Os canais continuam com o admin (POST /v1/channels é só do admin).
+    expect(holder.fake.state.calls.filter((call) => call.method === 'POST' && call.path === '/v1/channels').every((call) => call.token === 'admin-token')).toBe(true)
+    resetMemoryNetworkForTests()
+    await ensureAgentMemoryNetwork('local')
+    expect(holder.fake.state.calls.filter((call) => call.method === 'POST' && call.path === '/v1/tokens' && (call.body as { kind?: string }).kind === 'app')).toHaveLength(1)
+  })
+
+  it('OPE-117: create_agent/subscribe repetidos com 200 created:false contam como "já existia"', async () => {
+    await ensureAgentMemoryNetwork('local')
+    holder.fake.state.calls.length = 0
+    const original = holder.fake.engramindCall
+    // Simula o GET do agente sumindo (cache) para forçar o POST: a idempotência natural responde created:false.
+    holder.fake.engramindCall = (async (method: string, request: { path: string }, options?: never) => {
+      if (method === 'GET' && request.path.startsWith('/v1/agents/')) throw toEngramindError(404, { code: 'AGENT_NOT_FOUND', message: 'x' } as never)
+      return original(method, request as never, options)
+    }) as never
+    resetMemoryNetworkForTests()
+    const { step, summary } = await ensureAgentMemoryNetwork('local')
+    expect(step.status).not.toBe('failed')
+    expect(summary.agentsCreated).toEqual([])
+    expect(holder.fake.state.calls.filter((call) => call.method === 'POST' && call.path === '/v1/agents').length).toBeGreaterThan(0)
+    holder.fake.engramindCall = original
+  })
+
+  it('OPE-117: sem conseguir gravar o token de app, segue com o admin e avisa (nunca derruba o provisionamento)', async () => {
+    holder.updateFails = true
+    const { step, summary } = await ensureAgentMemoryNetwork('local')
+    expect(step.status).toBe('ok')
+    expect(summary.warnings.some((warning) => warning.includes('Token de app indisponível'))).toBe(true)
+    expect(holder.fake.state.calls.filter((call) => call.method === 'POST' && call.path === '/v1/agents').every((call) => call.token === 'admin-token')).toBe(true)
   })
 })

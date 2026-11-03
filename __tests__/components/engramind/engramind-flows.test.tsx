@@ -104,8 +104,9 @@ beforeEach(() => {
 
 describe('areasForEvent', () => {
   it.each([
-    ['memory.created', ['memories', 'channels']],
-    ['memory.deleted', ['memories', 'channels']],
+    ['memory.created', ['memories', 'channels', 'agent-activity']],
+    ['memory.deleted', ['memories', 'channels', 'agent-activity']],
+    ['memories.context', ['agent-activity']],
     ['channel.updated', ['channels', 'memories']],
     ['subscription.updated', ['subscriptions', 'agents']],
     ['settings.updated', ['settings', 'channels', 'status', 'providers']],

@@ -571,6 +571,9 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   `forget_my_memory` (as duas últimas `destructive`, com Confirmar/Cancelar pelo padrão; aparecem na
   árvore de Ferramentas para o dono desligar ou trocar a confirmação) e a instrução de quando gravar;
   no portal só gravam na lista do cliente da sessão. Ver `modules/ai.md`, "Aprendizado autônomo".
+  Desde a OPE-117 o turno também recebe, **sempre** (dono e portal, mesmo com a chave desligada), as
+  ferramentas de leitura `get_hints`, `get_memory` e `search_memories` (token do agente, canais do turno)
+  e o contexto vai com o **foco** na mensagem do usuário.
 - **Ferramentas de memórias** (`tools/memories.ts`, grupo "Memórias do agente"): o enum `agent` cobre
   todas as listas do catálogo — as três do Agente Opex **e a do Agente Adversário** (`adversarial`) —,
   então o Agente Opex lista, lê, cria, edita e exclui também as memórias do adversário (excluir é

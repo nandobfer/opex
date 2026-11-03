@@ -64,6 +64,7 @@ type GuardInput = { token?: string; scopes?: string[]; expires_at?: string | nul
 /** A operação pode cortar o acesso do próprio Opex (decide se vale consultar o `whoami`). */
 function touchesOwnAccess(operation: EngramindOperation, input: GuardInput): boolean {
     if (operation.id === "revoke_token" || operation.id === "delete_app") return true
+    if (operation.id === "rotate_token") return false
     if (operation.id === "update_token") return Boolean(input.scopes) || (input.expires_at !== undefined && input.expires_at !== null)
     return operation.id === "update_app" && input.disabled === true
 }
@@ -80,7 +81,15 @@ async function guardOwnToken(operation: EngramindOperation, input: GuardInput): 
         if (input.app !== whoami.app.slug && input.app !== whoami.app.id) return
         throw new DomainError(409, `Este é o app que o Opex usa no Engramind: troque o token na aba Conexão por um de outro app antes de ${operation.id === "delete_app" ? "excluí-lo" : "desativá-lo"}.`, "ENGRAMIND_OWN_TOKEN")
     }
-    if (input.token !== whoami.token_id) return
+    if (input.token !== whoami.token_id) {
+        // O token de app do provisionamento (OPE-117) também é do próprio Opex.
+        const { ownTokenRole } = await import("./connection")
+        if (!input.token || (await ownTokenRole(input.token)) !== "app") return
+        if (operation.id === "revoke_token") throw new DomainError(409, "Este é o token de app que o Opex usa para provisionar os agentes de memórias: rotacione em vez de revogar.", "ENGRAMIND_OWN_TOKEN")
+        if (input.scopes && !["read", "write", "delete"].every((scope) => input.scopes!.includes(scope))) throw new DomainError(409, "Este é o token de app do Opex: ele precisa continuar com read+write+delete.", "ENGRAMIND_OWN_TOKEN")
+        if (input.expires_at) throw new DomainError(409, "Este é o token de app do Opex: ele não pode ganhar validade.", "ENGRAMIND_OWN_TOKEN")
+        return
+    }
     if (operation.id === "revoke_token") throw new DomainError(409, "Este é o token que o Opex usa no Engramind: troque o token na aba Conexão antes de revogá-lo.", "ENGRAMIND_OWN_TOKEN")
     if (input.scopes && !["read", "write", "delete"].every((scope) => input.scopes!.includes(scope))) throw new DomainError(409, "Este é o token que o Opex usa no Engramind: ele precisa continuar com read+write+delete.", "ENGRAMIND_OWN_TOKEN")
     if (input.expires_at) throw new DomainError(409, "Este é o token que o Opex usa no Engramind: ele não pode ganhar validade (o Opex perderia o acesso ao vencer).", "ENGRAMIND_OWN_TOKEN")
@@ -120,6 +129,7 @@ export async function runEngramindOperation(id: string, rawInput: unknown, actor
     if (operation.id === "update_channel_settings") await validateChannelSettings(String(input.channel), input.settings as Record<string, unknown>)
     await guardOwnToken(operation, input as GuardInput)
 
+    if (operation.id === "rotate_token") return rotateToken(String(input.token), actorId)
     const result = await engramindCall(operation.method, operation.request(input), { sensitiveBody: Boolean(operation.redact) })
     if (operation.risk === "read") return result
 
@@ -160,4 +170,44 @@ export async function importEngramindMemories(raw: unknown, actorId: string): Pr
     engramindLog.info({ channel: input.channel, created: result.created.length, duplicates: result.duplicates.length }, "[engramind] memórias importadas")
     await publishEngramind({ type: "memory.created", channel: input.channel })
     return result
+}
+
+export interface RotatedTokenResult extends IssuedToken {
+    /** Token do próprio Opex (admin da Conexão ou de app): o novo segredo foi gravado sozinho. */
+    own: "admin" | "app" | null
+    /** O Opex gravou o novo segredo no campo privado (sem segredo na resposta). */
+    savedOwn: boolean
+}
+
+/**
+ * `rotate_token` (OPE-117): o Engramind emite o token igual e revoga o antigo na mesma transação. Num token
+ * do próprio Opex, o novo segredo vai para o campo privado da integração no mesmo passo (e não volta à
+ * tela); se a gravação falhar, o segredo volta UMA vez com o aviso de colá-lo na Conexão.
+ */
+async function rotateToken(tokenId: string, actorId: string): Promise<RotatedTokenResult> {
+    const { ownTokenRole, resetWhoamiCache: reset } = await import("./connection")
+    const own = await ownTokenRole(tokenId)
+    const issued = await engramindCall<IssuedToken>("POST", { path: `/v1/tokens/${encodeURIComponent(tokenId)}/rotate`, body: {} })
+    let savedOwn = false
+    if (own && issued.secret) {
+        try {
+            const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+            const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
+            await updateIntegration(ENGRAMIND_INTEGRATION_ID, { secrets: { [own === "admin" ? "adminToken" : "appToken"]: { action: "set", value: issued.secret } } }, actorId)
+            if (own === "app") {
+                const { EngramindState, ENGRAMIND_STATE_ID, engramindDb } = await import("./models")
+                await engramindDb()
+                await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { appToken: { tokenId: issued.token.id, prefix: issued.token.prefix, issuedAt: new Date() } } }, { upsert: true })
+            }
+            savedOwn = true
+            reset()
+        } catch (error) {
+            engramindLog.error({ err: error instanceof Error ? error.message : String(error), tokenPrefix: issued.token.prefix, own }, "[engramind] token do Opex rotacionado, mas o novo segredo não foi gravado")
+        }
+    }
+    await auditEngramind(actorId, "rotate_token", AcaoAuditoria.ATUALIZAR, { token: tokenId, novo: issued.token.id, prefix: issued.token.prefix, proprio: own, gravado: savedOwn })
+    engramindLog.info({ operation: "rotate_token", actorId, own, savedOwn }, "[engramind] token rotacionado")
+    resetWhoamiCache()
+    await publishEngramind({ type: "identities.updated" })
+    return { token: issued.token, secret: savedOwn ? null : (issued.secret ?? null), own, savedOwn }
 }

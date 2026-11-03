@@ -16,6 +16,8 @@ import { StatList, StatsCard } from "./StatsCard"
 import { useAgentWrites } from "./useAgentWrites"
 import { ChannelDisplayName } from "./ChannelName"
 import { useStable } from "./useStableNodes"
+import { useAgentActivity } from "../../hooks/useAgentActivity"
+import { OPEX_APP_SLUG } from "../../constants"
 
 const NODE_TYPES = { agent: AgentNode, channel: ChannelNode }
 const TRAVEL_MS = 900
@@ -73,6 +75,17 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
         [visibleAgents, channels, visibleLinks, reach, totalByChannel, layout],
     )
     const initialBounds = useMemo(() => overviewInitialBounds(positions), [positions])
+    // Gravadas (auditoria do Opex): só os agentes do app do Opex (`opex/<identidade>`); os demais mostram só as acessíveis.
+    const activity = useAgentActivity()
+    const writtenOf = useCallback(
+        (id: string) => {
+            const [app, slug] = id.split("/")
+            if (app !== OPEX_APP_SLUG || !slug) return null
+            const row = activity.byAgent.get(slug as never)
+            return { total: row?.total ?? 0, last7d: row?.last7d ?? 0 }
+        },
+        [activity.byAgent],
+    )
 
     const onConsumption = useCallback(
         (event: ConsumptionEvent) => {
@@ -112,7 +125,7 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
         const list: Node[] = []
         for (const agent of visibleAgents) {
             const point = positions.agents.get(agent.id) ?? { x: 0, y: 0 }
-            const data: AgentNodeData = { id: agent.id, name: agent.name, app: agent.app, scale: positions.scales.get(`agent:${agent.id}`), point }
+            const data: AgentNodeData = { id: agent.id, name: agent.name, app: agent.app, written: writtenOf(agent.id), reachable: reach.get(agent.id) ?? 0, scale: positions.scales.get(`agent:${agent.id}`), point }
             list.push({ id: `agent:${agent.id}`, type: "agent", position: point, data })
         }
         for (const channel of channels) {
@@ -122,7 +135,7 @@ export function OverviewView({ agents, channels, links, memories, allMemories, a
             list.push({ id: `channel:${channel.slug}`, type: "channel", position: point, data })
         }
         return list
-    }, [visibleAgents, channels, positions, hitsByChannel, countByChannel, onChannelMenu])
+    }, [visibleAgents, channels, positions, hitsByChannel, countByChannel, onChannelMenu, writtenOf, reach])
 
     const edges = useMemo<Edge[]>(
         () =>

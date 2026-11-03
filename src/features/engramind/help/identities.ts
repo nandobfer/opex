@@ -15,6 +15,7 @@ export const SCOPE_COMBINATION_HELP: Record<string, string> = {
 export const TOKEN_KIND_HELP: Record<string, string> = {
     admin: "Gere a rede: apps, agentes, tokens, canais, assinaturas, configurações, status e auditoria. Alcança todos os canais. Pertence a um app.",
     agent: "Opera memórias só nos canais que o agente assina (acesso = escopos ∩ acesso da assinatura). Pertence a um agente.",
+    app: "Provisiona o próprio app: agentes, tokens de agente, assinaturas e o webhook dele (403 FOREIGN_APP fora do app). Não grava memórias uma a uma. Só o admin emite.",
 }
 
 export const TOKEN_STATUS_HELP: Record<string, string> = {

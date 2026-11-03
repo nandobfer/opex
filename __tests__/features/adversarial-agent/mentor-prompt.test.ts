@@ -82,4 +82,13 @@ describe('prompts do Triador e do redator por destino (OPE-97)', () => {
   it('o decisor pergunta pelo revisor ou pelo desenvolvedor', () => {
     expect(buildJevMentorQuestions().lesson!.instructions).toContain('agente desenvolvedor')
   })
+
+  it('OPE-117: duas camadas, o redator sabe que o agente da mesa já grava e só registra o que passou batido, fundindo', () => {
+    for (const target of ['developer-global', 'developer-central', 'adversarial'] as const) {
+      const text = buildWriterInstructions('', target)
+      expect(text).toContain('SEGUNDA camada')
+      expect(text).toContain('passou batido')
+      expect(text).toContain('funda (update)')
+    }
+  })
 })

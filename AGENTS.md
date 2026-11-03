@@ -188,7 +188,7 @@ sem pedido explícito.
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
 - Engramind: `engramind-updated` (`{ type, channel?, keys? }`) e o consumo de memórias pelos agentes do
-  Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds }`, só ids e slugs) em
+  Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds, titleIds?, version? }`, só ids e slugs) em
   `private-app` (ver `aicontext/modules/engramind.md`, "Webhook e tempo real").
 - Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON

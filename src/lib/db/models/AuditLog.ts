@@ -58,6 +58,8 @@ const AuditLogSchema = new Schema<IAuditLog>(
 
 AuditLogSchema.index({ timestamp: -1 })
 AuditLogSchema.index({ entidade: 1, entidadeId: 1, timestamp: -1 })
+// Adoção do aprendizado autônomo por agente (OPE-117): gravações por ator.
+AuditLogSchema.index({ entidade: 1, "dadosNovos.ator": 1, timestamp: -1 })
 AuditLogSchema.index({ userId: 1, timestamp: -1 })
 
 export const AuditLog: Model<IAuditLog> =

@@ -185,21 +185,30 @@ export async function runAdversaryRound(input: AdversaryRoundInput): Promise<Adv
             buildContextSections(settings.context, { task, plans: input.plans, centralInstructions: input.centralInstructions, previous, attachments, tagLabels, attachedFiles: files.map((file) => file.name) }),
         )
         // Memórias (contexto do Engramind) e o aprendizado autônomo pelo MCP "Memória própria".
+        // Foco (OPE-117): tarefa, veredito da rodada anterior e o pedido/diff, nessa ordem.
         const { adversarialMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-        const memories = await adversarialMemoryContext()
+        const { buildMemoryFocus } = await import("@/features/ai/memory-focus")
+        const focus = buildMemoryFocus("adversario", {
+            kind: "review",
+            task: [input.taskCode, input.taskTitle, task?.description].filter(Boolean).join("\n"),
+            verdict: previous ? previous.findings.map((finding) => `${finding.severity}: ${finding.title}`).join("\n") : null,
+            diff: [previous?.userText, input.implementationText].filter(Boolean).join("\n"),
+        })
+        const memories = await adversarialMemoryContext({ focus })
         const cacheNotice = memoryCacheNotice(memories)
         if (cacheNotice) publishWorkbenchEvent(input.workbenchId, { type: "notice", level: "warn", message: cacheNotice })
         const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
         let selfMemory = await selfMemoryEnabled("adversario")
-        if (selfMemory) {
-            const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
-            const registered = await ensureAgentMemoryMcp(client, [input.worktreePath])
-            if (!registered.ok) {
-                selfMemory = false
-                log.warn({ workbenchId: input.workbenchId, err: registered.error }, "[adversarial] aprendizado autônomo indisponível nesta revisão")
-            }
+        // MCP de memórias sempre (leitura da faixa de títulos); gravação só com o aprendizado ligado.
+        const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+        const registered = await ensureAgentMemoryMcp(client, [input.worktreePath])
+        const memoryRead = registered.ok
+        if (!registered.ok) {
+            selfMemory = false
+            log.warn({ workbenchId: input.workbenchId, err: registered.error }, "[adversarial] memórias (MCP) indisponíveis nesta revisão")
         }
-        const instructions = buildAdversarialInstructions({ level: settings.level, instructions: settings.instructions, memories: memories.block, selfMemory })
+        const counts = memories.source === "none" ? null : { titles: memories.counts.titles, overflow: memories.counts.overflow }
+        const instructions = buildAdversarialInstructions({ level: settings.level, instructions: settings.instructions, memories: memories.block, selfMemory, memoryRead, counts })
         const session = await client.session.create({
             title: `Adversário · ${input.taskCode} · rodada ${plan.round}`.slice(0, 120),
             location: { directory: input.worktreePath },

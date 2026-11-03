@@ -78,6 +78,10 @@ vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+// OPE-117: memórias (contexto e MCP) mockadas, para o turno não depender do Engramind nem do OpenCode.
+vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('../../helpers/memory-context')).memoryContextModule())
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
+vi.mock('@/features/ai/server/self-memory/mcp', async () => (await import('../../helpers/memory-context')).selfMemoryMcpModule())
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
@@ -203,6 +207,12 @@ describe('fluxo herdado do padrão da central (OPE-79)', () => {
 })
 
 describe('prévia GitHub Action', () => {
+  // O planejamento disparado em segundo plano pelos testes de abertura (startWorkbench) termina depois deles:
+  // espera esses turnos órfãos antes de contar as chamadas desta seção.
+  beforeEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    mocks.runTurn.mockClear()
+  })
   const remote = () => {
     const config = defaultCentralConfig('/home/u/app')
     config.environment.previewMethod = 'github'

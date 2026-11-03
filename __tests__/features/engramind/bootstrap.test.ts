@@ -36,6 +36,8 @@ vi.mock('@/features/engramind/server/shared', () => ({
   engramindLog: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
   publishEngramind: vi.fn(),
 }))
+// OPE-117: o token de app do provisionamento fica no estado do Engramind (sem banco nos testes).
+vi.mock('@/features/engramind/server/models', () => ({ ENGRAMIND_STATE_ID: 'engramind', engramindDb: async () => undefined, EngramindState: { findById: () => ({ select: () => ({ lean: async () => null }) }), updateOne: async () => undefined } }))
 vi.mock('@/features/engramind/server/memory-network', () => ({
   ensureAgentMemoryNetwork: vi.fn(async (_actor: string, target: { token: string }) => {
     mocks.networkTargets.push(target.token)

@@ -170,12 +170,16 @@ export async function debugFetch(
     label: string,
     url: string,
     init: RequestInit & { next?: { revalidate?: number } } = {},
+    /** URL e corpo como devem aparecer no debug (ex.: texto do usuário mascarado); padrão: os reais. */
+    logged: { url?: string; body?: string } = {},
 ): Promise<Response> {
     const startedAt = Date.now()
     const headers = Object.fromEntries(new Headers(init.headers ?? {}).entries())
-    dbg.request(`${label}: ${init.method ?? "GET"} ${url}`, {
+    const loggedUrl = logged.url ?? url
+    const loggedBody = logged.body ?? (typeof init.body === "string" ? init.body : undefined)
+    dbg.request(`${label}: ${init.method ?? "GET"} ${loggedUrl}`, {
         headers,
-        ...(typeof init.body === "string" ? { body: init.body.slice(0, 2000) } : {}),
+        ...(loggedBody !== undefined ? { body: loggedBody.slice(0, 2000) } : {}),
     })
     try {
         const response = await fetch(url, init)
@@ -185,7 +189,7 @@ export async function debugFetch(
         })
         return response
     } catch (error) {
-        dbg.error(`${label}: falha de rede após ${Date.now() - startedAt} ms`, error, { url })
+        dbg.error(`${label}: falha de rede após ${Date.now() - startedAt} ms`, error, { url: loggedUrl })
         throw error
     }
 }

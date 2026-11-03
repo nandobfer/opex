@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { isOpexMemoryAgent } from "@/features/ai/agents"
-import { Bot, Pencil, Plus, Power, Trash2 } from "lucide-react"
+import { Bot, ChevronRight, Pencil, Plus, Power, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
@@ -16,7 +16,7 @@ import { Section } from "../../shared/Section"
 import { AgentDialog } from "./AgentDialog"
 
 /** Agentes: criar, editar, desativar/reativar e excluir; cada um mostra as assinaturas (só leitura). */
-export function AgentsCard({ agents, apps, subscriptions }: { agents: EngramindAgent[]; apps: EngramindApp[]; subscriptions: EngramindSubscription[] }) {
+export function AgentsCard({ agents, apps, subscriptions, onOpen }: { agents: EngramindAgent[]; apps: EngramindApp[]; subscriptions: EngramindSubscription[]; onOpen?: (agent: EngramindAgent) => void }) {
     const [editing, setEditing] = useState<EngramindAgent | null | "new">(null)
     const [deleting, setDeleting] = useState<EngramindAgent | null>(null)
     const toggle = useEngramindMutation((agent: EngramindAgent) => engramindSend("patch", route("agents", agent.qualified_slug), { disabled: !agent.disabled_at }), {
@@ -61,6 +61,11 @@ export function AgentsCard({ agents, apps, subscriptions }: { agents: EngramindA
                                             )}
                                         </div>
                                     </div>
+                                    {onOpen && (
+                                        <TooltipIconButton label={`Abrir o agente ${agent.qualified_slug}`} onClick={() => onOpen(agent)}>
+                                            <ChevronRight aria-hidden />
+                                        </TooltipIconButton>
+                                    )}
                                     <TooltipIconButton label="Editar agente" onClick={() => setEditing(agent)}>
                                         <Pencil aria-hidden />
                                     </TooltipIconButton>

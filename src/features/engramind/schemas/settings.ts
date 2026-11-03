@@ -1,5 +1,6 @@
 import { z, type ZodType } from "zod"
 import type { Category, ChannelSettingMeta, SettingMeta } from "../types"
+import { validateCron } from "../schedule-cron"
 
 /**
  * Validação das configurações gerada do metadado de `GET /v1/settings` (tipo, intervalo, opções):
@@ -42,9 +43,18 @@ export function settingValueSchema(meta: Meta): ZodType<unknown> {
         case "url":
             return z.string().trim().max(2048).regex(/^https?:\/\/[^\s/]+/, "Use uma URL http:// ou https://")
         case "list": {
+            const choices = "choices" in meta && meta.choices?.length ? meta.choices : null
+            if (choices) return z.array(z.enum(choices as [string, ...string[]])).min(1, "Escolha ao menos uma opção")
             const max = typeof meta.max === "number" ? meta.max : 5
             return z.array(z.string().trim().min(1).max(200)).max(max, `Até ${max} itens`)
         }
+        case "cron":
+            return z.string().superRefine((value, ctx) => {
+                const error = validateCron(value)
+                if (error) ctx.addIssue({ code: "custom", message: error })
+            })
+        case "map":
+            return z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/, "Categoria inválida"), z.number({ error: "Informe um número" }).int("Use um número inteiro").min(-1000, "Mínimo -1000").max(1000, "Máximo 1000"))
         case "categories": {
             const min = typeof meta.min === "number" ? meta.min : 1
             const max = typeof meta.max === "number" ? meta.max : 50

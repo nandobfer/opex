@@ -31,6 +31,9 @@ vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled:
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ createAgentMemory: mocks.create, updateAgentMemory: vi.fn(), deleteAgentMemory: mocks.remove, listAgentMemories: vi.fn(async () => []) }))
 vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: { confirmationOverrides: mocks.overrides, disabledTools: mocks.disabled } }) }))
 vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
+vi.mock('@/features/engramind/server/memory-network', () => ({ agentTarget: async () => ({ baseUrl: 'http://eng', token: 'tk-dev' }) }))
+const engramind = vi.hoisted(() => ({ call: vi.fn(async (_method: string, request: { path: string }) => (request.path === '/v1/hints' ? { hints: [{ id: 'm_9', title: 'Rode o lint', channel: 'agentes/desenvolvedor/global', score: 0.9 }] } : null)) }))
+vi.mock('@/features/engramind/server/client', () => ({ engramindCall: engramind.call }))
 
 import { agentMemoryMcpSecret, callSelfMemoryTool, ensureAgentMemoryMcp, handleAgentMemoryMcpRequest, isAgentMemoryMcpAuthorized, selfMemorySessionPermissions } from '@/features/ai/server/self-memory/mcp'
 import { resetSelfMemoryCounters } from '@/features/ai/server/self-memory/tools'
@@ -66,7 +69,7 @@ describe('MCP de memórias', () => {
   it('tools/list publica as ferramentas de memória própria', async () => {
     const response = await handleAgentMemoryMcpRequest(new Request('http://x', { method: 'POST', headers: { Authorization: `Bearer ${agentMemoryMcpSecret()}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }))
     const body = (await response.json()) as { result: { tools: { name: string }[] } }
-    expect(body.result.tools.map((tool) => tool.name)).toEqual(['list_my_memories', 'remember', 'update_my_memory', 'pin_my_memory', 'set_my_memory_active', 'forget_my_memory'])
+    expect(body.result.tools.map((tool) => tool.name)).toEqual(['list_my_memories', 'remember', 'update_my_memory', 'pin_my_memory', 'set_my_memory_active', 'forget_my_memory', 'get_hints', 'get_memory', 'search_memories'])
   })
 
   it('a sessão da mesa identifica o agente desenvolvedor e a central (inclusive vinda de um subagente)', async () => {
@@ -102,6 +105,15 @@ describe('MCP de memórias', () => {
     mocks.enabled = false
     expect(text((await callSelfMemoryTool('remember', { lista: 'developer-global', texto: 'x' }, meta('ses_mesa'))) as never)).toContain('está desligado')
     expect(mocks.create).not.toHaveBeenCalled()
+  })
+
+  it('OPE-117: com o aprendizado desligado, as ferramentas de leitura continuam atendendo (só a gravação é recusada)', async () => {
+    mocks.enabled = false
+    const result = await callSelfMemoryTool('get_hints', { text: 'lint' }, meta('ses_mesa'))
+    expect(result.isError).toBeFalsy()
+    expect(text(result as never)).toContain('m_9')
+    expect(engramind.call).toHaveBeenCalledWith('POST', expect.objectContaining({ path: '/v1/hints', body: expect.objectContaining({ channels: ['opex', 'agentes/desenvolvedor/global', `agentes/desenvolvedor/central/${C}`] }) }), expect.objectContaining({ target: { baseUrl: 'http://eng', token: 'tk-dev' } }))
+    expect(text((await callSelfMemoryTool('remember', { lista: 'developer-global', texto: 'x' }, meta('ses_mesa'))) as never)).toContain('só as ferramentas de leitura')
   })
 
   it('registro: adiciona o servidor por diretório uma vez; falha vira { ok: false } sem lançar', async () => {
@@ -164,5 +176,12 @@ describe('MCP de memórias', () => {
     expect(effect('set_my_memory_active')).toBe('allow')
     expect(effect('pin_my_memory')).toBe('deny')
     expect(effect('remember')).toBe('allow')
+  })
+
+  it('Maddox com o aprendizado desligado: as de gravação viram deny (nada de pedir confirmação ao dono); as de leitura seguem', () => {
+    const rules = selfMemorySessionPermissions({ overrides: {}, disabled: new Set() }, { write: false })
+    const effect = (name: string) => rules.findLast((rule) => rule.action === `opex_memorias_${name}`)?.effect
+    for (const name of ['list_my_memories', 'remember', 'update_my_memory', 'pin_my_memory', 'set_my_memory_active', 'forget_my_memory']) expect(effect(name)).toBe('deny')
+    for (const name of ['get_hints', 'get_memory', 'search_memories']) expect(effect(name)).toBe('allow')
   })
 })

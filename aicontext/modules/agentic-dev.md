@@ -142,6 +142,11 @@ as têm no histórico). Falha ao ler as memórias não derruba o
   (OPE-115). Só falha real (sem URL pública do Opex, sem `INTEGRATIONS_ENCRYPTION_KEY` ou nenhum
   diretório registrado, por erro ou por nenhum existir) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
   segue sempre. Excluir a central arquiva o canal dela no Engramind.
+- **Duas camadas (OPE-117)**: o desenvolvedor grava o que percebe (checklist de fim de turno, sem
+  restrição) e o Mentor grava só o que passou batido, fundindo com o que já existe. O contexto da mesa
+  leva o **foco** do turno (código, título, etapa e projeto; a descrição da tarefa no restante) e o MCP
+  de memórias é registrado sempre (leitura da faixa de títulos com `get_hints`/`get_memory`/
+  `search_memories`; gravação só com o aprendizado ligado), inclusive ao mover a sessão para o worktree.
 - O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
   adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista
   entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
