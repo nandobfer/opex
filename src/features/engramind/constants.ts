@@ -41,7 +41,7 @@ export function combinationOf(scopes: readonly string[]): ScopeCombination | nul
     return (SCOPE_COMBINATIONS as readonly string[]).includes(key) && key.split("+").length === scopes.length ? (key as ScopeCombination) : null
 }
 
-export const TOKEN_KINDS = ["admin", "agent"] as const
+export const TOKEN_KINDS = ["admin", "app", "agent"] as const
 export const SUBSCRIPTION_MODES = ["inject", "search", "manage"] as const
 export const MEMORY_STATUSES = ["active", "permanent", "archived"] as const
 export const JOB_KINDS = ["redact", "embed", "webhook"] as const

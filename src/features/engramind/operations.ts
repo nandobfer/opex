@@ -115,6 +115,8 @@ export const issueTokenInput = z
 .superRefine((value, ctx) => {
     if (value.kind === "agent" && !value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token agent exige o agente" })
     if (value.kind === "admin" && !value.app && !value.agent) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token admin" })
+    if (value.kind === "app" && !value.app) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token de app" })
+    if (value.kind === "app" && value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token de app não tem agente" })
 })
     .meta({ examples: [{ kind: "agent", agent: "app-a/curador", scopes: ["read", "write"] }] })
 
