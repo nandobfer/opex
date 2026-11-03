@@ -5,8 +5,9 @@ import { PR_REVIEWS_HREF } from "@/features/pr-review/constants"
 import { isNavGroup, type NavBadgeKey, type NavGroupDef, type NavItemDef, type NavSectionDef } from "./types"
 
 /**
- * Navegação do app: itens simples (Tarefas, Central de desenvolvimento, Engramind) e grupos que abrem
- * um painel à direita (Agentes, Contábil e Configurações). Dashboards não tem item: a logo leva a ela.
+ * Navegação do app: itens simples (Tarefas, Central de desenvolvimento, Engramind), grupos que abrem
+ * um painel à direita (Agentes, Contábil e Configurações) e Integrações, item que navega no clique e
+ * abre o submenu das integrações no hover (`panel`). Dashboards não tem item: a logo leva a ela.
  */
 export const APP_NAV: readonly NavSectionDef[] = [
     {
@@ -36,13 +37,13 @@ export const APP_NAV: readonly NavSectionDef[] = [
                     { href: "/financeiro", label: "Financeiro", title: "Financeiro", icon: Banknote },
                 ],
             },
+            { href: "/integracoes", label: "Integrações", title: "Integrações", icon: Plug, panel: "integrations" },
             {
                 kind: "group",
                 id: "configuracoes",
                 label: "Configurações",
                 icon: Settings,
                 items: [
-                    { href: "/integracoes", label: "Integrações", title: "Integrações", icon: Plug },
                     { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
                 ],
             },

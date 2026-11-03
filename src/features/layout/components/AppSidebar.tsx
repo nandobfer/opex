@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { ComponentType, ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { motion, useReducedMotion } from "framer-motion"
@@ -8,7 +8,7 @@ import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { withBasePath } from "@/lib/base-path"
 import { activeNavHref, flattenNav } from "../navigation"
-import { isNavGroup, type NavBadges, type NavSectionDef } from "../types"
+import { isNavGroup, type NavBadges, type NavPanelKey, type NavSectionDef, type SidebarPanelItemProps } from "../types"
 import { useNavSectionsState } from "../hooks/useNavSectionsState"
 import { SidebarNavSection } from "./sidebar/SidebarNavSection"
 import { SidebarNavItem } from "./sidebar/SidebarNavItem"
@@ -39,6 +39,18 @@ interface AppSidebarProps {
      * recolhida; cada item renderiza o próprio `<li>`.
      */
     footerItems?: (collapsed: boolean) => ReactNode
+    /**
+     * Componentes dos itens com painel de hover (`NavItemDef.panel`), ex.: o submenu de Integrações
+     * no menu do dono. Só valem com a barra recolhida (desktop); na gaveta, ou sem o componente, o
+     * item é um link simples.
+     */
+    itemPanels?: AppSidebarItemPanels
+}
+
+export type AppSidebarItemPanels = Partial<Record<NavPanelKey, ComponentType<SidebarPanelItemProps>>>
+
+function SidebarPanelItem({ component: PanelItem, ...props }: SidebarPanelItemProps & { component: ComponentType<SidebarPanelItemProps> }) {
+    return <PanelItem {...props} />
 }
 
 /**
@@ -50,7 +62,7 @@ interface AppSidebarProps {
  * linha inferior e o avatar do dono abre o popover com a ação "Sair" (`SidebarFooter`). A gaveta do
  * mobile usa o mesmo componente expandido.
  */
-export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, onClose, badges, ownerName, version, footerItems }: AppSidebarProps) {
+export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, onClose, badges, ownerName, version, footerItems, itemPanels }: AppSidebarProps) {
     const pathname = usePathname()
     const reduceMotion = useReducedMotion() ?? false
     const activeHref = activeNavHref(pathname, flattenNav(sections))
@@ -114,6 +126,15 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
                                             group={entry}
                                             activeHref={activeHref}
                                             collapsed={collapsed}
+                                            reduceMotion={reduceMotion}
+                                            onNavigate={onNavigate}
+                                        />
+                                    ) : entry.panel && collapsed && itemPanels?.[entry.panel] ? (
+                                        <SidebarPanelItem
+                                            key={entry.href}
+                                            component={itemPanels[entry.panel]!}
+                                            item={entry}
+                                            active={entry.href === activeHref}
                                             reduceMotion={reduceMotion}
                                             onNavigate={onNavigate}
                                         />

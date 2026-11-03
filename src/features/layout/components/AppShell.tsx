@@ -4,7 +4,7 @@ import { useCallback, useId, useRef, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Menu } from "lucide-react"
-import { AppSidebar, type SidebarBrand } from "./AppSidebar"
+import { AppSidebar, type AppSidebarItemPanels, type SidebarBrand } from "./AppSidebar"
 import { useSidebarState } from "../hooks/useSidebarState"
 import { useDrawerFocus } from "../hooks/useDrawerFocus"
 import { isActiveHref, pageTransitionKey } from "../navigation"
@@ -39,6 +39,8 @@ interface AppShellProps {
     version?: string
     /** Itens extras do menu acima do rodapé (ver `AppSidebar`). */
     sidebarFooterItems?: (collapsed: boolean) => ReactNode
+    /** Itens com painel de hover (ver `AppSidebar.itemPanels`). */
+    sidebarItemPanels?: AppSidebarItemPanels
     children: ReactNode
 }
 
@@ -48,7 +50,7 @@ interface AppShellProps {
  * "Pular para o conteúdo" como primeiro foco, gaveta abaixo de 1024px que fecha com Esc/fundo/link,
  * devolve o foco ao botão de menu e deixa o resto da tela inerte enquanto aberta.
  */
-export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [], persistentHrefs = [], evenPaddingHrefs = [], ownerName, version, sidebarFooterItems, children }: AppShellProps) {
+export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [], persistentHrefs = [], evenPaddingHrefs = [], ownerName, version, sidebarFooterItems, sidebarItemPanels, children }: AppShellProps) {
     const pathname = usePathname()
     const reduceMotion = useReducedMotion()
     const immersive = immersiveHrefs.some((href) => isActiveHref(pathname, href))
@@ -79,6 +81,7 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
             ownerName={ownerName}
             version={version}
             footerItems={sidebarFooterItems}
+            itemPanels={sidebarItemPanels}
         />
     )
 

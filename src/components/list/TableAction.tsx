@@ -12,6 +12,8 @@ interface TableActionProps {
   onClick: () => void
   disabled?: boolean
   disabledReason?: string
+  /** `sm`: botão menor, para painéis compactos (ex.: submenu da sidebar). */
+  size?: "default" | "sm"
 }
 
 const ACTION_CONFIG: Record<
@@ -59,7 +61,7 @@ const ACTION_CONFIG: Record<
   },
 }
 
-export function TableAction({ type, onClick, disabled = false, disabledReason }: TableActionProps) {
+export function TableAction({ type, onClick, disabled = false, disabledReason, size = "default" }: TableActionProps) {
   const { icon: Icon, title, className } = ACTION_CONFIG[type]
 
   const action = (
@@ -72,11 +74,12 @@ export function TableAction({ type, onClick, disabled = false, disabledReason }:
       title={disabledReason ?? title}
       aria-label={title}
       className={cn(
-        "h-9 w-9 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent",
+        size === "sm" ? "h-7 w-7" : "h-9 w-9",
+        "rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent",
         className,
       )}
     >
-      <Icon className="h-4 w-4" />
+      <Icon className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />
     </Button>
   )
 

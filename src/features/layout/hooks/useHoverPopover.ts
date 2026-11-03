@@ -79,7 +79,20 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
         })
     }, [cancelClose])
 
+    /**
+     * Abre pelo teclado (ex.: seta → no gatilho): o painel recebe o foco no primeiro link e o devolve
+     * ao gatilho ao fechar. Devolve `true` quando já estava aberto (pelo cursor): nesse caso o foco
+     * inicial do Radix não roda de novo e quem chamou move o foco para o painel.
+     */
+    const openFromKeyboard = useCallback((): boolean => {
+        cancelClose()
+        openedByHover.current = false
+        if (open) return true
+        setOpenState(true)
+        return false
+    }, [cancelClose, open])
+
     useEffect(() => cancelClose, [cancelClose])
 
-    return { open, setOpen, toggle, triggerHandlers: pointerHandlers("trigger"), panelHandlers: pointerHandlers("panel"), openedByHover }
+    return { open, setOpen, toggle, openFromKeyboard, triggerHandlers: pointerHandlers("trigger"), panelHandlers: pointerHandlers("panel"), openedByHover }
 }

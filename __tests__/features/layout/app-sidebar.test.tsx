@@ -20,9 +20,9 @@ vi.mock("next/link", () => ({
     ),
 }))
 
-import { AppSidebar } from "@/features/layout/components/AppSidebar"
+import { AppSidebar, type AppSidebarItemPanels } from "@/features/layout/components/AppSidebar"
 import { APP_NAV } from "@/features/layout/navigation"
-import type { NavBadges, NavSectionDef } from "@/features/layout/types"
+import type { NavBadges, NavSectionDef, SidebarPanelItemProps } from "@/features/layout/types"
 
 const STORAGE_KEY = "opex-sidebar-closed-sections"
 
@@ -39,7 +39,7 @@ const SECTIONS: readonly NavSectionDef[] = [
     },
 ]
 
-function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[]; homeHref?: string; footerItems?: (collapsed: boolean) => React.ReactNode } = {}) {
+function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; sections?: readonly NavSectionDef[]; homeHref?: string; footerItems?: (collapsed: boolean) => React.ReactNode; itemPanels?: AppSidebarItemPanels } = {}) {
     return render(
         <AppSidebar
             brand={{ name: "Meu App", subtitle: "Pessoal", homeHref: options.homeHref ?? "/tarefas" }}
@@ -50,6 +50,7 @@ function renderSidebar(options: { collapsed?: boolean; badges?: NavBadges; secti
             ownerName="Ana Souza"
             version="1.2.3"
             footerItems={options.footerItems}
+            itemPanels={options.itemPanels}
         />,
     )
 }
@@ -61,15 +62,44 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AppSidebar — padrão SideNavigation do DS Sipal", () => {
-    it("menu do app: itens soltos, grupos Agentes, Contábil e Configurações, sem Dashboards; a logo leva ao dashboard", () => {
+    it("menu do app: itens soltos, grupos Agentes e Contábil, Integrações e Configurações, sem Dashboards; a logo leva ao dashboard", () => {
         renderSidebar({ sections: APP_NAV, collapsed: true, homeHref: "/dashboard" })
         const nav = screen.getByRole("navigation", { name: "Menu principal" })
         const names = Array.from(nav.querySelectorAll(":scope > div > ul > li > a, :scope > div > ul > li > button")).map((el) => el.getAttribute("aria-label"))
-        expect(names).toEqual(["Tarefas", "Central de desenvolvimento", "Engramind", "Agentes", "Contábil", "Configurações"])
+        expect(names).toEqual(["Tarefas", "Central de desenvolvimento", "Engramind", "Agentes", "Contábil", "Integrações", "Configurações"])
         expect(screen.getByRole("link", { name: "Tarefas" }).getAttribute("aria-current")).toBe("page")
         expect(screen.queryByRole("link", { name: /Dashboards/ })).toBeNull()
-        expect(screen.queryByRole("link", { name: /Integrações/ })).toBeNull()
+        expect(screen.getByRole("link", { name: "Integrações" }).getAttribute("href")).toBe("/integracoes")
         expect(screen.getByRole("link", { name: "Meu App" }).getAttribute("href")).toBe("/dashboard")
+    })
+
+    describe("item com painel de hover (Integrações, OPE-120)", () => {
+        const PanelItem = ({ item, active }: SidebarPanelItemProps) => (
+            <li data-testid="panel-item" data-active={String(active)}>
+                {item.label}
+            </li>
+        )
+        const itemPanels: AppSidebarItemPanels = { integrations: PanelItem }
+
+        it("barra recolhida: o item usa o componente do painel", () => {
+            mocks.pathname = "/integracoes/github"
+            renderSidebar({ sections: APP_NAV, collapsed: true, itemPanels })
+            const item = screen.getByTestId("panel-item")
+            expect(item.textContent).toBe("Integrações")
+            expect(item.getAttribute("data-active")).toBe("true")
+        })
+
+        it("gaveta (expandida): sem submenu, Integrações é um link simples", () => {
+            renderSidebar({ sections: APP_NAV, collapsed: false, itemPanels })
+            expect(screen.queryByTestId("panel-item")).toBeNull()
+            expect(screen.getByRole("link", { name: "Integrações" }).getAttribute("href")).toBe("/integracoes")
+        })
+
+        it("sem itemPanels (portal, testes), a barra recolhida também cai no link simples", () => {
+            renderSidebar({ sections: APP_NAV, collapsed: true })
+            expect(screen.queryByTestId("panel-item")).toBeNull()
+            expect(screen.getByRole("link", { name: "Integrações" }).getAttribute("href")).toBe("/integracoes")
+        })
     })
 
     it("seção com título mostra o botão de recolher e marca o item ativo", () => {
