@@ -1,5 +1,6 @@
 import { dbConnect } from "@/lib/db"
 import { AgentMetricTracking, AgentRun, AgentUsageDay } from "@/lib/db/models/AgentMetrics"
+import { COUNTED_RUN } from "./exclusions"
 import { AuditLog } from "@/lib/db/models/AuditLog"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
@@ -63,7 +64,7 @@ export function mongoFilters(ctx: Pick<MetricsContext, "clientIds" | "projectIds
 
 /** Último uso do agente (ignora período e filtros). */
 export async function lastUsedAt(agent: AgentId): Promise<string | null> {
-    const last = await AgentRun.findOne({ agent }).sort({ finishedAt: -1 }).select({ finishedAt: 1 }).lean()
+    const last = await AgentRun.findOne({ agent, ...COUNTED_RUN }).sort({ finishedAt: -1 }).select({ finishedAt: 1 }).lean()
     return last?.finishedAt ? new Date(last.finishedAt).toISOString() : null
 }
 
@@ -76,7 +77,7 @@ export async function usageOf(ctx: MetricsContext): Promise<UsagePointDto[]> {
         .lean()
     const rows = days.map((day) => ({ day: day.day, runs: day.runs, failures: day.failures }))
     if (ctx.range.toDay >= today) {
-        const live = await AgentRun.find({ agent: ctx.agent, finishedAt: { $gte: new Date(ctx.bucket.from), $lte: ctx.range.to }, ...filters })
+        const live = await AgentRun.find({ agent: ctx.agent, finishedAt: { $gte: new Date(ctx.bucket.from), $lte: ctx.range.to }, ...filters, ...COUNTED_RUN })
             .select({ finishedAt: 1, ok: 1 })
             .lean()
         for (const run of live) {

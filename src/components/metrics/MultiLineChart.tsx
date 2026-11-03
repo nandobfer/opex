@@ -19,7 +19,11 @@ export interface MultiLineSeries {
     defaultSelected: boolean
 }
 
-const selectionSchema = z.array(z.string())
+// `null` = nenhuma escolha salva: as linhas marcadas vêm do padrão das séries atuais. O padrão não vai
+// como fallback do `usePersistentState` (que o guardaria em cache): as séries podem mudar com o período
+// (ex.: categorias de achados) e o padrão tem de acompanhar.
+const selectionSchema = z.array(z.string()).nullable()
+const NO_SELECTION: string[] | null = null
 
 /** Chave do `localStorage` com as linhas marcadas de um gráfico (versionada). */
 export const lineSelectionKey = (persistKey: string) => `opex:metrics:lines:${persistKey}:v1`
@@ -46,14 +50,18 @@ export function MultiLineChart({
 }) {
     const animate = useChartAnimation()
     const defaults = useMemo(() => series.filter((item) => item.defaultSelected).map((item) => item.key), [series])
-    const { value: stored, setValue } = usePersistentState<string[]>(lineSelectionKey(persistKey), selectionSchema, defaults)
+    const { value: stored, setValue } = usePersistentState<string[] | null>(lineSelectionKey(persistKey), selectionSchema, NO_SELECTION)
     const known = useMemo(() => new Set(series.map((item) => item.key)), [series])
-    const selected = useMemo(() => new Set(stored.filter((key) => known.has(key))), [stored, known])
+    const selected = useMemo(() => new Set((stored ?? defaults).filter((key) => known.has(key))), [stored, defaults, known])
     const items = series.map((item, index) => ({ key: item.key, label: item.label, color: colorAt(index) }))
     const visible = items.filter((item) => selected.has(item.key))
     const config = Object.fromEntries(items.map((item) => [item.key, { label: item.label, color: item.color }])) satisfies ChartConfig
 
-    const toggle = (key: string, checked: boolean) => setValue((current) => (checked ? [...new Set([...current.filter((value) => known.has(value)), key])] : current.filter((value) => value !== key)))
+    const toggle = (key: string, checked: boolean) =>
+        setValue((current) => {
+            const base = (current ?? defaults).filter((value) => known.has(value))
+            return checked ? [...new Set([...base, key])] : base.filter((value) => value !== key)
+        })
 
     return (
         <div className="space-y-3">

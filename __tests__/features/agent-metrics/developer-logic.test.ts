@@ -97,6 +97,17 @@ describe('classificação retroativa das correções', () => {
     expect(classifyLegacyCorrections(plans, turns, prRequests)).toEqual({ plan: 1, preview: 1, pr: 1 })
   })
 
+  it('pedido de mudança no PR pelo botão do app (sem o prefixo) conta como PR, não como prévia', () => {
+    const plans = [T('2026-11-01T10:00:00Z'), T('2026-11-01T18:00:00Z')]
+    // Plano → implementou → abriu o PR → pedido pelo app → nova versão: há turno na etapa do PR.
+    const turns = [
+      { ts: T('2026-11-01T12:00:00Z'), stage: 'implementing' },
+      { ts: T('2026-11-01T14:00:00Z'), stage: 'opening_pr' },
+    ]
+    expect(classifyLegacyCorrections(plans, turns, [])).toEqual({ plan: 0, preview: 0, pr: 1 })
+    expect(developerFlags(facts({ planVersions: 2, corrections: classifyLegacyCorrections(plans, turns, []) })).regression).toBe(false)
+  })
+
   it('depois da data dos eventos, vale o tipo exato do evento', () => {
     const since = T('2026-11-01T12:00:00Z')
     const counts = mergeCorrections(

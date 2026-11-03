@@ -42,6 +42,8 @@ export interface IAgentRun {
     costUsd: number | null
     durationMs: number | null
     data: Record<string, unknown> | null
+    /** Mesa excluída ou tarefa arquivada/excluída: fica gravada, mas sai das métricas (`reconcileExcludedRuns`). */
+    excluded: boolean
 }
 
 const AgentRunSchema = new Schema<IAgentRun>(
@@ -67,6 +69,7 @@ const AgentRunSchema = new Schema<IAgentRun>(
         costUsd: { type: Number, default: null },
         durationMs: { type: Number, default: null },
         data: { type: Schema.Types.Mixed, default: null },
+        excluded: { type: Boolean, default: false },
     },
     { collection: "agent_runs", versionKey: false },
 )

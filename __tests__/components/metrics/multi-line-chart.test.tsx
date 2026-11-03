@@ -73,3 +73,29 @@ describe('KPI Último uso', () => {
     expect(screen.getByText('Nunca usado')).toBeTruthy()
   })
 })
+
+describe('séries que mudam com o período (ex.: categorias de achados)', () => {
+  it('sem escolha salva, o padrão acompanha as séries novas em vez de ficar congelado', () => {
+    const first = [
+      { key: 'bug', label: 'bug', defaultSelected: true },
+      { key: 'design', label: 'design', defaultSelected: true },
+    ]
+    const second = [
+      { key: 'security', label: 'security', defaultSelected: true },
+      { key: 'tests', label: 'tests', defaultSelected: true },
+    ]
+    const point = (keys: string[]) => [{ bucket: '2026-11-02', ...Object.fromEntries(keys.map((key) => [key, 1])) }]
+    const { rerender } = render(<MultiLineChart persistKey="adversario:categories" series={first} points={point(['bug', 'design'])} format="count" ariaLabel="Métricas" />)
+    expect(headers()).toEqual(['Data', 'bug', 'design'])
+    rerender(<MultiLineChart persistKey="adversario:categories" series={second} points={point(['security', 'tests'])} format="count" ariaLabel="Métricas" />)
+    expect(screen.queryByText('Selecione ao menos uma métrica')).toBeNull()
+    expect(headers()).toEqual(['Data', 'security', 'tests'])
+  })
+
+  it('primeira renderização sem séries não grava padrão vazio', () => {
+    const { rerender } = render(<MultiLineChart persistKey="adversario:empty" series={[]} points={[]} format="count" ariaLabel="Métricas" />)
+    rerender(<MultiLineChart persistKey="adversario:empty" series={SERIES} points={POINTS} format="percent" ariaLabel="Métricas" />)
+    expect(headers()).toEqual(['Data', '% de regressão', '% de one shot'])
+    expect(window.localStorage.getItem(lineSelectionKey('adversario:empty'))).toBeNull()
+  })
+})

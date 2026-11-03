@@ -87,7 +87,7 @@ describe('Adversário e Mentor', () => {
 })
 
 describe('Revisor', () => {
-  const review = (overrides: Partial<ReviewFacts>): ReviewFacts => ({ id: 'r', prKey: 'org/app#1', at: 100, state: 'done', verdict: 'changes_requested', findings: null, durationMs: null, prOutcome: 'open', replannedExact: false, replannedApprox: false, ...overrides })
+  const review = (overrides: Partial<ReviewFacts>): ReviewFacts => ({ id: 'r', prKey: 'org/app#1', at: 100, state: 'done', verdict: 'changes_requested', findings: null, durationMs: null, prOutcome: 'open', replannedExact: false, replannedApprox: false, firstOfPr: false, ...overrides })
 
   it('aceita = pedido de mudança seguido de replanejamento; descartada = PR mergeado sem isso; fechado sem merge não conta', () => {
     expect(suggestionOutcome(review({ replannedExact: true }), 0)).toBe('accepted')
@@ -104,14 +104,20 @@ describe('Revisor', () => {
   it('% de aprovação na 1ª revisão de cada PR, achados por revisão, duração e falhas', () => {
     const summary = summarizeReviews(
       [
-        review({ id: 'a', prKey: 'x#1', at: 1, verdict: 'approved', findings: 2, durationMs: 120_000 }),
+        review({ id: 'a', prKey: 'x#1', at: 1, verdict: 'approved', findings: 2, durationMs: 120_000, firstOfPr: true }),
         review({ id: 'b', prKey: 'x#1', at: 2, verdict: 'changes_requested', findings: 4 }),
-        review({ id: 'c', prKey: 'x#2', at: 3, verdict: 'changes_requested', state: 'done' }),
+        review({ id: 'c', prKey: 'x#2', at: 3, verdict: 'changes_requested', state: 'done', firstOfPr: true }),
         review({ id: 'd', prKey: 'x#3', at: 4, state: 'failed', verdict: null }),
       ],
       null,
     )
     expect(summary).toMatchObject({ base: 4, firstApprovalPercent: 50, findingsPerReview: 3, durationMinutes: 2, failurePercent: 25 })
+  })
+
+  it('PR cuja 1ª revisão foi antes do período não conta: a aprovada da 2ª rodada não infla a taxa', () => {
+    // PR #10: 1ª revisão (pedido de mudança) fora do período; só a 2ª (aprovada) está no período.
+    const summary = summarizeReviews([review({ id: 'second', prKey: 'org/app#10', verdict: 'approved', firstOfPr: false })], null)
+    expect(summary.firstApprovalPercent).toBeNull()
   })
 })
 

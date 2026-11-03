@@ -11,6 +11,7 @@ import { percentSeries, pct, valueSeries } from "../logic/common"
 import { summarizeAdversarial, summarizeBudgets, summarizeCatalog, summarizeConversations, summarizeDiagrams, summarizeEstimates, summarizeMentor, summarizeRefinements, summarizeReviews, suggestionOutcome, type ReviewFacts } from "../logic/agents"
 import type { AgentMetricsDto, MetricPointDto } from "../types"
 import { iso, kpi, loadTasks, matchesFilters, mongoFilters, taskCompletionTimes, type MetricsContext } from "./context"
+import { COUNTED_RUN } from "./exclusions"
 
 type Partial_ = Partial<AgentMetricsDto>
 
@@ -109,7 +110,7 @@ export async function catalogMetrics(ctx: MetricsContext): Promise<Partial_> {
         .select({ summary: 1, tags: 1, createdAt: 1 })
         .lean()
     const summary = summarizeCatalog(tasks.map((task) => ({ summary: task.summary ?? null, tags: task.tags ?? [] })))
-    const runs = await AgentRun.find({ agent: "catalogador", finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx) })
+    const runs = await AgentRun.find({ agent: "catalogador", finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx), ...COUNTED_RUN })
         .select({ finishedAt: 1, ok: 1, kind: 1 })
         .lean()
     const tagsSince = ctx.since("task-tags-failures")
@@ -319,6 +320,20 @@ export async function reviewerMetrics(ctx: MetricsContext): Promise<Partial_> {
     const replanned = new Set(
         (await AgentMetricEvent.find({ type: METRIC_EVENT.prReviewReplanned, refId: { $in: docs.map((doc) => String(doc._id)) } }).select({ refId: 1 }).lean()).map((event) => event.refId),
     )
+    // Primeira revisão concluída de cada PR sem o recorte de período: o PR só conta em "aprovação na
+    // 1ª revisão" quando essa primeira revisão cai dentro do período (e dos filtros).
+    const prPairs = [...new Map(docs.filter((doc) => doc.state === "done").map((doc) => [`${doc.repo}#${doc.number}`, { repo: doc.repo, number: doc.number }])).values()]
+    const firstIds = new Set(
+        prPairs.length
+            ? (
+                  await PrReview.aggregate<{ _id: unknown; first: unknown }>([
+                      { $match: { state: "done", finishedAt: { $ne: null }, $or: prPairs } },
+                      { $sort: { finishedAt: 1, _id: 1 } },
+                      { $group: { _id: { repo: "$repo", number: "$number" }, first: { $first: "$_id" } } },
+                  ])
+              ).map((row) => String(row.first))
+            : [],
+    )
     const items: ReviewFacts[] = []
     for (const doc of docs) {
         const workbench = doc.workbenchId ? wbById.get(doc.workbenchId) : undefined
@@ -339,17 +354,14 @@ export async function reviewerMetrics(ctx: MetricsContext): Promise<Partial_> {
             prOutcome: pr?.state === "merged" ? "merged" : pr?.state === "closed" ? "closed" : "open",
             replannedExact: replanned.has(String(doc._id)),
             replannedApprox: (pr?.autoReviewReplans ?? 0) > 0,
+            firstOfPr: doc.state === "done" && firstIds.has(String(doc._id)),
         })
     }
     const exactSince = ctx.since(METRIC_EVENT.prReviewReplanned)
     const summary = summarizeReviews(items, exactSince)
     const findingsSince = ctx.since("pr-review-findings")
     const approximate = exactSince !== null && items.some((item) => item.verdict === "changes_requested" && item.at < exactSince)
-    const firstSeen = new Set<string>()
-    const firstFlags = [...items]
-        .filter((item) => item.state === "done")
-        .sort((a, b) => a.at - b.at)
-        .filter((item) => (firstSeen.has(item.prKey) ? false : (firstSeen.add(item.prKey), true)))
+    const firstFlags = items.filter((item) => item.firstOfPr)
     return {
         baseCount: summary.base,
         baseLabel: plural(summary.base, "revisão", "revisões"),

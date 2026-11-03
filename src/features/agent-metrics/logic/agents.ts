@@ -111,6 +111,8 @@ export interface ReviewFacts {
     replannedExact: boolean
     /** Aproximação para o passado: o PR teve replanejamento automático (contador da mesa). */
     replannedApprox: boolean
+    /** É a primeira revisão concluída do PR em todo o histórico (não só a primeira do período). */
+    firstOfPr: boolean
 }
 
 /**
@@ -130,9 +132,7 @@ export function suggestionOutcome(review: ReviewFacts, exactSince: number | null
 export function summarizeReviews(reviews: readonly ReviewFacts[], exactSince: number | null) {
     const finished = reviews.filter((review) => review.state === "done" || review.state === "failed" || review.state === "interrupted")
     const done = finished.filter((review) => review.state === "done")
-    const firstByPr = new Map<string, ReviewFacts>()
-    for (const review of [...done].sort((a, b) => a.at - b.at)) if (!firstByPr.has(review.prKey)) firstByPr.set(review.prKey, review)
-    const firsts = [...firstByPr.values()]
+    const firsts = done.filter((review) => review.firstOfPr)
     const outcomes = done.map((review) => suggestionOutcome(review, exactSince)).filter((value): value is "accepted" | "discarded" => value !== null)
     return {
         base: finished.length,

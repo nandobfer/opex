@@ -18,6 +18,9 @@ import {
 import type { AgentMetricsDto } from "../types"
 import { iso, kpi, loadTasks, matchesFilters, type MetricsContext } from "./context"
 
+/** KPIs que dependem do tipo das correções: antes dos eventos `correction` são aproximados (classificação retroativa). */
+const CORRECTION_DERIVED_KPIS = new Set(["previewCorrection", "regression"])
+
 export const DEVELOPER_PERCENT_LABELS: Record<DeveloperPercentKey, string> = {
     regression: "% de regressão",
     reopened: "↳ % reabertas",
@@ -159,7 +162,7 @@ export async function developerMetrics(ctx: MetricsContext): Promise<Partial<Age
         baseLabel: summary.base === 1 ? "1 mesa concluída" : `${summary.base} mesas concluídas`,
         emptyReason: "Nenhuma mesa foi concluída no período com estes filtros. As porcentagens são calculadas sobre as mesas concluídas (mesas abertas aparecem só no uso).",
         kpis: [
-            ...percentKpis.map((item) => (item.id === "previewCorrection" && correctionApprox ? { ...item, approximateUntil: iso(correctionSince) } : item)),
+            ...percentKpis.map((item) => (CORRECTION_DERIVED_KPIS.has(item.id) && correctionApprox ? { ...item, approximateUntil: iso(correctionSince) } : item)),
             kpi("cycles", "Ciclos de correção por mesa", summary.cyclesPerWorkbench, "decimal", "Correções de plano, de prévia e pedidos do PR"),
             kpi("hoursToMerge", "Tempo de mesa", summary.hoursToMerge, "hours", "Média da abertura ao merge"),
             kpi("cost", "Custo por mesa", summary.costPerWorkbench, "usd", "Média das mesas com registro"),

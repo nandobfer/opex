@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   dayDelete: vi.fn(async () => ({})),
   dayInsert: vi.fn(async () => []),
   publish: vi.fn(async () => {}),
+  reconcile: vi.fn(async (): Promise<Date | null> => null),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => {}) }))
@@ -26,11 +27,12 @@ vi.mock('@/lib/db/models/AgentMetrics', () => ({
   AgentUsageDay: { deleteMany: mocks.dayDelete, insertMany: mocks.dayInsert },
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
+vi.mock('@/features/agent-metrics/server/exclusions', () => ({ COUNTED_RUN: { excluded: { $ne: true } }, reconcileExcludedRuns: mocks.reconcile }))
 vi.mock('@/features/agent-metrics/server/sync', () => ({ syncAgentRuns: mocks.syncRuns }))
 vi.mock('@/features/agent-metrics/server/conversations', () => ({ syncConversations: mocks.syncConversations }))
 
 import { recordAgentEvent, recordAgentEventNow, recordAgentRun } from '@/features/agent-metrics/server/record'
-import { runAgentMetricsRoutine } from '@/features/agent-metrics/server/usage-daily'
+import { ensureFreshRuns, resetFreshRunsForTests, runAgentMetricsRoutine } from '@/features/agent-metrics/server/usage-daily'
 import { startAgentMetricsTracking } from '@/lib/db/migrations/agent-metrics-tracking-start'
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -82,6 +84,34 @@ describe('rotina agent-usage-daily', () => {
     await runAgentMetricsRoutine(now)
     expect(mocks.syncRuns).toHaveBeenLastCalledWith(expect.any(Array), new Date(now.getTime() - 3 * 86_400_000))
     expect(mocks.trackingUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('mesa excluída antes da janela: o resumo diário é recalculado desde o dia afetado', async () => {
+    const now = new Date('2026-11-03T12:00:00Z')
+    mocks.trackingFind.mockResolvedValueOnce({ type: 'backfill', since: now })
+    mocks.reconcile.mockResolvedValueOnce(new Date('2026-10-20T12:00:00Z'))
+    await runAgentMetricsRoutine(now)
+    expect(mocks.dayDelete).toHaveBeenLastCalledWith({ day: { $gte: '2026-10-20' } })
+  })
+
+  it('Visão geral antes da primeira execução da rotina: faz o backfill completo na hora (uma vez)', async () => {
+    resetFreshRunsForTests()
+    const now = new Date('2026-11-03T12:00:00Z').getTime()
+    mocks.trackingFind.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+    await ensureFreshRuns('revisor', now)
+    expect(mocks.syncRuns).toHaveBeenCalledWith(expect.any(Array), new Date(0))
+    expect(mocks.trackingUpdate).toHaveBeenCalledWith({ type: 'backfill' }, expect.anything(), { upsert: true })
+  })
+
+  it('com o backfill feito: só os últimos dias do agente e a reconciliação das exclusões', async () => {
+    resetFreshRunsForTests()
+    const now = new Date('2026-11-03T12:00:00Z').getTime()
+    mocks.trackingFind.mockResolvedValueOnce({ type: 'backfill', since: new Date(now) })
+    mocks.reconcile.mockResolvedValueOnce(new Date('2026-10-30T12:00:00Z'))
+    await ensureFreshRuns('desenvolvedor', now)
+    expect(mocks.syncRuns).toHaveBeenCalledWith(['desenvolvedor'], new Date(now - 2 * 86_400_000))
+    expect(mocks.dayDelete).toHaveBeenLastCalledWith({ day: { $gte: '2026-10-30' } })
+    expect(mocks.trackingUpdate).not.toHaveBeenCalled()
   })
 
   it('migração dos marcadores "Dados desde" é idempotente ($setOnInsert por fato)', async () => {

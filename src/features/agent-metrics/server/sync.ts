@@ -28,7 +28,8 @@ import { createLinkResolver } from "./links"
  * anterior ao limite gravado na primeira sincronização (`usage-logs:<feature>`), sem contar duas vezes.
  */
 
-type RunDoc = Omit<IAgentRun, "data"> & { data?: Record<string, unknown> | null }
+// `excluded` fica fora: é decidido só por `reconcileExcludedRuns`, a sincronização não o sobrescreve.
+type RunDoc = Omit<IAgentRun, "data" | "excluded"> & { data?: Record<string, unknown> | null }
 
 const ANY = new Date(0)
 

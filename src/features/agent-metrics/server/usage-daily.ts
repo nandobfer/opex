@@ -6,6 +6,7 @@ import { publishAppEvent } from "@/lib/pusher/channels"
 import { AGENT_IDS, type AgentId } from "../catalog"
 import { AGENT_METRICS_UPDATED_EVENT, METRICS_TIME_ZONE } from "../constants"
 import { syncConversations } from "./conversations"
+import { COUNTED_RUN, reconcileExcludedRuns } from "./exclusions"
 import { syncAgentRuns } from "./sync"
 
 const log = loggerFor({ module: "agent-metrics" })
@@ -43,7 +44,7 @@ export function rollupRuns(
 export async function rollupUsageDays(from: Date): Promise<number> {
     await dbConnect()
     const fromDay = dayKey(from.getTime(), METRICS_TIME_ZONE)
-    const runs = await AgentRun.find({ finishedAt: { $gte: new Date(from.getTime() - DAY_MS) } })
+    const runs = await AgentRun.find({ finishedAt: { $gte: new Date(from.getTime() - DAY_MS) }, ...COUNTED_RUN })
         .select({ agent: 1, finishedAt: 1, clientId: 1, projectId: 1, ok: 1, inputTokens: 1, outputTokens: 1, costUsd: 1, durationMs: 1 })
         .lean()
     const rows = rollupRuns(runs).filter((row) => row.day >= fromDay)
@@ -64,7 +65,10 @@ export async function runAgentMetricsRoutine(now: Date = new Date()): Promise<st
     const from = backfilled ? new Date(now.getTime() - ROLLING_DAYS * DAY_MS) : new Date(0)
     const runs = await syncAgentRuns(AGENT_IDS, from)
     const conversations = await syncConversations({ from })
-    const days = await rollupUsageDays(backfilled ? from : new Date(0))
+    // Mesa excluída e tarefa arquivada saem das métricas: os dias dessas execuções são recalculados.
+    const changedSince = await reconcileExcludedRuns()
+    const rollupFrom = backfilled ? (changedSince && changedSince < from ? changedSince : from) : new Date(0)
+    const days = await rollupUsageDays(rollupFrom)
     if (!backfilled) await AgentMetricTracking.updateOne({ type: AGENT_METRICS_BACKFILL_KEY }, { $setOnInsert: { type: AGENT_METRICS_BACKFILL_KEY, since: now } }, { upsert: true })
     await publishAppEvent(AGENT_METRICS_UPDATED_EVENT, { agents: AGENT_IDS }).catch(() => undefined)
     const message = `${backfilled ? "Atualizado" : "Histórico retroativo gerado"}: ${runs} execução(ões), ${conversations} conversa(s), ${days} resumo(s) diário(s)`
@@ -75,17 +79,39 @@ export async function runAgentMetricsRoutine(now: Date = new Date()): Promise<st
 const lastFresh = new Map<AgentId, number>()
 const FRESH_MS = 30_000
 
+let backfillInFlight: Promise<unknown> | null = null
+
+/** Para testes: esquece as sincronizações recentes e o backfill em andamento. */
+export function resetFreshRunsForTests(): void {
+    lastFresh.clear()
+    backfillInFlight = null
+}
+
 /**
  * Antes de calcular a Visão geral: sincroniza as execuções recentes do agente (no máximo a cada 30 s
- * por agente), para o tempo real não depender da rotina horária.
+ * por agente), para o tempo real não depender da rotina horária. Se o backfill retroativo ainda não
+ * rodou (logo após a subida, antes da primeira execução da rotina), roda-o agora, uma vez só, para
+ * "Último uso" e "Uso por data" não começarem vazios. Também tira das métricas as execuções de mesa
+ * excluída e de tarefa arquivada e recalcula os dias afetados.
  */
 export async function ensureFreshRuns(agent: AgentId, now: number = Date.now()): Promise<void> {
     if (now - (lastFresh.get(agent) ?? 0) < FRESH_MS) return
     lastFresh.set(agent, now)
     try {
+        await dbConnect()
+        const backfilled = await AgentMetricTracking.findOne({ type: AGENT_METRICS_BACKFILL_KEY }).lean()
+        if (!backfilled) {
+            backfillInFlight ??= runAgentMetricsRoutine(new Date(now)).finally(() => {
+                backfillInFlight = null
+            })
+            await backfillInFlight
+            return
+        }
         const from = new Date(now - 2 * DAY_MS)
         await syncAgentRuns([agent], from)
         if (agent === "opex" || agent === "maddox") await syncConversations({ from })
+        const changedSince = await reconcileExcludedRuns()
+        if (changedSince) await rollupUsageDays(changedSince)
     } catch (error) {
         log.warn({ err: error, agent }, "[agent-metrics] falha ao sincronizar as execuções recentes")
     }

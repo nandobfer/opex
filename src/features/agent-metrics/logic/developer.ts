@@ -15,6 +15,12 @@ export const PR_REQUEST_PREFIX = "Pedido de mudança no PR"
 export const REOPEN_PREFIX = "Mesa reaberta:"
 
 /** Etapas em que a mesa já tinha saído do planejamento (implementou, revisou, gerou prévia ou PR). */
+/**
+ * Etapas do lado do PR: a mesa abriu (ou mexia no) PR. Uma versão de plano depois delas veio de um
+ * pedido de mudança no PR, mesmo quando o pedido foi feito pelo botão do app (que grava o texto do
+ * pedido sem o prefixo "Pedido de mudança no PR").
+ */
+const PR_STAGES = new Set(["opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr"])
 const POST_PLAN_STAGES = new Set(["implementing", "adversarial_review", "build_queued", "building", "preview", "opening_pr", "pr_open", "changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr"])
 
 export interface CorrectionCounts {
@@ -25,8 +31,9 @@ export interface CorrectionCounts {
 
 /**
  * Classificação retroativa das versões de plano (antes do evento `correction`): cada versão depois da
- * primeira é uma correção. Pedido do PR (texto "Pedido de mudança no PR" ou gatilho do Mentor) entre a
- * versão anterior e esta → PR; a mesa saiu do planejamento nesse intervalo → prévia; senão → plano.
+ * primeira é uma correção. Pedido do PR entre a versão anterior e esta (texto "Pedido de mudança no PR",
+ * vindo do GitHub, ou um turno numa etapa do PR — o pedido pelo botão do app) → PR; a mesa saiu do
+ * planejamento nesse intervalo sem chegar ao PR → prévia; senão → plano.
  */
 export function classifyLegacyCorrections(planTimes: readonly number[], turns: readonly { ts: number; stage: string }[], prRequests: readonly number[]): CorrectionCounts {
     const counts: CorrectionCounts = { plan: 0, preview: 0, pr: 0 }
@@ -34,7 +41,8 @@ export function classifyLegacyCorrections(planTimes: readonly number[], turns: r
     for (let index = 1; index < times.length; index++) {
         const start = times[index - 1]!
         const end = times[index]!
-        if (prRequests.some((ts) => ts > start && ts <= end)) counts.pr++
+        const inInterval = (ts: number) => ts > start && ts <= end
+        if (prRequests.some(inInterval) || turns.some((turn) => inInterval(turn.ts) && PR_STAGES.has(turn.stage))) counts.pr++
         else if (turns.some((turn) => turn.ts > start && turn.ts <= end && POST_PLAN_STAGES.has(turn.stage))) counts.preview++
         else counts.plan++
     }

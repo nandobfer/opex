@@ -8,6 +8,7 @@ import { METRIC_EVENT } from "../constants"
 import type { AgentHistoryQuery } from "../period"
 import type { AgentHistoryItemDto, AgentHistoryPageDto } from "../types"
 import { createMetricsContext, loadTasks, matchesFilters, mongoFilters, type MetricsContext } from "./context"
+import { COUNTED_RUN } from "./exclusions"
 
 const taskHref = (taskId: string | null | undefined) => (taskId ? `/tarefas/${taskId}` : null)
 const workbenchHref = (taskId: string | null | undefined) => (taskId ? `/desenvolvimento/${taskId}` : null)
@@ -146,7 +147,7 @@ const KIND_LABELS: Record<string, string> = {
 }
 
 async function runHistory(ctx: MetricsContext, query: AgentHistoryQuery, agent: AgentId) {
-    const filter = { agent, finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx) }
+    const filter = { agent, finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx), ...COUNTED_RUN }
     const [total, docs] = await Promise.all([
         AgentRun.countDocuments(filter),
         AgentRun.find(filter)

@@ -38,6 +38,8 @@ const mocks = vi.hoisted(() => {
         probe: vi.fn(),
         liveChat: false,
         deliverLive: vi.fn(async () => undefined),
+        eventWrite: vi.fn(async () => ({})),
+        runWrite: vi.fn(async () => ({})),
     }
 })
 
@@ -58,6 +60,8 @@ const task = {
     timeLogs: [],
 }
 
+// Métricas dos agentes (OPE-122): os fatos e as execuções do Refinador, sem banco.
+vi.mock('@/features/agent-metrics/server/record', () => ({ recordAgentEvent: mocks.eventWrite, recordAgentRun: mocks.runWrite }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/db/models/Refinement', () => ({
     TaskRefinement: {
@@ -167,6 +171,9 @@ describe('iniciar o refinamento', () => {
         expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'RefinamentoTarefa', acao: 'CRIAR' }))
         await vi.waitFor(() => expect(mocks.fakeClient.session.create).toHaveBeenCalledWith(expect.objectContaining({ location: { directory: '/repo/opex' } })))
         await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+        // Métricas do Refinador (OPE-122): o início do refinamento vira fato e o turno vira execução.
+        await vi.waitFor(() => expect(mocks.eventWrite).toHaveBeenCalledWith(expect.objectContaining({ agent: 'refinador', type: 'refinement-started', taskId: 't1', dedupKey: 'refinement-started:cccccccccccccccccccccccc' })))
+        await vi.waitFor(() => expect(mocks.runWrite).toHaveBeenCalledWith(expect.objectContaining({ agent: 'refinador', kind: 'refinement-turn', ok: true })))
     })
 
     it('não recria quando a tarefa já tem um refinamento', async () => {
@@ -238,7 +245,7 @@ describe('turno e conclusão', () => {
         expect(mocks.updateTask).not.toHaveBeenCalled()
     })
 
-    it('turno concluído com a especificação marca como esclarecido e grava na tarefa', async () => {
+    it('turno concluído com a especificação marca como esclarecido, grava na tarefa e registra as métricas', async () => {
         mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
         await startRefinement('t1')
         await vi.waitFor(() =>
