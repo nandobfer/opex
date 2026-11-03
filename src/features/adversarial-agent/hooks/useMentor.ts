@@ -11,7 +11,7 @@ import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
 import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_TARGET_LABELS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../mentor/constants"
 import type { MentorRunListParams } from "../mentor/filters"
 import type { MentorSettings } from "../mentor/schemas"
-import type { MentorRunDto, MentorRunListDto, MentorSettingsDto } from "../mentor/types"
+import type { MentorRunDto, MentorRunListDto, MentorRunMemoryDto, MentorSettingsDto } from "../mentor/types"
 
 /** Consultas e mutações do Agente Mentor (parte do Agente Adversário). */
 
@@ -48,6 +48,25 @@ export function useMentorRunPages(params: MentorRunListParams) {
         initialPageParam: 1,
         getNextPageParam: (last) => (last.page < last.totalPages ? last.page + 1 : undefined),
         staleTime: 10_000,
+    })
+}
+
+/** Enquanto o Engramind gera o resumo, relê a cada 5 s por até 2 min. */
+const MEMORY_POLL_MS = 5_000
+const MEMORY_POLL_MAX_MS = 120_000
+
+/**
+ * Resumo da memória gravada pela execução aberta (só com `memoryId`). Fica sob `MENTOR_RUNS_KEY`:
+ * a aprovação e o `adversarial-mentor-updated` também o invalidam.
+ */
+export function useMentorRunMemory(run: Pick<MentorRunDto, "id" | "memoryId"> | null) {
+    const id = run?.id ?? null
+    const memoryId = run?.memoryId ?? null
+    return useQuery({
+        queryKey: [...MENTOR_RUNS_KEY, "memory", id, memoryId],
+        queryFn: () => get<MentorRunMemoryDto>(`/adversarial/mentor/runs/${id}/memory`),
+        enabled: Boolean(id && memoryId),
+        refetchInterval: (query) => (query.state.data?.resumoPendente && query.state.dataUpdateCount < MEMORY_POLL_MAX_MS / MEMORY_POLL_MS ? MEMORY_POLL_MS : false),
     })
 }
 
