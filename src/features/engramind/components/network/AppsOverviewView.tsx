@@ -25,6 +25,8 @@ export interface AppsOverviewViewProps {
     agents: NetworkAgent[]
     /** Canais da rede, já sem os vazios. */
     channels: NetworkChannel[]
+    /** Canais sem memórias: fora da rede, acessíveis pelo menu do card de estatísticas. */
+    emptyChannels?: NetworkChannel[]
     /** Assinaturas por agente (agregadas aqui por app). */
     links: NetworkLink[]
     memories: NetworkMemory[]
@@ -42,7 +44,7 @@ export interface AppsOverviewViewProps {
  * dos agentes de cada app (um link por app e canal). Mesmo canvas, distribuições e escala da visão
  * Agentes x canais; clicar no app abre essa visão restrita a ele.
  */
-export function AppsOverviewView({ apps, agents, channels, links, memories, allMemories, layout, hitsByChannel, onOpenApp, onOpenChannel, onChannelMenu }: AppsOverviewViewProps) {
+export function AppsOverviewView({ apps, agents, channels, emptyChannels = [], links, memories, allMemories, layout, hitsByChannel, onOpenApp, onOpenChannel, onChannelMenu }: AppsOverviewViewProps) {
     const appSlugs = useMemo(() => new Set(apps.map((app) => app.slug)), [apps])
     const agentsByApp = useMemo(() => {
         const counts = new Map<string, number>()
@@ -109,7 +111,7 @@ export function AppsOverviewView({ apps, agents, channels, links, memories, allM
                     summary={`${plural(apps.length, "app", "apps")} · ${plural(channels.length, "canal", "canais")}`}
                     rows={overviewStatRows({ hub: { label: "Apps", value: apps.length, testId: "stat-apps" }, channels: channels.length, memories, liveCount: live.liveCount })}
                 >
-                    <ChannelStatList channels={channels} countByChannel={countByChannel} />
+                    <ChannelStatList channels={channels} countByChannel={countByChannel} emptyChannels={emptyChannels} onOpenChannel={onChannelMenu} />
                     <StatList title="Por app (alcance)" testId="stats-by-app" items={apps.map((app) => ({ key: app.slug, label: app.name, count: reach.get(app.slug) ?? 0 })).sort((a, b) => b.count - a.count)} />
                 </StatsCard>
                 <RecenterButton />

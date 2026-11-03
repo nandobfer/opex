@@ -1112,6 +1112,52 @@ describe('OPE-129: Apps x canais', () => {
     })
   })
 
+  it('canal sem memória: fica fora do canvas, mas o card de estatísticas abre o painel do canal (editar/arquivar)', async () => {
+    const extra = [{ id: 'ch_v', slug: 'agentes/opex/vazio', name: 'Vazio', description: null, priority: 0, version: 1, created_at: now, archived_at: null }]
+    await withExtra(channels, extra, async () => {
+      subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio']
+      try {
+        mount()
+        expect(await screen.findByTestId('empty-channels')).toBeTruthy()
+        expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' }))
+        expect(await screen.findByRole('heading', { name: 'Vazio' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /^Editar$/ })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /Arquivar/ })).toBeTruthy()
+      } finally {
+        subscriptions[0]!.reaches = ['agentes/opex/global']
+      }
+    })
+  })
+
+  it('canal sem memória no app: o card de estatísticas lista só os canais do app; no universo, "Ações do canal" abre o painel', async () => {
+    const extra = [
+      { id: 'ch_v', slug: 'agentes/opex/vazio', name: 'Vazio', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+      { id: 'ch_o', slug: 'agentes/outro/vazio', name: 'Vazio do outro', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+    ]
+    await withExtra(channels, extra, async () => {
+      subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio']
+      subscriptions.push({ id: 's9', agent: { ...ref('ag_2', 'bot'), qualified_slug: 'outro/bot' }, target: 'agentes/outro/vazio', is_prefix: false, mode: 'inject', access: null, priority: null, reaches: ['agentes/outro/vazio'], created_at: now })
+      try {
+        inApp('opex')
+        mount()
+        const list = await screen.findByTestId('empty-channels')
+        expect(within(list).getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' })).toBeTruthy()
+        expect(within(list).queryByRole('button', { name: 'Abrir o canal agentes/outro/vazio' })).toBeNull()
+        cleanup()
+        nav.params = new URLSearchParams('universo=canal:agentes/opex/vazio')
+        mount()
+        expect((await screen.findByTestId('universe-center')).textContent).toContain('vazio')
+        fireEvent.click(within(screen.getByTestId('network-actions')).getByRole('button', { name: 'Ações do canal' }))
+        expect(await screen.findByRole('heading', { name: 'Vazio' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /^Editar$/ })).toBeTruthy()
+      } finally {
+        subscriptions.pop()
+        subscriptions[0]!.reaches = ['agentes/opex/global']
+      }
+    })
+  })
+
   it('Novo canal: depois de criar, abre o universo do canal novo', async () => {
     net.post.mockResolvedValue({ data: { data: { id: 'ch_n', slug: 'eng/novo' } } })
     mount()

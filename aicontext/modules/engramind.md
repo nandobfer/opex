@@ -225,7 +225,14 @@ rede (teste estático).
   contam), e os links para os escondidos saem junto. "Canais" e "Por canal" contam só os mostrados, e a
   busca cita só eles. Ao vivo: a primeira memória faz o canal aparecer; excluir ou mover a última o faz
   sumir. Agentes e apps sem canal com memórias continuam na tela, sem links. Os universos, o filtro
-  **Canal**, o `ChannelPanel`, o Importar e `/engramind/canais/<slug>` continuam com todos os canais.
+  **Canal**, o Importar e `/engramind/canais/<slug>` continuam com todos os canais.
+- **Acesso aos canais sem memória** (OPE-129): como o node só existe com memória, os canais fora da
+  rede ficam na lista **"Sem memórias (N)"** do card de estatísticas — nas duas redes; no app, só os
+  canais que os agentes dele assinam — e, no estado vazio do app, na mesma lista (`EmptyChannelList`).
+  Cada linha tem o menu do canal e abre o `ChannelPanel` (editar, assinantes, configurações,
+  arquivar/restaurar, excluir de vez). No universo do canal, **Ações do canal** na trilha (ao lado de
+  Importar/Novo canal) abre o mesmo painel — o caminho para `?universo=canal:<slug>` não depende de
+  memória.
 - **Visão do app: Agentes x canais** (`OverviewView`, `?app=<slug>`): todos os agentes **ativos** do app (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
   `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`) e os canais ativos, numa das
@@ -317,7 +324,7 @@ rede (teste estático).
   nos de `/integracoes/ia`), links fracos em roxo primário, sem destaque.
 - **Navegação** (`useUniverseParam`): `?app=<slug>` (visão do app, OPE-129) e `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › App X › Agente Y" / "Rede › Canal X" com
-  **Voltar**; Voltar e **Esc** sobem **um nível** (universo → app, se houver → Apps x canais; fora de diálogos e campos), e o
+  **Voltar**; no universo do canal, **Ações do canal** abre o `ChannelPanel`; Voltar e **Esc** sobem **um nível** (universo → app, se houver → Apps x canais; fora de diálogos e campos), e o
   universo aberto a partir do app mantém o `?app=`. App inexistente → toast "App não encontrado: voltando à rede." e
   a visão inicial com `router.replace`. Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
   histórico, e o voltar do navegador não fica preso nele).
@@ -819,7 +826,9 @@ OPE-129: `app-network.test.ts` (canais vazios fora das redes com inativas contan
 canais e alcance do app) e o bloco `OPE-129: Apps x canais` de `network.test.tsx` (cards de app e
 links agregados, seleção do app por `?app=`, Voltar/Esc por nível, app inexistente, clique no canal,
 canais vazios escondidos e aparecendo/sumindo ao vivo, Novo canal abrindo o universo, estados vazio e
-carregando); os testes da visão de agentes abrem o app (`inApp`).
+carregando); os testes da visão de agentes abrem o app (`inApp`). Acesso aos canais sem memória: o
+card lista só os do app e abre o painel (Editar/Arquivar), e no universo **Ações do canal** abre o
+mesmo painel.
 Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,

@@ -22,6 +22,8 @@ export interface OverviewViewProps {
     agents: NetworkAgent[]
     /** Canais ligados aos agentes do app, já sem os vazios. */
     channels: NetworkChannel[]
+    /** Canais do app sem memórias: fora da rede, acessíveis pelo menu do card de estatísticas. */
+    emptyChannels?: NetworkChannel[]
     links: NetworkLink[]
     memories: NetworkMemory[]
     /** Todas as memórias da rede (criações por agente: a partícula verde não depende dos filtros da visão). */
@@ -47,7 +49,7 @@ const agentNodeKey = (agent: string) => `agent:${agent}`
  * Radial), com os cards pelo tamanho. O consumo ao vivo de um agente pulsa o agente, manda a
  * partícula ao canal e, se ele entregou memórias, de volta ao agente.
  */
-export function OverviewView({ agents, channels, links, memories, allMemories, title = "Rede", layout, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
+export function OverviewView({ agents, channels, emptyChannels = [], links, memories, allMemories, title = "Rede", layout, hitsByChannel, onOpenAgent, onOpenChannel, onChannelMenu }: OverviewViewProps) {
     const agentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents])
     const visibleLinks = useMemo(() => links.filter((link) => agentIds.has(link.agent)), [links, agentIds])
     const { countByChannel, totalByChannel } = useChannelCounts(memories)
@@ -115,7 +117,7 @@ export function OverviewView({ agents, channels, links, memories, allMemories, t
                     summary={`${agents.length} ${agents.length === 1 ? "agente" : "agentes"} · ${channels.length} ${channels.length === 1 ? "canal" : "canais"}`}
                     rows={overviewStatRows({ hub: { label: "Agentes", value: agents.length, testId: "stat-agents" }, channels: channels.length, memories, liveCount: live.liveCount })}
                 >
-                    <ChannelStatList channels={channels} countByChannel={countByChannel} />
+                    <ChannelStatList channels={channels} countByChannel={countByChannel} emptyChannels={emptyChannels} onOpenChannel={onChannelMenu} />
                     <StatList title="Por agente (alcance)" testId="stats-by-agent" items={agents.map((agent) => ({ key: agent.id, label: agent.name, count: reach.get(agent.id) ?? 0 })).sort((a, b) => b.count - a.count)} />
                 </StatsCard>
                 <RecenterButton />

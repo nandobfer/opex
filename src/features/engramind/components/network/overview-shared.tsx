@@ -2,6 +2,9 @@
 
 import { useCallback, useMemo } from "react"
 import type { Node } from "@xyflow/react"
+import { MoreHorizontal } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import type { AgentWrite } from "../../network/network-math"
 import type { OverviewLayout } from "../../network/overview-layout"
 import type { ConsumptionEvent, NetworkChannel, NetworkMemory } from "../../network/types"
@@ -54,10 +57,39 @@ export function overviewStatRows(input: { hub: StatRow; channels: number; memori
     ]
 }
 
-/** Lista "Por canal" do card de estatísticas (nome legível, maior primeiro). */
-export function ChannelStatList({ channels, countByChannel }: { channels: readonly NetworkChannel[]; countByChannel: ReadonlyMap<string, number> }) {
+/**
+ * Canais fora da rede por não terem memória (OPE-129): sem node, o menu do canal só fica acessível
+ * aqui (ou no estado vazio do app). Abrir leva ao `ChannelPanel` — editar, assinantes, configurações,
+ * arquivar/restaurar e excluir de vez.
+ */
+export function EmptyChannelList({ channels, onOpen, className }: { channels: readonly NetworkChannel[]; onOpen: (slug: string) => void; className?: string }) {
+    return (
+        <div className={cn("mt-3 border-t pt-2", className)} data-testid="empty-channels">
+            <p className="mb-1 font-semibold text-foreground">Sem memórias ({channels.length})</p>
+            <p className="mb-1 text-[11px] text-muted-foreground">Fora da rede até a primeira memória. Abra o canal para editar, ver assinantes ou arquivar.</p>
+            <ul className="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                {channels.map((channel) => (
+                    <li key={channel.slug} className="flex items-center gap-1.5">
+                        <ChannelDisplayName slug={channel.slug} className="min-w-0 flex-1 text-muted-foreground" />
+                        <Button type="button" variant="ghost" size="icon" aria-label={`Abrir o canal ${channel.slug}`} className="h-6 w-6 shrink-0 text-muted-foreground" onClick={() => onOpen(channel.slug)}>
+                            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
+}
+
+/** Lista "Por canal" do card de estatísticas (nome legível, maior primeiro) e os canais sem memórias. */
+export function ChannelStatList({ channels, countByChannel, emptyChannels = [], onOpenChannel }: { channels: readonly NetworkChannel[]; countByChannel: ReadonlyMap<string, number>; emptyChannels?: readonly NetworkChannel[]; onOpenChannel?: (slug: string) => void }) {
     const items = channels.map((channel) => ({ key: channel.slug, label: channel.slug, node: <ChannelDisplayName slug={channel.slug} className="min-w-0 flex-1 text-muted-foreground" />, count: countByChannel.get(channel.slug) ?? 0 })).sort((a, b) => b.count - a.count)
-    return <StatList title="Por canal" testId="stats-by-channel" items={items} />
+    return (
+        <>
+            <StatList title="Por canal" testId="stats-by-channel" items={items} />
+            {emptyChannels.length > 0 && onOpenChannel && <EmptyChannelList channels={emptyChannels} onOpen={onOpenChannel} />}
+        </>
+    )
 }
 
 export interface HubLinkRef {

@@ -29,6 +29,7 @@ import { NetworkSkeleton } from "./NetworkSkeleton"
 import { NetworkActions, NetworkToolbar } from "./NetworkToolbar"
 import { OverviewView } from "./OverviewView"
 import { AppsOverviewView } from "./AppsOverviewView"
+import { EmptyChannelList } from "./overview-shared"
 import { AboutCard } from "../page/AboutCard"
 import { useRawMemoryActions } from "./useRawMemoryActions"
 import { useUniverseParam } from "./useUniverseParam"
@@ -104,6 +105,18 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
         const slugs = new Set(appLinksOfApp.map((link) => link.channel))
         return networkChannels.filter((item) => slugs.has(item.slug))
     }, [appLinksOfApp, networkChannels])
+    // Canais assinados pelo app, mesmo sem memória (a rede esconde; o card de estatísticas abre o painel).
+    const appLinkedChannelSlugs = useMemo(() => {
+        if (!app) return null
+        const ids = new Set(appAgents.map((item) => item.id))
+        return new Set(visibleLinks.filter((link) => ids.has(link.agent)).map((link) => link.channel))
+    }, [app, appAgents, visibleLinks])
+    // Canais sem memória: fora do canvas, continuam editáveis pelo card de estatísticas (OPE-129).
+    const emptyChannels = useMemo(() => {
+        if (universe) return []
+        const shown = new Set(networkChannels.map((item) => item.slug))
+        return visibleChannels.filter((item) => !shown.has(item.slug) && (!appLinkedChannelSlugs || appLinkedChannelSlugs.has(item.slug)))
+    }, [universe, networkChannels, visibleChannels, appLinkedChannelSlugs])
 
     const agentChannels = useMemo(() => (agent ? [...new Set(links.filter((link) => link.agent === agent.id && (includeArchived || !data.channels.find((item) => item.slug === link.channel)?.archived)).map((link) => link.channel))] : []), [agent, links, includeArchived, data.channels])
     // Cores sobre todos os canais (estáveis entre universos); o universo só lê as dos seus canais e dá o
@@ -167,7 +180,7 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
                 current={current}
                 onBack={() => back()}
                 onHome={() => home()}
-                actions={<NetworkActions onNewChannel={() => setDialog("channel")} onImport={() => setDialog("import")} importDisabled={data.channels.every((item) => item.archived)} />}
+                actions={<NetworkActions onNewChannel={() => setDialog("channel")} onImport={() => setDialog("import")} importDisabled={data.channels.every((item) => item.archived)} onChannelMenu={channel ? () => setPanel(channel.slug) : undefined} />}
             />
             <NetworkToolbar
                 filters={filters}
@@ -213,11 +226,14 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
                             !appAgents.length ? (
                                 <EmptyState icon={UserX} title="Este app não tem agentes ativos" description="Crie ou ative um agente deste app em Integrações › Engramind › Identidades." actionLabel="Voltar à rede" onAction={() => back()} />
                             ) : !appChannelList.length ? (
-                                <EmptyState icon={Unplug} title="Os agentes deste app não assinam nenhum canal com memórias" description="Canais sem memórias ficam fora da rede. Assine um canal ou grave uma memória num canal assinado." actionLabel="Voltar à rede" onAction={() => back()} />
+                                <EmptyState icon={Unplug} title="Os agentes deste app não assinam nenhum canal com memórias" description="Canais sem memórias ficam fora da rede. Assine um canal ou grave uma memória num canal assinado." actionLabel="Voltar à rede" onAction={() => back()}>
+                                    <EmptyChannelList channels={emptyChannels} onOpen={setPanel} className="w-full max-w-sm border-t-0 pt-0 text-left" />
+                                </EmptyState>
                             ) : (
                                 <OverviewView
                                     agents={appAgents}
                                     channels={appChannelList}
+                                    emptyChannels={emptyChannels}
                                     links={appLinksOfApp}
                                     memories={overviewMemories}
                                     allMemories={data.memories}
@@ -236,6 +252,7 @@ function EngramindNetworkView({ onConfigure, data }: { onConfigure: () => void; 
                                 apps={data.apps}
                                 agents={data.agents}
                                 channels={networkChannels}
+                                emptyChannels={emptyChannels}
                                 links={networkLinks}
                                 memories={overviewMemories}
                                 allMemories={data.memories}
