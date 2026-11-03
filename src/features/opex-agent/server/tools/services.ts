@@ -49,8 +49,8 @@ export const serviceTools = [
         risk: "read",
         description: "Serviços (lançamentos manuais de faturamento) num período, com cliente, repositório, horas e faturamento. Arquivados só com includeArchived.",
         input: z.object({
-            from: z.string().optional().describe("ISO 8601 (início do período, pela data do serviço)"),
-            to: z.string().optional().describe("ISO 8601 (fim do período)"),
+            from: z.string().optional().describe("ISO 8601 ou yyyy-MM-dd (início do período, pela data do serviço; só data = desde o início do dia)"),
+            to: z.string().optional().describe("ISO 8601 ou yyyy-MM-dd (fim do período; só data = inclui o dia inteiro)"),
             clientIds: z.array(z.string()).optional(),
             projectIds: z.array(z.string()).optional(),
             includeArchived: z.boolean().optional(),

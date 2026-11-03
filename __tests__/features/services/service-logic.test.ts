@@ -10,6 +10,7 @@ import {
     parseMoneyInput,
     serviceDateFromInput,
     serviceDateKey,
+    serviceRangeBound,
     todayDateInput,
 } from "@/features/services/logic"
 
@@ -138,5 +139,13 @@ describe("data do serviço sem deslocamento de fuso (OPE-125, America/Sao_Paulo)
         expect(inside("2026-11-30")).toBe(true)
         expect(inside("2026-10-31")).toBe(false)
         expect(inside("2026-12-01")).toBe(false)
+    })
+})
+
+describe("serviceRangeBound", () => {
+    it("só data vira o dia UTC inteiro; ISO completo vale como veio", () => {
+        expect(serviceRangeBound("2026-11-01", "from").toISOString()).toBe("2026-11-01T00:00:00.000Z")
+        expect(serviceRangeBound("2026-11-30", "to").toISOString()).toBe("2026-11-30T23:59:59.999Z")
+        expect(serviceRangeBound("2026-12-01T02:59:59.999Z", "to").toISOString()).toBe("2026-12-01T02:59:59.999Z")
     })
 })

@@ -198,6 +198,18 @@ describe("data do serviço e período (OPE-125, fuso America/Sao_Paulo)", () => 
         expect(rows.map((row) => new Date(row.serviceDate).toISOString()).sort()).toEqual(["2026-11-01T12:00:00.000Z", "2026-11-30T12:00:00.000Z"])
     })
 
+    it("período só com data (yyyy-MM-dd, como o Agente Opex envia) inclui o serviço do último dia", async () => {
+        const client = await seedClient()
+        mocks.nextProjectCode.mockResolvedValue(null)
+        for (const serviceDate of ["2026-10-31", "2026-11-01", "2026-11-30", "2026-12-01"]) {
+            await createService(baseInput({ clientId: String(client._id), serviceDate }), "local")
+        }
+
+        const rows = await listServiceAggregates({ from: "2026-11-01", to: "2026-11-30" })
+
+        expect(rows.map((row) => new Date(row.serviceDate).toISOString()).sort()).toEqual(["2026-11-01T12:00:00.000Z", "2026-11-30T12:00:00.000Z"])
+    })
+
     it("editar a data também grava ao meio-dia UTC e recusa data inexistente", async () => {
         const client = await seedClient()
         const service = await createService(baseInput({ clientId: String(client._id) }), "local")

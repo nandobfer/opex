@@ -14,7 +14,7 @@ import { ownerAttachmentActor } from "@/features/tasks/attachments/server/actor"
 import { nextProjectCode } from "@/features/tasks/server/service"
 import type { ProjectRef } from "@/features/tasks/types"
 import { SERVICE_AUDIT_ENTITY, SERVICE_CODE_COUNTER, SERVICE_CODE_PREFIX, SERVICES_UPDATED_EVENT } from "../constants"
-import { computeServiceAmounts, serviceDateFromInput } from "../logic"
+import { computeServiceAmounts, serviceDateFromInput, serviceRangeBound } from "../logic"
 import type { ServiceWriteInput } from "../schemas"
 import type { ServiceDto, ServiceTaskRef } from "../types"
 
@@ -201,8 +201,8 @@ export async function listServiceAggregates(range: {
     if (!range.includeArchived) filter.archived = { $ne: true }
     if (range.from || range.to) {
         const window: Record<string, Date> = {}
-        if (range.from) window.$gte = new Date(range.from)
-        if (range.to) window.$lte = new Date(range.to)
+        if (range.from) window.$gte = serviceRangeBound(range.from, "from")
+        if (range.to) window.$lte = serviceRangeBound(range.to, "to")
         filter.serviceDate = window
     }
     if (range.clientIds && range.clientIds.length > 0) filter.clientId = { $in: [...range.clientIds] }

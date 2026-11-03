@@ -128,3 +128,13 @@ export function formatServiceDate(value: string | number | Date | null | undefin
     const [year, month, day] = serviceDateKey(time).split("-")
     return `${day}/${month}/${year}`
 }
+
+/**
+ * Limite do período da consulta de serviços → instante. ISO completo vale como veio (o navegador
+ * envia início/fim do dia local); só data (`yyyy-MM-dd`, ex.: Agente Opex) vira o dia UTC inteiro —
+ * início `00:00:00.000Z`, fim `23:59:59.999Z` —, para incluir o serviço gravado ao meio-dia UTC.
+ */
+export function serviceRangeBound(value: string, edge: "from" | "to"): Date {
+    if (DATE_KEY.test(value)) return new Date(`${value}T${edge === "from" ? "00:00:00.000" : "23:59:59.999"}Z`)
+    return new Date(value)
+}
