@@ -23,6 +23,7 @@ import { buildNodes } from '@/features/architect-agent/components/workbench/Arch
 import { ARCHITECT_GROUP_NODE_TYPE, ARCHITECT_NODE_TYPES } from '@/features/architect-agent/components/workbench/ArchitectNodes'
 import { toViewGraph } from '@/features/architect-agent/filters'
 import { NODE_HEIGHT, NODE_WIDTH, layoutArchitecture } from '@/features/architect-agent/layout'
+import { arrowIdFor, edgeOpacity } from '@/features/architect-agent/components/workbench/ArchitectEdge'
 
 const allKinds = { kinds: [...ARCHITECT_NODE_KINDS], onlyChanges: false }
 const view = (props: { view?: ArchitectView; filter?: typeof allKinds; diagramId?: string } = {}) => (
@@ -47,6 +48,39 @@ describe('ArchitectDiagramView', () => {
     expect(screen.getByTestId('architect-edge-e3').getAttribute('class')).toContain('stroke-primary')
     fireEvent.mouseLeave(screen.getByTestId('rf-node-route'))
     expect(node('view').getAttribute('data-dimmed')).toBe('false')
+  })
+
+  it('arestas e setas usam a cor primária do tema (no lugar do cinza), com ou sem foco', () => {
+    render(view())
+    const edges = () => screen.getAllByTestId(/^architect-edge-e\d+$/)
+    const assertPrimary = () => {
+      for (const edge of edges()) {
+        expect(edge.classList.contains('stroke-primary')).toBe(true)
+        expect(edge.classList.contains('stroke-muted-foreground')).toBe(false)
+      }
+    }
+    expect(edges().length).toBeGreaterThan(0)
+    assertPrimary()
+    const arrowPath = screen.getByTestId(arrowIdFor('e3')).querySelector('path')
+    expect(arrowPath?.classList.contains('fill-primary')).toBe(true)
+    expect(arrowPath?.classList.contains('fill-muted-foreground')).toBe(false)
+    // "contém" não tem seta.
+    expect(screen.queryByTestId(arrowIdFor('e2'))).toBeNull()
+
+    fireEvent.mouseEnter(screen.getByTestId('rf-node-route'))
+    assertPrimary()
+    const focused = screen.getByTestId('architect-edge-e3')
+    const dimmed = screen.getByTestId('architect-edge-e1')
+    expect(dimmed.getAttribute('data-dimmed')).toBe('true')
+    expect(Number(focused.getAttribute('stroke-width'))).toBeGreaterThan(Number(dimmed.getAttribute('stroke-width')))
+  })
+
+  it('opacidade da aresta: cheia no foco, esmaecida fora dele e mais leve nas secundárias', () => {
+    expect(edgeOpacity({ focused: true, dimmed: false, secondary: false })).toBe(1)
+    expect(edgeOpacity({ focused: true, dimmed: false, secondary: true })).toBe(1)
+    expect(edgeOpacity({ focused: false, dimmed: true, secondary: false })).toBe(0.12)
+    expect(edgeOpacity({ focused: false, dimmed: false, secondary: true })).toBe(0.35)
+    expect(edgeOpacity({ focused: false, dimmed: false, secondary: false })).toBe(0.8)
   })
 
   it('clique abre o painel lateral com descrição e vizinhos; clicar num vizinho troca o nó', () => {
