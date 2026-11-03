@@ -66,7 +66,10 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
     - **dias sem dados**: o bucket sem base continua `null` (sem ponto, nunca 0%), e a **linha é
       contínua**, ligando os pontos vizinhos (`connectNulls`). Decisão do dono na revisão do plano da
       OPE-122, que substitui o critério original "dias sem dados quebram a linha" (a linha quebrada
-      parecia sumir e aparecer). O tooltip do dia vazio diz "Sem <amostra> (n = 0)";
+      parecia sumir e aparecer). O tooltip do dia sem amostra diz "Sem <amostra> (n = 0)"; num dia com
+      amostra em que as séries visíveis não têm base (ex.: "% de CI corrigido" sem CI falho, ou métrica
+      não retroativa antes da data de início), diz "Sem base para as métricas selecionadas nesta data
+      (n da data = N …)". O tooltip usa a moldura padrão `ChartTooltipFrame` de `ui/chart.tsx`;
     - **amostra (n)**: cada gráfico declara o que conta (`sampleLabel`, ex.: "mesas concluídas";
       `null` nos gráficos de soma, sem n). `percentSeries`/`valueSeries` gravam `n:<série>` junto do
       valor e `finalizeLineChart` separa isso em `samples` (`base` do bucket = maior n entre as séries;

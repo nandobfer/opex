@@ -19,8 +19,10 @@ vi.mock('recharts', () => ({
   XAxis: () => null,
   YAxis: (props: Record<string, unknown>) => <div data-testid="y-axis" data-domain={JSON.stringify(props.domain)} />,
   Tooltip: () => null,
+  Legend: () => null,
 }))
-vi.mock('@/components/ui/chart', () => ({
+vi.mock('@/components/ui/chart', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/ui/chart')>()),
   ChartContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
@@ -149,6 +151,23 @@ describe('tooltip do gráfico de linhas', () => {
   it('dia sem dados: a linha só atravessa o dia ("Sem mesas concluídas (n = 0)")', () => {
     render(<LineChartTooltip active label="2026-10-17" {...props} />)
     expect(screen.getByRole('tooltip').textContent).toContain('Sem mesas concluídas (n = 0)')
+  })
+
+  it('dia com mesas, mas sem base na série visível: não diz "Sem mesas" e mostra o n da data', () => {
+    const ciOnly = lineSeriesItems(SERIES).filter((item) => item.key === 'ciFixed')
+    const points = [{ bucket: '2026-10-20', ...Object.fromEntries(KEYS.map((key) => [key, key === 'ciFixed' ? null : 20])) }]
+    const samples = [{ bucket: '2026-10-20', base: 5, bySeries: { ...Object.fromEntries(KEYS.map((key) => [key, 5])), ciFixed: 0 } }]
+    render(<LineChartTooltip active label="2026-10-20" {...props} items={ciOnly} points={points} samples={samples} />)
+    const text = screen.getByRole('tooltip').textContent ?? ''
+    expect(text).not.toContain('Sem mesas concluídas (n = 0)')
+    expect(text).toContain('Sem base para as métricas selecionadas nesta data (n da data = 5 mesas concluídas)')
+  })
+
+  it('usa a moldura padrão dos tooltips dos gráficos (mesmas classes do ChartTooltipContent)', () => {
+    render(<LineChartTooltip active label="2026-10-16" {...props} />)
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip.classList.contains('min-w-[8rem]')).toBe(true)
+    expect(tooltip.classList.contains('max-w-[280px]')).toBe(true)
   })
 
   it('semana: "Semana de dd/MM"', () => {

@@ -1,5 +1,6 @@
 "use client"
 
+import { ChartTooltipFooter, ChartTooltipFrame } from "@/components/ui/chart"
 import type { BucketMode } from "@/lib/time/buckets"
 import { formatBucketLabel, formatMetricValue, type MetricValueFormat } from "./format"
 import { isSmallSample, sampleOf, type LineSample, type LineSeriesItem } from "./line-chart-model"
@@ -11,10 +12,19 @@ export function formatBucketTitle(bucket: string, mode?: BucketMode): string {
     return mode === "week" ? `Semana de ${label}` : label
 }
 
+/** Texto do bucket sem valor nas séries visíveis: sem amostra nenhuma, ou com amostra mas sem base. */
+export function emptyMessage(sampleLabel: string | null, base: number): string {
+    if (sampleLabel === null) return "Sem dados"
+    if (base === 0) return `Sem ${sampleLabel} (n = 0)`
+    return `Sem base para as métricas selecionadas nesta data (n da data = ${base} ${sampleLabel})`
+}
+
 /**
  * Tooltip do gráfico de linhas: data, n do bucket ("n = 5 mesas concluídas") e uma linha por série
- * visível com valor (nome, valor e, quando a base da série é outra, o n dela). Bucket sem dados mostra
- * "Sem <amostra> (n = 0)": a linha só atravessa o dia.
+ * visível com valor (nome, valor e, quando a base da série é outra, o n dela). Bucket sem nenhuma
+ * amostra mostra "Sem <amostra> (n = 0)" (a linha só atravessa o dia); bucket com amostra em que as
+ * séries visíveis não têm base (ex.: "% de CI corrigido" num dia sem CI falho) diz isso, com o n da
+ * data. Usa a moldura padrão dos tooltips (`ChartTooltipFrame`).
  */
 export function LineChartTooltip({
     active,
@@ -46,7 +56,7 @@ export function LineChartTooltip({
     const small = sampleLabel !== null && rows.some((item) => isSmallSample(sampleOf(sample, item.key), minSample))
 
     return (
-        <div role="tooltip" className="grid min-w-[10rem] max-w-[300px] gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl">
+        <ChartTooltipFrame>
             <div className="flex items-baseline justify-between gap-3">
                 <span className="font-medium text-foreground">{formatBucketTitle(bucket, bucketMode)}</span>
                 {sampleLabel !== null && rows.length > 0 && (
@@ -56,7 +66,7 @@ export function LineChartTooltip({
                 )}
             </div>
             {rows.length === 0 ? (
-                <p className="text-muted-foreground">{sampleLabel !== null ? `Sem ${sampleLabel} (n = 0)` : "Sem dados"}</p>
+                <p className="text-muted-foreground">{emptyMessage(sampleLabel, base)}</p>
             ) : (
                 <div className="grid gap-1.5">
                     {rows.map((item) => {
@@ -72,7 +82,7 @@ export function LineChartTooltip({
                     })}
                 </div>
             )}
-            {small && <p className="border-t border-border/50 pt-1.5 text-[11px] text-muted-foreground">Amostra pequena: pouco representativo</p>}
-        </div>
+            {small && <ChartTooltipFooter>Amostra pequena: pouco representativo</ChartTooltipFooter>}
+        </ChartTooltipFrame>
     )
 }
