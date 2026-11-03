@@ -13,7 +13,7 @@ import { minimalChange, mirrorSelection, watchExternalValue, writeTextareaValue 
 import { configureVim, currentVimMode, enterInsertMode, escapeBelongsToVim, modeFromChange, pullSystemClipboard, sendVimEscape, vimInsertLineBreak, vimLineEnd, type VimMode } from "./vim-setup"
 import { vimTheme } from "./theme"
 import { lineNumbersExtension } from "./line-numbers"
-import { accessibleName, editableExtensions, forwardFiles, hostClassName } from "./dom"
+import { accessibleName, editableExtensions, hostClassName } from "./dom"
 
 export interface VimEditorProps {
     /** `<textarea>` escondido que guarda o valor do campo. */
@@ -94,8 +94,6 @@ export function VimEditor({ textarea, className, rows = 2, disabled, readOnly, p
                             void pullSystemClipboard()
                             return false
                         },
-                        paste: (event, v) => forwardFiles(textarea, v, event, "paste"),
-                        drop: (event, v) => forwardFiles(textarea, v, event, "drop"),
                     }),
                 ],
             }),

@@ -1,9 +1,5 @@
 /**
- * @vitest-environment jsdom
- *
- * jsdom de propósito: no happy-dom o `paste` despachado no conteúdo do CodeMirror não chega ao
- * encaminhamento de arquivos do editor (o handler de colar do CodeMirror não roda), então o arquivo
- * nunca é enfileirado.
+ * @vitest-environment happy-dom
  */
 
 import { useState } from 'react'
@@ -18,16 +14,11 @@ import { MarkdownField, type MarkdownUploads } from '@/components/ui/markdown-fi
 import { EDITOR_MODE_KEY } from '@/features/editor-mode/preference'
 
 /**
- * O jsdom não implementa `ClipboardEvent`; o editor o usa ao encaminhar o arquivo colado ao
- * `<textarea>` do campo. O stub preserva apenas o `clipboardData` que o encaminhamento carrega.
+ * Como no navegador: um evento de colar criado por código não leva os arquivos da colagem (o
+ * `DataTransfer` é protegido). O campo lê os arquivos do evento original (OPE-119).
  */
-class TestClipboardEvent extends Event {
-  readonly clipboardData: unknown
-
-  constructor(type: string, init: ClipboardEventInit = {}) {
-    super(type, init)
-    this.clipboardData = init.clipboardData ?? null
-  }
+class BrowserLikeClipboardEvent extends Event {
+  readonly clipboardData = null
 }
 
 beforeAll(() => {
@@ -35,7 +26,7 @@ beforeAll(() => {
   Range.prototype.getClientRects = rects
   Range.prototype.getBoundingClientRect = () => new DOMRect()
   Element.prototype.scrollIntoView = () => undefined
-  vi.stubGlobal('ClipboardEvent', TestClipboardEvent)
+  vi.stubGlobal('ClipboardEvent', BrowserLikeClipboardEvent)
 })
 
 afterAll(() => {
@@ -69,10 +60,89 @@ function pasteEvent(files: File[]): Event {
   return event
 }
 
-function Harness({ uploads }: { uploads: MarkdownUploads }) {
+function Harness({ uploads, ariaLabel }: { uploads?: MarkdownUploads; ariaLabel?: string }) {
   const [value, setValue] = useState('')
-  return <MarkdownField value={value} onChange={setValue} uploads={uploads} />
+  return <MarkdownField value={value} onChange={setValue} uploads={uploads} ariaLabel={ariaLabel} />
 }
+
+function dropEvent(files: File[]): Event {
+  const event = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: { files, getData: () => '' } })
+  return event
+}
+
+function uploadsWith(enqueue: MarkdownUploads['enqueue']): MarkdownUploads {
+  return { enqueue, items: [], retry: () => undefined, cancel: () => undefined, dismiss: () => undefined }
+}
+
+describe('MarkdownField no modo Vim: arquivos capturados no contêiner do campo (OPE-119)', () => {
+  it('colar um print no comentário envia a imagem e insere a referência lendo os arquivos do evento original', async () => {
+    const enqueue = vi.fn((file: File) => ({ id: 'c1', markdown: Promise.resolve(`![${file.name}](/api/attachments/c1/content)`) }))
+    const { container } = render(<Harness uploads={uploadsWith(enqueue)} ariaLabel="Novo comentário" />)
+    const view = await editorIn(container)
+    const file = new File(['x'], 'print.png', { type: 'image/png' })
+
+    act(() => {
+      view.dispatch({ changes: { from: 0, insert: 'veja ' }, selection: { anchor: 5 } })
+    })
+    const event = pasteEvent([file])
+    act(() => {
+      view.contentDOM.dispatchEvent(event)
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(enqueue).toHaveBeenCalledWith(file)
+    await waitFor(() => expect(view.state.doc.toString()).toBe('veja \n\n![print.png](/api/attachments/c1/content)'))
+    expect(container.querySelector('textarea')?.value).toBe('veja \n\n![print.png](/api/attachments/c1/content)')
+  })
+
+  it('a colagem assumida não chega ao editor: o texto só muda quando o envio confirma', async () => {
+    let confirm: (markdown: string) => void = () => undefined
+    const enqueue = vi.fn(() => ({ id: 'c2', markdown: new Promise<string>((resolve) => (confirm = resolve)) }))
+    const { container } = render(<Harness uploads={uploadsWith(enqueue)} />)
+    const view = await editorIn(container)
+
+    act(() => {
+      view.contentDOM.dispatchEvent(pasteEvent([new File(['x'], 'foto.png', { type: 'image/png' })]))
+    })
+    expect(view.state.doc.toString()).toBe('')
+
+    await act(async () => {
+      confirm('![foto.png](/api/attachments/c2/content)')
+    })
+    await waitFor(() => expect(view.state.doc.toString()).toBe('![foto.png](/api/attachments/c2/content)'))
+  })
+
+  it('soltar um arquivo no editor envia e insere a referência', async () => {
+    const enqueue = vi.fn((file: File) => ({ id: 'd1', markdown: Promise.resolve(`![${file.name}](/api/attachments/d1/content)`) }))
+    const { container } = render(<Harness uploads={uploadsWith(enqueue)} />)
+    const view = await editorIn(container)
+    const file = new File(['x'], 'solta.png', { type: 'image/png' })
+    const event = dropEvent([file])
+
+    act(() => {
+      view.contentDOM.dispatchEvent(event)
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(enqueue).toHaveBeenCalledWith(file)
+    await waitFor(() => expect(view.state.doc.toString()).toContain('/api/attachments/d1/content'))
+  })
+
+  it('sem envio de mídia no campo, o arquivo colado não é capturado e nada é inserido', async () => {
+    const { container } = render(<Harness />)
+    const view = await editorIn(container)
+    const textareaPaste = vi.fn()
+    container.querySelector('textarea')?.addEventListener('paste', textareaPaste)
+
+    act(() => {
+      view.contentDOM.dispatchEvent(pasteEvent([new File(['x'], 'foto.png', { type: 'image/png' })]))
+    })
+
+    expect(view.state.doc.toString()).toBe('')
+    expect(textareaPaste).not.toHaveBeenCalled()
+  })
+})
 
 describe('MarkdownField no modo Vim: mídia colada no editor', () => {
   it('encaminha o arquivo colado ao campo e insere a referência na posição do cursor', async () => {
