@@ -167,6 +167,11 @@
     --chart-4: #f472b6;
     --chart-5: #34d399;
     --chart-6: #fbbf24;
+    /* Cores extras das linhas das métricas (uma cor distinta por série; ordem em palette.ts). */
+    --chart-7: #fb923c;
+    --chart-8: #60a5fa;
+    --chart-9: #f87171;
+    --chart-10: #a3e635;
     /* Markdown e stream dos agentes: títulos lilás, negrito/marcadores âmbar, código verde, citação e ferramentas ciano. */
     --md-heading: #b366ff;
     --md-strong: #fbbf24;

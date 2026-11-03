@@ -1,5 +1,5 @@
 import type { CorrectionKind } from "../constants"
-import { avg, pct, percentSeries, type BucketContext } from "./common"
+import { avg, pct, percentSeries, sampleKey, type BucketContext } from "./common"
 import type { MetricPointDto } from "../types"
 
 /**
@@ -85,8 +85,11 @@ export interface DeveloperWorkbenchFacts {
 export const DEVELOPER_PERCENT_KEYS = ["regression", "reopened", "regressionFinding", "previewCorrection", "blocked", "lesson", "oneShot", "conflict", "ciFailed", "ciFixed", "interrupted", "resumed", "retried"] as const
 export type DeveloperPercentKey = (typeof DEVELOPER_PERCENT_KEYS)[number]
 
-/** As cinco da issue vêm marcadas na legenda; as demais começam desmarcadas. */
-export const DEVELOPER_DEFAULT_LINES: readonly DeveloperPercentKey[] = ["regression", "blocked", "lesson", "oneShot", "conflict"]
+/** As principais vêm marcadas na legenda ao abrir a página; as demais começam desmarcadas. */
+export const DEVELOPER_DEFAULT_LINES: readonly DeveloperPercentKey[] = ["regression", "blocked", "oneShot"]
+
+/** Ordem das linhas no gráfico (e das cores): as marcadas primeiro, com as cores mais distintas. */
+export const DEVELOPER_LINE_ORDER: readonly DeveloperPercentKey[] = ["regression", "blocked", "oneShot", "lesson", "conflict", "reopened", "regressionFinding", "previewCorrection", "ciFailed", "ciFixed", "interrupted", "resumed", "retried"]
 
 /** Marcas de uma mesa para as porcentagens. */
 export function developerFlags(facts: DeveloperWorkbenchFacts): Record<DeveloperPercentKey, boolean> {
@@ -160,7 +163,10 @@ export function summarizeDeveloper(items: readonly DeveloperWorkbenchFacts[], ct
         ctx,
         { ciFixed: since.ciFixed },
     )
-    series.forEach((point, index) => (point.ciFixed = ciPoints[index]?.ciFixed ?? null))
+    series.forEach((point, index) => {
+        point.ciFixed = ciPoints[index]?.ciFixed ?? null
+        point[sampleKey("ciFixed")] = ciPoints[index]?.[sampleKey("ciFixed")] ?? 0
+    })
 
     return {
         base: items.length,

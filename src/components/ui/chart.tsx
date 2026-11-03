@@ -146,7 +146,7 @@ function ChartTooltipContent({
     const extra = footer?.(payload)
 
     return (
-        <div role="tooltip" className={cn("grid min-w-[8rem] max-w-[280px] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl", className)}>
+        <ChartTooltipFrame className={className}>
             {!nestLabel ? tooltipLabel : null}
             <div className="grid gap-1.5">
                 {payload
@@ -193,9 +193,23 @@ function ChartTooltipContent({
                         )
                     })}
             </div>
-            {extra ? <div className="border-t border-border/50 pt-1.5 text-[11px] leading-snug text-muted-foreground">{extra}</div> : null}
+            {extra ? <ChartTooltipFooter>{extra}</ChartTooltipFooter> : null}
+        </ChartTooltipFrame>
+    )
+}
+
+/** Moldura padrão dos tooltips dos gráficos (a mesma do `ChartTooltipContent`, para tooltips próprios). */
+function ChartTooltipFrame({ className, children }: { className?: string; children: React.ReactNode }) {
+    return (
+        <div role="tooltip" className={cn("grid min-w-[8rem] max-w-[280px] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl", className)}>
+            {children}
         </div>
     )
+}
+
+/** Rodapé de contexto do tooltip (separado por uma linha). */
+function ChartTooltipFooter({ children }: { children: React.ReactNode }) {
+    return <div className="border-t border-border/50 pt-1.5 text-[11px] leading-snug text-muted-foreground">{children}</div>
 }
 
 const ChartLegend = RechartsPrimitive.Legend
@@ -239,4 +253,4 @@ function getPayloadConfigFromPayload(config: ChartConfig, payload: unknown, key:
     return configLabelKey in config ? config[configLabelKey] : config[key]
 }
 
-export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartStyle }
+export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartTooltipFrame, ChartTooltipFooter, ChartLegend, ChartLegendContent, ChartStyle }

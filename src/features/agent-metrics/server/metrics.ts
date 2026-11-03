@@ -1,6 +1,7 @@
 import type { AgentId } from "../catalog"
 import type { AgentMetricsQuery } from "../period"
-import type { AgentMetricsDto } from "../types"
+import type { AgentMetricsDto, AgentMetricsPart } from "../types"
+import { finalizeLineChart } from "../logic/common"
 import { adversarialMetrics, architectMetrics, budgetMetrics, catalogMetrics, conversationMetrics, mentorMetrics, refinerMetrics, reviewerMetrics } from "./agents"
 import { createMetricsContext, filterOptions, lastUsedAt, usageOf, type MetricsContext } from "./context"
 import { developerMetrics } from "./developer"
@@ -20,7 +21,7 @@ const USAGE_UNITS: Record<AgentId, string> = {
     mentor: "execuções",
 }
 
-const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<Partial<AgentMetricsDto>>> = {
+const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<AgentMetricsPart>> = {
     opex: (ctx) => conversationMetrics(ctx, "opex"),
     maddox: (ctx) => conversationMetrics(ctx, "maddox"),
     orcamentista: budgetMetrics,
@@ -49,7 +50,7 @@ export async function getAgentMetrics(agent: AgentId, query: AgentMetricsQuery, 
         usageUnit: USAGE_UNITS[agent],
         usage,
         kpis: specific.kpis ?? [],
-        lines: specific.lines ?? [],
+        lines: (specific.lines ?? []).map(finalizeLineChart),
         bars: specific.bars ?? [],
         baseCount: specific.baseCount ?? 0,
         baseLabel: specific.baseLabel ?? "",

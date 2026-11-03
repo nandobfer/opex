@@ -30,7 +30,7 @@ const data = (overrides: Partial<AgentMetricsDto> = {}): AgentMetricsDto => ({
     { id: 'regression', label: '% de regressão', hint: 'Reaberta, achado de regressão ou correção de prévia', value: 25, format: 'percent', since: null },
     { id: 'interrupted', label: '% interrompidas', hint: 'Interrupção pedida por você', value: null, format: 'percent', since: '2026-11-03T12:00:00.000Z' },
   ],
-  lines: [{ id: 'percentages', title: 'Métricas ao longo do tempo', description: 'x', format: 'percent', series: [{ key: 'regression', label: '% de regressão', defaultSelected: true }], points: [{ bucket: '2026-11-02', regression: 25 }] }],
+  lines: [{ id: 'percentages', title: 'Métricas ao longo do tempo', description: 'x', format: 'percent', series: [{ key: 'regression', label: '% de regressão', defaultSelected: true }], points: [{ bucket: '2026-11-02', regression: 25 }], sampleLabel: 'mesas concluídas', samples: [{ bucket: '2026-11-02', base: 4, bySeries: { regression: 4 } }], minSample: 3 }],
   bars: [],
   baseCount: 4,
   baseLabel: '4 mesas concluídas',

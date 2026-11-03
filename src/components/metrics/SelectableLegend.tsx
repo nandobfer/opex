@@ -1,11 +1,14 @@
 "use client"
 
 import { Checkbox } from "@/components/ui/checkbox"
+import { LineSwatch } from "./LineSwatch"
 
 export interface LegendItem {
     key: string
     label: string
     color: string
+    /** Tracejado da linha (o mesmo do traço desenhado no gráfico). */
+    dash?: string
 }
 
 /** Legenda com uma caixa de seleção por linha para mostrar ou ocultar a série no gráfico. */
@@ -17,7 +20,7 @@ export function SelectableLegend({ id, items, selected, onToggle }: { id: string
                 return (
                     <li key={item.key} className="flex items-center gap-2 text-xs">
                         <Checkbox id={inputId} checked={selected.has(item.key)} onCheckedChange={(checked) => onToggle(item.key, checked)} aria-label={item.label} />
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: item.color }} aria-hidden />
+                        <LineSwatch color={item.color} dash={item.dash} />
                         <label htmlFor={inputId} className="cursor-pointer text-muted-foreground">
                             {item.label}
                         </label>

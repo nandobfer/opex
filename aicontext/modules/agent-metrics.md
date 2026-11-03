@@ -52,8 +52,33 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
   - **Gráfico de linhas único** por agente com as porcentagens ao longo do tempo (eixo X = data, uma
     linha por métrica; `MultiLineChart`): a legenda tem uma **caixa de seleção por linha**; a seleção
     fica salva no navegador por gráfico (`usePersistentState`, chave
-    `opex:metrics:lines:<agente>:<gráfico>:v1`); todas desmarcadas → "Selecione ao menos uma
-    métrica". Data sem base não tem ponto (a linha não liga os vizinhos).
+    `opex:metrics:lines:<agente>:<gráfico>:v2`; a `v2` descartou as escolhas da `v1` para todos
+    abrirem com o padrão novo); todas desmarcadas → "Selecione ao menos uma métrica". Ao abrir, no
+    máximo 3 linhas vêm marcadas (as principais de cada agente; ver abaixo). Desenho (modelo puro em
+    `src/components/metrics/line-chart-model.ts`):
+    - **cor e traço únicos por série**, pela posição na lista completa do gráfico (marcar ou desmarcar
+      não troca as outras cores): `LINE_SERIES_COLORS` (`charts/palette.ts`, tokens `--chart-1..10`,
+      com os dois roxos nas pontas); acima de 10 séries a cor se repete com traço tracejado, e a
+      combinação cor + traço nunca se repete. A legenda e o tooltip mostram o mesmo traço
+      (`LineSwatch`);
+    - **linha reta** (`type="linear"`, nunca passa dos valores reais) e eixo de % fixo em 0–100 (marcas
+      de 25), que só cresce quando um valor passa de 100 de verdade (ex.: erro da estimativa);
+    - **dias sem dados**: o bucket sem base continua `null` (sem ponto, nunca 0%), e a **linha é
+      contínua**, ligando os pontos vizinhos (`connectNulls`). Decisão do dono na revisão do plano da
+      OPE-122, que substitui o critério original "dias sem dados quebram a linha" (a linha quebrada
+      parecia sumir e aparecer). O tooltip do dia sem amostra diz "Sem <amostra> (n = 0)"; num dia com
+      amostra em que as séries visíveis não têm base (ex.: "% de CI corrigido" sem CI falho, ou métrica
+      não retroativa antes da data de início), diz "Sem base para as métricas selecionadas nesta data
+      (n da data = N …)". O tooltip usa a moldura padrão `ChartTooltipFrame` de `ui/chart.tsx`;
+    - **amostra (n)**: cada gráfico declara o que conta (`sampleLabel`, ex.: "mesas concluídas";
+      `null` nos gráficos de soma, sem n). `percentSeries`/`valueSeries` gravam `n:<série>` junto do
+      valor e `finalizeLineChart` separa isso em `samples` (`base` do bucket = maior n entre as séries;
+      `mergeLineSeries` junta séries de bases diferentes). O eixo X mostra a data e `n=5`; o tooltip
+      mostra a data ("Semana de dd/MM" no agrupamento semanal), "n = 5 mesas concluídas" e, por série
+      visível com valor, o nome, o valor e o próprio n quando a base da série é outra (ex.: "% de CI
+      corrigido", só mesas com CI falho); a tabela acessível tem a coluna n. Ponto com n abaixo de 3
+      (`MIN_RELIABLE_SAMPLE`) sai **vazado** (pouco representativo), com a nota no tooltip e a
+      explicação abaixo do gráfico.
   - **Uso por data** (`UsageByDateChart`): execuções (e falhas) por dia, semana ou mês.
   - Distribuições em barras (`RankedBarsCard`): categorias, ferramentas, destinos, tags, etapas.
   - Agrupamento: por dia até 31 dias, por semana até ~6 meses, por mês acima disso.
@@ -114,8 +139,14 @@ concluída de novo conta uma vez). Mesa aberta fica fora da base (o uso dela apa
 Classificação retroativa das correções (`classifyLegacyCorrections`): cada versão de plano depois da
 primeira é uma correção; houve "Pedido de mudança no PR" entre a versão anterior e esta → PR; a mesa saiu
 do planejamento nesse intervalo (implementou, revisou, gerou prévia ou PR) → prévia; senão → plano.
-Depois da data dos eventos `correction`, vale o tipo exato. O gráfico traz todas as porcentagens; as
-cinco da issue (regressão, bloqueio, lições, one shot e conflito) vêm marcadas.
+Depois da data dos eventos `correction`, vale o tipo exato. O gráfico traz todas as porcentagens, na
+ordem `DEVELOPER_LINE_ORDER` (as subdivisões da regressão como "Regressão: % reabertas"…); ao abrir,
+vêm marcadas só regressão, bloqueio pelo Adversário e one shot (`DEVELOPER_DEFAULT_LINES`).
+
+Linhas marcadas ao abrir nos demais gráficos: Orçamentista (dentro da margem e aprovados),
+Catalogador (com resumo e com tags), Revisor (aprovação na 1ª revisão e sugestões aceitas),
+Adversário/categorias (as 3 primeiras); Mentor, Opex, Maddox e Arquiteto têm 2 linhas por gráfico,
+ambas marcadas.
 
 ### Demais agentes
 
@@ -186,13 +217,16 @@ cinco da issue (regressão, bloqueio, lições, one shot e conflito) vêm marcad
 Extraídos dos Dashboards (que passaram a usá-los): `charts/` (`ChartCard`, `TrendLineChart`,
 `BarsChart`, `RankedBarsCard`, `DonutChart`, `EmptyChart`, `ChartDataTable`, `palette`), `KpiCard` e
 `KpiGrid`, `formatBucketLabel` e `formatMetricValue`; novos: `LastUsedKpi`, `MultiLineChart` +
-`SelectableLegend`, `UsageByDateChart`, `MetricsFiltersBar`, `DataSinceNotice` e
+`SelectableLegend` (com `line-chart-model.ts`, `LineChartTooltip`, `SampleAxisTick`, `line-dots.tsx` e
+`LineSwatch`), `UsageByDateChart`, `MetricsFiltersBar`, `DataSinceNotice` e
 `MetricsOverviewSkeleton`. Buckets de tempo em `src/lib/time/buckets.ts` (também dos Dashboards).
 
 ## Testes
 
 `__tests__/features/agent-metrics/` (`period`, `developer-logic`, `agents-logic`, `record` — falha do
 banco não rejeita, rotina e marcadores —, `routes` e `agent-page`), `__tests__/components/metrics/`
-(legenda selecionável salva no navegador, "Selecione ao menos uma métrica", "—" e Último uso),
+(legenda selecionável salva no navegador, "Selecione ao menos uma métrica", "—" e Último uso;
+`line-chart-model` — cores e traços únicos, eixo 0–100, amostra pequena; `multi-line-chart-lines` —
+recharts simulado: cores do print, linha reta e contínua, marcador vazado, tooltip com n e esqueleto),
 `__tests__/features/layout/navigation.test.ts` (10 agentes, ordem, nomes e ícones iguais às abas,
 página de cada um) e `__tests__/features/ai/ai-tabs.test.tsx`.

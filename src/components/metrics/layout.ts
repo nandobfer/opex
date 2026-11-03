@@ -6,3 +6,7 @@ export const KPI_GRID = "grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
 export const KPI_CARD_HEIGHT = "min-h-24"
 export const CHART_GRID = "grid gap-4 lg:grid-cols-2"
 export const CHART_HEIGHT = 260
+/** Altura do cartão de gráfico além da área do gráfico (título, descrição e legenda). */
+export const CHART_CARD_CHROME = 96
+/** Cartão do gráfico de linhas das métricas: eixo com o n e a linha de explicação da amostra. */
+export const LINE_CHART_CARD_CHROME = CHART_CARD_CHROME + 36

@@ -27,14 +27,34 @@ export interface MetricSeriesDto {
 /** Ponto do gráfico: `bucket` (`YYYY-MM-DD` ou `YYYY-MM`) e um valor por série (`null` = sem base). */
 export type MetricPointDto = { bucket: string } & Record<string, number | string | null>
 
-export interface MetricLineChartDto {
+/** Amostra (n) de um bucket: a base do gráfico e o n de cada série. */
+export interface MetricSampleDto {
+    bucket: string
+    base: number
+    bySeries: Record<string, number>
+}
+
+/** Gráfico de linhas como os carregadores montam (pontos ainda com as chaves `n:<série>`). */
+export interface MetricLineChartInput {
     id: string
     title: string
     description: string
     format: MetricFormat
     series: MetricSeriesDto[]
     points: MetricPointDto[]
+    /** O que o n conta (ex.: "mesas concluídas"); `null` em gráfico de soma (sem n). */
+    sampleLabel: string | null
 }
+
+export interface MetricLineChartDto extends MetricLineChartInput {
+    /** Alinhado com `points`; vazio quando `sampleLabel` é `null`. */
+    samples: MetricSampleDto[]
+    /** Abaixo deste n o ponto é pouco representativo; `null` sem n. */
+    minSample: number | null
+}
+
+/** O que cada carregador de agente devolve (as linhas ainda sem as amostras separadas). */
+export type AgentMetricsPart = Omit<Partial<AgentMetricsDto>, "lines"> & { lines?: MetricLineChartInput[] }
 
 export interface MetricBarItemDto {
     key: string
