@@ -103,6 +103,12 @@ describe('runWithFallback', () => {
     expect(result.message).toContain('Todos os modelos de fallback também falharam')
   })
 
+  it('cota que encerra a execução, sem fallback: também para com o motivo claro', async () => {
+    const run = vi.fn(async () => ({ ...modelFail('Your credit balance is too low'), limited: true }))
+    const result = await runWithFallback({ agent: 'plan', model: 'anthropic/opus', variant: null, fallbacks: [] }, 'x', run, { signal: signal() })
+    expect(result.message).toBe('Your credit balance is too low. Nenhum modelo de fallback configurado para esta etapa.')
+  })
+
   it('falha de modelo sem limite mantém a mensagem original', async () => {
     const run = vi.fn(async () => modelFail('modelo indisponível'))
     const result = await runWithFallback({ agent: 'plan', model: 'a/b', variant: null }, 'x', run, { signal: signal() })

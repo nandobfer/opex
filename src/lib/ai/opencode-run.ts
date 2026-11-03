@@ -2,6 +2,7 @@ import type { OpencodeClient } from "@/lib/ai/opencode-client"
 import { recordAiConsumption } from "@/lib/ai/consumption"
 import {
     describeToolInput,
+    isProviderLimitError,
     normalizeOpencodeEvent,
     retryNotice,
     shouldAbandonRetry,
@@ -324,15 +325,19 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     }
 
     let interruptRequested = false
+    // Parar do usuário (o abort chega antes do fim da desistência por limite, que espera até 15 s).
+    let userStop = false
     // Limite/cota do provedor: fim já decidido, aguardando a execução parar no OpenCode.
     let limitEnd: End | null = null
+    /** Fim da desistência: o Parar do usuário manda mais que o limite (a mesa fica "interrompida", não falha). */
+    const limitFinish = (end: End): End => (userStop ? { outcome: "interrupted", message: request.signal.reason instanceof Error ? request.signal.reason.message : "Interrompido" } : end)
     const abandonForLimit = async (retry: OpencodeRetry) => {
         const reason = providerLimitMessage(retry, request.agent.model)
+        interruptRequested = true
         limitEnd = { outcome: "failed", message: reason, failure: "model", limited: true }
         publish({ type: "notice", level: "warn", message: `${reason}. Desistindo das novas tentativas do OpenCode.` })
-        interruptRequested = true
         const end = limitEnd
-        setTimeout(() => finish(end), INTERRUPT_GRACE_MS).unref?.()
+        setTimeout(() => finish(limitFinish(end)), INTERRUPT_GRACE_MS).unref?.()
         await client.session.interrupt({ sessionID: sessionId }).catch(() => undefined)
     }
 
@@ -430,9 +435,9 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 break
             case "end":
                 // Desistência por limite: o fim (interrompido) que vier é o da interrupção pedida aqui.
-                if (limitEnd) finish(limitEnd)
+                if (limitEnd) finish(limitFinish(limitEnd))
                 else
-                    finish(event.outcome === "succeeded" ? { outcome: "succeeded", message: null } : event.outcome === "failed" ? { outcome: "failed", message: event.message, failure: "model" } : { outcome: "interrupted", message: event.reason === "user" ? "Interrompido" : `Interrompido (${event.reason})` })
+                    finish(event.outcome === "succeeded" ? { outcome: "succeeded", message: null } : event.outcome === "failed" ? { outcome: "failed", message: event.message, failure: "model", ...(event.error && !attach && isProviderLimitError(event.error) ? { limited: true } : {}) } : { outcome: "interrupted", message: event.reason === "user" ? "Interrompido" : `Interrompido (${event.reason})` })
                 break
         }
     }
@@ -467,7 +472,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             }
             await sleep(RECONNECT_DELAY_MS)
             const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
-            if (!finished && limitEnd && info?.outcome) finish(limitEnd)
+            if (!finished && limitEnd && info?.outcome) finish(limitFinish(limitEnd))
             else if (!finished && info?.outcome && (info.time.idle ?? 0) >= startedAt) {
                 publish({ type: "notice", level: "warn", message: "A conexão com o OpenCode caiu; parte da saída pode não ter sido exibida" })
                 finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null, ...(info.outcome === "failed" ? { failure: "model" as const } : {}) })
@@ -479,6 +484,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     heartbeat.unref?.()
 
     const interrupt = async (reason: string) => {
+        if (request.signal.aborted) userStop = true
         if (interruptRequested || finished) return
         interruptRequested = true
         await client.session.interrupt({ sessionID: sessionId }).catch(() => undefined)

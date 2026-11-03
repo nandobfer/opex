@@ -78,7 +78,7 @@ export type OpencodeSessionEvent =
     | { kind: "form-closed"; id: string }
     | { kind: "moved"; directory: string }
     | { kind: "end"; outcome: "succeeded" }
-    | { kind: "end"; outcome: "failed"; message: string }
+    | { kind: "end"; outcome: "failed"; message: string; error?: OpencodeRetryError }
     | { kind: "end"; outcome: "interrupted"; reason: string }
 
 type Raw = Record<string, unknown>
@@ -86,6 +86,12 @@ const isObj = (value: unknown): value is Raw => typeof value === "object" && val
 const str = (value: unknown): string | null => (typeof value === "string" ? value : null)
 const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0)
 const errorMessage = (value: unknown, fallback: string) => (isObj(value) ? (str(value.message) ?? fallback) : fallback)
+
+/** Erro do provedor (`{ type, message, status }`) do evento; o que faltar fica nulo. */
+const providerError = (value: unknown): OpencodeRetryError | undefined => {
+    if (!isObj(value)) return undefined
+    return { type: str(value.type), message: str(value.message) ?? "erro desconhecido", status: typeof value.status === "number" ? value.status : null }
+}
 
 /** Sessão do evento: `form.created` traz em `data.form.sessionID`; os demais, em `data.sessionID`. */
 export function opencodeEventSessionId(event: unknown): string | null {
@@ -200,19 +206,15 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
         }
         case "session.step.failed":
             return { kind: "notice", message: `Passo do modelo falhou: ${errorMessage(data.error, "erro desconhecido")}` }
-        case "session.retry.scheduled": {
-            const error = isObj(data.error) ? data.error : {}
-            return {
-                kind: "retry",
-                attempt: num(data.attempt),
-                at: num(data.at),
-                error: { type: str(error.type), message: str(error.message) ?? "erro desconhecido", status: typeof error.status === "number" ? error.status : null },
-            }
-        }
+        case "session.retry.scheduled":
+            return { kind: "retry", attempt: num(data.attempt), at: num(data.at), error: providerError(data.error) ?? { type: null, message: "erro desconhecido", status: null } }
         case "session.execution.succeeded":
             return { kind: "end", outcome: "succeeded" }
-        case "session.execution.failed":
-            return { kind: "end", outcome: "failed", message: errorMessage(data.error, "O agente terminou com erro") }
+        case "session.execution.failed": {
+            // O erro estruturado permite reconhecer cota/limite que encerra a execução (`provider.quota` etc.).
+            const error = providerError(data.error)
+            return { kind: "end", outcome: "failed", message: errorMessage(data.error, "O agente terminou com erro"), ...(error ? { error } : {}) }
+        }
         case "session.execution.interrupted":
             return { kind: "end", outcome: "interrupted", reason: str(data.reason) ?? "user" }
         case "permission.asked": {

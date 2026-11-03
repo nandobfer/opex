@@ -104,4 +104,31 @@ describe('limite do provedor no turno do OpenCode', () => {
     expect(interrupt).toHaveBeenCalledTimes(1)
     expect(result).toMatchObject({ outcome: 'failed', failure: 'model', limited: true })
   })
+
+  it('cota que encerra a execução (execution.failed): também conta como limite', async () => {
+    const { client, interrupt } = scriptedClient(() => [ev('session.execution.failed', { error: { type: 'provider.quota', message: 'Your credit balance is too low', status: 400 } })])
+    const result = await runAgentTurn(client, { ...base, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY })
+    expect(interrupt).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ outcome: 'failed', failure: 'model', limited: true, message: 'Your credit balance is too low' })
+  })
+
+  it('falha de modelo que não é de cota não é marcada como limite', async () => {
+    const { client } = scriptedClient(() => [ev('session.execution.failed', { error: { type: 'provider.invalid-request', message: 'modelo indisponível', status: 404 } })])
+    const result = await runAgentTurn(client, { ...base, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY })
+    expect(result).toMatchObject({ outcome: 'failed', failure: 'model', message: 'modelo indisponível' })
+    expect(result.limited).toBeUndefined()
+  })
+
+  it('Parar do usuário durante a desistência: o turno termina interrompido, não como falha de limite', async () => {
+    const controller = new AbortController()
+    const { client } = scriptedClient(() => [ev('session.retry.scheduled', { attempt: 1, at: Date.now() + 3 * HOURS, error: LIMIT_ERROR })])
+    const result = await runAgentTurn(client, { ...base, signal: controller.signal, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY }, {
+      publish: (event) => {
+        // O Parar chega na janela entre a desistência e o fim da execução no OpenCode.
+        if (event.type === 'notice' && event.message.includes('Desistindo das novas tentativas')) controller.abort(new Error('Parado pelo usuário'))
+      },
+    })
+    expect(result).toMatchObject({ outcome: 'interrupted', message: 'Parado pelo usuário' })
+    expect(result.limited).toBeUndefined()
+  })
 })

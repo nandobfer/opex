@@ -17,7 +17,9 @@ describe('normalizeOpencodeEvent', () => {
     // Sem `assistantMessageID`, cai no id do evento (para a deduplicação do consumo).
     expect(normalizeOpencodeEvent({ type: 'session.step.ended', id: 'e9', data: { sessionID: 's1', cost: 0, tokens: {} } }, 's1')).toMatchObject({ kind: 'step', stepId: 'e9' })
     expect(normalizeOpencodeEvent(ev('session.execution.succeeded', {}), 's1')).toEqual({ kind: 'end', outcome: 'succeeded' })
-    expect(normalizeOpencodeEvent(ev('session.execution.failed', { error: { message: 'cota' } }), 's1')).toEqual({ kind: 'end', outcome: 'failed', message: 'cota' })
+    expect(normalizeOpencodeEvent(ev('session.execution.failed', { error: { message: 'cota' } }), 's1')).toEqual({ kind: 'end', outcome: 'failed', message: 'cota', error: { type: null, message: 'cota', status: null } })
+    // O erro estruturado do fim carrega tipo e status (cota/limite que encerra a execução).
+    expect(normalizeOpencodeEvent(ev('session.execution.failed', { error: { type: 'provider.quota', message: 'quota', status: 429 } }), 's1')).toMatchObject({ kind: 'end', outcome: 'failed', error: { type: 'provider.quota', status: 429 } })
   })
 
   it('lê a sessão do formulário em data.form e normaliza os campos', () => {

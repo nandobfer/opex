@@ -849,7 +849,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   e **desiste** das novas tentativas quando o erro é de limite/cota (`isProviderLimitError`: tipos
   `provider.rate-limit`/`quota`/`free-limit`/`budget-limit`/`model-budget-limit`, status 429 ou mensagem de
   limite/cota) **e** a próxima tentativa fica para daqui a **mais de 60 s** ou já é a **3ª** por limite
-  (`shouldAbandonRetry`). Limite passageiro de poucos segundos continua com o OpenCode tentando;
+  (`shouldAbandonRetry`). A cota que **encerra** a execução (`session.execution.failed` com erro de
+  limite/cota, ex.: `provider.quota`) também sai com `limited`, e a parada sem fallback ganha o mesmo
+  motivo claro. Limite passageiro de poucos segundos continua com o OpenCode tentando;
   sobrecarga, erro interno, transporte e tempo limite nunca desistem. Ao desistir, interrompe a execução
   no OpenCode, espera ela parar e termina o turno como falha do modelo (`limited: true`), com o motivo
   "Limite de uso do provedor em anthropic/… (provider.rate-limit: …); o OpenCode só tentaria de novo em
@@ -858,7 +860,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   motivo + "Nenhum modelo de fallback configurado para esta etapa." (ou "Todos os modelos de fallback
   também falharam."), em vez de ficar parada até o tempo limite de 3 h. Os demais agentes (Refinar
   tarefa, revisão de PR, Adversário, Arquiteto, Maddox) não levam a política e seguem como antes.
-  Reconexão (`attach`) não desiste. **Não** troca ao
+  Reconexão (`attach`) não desiste. O **Parar** do usuário durante a janela da desistência (até os 15 s
+  de espera do fim da execução) manda mais que o limite: o turno termina **interrompido** e não troca
+  de modelo. **Não** troca ao
   Parar, com a conexão com o OpenCode perdida, na reconexão (que não envia mensagem) nem em erros da
   etapa (build falhou, plano vazio, PR sem URL).
 - **Como continua** (`runWithFallback`, `server/model-fallback.ts`): reenvia o turno **na mesma
