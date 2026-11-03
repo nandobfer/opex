@@ -7,15 +7,18 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
-import type { AdversarialSettings } from "../../schemas"
 
-const DEFAULT_DESCRIPTION = "Ao fim de cada implementação nas centrais escolhidas, o adversário revisa antes da prévia (ou do Pull Request, no fluxo PR automático)."
+/** Campos do formulário usados pelo cartão (Agente Adversário, Agente Mentor e Agente Arquiteto). */
+export interface ScopeFormShape {
+    scope: { all: boolean; centralIds: string[] }
+}
 
 /**
- * Centrais em que as mesas passam pelo adversário (ou pelo Agente Mentor): todas ou as escolhidas.
- * Só usa os campos `scope.*` do formulário (o Mentor tem a mesma forma).
+ * Centrais em que as mesas passam por um agente das mesas (Adversário, Mentor, Arquiteto): todas ou
+ * as escolhidas. Só usa os campos `scope.*` do formulário.
  */
-export function ScopeCard({ form, id = "adversarial", description = DEFAULT_DESCRIPTION, listLabel = "Centrais com o agente adversário" }: { form: UseFormReturn<AdversarialSettings>; id?: string; description?: string; listLabel?: string }) {
+export function ScopeCard<T extends ScopeFormShape>({ form: source, id, description, listLabel }: { form: UseFormReturn<T>; id: string; description: string; listLabel: string }) {
+    const form = source as unknown as UseFormReturn<ScopeFormShape>
     const all = useWatch({ control: form.control, name: "scope.all" })
     const centrals = useCentrals()
     const error = form.formState.errors.scope?.centralIds?.message

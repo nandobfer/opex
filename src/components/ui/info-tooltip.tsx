@@ -12,10 +12,12 @@ interface InfoTooltipProps {
     label?: string
     side?: "top" | "right" | "bottom" | "left"
     className?: string
+    /** Classes da dica (ex.: mais larga para um texto longo). */
+    contentClassName?: string
 }
 
 /** Ícone de informação com tooltip: explica um campo, parâmetro, escopo ou status ao lado do rótulo. */
-export function InfoTooltip({ text, label, side = "top", className }: InfoTooltipProps) {
+export function InfoTooltip({ text, label, side = "top", className, contentClassName }: InfoTooltipProps) {
     return (
         <TooltipProvider delayDuration={150}>
             <Tooltip>
@@ -28,7 +30,7 @@ export function InfoTooltip({ text, label, side = "top", className }: InfoToolti
                         <Info className="h-3.5 w-3.5" aria-hidden />
                     </button>
                 </TooltipTrigger>
-                <TooltipContent side={side} className="max-w-xs text-xs leading-relaxed">
+                <TooltipContent side={side} className={cn("max-w-xs text-xs leading-relaxed", contentClassName)}>
                     {text}
                 </TooltipContent>
             </Tooltip>

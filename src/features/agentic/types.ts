@@ -1,3 +1,4 @@
+import type { WorkbenchArchitectDto } from "@/features/architect-agent/types"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import type { ChatFileDto } from "@/lib/chat-files/kind"
@@ -137,6 +138,8 @@ export interface WorkbenchDto {
     liveChat: boolean
     /** O Agente Adversário se aplica a esta mesa (ativo e a central no escopo): passo "Revisão adversária" na trilha. */
     adversarial: boolean
+    /** Agente Arquiteto: se ele se aplica à central e a versão do plano aprovado (aba "Arquitetura"). */
+    architect: WorkbenchArchitectDto | null
     startedAt: string
     completedAt: string | null
     updatedAt: string

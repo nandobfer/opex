@@ -4,11 +4,9 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Controller, type UseFormReturn } from "react-hook-form"
 import { ShieldAlert, ShieldCheck } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Slider } from "@/components/ui/slider"
+import { LeveledSlider } from "@/components/ui/leveled-slider"
 import { ADVERSARIAL_LEVEL_DEFS, ADVERSARIAL_LEVELS, FINDING_SEVERITY_LABELS } from "../../constants"
 import type { AdversarialSettings } from "../../schemas"
-
-const MARKS = ADVERSARIAL_LEVELS.map((level, index) => ({ value: index, label: ADVERSARIAL_LEVEL_DEFS[level].label }))
 
 /**
  * Criticidade em steps com rótulos (do mais liberal ao mais crítico). Abaixo do slider, o que o nível
@@ -26,24 +24,18 @@ export function CriticalityCard({ form }: { form: UseFormReturn<AdversarialSetti
                     control={form.control}
                     name="level"
                     render={({ field }) => {
-                        const index = Math.max(0, ADVERSARIAL_LEVELS.indexOf(field.value))
                         const def = ADVERSARIAL_LEVEL_DEFS[field.value]
                         return (
                             <div className="space-y-5">
-                                <div className="px-7 pb-2">
-                                    <Slider
-                                        id="adversarial-level"
-                                        aria-label="Criticidade do agente adversário"
-                                        min={0}
-                                        max={ADVERSARIAL_LEVELS.length - 1}
-                                        step={1}
-                                        value={index}
-                                        onChange={(next) => field.onChange(ADVERSARIAL_LEVELS[next] ?? field.value)}
-                                        onBlur={field.onBlur}
-                                        formatValue={(value) => ADVERSARIAL_LEVEL_DEFS[ADVERSARIAL_LEVELS[value] ?? "balanced"].label}
-                                        marks={MARKS}
-                                    />
-                                </div>
+                                <LeveledSlider
+                                    id="adversarial-level"
+                                    label="Criticidade do agente adversário"
+                                    levels={ADVERSARIAL_LEVELS}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    onBlur={field.onBlur}
+                                    labelOf={(level) => ADVERSARIAL_LEVEL_DEFS[level].label}
+                                />
                                 <AnimatePresence mode="wait" initial={false}>
                                     <motion.div key={field.value} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} className="grid gap-3 sm:grid-cols-2">
                                         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">

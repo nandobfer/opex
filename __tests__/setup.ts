@@ -34,6 +34,15 @@ vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   mentorAfterTurns: vi.fn(async () => null),
 }))
 
+// Agente Arquiteto: paralelo à mesa (plano pronto, aprovação, exclusão e DTO). Fica de fora por padrão; os
+// testes do arquiteto redefinem este mock.
+vi.mock('@/features/architect-agent/server/workflow-hook', () => ({
+  onPlanApproved: vi.fn(async () => undefined),
+  onPlanReady: vi.fn(async () => undefined),
+  cleanupWorkbenchDiagrams: vi.fn(async () => undefined),
+  workbenchArchitect: vi.fn(async () => ({ applies: false, planVersion: null })),
+}))
+
 // O Framer Motion usa as animações nativas do happy-dom: quando um componente desmonta no meio
 // da animação, o cancelamento rejeita uma promise fora do teste ("AbortError: The animation
 // was canceled.") e o Vitest derruba o run inteiro. `skipAnimations` faz o motion ir direto ao

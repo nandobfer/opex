@@ -23,8 +23,9 @@ import { TaskTextView } from "./TaskTextView"
 import { Timeline } from "./Timeline"
 import { WorkbenchHeader } from "./WorkbenchHeader"
 import { AdversarialRoundsView, AdversarialTabNavProvider, useAdversarialTab } from "@/features/adversarial-agent/components/workbench/AdversarialRoundsView"
+import { ArchitectTab, useArchitectTab } from "@/features/architect-agent/components/workbench/ArchitectTab"
 
-type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial" | "forks"
+type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial" | "architect" | "forks"
 
 /**
  * Mesa de trabalho: cabeçalho, etapas, descrição e spec. da tarefa (só leitura), saída ao vivo (ou o
@@ -42,6 +43,8 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     // Agente Adversário: aba com a saída final de cada rodada (`null` = a mais recente).
     const adversarialTab = useAdversarialTab(workbench)
     const [adversarialRound, setAdversarialRound] = useState<string | null>(null)
+    // Agente Arquiteto: diagrama do plano aprovado (paralelo à mesa; não é etapa).
+    const architectTab = useArchitectTab(workbench)
     const openAdversarialRound = (reviewId: string) => {
         setAdversarialRound(reviewId)
         setView("adversarial")
@@ -53,7 +56,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     const lastCheck = latestPrWatch(timeline.items)
     const prWatch = watchingPr && schedule ? { enabled: schedule.enabled, nextCheckAt: nextPrWatchAt(schedule.nextCheckAt, lastCheck?.nextCheckAt), checking: lastCheck?.outcome === null } : null
     // Sem forks (todos descartados) ou sem rodadas do adversário, a aba some e a visão volta para a saída.
-    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "build" && !buildCount) ? "output" : selected
+    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "architect" && !architectTab.visible) || (selected === "build" && !buildCount) ? "output" : selected
     const tabs: { id: View; label: string; disabled?: boolean; hidden?: boolean }[] = [
         { id: "description", label: "Descrição" },
         { id: "spec", label: "Spec." },
@@ -61,6 +64,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
         { id: "plan", label: plans.length ? `Plano v${plans.length}` : "Plano", disabled: !plans.length },
         { id: "build", label: `Build (${buildCount})`, hidden: !buildCount },
         { id: "adversarial", label: `Adversário (${adversarialTab.count})`, hidden: !adversarialTab.visible },
+        { id: "architect", label: `Arquitetura (${architectTab.count})`, hidden: !architectTab.visible },
         { id: "forks", label: `Forks (${forks.length})`, hidden: !forks.length },
     ]
 
@@ -100,6 +104,8 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
                         <BuildLogView workbenchId={workbench.id} selectedId={buildId} onSelect={setBuildId} />
                     ) : view === "adversarial" ? (
                         <AdversarialRoundsView workbenchId={workbench.id} selectedId={adversarialRound} onSelect={setAdversarialRound} />
+                    ) : view === "architect" ? (
+                        <ArchitectTab workbench={workbench} />
                     ) : (
                         <ForkView workbench={workbench} forks={forks} selectedId={forkId} onSelect={setForkId} />
                     )}

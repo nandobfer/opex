@@ -217,7 +217,12 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   para build local.
 - Cancelamento, exclusão, correção e nova tentativa invalidam o estado antigo; o runner verifica
   a reserva lógica durante a espera e imediatamente antes da publicação. Timeout/falha também
-  invalidam a tentativa. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
+  invalidam a tentativa — **só a da própria rodada**: a falha de um turno pode chegar depois de a mesa
+  já ter reservado outra tentativa, e apagar o estado da nova derrubava o script dela no meio da
+  espera (`ENOENT`); o turno registra a tentativa com que trabalha e a invalidação recebe essa
+  tentativa (`invalidateRemotePreview(..., { attempt })`), saindo sem apagar quando ela já mudou. Se o
+  estado sumir durante a execução, o script falha com "Tentativa cancelada ou substituída" em vez de
+  `ENOENT` cru. O app exige confirmação remota, backup e saúde antes de liberar a prévia.
   A reserva/invalidação e o Compose compartilham `flock` por mesa, evitando corrida entre uma
   execução antiga e uma nova publicação. Host Linux precisa de `flock` (util-linux).
 - Credenciais de GitHub vêm do `gh` autenticado no host do OpenCode (mesmo requisito dos PRs).
@@ -466,6 +471,14 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   novo, Seguir mesmo assim, saindo por `launchOrQueue` com as ações pendentes `adversarial-*`). Sem
   chat durante a revisão e sem Reconectar na revisão que falhou. Trilha com o passo "Revisão
   adversária" (`WorkbenchDto.adversarial`) e aba **Adversário (N)**. Ver `modules/adversarial-agent.md`.
+- **Agente Arquiteto (OPE-105)**: o fim do turno de planejamento (plano pronto, mesa em
+  `plan_review`) chama `onPlanReady` do arquiteto (`runAfterResponse`), que desenha a arquitetura da
+  funcionalidade consolidando todos os planos da mesa, para a análise do plano. O **Implementar** grava
+  `approvedPlanVersion` (histórico) e chama `onPlanApproved`, só a reserva: gera apenas se o plano ainda
+  não tem diagrama gerando ou pronto. **Não é etapa**: não entra na trilha, não ocupa vaga, não
+  publica na Saída da IA e nunca muda a etapa da mesa; a exclusão da mesa aborta a geração
+  (`cleanupWorkbenchDiagrams`). Aba **Arquitetura (N)** depois de "Adversário (N)" e campo
+  `WorkbenchDto.architect` (`applies`, `planVersion`: o plano mais recente). Ver `modules/architect-agent.md`.
 - **Agente Mentor (OPE-92 · OPE-104)**: o fim de cada cadeia de turnos (com a ação que a originou, o
   texto do usuário, a rodada do Adversário quando houver e o início da cadeia) e o chat ao vivo vão ao
   Mentor (sem o antigo bloco ` ```opex-lesson `: o agente consolida as próprias memórias)

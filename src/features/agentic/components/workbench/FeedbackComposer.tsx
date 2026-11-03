@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { motion } from "framer-motion"
 import { Loader2, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,19 +14,44 @@ export interface FeedbackCopy {
     submit: string
 }
 
+/** Campo sem anexos (ex.: "Pedir ajustes" do Agente Arquiteto). */
+export const NO_ATTACHMENTS: FieldAttachments = { available: false, items: [], onFiles: () => undefined, onRetry: () => undefined, onRemove: () => undefined, fileIds: [], blockReason: null, clearSent: () => undefined }
+
 /**
  * Campo de correção/feedback da mesa (vai para o planejador), com anexos. O texto continua obrigatório
- * (mínimo 3 caracteres); o envio espera os anexos terminarem de subir.
+ * (mínimo 3 caracteres); o envio espera os anexos terminarem de subir. `aside` fica ao lado dos botões
+ * (ex.: o slider de profundidade do Agente Arquiteto).
  */
-export function FeedbackComposer({ copy, value, onValueChange, attachments, pending, onCancel, onSubmit }: { copy: FeedbackCopy; value: string; onValueChange: (value: string) => void; attachments: FieldAttachments; pending: boolean; onCancel: () => void; onSubmit: (text: string) => void }) {
+export function FeedbackComposer({
+    copy,
+    value,
+    onValueChange,
+    attachments = NO_ATTACHMENTS,
+    pending,
+    onCancel,
+    onSubmit,
+    id = "workbench-feedback",
+    aside,
+}: {
+    copy: FeedbackCopy
+    value: string
+    onValueChange: (value: string) => void
+    attachments?: FieldAttachments
+    pending: boolean
+    onCancel: () => void
+    onSubmit: (text: string) => void
+    id?: string
+    aside?: ReactNode
+}) {
     const blocked = attachments.blockReason
     return (
         <motion.div key="composer" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="space-y-2 overflow-hidden">
-            <label htmlFor="workbench-feedback" className="text-sm font-medium">
+            <label htmlFor={id} className="text-sm font-medium">
                 {copy.title}
             </label>
-            <AttachableTextarea id="workbench-feedback" autoFocus rows={4} value={value} onValueChange={onValueChange} placeholder={copy.placeholder} attachments={attachments} />
-            <div className="flex justify-end gap-2">
+            <AttachableTextarea id={id} autoFocus rows={4} value={value} onValueChange={onValueChange} placeholder={copy.placeholder} attachments={attachments} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+                {aside && <div className="mr-auto min-w-0 flex-1">{aside}</div>}
                 <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onCancel} disabled={pending}>
                     <X className="h-3.5 w-3.5" aria-hidden /> Cancelar
                 </Button>

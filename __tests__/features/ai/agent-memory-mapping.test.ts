@@ -29,10 +29,11 @@ describe('mapeamento lista ↔ canal', () => {
   })
 
   it('canais fixos: o "opex" de todos e as listas sem escopo; todo consumidor assina o "opex" (o Mentor só onde grava)', () => {
-    expect(fixedMemoryChannels().map((item) => item.slug)).toEqual(['opex', 'agentes/opex/global', 'agentes/opex/dono', 'agentes/opex/cliente', 'agentes/maddox/global', 'agentes/maddox/dono', 'agentes/maddox/cliente', 'agentes/adversario', 'agentes/desenvolvedor/global'])
+    expect(fixedMemoryChannels().map((item) => item.slug)).toEqual(['opex', 'agentes/opex/global', 'agentes/opex/dono', 'agentes/opex/cliente', 'agentes/maddox/global', 'agentes/maddox/dono', 'agentes/maddox/cliente', 'agentes/adversario', 'agentes/arquiteto', 'agentes/desenvolvedor/global'])
     for (const consumer of MEMORY_CONSUMERS) expect(MEMORY_SUBSCRIPTION_TARGETS[consumer][0]).toBe('opex')
     expect(MEMORY_SUBSCRIPTION_TARGETS.mentor).toEqual(['agentes/adversario', 'agentes/desenvolvedor/*'])
     expect(MEMORY_SUBSCRIPTION_TARGETS.adversario).toEqual(['opex', 'agentes/adversario'])
+    expect(MEMORY_SUBSCRIPTION_TARGETS.arquiteto).toEqual(['opex', 'agentes/arquiteto'])
     expect(MEMORY_SUBSCRIPTION_TARGETS.desenvolvedor).toEqual(['opex', 'agentes/desenvolvedor/*'])
   })
 

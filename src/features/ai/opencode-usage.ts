@@ -19,6 +19,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     agentic: "Desenvolvimento agêntico (mesas)",
     "pr-review": "Agente Revisor",
     "adversarial-agent": "Agente Adversário",
+    "architect-agent": "Agente Arquiteto",
     "adversarial-mentor-decision": "Agente Mentor (decisor)",
     "adversarial-mentor-writer": "Agente Mentor (redator)",
     "memory-curator": "Curador de memórias (migração para o Engramind)",

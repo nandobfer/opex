@@ -15,13 +15,14 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { DEFAULT_ADVERSARIAL_SETTINGS, adversarialSettingsSchema, type AdversarialSettings } from "../../schemas"
 import { useAdversarialSettings, useSaveAdversarialSettings } from "../../hooks/useAdversarial"
-import { AgentCard } from "./AgentCard"
+import { AgentCard, type AgentCardCopy } from "@/features/ai/components/agent-settings/AgentCard"
+import { ScopeCard } from "@/features/ai/components/agent-settings/ScopeCard"
+import { ADVERSARIAL_TIMEOUT_MAX, ADVERSARIAL_TIMEOUT_MIN } from "../../constants"
 import { ContextSection } from "./ContextSection"
 import { CriticalityCard } from "./CriticalityCard"
 import { FlowCard } from "./FlowCard"
 import { MemoriesSection } from "./MemoriesSection"
 import { ReviewsSection } from "./ReviewsSection"
-import { ScopeCard } from "./ScopeCard"
 
 type Section = "geral" | "contexto" | "memorias" | "revisoes"
 const SECTIONS: { value: Section; label: string }[] = [
@@ -30,6 +31,15 @@ const SECTIONS: { value: Section; label: string }[] = [
     { value: "memorias", label: "Memórias" },
     { value: "revisoes", label: "Revisões" },
 ]
+const AGENT_COPY: AgentCardCopy = {
+    id: "adversarial",
+    description: "Cada rodada abre uma sessão NOVA do OpenCode no worktree da mesa, sem o histórico do implementador. O agente só lê o código: nunca roda testes, build, lint ou typecheck.",
+    timeoutLabel: "Tempo máximo da revisão (minutos)",
+    timeoutMin: ADVERSARIAL_TIMEOUT_MIN,
+    timeoutMax: ADVERSARIAL_TIMEOUT_MAX,
+    placeholder: "Ex.: dê atenção a permissões e a migrações; ignore arquivos gerados.",
+    notice: "A revisão roda sem ninguém para responder: o agente só tem permissão de leitura (edição, subagentes e comandos de teste, build, lint, instalação e escrita no git são negados) e perguntas são dispensadas.",
+}
 const sectionMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
@@ -97,8 +107,8 @@ export function AdversarialAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: 
                             </Card>
                             <CriticalityCard form={form} />
                             <FlowCard form={form} />
-                            <AgentCard form={form} />
-                            <ScopeCard form={form} />
+                            <AgentCard form={form} copy={AGENT_COPY} />
+                            <ScopeCard form={form} id="adversarial" description="Ao fim de cada implementação nas centrais escolhidas, o adversário revisa antes da prévia (ou do Pull Request, no fluxo PR automático)." listLabel="Centrais com o agente adversário" />
                         </>
                     )}
                     {section === "contexto" && <ContextSection form={form} />}

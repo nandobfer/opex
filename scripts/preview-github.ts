@@ -39,7 +39,15 @@ async function portBusy(port: number): Promise<boolean> {
 
 export async function runPreview(statePath: string, attempt: string): Promise<void> {
     const current = () => {
-        const s = JSON.parse(readFileSync(statePath, "utf8")) as PreviewState
+        // O estado pode sumir no meio da execução: o app invalida a tentativa apagando o arquivo. A
+        // mensagem diz o que aconteceu, em vez de um ENOENT sem contexto.
+        let raw: string
+        try {
+            raw = readFileSync(statePath, "utf8")
+        } catch {
+            throw new Error("Tentativa cancelada ou substituída (o estado da prévia não existe mais)")
+        }
+        const s = JSON.parse(raw) as PreviewState
         validateState(s, attempt)
         if (readFileSync(s.currentPath, "utf8") !== attempt) throw new Error("Tentativa substituída")
         return s

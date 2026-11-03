@@ -5,6 +5,7 @@ import { Check, ChevronRight, Circle } from "lucide-react"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { usePortalContainer } from "@/components/ui/portal-container"
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -58,7 +59,7 @@ const ContextMenuContent = React.forwardRef<
     React.ComponentRef<typeof ContextMenuPrimitive.Content>,
     React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
 >(({ className, ...props }, ref) => (
-    <ContextMenuPrimitive.Portal>
+    <ContextMenuPrimitive.Portal container={usePortalContainer()}>
         <ContextMenuPrimitive.Content
             ref={ref}
             className={cn(

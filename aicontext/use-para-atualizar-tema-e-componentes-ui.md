@@ -248,6 +248,21 @@ repassar ao elemento DOM.)
 - Card ou painel sobre a rede fica numa camada fora da área com zoom (filho do React Flow), com
   tamanho fixo e preso às bordas do quadro (`MemoryCardLayer`).
 
+## Tela cheia e maximizar
+
+- **Tela cheia do navegador** de um elemento: `useFullscreen(elemento)` (`src/hooks/useFullscreen.ts`)
+  devolve `{ active, native, toggle, exit }`, segue o `fullscreenchange` (Esc e F11 contam), sai ao
+  desmontar e, sem a API ou com o pedido recusado, cai no maximizado. Exemplo: o diagrama do Agente
+  Arquiteto.
+- Em tela cheia o navegador só mostra o que está DENTRO do elemento: os wrappers de `src/components/ui`
+  (popover, menu, dica, seletor, menu de contexto, diálogo, alerta e sheet) desenham o portal no
+  contêiner de `PortalContainerProvider` (`src/components/ui/portal-container.tsx`; sem provider, o
+  `document.body`). Aponte o provider para o elemento enquanto `native` estiver ligado e monte um
+  `Toaster` dentro dele para os avisos.
+- **Maximizar** sobre a área de conteúdo do app, sem remontar: `useMaximizedFrame`
+  (`src/hooks/useMaximizedFrame.ts`), com entrada e saída animadas. Usado pelo terminal de logs das
+  Integrações e pela alternativa da tela cheia.
+
 ## Gráficos (recharts via Chart do shadcn)
 
 - Base: `src/components/ui/chart.tsx` (`ChartContainer`, `ChartTooltip`, `ChartTooltipContent`,

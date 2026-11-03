@@ -40,6 +40,7 @@ import type { CiFailure } from "../ci"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
+import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
 import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
@@ -116,14 +117,14 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId))
+    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -221,6 +222,10 @@ const forksModule = () => import("./forks")
 /** Agente Adversário (import dinâmico: só carrega quando a mesa chega ao fim da implementação; uma vez por processo). */
 let adversaryImport: Promise<typeof import("@/features/adversarial-agent/server/workflow-hook")> | null = null
 const adversaryModule = () => (adversaryImport ??= import("@/features/adversarial-agent/server/workflow-hook"))
+
+/** Agente Arquiteto (import dinâmico, uma vez por processo): paralelo à mesa, nunca muda o estado dela. */
+let architectImport: Promise<typeof import("@/features/architect-agent/server/workflow-hook")> | null = null
+const architectModule = () => (architectImport ??= import("@/features/architect-agent/server/workflow-hook"))
 
 /** Builder Machine (import dinâmico, uma vez por processo): só com a integração ativa. Ver aicontext/modules/builder-machine.md. */
 let localDockerImport: Promise<typeof import("@/features/local-docker/server/agentic-hooks")> | null = null
@@ -659,6 +664,8 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
 /** Executa o turno e os encadeados (implementação → build), mantendo a mesa ativa entre eles. */
 async function executeTurns(id: string, first: TurnPlan, controller: AbortController, mentorTurns: MentorTurns = []): Promise<void> {
     let turn: TurnPlan | null = first
+    /** Tentativa remota desta rodada de build (a falha dela não invalida uma reserva mais nova). */
+    const failedAttempt: { attempt: string | null } = { attempt: null }
     while (turn) {
         const loaded = await loadAll(id)
         const log = centralLogger(loaded.doc.centralId, loaded.doc.taskCode)
@@ -698,7 +705,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                   })
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
-                next = await buildTurn(client, loaded, turn, sessionId, controller, memories)
+                next = await buildTurn(client, loaded, turn, sessionId, controller, memories, failedAttempt)
                 turn = controller.signal.aborted ? null : next
                 continue
             }
@@ -723,7 +730,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (stage === "building") {
                 await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
                 const current = await AgenticWorkbench.findById(id).lean()
-                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory).catch(() => undefined)
+                if (current?.previewBuild?.method === "github") await invalidateRemotePreview(await getOpencodeClient(), current, loaded.config.sessionDirectory, failedAttempt).catch(() => undefined)
             }
             log.error(`${WORKBENCH_STAGE_LABELS[stage]}: falhou`, error, { workbenchId: id })
             await prepareHub(id)
@@ -805,7 +812,7 @@ type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
  * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
  * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
  */
-async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null): Promise<TurnPlan | null> {
+async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null, failedAttempt: { attempt: string | null } = { attempt: null }): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
     const ctx = contextOf(loaded)
@@ -817,6 +824,8 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
     if (port === null) throw new Error("A mesa ficou sem porta reservada")
     const docker = method === "local" ? ((turn.build ? turn.build.docker : saved?.docker) ?? undefined) : undefined
     const remote = method === "github"
+    // Tentativa desta rodada: uma falha dela não pode apagar a reserva de uma tentativa mais nova.
+    failedAttempt.attempt = saved?.attempt ?? null
     // O dump só entra quando a central o exige nesta tentativa (OPE-72); o servidor confere o arquivo.
     const backup = saved?.dumpRequired !== false ? (doc.previewBackup ?? null) : null
     const hooks = turnHooks(doc)
@@ -841,7 +850,7 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
             if (result.outcome !== "succeeded") {
                 const status = result.outcome === "interrupted" ? "interrupted" : "failed"
                 await trackBuild(id, () => settleBuild(id, status, result.message ?? null))
-                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory).catch(() => undefined)
+                if (remote) await invalidateRemotePreview(client, (await AgenticWorkbench.findById(id).lean()) ?? doc, config.sessionDirectory, failedAttempt).catch(() => undefined)
                 await update(doc, { runState: status, error: result.message ?? "O agente não concluiu a etapa" })
                 return null
             }
@@ -861,7 +870,8 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
                 if (!fresh.repo) throw new Error("Vincule um repositório GitHub à central para construir a prévia")
                 if (!fresh.doc.previewBackup) throw new Error("Não foi possível reservar a pasta da prévia remota")
                 await invalidateRemotePreview(client, fresh.doc, config.sessionDirectory)
-                await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
+                const reserved = await reserveRemotePreview(client, fresh.doc, config, fresh.repo.repo, port, await effectivePorts(config.environment), fresh.doc.previewBackup, ctx)
+                failedAttempt.attempt = reserved.attempt
                 await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "previewBuild.port": port, "previewBuild.prepared": true } })
             }
             step = null
@@ -1091,6 +1101,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
             await update(doc, { stage: "plan_review", runState: "idle", pendingFeedback: null }, { $push: { plans: { version, text, feedback: doc.pendingFeedback ?? null, createdAt: new Date() } } })
             // Plano pronto não ocupa vaga: a próxima mesa da central pode executar.
             pumpQueue(doc.centralId)
+            // Agente Arquiteto: diagrama do plano pronto, para a análise do plano (em paralelo; nunca atrasa a mesa).
+            runAfterResponse("architect-plan-ready", async () => (await architectModule()).onPlanReady(id))
             return null
         }
         case "implementing": {
@@ -1433,13 +1445,18 @@ export async function implement(id: string, additionalInfo?: string, fileIds?: s
     // Informações adicionais digitadas ao aprovar o plano vão no prompt de implementação.
     const info = additionalInfo?.trim() || null
     const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
+    const approvedPlanVersion = loaded.doc.plans?.length ?? 1
     await launchOrQueue(
         loaded,
         "implement",
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, loaded.doc.plans?.length ?? 1, info), ...fileIdsOf(files) },
+        { stage: "implementing", text: implementPrompt(loaded.config, ctx, approvedPlanVersion, info), ...fileIdsOf(files) },
         { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
     )
+    // A versão aprovada vale na hora, mesmo com a mesa aguardando vaga (o Agente Arquiteto lê dela).
+    await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { approvedPlanVersion } })
     await claimAgenticFiles(files, { workbenchId: id })
+    // Agente Arquiteto: reserva do disparo do plano pronto (só gera se o plano ainda não tem diagrama).
+    runAfterResponse("architect-plan-approved", async () => (await architectModule()).onPlanApproved(id))
     return getWorkbench(id)
 }
 
@@ -1853,6 +1870,8 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await removeWorkbenchSessions(current)
     // Sessões que rodadas do Agente Adversário ainda seguram (melhor esforço; o histórico fica).
     await (await adversaryModule()).removeWorkbenchReviewSessions(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao excluir sessões do agente adversário", { workbenchId: id, error: errorText(error) }))
+    // Gerações do Agente Arquiteto: aborta e exclui as sessões pendentes (melhor esforço; as versões ficam no histórico).
+    await (await architectModule()).cleanupWorkbenchDiagrams(id).catch((error: unknown) => centralLogger(doc.centralId, doc.taskCode).warn("Falha ao limpar o agente arquiteto da mesa", { workbenchId: id, error: errorText(error) }))
     await releasePreviewPort(id)
     await dropWorkbenchEvents(id)
     await trackBuild(id, () => dropBuilds(id))

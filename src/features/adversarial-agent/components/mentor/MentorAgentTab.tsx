@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { useForm, type UseFormReturn } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { GraduationCap, Info, Loader2, Save, Undo2 } from "lucide-react"
@@ -18,9 +18,8 @@ import type { AiTab } from "@/features/ai/constants"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
 import { MENTOR_AI_TAB } from "../../mentor/constants"
 import { DEFAULT_MENTOR_SETTINGS, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
-import type { AdversarialSettings } from "../../schemas"
 import { useMentorSettings, useSaveMentorSettings } from "../../hooks/useMentor"
-import { ScopeCard } from "../settings/ScopeCard"
+import { ScopeCard } from "@/features/ai/components/agent-settings/ScopeCard"
 import { MentorContextSection } from "./MentorContextSection"
 import { MentorDeciderCard } from "./MentorDeciderCard"
 import { MentorRouterCard } from "./MentorRouterCard"
@@ -106,8 +105,7 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                             <MentorDeciderCard form={form} providers={providers} />
                             <MentorRouterCard form={form} providers={providers} />
                             <MentorWriterCard form={form} providers={providers} />
-                            {/* O cartão de centrais só usa `scope.*`, igual nas duas configurações. */}
-                            <ScopeCard form={form as unknown as UseFormReturn<AdversarialSettings>} id="mentor" description="O Mentor avalia só as mesas das centrais escolhidas." listLabel="Centrais com o Agente Mentor" />
+                            <ScopeCard form={form} id="mentor" description="O Mentor avalia só as mesas das centrais escolhidas." listLabel="Centrais com o Agente Mentor" />
                         </>
                     )}
                     {section === "contexto" && <MentorContextSection form={form} />}

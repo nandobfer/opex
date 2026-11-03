@@ -69,7 +69,7 @@ export function selfMemorySessionPermissions(policy: { overrides: Readonly<Recor
 
 type Resolver = (opencodeSessionId: string) => Promise<Omit<SelfMemoryContext, "onChange"> & { notify?: (message: string) => void } | null>
 
-/** Sessão do OpenCode → agente e turno. Ordem: mesa, fork, revisão do Adversário, Agente Maddox. */
+/** Sessão do OpenCode → agente e turno. Ordem: mesa, fork, revisão do Adversário, diagrama do Arquiteto, Agente Maddox. */
 const resolvers: Resolver[] = [
     async (id) => {
         const { AgenticWorkbench } = await import("@/lib/db/models/Agentic")
@@ -114,6 +114,20 @@ const resolvers: Resolver[] = [
             actorId: getLocalUser().id,
             auditContext: { mesa: doc.workbenchId, revisao: reviewId, ...(doc.taskCode ? { tarefa: doc.taskCode } : {}) },
             notify: (message) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(doc.workbenchId, { type: "notice", level: "info", message })),
+        }
+    },
+    async (id) => {
+        const { ArchitectDiagram } = await import("@/features/architect-agent/server/models")
+        const doc = await ArchitectDiagram.findOne({ sessionId: id }).lean<{ _id: unknown; workbenchId: string; taskCode?: string; version?: number }>()
+        if (!doc) return null
+        const diagramId = String(doc._id)
+        return {
+            consumer: "arquiteto",
+            turn: { kind: "review" },
+            label: `${MEMORY_CONSUMER_DEFS.arquiteto.label}${doc.taskCode ? ` · ${doc.taskCode}` : ""}`,
+            turnKey: `arch:${diagramId}`,
+            actorId: getLocalUser().id,
+            auditContext: { mesa: doc.workbenchId, arquitetura: diagramId, ...(doc.taskCode ? { tarefa: doc.taskCode } : {}) },
         }
     },
     async (id) => {

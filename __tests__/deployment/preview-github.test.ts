@@ -87,6 +87,35 @@ describe('prévia remota', () => {
     expect(mocks.exec).not.toHaveBeenCalled()
   })
 
+  it('estado da tentativa apagado no meio da execução: falha com mensagem clara, sem publicar', async () => {
+    mocks.exec.mockImplementation((name: string, args: string[]) => {
+      if (name === 'git') {
+        if (args[0] === 'status') return ''
+        if (args[0] === 'rev-parse') return sha
+        if (args[0] === 'branch') return state.branch
+        return ''
+      }
+      if (name === 'gh' && args[0] === 'repo') return state.repo
+      if (name === 'gh' && args[0] === 'api') return 'main'
+      // A reserva some enquanto o workflow roda (o app invalidou a tentativa).
+      if (name === 'gh' && args[1] === 'view') {
+        rmSync(statePath, { force: true })
+        return JSON.stringify({ status: 'completed', conclusion: 'success' })
+      }
+      if (name === 'gh' && args[1] === 'list') return JSON.stringify([{ databaseId: 9, displayTitle: 'preview-one' }])
+      if (name === 'gh' && args[1] === 'download') {
+        const target = args[args.indexOf('--dir') + 1]
+        const archive = Buffer.from('image')
+        writeFileSync(join(target, 'image.tar.gz'), archive)
+        writeFileSync(join(target, 'manifest.json'), JSON.stringify({ attempt: 'one', sha, image: 'opex-preview:one', checksum: createHash('sha256').update(archive).digest('hex') }))
+        return ''
+      }
+      return ''
+    })
+    await expect(runPreview(statePath, 'one')).rejects.toThrow('Tentativa cancelada ou substituída')
+    expect(mocks.exec.mock.calls.some(([name, args]) => name === 'docker' && (args as string[]).includes('load'))).toBe(false)
+  })
+
   it('tentativa substituída não publica nem sobrescreve a nova reserva', async () => {
     writeFileSync(state.currentPath, 'new-attempt')
     await expect(runPreview(statePath, 'one')).rejects.toThrow('substituída')
