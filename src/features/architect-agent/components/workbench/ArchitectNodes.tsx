@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { ARCHITECT_GROUP_LAYER_LABELS, ARCHITECT_NODE_KIND_LABELS, ARCHITECT_NODE_STATUS_LABELS } from "../../constants"
 import type { ArchitectGroup, ArchitectNode as GraphNode } from "../../graph"
 import { ARCHITECT_NODE_KIND_ICONS } from "../icons"
+import { NODE_SIZE_STYLE } from "../../layout"
 import { enterDelay, isDimmed, useDiagramHighlight } from "./diagram-context"
 
 /** Nós do canvas do Agente Arquiteto (componentes React com os tokens do tema escuro). */
@@ -58,8 +59,9 @@ function ItemNodeView({ id, data }: NodeProps<ItemNode>) {
             initial={highlight.reducedMotion ? false : { opacity: 0, scale: highlight.live ? 0.6 : 0.92 }}
             animate={data.leaving ? { opacity: 0, scale: 0.85 } : { opacity: dimmed ? 0.25 : 1, scale: 1 }}
             transition={{ duration: 0.2, delay: highlight.live ? 0 : enterDelay(data.rank, highlight.reducedMotion) }}
+            style={NODE_SIZE_STYLE}
             className={cn(
-                "flex h-[68px] w-[220px] flex-col justify-center gap-1 rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm",
+                "flex flex-col gap-1 overflow-hidden rounded-lg border bg-card px-3 py-2 text-card-foreground shadow-sm",
                 node.kind === "objective" && "border-primary bg-primary/10",
                 node.status === "new" && node.kind !== "objective" && "border-primary/70",
                 node.status === "changed" && "border-dashed border-primary/60",
@@ -67,21 +69,24 @@ function ItemNodeView({ id, data }: NodeProps<ItemNode>) {
             )}
         >
             <Handles />
-            <div className="flex min-w-0 items-center gap-1.5">
-                <Icon className={cn("h-3.5 w-3.5 shrink-0", node.kind === "risk" ? "text-destructive" : "text-primary")} aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium" title={node.label}>
+            {/* Título com a largura toda, em até 2 linhas; o selo fica na linha de baixo e nunca o cobre. */}
+            <div className="flex min-w-0 items-start gap-1.5" data-testid={`architect-node-title-row-${id}`}>
+                <Icon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", node.kind === "risk" ? "text-destructive" : "text-primary")} aria-hidden />
+                <span className="line-clamp-2 min-w-0 flex-1 break-words text-xs leading-4 font-medium" title={node.label} data-testid={`architect-node-label-${id}`}>
                     {node.label}
                 </span>
-                <StatusBadge status={node.status} />
             </div>
-            {/* Diagrama de ideias: o tipo e o começo da descrição (nunca arquivos). */}
-            <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+            {/* Diagrama de ideias: o tipo, o começo da descrição (nunca arquivos) e o selo Novo/Alterado. */}
+            <div className="mt-auto flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
                 <span className="shrink-0">{ARCHITECT_NODE_KIND_LABELS[node.kind]}</span>
                 {node.detail && (
-                    <span className="min-w-0 truncate" title={node.detail}>
+                    <span className="min-w-0 flex-1 truncate" title={node.detail}>
                         · {node.detail}
                     </span>
                 )}
+                <span className="ml-auto flex shrink-0">
+                    <StatusBadge status={node.status} />
+                </span>
             </div>
         </motion.div>
     )
@@ -125,7 +130,8 @@ function CollapsedNodeView({ id, data }: NodeProps<CollapsedNode>) {
             initial={highlight.reducedMotion ? false : { opacity: 0, scale: 0.92 }}
             animate={data.leaving ? { opacity: 0, scale: 0.85 } : { opacity: dimmed ? 0.25 : 1, scale: 1 }}
             transition={{ duration: 0.2, delay: highlight.live ? 0 : enterDelay(data.rank, highlight.reducedMotion) }}
-            className="flex h-[68px] w-[220px] items-center gap-2 rounded-xl border border-dashed border-primary/50 bg-primary/5 px-3"
+            style={NODE_SIZE_STYLE}
+            className="flex items-center gap-2 rounded-xl border border-dashed border-primary/50 bg-primary/5 px-3"
         >
             <Handles />
             <button type="button" className="nodrag flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-medium" onClick={() => highlight.onToggleGroup(data.groupId)} aria-label={`Expandir o grupo ${data.label}`}>

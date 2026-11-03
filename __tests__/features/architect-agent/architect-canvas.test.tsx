@@ -22,7 +22,7 @@ import { flowSpies } from '../../helpers/xyflow-interactive'
 import { buildNodes } from '@/features/architect-agent/components/workbench/ArchitectCanvas'
 import { ARCHITECT_GROUP_NODE_TYPE, ARCHITECT_NODE_TYPES } from '@/features/architect-agent/components/workbench/ArchitectNodes'
 import { toViewGraph } from '@/features/architect-agent/filters'
-import { layoutArchitecture } from '@/features/architect-agent/layout'
+import { NODE_HEIGHT, NODE_WIDTH, layoutArchitecture } from '@/features/architect-agent/layout'
 
 const allKinds = { kinds: [...ARCHITECT_NODE_KINDS], onlyChanges: false }
 const view = (props: { view?: ArchitectView; filter?: typeof allKinds; diagramId?: string } = {}) => (
@@ -84,8 +84,8 @@ describe('ArchitectDiagramView', () => {
     render(view({ view: 'mindmap' }))
     expect(screen.queryByTestId('architect-group-g-ui')).toBeNull()
     const root = screen.getByTestId('rf-node-objective')
-    expect(Number(root.getAttribute('data-x')) + 110).toBeCloseTo(0)
-    expect(Number(root.getAttribute('data-y')) + 34).toBeCloseTo(0)
+    expect(Number(root.getAttribute('data-x')) + NODE_WIDTH / 2).toBeCloseTo(0)
+    expect(Number(root.getAttribute('data-y')) + NODE_HEIGHT / 2).toBeCloseTo(0)
   })
 
   it('arrastar grava a posição só no navegador, por mesa, versão e visão, e "Restaurar layout" limpa', () => {
@@ -173,6 +173,38 @@ describe('diagrama de ideias na tela', () => {
     const panel = screen.getByRole('complementary', { name: 'Detalhes de Aba "Arquitetura"' })
     expect(panel.textContent).not.toContain('src/')
     expect(panel.textContent).not.toContain('Arquivos')
+  })
+})
+
+describe('título do nó (OPE-118)', () => {
+  const longLabel = 'Configurações para categorias criadas pelos agentes do Opex'
+  const withLongLabel = () => {
+    const graph = sampleGraph()
+    return { ...graph, nodes: graph.nodes.map((item) => (item.id === 'tab' ? { ...item, label: longLabel } : item)) }
+  }
+
+  it('quebra o título em até 2 linhas, sem cortar numa linha só, com o texto inteiro no DOM', () => {
+    render(<ArchitectDiagramView workbenchId="w1" diagramId="d1" graph={withLongLabel()} view="architecture" filter={allKinds} />)
+    const label = screen.getByTestId('architect-node-label-tab')
+    expect(label.textContent).toBe(longLabel)
+    expect(label.getAttribute('title')).toBe(longLabel)
+    expect(label.classList.contains('line-clamp-2')).toBe(true)
+    expect(label.classList.contains('truncate')).toBe(false)
+  })
+
+  it('o selo Novo/Alterado fica fora da linha do título', () => {
+    render(view())
+    const titleRow = screen.getByTestId('architect-node-title-row-tab')
+    expect(titleRow.textContent).not.toContain('Novo')
+    expect(node('tab').textContent).toContain('Novo')
+    expect(screen.getByTestId('architect-node-title-row-view').textContent).not.toContain('Alterado')
+    expect(node('view').textContent).toContain('Alterado')
+  })
+
+  it('o cartão tem o mesmo tamanho que o layout reserva', () => {
+    render(view())
+    expect(node('tab').style.width).toBe(`${NODE_WIDTH}px`)
+    expect(node('tab').style.height).toBe(`${NODE_HEIGHT}px`)
   })
 })
 
