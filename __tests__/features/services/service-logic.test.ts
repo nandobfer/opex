@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest"
-import { computeServiceAmounts, formatHoursInput, formatMoneyInput, parseHoursInput, parseMoneyInput, todayDateInput } from "@/features/services/logic"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { financeQueryRange } from "@/features/finance/filters"
+import { formatDate } from "@/features/tasks/format"
+import {
+    computeServiceAmounts,
+    formatHoursInput,
+    formatMoneyInput,
+    formatServiceDate,
+    parseHoursInput,
+    parseMoneyInput,
+    serviceDateFromInput,
+    serviceDateKey,
+    todayDateInput,
+} from "@/features/services/logic"
 
 /**
  * Regras puras dos Serviços: a relação dos três campos reativos (o último editado manda) e a
@@ -80,5 +92,51 @@ describe("parseMoneyInput / formatMoneyInput", () => {
 describe("todayDateInput", () => {
     it("devolve o dia local em yyyy-MM-dd", () => {
         expect(todayDateInput(new Date(2026, 9, 5))).toBe("2026-10-05")
+    })
+})
+
+describe("data do serviço sem deslocamento de fuso (OPE-125, America/Sao_Paulo)", () => {
+    const previousTz = process.env.TZ
+    beforeAll(() => {
+        process.env.TZ = "America/Sao_Paulo"
+    })
+    afterAll(() => {
+        process.env.TZ = previousTz
+    })
+
+    it("grava o dia escolhido ao meio-dia UTC, inclusive o 1º e o último dia do mês", () => {
+        expect(serviceDateFromInput("2026-11-01")?.toISOString()).toBe("2026-11-01T12:00:00.000Z")
+        expect(serviceDateFromInput("2026-10-31")?.toISOString()).toBe("2026-10-31T12:00:00.000Z")
+    })
+
+    it("recusa data malformada ou inexistente", () => {
+        expect(serviceDateFromInput("2026-13-01")).toBeNull()
+        expect(serviceDateFromInput("2026-02-30")).toBeNull()
+        expect(serviceDateFromInput("01/11/2026")).toBeNull()
+    })
+
+    it("exibe o dia gravado (01/11) também na formatação local, e a chave volta ao dia escolhido", () => {
+        const stored = serviceDateFromInput("2026-11-01")!.toISOString()
+        expect(formatServiceDate(stored)).toBe("01/11/2026")
+        expect(formatDate(stored)).toBe("01/11/2026")
+        expect(serviceDateKey(stored)).toBe("2026-11-01")
+        expect(formatServiceDate(null)).toBe("—")
+    })
+
+    it("registro antigo à meia-noite UTC ainda é exibido no dia escolhido", () => {
+        expect(formatServiceDate("2026-11-01T00:00:00.000Z")).toBe("01/11/2026")
+    })
+
+    it("o período local do mês inclui o 1º e o último dia e exclui os vizinhos", () => {
+        const range = financeQueryRange({ from: "2026-11-01", to: "2026-11-30" })
+        const inside = (value: string) => {
+            const time = serviceDateFromInput(value)!.getTime()
+            return time >= new Date(range.from).getTime() && time <= new Date(range.to).getTime()
+        }
+        expect(range.from).toBe("2026-11-01T03:00:00.000Z")
+        expect(inside("2026-11-01")).toBe(true)
+        expect(inside("2026-11-30")).toBe(true)
+        expect(inside("2026-10-31")).toBe(false)
+        expect(inside("2026-12-01")).toBe(false)
     })
 })

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { SERVICE_CALC_ORIGINS, SERVICE_CALC_ORIGIN_LABELS } from "@/features/services/constants"
+import { serviceDateKey } from "@/features/services/logic"
 import { serviceWriteSchema, type ServiceWriteInput } from "@/features/services/schemas"
 import { createService, getService, listServiceAggregates, requestServiceAi, setServiceArchived, updateService } from "@/features/services/server/service"
 import type { ServiceDto } from "@/features/services/types"
@@ -36,7 +37,7 @@ function slimService(service: ServiceDto) {
     return {
         ...service,
         description: clipText(service.description, 8000),
-        serviceDate: service.serviceDate.slice(0, 10),
+        serviceDate: serviceDateKey(service.serviceDate),
     }
 }
 
@@ -61,7 +62,7 @@ export const serviceTools = [
             return {
                 total: rows.length,
                 returned: Math.min(limit, rows.length),
-                services: rows.slice(0, limit).map((row) => ({ ...row, project: row.project?.name ?? null, serviceDate: new Date(row.serviceDate).toISOString().slice(0, 10) })),
+                services: rows.slice(0, limit).map((row) => ({ ...row, project: row.project?.name ?? null, serviceDate: serviceDateKey(row.serviceDate) })),
             }
         },
     }),
@@ -124,7 +125,7 @@ export const serviceTools = [
                 projectId: current.project?.id ?? null,
                 taskId: current.task?.id ?? null,
                 description: current.description,
-                serviceDate: current.serviceDate.slice(0, 10),
+                serviceDate: serviceDateKey(current.serviceDate),
                 origin: "hours",
                 hours: current.hours,
                 clientHours: current.clientHours,

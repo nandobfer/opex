@@ -14,7 +14,7 @@ import { ownerAttachmentActor } from "@/features/tasks/attachments/server/actor"
 import { nextProjectCode } from "@/features/tasks/server/service"
 import type { ProjectRef } from "@/features/tasks/types"
 import { SERVICE_AUDIT_ENTITY, SERVICE_CODE_COUNTER, SERVICE_CODE_PREFIX, SERVICES_UPDATED_EVENT } from "../constants"
-import { computeServiceAmounts } from "../logic"
+import { computeServiceAmounts, serviceDateFromInput } from "../logic"
 import type { ServiceWriteInput } from "../schemas"
 import type { ServiceDto, ServiceTaskRef } from "../types"
 
@@ -80,8 +80,8 @@ function projectRef(project: { _id: unknown; name: string; repo: string; sigla: 
 
 /** Converte a data do formulário (`yyyy-MM-dd`) no instante do dia (meia-noite UTC). */
 function dateFromInput(value: string): Date {
-    const date = new Date(`${value}T00:00:00.000Z`)
-    if (Number.isNaN(date.getTime())) throw new DomainError(400, "Data inválida", "INVALID_DATE")
+    const date = serviceDateFromInput(value)
+    if (!date) throw new DomainError(400, "Data inválida", "INVALID_DATE")
     return date
 }
 

@@ -43,6 +43,14 @@ Regras de borda (`computeServiceAmounts`, `logic.ts`, puro):
 - **`code`**: com repositório e sigla, segue a **mesma sequência das tarefas** (`Project.taskSeq`,
   via `nextProjectCode`); sem repositório (ou sem sigla), `SRV-{n}` pelo **contador global**
   (`counters`, `src/lib/db/models/Counter.ts`).
+- **`serviceDate`** é uma **data sem hora**: o formulário e o Agente Opex enviam `yyyy-MM-dd`, e o
+  servidor grava ao **meio-dia UTC** (`serviceDateFromInput` em `src/features/services/logic.ts`), que
+  cai no mesmo dia de calendário de UTC−11 a UTC+11. Assim o período do Financeiro, do dashboard e do
+  portal (início/fim do dia no fuso do navegador) inclui o serviço no **1º e no último dia** e nada
+  recua um dia em America/Sao_Paulo. A exibição usa `formatServiceDate` (a própria data, sem fuso) e
+  a leitura como `yyyy-MM-dd` usa `serviceDateKey`. Data inexistente → 400 `INVALID_DATE`. Os
+  registros antigos, gravados à meia-noite UTC, são movidos para o meio-dia pela migração
+  `normalize-service-dates` (idempotente, em `dbConnect`).
 - **Soft delete** (`archived: true`): some das somas/listas/dashboards/portal, preservando registro e
   anexos; restaurável pelo filtro **"Mostrar arquivados"** do Financeiro.
 
