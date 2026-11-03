@@ -62,6 +62,10 @@ export interface ConsumptionEvent {
     /** Canais que entregaram ao menos uma memória (a partícula volta ao agente). */
     delivered: string[]
     memoryIds: string[]
+    /** Ids da faixa 2 (só título), no contexto (OPE-117). */
+    titleIds?: string[]
+    /** `version` do bloco entregue (OPE-117). */
+    version?: string
 }
 
 export type UniverseRef = { kind: "channel"; slug: string } | { kind: "agent"; id: string }

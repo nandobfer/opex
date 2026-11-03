@@ -20,10 +20,18 @@ describe('catálogo de operações', () => {
     }
   })
 
-  it('só exclusões, arquivamentos e a revogação são destrutivas, todas com a frase de confirmação', () => {
+  it('só exclusões, arquivamentos, a revogação e a rotação são destrutivas, todas com a frase de confirmação', () => {
     const destructive = ENGRAMIND_OPERATIONS.filter((op) => op.risk === 'destructive').map((op) => op.id).sort()
-    expect(destructive).toEqual(['archive_channel', 'archive_memory', 'delete_agent', 'delete_app', 'delete_channel', 'delete_memory', 'revoke_token'].sort())
+    expect(destructive).toEqual(['archive_channel', 'archive_memory', 'delete_agent', 'delete_app', 'delete_channel', 'delete_memory', 'revoke_token', 'rotate_token'].sort())
     for (const op of ENGRAMIND_OPERATIONS.filter((item) => item.risk === 'destructive')) expect(op.summarize?.({ channel: 'eng/x', memory: 'm_1', app: 'a', agent: 'a/b', token: 'tk_1' } as never)).toBeTruthy()
+  })
+
+  it('OPE-117: run_consolidation e rotate_token seguem o contrato da 0.11.0', () => {
+    expect(matchEngramindRoute('POST', ['consolidation', 'run'])?.operation.id).toBe('run_consolidation')
+    expect(matchEngramindRoute('POST', ['tokens', 'tk_1', 'rotate'])).toMatchObject({ operation: { id: 'rotate_token' }, params: { token: 'tk_1' } })
+    const run = ENGRAMIND_OPERATIONS.find((op) => op.id === 'run_consolidation')!
+    expect(run.request({ channel: 'eng/x', dry_run: true } as never)).toEqual({ path: '/v1/consolidation/run', body: { channel: 'eng/x', dry_run: true } })
+    expect(run.input.safeParse({ tasks: ['outra'] }).success).toBe(false)
   })
 
   it('a rota do Opex encontra a operação certa (literal vence parâmetro)', () => {

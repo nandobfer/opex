@@ -357,6 +357,7 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         await syncDeveloperMemories(client, fork.sessionId, fork.centralId, {
             directories: [fork.sessionDirectory],
             notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+            focus: { taskId: fork.taskId, code: fork.taskCode, stage: `Fork ${fork.number}` },
         }),
         text,
     )

@@ -17,6 +17,8 @@ export async function publishConsumption(event: ConsumptionEvent): Promise<void>
         channels: [...new Set(event.channels)],
         delivered: [...new Set(event.delivered)],
         memoryIds: [...new Set(event.memoryIds)],
+        ...(event.titleIds?.length ? { titleIds: [...new Set(event.titleIds)] } : {}),
+        ...(event.version ? { version: event.version } : {}),
     }
     if (!payload.memoryIds.length) {
         engramindLog.info({ agent: payload.agent, kind: payload.kind }, "[engramind] consumo sem memórias entregues: nada a publicar")

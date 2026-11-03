@@ -8,7 +8,7 @@ import { JSON_RPC_ERRORS, MCP_UNAUTHORIZED_CODE, OPENCODE_SESSION_META, handleMc
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { AI_AGENT_IDS, MEMORY_CONSUMER_DEFS } from "../../agents"
-import { SELF_MEMORY_TOOL_NAMES, selfMemoryToolConfirms, type SelfMemoryToolName } from "../../self-memory"
+import { SELF_MEMORY_TOOL_NAMES, isSelfMemoryReadTool, selfMemoryToolConfirms, type SelfMemoryToolName } from "../../self-memory"
 import { selfMemoryEnabled } from "./settings"
 import { selfMemoryTools, type SelfMemoryContext } from "./tools"
 
@@ -56,13 +56,19 @@ const isSelfMemoryTool = (name: string): name is SelfMemoryToolName => (SELF_MEM
  * Regras da sessão do Maddox para as ferramentas de memória própria: desligada → `deny`; pede confirmação →
  * `ask` (Confirmar/Cancelar no chat); demais → `allow`.
  */
-export function selfMemorySessionPermissions(policy: { overrides: Readonly<Record<string, boolean>>; disabled: ReadonlySet<string> }): { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] {
+/**
+ * Regras da sessão do OpenCode para as ferramentas do MCP. Com o aprendizado desligado (`write: false`), as
+ * de gravação viram `deny`: o catálogo do MCP é único por diretório (não muda por sessão), e assim o Maddox
+ * nem as chama nem pede ao dono a confirmação de algo que o servidor recusaria.
+ */
+export function selfMemorySessionPermissions(policy: { overrides: Readonly<Record<string, boolean>>; disabled: ReadonlySet<string> }, options: { write?: boolean } = {}): { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] {
+    const write = options.write !== false
     return [
         { action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}*`, resource: "*", effect: "allow" },
         ...SELF_MEMORY_TOOL_NAMES.map((name) => ({
             action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}${name}`,
             resource: "*",
-            effect: policy.disabled.has(name) ? ("deny" as const) : selfMemoryToolConfirms(name, policy.overrides) ? ("ask" as const) : ("allow" as const),
+            effect: policy.disabled.has(name) || (!write && !isSelfMemoryReadTool(name)) ? ("deny" as const) : selfMemoryToolConfirms(name, policy.overrides) ? ("ask" as const) : ("allow" as const),
         })),
     ]
 }
@@ -180,7 +186,9 @@ export async function callSelfMemoryTool(name: string, args: Record<string, unkn
         if (!sessionId) throw new SessionRefusal("Chamada sem a sessão do OpenCode: as memórias só atendem um agente do Opex.")
         const context = await selfMemoryContextOfSession(sessionId)
         if (!context) throw new SessionRefusal("Esta sessão do OpenCode não é de um agente do Opex (mesa, fork, revisão do Adversário ou Agente Maddox).")
-        if (!(await selfMemoryEnabled(context.consumer))) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado.`)
+        // Leitura (faixa de títulos) vale sempre que o agente recebe contexto; gravar exige o aprendizado autônomo.
+        const write = isSelfMemoryReadTool(name) ? true : await selfMemoryEnabled(context.consumer)
+        if (!write) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado: só as ferramentas de leitura (get_hints, get_memory, search_memories) atendem.`)
         const tool = selfMemoryTools(context).find((item) => item.name === name)
         if (!tool || !isSelfMemoryTool(name)) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
         const policy = await selfMemoryToolPolicy()

@@ -73,6 +73,7 @@ const memory = (id: string, channel: string, extra: Record<string, unknown> = {}
 })
 let memories: ReturnType<typeof memory>[]
 let centrals: { id: string; sigla: string; projectName: string; repo: string | null }[] = []
+let activity: { agent: string; total: number; last7d: number }[] = []
 
 const respond = (url: string) => {
   if (url === '/engramind/channels') return { channels, next_cursor: null }
@@ -82,6 +83,7 @@ const respond = (url: string) => {
   if (url === '/engramind/memories') return { memories, next_cursor: null }
   if (url === '/engramind/settings') return { settings: [{ key: 'consolidation.stale_after_days', value: 30 }, { key: 'categories.list', value: [{ key: 'PROJECT_RULES', label: 'Regras', priority: 1 }] }, { key: 'memory.text_min', value: 3 }, { key: 'memory.text_max', value: 200 }] }
   if (url === '/engramind/memory-usage') return {}
+  if (url === '/engramind/agent-activity') return activity.map((row) => ({ lastWriteAt: null, delivery: null, selfMemory: true, stale: false, ...row }))
   if (url === '/agentic/centrals') return centrals
   if (url.startsWith('/engramind/memories/')) return memories.find((item) => item.id === decodeURIComponent(url.slice('/engramind/memories/'.length)))
   return {}
@@ -116,11 +118,30 @@ beforeEach(() => {
   pusher.handlers.clear()
   nav.params = new URLSearchParams()
   memories = [memory('m_1', 'opex'), memory('m_2', 'agentes/opex/global'), memory('m_3', 'opex', { status: 'archived' })]
+  activity = []
   net.get.mockImplementation(async (url: string) => ({ data: { data: respond(url) } }))
 })
 afterEach(cleanup)
 
 describe('visão inicial', () => {
+  it('OPE-117: node do agente do Opex mostra "N gravadas · M acessíveis" (zero explícito); agente de outro app só as acessíveis', async () => {
+    mount()
+    const opex = await screen.findByTestId('agent-counts-opex/opex')
+    await waitFor(() => expect(opex.textContent).toBe('0 gravadas · 2 acessíveis'))
+    expect(screen.getByTestId('agent-counts-outro/bot').textContent).toBe('1 acessível')
+    expect(screen.queryByTestId('agent-written-outro/bot')).toBeNull()
+    expect(screen.getByTestId('agent-node-opex/opex').className).toContain('w-[11.25rem]')
+  })
+
+  it('OPE-117: a contagem de gravadas atualiza depois do engramind-updated (memória criada) e o tooltip traz os 7 dias', async () => {
+    mount()
+    await waitFor(() => expect(screen.getByTestId('agent-counts-opex/opex').textContent).toContain('0 gravadas'))
+    activity = [{ agent: 'opex', total: 4, last7d: 1 }]
+    emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await waitFor(() => expect(screen.getByTestId('agent-counts-opex/opex').textContent).toContain('4 gravadas'))
+    expect(screen.getByTestId('agent-written-opex/opex').getAttribute('title')).toBe('1 nos últimos 7 dias')
+  })
+
   it('agentes ativos de todos os apps sem o prefixo "Agente", canais ativos e um link por canal casado', async () => {
     mount()
     expect((await screen.findByTestId('agent-node-opex/opex')).textContent).toContain('Opex')

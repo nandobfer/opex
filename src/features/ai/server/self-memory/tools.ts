@@ -6,6 +6,7 @@ import { firstSentence } from "../../memory-text"
 import { SELF_MEMORY_TOOL_METAS, SELF_MEMORY_TURN_LIMIT } from "../../self-memory"
 import type { MemoryDto, MemoryMutationResult } from "../../types"
 import { createAgentMemory, deleteAgentMemory, listAgentMemories, updateAgentMemory } from "../agent-memory-service"
+import { selfMemoryReadTools } from "./read-tools"
 
 /**
  * Ferramentas "Memória própria" (aprendizado autônomo, OPE-104): o agente grava, edita, fixa,
@@ -102,8 +103,17 @@ async function outsideContext(context: Pick<SelfMemoryContext, "consumer" | "tur
     }
 }
 
-/** Ferramentas do turno (as mesmas para o Agente Opex nativo e para o MCP de memórias). */
-export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAgentId[]): OpexTool[] {
+/**
+ * Ferramentas do turno (as mesmas para o Agente Opex nativo e para o MCP de memórias): as de leitura
+ * sempre; as de gravação só com `write` (aprendizado autônomo ligado, padrão).
+ */
+export function selfMemoryTools(context: SelfMemoryContext, listingLists?: AiAgentId[], options: { write?: boolean } = {}): OpexTool[] {
+    const read = selfMemoryReadTools({ consumer: context.consumer, turn: context.turn })
+    if (options.write === false) return read
+    return [...selfMemoryWriteTools(context, listingLists), ...read]
+}
+
+function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgentId[]): OpexTool[] {
     const readable = contextListsFor(context.consumer, context.turn)
     const writable = listingLists ?? writableListsFor(context.consumer, context.turn)
     const writableEnum = z.enum(writable as [AiAgentId, ...AiAgentId[]]).describe(`Lista: ${writable.map((id) => `${id} = ${AI_AGENTS[id].title}`).join("; ")}`)

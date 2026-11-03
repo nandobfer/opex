@@ -34,6 +34,28 @@ export async function ownTokenId(): Promise<string | null> {
     }
 }
 
+/** Papel de um token do próprio Opex: o admin da Conexão ou o token de app do provisionamento (OPE-117). */
+export async function ownTokenRole(tokenId: string): Promise<"admin" | "app" | null> {
+    if (!tokenId) return null
+    if ((await ownTokenId()) === tokenId) return "admin"
+    return (await appTokenId()) === tokenId ? "app" : null
+}
+
+/** Ids dos dois tokens do próprio Opex (selo "Este Opex" na aba Identidades). */
+export async function ownTokenIds(): Promise<{ admin: string | null; app: string | null }> {
+    return { admin: await ownTokenId(), app: await appTokenId() }
+}
+
+async function appTokenId(): Promise<string | null> {
+    try {
+        const { EngramindState, ENGRAMIND_STATE_ID, engramindDb } = await import("./models")
+        await engramindDb()
+        return (await EngramindState.findById(ENGRAMIND_STATE_ID).select({ appToken: 1 }).lean())?.appToken?.tokenId ?? null
+    } catch {
+        return null
+    }
+}
+
 export const webhookUrlOf = (opexPublicUrl: string) => `${opexPublicUrl.replace(/\/+$/, "")}${ENGRAMIND_WEBHOOK_PATH}`
 
 async function environmentName(id: string | undefined): Promise<string | null> {
@@ -66,6 +88,7 @@ export async function getConnection(): Promise<EngramindConnectionDto> {
         bootstrapPending: false,
         tokenSufficient: false,
         webhook: null,
+        appTokenId: await appTokenId(),
     }
     if (!configured) return base
     try {

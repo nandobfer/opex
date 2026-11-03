@@ -710,6 +710,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                 : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId, {
                       directories: [loaded.config.sessionDirectory, loaded.doc.sessionDirectory, loaded.doc.worktreePath],
                       notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+                      focus: { taskId: loaded.doc.taskId, code: loaded.doc.taskCode, title: loaded.doc.taskTitle, stage: WORKBENCH_STAGE_LABELS[stage] ?? stage, workbench: loaded.projectName },
                   })
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.

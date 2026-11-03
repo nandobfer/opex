@@ -99,7 +99,8 @@ export function useEngramindMutation<V, T = unknown>(request: (variables: V) => 
 
 /** Áreas a invalidar por tipo de evento (`engramind-updated`). */
 export function areasForEvent(type: string): string[] {
-    if (type.startsWith("memory.")) return ["memories", "channels"]
+    if (type.startsWith("memory.")) return ["memories", "channels", "agent-activity"]
+    if (type === "memories.context") return ["agent-activity"]
     if (type === "channel.updated") return ["channels", "memories"]
     if (type === "subscription.updated") return ["subscriptions", "agents"]
     if (type === "settings.updated") return ["settings", "channels", "status", "providers"]

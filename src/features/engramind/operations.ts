@@ -115,6 +115,8 @@ export const issueTokenInput = z
 .superRefine((value, ctx) => {
     if (value.kind === "agent" && !value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token agent exige o agente" })
     if (value.kind === "admin" && !value.app && !value.agent) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token admin" })
+    if (value.kind === "app" && !value.app) ctx.addIssue({ code: "custom", path: ["app"], message: "Informe o app do token de app" })
+    if (value.kind === "app" && value.agent) ctx.addIssue({ code: "custom", path: ["agent"], message: "Token de app não tem agente" })
 })
     .meta({ examples: [{ kind: "agent", agent: "app-a/curador", scopes: ["read", "write"] }] })
 
@@ -436,6 +438,20 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         summarize: (input) => `Revogar o token ${input.token} do Engramind (deixa de autenticar na hora)`,
         event: "identities.updated",
     }),
+    op({
+        id: "rotate_token",
+        method: "POST",
+        route: "tokens/:token/rotate",
+        area: "tokens",
+        risk: "destructive",
+        tool: "rotate_engramind_token",
+        label: "Rotacionar token do Engramind",
+        description: "Emite um token igual (mesmo app, agente, tipo, escopos, rótulo e validade) e revoga o antigo na mesma transação. O consumidor precisa receber o novo segredo; o dos tokens do próprio Opex é gravado sozinho.",
+        input: z.object({ token: tokenRef }),
+        request: (input) => ({ path: `/v1/tokens/${enc(input.token)}/rotate`, body: {} }),
+        summarize: (input) => `Rotacionar o token ${input.token} do Engramind (o antigo deixa de autenticar na hora)`,
+        event: "identities.updated",
+    }),
     // --- Canais ------------------------------------------------------------------------------
     op({
         id: "list_channels",
@@ -624,6 +640,22 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         request: (input) => ({ path: "/v1/memories/search", body: input }),
     }),
     op({
+        id: "get_hints",
+        method: "POST",
+        route: "hints",
+        area: "memories",
+        risk: "read",
+        tool: "get_engramind_hints",
+        label: "Dicas de memórias do Engramind",
+        description: "Dicas de memórias relevantes para uma mensagem ou cena (só id, título, canal e nota; sem texto). Sem embeddings, a lista vem vazia: use a busca. Leia a escolhida com get_engramind_memory.",
+        input: z.object({
+            text: z.string().trim().min(1, "Informe a mensagem ou a cena atual").max(2000, "Até 2000 caracteres"),
+            channels: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
+            limit: z.number().int().min(1).max(20).optional(),
+        }),
+        request: (input) => ({ path: "/v1/hints", body: input }),
+    }),
+    op({
         id: "get_memory",
         method: "GET",
         route: "memories/:memory",
@@ -802,6 +834,25 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         description: "Recoloca na fila um job failed, com as tentativas zeradas.",
         input: z.object({ job: z.string().trim().min(1).max(40) }),
         request: (input) => ({ path: `/v1/jobs/${enc(input.job)}/retry`, body: {} }),
+        event: "jobs.updated",
+    }),
+    op({
+        id: "run_consolidation",
+        method: "POST",
+        route: "consolidation/run",
+        area: "operation",
+        risk: "write",
+        tool: "run_engramind_consolidation",
+        label: "Executar a consolidação do Engramind",
+        description:
+            "Roda a consolidação com a configuração salva: sem channel, todos os canais com consolidation.enabled; com channel, só ele. dry_run: true devolve o plano (duplicatas, classificação, desatualizadas) sem gravar nem chamar o LLM; sem dry_run, enfileira um job por canal (already_queued quando já havia).",
+        input: z.object({
+            channel: z.string().trim().min(1).max(160).optional(),
+            dry_run: z.boolean().optional(),
+            tasks: z.array(z.enum(["duplicates", "importance", "stale"])).min(1).max(3).optional(),
+        }),
+        request: (input) => ({ path: "/v1/consolidation/run", body: input }),
+        summarize: (input) => `${input.dry_run ? "Ver o plano da" : "Executar a"} consolidação ${input.channel ? `do canal ${input.channel}` : "de todos os canais com consolidação ativa"}`,
         event: "jobs.updated",
     }),
     op({

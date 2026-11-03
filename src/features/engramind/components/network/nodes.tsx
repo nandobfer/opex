@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { AgentIcon } from "./agent-icons"
 import { ChannelName } from "./ChannelName"
+import { AGENT_NODE_SIZE_CLASS } from "./layout-classes"
 import { PulseRing } from "./live"
 import { usePositionSlide } from "./usePositionSlide"
 import type { Point } from "../../network/network-math"
@@ -45,13 +46,39 @@ function OverviewNodeShell({ look, children }: { look: OverviewNodeLook; childre
 }
 const ORIGIN: Point = { x: 0, y: 0 }
 
-export type AgentNodeData = { id: string; name: string; app: string; dimmed?: boolean } & OverviewNodeLook
+export type AgentNodeData = {
+    id: string
+    name: string
+    app: string
+    dimmed?: boolean
+    /** Memórias que o agente gravou (auditoria do Opex; só agentes do Opex): total e últimos 7 dias. */
+    written?: { total: number; last7d: number } | null
+    /** Memórias ativas dos canais que ele lê (soma das assinaturas). */
+    reachable?: number
+} & OverviewNodeLook
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+/** "N gravadas · M acessíveis" no padrão da linha "N memórias" do canal (zero explícito). */
+function AgentCounts({ data }: { data: AgentNodeData }) {
+    const reachable = data.reachable ?? 0
+    return (
+        <span className="truncate text-[10px] text-muted-foreground" data-testid={`agent-counts-${data.id}`}>
+            {data.written && (
+                <span title={`${data.written.last7d} nos últimos 7 dias`} data-testid={`agent-written-${data.id}`}>
+                    {plural(data.written.total, "gravada", "gravadas")} ·{" "}
+                </span>
+            )}
+            <span data-testid={`agent-reachable-${data.id}`}>{plural(reachable, "acessível", "acessíveis")}</span>
+        </span>
+    )
+}
 
 export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentNodeData, "agent">>) {
     const showLabel = useZoom() >= LABEL_MIN_ZOOM
     return (
         <OverviewNodeShell look={data}>
-        <div data-testid={`agent-node-${data.id}`} data-scale={data.scale ?? 1} title={data.id} className={cn("relative flex max-w-[11.25rem] cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", data.dimmed && "opacity-40")}>
+        <div data-testid={`agent-node-${data.id}`} data-scale={data.scale ?? 1} title={data.id} className={cn("relative flex cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", AGENT_NODE_SIZE_CLASS, data.dimmed && "opacity-40")}>
             <PulseRing nodeKey={`agent:${data.id}`} />
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                 <AgentIcon agent={data.id} className="h-4 w-4" />
@@ -60,6 +87,7 @@ export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentN
                 <span className="flex min-w-0 flex-col leading-tight">
                     <span className="truncate text-sm font-medium text-foreground">{data.name}</span>
                     <span className="truncate text-[10px] text-muted-foreground">{data.app}</span>
+                    <AgentCounts data={data} />
                 </span>
             )}
         </div>

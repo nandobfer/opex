@@ -33,7 +33,7 @@ describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
     mocks.context.mockResolvedValueOnce(live('- Global.\n- Da central.'))
     const { client, put, remove } = makeClient()
     const sync = await syncDeveloperMemories(client, 'ses_1', 'c1')
-    expect(mocks.context).toHaveBeenCalledWith('c1')
+    expect(mocks.context).toHaveBeenCalledWith('c1', { focus: undefined })
     expect(put).toHaveBeenCalledWith({ sessionID: 'ses_1', key: 'opex-developer-memories', value: expect.stringContaining('- Global.\n- Da central.') })
     expect(remove).not.toHaveBeenCalled()
     expect(sync.applied).toBe(true)
@@ -101,11 +101,8 @@ describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
     expect((put.mock.calls[0] as unknown as [{ value: string }])[0].value).toContain('## Memória própria (aprendizado autônomo)')
   })
 
-  it('OPE-115: sessão movida para o worktree registra o MCP no novo diretório (só com o aprendizado ligado, sem lançar)', async () => {
+  it('OPE-115/OPE-117: sessão movida para o worktree registra o MCP no novo diretório (leitura vale com o aprendizado desligado, sem lançar)', async () => {
     const { client } = makeClient()
-    await registerDeveloperMemoryMcpAt(client, '/repo/worktrees/ope-115')
-    expect(mocks.ensureMcp).not.toHaveBeenCalled()
-    mocks.selfEnabled.mockResolvedValue(true)
     await registerDeveloperMemoryMcpAt(client, '/repo/worktrees/ope-115')
     expect(mocks.ensureMcp).toHaveBeenCalledWith(client, ['/repo/worktrees/ope-115'])
     mocks.ensureMcp.mockRejectedValueOnce(new Error('OpenCode fora'))

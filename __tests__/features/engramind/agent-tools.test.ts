@@ -13,6 +13,9 @@ vi.mock('@/features/opex-agent/server/secret-reveals', () => ({ createSecretReve
 vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 const consumption = vi.hoisted(() => ({ publishConsumption: vi.fn(async () => undefined) }))
 vi.mock('@/features/engramind/server/consumption', () => consumption)
+const hints = vi.hoisted(() => ({ call: vi.fn(async (..._args: unknown[]) => ({ hints: [{ id: 'm_1', title: 'Deploy', channel: 'opex', score: 0.8 }] })), tokens: { opex: 'eng.tk_opex.s', maddox: 'eng.tk_maddox.s' } as Record<string, string | null> }))
+vi.mock('@/features/engramind/server/memory-network', () => ({ agentTokenFor: async (consumer: string) => hints.tokens[consumer] ?? null }))
+vi.mock('@/features/engramind/server/client', () => ({ engramindCall: hints.call, engramindTarget: async () => ({ baseUrl: 'http://engramind', token: 'admin' }) }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ applyOpexAiSource: mocks.apply, getOpexAiSourceState: vi.fn(), resendOpexAiKey: vi.fn() }))
 
 import { engramindTools } from '@/features/opex-agent/server/tools/engramind'
@@ -35,9 +38,9 @@ describe('ferramentas do Engramind', () => {
     expect(new Set(engramindTools.map((tool) => tool.group))).toEqual(new Set(['engramind']))
   })
 
-  it('confirmação só em excluir, arquivar e revogar', () => {
+  it('confirmação só em excluir, arquivar, revogar e rotacionar', () => {
     expect(engramindTools.filter((tool) => tool.risk === 'destructive').map((tool) => tool.name).sort()).toEqual(
-      ['archive_engramind_channel', 'archive_engramind_memory', 'delete_engramind_agent', 'delete_engramind_app', 'delete_engramind_channel', 'delete_engramind_memory', 'revoke_engramind_token'].sort(),
+      ['archive_engramind_channel', 'archive_engramind_memory', 'delete_engramind_agent', 'delete_engramind_app', 'delete_engramind_channel', 'delete_engramind_memory', 'revoke_engramind_token', 'rotate_engramind_token'].sort(),
     )
     for (const tool of engramindTools.filter((item) => item.risk === 'destructive')) expect(typeof tool.summarize).toBe('function')
   })
@@ -167,5 +170,46 @@ describe('busca de memórias pelo agente (OPE-109)', () => {
     consumption.publishConsumption.mockRejectedValueOnce(new Error('pusher fora'))
     mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'opex')] })
     await expect(find('search_engramind_memories').execute({ query: 'x' }, context)).resolves.toMatchObject({ results: [expect.anything()] })
+  })
+})
+
+describe('get_engramind_hints (OPE-117)', () => {
+  beforeEach(() => {
+    mocks.run.mockReset()
+    hints.call.mockClear()
+    hints.tokens = { opex: 'eng.tk_opex.s', maddox: 'eng.tk_maddox.s' }
+  })
+
+  it('está no Agente Opex e no Maddox do dono (leitura, sem confirmação) e fora do portal', async () => {
+    expect(find('get_engramind_hints').risk).toBe('read')
+    const { maddoxMcpCatalog } = await import('@/features/maddox-agent/server/mcp-catalog')
+    expect((await maddoxMcpCatalog('owner')).map((tool) => tool.name)).toContain('get_engramind_hints')
+    expect(OPEX_CLIENT_SERVER_TOOLS.some((tool) => tool.name === 'get_engramind_hints')).toBe(false)
+  })
+
+  it('valida o texto (1 a 2000) e o limite (1 a 20)', () => {
+    const input = find('get_engramind_hints').input
+    expect(input.safeParse({ text: '' }).success).toBe(false)
+    expect(input.safeParse({ text: 'x'.repeat(2001) }).success).toBe(false)
+    expect(input.safeParse({ text: 'deploy', limit: 21 }).success).toBe(false)
+    expect(input.safeParse({ text: 'deploy', channels: ['opex'], limit: 20 }).success).toBe(true)
+  })
+
+  it('o Agente Opex e o Maddox pedem as dicas com o próprio token de agente, não o admin', async () => {
+    await find('get_engramind_hints').execute({ text: 'deploy' }, context)
+    await find('get_engramind_hints').execute({ text: 'deploy' }, { ...context, scope: { kind: 'owner', agent: 'maddox' } as never })
+    expect(hints.call.mock.calls.map((call) => (call[2] as { target: { token: string } }).target.token)).toEqual(['eng.tk_opex.s', 'eng.tk_maddox.s'])
+    expect(hints.call.mock.calls[0]![1]).toMatchObject({ path: '/v1/hints', body: { text: 'deploy' } })
+    expect(mocks.run).not.toHaveBeenCalled()
+  })
+
+  it('por token de sistema (ou sem token do agente) segue pela operação do admin', async () => {
+    mocks.run.mockResolvedValue({ hints: [] })
+    await find('get_engramind_hints').execute({ text: 'x' }, { ...context, origin: { kind: 'api-token', tokenId: 't', nome: 'Sistema', prefixo: 'opx_' } })
+    hints.tokens.opex = null
+    await find('get_engramind_hints').execute({ text: 'x' }, context)
+    expect(mocks.run).toHaveBeenCalledTimes(2)
+    expect(mocks.run.mock.calls[0]![0]).toBe('get_hints')
+    expect(hints.call).not.toHaveBeenCalled()
   })
 })
