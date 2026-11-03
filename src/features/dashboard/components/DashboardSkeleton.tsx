@@ -1,14 +1,16 @@
 "use client"
 
 import { Skeleton } from "@/components/ui/skeleton"
+import { KPI_CARD_HEIGHT, KPI_GRID } from "@/components/metrics/layout"
+import { cn } from "@/lib/utils"
 
 /** Esqueleto da tela Dashboards (KPIs + blocos de gráficos) durante o carregamento. */
 export function DashboardSkeleton() {
     return (
         <div className="space-y-6" aria-label="Carregando dashboards">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <div className={KPI_GRID}>
                 {Array.from({ length: 9 }, (_, index) => (
-                    <Skeleton key={index} className="h-24 w-full" />
+                    <Skeleton key={index} className={cn(KPI_CARD_HEIGHT, "w-full")} />
                 ))}
             </div>
             {[0, 1].map((section) => (

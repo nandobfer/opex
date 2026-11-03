@@ -1,39 +1,25 @@
 "use client"
 
 import { useMemo } from "react"
-import { motion, useReducedMotion } from "framer-motion"
 import { GraduationCap } from "lucide-react"
-import { AvailabilityNotice } from "@/components/feedback/AvailabilityNotice"
-import { AgentPageHeader } from "@/components/list/AgentPageHeader"
 import { InfiniteListView } from "@/components/list/InfiniteListView"
 import { useUrlFilters } from "@/hooks/useUrlFilters"
-import { MENTOR_SETTINGS_HREF } from "../../mentor/constants"
+import { AgentPage, type AgentPageTab } from "@/features/agent-metrics/components/AgentPage"
 import { DEFAULT_MENTOR_RUN_FILTERS, hasMentorRunFilters, MENTOR_RUN_FILTER_SCHEMA, toMentorRunListParams } from "../../mentor/filters"
 import { useMentorRealtime, useMentorRunPages, useMentorSettings } from "../../hooks/useMentor"
 import { MentorFiltersBar } from "./MentorFiltersBar"
 import { MentorRunList } from "./MentorRunList"
 
-/**
- * Agente Mentor (`/agente-mentor`): execuções do Mentor, mais recentes primeiro, com os filtros na
- * URL (recorte feito pela API), rolagem infinita e tempo real. "Decidir" abre a sugestão para
- * aprovar ou descartar. A configuração fica em Integrações › Inteligência Artificial › Agente Mentor.
- */
-export function MentorRunsPage() {
-    const reduceMotion = useReducedMotion()
-    useMentorRealtime()
-    const settings = useMentorSettings()
+/** Aba **Execuções**: execuções do Mentor com os filtros na URL (recorte feito pela API), rolagem infinita. */
+function RunsTab() {
     const [filters, setFilters, resetFilters] = useUrlFilters(DEFAULT_MENTOR_RUN_FILTERS, MENTOR_RUN_FILTER_SCHEMA)
     const params = useMemo(() => toMentorRunListParams(filters), [filters])
     const query = useMentorRunPages(params)
     const pages = query.data?.pages ?? []
     const items = pages.flatMap((page) => page.items)
     const total = pages[0]?.total ?? 0
-    const availability = settings.data?.availability
-
     return (
-        <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <AgentPageHeader icon={GraduationCap} title="Agente Mentor" description="Avaliações dos turnos das mesas que viram memórias do Agente Adversário. Atualiza em tempo real." settingsHref={MENTOR_SETTINGS_HREF} />
-            <AvailabilityNotice reason={availability && !availability.available ? availability.reason : null} />
+        <div className="space-y-4">
             <MentorFiltersBar filters={filters} setFilters={setFilters} onClear={resetFilters} total={total} centrals={pages[0]?.centrals ?? []} />
             <InfiniteListView
                 query={query}
@@ -52,6 +38,20 @@ export function MentorRunsPage() {
             >
                 <MentorRunList items={items} />
             </InfiniteListView>
-        </motion.section>
+        </div>
     )
+}
+
+const TABS: AgentPageTab[] = [{ value: "execucoes", label: "Execuções", render: () => <RunsTab /> }]
+
+/**
+ * Agente Mentor (`/agente-mentor`): **Visão geral** (métricas, primeira aba, OPE-122) e **Execuções**
+ * (mais recentes primeiro; "Decidir" abre a sugestão para aprovar ou descartar). Tempo real. A
+ * configuração fica em Integrações › Inteligência Artificial › Mentor.
+ */
+export function MentorRunsPage() {
+    useMentorRealtime()
+    const settings = useMentorSettings()
+    const availability = settings.data?.availability
+    return <AgentPage agent="mentor" tabs={TABS} availabilityReason={availability && !availability.available ? availability.reason : null} />
 }

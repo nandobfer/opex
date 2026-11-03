@@ -21,7 +21,7 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
     useRefreshAiSkills: () => vi.fn(),
 }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ isLoading: false, data: [] }) }))
-vi.mock('@/features/ai/components/understand-task/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
+vi.mock('@/features/ai/components/shared/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
 
 import { TaskRefinementTab } from '@/features/ai/components/task-refinement/TaskRefinementTab'
 

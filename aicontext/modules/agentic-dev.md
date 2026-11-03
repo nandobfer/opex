@@ -14,6 +14,11 @@ caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferênci
 `src/features/agentic/server/preview-backup.ts`; se ele roda ou não é uma opção da central
 (`environment.backupDatabase`, OPE-72 — ver “Backup do MongoDB da prévia”).
 
+
+Página `/agente-desenvolvedor` (categoria **Agentes** da sidebar, OPE-122): Visão geral com as métricas das
+mesas concluídas (regressão, bloqueio, lições, one shot, conflito, CI, tempo por etapa — fatos gravados
+em `agent_metric_events` pelo `workflow.ts`), Histórico das mesas e Memórias — ver `modules/agent-metrics.md`.
+
 ## Configuração (Integrações › Inteligência Artificial › aba "Agente Desenvolvedor", ícone `</>` `CodeXml`)
 
 - Configuração geral em `ai_feature_settings` (`feature: "agentic-dev"`,
@@ -468,7 +473,7 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   **Tentar novamente** (reenvia a mensagem da etapa pedindo para retomar) e, depois do plano,
   **Voltar ao planejamento**.
 - **Planejamento**: só leitura; o texto do turno vira uma nova **versão do plano** (com o pedido que
-  a originou). A tarefa vai em Markdown (`buildUnderstandTaskPrompt`, **sem cortes** — opção
+  a originou). A tarefa vai em Markdown (`buildTaskContextPrompt`, **sem cortes** — opção
   `fullText`) + link. As **Informações
   adicionais** informadas ao abrir a mesa são anexadas ao **primeiro prompt** (seção própria, sem
   virar o "pedido" da versão 1) e aparecem como mensagem do usuário na saída.

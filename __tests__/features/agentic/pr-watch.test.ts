@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   reports: [] as { workbenchId: string; prNumber: number; nextCheckAt: string | null; steps: { text: string; level: string }[]; outcome: string | null; summary: string | null; failed: string | null }[],
 }))
 
+// Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
+vi.mock('@/features/agent-metrics/server/record', () => ({ recordWorkbenchEvent: vi.fn(async () => undefined), recordPrReviewReplanned: vi.fn(async () => undefined), recordAgentEvent: vi.fn(), recordAgentRun: vi.fn() }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: { find: () => ({ lean: mocks.find }) }, AgenticCentral: { find: () => ({ lean: async () => mocks.centrals() }) } }))
 vi.mock('@/features/github/client', () => ({ githubRequest: mocks.request, githubPaginate: mocks.paginate }))

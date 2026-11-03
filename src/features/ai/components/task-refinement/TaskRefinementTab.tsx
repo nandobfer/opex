@@ -15,7 +15,7 @@ import { REFINEMENT_INCLUDE_LABELS } from "../../constants"
 import { DEFAULT_TASK_REFINEMENT_SETTINGS, taskRefinementSettingsSchema, type TaskRefinementSettings } from "../../schemas"
 import { useAiProviderStatuses, useSaveTaskRefinementSettings, useTaskRefinementSettings } from "../../hooks/useAi"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
-import { ProviderModelCard } from "../understand-task/ProviderModelCard"
+import { ProviderModelCard } from "../shared/ProviderModelCard"
 import { RefinementInstructionsCard } from "./RefinementInstructionsCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }

@@ -27,7 +27,6 @@ import { useTaskBoard } from "../../hooks/useTaskBoard"
 import { useDeleteTask, useTaskDetail, useTaskOptions, useTasksRealtime, useUpdateTask } from "../../hooks/useTasks"
 import { useTaskMoveFlow } from "../../hooks/useTaskMoveFlow"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
-import { UnderstandTaskButton } from "@/features/ai/components/understand-task/UnderstandTaskButton"
 import { TaskSummaryButton } from "@/features/ai/components/task-summary/TaskSummaryButton"
 import { RefineTaskButton } from "@/features/refinement/components/RefineTaskButton"
 import { RefinementPanel } from "@/features/refinement/components/RefinementPanel"
@@ -118,7 +117,6 @@ export function TaskDetailPage({ id }: { id: string }) {
                                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                                     <TimerIndicator />
                                     <TaskColumnMenu task={task} columns={board.columns} moving={flow.movingId === task.id} onMove={(current, column) => flow.move(current, column)} size="default" />
-                                    <UnderstandTaskButton taskId={task.id} taskCode={task.code} />
                                     <RefineTaskButton taskId={task.id} onOpen={() => { setTab("spec"); setStartRefinement(true) }} />
                                     <TaskSummaryButton taskId={task.id} taskCode={task.code} />
                                     <WorkbenchButton taskId={task.id} projectId={task.project?.id ?? null} />

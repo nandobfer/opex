@@ -6,6 +6,12 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 import type { AdversarialReviewDto, AdversarialReviewListDto } from "@/features/adversarial-agent/types"
 
 const mocks = vi.hoisted(() => ({ pages: vi.fn(), settings: vi.fn(), refetch: vi.fn(), fetchNextPage: vi.fn() }))
+// OPE-122: a Visão geral (primeira aba) é da página compartilhada dos agentes; aqui o foco são as abas atuais.
+vi.mock("@/features/agent-metrics/hooks/useAgentMetrics", () => ({
+    useAgentMetrics: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+    useAgentMetricsRealtime: vi.fn(),
+    useAgentHistoryPages: vi.fn(),
+}))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("@/features/adversarial-agent/hooks/useAdversarial", () => ({
     useAdversarialReviewPages: mocks.pages,
@@ -62,7 +68,7 @@ const result = (data: AdversarialReviewListDto | undefined, extra: Record<string
 
 beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState(null, "", "/agente-adversario")
+    window.history.replaceState(null, "", "/agente-adversario?aba=revisoes")
     mocks.settings.mockReturnValue({ data: { availability: { available: true, reason: null } } })
     mocks.pages.mockReturnValue(result(page([review({ id: "a1" }), review({ id: "a2", taskCode: "OPE-11", taskTitle: "Nova tela", state: "running", decision: null })])))
 })
@@ -88,13 +94,13 @@ describe("página Agente Adversário", () => {
     })
 
     it("filtros da URL vão para a consulta; vazio com filtro oferece limpar", () => {
-        window.history.replaceState(null, "", "/agente-adversario?decisions=failed&q=login")
+        window.history.replaceState(null, "", "/agente-adversario?aba=revisoes&decisions=failed&q=login")
         mocks.pages.mockReturnValue(result(page([])))
         render(<AdversarialReviewsPage />)
         expect(mocks.pages).toHaveBeenLastCalledWith({ q: "login", decisions: "failed" })
         expect(screen.getByText("Nenhuma revisão com estes filtros")).toBeTruthy()
         fireEvent.click(screen.getAllByRole("button", { name: "Limpar filtros" }).at(-1)!)
-        expect(window.location.search).toBe("")
+        expect(window.location.search).toBe("?aba=revisoes")
         expect(mocks.pages).toHaveBeenLastCalledWith({})
     })
 
@@ -105,7 +111,7 @@ describe("página Agente Adversário", () => {
     })
 
     it("aba Memórias mostra a lista do adversário e fica na URL; voltar para Revisões mantém os filtros", () => {
-        window.history.replaceState(null, "", "/agente-adversario?q=login")
+        window.history.replaceState(null, "", "/agente-adversario?aba=revisoes&q=login")
         render(<AdversarialReviewsPage />)
         fireEvent.click(screen.getByRole("radio", { name: "Memórias" }))
         expect(screen.getByLabelText("Memórias do Agente Adversário")).toBeTruthy()
@@ -114,7 +120,7 @@ describe("página Agente Adversário", () => {
         expect(new URLSearchParams(window.location.search).get("q")).toBe("login")
         fireEvent.click(screen.getByRole("radio", { name: "Revisões" }))
         expect(screen.getByText("Corrige login")).toBeTruthy()
-        expect(new URLSearchParams(window.location.search).has("aba")).toBe(false)
+        expect(new URLSearchParams(window.location.search).get("aba")).toBe("revisoes")
     })
 
     it("?aba=memorias abre direto nas memórias", () => {

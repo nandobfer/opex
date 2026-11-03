@@ -9,6 +9,7 @@ import { memoryModel } from '../../helpers/memory-model'
 
 const store = vi.hoisted(() => ({ sessions: null as unknown, messages: null as unknown }))
 const mocks = vi.hoisted(() => ({
+  preserveConversations: vi.fn(async (_ids: readonly string[]) => {}),
   audit: vi.fn(async () => {}),
   publishAppEvent: vi.fn(async () => {}),
   publishToChannels: vi.fn(async () => {}),
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR' } }))
+// Métricas dos agentes (OPE-122): a estatística da conversa é preservada antes de apagar.
+vi.mock('@/features/agent-metrics/server/conversations', () => ({ preserveConversations: mocks.preserveConversations }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
 vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = memoryModel()

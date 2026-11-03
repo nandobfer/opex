@@ -6,6 +6,12 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 import type { MentorRunDto, MentorRunListDto } from "@/features/adversarial-agent/mentor/types"
 
 const mocks = vi.hoisted(() => ({ pages: vi.fn(), settings: vi.fn(), refetch: vi.fn(), fetchNextPage: vi.fn() }))
+// OPE-122: a Visão geral (primeira aba) é da página compartilhada dos agentes; aqui o foco são as abas atuais.
+vi.mock("@/features/agent-metrics/hooks/useAgentMetrics", () => ({
+    useAgentMetrics: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+    useAgentMetricsRealtime: vi.fn(),
+    useAgentHistoryPages: vi.fn(),
+}))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("@/features/adversarial-agent/hooks/useMentor", () => ({
     useMentorRunPages: mocks.pages,
@@ -64,7 +70,7 @@ const result = (data: MentorRunListDto | undefined, extra: Record<string, unknow
 
 beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState(null, "", "/agente-mentor")
+    window.history.replaceState(null, "", "/agente-mentor?aba=execucoes")
     mocks.settings.mockReturnValue({ data: { availability: { available: true, reason: null } } })
     mocks.pages.mockReturnValue(result(page([run({ id: "m1" }), run({ id: "m2", taskCode: "OPE-21", status: "suggested", proposal: { action: "create", memoryId: null, text: "Regra", target: "adversarial", centralId: null }, target: "adversarial" })])))
 })
@@ -91,13 +97,13 @@ describe("página Agente Mentor", () => {
     })
 
     it("filtros da URL vão para a consulta; vazio com filtro oferece limpar", () => {
-        window.history.replaceState(null, "", "/agente-mentor?statuses=failed&sources=developer")
+        window.history.replaceState(null, "", "/agente-mentor?aba=execucoes&statuses=failed&sources=developer")
         mocks.pages.mockReturnValue(result(page([])))
         render(<MentorRunsPage />)
         expect(mocks.pages).toHaveBeenLastCalledWith({ statuses: "failed", sources: "developer" })
         expect(screen.getByText("Nenhuma execução com estes filtros")).toBeTruthy()
         fireEvent.click(screen.getAllByRole("button", { name: "Limpar filtros" }).at(-1)!)
-        expect(window.location.search).toBe("")
+        expect(window.location.search).toBe("?aba=execucoes")
     })
 
     it("sem IntersectionObserver ou com erro na próxima página: Carregar mais (x de y)", () => {

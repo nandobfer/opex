@@ -127,6 +127,19 @@ export async function getSessionDetail(id: string, scope: OpexServerScope = OWNE
     return { session: toSessionDto(session), messages: messages.map(toMessageDto) }
 }
 
+/**
+ * Conversa para leitura do dono (métricas dos agentes, OPE-122): qualquer escopo (dono ou portal),
+ * sem reconciliar nem alterar a sessão. Só a rota do dono chama.
+ */
+export async function getSessionTranscript(id: string): Promise<OpexSessionDetailDto & { clientId: string | null }> {
+    assertSessionId(id)
+    await opexDb()
+    const session = await OpexSession.findById(id).lean<SessionDoc>()
+    if (!session) throw new DomainError(404, "Conversa não encontrada (pode ter sido removida pela retenção)", "OPEX_SESSION_NOT_FOUND")
+    const messages = await OpexMessage.find({ sessionId: session._id }).sort({ seq: 1 }).select({ modelMessages: 0 }).lean<MessageDoc[]>()
+    return { session: toSessionDto(session), messages: messages.map(toMessageDto), clientId: session.clientId ?? null }
+}
+
 export async function createSession(actorId: string, scope: OpexServerScope = OWNER_SCOPE, extra?: Partial<Pick<IOpexSession, "modelOverride">>): Promise<OpexSessionDto> {
     await opexDb()
     const doc = await OpexSession.create({
@@ -171,6 +184,9 @@ export async function deleteClientOpexData(clientId: string): Promise<void> {
     await opexDb()
     await OpexJob.deleteMany({ clientId })
     const sessions = await OpexSession.find({ clientId }).select({ _id: 1, agent: 1, opencodeSessionId: 1 }).lean<Pick<SessionDoc, "_id" | "agent" | "opencodeSessionId">[]>()
+    // Métricas dos agentes: a estatística das conversas fica (OPE-122).
+    const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
+    await preserveConversations(sessions.map((session) => session._id.toString()))
     for (const session of sessions) {
         const id = session._id.toString()
         forgetSession(id)
@@ -201,6 +217,9 @@ export async function purgeSession(
 ): Promise<void> {
     const id = session._id.toString()
     forgetSession(id)
+    // Métricas dos agentes: a estatística da conversa fica, marcada como removida (OPE-122).
+    const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
+    await preserveConversations([id])
     // Arquivos primeiro (objetos no storage + metadados), depois o resto da sessão.
     const { deleteSessionFiles } = await import("./files")
     await deleteSessionFiles(id)

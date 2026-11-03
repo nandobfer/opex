@@ -6,7 +6,6 @@ import {
     taskRefinementSettingsSchema,
     taskSummarySettingsSchema,
     taskTagsSettingsSchema,
-    understandTaskSettingsSchema,
 } from "@/features/ai/schemas"
 import {
     getBudgetPreviewSettings,
@@ -15,14 +14,12 @@ import {
     getTaskRefinementSettings,
     getTaskSummarySettings,
     getTaskTagsSettings,
-    getUnderstandTaskSettings,
     saveBudgetPreviewSettings,
     saveEstimateHoursSettings,
     savePrReviewSettings,
     saveTaskRefinementSettings,
     saveTaskSummarySettings,
     saveTaskTagsSettings,
-    saveUnderstandTaskSettings,
 } from "@/features/ai/server/settings"
 import { dashboardQuerySchema } from "@/features/dashboard/schemas"
 import { buildDashboard } from "@/features/dashboard/server/service"
@@ -40,7 +37,6 @@ interface FeatureSettingsHandler {
 
 /** Features de IA configuráveis pelo agente (a do próprio agente fica de fora). */
 const AI_FEATURES = {
-    "understand-task": { schema: understandTaskSettingsSchema, get: getUnderstandTaskSettings, save: saveUnderstandTaskSettings },
     "task-summary": { schema: taskSummarySettingsSchema, get: getTaskSummarySettings, save: saveTaskSummarySettings },
     "task-tags": { schema: taskTagsSettingsSchema, get: getTaskTagsSettings, save: saveTaskTagsSettings },
     "budget-preview": { schema: budgetPreviewSettingsSchema, get: getBudgetPreviewSettings, save: saveBudgetPreviewSettings },

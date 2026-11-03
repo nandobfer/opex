@@ -10,7 +10,6 @@ export type OpencodeUsageQuery = z.infer<typeof opencodeUsageQuerySchema>
 
 /** Rótulos das origens do consumo medido (feature de IA, refinamento ou mesa de desenvolvimento). */
 export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
-    "understand-task": "Entender tarefas",
     "task-summary": "Resumos de tarefas",
     "task-tags": "Tags de tarefas",
     "budget-preview": "Orçamentos",

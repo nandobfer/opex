@@ -17,26 +17,22 @@ import {
     DEFAULT_TASK_REFINEMENT_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
     DEFAULT_TASK_TAGS_SETTINGS,
-    DEFAULT_UNDERSTAND_TASK_SETTINGS,
     budgetPreviewSettingsSchema,
     estimateHoursSettingsSchema,
     taskRefinementSettingsSchema,
     taskSummarySettingsSchema,
     taskTagsSettingsSchema,
-    understandTaskSettingsSchema,
     type BudgetPreviewSettings,
     type EstimateHoursSettings,
     type TaskRefinementSettings,
     type TaskSummarySettings,
     type TaskTagsSettings,
-    type UnderstandTaskSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, RefinementSkillStateDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, RefinementSkillStateDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto } from "../types"
 import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
 import type { PrReviewSettingsDto } from "@/features/pr-review/types"
 
-const UNDERSTAND_TASK_FEATURE = "understand-task"
 const TASK_SUMMARY_FEATURE = "task-summary"
 const TASK_TAGS_FEATURE = "task-tags"
 const BUDGET_PREVIEW_FEATURE = "budget-preview"
@@ -111,11 +107,6 @@ function normalizeProvider<T extends ProviderSettings>(input: T): T {
     }
 }
 
-/** Campos que não se aplicam ao provedor escolhido são gravados vazios (provedor, modelo, amostragem e agente). */
-export function normalizeSettings(input: UnderstandTaskSettings): UnderstandTaskSettings {
-    return normalizeProvider(input)
-}
-
 export function normalizeTaskSummarySettings(input: TaskSummarySettings): TaskSummarySettings {
     return normalizeProvider(input)
 }
@@ -130,29 +121,6 @@ export async function persistFeature<T>(feature: string, next: T, actorId: strin
         depois: next as Record<string, unknown>,
     })
     await publishAppEvent(AI_FEATURE_UPDATED_EVENT, { feature }).catch(() => undefined)
-}
-
-// ── Entender tarefas ─────────────────────────────────────────────────────────
-
-export async function loadUnderstandTaskSettings(): Promise<{ settings: UnderstandTaskSettings; isDefault: boolean; updatedAt: Date | null }> {
-    return loadFeature(UNDERSTAND_TASK_FEATURE, understandTaskSettingsSchema, DEFAULT_UNDERSTAND_TASK_SETTINGS)
-}
-
-export async function availabilityOf(settings: UnderstandTaskSettings): Promise<AiFeatureAvailability> {
-    return availability(settings, '"Entender tarefas"')
-}
-
-export async function getUnderstandTaskSettings(): Promise<UnderstandTaskSettingsDto> {
-    const { settings, isDefault, updatedAt } = await loadUnderstandTaskSettings()
-    return { settings, isDefault, availability: await availabilityOf(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
-}
-
-export async function saveUnderstandTaskSettings(input: UnderstandTaskSettings, actorId: string): Promise<UnderstandTaskSettingsDto> {
-    const next = normalizeSettings(input)
-    await assertCatalog(next)
-    const before = await loadUnderstandTaskSettings()
-    await persistFeature(UNDERSTAND_TASK_FEATURE, next, actorId, before)
-    return getUnderstandTaskSettings()
 }
 
 // ── Resumos de tarefas ───────────────────────────────────────────────────────

@@ -144,7 +144,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:
   Geral, Vínculos, Mapeamento, Sincronização), Inteligência Artificial (`AiEditorForm`:
-  Provedores, Entender tarefas, Resumos de tarefas, Orçamentos, Agente Desenvolvedor), página de
+  Provedores e uma aba por agente, na ordem do catálogo de agentes — ver `modules/ai.md`), página de
   cada provedor (`AiProviderEditorForm`: Configuração, Modelos e Consumo — ver `modules/ai.md`),
   Crons (`CronsEditorForm`: Geral, Rotinas e Jobs), Engramind (`EngramindEditorForm`: Sobre, Conexão,
   Configurações, Provedores, Identidades, Operação e Variáveis de ambiente — ver `modules/engramind.md`) e a página da central de desenvolvimento
@@ -232,7 +232,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   remove uploads de anexo abandonados no storage e conclui remoções físicas pendentes; ver
   `modules/tasks.md`, "Anexos da tarefa") e `opex-files-cleanup` (60 min — remove do storage e do banco
   os arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h; ver
-  `modules/opex-agent.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
+  `modules/opex-agent.md`), `agent-usage-daily` (60 min — sincroniza as execuções e as conversas dos
+  agentes e gera o resumo diário de uso; a primeira execução faz o backfill retroativo; ver
+  `modules/agent-metrics.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
   host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`) e
   `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
   ao ativar a Builder Machine — ver `modules/builder-machine.md`) e `environments-registry-cleanup`

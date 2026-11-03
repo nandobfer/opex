@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
+// Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
+vi.mock('@/features/agent-metrics/server/record', () => ({ recordWorkbenchEvent: vi.fn(async () => undefined), recordPrReviewReplanned: vi.fn(async () => undefined), recordAgentEvent: vi.fn(), recordAgentRun: vi.fn() }))
 vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 // Builder Machine desativada: o build e a limpeza seguem no servidor.
@@ -62,7 +64,7 @@ vi.mock('@/features/agentic/server/settings', async () => {
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(async () => ({ id: 't1', columnId: 'todo' })), moveTask: vi.fn() }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ syncWorkbenchTimer: vi.fn(async () => undefined) }))
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig } from '@/features/agentic/schemas'

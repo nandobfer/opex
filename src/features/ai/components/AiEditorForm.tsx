@@ -2,32 +2,28 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { BrainCircuit, Bot, CodeXml, AlignLeft, Sparkles, Calculator, Timer, Tag, Wand2, GitPullRequest, Swords, Orbit } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
 import type { Draft } from "@/features/integrations/components/detail/draft"
 import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
-import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
+import { IntegrationTabs } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
-import { AI_TABS, type AiTab } from "../constants"
+import { AI_TAB_ALIASES, AI_TABS, type AiTab } from "../constants"
 import { useAiFeatureRealtime } from "../hooks/useAi"
 import { AiProvidersTab } from "./AiProvidersTab"
-import { UnderstandTaskTab } from "./understand-task/UnderstandTaskTab"
-import { TaskSummaryTab } from "./task-summary/TaskSummaryTab"
-import { TaskTagsTab } from "./task-tags/TaskTagsTab"
-import { BudgetPreviewTab } from "./budget-preview/BudgetPreviewTab"
-import { EstimateHoursTab } from "./estimate-hours/EstimateHoursTab"
+import { OrcamentistaTab } from "./orcamentista/OrcamentistaTab"
+import { CatalogadorTab } from "./catalogador/CatalogadorTab"
 import { TaskRefinementTab } from "./task-refinement/TaskRefinementTab"
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
 import { PrReviewTab } from "@/features/pr-review/components/PrReviewTab"
 import { OpexAgentTab } from "@/features/opex-agent/components/settings/OpexAgentTab"
 import { MaddoxAgentTab } from "@/features/maddox-agent/components/settings/MaddoxAgentTab"
 import { AdversarialAgentTab } from "@/features/adversarial-agent/components/settings/AdversarialAgentTab"
-import { MENTOR_AI_TAB_DEF, MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
+import { MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
 import { ArchitectAgentTab } from "@/features/architect-agent/components/settings/ArchitectAgentTab"
-import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
+import { AI_EDITOR_TABS } from "../tabs"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -40,36 +36,27 @@ interface AiEditorFormProps {
     onUndo: () => void
 }
 
-const TABS: IntegrationTabDef<AiTab>[] = [
-    { id: "provedores", label: "Provedores", icon: BrainCircuit },
-    { id: "entender-tarefas", label: "Entender tarefas", icon: Sparkles },
-    { id: "resumos-tarefas", label: "Resumos de tarefas", icon: AlignLeft },
-    { id: "tags-tarefas", label: "Tags de tarefas", icon: Tag },
-    { id: "orcamentos", label: "Orçamentos", icon: Calculator },
-    { id: "estimar-prazos", label: "Estimar prazos", icon: Timer },
-    { id: "refinar-tarefa", label: "Agente Refinador", icon: Wand2 },
-    { id: "revisao-pr", label: "Agente Revisor", icon: GitPullRequest },
-    { id: "desenvolvimento-agentico", label: "Agente Desenvolvedor", icon: CodeXml },
-    { id: "agente-maddox", label: "Agente Maddox", icon: Orbit },
-    { id: "agente-opex", label: "Agente Opex", icon: Bot },
-    { id: "agente-adversario", label: "Agente Adversário", icon: Swords },
-    MENTOR_AI_TAB_DEF,
-    { id: "agente-arquiteto", label: "Agente Arquiteto", icon: ARCHITECT_ICON },
-]
-
 /**
  * Página "Inteligência Artificial" (`/integracoes/ia`): aba Provedores (OpenCode, Gemini e as opções gerais
- * do hub) e uma aba por feature que usa IA. Trocar de aba com alterações pede descarte.
+ * do hub) e uma aba por agente (catálogo de agentes). Links antigos de abas fundidas ou removidas abrem a
+ * aba atual (`AI_TAB_ALIASES`). Trocar de aba com alterações pede descarte.
  */
 export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiEditorFormProps) {
     useAiFeatureRealtime()
     const [tabDirty, setTabDirty] = useState(false)
     const [resetKey, setResetKey] = useState(0)
-    const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<AiTab>(AI_TABS, "provedores", dirty || tabDirty, () => {
-        onUndo()
-        setTabDirty(false)
-        setResetKey((value) => value + 1)
-    })
+    const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<AiTab>(
+        AI_TABS,
+        "provedores",
+        dirty || tabDirty,
+        () => {
+            onUndo()
+            setTabDirty(false)
+            setResetKey((value) => value + 1)
+        },
+        undefined,
+        AI_TAB_ALIASES,
+    )
 
     return (
         <motion.form
@@ -85,7 +72,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
             }}
         >
             <DetailHeader def={def} data={data} hasAnySecret={false} />
-            <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções de Inteligência Artificial">
+            <IntegrationTabs tabs={AI_EDITOR_TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções de Inteligência Artificial">
                 {tab === "provedores" && (
                     <>
                         <AiProvidersTab />
@@ -93,11 +80,8 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                         <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
                     </>
                 )}
-                {tab === "entender-tarefas" && <UnderstandTaskTab key={resetKey} onDirtyChange={setTabDirty} />}
-                {tab === "resumos-tarefas" && <TaskSummaryTab key={resetKey} onDirtyChange={setTabDirty} />}
-                {tab === "tags-tarefas" && <TaskTagsTab key={resetKey} onDirtyChange={setTabDirty} />}
-                {tab === "orcamentos" && <BudgetPreviewTab key={resetKey} onDirtyChange={setTabDirty} />}
-                {tab === "estimar-prazos" && <EstimateHoursTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "orcamentista" && <OrcamentistaTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "catalogador" && <CatalogadorTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "refinar-tarefa" && <TaskRefinementTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "revisao-pr" && <PrReviewTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "desenvolvimento-agentico" && <AgenticTab key={resetKey} onDirtyChange={setTabDirty} />}

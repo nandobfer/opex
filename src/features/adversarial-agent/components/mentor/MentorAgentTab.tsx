@@ -28,7 +28,7 @@ import { MentorTriggersCard } from "./MentorTriggersCard"
 import { MentorWriterCard } from "./MentorWriterCard"
 
 /** Aba "Agente Mentor" de `/integracoes/ia` (logo depois da aba Agente Adversário). */
-export const MENTOR_AI_TAB_DEF: IntegrationTabDef<AiTab> = { id: MENTOR_AI_TAB, label: "Agente Mentor", icon: GraduationCap }
+export const MENTOR_AI_TAB_DEF: IntegrationTabDef<AiTab> = { id: MENTOR_AI_TAB, label: "Mentor", icon: GraduationCap }
 
 type Section = "geral" | "contexto" | "execucoes"
 const SECTIONS: { value: Section; label: string }[] = [
