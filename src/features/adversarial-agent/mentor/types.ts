@@ -48,6 +48,16 @@ export interface MentorRunDto {
     finishedAt: string | null
 }
 
+/** Resumo da memória gravada por uma execução (`GET /api/adversarial/mentor/runs/[id]/memory`), lido do Engramind. */
+export interface MentorRunMemoryDto {
+    /** `none`: a execução não gravou memória; `missing`: a memória não está mais no Engramind. */
+    state: "none" | "ok" | "missing"
+    resumo: string | null
+    /** O Engramind ainda gera o resumo (o texto é provisório). */
+    resumoPendente: boolean
+    atualizadaEm: string | null
+}
+
 /** Página da lista `GET /api/adversarial/mentor/runs` (página do Agente Mentor e aba Execuções). */
 export interface MentorRunListDto {
     items: MentorRunDto[]
