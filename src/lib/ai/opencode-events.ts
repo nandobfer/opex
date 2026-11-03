@@ -46,6 +46,21 @@ export interface OpencodePermissionDto {
     toolCallId?: string | null
 }
 
+/** Erro do provedor numa nova tentativa agendada pelo OpenCode (`session.retry.scheduled`). */
+export interface OpencodeRetryError {
+    /** Classificação do OpenCode (ex.: `provider.rate-limit`, `provider.quota`); `null` se ausente. */
+    type: string | null
+    message: string
+    status: number | null
+}
+
+/** Nova tentativa do OpenCode após falha do provedor: `at` = instante (epoch ms) da próxima tentativa. */
+export interface OpencodeRetry {
+    attempt: number
+    at: number
+    error: OpencodeRetryError
+}
+
 export type OpencodeSessionEvent =
     | { kind: "text"; delta: string }
     | { kind: "reasoning"; delta?: string }
@@ -56,6 +71,7 @@ export type OpencodeSessionEvent =
     | { kind: "tool-error"; id: string; message: string; output: string }
     | { kind: "step"; stepId: string | null; costUsd: number; tokens: OpencodeTokenUsage }
     | { kind: "notice"; message: string }
+    | ({ kind: "retry" } & OpencodeRetry)
     | { kind: "permission"; permission: OpencodePermissionDto }
     | { kind: "permission-replied"; id: string }
     | { kind: "form"; form: OpencodeFormDto }
@@ -184,8 +200,15 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
         }
         case "session.step.failed":
             return { kind: "notice", message: `Passo do modelo falhou: ${errorMessage(data.error, "erro desconhecido")}` }
-        case "session.retry.scheduled":
-            return { kind: "notice", message: `Nova tentativa (${num(data.attempt)}) após falha do provedor: ${errorMessage(data.error, "erro desconhecido")}` }
+        case "session.retry.scheduled": {
+            const error = isObj(data.error) ? data.error : {}
+            return {
+                kind: "retry",
+                attempt: num(data.attempt),
+                at: num(data.at),
+                error: { type: str(error.type), message: str(error.message) ?? "erro desconhecido", status: typeof error.status === "number" ? error.status : null },
+            }
+        }
         case "session.execution.succeeded":
             return { kind: "end", outcome: "succeeded" }
         case "session.execution.failed":
@@ -215,6 +238,45 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
         default:
             return null
     }
+}
+
+/** Aviso de uma nova tentativa do OpenCode (o mesmo texto de antes da detecção de limite). */
+export function retryNotice(retry: OpencodeRetry): string {
+    return `Nova tentativa (${retry.attempt}) após falha do provedor: ${retry.error.message}`
+}
+
+/** Tipos que o OpenCode dá aos erros de limite/cota do provedor (`provider.rate-limit` é repetido; os demais encerram a execução). */
+const PROVIDER_LIMIT_TYPES = new Set(["provider.rate-limit", "provider.quota", "provider.free-limit", "provider.budget-limit", "provider.model-budget-limit"])
+const PROVIDER_LIMIT_PATTERN = /rate[-_\s]?limit|too many requests|usage limit|quota|limit (?:reached|exhausted|exceeded)/i
+
+/**
+ * O erro do provedor é de limite de uso/cota (ex.: cota da Anthropic esgotada, que chega como 429
+ * `provider.rate-limit`)? Sobrecarga, erro interno, transporte e tempo limite não contam.
+ */
+export function isProviderLimitError(error: OpencodeRetryError): boolean {
+    if (error.type && PROVIDER_LIMIT_TYPES.has(error.type)) return true
+    if (error.status === 429) return true
+    if (error.type && error.type.startsWith("provider.") && error.type !== "provider.error" && error.type !== "provider.unknown") return false
+    return PROVIDER_LIMIT_PATTERN.test(error.message)
+}
+
+/** Quando desistir das novas tentativas do OpenCode por limite: espera maior que `maxWaitMs` ou a partir da tentativa `maxAttempts`. */
+export interface ProviderLimitPolicy {
+    maxWaitMs: number
+    maxAttempts: number
+}
+
+/** Política da mesa e do fork: desiste se a próxima tentativa for daqui a mais de 60 s ou na 3ª tentativa por limite. */
+export const DEFAULT_PROVIDER_LIMIT_POLICY: ProviderLimitPolicy = { maxWaitMs: 60_000, maxAttempts: 3 }
+
+/**
+ * Desistir desta nova tentativa? Só para erro de limite/cota, quando a próxima tentativa agendada
+ * fica longe demais (o `retry-after` da cota pode ser de horas) ou já é a N-ésima por limite.
+ * Limites passageiros de poucos segundos continuam com o OpenCode tentando.
+ */
+export function shouldAbandonRetry(retry: OpencodeRetry, now: number, policy: ProviderLimitPolicy): boolean {
+    if (!isProviderLimitError(retry.error)) return false
+    return retry.at - now > policy.maxWaitMs || retry.attempt >= policy.maxAttempts
 }
 
 /** Resumo curto da entrada de uma ferramenta (comando, arquivo, padrão…), para a linha da tela. */

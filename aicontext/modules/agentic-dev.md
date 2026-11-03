@@ -841,7 +841,24 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   continuam válidas, sem migração).
 - **Quando troca**: só quando o **modelo/provedor falha** — o OpenCode encerra a execução com erro
   (limite de uso, cota, autenticação, modelo indisponível, sobrecarga), não consegue selecionar o modelo
-  ou recusa a mensagem (`TurnResult.failure = "model"`, `lib/ai/opencode-run.ts`). **Não** troca ao
+  ou recusa a mensagem (`TurnResult.failure = "model"`, `lib/ai/opencode-run.ts`).
+- **Cota/limite de uso do provedor** (OPE-127): a cota esgotada da Anthropic chega como HTTP 429
+  `provider.rate-limit`, que o OpenCode **não** encerra — agenda novas tentativas
+  (`session.retry.scheduled`) respeitando o `retry-after`, às vezes de horas. Na mesa e no fork o turno
+  leva a política `DEFAULT_PROVIDER_LIMIT_POLICY` (`TurnRequest.providerLimit`, `lib/ai/opencode-events.ts`)
+  e **desiste** das novas tentativas quando o erro é de limite/cota (`isProviderLimitError`: tipos
+  `provider.rate-limit`/`quota`/`free-limit`/`budget-limit`/`model-budget-limit`, status 429 ou mensagem de
+  limite/cota) **e** a próxima tentativa fica para daqui a **mais de 60 s** ou já é a **3ª** por limite
+  (`shouldAbandonRetry`). Limite passageiro de poucos segundos continua com o OpenCode tentando;
+  sobrecarga, erro interno, transporte e tempo limite nunca desistem. Ao desistir, interrompe a execução
+  no OpenCode, espera ela parar e termina o turno como falha do modelo (`limited: true`), com o motivo
+  "Limite de uso do provedor em anthropic/… (provider.rate-limit: …); o OpenCode só tentaria de novo em
+  03/11, 18:40" (horário de Brasília): o fallback assume com o aviso de sempre na saída (gravado no
+  histórico da mesa). **Sem fallback** (ou com a corrente esgotada), a mesa/o fork falha na hora com o
+  motivo + "Nenhum modelo de fallback configurado para esta etapa." (ou "Todos os modelos de fallback
+  também falharam."), em vez de ficar parada até o tempo limite de 3 h. Os demais agentes (Refinar
+  tarefa, revisão de PR, Adversário, Arquiteto, Maddox) não levam a política e seguem como antes.
+  Reconexão (`attach`) não desiste. **Não** troca ao
   Parar, com a conexão com o OpenCode perdida, na reconexão (que não envia mensagem) nem em erros da
   etapa (build falhou, plano vazio, PR sem URL).
 - **Como continua** (`runWithFallback`, `server/model-fallback.ts`): reenvia o turno **na mesma
@@ -1075,7 +1092,7 @@ releitura das pendências no buraco do SSE —, o ciclo automático de reconexã
 `auto-reconnect`), acompanhamento do PR (inclusive o relato ao vivo: `pr-watch`, `pr-watch-report`,
 `pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
 `forks-model`, `model-routes`, `ModelOverridePicker`), modelos de fallback
-(`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`), exclusão de sessão (`session-cleanup`),
+(`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`, `opencode-run-provider-limit`, `opencode-events` › limite do provedor), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), CI falho do PR (`ci`, `workflow-pr-ci`, prioridades e limite em
 `pr-watch`, `ciFixPrompt` em `prompts`, padrão global/central em `logic`, `git-section` e

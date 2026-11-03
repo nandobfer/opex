@@ -246,6 +246,8 @@ describe('modelos de fallback no fork', () => {
     expect(mocks.runTurn).toHaveBeenCalledTimes(2)
     const second = mocks.runTurn.mock.calls[1]![1] as { text: string; agent: unknown }
     expect(second.agent).toEqual({ agent: 'plan', model: 'openai/gpt-5', variant: null })
+    // OPE-127: o turno do fork desiste da cota/limite do provedor para seguir com o fallback.
+    expect((mocks.runTurn.mock.calls[0]![1] as { providerLimit?: unknown }).providerLimit).toEqual({ maxWaitMs: 60_000, maxAttempts: 3 })
     expect(second.text).toContain('A resposta anterior não terminou (cota excedida). Retome de onde parou')
     expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', level: 'warn', message: 'modelo padrão do agente falhou (cota excedida): continuando com openai/gpt-5 — fallback 1 de 1.' }))
     expect(forks.docs[0]!.runState).toBe('idle')
