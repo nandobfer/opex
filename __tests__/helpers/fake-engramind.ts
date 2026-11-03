@@ -67,6 +67,7 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
   ['POST', '/v1/tokens'],
   ['POST', '/v1/tokens/{token}/revoke'],
   ['POST', '/v1/tokens/{token}/rotate'],
+  ['GET', '/v1/whoami'],
   ['POST', '/v1/hints'],
   ['POST', '/v1/memories/search'],
   ['POST', '/v1/consolidation/run'],
@@ -84,7 +85,7 @@ export function createFakeEngramind() {
     memories: new Map<string, FakeMemory>(),
     agents: new Map<string, { slug: string; disabled_at: string | null }>(),
     subscriptions: [] as { agent: string; target: string; mode: string }[],
-    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'expired' | 'revoked'; agent: string | null; scopes: string[] }>(),
+    tokens: new Map<string, { id: string; prefix: string; status: 'active' | 'expired' | 'revoked'; agent: string | null; scopes: string[]; kind?: 'agent' | 'app' | 'admin' }>(),
     imports: new Map<string, unknown>(),
     context: { content: '', version: 'cv_1', counts: { full: 0, titles: 0, overflow: 0 } },
     contextFails: false,
@@ -279,8 +280,9 @@ export function createFakeEngramind() {
     }
     if (method === 'POST' && path === '/v1/tokens') {
       const id = `tk_${(++state.seq).toString(16).padStart(6, '0')}`
-      state.tokens.set(id, { id, prefix: `eng.${id}`, status: 'active', agent: String(body.agent ?? '').split('/').pop() ?? null, scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : [] })
-      return { token: { id, prefix: `eng.${id}`, status: 'active' }, secret: `eng.${id}.segredo` }
+      const kind = (typeof body.kind === 'string' ? body.kind : 'agent') as 'agent' | 'app' | 'admin'
+      state.tokens.set(id, { id, prefix: `eng.${id}`, status: 'active', agent: kind === 'agent' ? (String(body.agent ?? '').split('/').pop() ?? null) : null, scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : [], kind })
+      return { token: { id, prefix: `eng.${id}`, status: 'active', kind }, secret: `eng.${id}.segredo` }
     }
     if (method === 'GET' && path === '/v1/tokens') {
       // Contrato: lista paginada (`{ tokens, next_cursor }`), filtrada por `agent` (`app/agente`); não há leitura por id.
@@ -307,6 +309,11 @@ export function createFakeEngramind() {
       const id = `tk_${(++state.seq).toString(16).padStart(6, '0')}`
       state.tokens.set(id, { ...old, id, prefix: `eng.${id}`, status: 'active' })
       return { token: { id, prefix: `eng.${id}`, status: 'active' }, secret: `eng.${id}.segredo` }
+    }
+    if (method === 'GET' && path === '/v1/whoami') {
+      const row = [...state.tokens.values()].find((item) => token?.includes(item.id))
+      if (!row || row.status !== 'active') return { token_id: 'tk_admin', kind: 'admin', scopes: ['read', 'write', 'delete'], app: { id: 'app_opex', slug: 'opex' }, agent: null }
+      return { token_id: row.id, kind: row.kind ?? 'agent', scopes: row.scopes, app: { id: 'app_opex', slug: 'opex' }, agent: row.agent ? { slug: row.agent } : null }
     }
     if (method === 'GET' && path === '/v1/context') {
       if (state.contextFails) throw toEngramindError(503, null)
