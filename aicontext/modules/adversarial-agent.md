@@ -143,6 +143,25 @@ real (`adversarial-review-updated` / `adversarial-mentor-updated` invalidam as p
   (`MentorRunList`, a mesma da seção Execuções; **Ver/Decidir** abre o detalhe e, numa sugestão,
   Aprovar/Descartar). Filtros: busca, **Situação**, **Origem** (mensagem do usuário, turno da IA,
   pedido do desenvolvedor — casa quem tem ao menos uma), **Gatilho**, **Central** e **Período**.
+- **Detalhe da execução** (`MentorRunDialog`, OPE-128; o mesmo na página e na seção Execuções):
+  - **Cabeçalho** (`MentorRunHeader`): título com o código da tarefa (link para a mesa) e o selo da
+    situação; subtítulo com o título da tarefa; metadados em chips (custo, duração, quando, destino).
+  - **Corpo com rolagem**: o erro (quando houver) em destaque no topo e as etapas em seções com ícone e
+    título, sem coluna de rótulos (`MentorRunDetails` + `MentorRunSection`): **Gatilhos** (origens,
+    tipo da mensagem e pedidos em chips; a mensagem do usuário como citação), **Decisor** (nível e
+    nota/limiar; motivo em parágrafo), **Triador**, **Redator** e **Sanitizador**/**Motivo do descarte**.
+  - **Memória** (`MentorRunMemory`): primeiro o **resumo** em destaque, que é o título do Engramind lido
+    na hora por `GET /api/adversarial/mentor/runs/[id]/memory` (`useMentorRunMemory`, só com
+    `memoryId`). Enquanto o resumo está pendente, mostra o texto provisório com "Resumo sendo gerado
+    pelo Engramind…" e relê a cada 5 s por até 2 min, contados a cada abertura do detalhe
+    (não pelo cache). Se o limite estourar com o resumo ainda pendente, a releitura para e o aviso troca
+    para "O resumo ainda não ficou pronto: este é o texto provisório." Sem memória gravada (sugestão, não gravou,
+    falhou), mostra um estado vazio discreto. Com a memória excluída ou movida, mostra um aviso; com
+    erro, "Tentar novamente". Depois vem o texto completo gravado pelo Mentor, numa área de leitura
+    (`max-w-prose`, `leading-relaxed`, rolagem interna até 40vh). Numa sugestão, o destino
+    (`OptionTabs`) e o texto editável.
+  - **Rodapé**: na sugestão, Descartar (com confirmação) e Aprovar; nos demais casos, **Fechar**
+    (`DialogClose`). O X padrão do dialog continua no canto.
 - O filtro **Central** (`page/CentralFilter.tsx`) lista as centrais existentes (`centrals` da
   resposta); central filtrada que deixou de existir continua como opção para poder desmarcar.
 - As seções **Revisões**, **Memórias** e **Execuções** das abas de configuração continuam, lendo a
@@ -295,6 +314,7 @@ na tela e na API; `withMentorDefaults`).
 | `/api/ai/agents/adversarial/memories*` | Memórias (rotas do módulo de memórias dos agentes; sem limite de quantidade) |
 | `GET/PUT /api/ai/features/adversarial-mentor` | Configuração do Agente Mentor |
 | `GET /api/adversarial/mentor/runs?q&statuses&sources&triggers&centrals&from&to&page&limit` | Execuções paginadas no recorte (mesmo envelope; marca as órfãs como falhas antes de listar) |
+| `GET /api/adversarial/mentor/runs/[id]/memory` | Resumo (Engramind) da memória gravada pela execução: `{ state: "none" \| "ok" \| "missing", resumo, resumoPendente, atualizadaEm }` (`getMentorRunMemory`) |
 | `POST /api/adversarial/mentor/runs/[id]/approve` `{ text?, target? }`, `POST …/discard` | Aprovar (texto editável) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
 
 ## Dados
@@ -327,7 +347,8 @@ na tela e na API; `withMentorDefaults`).
   `sanitize.ts`, `decision.ts`, `prompt.ts`), `server/mentor/` (`models.ts`, `settings.ts`, `queue.ts`,
   `run.ts`, `hooks.ts`), `hooks/useMentor.ts` e `components/mentor/` (`MentorAgentTab`,
   `MentorTriggersCard`, `MentorDeciderCard`, `MentorRouterCard`, `MentorWriterCard`, `MentorModelFields`, `MentorCheckbox`,
-  `MentorContextSection`, `MentorRunsSection`, `MentorRunDialog`, `MentorRunBadge`).
+  `MentorContextSection`, `MentorRunsSection`, `MentorRunDialog`, `MentorRunHeader`, `MentorRunDetails`,
+  `MentorRunMemory`, `MentorRunSection`, `MentorRunBadge`).
 - `hooks/useAdversarial.ts`; `components/` (`FindingList`, `ReviewBadges`, `ReviewDetailDialog`,
   `ReviewFindingsBody`, `VerdictCard`, `settings/*`, `workbench/*`).
 - `src/lib/ai/opencode-run.ts`: campo opcional `files` (`{ uri, name }[]`) em `TurnRequest`.

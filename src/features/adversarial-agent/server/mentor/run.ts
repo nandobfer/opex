@@ -35,9 +35,9 @@ import {
 } from "../../mentor/prompt"
 import { sanitizeMemoryText, type SanitizeContext } from "../../mentor/sanitize"
 import { enabledTargets, type MentorRunListQuery, type MentorSettings } from "../../mentor/schemas"
-import type { MentorProposal, MentorRunDto, MentorRunListDto } from "../../mentor/types"
+import type { MentorProposal, MentorRunDto, MentorRunListDto, MentorRunMemoryDto } from "../../mentor/types"
 import { AdversarialReview } from "../models"
-import { createAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
+import { createAgentMemory, getAgentMemory, listAgentMemories, updateAgentMemory, type AgentMemoryWriteOptions } from "@/features/ai/server/agent-memory-service"
 import { memoryChannelOf } from "@/features/ai/agents"
 import { pageInfo } from "@/lib/list/query"
 import { listCentralOptions } from "../central-options"
@@ -335,6 +335,26 @@ export async function listMentorRuns(query: Partial<MentorRunListQuery> = {}): P
         listCentralOptions(),
     ])
     return { items: rows.map(toMentorRunDto), ...pageInfo(page, limit, total), centrals }
+}
+
+/**
+ * Resumo da memória gravada por uma execução (OPE-128), lido do Engramind na hora: o título é gerado
+ * depois da gravação, então não fica guardado na execução. Sem memória → `none`; excluída ou movida → `missing`.
+ */
+export async function getMentorRunMemory(id: string): Promise<MentorRunMemoryDto> {
+    if (!Types.ObjectId.isValid(id)) throw new DomainError(404, "Execução não encontrada", "MENTOR_RUN_NOT_FOUND")
+    await mentorDb()
+    const run = (await MentorRun.findById(id).lean()) as IMentorRun | null
+    if (!run) throw new DomainError(404, "Execução não encontrada", "MENTOR_RUN_NOT_FOUND")
+    const proposal = proposalOf(run)
+    if (!run.memoryId || !proposal) return { state: "none", resumo: null, resumoPendente: false, atualizadaEm: null }
+    try {
+        const memory = await getAgentMemory(proposal.target, run.memoryId, proposal.centralId)
+        return { state: "ok", resumo: memory.resumo, resumoPendente: memory.resumoPendente, atualizadaEm: memory.atualizadaEm ?? null }
+    } catch (error) {
+        if (error instanceof DomainError && error.status === 404) return { state: "missing", resumo: null, resumoPendente: false, atualizadaEm: null }
+        throw error
+    }
 }
 
 async function suggestedRun(id: string): Promise<IMentorRun> {
