@@ -31,7 +31,7 @@ export type CorrectionKind = (typeof CORRECTION_KINDS)[number]
  * Marcadores de "Dados desde" (`agent_metric_tracking`): gravados uma vez, na primeira subida com a
  * OPE-122 (`$setOnInsert`). Cada métrica não retroativa usa o marcador do fato de que depende.
  */
-export const TRACKING_KEYS = [...Object.values(METRIC_EVENT), "conversations"] as const
+export const TRACKING_KEYS = [...Object.values(METRIC_EVENT), "conversations", "pr-review-findings", "task-tags-failures"] as const
 export type TrackingKey = (typeof TRACKING_KEYS)[number]
 
 /** Evento em `private-app` quando a rotina grava execuções ou resumos novos. Payload: `{ agents }`. */

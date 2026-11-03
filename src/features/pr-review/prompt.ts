@@ -58,6 +58,6 @@ export function buildPrReviewPrompt(ctx: PrReviewContext): string {
         "",
         "## 5. Resposta",
         "- Responda com o relatório completo da revisão (Bloqueios reais / Observações não bloqueantes / Elogios / Verificações).",
-        '- Termine com um bloco ```json``` contendo SOMENTE o objeto: {"verdict": "approved" | "changes_requested" | "commented", "blocking": <número de bloqueios>, "summary": "<uma linha>"}. Use "changes_requested" sempre que houver bloqueios reais, mesmo que tenha publicado como comentário.',
+        '- Termine com um bloco ```json``` contendo SOMENTE o objeto: {"verdict": "approved" | "changes_requested" | "commented", "blocking": <número de bloqueios>, "findings": <número total de achados, bloqueantes ou não>, "summary": "<uma linha>"}. Use "changes_requested" sempre que houver bloqueios reais, mesmo que tenha publicado como comentário.',
     ].join("\n")
 }

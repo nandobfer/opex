@@ -192,7 +192,7 @@ async function executeReview(id: string, controller: AbortController): Promise<v
     const verdict = parsed.verdict ?? published.verdict
     const state: PrReviewState = succeeded ? "done" : result.outcome === "interrupted" ? "interrupted" : "failed"
     const error = succeeded ? (published.found ? null : "A revisão não foi encontrada no GitHub (o agente pode não tê-la publicado)") : (result.message ?? "O agente não concluiu a revisão")
-    await PrReview.updateOne(filter, { $set: { state, verdict, blocking: parsed.blocking, summary: parsed.summary, report: parsed.report || null, error, finishedAt: new Date() } })
+    await PrReview.updateOne(filter, { $set: { state, verdict, blocking: parsed.blocking, findings: parsed.findings, summary: parsed.summary, report: parsed.report || null, error, finishedAt: new Date() } })
     await recordAudit({ userId: actorId(), entidade: PR_REVIEW_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { pr: `${doc.repo}#${doc.number}`, commit: doc.headSha.slice(0, 7), estado: state, veredito: verdict } })
     log.info({ reviewId: id, state, verdict, costUsd: result.costUsd }, `${PR_REVIEW_STAGE_LABEL} ${doc.repo}#${doc.number}: ${state}`)
     await finishReviewSession(id, session.id)
@@ -308,7 +308,7 @@ async function queueManual(repo: string, number: number): Promise<string> {
             await dropWorkbenchEvents(id)
             await PrReview.updateOne(
                 { _id: id },
-                { $set: { state: "queued", trigger: "manual", verdict: null, blocking: null, summary: null, report: null, error: null, startedAt: null, finishedAt: null, usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 } } },
+                { $set: { state: "queued", trigger: "manual", verdict: null, blocking: null, findings: null, summary: null, report: null, error: null, startedAt: null, finishedAt: null, usage: { costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 } } },
             )
         }
     }

@@ -127,6 +127,19 @@ export async function getSessionDetail(id: string, scope: OpexServerScope = OWNE
     return { session: toSessionDto(session), messages: messages.map(toMessageDto) }
 }
 
+/**
+ * Conversa para leitura do dono (métricas dos agentes, OPE-122): qualquer escopo (dono ou portal),
+ * sem reconciliar nem alterar a sessão. Só a rota do dono chama.
+ */
+export async function getSessionTranscript(id: string): Promise<OpexSessionDetailDto & { clientId: string | null }> {
+    assertSessionId(id)
+    await opexDb()
+    const session = await OpexSession.findById(id).lean<SessionDoc>()
+    if (!session) throw new DomainError(404, "Conversa não encontrada (pode ter sido removida pela retenção)", "OPEX_SESSION_NOT_FOUND")
+    const messages = await OpexMessage.find({ sessionId: session._id }).sort({ seq: 1 }).select({ modelMessages: 0 }).lean<MessageDoc[]>()
+    return { session: toSessionDto(session), messages: messages.map(toMessageDto), clientId: session.clientId ?? null }
+}
+
 export async function createSession(actorId: string, scope: OpexServerScope = OWNER_SCOPE, extra?: Partial<Pick<IOpexSession, "modelOverride">>): Promise<OpexSessionDto> {
     await opexDb()
     const doc = await OpexSession.create({
