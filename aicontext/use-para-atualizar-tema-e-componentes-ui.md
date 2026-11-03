@@ -518,8 +518,9 @@ próprios.
 - **Recolhível** (`collapsible`, usado em Tarefas): o cartão começa recolhido numa linha —
   "Filtros", resumo dos filtros ativos em chips (`ActiveFilterChips`: até 4 visíveis + "+N" com o
   resto na dica; × em cada chip remove só aquele filtro; chip `subtle` para preferências como a
-  ordenação), "N REGISTROS", × limpar (só com filtro ativo) e ⌄. Clicar no cartão expande; o ⌃
-  após o total recolhe. Abre/fecha com Framer Motion (altura, ou só opacidade com movimento
+  ordenação), "N REGISTROS", × limpar (só com filtro ativo) e ⌄. Clicar em qualquer ponto da linha
+  do título expande e recolhe; o ⌄/⌃ após o total também alterna (estado em `useFiltersCollapse`, o
+  mesmo `toggle` nos dois; × de chip e limpar não alternam). Abre/fecha com Framer Motion (altura, ou só opacidade com movimento
   reduzido). Sempre começa recolhido ao entrar na página (`defaultCollapsed`, padrão `true`). Os
   chips são montados pela página (função pura da feature), nunca pelo componente genérico. Sem
   `collapsible` o cartão segue sempre aberto. No **celular** (`< md`) o resumo — os chips ou a

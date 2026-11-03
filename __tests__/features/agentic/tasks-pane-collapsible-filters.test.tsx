@@ -102,6 +102,16 @@ describe('filtros recolhíveis da coluna Tarefas da Central de desenvolvimento',
     expect(screen.getByLabelText('Buscar tarefas')).toBeTruthy()
   })
 
+  it('regressão OPE-121: clicar de novo na linha do título recolhe', async () => {
+    await renderPane()
+    const header = screen.getByTestId('dev-center-filters-header')
+    fireEvent.click(header)
+    expect(screen.getByLabelText('Buscar tarefas')).toBeTruthy()
+    fireEvent.click(header)
+    expect(screen.queryByLabelText('Buscar tarefas')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Expandir filtros' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
   it('mostra os filtros salvos como chips (no máximo 2 + "+N") e o × remove só aquele filtro', async () => {
     window.localStorage.setItem(DEV_CENTER_FILTERS_KEY, JSON.stringify({ activeOnly: true, search: 'OPE', columns: ['doing'], allColumns: false, states: ['planning'] }))
     await renderPane()
