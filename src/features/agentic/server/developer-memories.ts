@@ -1,5 +1,7 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
 import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
+import mongoose from "mongoose"
+import { buildMemoryFocus } from "@/features/ai/memory-focus"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
 import { logger } from "@/lib/logger"
 import { DEVELOPER_MEMORIES_INSTRUCTIONS_KEY } from "../constants"
@@ -31,25 +33,34 @@ export interface DeveloperMemoriesOptions {
     focus?: { taskId?: string | null; code?: string | null; title?: string | null; stage?: string | null; workbench?: string | null }
 }
 
-/** Foco do agente desenvolvedor: título + etapa/mesa primeiro, descrição no restante. Nunca lança. */
+/** Prefixo das ferramentas do MCP "Memória própria" no OpenCode. */
+const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
+
+const FOCUS_TASK_TIMEOUT_MS = 1_500
+
+/** Foco do agente desenvolvedor: título + etapa/mesa primeiro, descrição no restante. Nunca lança nem atrasa o turno. */
 async function developerFocus(focus: DeveloperMemoriesOptions["focus"]): Promise<string | undefined> {
     if (!focus) return undefined
     let description: string | null = null
     if (focus.taskId) {
         try {
-            const { DevTask } = await import("@/lib/db/models/DevTask")
-            const task = await DevTask.findById(focus.taskId).select({ description: 1 }).lean<{ description?: string | null } | null>()
-            description = task?.description ?? null
+            // Só com o banco já conectado (o turno nunca espera a conexão por causa do foco).
+            if (mongoose.connection.readyState === 1) {
+                const { DevTask } = await import("@/lib/db/models/DevTask")
+                let timer: ReturnType<typeof setTimeout> | undefined
+                const task = await Promise.race([
+                    DevTask.findById(focus.taskId).select({ description: 1 }).lean<{ description?: string | null } | null>(),
+                    new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), FOCUS_TASK_TIMEOUT_MS))),
+                ])
+                clearTimeout(timer)
+                description = task?.description ?? null
+            }
         } catch {
             description = null
         }
     }
-    const { buildMemoryFocus } = await import("@/features/ai/memory-focus")
     return buildMemoryFocus("desenvolvedor", { kind: "task", code: focus.code, title: focus.title, stage: focus.stage, workbench: focus.workbench, description })
 }
-
-/** Prefixo das ferramentas do MCP "Memória própria" no OpenCode. */
-const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
 /**
  * O MCP de memórias vale sempre (leitura da faixa de títulos, OPE-117); a gravação (checklist de fim de
@@ -73,7 +84,8 @@ export async function syncDeveloperMemories(client: OpencodeClient, sessionId: s
     let self = ""
     try {
         const { developerMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-        const context = await developerMemoryContext(centralId, { focus: await developerFocus(options.focus) })
+        const focus = options.focus?.taskId && mongoose.connection.readyState === 1 ? await developerFocus(options.focus) : options.focus ? buildMemoryFocus("desenvolvedor", { kind: "task", ...options.focus }) : undefined
+        const context = await developerMemoryContext(centralId, { focus })
         block = context.block
         const notice = memoryCacheNotice(context)
         if (notice) options.notify?.("warn", notice)

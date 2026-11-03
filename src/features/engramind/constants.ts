@@ -56,7 +56,7 @@ export const SECRET_KEYS = ["redator.api_key", "embedding.api_key"] as const
 export type EngramindSecretKey = (typeof SECRET_KEYS)[number]
 
 /** Grupos das configurações (prefixo da chave), na ordem da tela. */
-export const SETTING_GROUPS = ["limits", "categories", "memory", "context", "redator", "embedding", "search", "webhooks", "retention"] as const
+export const SETTING_GROUPS = ["limits", "categories", "memory", "context", "redator", "embedding", "search", "consolidation", "webhooks", "retention"] as const
 export const SETTING_GROUP_LABELS: Record<(typeof SETTING_GROUPS)[number], string> = {
     limits: "Limites",
     categories: "Categorias",
@@ -65,6 +65,7 @@ export const SETTING_GROUP_LABELS: Record<(typeof SETTING_GROUPS)[number], strin
     redator: "Redator",
     embedding: "Embeddings",
     search: "Busca",
+    consolidation: "Consolidação",
     webhooks: "Webhooks",
     retention: "Retenção",
 }

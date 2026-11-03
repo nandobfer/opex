@@ -57,6 +57,19 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
     "retention.llm_calls_days": { label: "Dias de chamadas ao LLM", help: "Dias de chamadas ao LLM guardados." },
     "retention.audit_days": { label: "Dias de auditoria", help: "Dias de auditoria guardados; vazio guarda para sempre." },
     "retention.jobs_days": { label: "Dias de jobs encerrados", help: "Dias que jobs done e failed ficam na fila depois de terminar (queued e running nunca saem)." },
+    // Engramind 0.11.0 (OPE-117).
+    "context.category_priorities": { label: "Prioridade por categoria", help: "Sobrepõe, no contexto, a prioridade de cada categoria de categories.list (−1000 a 1000); aceita sobreposição por canal." },
+    "context.text_max_chars": { label: "Corte do texto no contexto", help: "Caracteres máximos de cada memória com texto completo no contexto (0 = sem corte); a busca e as dicas devolvem o texto inteiro." },
+    "context.focus_min_score": { label: "Nota mínima do foco", help: "Cosseno mínimo para uma memória contar como relevante ao foco do turno (o ramo textual vale com qualquer termo casado)." },
+    "context.focus_embed_timeout_ms": { label: "Prazo do embedding do foco", help: "Tempo máximo para vetorizar o foco; estourou, o foco segue só pelo texto (focus_mode text)." },
+    "memory.vector_similar_threshold": { label: "Limiar de parecidas (vetor)", help: "Cosseno mínimo para uma memória aparecer em similar na leitura e na gravação." },
+    "memory.vector_duplicate_threshold": { label: "Limiar de duplicata (vetor)", help: "Cosseno a partir do qual uma parecida é marcada como duplicata (duplicate: true)." },
+    "consolidation.enabled": { label: "Consolidação ativa", help: "Liga a consolidação agendada (e por canal, com sobreposição)." },
+    "consolidation.schedule": { label: "Agendamento", help: "Quando a consolidação roda. O Engramind guarda um cron de 5 campos em UTC; aqui o horário é o de Brasília, convertido ao salvar." },
+    "consolidation.tasks": { label: "Tarefas", help: "O que a consolidação faz, sempre nesta ordem: duplicates (funde parecidas), importance (dá a nota) e stale (marca as desatualizadas)." },
+    "consolidation.duplicate_threshold": { label: "Limiar de duplicatas", help: "Similaridade mínima para duas memórias virarem candidatas à fusão." },
+    "consolidation.stale_after_days": { label: "Dias até desatualizada", help: "Dias sem uso até a memória virar candidata a esquecimento." },
+    "consolidation.auto_archive_stale": { label: "Arquivar desatualizadas", help: "Arquiva sozinho as memórias desatualizadas (desligado: só marca)." },
 }
 
 export function settingHelp(key: string, apiDescription?: string): SettingHelp {

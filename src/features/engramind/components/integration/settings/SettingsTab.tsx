@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Loader2, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,11 @@ import { Section } from "../../shared/Section"
 import { StaleFormNotice } from "../../shared/StaleFormNotice"
 import { useFormSnapshot } from "../../shared/useFormSnapshot"
 import { SettingField } from "./SettingField"
+import { SettingsFilters, filterSettingMetas } from "./SettingsFilters"
+import { ConsolidationActions, ReindexAction, RetentionInfo, type SectionRunProps } from "./SectionActions"
+import { isCategoryList } from "../../../schemas/settings"
+import type { EngramindStatus } from "../../../types"
+import { useEngramindQuery as useStatusQuery } from "../../../hooks/useEngramind"
 
 const GROUP_HELP: Record<string, string> = {
     limits: "Limites por token e por lote.",
@@ -26,8 +31,9 @@ const GROUP_HELP: Record<string, string> = {
     redator: "LLM que dá título e revisa o texto das memórias. Provedor, modelo e reservas são escolhidos na aba Provedores (IA do Opex).",
     embedding: "Vetores da busca por sentido. Provedor, modelo e dimensão são escolhidos na aba Provedores (IA do Opex); trocar o prefixo valida o provedor e reindexa.",
     search: "Fusão da busca por sentido e por texto e as dicas.",
+    consolidation: "Fusão de duplicatas, nota de importância e memórias desatualizadas, no agendamento (horário de Brasília convertido para UTC) ou agora.",
     webhooks: "Entrega dos eventos aos apps (inclusive ao Opex).",
-    retention: "Limpeza horária dos registros antigos.",
+    retention: "Limpeza horária dos registros antigos (automática; sem execução manual no Engramind).",
 }
 
 /** Chaves que só a aba Provedores edita (a URL é definida pelo provedor escolhido). */
@@ -76,20 +82,62 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
     const validation = useMemo(() => buildSettingsSchema(metas).safeParse(changes), [metas, changes])
     const reindex = Object.keys(changes).some((key) => REINDEX_SETTING_KEYS.includes(key))
     const save = useEngramindMutation((settings: Record<string, unknown>) => engramindSend("put", "settings", { settings }), { invalidate: ["settings", "status"], success: "Configurações do Engramind salvas" })
+    const status = useStatusQuery<EngramindStatus>("status")
+    const [term, setTerm] = useState("")
+    const [onlyChanged, setOnlyChanged] = useState(false)
+    const shown = useMemo(() => filterSettingMetas(metas, { term, onlyChanged, draft }), [metas, term, onlyChanged, draft])
+    const categories = useMemo(() => {
+        const current = draft["categories.list"] ?? metas.find((meta) => meta.key === "categories.list")?.default
+        return isCategoryList(current) ? current.map((item) => ({ key: item.key, label: item.label })) : []
+    }, [draft, metas])
 
-    const groups = SETTING_GROUPS.map((group) => ({ group, items: metas.filter((meta) => settingGroupOf(meta.key) === group) })).filter((entry) => entry.items.length > 0)
-    const others = metas.filter((meta) => !(SETTING_GROUPS as readonly string[]).includes(settingGroupOf(meta.key)))
+    const groups = SETTING_GROUPS.map((group) => ({ group, items: shown.filter((meta) => settingGroupOf(meta.key) === group) })).filter((entry) => entry.items.length > 0)
+    const others = shown.filter((meta) => !(SETTING_GROUPS as readonly string[]).includes(settingGroupOf(meta.key)))
     const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes, { onSuccess: () => void onSaved() }))
+    // "Salvar e executar": grava as pendentes (tudo ou nada) e só então a ação roda; falha → nada executa.
+    const saveDraft = useCallback(async () => {
+        if (!dirty) return true
+        if (!validation.success) return false
+        try {
+            await save.mutateAsync(changes)
+            await onSaved()
+            return true
+        } catch {
+            return false
+        }
+    }, [dirty, validation.success, save, changes, onSaved])
+    const run: SectionRunProps = { dirty, saveDraft }
+    const sectionExtra: Record<string, ReactNode> = { consolidation: <ConsolidationActions {...run} />, retention: <RetentionInfo /> }
+    const sectionActions: Record<string, ReactNode> = { embedding: <ReindexAction {...run} /> }
 
     return (
         <div className="flex flex-col gap-6">
+            <SettingsFilters term={term} onTerm={setTerm} onlyChanged={onlyChanged} onOnlyChanged={setOnlyChanged} shown={shown.length} total={metas.length} />
+            <AnimatePresence initial={false}>
+                {shown.length === 0 && (
+                    <motion.p key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="settings-empty">
+                        {onlyChanged ? "Nenhuma configuração alterada" : "Nenhuma configuração encontrada"}
+                        {term ? ` para "${term}"` : ""}.
+                    </motion.p>
+                )}
+            </AnimatePresence>
             {[...groups, ...(others.length ? [{ group: "outras", items: others }] : [])].map(({ group, items }) => (
-                <Section key={group} title={SETTING_GROUP_LABELS[group as keyof typeof SETTING_GROUP_LABELS] ?? "Outras"} info={GROUP_HELP[group]}>
+                <Section key={group} title={SETTING_GROUP_LABELS[group as keyof typeof SETTING_GROUP_LABELS] ?? "Outras"} info={GROUP_HELP[group]} actions={sectionActions[group]}>
                     <div className={FORM_GRID}>
                         {items.map((meta) => (
-                            <SettingField key={meta.key} meta={meta} value={draft[meta.key] ?? null} dirty={meta.key in changes} readOnlyNote={readOnlyNoteOf(meta.key)} onChange={(value) => setDraft((prev) => ({ ...prev, [meta.key]: value }))} />
+                            <SettingField
+                                key={meta.key}
+                                meta={meta}
+                                value={draft[meta.key] ?? null}
+                                dirty={meta.key in changes}
+                                readOnlyNote={readOnlyNoteOf(meta.key)}
+                                categories={categories}
+                                nextRunAt={meta.type === "cron" ? (status.data?.consolidation?.next_run_at ?? null) : undefined}
+                                onChange={(value) => setDraft((prev) => ({ ...prev, [meta.key]: value }))}
+                            />
                         ))}
                     </div>
+                    {sectionExtra[group]}
                 </Section>
             ))}
             <AnimatePresence initial={false}>
@@ -130,6 +178,10 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
 export function SettingsSkeleton() {
     return (
         <div className="flex flex-col gap-6" aria-busy="true">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center" data-testid="settings-filters-skeleton">
+                <Skeleton className="h-9 w-full sm:flex-1" />
+                <Skeleton className="h-9 w-full sm:w-40" />
+            </div>
             {Array.from({ length: 3 }, (_, group) => (
                 <div key={group} className="space-y-4 rounded-xl border p-6">
                     <Skeleton className="h-5 w-28" />
