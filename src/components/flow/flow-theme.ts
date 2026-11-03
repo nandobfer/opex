@@ -10,8 +10,15 @@ import type { BackgroundVariant } from "@xyflow/react"
  * `style` do próprio elemento (`FLOW_THEME_STYLE`) vencem essa folha. Os tipos de nó reservados da
  * biblioteca (`group`, `default`, `input`, `output`) ganham classe com fundo, padding e borda próprios:
  * os canvas usam tipos com prefixo do domínio, e as variáveis abaixo neutralizam o que sobrar.
+ *
+ * Cor e espessura das arestas vão no `style` inline do `path`: a folha do React Flow é importada fora
+ * das camadas do Tailwind, então a regra `.react-flow__edge-path { stroke; stroke-width }` vence
+ * qualquer classe utilitária (`stroke-primary`) e o atributo `strokeWidth` do SVG.
  */
 export const FLOW_SURFACE_CLASS = "relative overflow-hidden rounded-xl border bg-background bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.08),transparent_70%)]"
+
+/** Cor das linhas das arestas: roxo primário do tema (aplicar no `style` inline, ver acima). */
+export const FLOW_EDGE_PRIMARY_STROKE = "var(--color-primary)"
 
 export const FLOW_THEME_STYLE = {
     "--xy-background-color": "transparent",

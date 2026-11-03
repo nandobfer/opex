@@ -3,13 +3,16 @@
 import { memo, useState } from "react"
 import { EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react"
 import { motion } from "framer-motion"
+import { FLOW_EDGE_PRIMARY_STROKE } from "@/components/flow/flow-theme"
 import { PathTraveler } from "@/components/flow/path-traveler"
 import type { ArchitectEdgeKind } from "../../constants"
 import { enterDelay, useDiagramHighlight } from "./diagram-context"
 
 /**
  * Aresta do canvas: desenha-se na entrada (Framer Motion), sempre na cor primária do tema (linha e seta).
- * O foco se destaca pela espessura; fora dele a aresta esmaece (opacidade inalterada pela troca de cor).
+ * O foco se destaca pela espessura; fora dele a aresta esmaece pela opacidade.
+ * Cor e espessura da linha vão no `style` inline: a folha do React Flow (fora das camadas do Tailwind)
+ * pinta `.react-flow__edge-path` de cinza e venceria `stroke-primary` e o atributo `strokeWidth`.
  */
 
 export type DiagramEdge = Edge<{ kind: ArchitectEdgeKind; label: string | null; count: number; edgeIds: string[]; secondary: boolean; rank: number }, "architect">
@@ -26,6 +29,7 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
     const kind = data?.kind ?? "uses"
     const label = data?.count && data.count > 1 ? `×${data.count}` : data?.label
     const arrow = kind === "contains" ? null : arrowIdFor(id)
+    const strokeWidth = focused ? 2.25 : kind === "flow" ? 1.75 : 1.25
     return (
         <>
             {arrow && <ArrowMarker id={arrow} />}
@@ -34,8 +38,8 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
                 fill="none"
                 data-testid={`architect-edge-${id}`}
                 data-dimmed={dimmed ? "true" : "false"}
-                className="react-flow__edge-path stroke-primary"
-                strokeWidth={focused ? 2.25 : kind === "flow" ? 1.75 : 1.25}
+                className="react-flow__edge-path"
+                style={{ stroke: FLOW_EDGE_PRIMARY_STROKE, strokeWidth }}
                 strokeDasharray={DASH[kind]}
                 initial={highlight.reducedMotion ? false : { pathLength: 0, opacity: 0 }}
                 animate={{ pathLength: 1, opacity: edgeOpacity({ dimmed, secondary: Boolean(data?.secondary) }) }}
