@@ -82,6 +82,7 @@ import { OPEX_CLIENT_CONTEXT_TOOL, OPEX_CLIENT_OPT_IN_TOOLS, OPEX_CLIENT_TOOLS, 
 import { OPEX_CLIENT_SERVER_TOOLS, enabledClientOpexServerTools, findOpexClientServerTool } from '@/features/opex-agent/server/client-tools/registry'
 import type { ClientActor } from '@/features/auth/server/context'
 import type { OpexToolContext } from '@/features/opex-agent/server/tools/define'
+import { jobIdField, jobScheduleInput, jobUpdateInput } from '@/features/opex-agent/server/tools/job-shared'
 
 const actor = (isAdmin: boolean): ClientActor =>
   ({
@@ -150,6 +151,13 @@ beforeEach(() => {
 })
 
 describe('catálogo de ferramentas do portal', () => {
+  it('os schemas de jobs do portal vêm do módulo compartilhado, sem ciclo com tools/jobs', () => {
+    expect(findOpexClientServerTool('schedule_job')?.input).toBe(jobScheduleInput)
+    expect(findOpexClientServerTool('update_job')?.input).toBe(jobUpdateInput)
+    const cancel = findOpexClientServerTool('cancel_job')!.input as unknown as { shape: { jobId: unknown } }
+    expect(cancel.shape.jobId).toBe(jobIdField)
+  })
+
   it('o registro executável bate com o catálogo da tela', () => {
     const names = OPEX_CLIENT_SERVER_TOOLS.map((tool) => tool.name)
     expect(new Set(names).size).toBe(names.length)

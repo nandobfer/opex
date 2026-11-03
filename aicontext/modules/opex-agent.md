@@ -501,7 +501,7 @@ Um **job** é um prompt que o agente executa sozinho, **uma única vez**: agora,
 minutos/horas/dias ou numa data e hora (horário de Brasília), numa sessão nova (com o título do job)
 ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `jobs.ts` (puro: schema
 `opexJobInputSchema`, `resolveRunAt`, rótulos, `jobModelText`), `open-session.ts`, `server/jobs.ts`
-(serviço), `server/tools/jobs.ts` (dono + entradas compartilhadas), `server/client-tools/jobs.ts`
+(serviço), `server/tools/jobs.ts` (dono), `server/tools/job-shared.ts` (entradas, visão e resumo compartilhados entre dono e portal), `server/client-tools/jobs.ts`
 (portal), `hooks/useOpexJobs.ts` e `components/jobs/` (`OpexJobsTab`, `OpexJobsFilters`,
 `OpexJobRow`, `OpexJobDialog`).
 
