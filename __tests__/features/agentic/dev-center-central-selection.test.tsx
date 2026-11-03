@@ -24,7 +24,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useAgenticRealtime: () => {},
   useCentrals: () => mocks.centrals,
 }))
-vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskList: () => mocks.tasks }))
+vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskList: () => mocks.tasks, useTasksRealtime: () => {} }))
 vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({
   WorkbenchPane: ({ central }: { central: CentralDto }) => <div data-testid="workbench">{central.id}</div>,
 }))
