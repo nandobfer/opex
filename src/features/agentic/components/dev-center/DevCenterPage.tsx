@@ -12,7 +12,7 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { useScrollViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
-import { useTaskList } from "@/features/tasks/hooks/useTasks"
+import { useTaskList, useTasksRealtime } from "@/features/tasks/hooks/useTasks"
 import { DEV_CENTER_PATH } from "../../constants"
 import { ALL_CENTRALS_ID, isAllCentrals, pickActiveCentral } from "../../dev-center-central"
 import { useAgenticRealtime, useCentrals } from "../../hooks/useAgentic"
@@ -29,7 +29,10 @@ import { TasksPane } from "./TasksPane"
  * usa a central do produto da tarefa aberta (a escolha "Todos" continua salva).
  */
 export function DevCenterPage({ taskId }: { taskId: string | null }) {
+    // Tempo real pelo Pusher (`private-app`): mesas e fila (`agentic-updated`) e a lista de tarefas e o
+    // quadro (`tasks-updated`/`task-columns-updated`). A reconexão refaz as consultas ativas (OPE-124).
     useAgenticRealtime()
+    useTasksRealtime()
     const router = useRouter()
     const centrals = useCentrals()
     const list = useMemo(() => centrals.data ?? [], [centrals.data])

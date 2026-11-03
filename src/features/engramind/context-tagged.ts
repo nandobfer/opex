@@ -3,6 +3,9 @@
  * por memória (`#<id>: <texto achatado>`) dentro de `<channel slug="…">` / `<CATEGORIA>` (faixa 1,
  * texto completo) ou de `<titles>` (faixa 2, só título). Só a faixa 1 conta como injeção no
  * Engramind (`injected_count`); os títulos ficam à parte.
+ *
+ * Desde a 0.11.0 (decisão 0030) a faixa 2 traz a categoria e o canal: `#<id> [CATEGORIA] @canal: título`.
+ * O formato antigo (`#<id>: título`) continua aceito (cache de antes do upgrade).
  */
 
 export interface TaggedContextIds {
@@ -10,13 +13,16 @@ export interface TaggedContextIds {
     full: { id: string; channel: string }[]
     /** Faixa 2: memórias entregues só pelo título. */
     titles: string[]
+    /** Faixa 2 com categoria e canal (vazios no formato antigo). */
+    titleItems: { id: string; category: string | null; channel: string | null }[]
 }
 
 const CHANNEL_OPEN = /^<channel slug="([^"]+)">$/
 const ITEM = /^#([^:\s]+): /
+const TITLE_ITEM = /^#([^:\s\[]+) \[([^\]]+)\] @([^:\s]+): /
 
 export function parseTaggedContext(content: string | null | undefined): TaggedContextIds {
-    const result: TaggedContextIds = { full: [], titles: [] }
+    const result: TaggedContextIds = { full: [], titles: [], titleItems: [] }
     if (!content) return result
     let channel: string | null = null
     let inTitles = false
@@ -39,10 +45,17 @@ export function parseTaggedContext(content: string | null | undefined): TaggedCo
             inTitles = false
             continue
         }
+        if (inTitles) {
+            const titled = TITLE_ITEM.exec(line)
+            const legacy = titled ? null : ITEM.exec(line)
+            const id = titled?.[1] ?? legacy?.[1]
+            if (!id) continue
+            result.titles.push(id)
+            result.titleItems.push({ id, category: titled?.[2] ?? null, channel: titled?.[3] ?? null })
+            continue
+        }
         const item = ITEM.exec(line)
-        if (!item) continue
-        if (inTitles) result.titles.push(item[1])
-        else if (channel) result.full.push({ id: item[1], channel })
+        if (item && channel) result.full.push({ id: item[1], channel })
     }
     return result
 }

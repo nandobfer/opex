@@ -4,8 +4,6 @@ import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ setWorkbenchModel: vi.fn() }))
-
 const MODELS = [
   { id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: ['low', 'high'] },
   { id: 'openai/gpt-5', name: 'GPT-5', group: 'OpenAI', variants: [] },
@@ -46,11 +44,8 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
     },
   }
 })
-vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useSetWorkbenchModel: () => ({ mutate: mocks.setWorkbenchModel, isPending: false }) }))
 
 import { ModelOverridePicker } from '@/features/ai/components/model-picker/ModelOverridePicker'
-import { WorkbenchModelPicker } from '@/features/agentic/components/workbench/WorkbenchModelPicker'
-import type { WorkbenchDto } from '@/features/agentic/types'
 
 const onChange = vi.fn()
 
@@ -92,36 +87,5 @@ describe('ModelOverridePicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'escolher GPT-5' }))
     expect(onChange).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /Esforço de raciocínio/ })).toBeNull()
-  })
-})
-
-describe('WorkbenchModelPicker', () => {
-  const models = {
-    planning: { model: 'anthropic/opus', variant: null, overridden: false },
-    implementation: { model: 'openai/gpt-5', variant: null, overridden: true },
-    build: { model: null, variant: null, overridden: false },
-    pr: { model: null, variant: null, overridden: false },
-  }
-  const workbench = (patch: Partial<WorkbenchDto>) => ({ id: 'w1', taskId: 't1', stage: 'plan_review', runState: 'idle', models, ...patch }) as WorkbenchDto
-
-  it('troca o modelo do papel da etapa atual (Mudanças pedidas = Plano)', () => {
-    render(<WorkbenchModelPicker workbench={workbench({ stage: 'changes_requested' })} />)
-    expect(screen.getByRole('button', { name: /Modelo do Plano: Claude Opus/ })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'escolher GPT-5' }))
-    expect(mocks.setWorkbenchModel).toHaveBeenCalledWith({ role: 'planning', model: 'openai/gpt-5', variant: null })
-  })
-
-  it('com o agente respondendo continua disponível (vale no próximo turno)', () => {
-    render(<WorkbenchModelPicker workbench={workbench({ stage: 'implementing', runState: 'running' })} />)
-    const trigger = screen.getByRole('button', { name: /Modelo da Implementação: GPT-5 \(trocado\)/ }) as HTMLButtonElement
-    expect(trigger.disabled).toBe(false)
-  })
-
-  it('oculto em Concluída e sem os modelos da central', () => {
-    const { container, unmount } = render(<WorkbenchModelPicker workbench={workbench({ stage: 'done' })} />)
-    expect(container.innerHTML).toBe('')
-    unmount()
-    const other = render(<WorkbenchModelPicker workbench={workbench({ models: null })} />)
-    expect(other.container.innerHTML).toBe('')
   })
 })

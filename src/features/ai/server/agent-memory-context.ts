@@ -7,21 +7,22 @@ import type { MemoriesMetaDto } from "../types"
  * pede as memórias. Nunca lança (o serviço do Engramind cai no cache ou em "sem memórias").
  */
 
-export type { MemoryContextResult } from "@/features/engramind/server/memory-context"
+export type { MemoryContextResult, MemoryContextOptions } from "@/features/engramind/server/memory-context"
 
-export async function agentMemoryContext(consumer: MemoryConsumer, turn: MemoryTurn) {
+/** `options.focus`: o foco do turno já montado por `buildMemoryFocus` (sem segredos, cortado). */
+export async function agentMemoryContext(consumer: MemoryConsumer, turn: MemoryTurn, options: { focus?: string } = {}) {
     const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
-    return getAgentMemoryContext(consumer, contextChannelsFor(consumer, turn))
+    return getAgentMemoryContext(consumer, contextChannelsFor(consumer, turn), options)
 }
 
 /** Agente Adversário: Memórias do Opex + a lista dele. */
-export const adversarialMemoryContext = () => agentMemoryContext("adversario", { kind: "review" })
+export const adversarialMemoryContext = (options: { focus?: string } = {}) => agentMemoryContext("adversario", { kind: "review" }, options)
 
 /** Agente Arquiteto: Memórias do Opex + a lista dele. */
-export const architectMemoryContext = () => agentMemoryContext("arquiteto", { kind: "review" })
+export const architectMemoryContext = (options: { focus?: string } = {}) => agentMemoryContext("arquiteto", { kind: "review" }, options)
 
 /** Agente desenvolvedor: Memórias do Opex, as globais e as da central (a arquivada fica de fora). */
-export const developerMemoryContext = (centralId: string | null) => agentMemoryContext("desenvolvedor", { kind: "central", centralId })
+export const developerMemoryContext = (centralId: string | null, options: { focus?: string } = {}) => agentMemoryContext("desenvolvedor", { kind: "central", centralId }, options)
 
 /** Metadados das telas de memórias. Nunca lança: um erro do Engramind vem em `error`. */
 export async function getMemoriesMeta(): Promise<MemoriesMetaDto> {

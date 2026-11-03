@@ -53,6 +53,11 @@ export interface IEngramindState {
     sources?: { redator?: IEngramindAiSource | null; embedding?: IEngramindAiSource | null } | null
     agentTokens?: Partial<Record<MemoryIdentity, IEngramindAgentToken>> | null
     memoryContext?: IEngramindMemoryContextState | null
+    /**
+     * Token `kind: app` do app opex (OPE-117) que provisiona agentes, assinaturas e tokens de agente: só o
+     * id e o prefixo (o segredo é o campo privado `appToken` da integração).
+     */
+    appToken?: { tokenId: string; prefix: string; issuedAt: Date } | null
 }
 
 /** Último contexto de memórias recebido por agente e combinação de canais (reserva com o Engramind fora do ar). */
@@ -69,7 +74,31 @@ export interface IEngramindContextCache {
     memoryIds?: string[]
     /** Canais que entregaram ao menos uma memória. */
     delivered?: string[]
+    /** Ids da faixa 2 (só título), para o rastreio da entrega na resposta `304`. */
+    titleIds?: string[]
+    /** SHA-256 do foco normalizado do bloco em cache (nunca o texto): o `If-None-Match` só vale com o mesmo foco. */
+    focusHash?: string | null
+    /** Modo do foco do bloco em cache (`hybrid`; blocos degradados não entram). */
+    focusMode?: "hybrid" | "text" | "none" | null
     fetchedAt: Date
+}
+
+/**
+ * Última entrega do contexto por consumidor (OPE-117, `_id` = consumidor): ids por faixa, canais,
+ * `version` e modo do foco. Nunca guarda o texto das memórias nem o foco; sobrescrita a cada turno.
+ */
+export interface IEngramindDelivery {
+    _id: string
+    fullIds: string[]
+    titleIds: string[]
+    overflow: number
+    counts: { full: number; titles: number; overflow: number }
+    channels: string[]
+    delivered: string[]
+    version: string
+    focusMode: "hybrid" | "text" | "none" | null
+    source: "live" | "not-modified"
+    at: Date
 }
 
 const webhookEventSchema = new Schema<IEngramindWebhookEvent>(
@@ -85,6 +114,7 @@ const stateSchema = new Schema<IEngramindState>(
         sources: { type: Schema.Types.Mixed, default: null },
         agentTokens: { type: Schema.Types.Mixed, default: null },
         memoryContext: { type: Schema.Types.Mixed, default: null },
+        appToken: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false },
 )
@@ -100,10 +130,32 @@ const contextCacheSchema = new Schema<IEngramindContextCache>(
         format: { type: String, default: "markdown" },
         memoryIds: { type: [String], default: [] },
         delivered: { type: [String], default: [] },
+        titleIds: { type: [String], default: [] },
+        focusHash: { type: String, default: null },
+        focusMode: { type: String, default: null },
         fetchedAt: { type: Date, required: true },
     },
     { collection: "engramind_context_cache", versionKey: false },
 )
+
+const deliverySchema = new Schema<IEngramindDelivery>(
+    {
+        _id: { type: String, required: true },
+        fullIds: { type: [String], default: [] },
+        titleIds: { type: [String], default: [] },
+        overflow: { type: Number, default: 0 },
+        counts: { type: Schema.Types.Mixed, default: () => ({ full: 0, titles: 0, overflow: 0 }) },
+        channels: { type: [String], default: [] },
+        delivered: { type: [String], default: [] },
+        version: { type: String, default: "" },
+        focusMode: { type: String, default: null },
+        source: { type: String, default: "live" },
+        at: { type: Date, required: true },
+    },
+    { collection: "engramind_deliveries", versionKey: false },
+)
+
+export const EngramindDelivery: Model<IEngramindDelivery> = (models.EngramindDelivery as Model<IEngramindDelivery>) ?? model<IEngramindDelivery>("EngramindDelivery", deliverySchema)
 
 export const EngramindContextCache: Model<IEngramindContextCache> =
     (models.EngramindContextCache as Model<IEngramindContextCache>) ?? model<IEngramindContextCache>("EngramindContextCache", contextCacheSchema)

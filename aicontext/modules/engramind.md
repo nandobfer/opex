@@ -1,6 +1,6 @@
 # Módulo: Engramind (`src/features/engramind/`)
 
-O **Engramind** (v0.10.0, repositório `nandobfer/engramind`, instalado em `/home/engramind`) é uma rede
+O **Engramind** (contrato documentado aqui: o da 0.11.0, `docs/openapi.json` do repositório `nandobfer/engramind`; a versão em execução vem de `GET /v1/status`; instalado em `/home/engramind`) é uma rede
 de memórias para agentes de IA: um serviço Rust separado do Opex (SQLite + FTS5, backup contínuo
 pelo Litestream, Redator por LLM, embeddings locais ou remotos, webhooks) que guarda fatos curtos em
 **canais** e os entrega por REST, MCP e CLI. O Opex é o **gestor** da rede: configura o serviço,
@@ -536,7 +536,8 @@ sem memórias) e o provisionamento termina em segundo plano. Nos testes, o Engra
 
 ### Contexto com cache (`server/memory-context.ts`)
 
-`getAgentMemoryContext(consumer, channels)` → `{ block, source: live|cache|none, cachedAt, counts, reason }`:
+`getAgentMemoryContext(consumer, channels, { focus? })` → `{ block, source: live|cache|none, cachedAt, counts, reason, focusMode }`
+(foco e rastreio: ver "Contratos 0.11.0 e OPE-117" abaixo):
 `GET /v1/context?channels=…&format=tagged` (desde a OPE-109; o `markdown` não traz ids) com o token do
 agente e `If-None-Match` (a `version` do cache, só quando o cache já é `tagged` — a `version` muda
 com o formato; `304` reaproveita). `parseTaggedContext` (`context-tagged.ts`, puro) lê os ids da
@@ -549,6 +550,114 @@ alteração** depois do cabeçalho curto (`memoriesSection`); `memoryCacheNotice
 memórias"). Quem monta: `src/features/ai/server/agent-memory-context.ts` (`agentMemoryContext`,
 `adversarialMemoryContext`, `developerMemoryContext`). O orçamento global não muda sozinho: os cards
 mostram as memórias fora do texto completo (`counts`) com link às configurações.
+
+### Contratos 0.11.0 e OPE-117
+
+Contratos conferidos no `docs/openapi.json` e nas decisões 0025 e 0028–0033 do Engramind. Onde o texto da
+tarefa divergia do contrato, vale o contrato:
+
+- **Foco no contexto** (decisão 0029): `GET /v1/context?focus=…` (query, **não** `POST`), até 2.000
+  caracteres depois de juntar os espaços (`400 FOCUS_TOO_LONG`); a resposta traz `focus_mode`
+  (`hybrid`/`text`/`none`, também no cabeçalho `Engramind-Focus-Mode`) e a `version` muda com o foco (o
+  Engramind guarda só o hash). O Opex monta o foco por consumidor em `src/features/ai/memory-focus.ts`
+  (puro): Opex/Maddox (dono e portal) e Arquiteto, o pedido do turno; desenvolvedor, código + título +
+  etapa/mesa e a descrição no restante (lida do banco só com a conexão aberta, prazo de 1,5 s);
+  Adversário, tarefa + veredito da rodada anterior + pedido/implementação. Segredos saem **antes** do
+  corte (`redactFocusText`: tokens `eng.tk_…`, `mt_sys_…`, `Bearer`, `sk-`/`ghp_`/JWT e `KEY=valor`).
+  Engramind sem suporte (400 de validação) → a chamada é refeita uma vez sem foco (log
+  `focus_fallback`, sem o texto). O cache guarda `focusHash` (sha256, nunca o texto) e `focusMode`:
+  `If-None-Match` só com o mesmo foco, e bloco degradado (`text`/`none`) não entra no cache.
+- **Faixa de títulos com categoria e canal** (0030): `#id [CATEGORIA] @canal: título` (sem tags).
+  `parseTaggedContext` lê o formato novo (e o antigo `#id: título`) e devolve `titleItems` com categoria
+  e canal.
+- **Rastreio por turno**: cada entrega (200 ou 304) grava `engramind_deliveries` (`_id` = consumidor,
+  sobrescrito): `fullIds`, `titleIds`, `overflow` (o bloco não lista os ids do overflow, só a contagem),
+  `counts`, `channels`, `delivered`, `version`, `focusMode`, `source` e `at`. Nunca texto nem foco.
+  Gravação fire-and-forget com `.catch`. `engramind-consumption` ganhou só `titleIds` e `version`.
+- **Adoção** (`server/agent-activity.ts`, `GET /api/engramind/agent-activity`): por identidade, gravações
+  `total`/`last7d`/`lastWriteAt` da auditoria (`entidade: MemoriaAgente`, `dadosNovos.ator =
+  agente:<identidade>`, índice `{ entidade, dadosNovos.ator, timestamp }`), a última entrega e `stale`
+  (aprendizado ligado e sem gravar há 14 dias ou mais; nunca gravou com o agente criado há mais de 14
+  dias). O card "Aprendizado autônomo" de cada agente (`SelfMemorySwitch` + `AgentMemoryActivity`)
+  mostra "Memórias gravadas (7d)", "Última gravação", "Último contexto lido" (zeros explícitos:
+  "0"/"Nunca"), o aviso discreto e o bloco recolhível "Última entrega"; falha ao carregar mostra o erro
+  com "Tentar novamente" (nunca zeros). Invalidação: `engramind-updated`
+  (`memory.*`, `memories.context`), `ai-memories-updated` e `engramind-consumption` (3 s depois).
+- **Rede**: o node do agente mostra "N gravadas · M acessíveis" (gravadas: auditoria, só os agentes do app
+  opex, com os 7 dias no tooltip; acessíveis: soma das memórias ativas dos canais assinados — o alcance
+  já usado no tamanho). Largura e altura fixas (`AGENT_NODE_SIZE_CLASS`), também no skeleton.
+- **Dicas** (`POST /v1/hints`): só `{ id, title, channel, score, method, duplicate }`; sem embeddings,
+  vazio. Usadas pelas ferramentas de leitura da memória própria (ver `aicontext/modules/ai.md`) e pela
+  operação `get_hints` do catálogo (`get_engramind_hints`, `{ text 1–2000, channels?, limit 1–20 }`,
+  leitura), presente no Agente Opex e no Maddox do dono e ausente no portal. Chamada por eles, vai com o
+  **token do próprio agente** (`opex/opex`, `opex/maddox`), como os outros agentes (decisão do dono); por
+  token de sistema ou sem token do agente, pelo admin.
+- **Debug sem texto do usuário**: no `engramindCall`, o `focus` da query e o `text`/`query` de
+  `/v1/hints` e `/v1/memories/search` aparecem no debug da integração (console, `integration_logs`,
+  stream) só como `[foco|texto omitido: N caracteres]` (`debugView`; `debugFetch` aceita a URL e o corpo
+  registrados).
+- **Consolidação** (0025/0026): `consolidation.schedule` é cron de 5 campos em **UTC** (sem apelidos);
+  `POST /v1/consolidation/run { channel?, dry_run?, tasks? }` (admin): `dry_run` → `200 channels[]`
+  (plano, sem gravar nem LLM); senão `202 jobs[{ channel, job_id, already_queued }]`; `409
+  CONSOLIDATION_DISABLED`/`CHANNEL_ARCHIVED`. Operação `run_consolidation` no catálogo.
+- **Retenção**: sem execução manual (só a automática); `status.retention.last_run_at` + `removed`.
+  **Webhooks**: sem rota de reenvio/teste; entrega falha é reprocessada por `retry_job`.
+- **Tokens** (0028): `kind: app` (só o admin emite; opera o próprio app, `403 FOREIGN_APP`; não muta
+  memória a memória); `POST /v1/tokens/{id}/rotate` emite igual e revoga o antigo numa transação
+  (`rotate_token`, destrutiva); `update_token` muda só rótulo, escopos e validade (o vínculo é imutável);
+  `create_agent`/`subscribe` repetidos com os mesmos campos → `200 created: false`.
+- **Configuração por canal**: `context.category_priorities` (tipo `map`, −1000..1000, por canal),
+  `context.text_max_chars`, `context.focus_min_score`, `context.focus_embed_timeout_ms`,
+  `memory.vector_similar_threshold` e `memory.vector_duplicate_threshold`; `/v1/consumer-settings` e
+  `/v1/categories` (categorias globais: o agente não tem campo de categorias).
+
+### Token de app no provisionamento
+
+`ensureAppToken` confere o token salvo no campo privado `appToken` da integração (`whoami` com
+`kind: app` do app opex); sem ele, emite UMA vez com o admin, grava cifrado, guarda id/prefixo em
+`engramind_state.appToken` e revoga o anterior. Agentes, assinaturas e tokens de agente passam a ser
+provisionados com ele; sem token de app (Engramind antigo, gravação falhou), segue com o admin e avisa.
+**Follow-up**: os canais (fixos e por central) continuam com o admin — `POST /v1/channels` é só do admin;
+pelo app, o canal nasceria por assinatura exata com nome = slug, e o arquivamento pelo app só vale para
+canais que ele criou (`409 CHANNEL_SHARED`).
+
+Os dois tokens do próprio Opex (o admin da Conexão e o de app) são "Este Opex" na aba Identidades e
+protegidos por `guardOwnToken` (sem revogar, rebaixar ou ganhar validade). **Rotacionar** um deles grava
+o novo segredo no campo privado no mesmo passo (`RotatedTokenResult.savedOwn`, sem segredo na resposta);
+se a gravação falhar, o segredo volta uma vez com o aviso de colá-lo na Conexão. O Agente Opex rotaciona
+pelo mesmo caminho do "Ver token" (o Maddox não tem a ferramenta, como em `issue_engramind_token`).
+
+### Aba Identidades (dois níveis)
+
+Lista de apps (`AppsCard`: agentes, tokens ativos, última atividade e alertas; busca, status e "Com
+alertas") e a lista geral **só com os tokens administrativos** (decisão do dono; todo token tem app). O
+detalhe do app (`AppDetail`) tem o **token em uso** fixo no topo (`appTokenInUse`: o de app do Opex, ou o
+`kind: app` ativo usado por último) e as abas Visão geral · Agentes · Tokens (sem agente, sem o em uso) ·
+Webhook; o do agente (`AgentDetail`): Configuração · Tokens · Assinaturas · Memórias gravadas ·
+Memórias acessíveis. "Emitir token" vem escopado ao app (`app`/`admin`) ou ao agente. Alertas
+(`tokenHealth`): expira em até 7 dias, sem uso há 30 dias ou mais (nunca usado criado há mais de 30) e
+app/agente desativado com token ativo. Regras puras em `src/features/engramind/identities.ts`.
+
+### Configurações (`SettingsTab`)
+
+Controles por tipo do metadado (`boolean` switch; `integer`/`number` com min/max e passo 0,01 em 0–1;
+`enum` abas/select; `list` com `choices` vira chaves por opção; `categories`; `map` →
+`CategoryPrioritiesEditor`; `cron` → `ScheduleSettingControl`), selo "por canal" quando
+`channel_override`, busca (fuse.js) e "Só alteradas". O agendamento usa o `ScheduleEditor` das Rotinas
+(horário de Brasília) convertido para o cron UTC (`schedule-cron.ts`, puro: virada de dia desloca os dias
+da semana; mensal só até o dia 28; intervalo só em divisores de 60 min/24 h), com o modo "Expressão cron"
+validado inline (5 campos, sem apelidos); cron fora do editor abre no modo avançado. "Executar agora"
+(`RunNowButton`/`RunNowDialog` de `src/components/ui/run-now-button.tsx`, extraído das Rotinas, fundo do
+card): Consolidação (todos com consolidação ativa ou um canal; "Ver plano" com `dry_run`; resultado com
+jobs/`already_queued` ou o plano) e Embeddings ("Reindexar agora", `reembed_all`); Retenção só mostra a
+última execução. Com alterações pendentes, a confirmação vira "Salvar e executar" (grava antes; falha ao
+gravar não executa); com chave de embedding pendente, o "Salvar e executar" pede a mesma confirmação
+"Trocar o embedding?" do Salvar (cancelar não grava nem executa), e o "Reindexar agora" não dispara o
+`reembed_all` quando a gravação já reindexou. O resultado/erro da consolidação, o "em execução" das duas
+ações e a busca/"Só alteradas" ficam no `SettingsTab` e sobrevivem ao remonte do formulário depois de
+salvar. O editor de agendamento segue o rascunho ("Voltar ao padrão", "Desfazer"); agendamento que não
+cabe no cron UTC (mensal depois do dia 28) entra no rascunho como marcador inválido e bloqueia o Salvar
+com a mensagem da conversão. Erro acionável com "Tentar novamente".
 
 ### Serviço (`src/features/ai/server/agent-memory-service.ts`)
 

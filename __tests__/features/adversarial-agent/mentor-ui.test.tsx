@@ -14,6 +14,7 @@ vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
   useMentorRuns: () => ({ data: mocks.runs, isLoading: false, isError: false, refetch: vi.fn() }),
   useMentorRealtime: vi.fn(),
   useMentorRunDecision: () => ({ mutate: mocks.mutate, isPending: false }),
+  useMentorRunMemory: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 
 import { MentorDeciderCard } from '@/features/adversarial-agent/components/mentor/MentorDeciderCard'

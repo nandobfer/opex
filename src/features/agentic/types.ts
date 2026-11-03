@@ -84,12 +84,21 @@ export interface SlotQueueDto {
     action: PendingTurnAction
 }
 
+/** De onde vem o modelo efetivo: troca do fork, troca da mesa, central ou Configurações Padrão (global). */
+export type ModelSourceDto = "fork" | "workbench" | "central" | "global"
+
 /** Modelo efetivo de um papel na mesa ou no fork: o do papel (`overridden: false`) ou o trocado. */
 export interface ModelChoiceDto {
     /** `provedor/modelo`; `null` = modelo padrão do agente. */
     model: string | null
     variant: string | null
     overridden: boolean
+    /** Valor sem a troca deste nível (na mesa: central/global; no fork: o Fork da mesa). */
+    inherited?: { model: string | null; variant: string | null }
+    /** Origem do valor efetivo (precedência fork > mesa > central > global). */
+    source?: ModelSourceDto
+    /** Origem do valor herdado (o que vale ao voltar ao padrão). */
+    inheritedSource?: ModelSourceDto
 }
 
 export interface WorkbenchDto {
@@ -134,6 +143,8 @@ export interface WorkbenchDto {
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    /** Modelo do Agente Adversário (aba própria; só leitura na mesa), quando ele se aplica à mesa. */
+    adversarialModel: { model: string | null; variant: string | null } | null
     /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
     liveChat: boolean
     /** O Agente Adversário se aplica a esta mesa (ativo e a central no escopo): passo "Revisão adversária" na trilha. */

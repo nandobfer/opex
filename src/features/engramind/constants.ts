@@ -41,7 +41,7 @@ export function combinationOf(scopes: readonly string[]): ScopeCombination | nul
     return (SCOPE_COMBINATIONS as readonly string[]).includes(key) && key.split("+").length === scopes.length ? (key as ScopeCombination) : null
 }
 
-export const TOKEN_KINDS = ["admin", "agent"] as const
+export const TOKEN_KINDS = ["admin", "app", "agent"] as const
 export const SUBSCRIPTION_MODES = ["inject", "search", "manage"] as const
 export const MEMORY_STATUSES = ["active", "permanent", "archived"] as const
 export const JOB_KINDS = ["redact", "embed", "webhook"] as const
@@ -56,7 +56,7 @@ export const SECRET_KEYS = ["redator.api_key", "embedding.api_key"] as const
 export type EngramindSecretKey = (typeof SECRET_KEYS)[number]
 
 /** Grupos das configurações (prefixo da chave), na ordem da tela. */
-export const SETTING_GROUPS = ["limits", "categories", "memory", "context", "redator", "embedding", "search", "webhooks", "retention"] as const
+export const SETTING_GROUPS = ["limits", "categories", "memory", "context", "redator", "embedding", "search", "consolidation", "webhooks", "retention"] as const
 export const SETTING_GROUP_LABELS: Record<(typeof SETTING_GROUPS)[number], string> = {
     limits: "Limites",
     categories: "Categorias",
@@ -65,6 +65,7 @@ export const SETTING_GROUP_LABELS: Record<(typeof SETTING_GROUPS)[number], strin
     redator: "Redator",
     embedding: "Embeddings",
     search: "Busca",
+    consolidation: "Consolidação",
     webhooks: "Webhooks",
     retention: "Retenção",
 }

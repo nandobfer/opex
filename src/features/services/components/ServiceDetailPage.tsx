@@ -21,8 +21,8 @@ import { clienteConfigPath } from "@/features/orcamentos/constants"
 import { AttachmentList } from "@/features/tasks/attachments/components/AttachmentList"
 import { useDeleteAttachment, useOwnerAttachmentClient, useTaskAttachments } from "@/features/tasks/attachments/hooks"
 import { taskPath } from "@/features/tasks/constants"
-import { formatDate } from "@/features/tasks/format"
 import { formatBillingBrl, formatHours } from "@/features/finance/format"
+import { formatServiceDate } from "@/features/services/logic"
 import { SERVICES_PATH, serviceEditPath } from "../constants"
 import { useArchiveService, useRestoreService, useService, useServicesRealtime } from "../hooks"
 import { ServiceAiPanel } from "./ServiceAiPanel"
@@ -169,7 +169,7 @@ export function ServiceDetailPage({ id }: { id: string }) {
                                             <Row label="Data">
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-                                                    {formatDate(service.serviceDate)}
+                                                    {formatServiceDate(service.serviceDate)}
                                                 </span>
                                             </Row>
                                             <Row label="Duração do serviço">{formatHours(service.hours)} h</Row>

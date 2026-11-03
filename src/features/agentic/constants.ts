@@ -126,7 +126,7 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
 }
 
 /** Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca). */
-export const WORKBENCH_MODEL_ROLES = ["planning", "implementation", "build", "pr"] as const satisfies readonly AgentRole[]
+export const WORKBENCH_MODEL_ROLES = ["planning", "implementation", "build", "pr", "fork"] as const satisfies readonly AgentRole[]
 export type WorkbenchModelRole = (typeof WORKBENCH_MODEL_ROLES)[number]
 
 /** Rótulo do seletor de modelo da mesa e dos avisos ("Modelo do Plano"). */
@@ -135,6 +135,7 @@ export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
     implementation: "Modelo da Implementação",
     build: "Modelo da Prévia",
     pr: "Modelo do Pull Request",
+    fork: "Modelo do Fork",
 }
 
 /**

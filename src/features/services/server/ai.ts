@@ -11,6 +11,7 @@ import { taskSummarySourceHash, toSummaryLine } from "@/features/ai/task-summary
 import { taskTagsSourceHash } from "@/features/ai/task-tags"
 import { buildServiceAiInstructions, buildServiceAiPrompt, parseServiceAi } from "../ai-prompt"
 import { SERVICE_AI_ORIGIN, SERVICE_SUMMARY_MAX, SERVICE_TITLE_MAX } from "../constants"
+import { serviceDateKey } from "../logic"
 import { publishServicesUpdated } from "./service"
 import type { ServiceRow } from "./service"
 
@@ -63,7 +64,7 @@ export async function generateServiceAi(id: string): Promise<void> {
             temperature: settings.temperature,
             maxOutputTokens: settings.maxOutputTokens,
             instructions: buildServiceAiInstructions(settings.instructions),
-            prompt: buildServiceAiPrompt({ code: service.code, projectName: project?.name ?? null, serviceDate: new Date(service.serviceDate).toISOString().slice(0, 10), description }),
+            prompt: buildServiceAiPrompt({ code: service.code, projectName: project?.name ?? null, serviceDate: serviceDateKey(service.serviceDate), description }),
             title: `Serviço ${service.code}`,
             consumption: { origin: SERVICE_AI_ORIGIN, subject: id },
         })) {

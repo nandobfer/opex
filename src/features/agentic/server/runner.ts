@@ -1,5 +1,5 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
-import type { OpencodeFormDto, OpencodePermissionDto, OpencodeTokenUsage } from "@/lib/ai/opencode-events"
+import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 import { runAgentTurn as runTurn, type TurnResult } from "@/lib/ai/opencode-run"
 import type { WorkbenchStage } from "../constants"
 import type { AgentConfig } from "../schemas"
@@ -59,6 +59,8 @@ export function runAgentTurn(client: OpencodeClient, request: TurnRequest, hooks
             startedAt: request.startedAt,
             ...(request.files?.length ? { files: request.files } : {}),
             consumption: { origin: "agentic", subject: request.workbenchId },
+            // Cota/limite do provedor: desiste das novas tentativas para o turno seguir com o fallback do papel.
+            providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
         },
         { ...hooks, publish },
     )

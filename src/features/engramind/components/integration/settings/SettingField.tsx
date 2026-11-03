@@ -12,7 +12,7 @@ import { formatDateTime, formatSettingValue } from "../../shared/format"
 import { SettingControl, type SettingControlMeta } from "./SettingControl"
 
 interface SettingFieldProps {
-    meta: SettingControlMeta & { description: string; default: unknown; value?: unknown; updated_at?: string | null; updated_by_app?: string | null }
+    meta: SettingControlMeta & { description: string; default: unknown; value?: unknown; updated_at?: string | null; updated_by_app?: string | null; channel_override?: boolean }
     value: unknown
     dirty: boolean
     onChange: (value: unknown) => void
@@ -25,15 +25,19 @@ interface SettingFieldProps {
     hideHistory?: boolean
     /** Somente leitura: mostra o valor e este aviso no lugar do controle (ex.: "Edite na aba Provedores"). */
     readOnlyNote?: string
+    /** Categorias do rascunho (mapa de prioridades). */
+    categories?: readonly { key: string; label: string }[]
+    /** Próxima execução do agendamento (cron). */
+    nextRunAt?: string | null
 }
 
 /** Uma configuração: rótulo com tooltip, controle, padrão, intervalo, última alteração e "Voltar ao padrão". */
-export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão", defaultLabel = "Padrão", hideHistory = false, readOnlyNote }: SettingFieldProps) {
+export function SettingField({ meta, value, dirty, onChange, extra, resetLabel = "Voltar ao padrão", defaultLabel = "Padrão", hideHistory = false, readOnlyNote, categories, nextRunAt }: SettingFieldProps) {
     const help = settingHelp(meta.key, meta.description)
     const id = `setting-${meta.key.replace(/\W/g, "-")}`
     const error = value === null ? null : settingValueSchema(meta).safeParse(value).error?.issues[0]?.message ?? null
     const range = typeof meta.min === "number" || typeof meta.max === "number" ? `${meta.type === "categories" || meta.type === "list" ? "itens " : ""}${meta.min ?? "…"} a ${meta.max ?? "…"}` : null
-    const wide = meta.type === "categories" || meta.key.endsWith("instructions")
+    const wide = meta.type === "categories" || meta.type === "cron" || meta.type === "map" || meta.key.endsWith("instructions")
     return (
         <div className={cn("space-y-1.5 rounded-lg border p-3 transition-colors", dirty && "border-primary/50 bg-primary/5", wide && "sm:col-span-2")}>
             <div className="flex items-center gap-1.5">
@@ -41,6 +45,11 @@ export function SettingField({ meta, value, dirty, onChange, extra, resetLabel =
                     {help.label}
                 </Label>
                 <InfoTooltip text={help.help} label={help.label} />
+                {meta.channel_override && (
+                    <span className="rounded border px-1 text-[10px] text-muted-foreground" title="Aceita sobreposição por canal (Engramind › canal › Configurações)" data-testid="channel-override">
+                        por canal
+                    </span>
+                )}
                 <code className="ml-auto truncate font-mono text-[10px] text-muted-foreground">{meta.key}</code>
             </div>
             {readOnlyNote ? (
@@ -49,7 +58,7 @@ export function SettingField({ meta, value, dirty, onChange, extra, resetLabel =
                     <p className="text-[11px] text-muted-foreground">{readOnlyNote}</p>
                 </div>
             ) : (
-                <SettingControl id={id} meta={meta} value={value === null ? meta.default : value} onChange={onChange} />
+                <SettingControl id={id} meta={meta} value={value === null ? meta.default : value} onChange={onChange} categories={categories} nextRunAt={nextRunAt} />
             )}
             <AnimatePresence initial={false}>
                 {error && (

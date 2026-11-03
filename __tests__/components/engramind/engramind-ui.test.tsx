@@ -85,7 +85,7 @@ describe('TokensCard', () => {
   beforeEach(() => mocks.mutate.mockClear())
 
   it('o token do Opex aparece marcado e não pode ser revogado; os outros pedem confirmação', async () => {
-    render(<TokensCard tokens={[token('tk_0e000001'), token('tk_0ther001')]} apps={[]} agents={[]} ownTokenId="tk_0e000001" />)
+    render(<TokensCard tokens={[token('tk_0e000001'), token('tk_0ther001')]} apps={[]} agents={[]} ownTokenIds={["tk_0e000001"]} />)
     expect(screen.getAllByText('Este Opex')).toHaveLength(1)
     const revoke = screen.getAllByRole('button', { name: 'Revogar token' })
     expect(revoke[0]!.getAttribute('aria-disabled')).toBe('true')
@@ -98,7 +98,7 @@ describe('TokensCard', () => {
   })
 
   it('vazio com ação de emitir', () => {
-    render(<TokensCard tokens={[]} apps={[]} agents={[]} ownTokenId={null} />)
+    render(<TokensCard tokens={[]} apps={[]} agents={[]} ownTokenIds={[]} />)
     expect(screen.getByText('Nenhum token')).toBeTruthy()
   })
 })

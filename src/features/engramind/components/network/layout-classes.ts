@@ -15,3 +15,5 @@ export const NETWORK_STATS_TOGGLE_CLASS = "pointer-events-auto absolute right-3 
 export const NETWORK_TOUCH_BUTTON_CLASS = "max-md:h-10 max-md:px-3"
 /** Skeleton da visão inicial: área livre à esquerda do card de estatísticas, com o grupo de agentes e canais ao centro. */
 export const NETWORK_SKELETON_AREA_CLASS = "absolute inset-y-0 left-0 right-72 flex items-center justify-center max-md:right-0 max-md:overflow-hidden"
+/** Card do agente na visão inicial: largura e altura fixas (as linhas de contagem não deslocam o layout, OPE-117). */
+export const AGENT_NODE_SIZE_CLASS = "w-[11.25rem] h-16"

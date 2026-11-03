@@ -28,8 +28,11 @@ describe('rotas de troca de modelo', () => {
     expect(mocks.setWorkbenchModel).toHaveBeenLastCalledWith('w1', { role: 'pr', model: null, variant: null })
   })
 
-  it('mesa: papel do fork ou desconhecido é recusado (400)', async () => {
-    expect((await putWorkbench({ role: 'fork', model: 'openai/gpt-5', variant: null })).status).toBe(400)
+  it('mesa: papel Fork da mesa é aceito (OPE-126); papel desconhecido é recusado (400)', async () => {
+    mocks.setWorkbenchModel.mockResolvedValueOnce({ id: 'w1' })
+    expect((await putWorkbench({ role: 'fork', model: 'openai/gpt-5', variant: null })).status).toBe(200)
+    expect(mocks.setWorkbenchModel).toHaveBeenCalledWith('w1', { role: 'fork', model: 'openai/gpt-5', variant: null })
+    mocks.setWorkbenchModel.mockClear()
     expect((await putWorkbench({ role: 'deploy', model: 'openai/gpt-5', variant: null })).status).toBe(400)
     expect((await putWorkbench({ model: 'openai/gpt-5' })).status).toBe(400)
     expect(mocks.setWorkbenchModel).not.toHaveBeenCalled()

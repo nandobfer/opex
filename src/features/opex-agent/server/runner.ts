@@ -37,8 +37,15 @@ const INTERRUPTED = "Interrompido pelo usuário"
  * Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema.
  * No portal, a dica de jobs só entra com o grupo "Jobs agendados" ligado para o cliente.
  */
-export function instructionsFor(settings: OpexAgentSettings, scope: OpexServerScope, memories = "", options: { jobs?: boolean; selfMemory?: boolean } = {}): string {
-    const self = options.selfMemory ? selfMemoryInstructions("opex", memoryTurnOf(scope)) : ""
+export function instructionsFor(
+    settings: OpexAgentSettings,
+    scope: OpexServerScope,
+    memories = "",
+    options: { jobs?: boolean; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null } = {},
+): string {
+    const read = options.memoryRead ?? false
+    const write = options.selfMemory ?? false
+    const self = read || write ? selfMemoryInstructions("opex", memoryTurnOf(scope), { counts: options.counts, read, write }) : ""
     if (scope.kind === "owner") {
         return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : [])].join("\n")
     }
@@ -58,20 +65,34 @@ export function memoryTurnOf(scope: OpexServerScope): MemoryTurn {
     return scope.kind === "client" ? { kind: "client", clientId: String(scope.actor.client._id) } : { kind: "owner" }
 }
 
-/** Memórias do turno (contexto do Engramind) e as ferramentas "Memória própria" quando ligadas. */
-async function memoriesForTurn(scope: OpexServerScope, sessionId: string, turnKey: string, actorId: string, disabledTools: readonly string[] = []): Promise<{ block: string; notice: string | null; selfTools: OpexTool[] }> {
+/**
+ * Memórias do turno (contexto do Engramind, com o foco na mensagem do usuário) e as ferramentas
+ * "Memória própria": as de leitura sempre (faixa de títulos acionável); as de gravação só ligadas.
+ */
+async function memoriesForTurn(
+    scope: OpexServerScope,
+    sessionId: string,
+    turnKey: string,
+    actorId: string,
+    disabledTools: readonly string[] = [],
+    userText = "",
+): Promise<{ block: string; notice: string | null; selfTools: OpexTool[]; write: boolean; read: boolean; counts: { titles: number; overflow: number } | null }> {
     const turn = memoryTurnOf(scope)
-    const [{ agentMemoryContext }, { selfMemoryEnabled }] = await Promise.all([import("@/features/ai/server/agent-memory-context"), import("@/features/ai/server/self-memory/settings")])
-    const context = await agentMemoryContext("opex", turn)
-    let selfTools: OpexTool[] = []
-    if (await selfMemoryEnabled("opex")) {
-        const { selfMemoryTools } = await import("@/features/ai/server/self-memory/tools")
-        const label = scope.kind === "client" ? `Agente Opex · ${scope.actor.client.name}` : "Agente Opex"
-        // Desligadas pelo dono (Ferramentas do Agente Opex) ficam de fora; a confirmação segue os ajustes do dono.
-        const disabled = new Set(scope.kind === "owner" ? disabledTools : [])
-        selfTools = selfMemoryTools({ consumer: "opex", turn, label, turnKey, actorId, auditContext: { sessao: sessionId } }).filter((tool) => !disabled.has(tool.name))
-    }
-    return { block: context.block, notice: memoryCacheNotice(context), selfTools }
+    const [{ agentMemoryContext }, { selfMemoryEnabled }, { buildMemoryFocus }] = await Promise.all([
+        import("@/features/ai/server/agent-memory-context"),
+        import("@/features/ai/server/self-memory/settings"),
+        import("@/features/ai/memory-focus"),
+    ])
+    const context = await agentMemoryContext("opex", turn, { focus: buildMemoryFocus("opex", { kind: "message", text: userText }) })
+    const write = await selfMemoryEnabled("opex")
+    const { selfMemoryTools } = await import("@/features/ai/server/self-memory/tools")
+    const label = scope.kind === "client" ? `Agente Opex · ${scope.actor.client.name}` : "Agente Opex"
+    // Desligadas pelo dono (Ferramentas do Agente Opex) ficam de fora; a confirmação segue os ajustes do dono.
+    const disabled = new Set(scope.kind === "owner" ? disabledTools : [])
+    const selfTools = selfMemoryTools({ consumer: "opex", turn, label, turnKey, actorId, auditContext: { sessao: sessionId } }, undefined, { write }).filter((tool) => !disabled.has(tool.name))
+    const read = selfTools.some((tool) => tool.name === "get_hints")
+    const counts = context.source === "none" ? null : { titles: context.counts.titles, overflow: context.counts.overflow }
+    return { block: context.block, notice: memoryCacheNotice(context), selfTools, write: write && selfTools.some((tool) => tool.name === "remember"), read, counts }
 }
 
 /** Ferramentas e política do turno, conforme o escopo. */
@@ -277,7 +298,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
         mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
         const mcpTools = new Map(mcp.tools.map((tool) => [tool.name, tool]))
-        const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId, settings.disabledTools)
+        const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId, settings.disabledTools, args.userText)
         const selfNames = new Set(memory.selfTools.map((tool) => tool.name))
         const appNames = new Set([...appTools.map((tool) => tool.name), ...selfNames])
         const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
@@ -312,7 +333,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.selfTools.length > 0 }),
+            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts }),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),

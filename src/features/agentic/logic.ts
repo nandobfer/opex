@@ -3,6 +3,8 @@ import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { COLUMN_COLORS } from "@/features/tasks/board"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
+import type { ModelChoiceDto, ModelSourceDto } from "./types"
+
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
 /** Fluxo da mesa salvo (tarefa/mesa) → valor conhecido; qualquer registro antigo cai em `preview`. */
@@ -50,6 +52,26 @@ export function asModelOverride(value: unknown): ModelOverride | null {
     const { model, variant } = value as { model?: unknown; variant?: unknown }
     if (typeof model !== "string" || !model) return null
     return { model, variant: typeof variant === "string" && variant ? variant : null }
+}
+
+/**
+ * Origem do modelo de um papel sem troca na mesa: `central` quando a central personaliza o modelo
+ * do papel (mesma regra de `resolveAgent`: só o modelo próprio da central substitui o padrão) e
+ * `global` quando ele vem das Configurações Padrão.
+ */
+export function modelSource(central: Pick<CentralConfig, "agents">, role: AgentRole): "central" | "global" {
+    return central.agents[role]?.model ? "central" : "global"
+}
+
+/**
+ * Escolha otimista depois de uma troca na mesa ou no fork: com modelo, vira a troca deste nível
+ * (`level`); `model: null` volta ao valor herdado (`inherited`, com `inheritedSource`). Sem
+ * `inherited` (DTO antigo), mantém o valor e só desliga o "trocado".
+ */
+export function optimisticModelChoice(current: ModelChoiceDto, input: { model: string | null; variant: string | null }, level: ModelSourceDto): ModelChoiceDto {
+    if (input.model) return { ...current, model: input.model, variant: input.variant, overridden: true, source: level }
+    const inherited = current.inherited ?? { model: current.model, variant: current.variant }
+    return { ...current, ...inherited, overridden: false, source: current.inheritedSource ?? current.source }
 }
 
 /** Agente do turno com a troca de modelo aplicada: substitui modelo e variante e mantém o agente. */

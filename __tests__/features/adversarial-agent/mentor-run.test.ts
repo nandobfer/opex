@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   limitsFor: vi.fn(),
+  get: vi.fn(),
 }))
 const store = vi.hoisted(() => ({ runs: null as unknown, reviews: null as unknown }))
 
@@ -23,7 +24,7 @@ vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 // Memórias do adversário: a lista `adversarial` do serviço de memórias dos agentes.
 vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limitsFor }))
-vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, createAgentMemory: mocks.create, updateAgentMemory: mocks.update }))
+vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, getAgentMemory: mocks.get, createAgentMemory: mocks.create, updateAgentMemory: mocks.update }))
 vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: vi.fn(async () => [{ id: 'c1', projectName: 'App' }]) }))
 vi.mock('@/features/adversarial-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
@@ -38,7 +39,7 @@ vi.mock('@/features/adversarial-agent/server/mentor/models', async () => {
 
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
 import { enqueueMentorRun, mentorChainOf } from '@/features/adversarial-agent/server/mentor/queue'
-import { approveMentorRun, discardMentorRun, listMentorRuns, type MentorRunInput } from '@/features/adversarial-agent/server/mentor/run'
+import { approveMentorRun, discardMentorRun, getMentorRunMemory, listMentorRuns, type MentorRunInput } from '@/features/adversarial-agent/server/mentor/run'
 
 type Model = { docs: Record<string, unknown>[] }
 const runs = () => store.runs as Model
@@ -343,5 +344,48 @@ describe('Triador e destinos do Agente Mentor (OPE-97)', () => {
     expect((await listMentorRuns()).items.find((item) => item.id === String(legacy._id))).toMatchObject({ target: 'adversarial', proposal: { target: 'adversarial', centralId: null } })
     expect(await approveMentorRun(String(legacy._id), undefined, 'local')).toMatchObject({ status: 'created', target: 'adversarial' })
     expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ centralId: null }))
+  })
+
+  describe('OPE-128: resumo da memória gravada (getMentorRunMemory)', () => {
+    const seed = (overrides: Record<string, unknown>) =>
+      (store.runs as { create: (doc: Record<string, unknown>) => Promise<{ _id: unknown }> }).create({
+        workbenchId: 'w1', centralId: 'c1', taskId: 't1', taskCode: 'OPE-9', taskTitle: 'Resumo', sources: ['user'], trigger: null, userMessage: null, lessonCount: 0,
+        status: 'created', level: 'balanced', score: 0.9, threshold: 0.65, deciderReason: null, writerAction: 'create', writerReason: null, sanitizerReason: null,
+        proposal: { action: 'create', memoryId: null, text: RULE, target: 'adversarial', centralId: null }, memoryId: 'm_abc', error: null, costUsd: 0, durationMs: null, createdAt: new Date(),
+        ...overrides,
+      })
+
+    it('memória gravada: devolve o resumo do Engramind (e se ainda está sendo gerado)', async () => {
+      mocks.get.mockResolvedValueOnce({ id: 'm_abc', resumo: 'Conferir providers', resumoPendente: true, atualizadaEm: '2026-11-03T10:00:00.000Z' })
+      const doc = await seed({})
+      expect(await getMentorRunMemory(String(doc._id))).toEqual({ state: 'ok', resumo: 'Conferir providers', resumoPendente: true, atualizadaEm: '2026-11-03T10:00:00.000Z' })
+      expect(mocks.get).toHaveBeenCalledWith('adversarial', 'm_abc', null)
+    })
+
+    it('lista da central: lê com a central da execução', async () => {
+      mocks.get.mockResolvedValueOnce({ id: 'm_abc', resumo: 'R', resumoPendente: false, atualizadaEm: null })
+      const doc = await seed({ target: 'developer-central', proposal: { action: 'create', memoryId: null, text: RULE, target: 'developer-central', centralId: 'c1' } })
+      await getMentorRunMemory(String(doc._id))
+      expect(mocks.get).toHaveBeenCalledWith('developer-central', 'm_abc', 'c1')
+    })
+
+    it('sem memória gravada (sugestão, não gravou): estado vazio, sem consultar o Engramind', async () => {
+      const doc = await seed({ status: 'suggested', memoryId: null })
+      expect(await getMentorRunMemory(String(doc._id))).toMatchObject({ state: 'none', resumo: null })
+      expect(mocks.get).not.toHaveBeenCalled()
+    })
+
+    it('memória excluída do Engramind (404): estado "missing"; outro erro sobe', async () => {
+      const { DomainError } = await import('@/lib/api/route')
+      const doc = await seed({})
+      mocks.get.mockRejectedValueOnce(new DomainError(404, 'Memória não encontrada', 'NOT_FOUND'))
+      expect(await getMentorRunMemory(String(doc._id))).toMatchObject({ state: 'missing' })
+      mocks.get.mockRejectedValueOnce(new Error('Engramind fora do ar'))
+      await expect(getMentorRunMemory(String(doc._id))).rejects.toThrow('Engramind fora do ar')
+    })
+
+    it('execução inexistente: 404', async () => {
+      await expect(getMentorRunMemory('nao-e-id')).rejects.toMatchObject({ status: 404, code: 'MENTOR_RUN_NOT_FOUND' })
+    })
   })
 })

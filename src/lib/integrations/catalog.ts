@@ -774,6 +774,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         secretFields: [
             { key: "adminToken", label: "Token admin", description: "Token eng.tk_… admin com read+write+delete (o de bootstrap é trocado por um próprio do Opex)", required: true },
             { key: "webhookSecret", label: "Segredo do webhook", description: "Gerado pelo Opex e registrado no app opex; nunca exibido", group: "card" },
+            { key: "appToken", label: "Token do app opex", description: "Token eng.tk_… kind app emitido pelo Opex para provisionar os agentes de memórias (OPE-117); nunca exibido", group: "card" },
         ],
     },
 ]

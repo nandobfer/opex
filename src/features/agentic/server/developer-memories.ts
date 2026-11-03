@@ -1,5 +1,7 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
 import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
+import mongoose from "mongoose"
+import { buildMemoryFocus } from "@/features/ai/memory-focus"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
 import { logger } from "@/lib/logger"
 import { DEVELOPER_MEMORIES_INSTRUCTIONS_KEY } from "../constants"
@@ -8,8 +10,8 @@ import { DEVELOPER_MEMORIES_INSTRUCTIONS_KEY } from "../constants"
  * Memórias do agente desenvolvedor (OPE-97; Engramind desde a OPE-104): o contexto do Engramind
  * (Memórias do Opex, globais e da central) vira uma entrada durável de instrução da sessão do
  * OpenCode, regravada a cada turno da mesa e do fork — assim a memória criada, editada ou excluída
- * vale a partir do próximo turno. Com o aprendizado autônomo ligado, o MCP "Memória própria" é
- * registrado nos diretórios da sessão e a instrução dele entra junto (diretório que ainda não existe,
+ * vale a partir do próximo turno. O MCP "Memória própria" é registrado nos diretórios da sessão sempre
+ * (leitura da faixa de títulos; gravação só com o aprendizado autônomo ligado) e a instrução dele entra junto (diretório que ainda não existe,
  * como o worktree antes de o agente de implementação criá-lo, é pulado sem aviso; quando a sessão
  * muda para ele, `registerDeveloperMemoryMcpAt` registra o MCP lá). Sem memórias nem aprendizado,
  * a entrada sai da sessão. Se o servidor recusar a gravação, quem chamou prefixa `section` no prompt.
@@ -27,21 +29,53 @@ export interface DeveloperMemoriesOptions {
     directories?: readonly (string | null | undefined)[]
     /** Aviso discreto na Saída da IA (contexto do cache, aprendizado indisponível). */
     notify?: (level: "info" | "warn", message: string) => void
+    /** Foco do contexto (OPE-117): tarefa, etapa e mesa; a descrição é lida do banco pelo `taskId`. */
+    focus?: { taskId?: string | null; code?: string | null; title?: string | null; stage?: string | null; workbench?: string | null }
 }
 
 /** Prefixo das ferramentas do MCP "Memória própria" no OpenCode. */
 const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
-async function selfMemorySection(client: OpencodeClient, centralId: string, options: DeveloperMemoriesOptions): Promise<string> {
+const FOCUS_TASK_TIMEOUT_MS = 1_500
+
+/** Foco do agente desenvolvedor: título + etapa/mesa primeiro, descrição no restante. Nunca lança nem atrasa o turno. */
+async function developerFocus(focus: DeveloperMemoriesOptions["focus"]): Promise<string | undefined> {
+    if (!focus) return undefined
+    let description: string | null = null
+    if (focus.taskId) {
+        try {
+            // Só com o banco já conectado (o turno nunca espera a conexão por causa do foco).
+            if (mongoose.connection.readyState === 1) {
+                const { DevTask } = await import("@/lib/db/models/DevTask")
+                let timer: ReturnType<typeof setTimeout> | undefined
+                const task = await Promise.race([
+                    DevTask.findById(focus.taskId).select({ description: 1 }).lean<{ description?: string | null } | null>(),
+                    new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), FOCUS_TASK_TIMEOUT_MS))),
+                ])
+                clearTimeout(timer)
+                description = task?.description ?? null
+            }
+        } catch {
+            description = null
+        }
+    }
+    return buildMemoryFocus("desenvolvedor", { kind: "task", code: focus.code, title: focus.title, stage: focus.stage, workbench: focus.workbench, description })
+}
+
+/**
+ * O MCP de memórias vale sempre (leitura da faixa de títulos, OPE-117); a gravação (checklist de fim de
+ * turno) só com o aprendizado autônomo ligado. O desenvolvedor grava o que percebe; o Mentor é a 2ª camada.
+ */
+async function selfMemorySection(client: OpencodeClient, centralId: string, options: DeveloperMemoriesOptions, counts: { titles: number; overflow: number } | null): Promise<string> {
     const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
-    if (!(await selfMemoryEnabled("desenvolvedor"))) return ""
+    const write = await selfMemoryEnabled("desenvolvedor")
     const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
     const registered = await ensureAgentMemoryMcp(client, options.directories ?? [])
     if (!registered.ok) {
-        options.notify?.("warn", `Aprendizado autônomo indisponível neste turno: ${registered.error}`)
+        if (write) options.notify?.("warn", `Aprendizado autônomo indisponível neste turno: ${registered.error}`)
         return ""
     }
-    return selfMemoryInstructions("desenvolvedor", { kind: "central", centralId }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX }).trim()
+    return selfMemoryInstructions("desenvolvedor", { kind: "central", centralId }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX, counts, write, read: true }).trim()
 }
 
 export async function syncDeveloperMemories(client: OpencodeClient, sessionId: string, centralId: string, options: DeveloperMemoriesOptions = {}): Promise<DeveloperMemoriesSync> {
@@ -50,11 +84,12 @@ export async function syncDeveloperMemories(client: OpencodeClient, sessionId: s
     let self = ""
     try {
         const { developerMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-        const context = await developerMemoryContext(centralId)
+        const focus = options.focus?.taskId && mongoose.connection.readyState === 1 ? await developerFocus(options.focus) : options.focus ? buildMemoryFocus("desenvolvedor", { kind: "task", ...options.focus }) : undefined
+        const context = await developerMemoryContext(centralId, { focus })
         block = context.block
         const notice = memoryCacheNotice(context)
         if (notice) options.notify?.("warn", notice)
-        self = await selfMemorySection(client, centralId, options)
+        self = await selfMemorySection(client, centralId, options, context.source === "none" ? null : { titles: context.counts.titles, overflow: context.counts.overflow })
     } catch (error) {
         // Falha inesperada não derruba o turno: a sessão mantém a última versão gravada.
         logger.warn({ err: error, sessionId, centralId }, "[agentic] não foi possível ler as memórias do agente desenvolvedor; o turno segue com as já gravadas na sessão")
@@ -85,8 +120,6 @@ export async function syncDeveloperMemories(client: OpencodeClient, sessionId: s
  */
 export async function registerDeveloperMemoryMcpAt(client: OpencodeClient | (() => Promise<OpencodeClient>), directory: string): Promise<void> {
     try {
-        const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
-        if (!(await selfMemoryEnabled("desenvolvedor"))) return
         const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
         const registered = await ensureAgentMemoryMcp(typeof client === "function" ? await client() : client, [directory])
         if (!registered.ok) logger.warn({ directory, err: registered.error }, "[agentic] MCP de memórias não registrado no novo diretório da sessão")

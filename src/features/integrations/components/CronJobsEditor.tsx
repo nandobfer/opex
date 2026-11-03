@@ -3,23 +3,13 @@
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import Fuse from "fuse.js"
-import { AlertCircle, CheckCircle2, ChevronDown, Clock, Cog, Globe, Loader2, Play, Plus, Search, Trash2 } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronDown, Clock, Cog, Globe, Loader2, Plus, Search, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { RunNowButton, RunNowDialog } from "@/components/ui/run-now-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { CronJobConfig } from "@/lib/integrations/catalog"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
@@ -53,37 +43,6 @@ export function runNowBlockReason(
     const saved = savedJobs.find((candidate) => candidate.id === job.id)
     if (!saved || JSON.stringify(saved) !== JSON.stringify(job)) return "Salve as alterações antes de executar"
     return null
-}
-
-function RunNowButton({ label, blockReason, pending, onClick }: { label: string; blockReason: string | null; pending: boolean; onClick: () => void }) {
-    const button = (
-        <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8"
-            onClick={onClick}
-            disabled={pending || blockReason !== null}
-            aria-label={`Executar agora: ${label}`}
-        >
-            {pending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
-            Executar agora
-        </Button>
-    )
-    if (!blockReason || pending) return button
-    // Botão desabilitado não dispara eventos de ponteiro: o tooltip fica no wrapper.
-    return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <span tabIndex={0} className="inline-flex" data-testid="run-now-blocked">
-                        {button}
-                    </span>
-                </TooltipTrigger>
-                <TooltipContent>{blockReason}</TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
-    )
 }
 
 function slugify(text: string): string {
@@ -341,21 +300,13 @@ export function CronJobsEditor({ value, onChange, states = [], disabled, savedJo
                 <Plus className="mr-1.5 h-4 w-4" /> Adicionar rotina
             </Button>
 
-            <AlertDialog open={confirmJob !== null} onOpenChange={(open) => !open && setConfirmJob(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Executar “{confirmJob?.label}” agora?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            A rotina salva será executada imediatamente, com os mesmos efeitos da execução agendada. A próxima
-                            execução agendada não muda.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => confirmJob && void executeNow(confirmJob)}>Executar agora</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <RunNowDialog
+                open={confirmJob !== null}
+                onOpenChange={(open) => !open && setConfirmJob(null)}
+                title={<>Executar “{confirmJob?.label}” agora?</>}
+                description="A rotina salva será executada imediatamente, com os mesmos efeitos da execução agendada. A próxima execução agendada não muda."
+                onConfirm={() => confirmJob && void executeNow(confirmJob)}
+            />
         </div>
     )
 }

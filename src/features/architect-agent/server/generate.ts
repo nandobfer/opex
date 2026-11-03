@@ -125,26 +125,37 @@ async function applyInstructions(client: OpencodeClient, sessionId: string, inst
 }
 
 /** Memórias do arquiteto para um provedor direto (o bloco nas instruções; sem o MCP do OpenCode). */
-async function directMemories(): Promise<{ memories: string; notice: string | null }> {
+async function directMemories(focus?: string): Promise<{ memories: string; notice: string | null }> {
     const { architectMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-    const context = await architectMemoryContext()
+    const context = await architectMemoryContext({ focus })
     return { memories: context.block, notice: memoryCacheNotice(context) }
 }
 
-async function memoryInstructions(client: OpencodeClient, directory: string, workbenchId: string): Promise<{ memories: string; selfMemory: boolean; notice: string | null }> {
+/** Pedido do turno do Arquiteto (foco do contexto, OPE-117): a tarefa e o ajuste pedido, sem segredos. */
+async function architectFocus(parts: (string | null | undefined)[]): Promise<string | undefined> {
+    const { buildMemoryFocus } = await import("@/features/ai/memory-focus")
+    return buildMemoryFocus("arquiteto", { kind: "message", text: parts.filter(Boolean).join("\n") })
+}
+
+async function memoryInstructions(
+    client: OpencodeClient,
+    directory: string,
+    workbenchId: string,
+    focus?: string,
+): Promise<{ memories: string; selfMemory: boolean; memoryRead: boolean; counts: { titles: number; overflow: number } | null; notice: string | null }> {
     const { architectMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-    const context = await architectMemoryContext()
+    const context = await architectMemoryContext({ focus })
     const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
     let selfMemory = await selfMemoryEnabled("arquiteto")
-    if (selfMemory) {
-        const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
-        const registered = await ensureAgentMemoryMcp(client, [directory])
-        if (!registered.ok) {
-            selfMemory = false
-            log.warn({ workbenchId, err: registered.error }, "[architect] aprendizado autônomo indisponível nesta geração")
-        }
+    // MCP de memórias sempre (leitura da faixa de títulos); gravação só com o aprendizado ligado.
+    const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
+    const registered = await ensureAgentMemoryMcp(client, [directory])
+    if (!registered.ok) {
+        selfMemory = false
+        log.warn({ workbenchId, err: registered.error }, "[architect] memórias (MCP) indisponíveis nesta geração")
     }
-    return { memories: context.block, selfMemory, notice: memoryCacheNotice(context) }
+    const counts = context.source === "none" ? null : { titles: context.counts.titles, overflow: context.counts.overflow }
+    return { memories: context.block, selfMemory, memoryRead: registered.ok, counts, notice: memoryCacheNotice(context) }
 }
 
 /**
@@ -280,7 +291,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
         let followUp: (correction: string, previous: string) => Promise<TurnResult>
         if (direct) {
             // Provedor direto: sem sessão, ferramentas nem acesso ao código; o diagrama sai do plano.
-            const { memories, notice } = await withTimeout(directMemories(), "As memórias do agente", signal)
+            const { memories, notice } = await withTimeout(directMemories(await architectFocus([doc.taskCode, doc.taskTitle, doc.feedback, task?.description])), "As memórias do agente", signal)
             if (notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${notice}`)
             log.info({ diagramId, provider }, "[architect] provedor direto: sem aprendizado autônomo (as ferramentas de memória são do OpenCode)")
             const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories, selfMemory: false, codeAccess: false })
@@ -303,9 +314,9 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             await withTimeout(retryPendingDeletions(opencodeClient, doc.workbenchId), "A exclusão das sessões pendentes", signal)
             const { directory, worktree } = await withTimeout(resolveDirectory(opencodeClient, { worktreePath: workbench.worktreePath, centralId: workbench.centralId, taskCode: workbench.taskCode }, signal), "A leitura da central", signal)
             await ArchitectDiagram.updateOne(filter, { $set: { directory } })
-            const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId), "As memórias do agente", signal)
+            const memory = await withTimeout(memoryInstructions(opencodeClient, directory, doc.workbenchId, await architectFocus([doc.taskCode, doc.taskTitle, doc.feedback, task?.description])), "As memórias do agente", signal)
             if (memory.notice) log.warn({ workbenchId: doc.workbenchId, diagramId }, `[architect] ${memory.notice}`)
-            const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory })
+            const instructions = buildArchitectInstructions({ instructions: settings.instructions, memories: memory.memories, selfMemory: memory.selfMemory, memoryRead: memory.memoryRead, counts: memory.counts })
             const session = await withTimeout(
                 opencodeClient.session.create({
                     title: `Arquiteto · ${doc.taskCode} · v${doc.version}`.slice(0, 120),

@@ -19,6 +19,13 @@ import { AcaoAuditoria, auditEngramind, engramindLog } from "./shared"
  *   `read+write`), guardado cifrado em `engramind_state.agentTokens` e nunca exibido (reemitido quando
  *   falta, foi revogado, expirou ou tem escopos diferentes dos esperados).
  * Canais de central e de cliente também nascem sob demanda (`ensureMemoryChannel`).
+ *
+ * Token de app (OPE-117, Engramind 0.11.0): agentes, assinaturas e tokens de agente são provisionados com
+ * o token `kind: app` do app opex (campo privado `appToken` da integração, emitido uma vez pelo admin),
+ * e a repetição é idempotente pelo próprio Engramind (`200 created: false`). Os canais continuam com o
+ * token admin (`POST /v1/channels` é só do admin; pelo app, o canal nasceria com nome = slug e exigiria
+ * uma assinatura exata a mais por central) — follow-up registrado em `aicontext/modules/engramind.md`.
+ * Sem token de app (Engramind anterior à 0.11.0 ou emissão recusada), o provisionamento segue com o admin.
  */
 
 const enc = encodeURIComponent
@@ -80,8 +87,9 @@ async function ensureAgent(consumer: MemoryIdentity, target: EngramindTarget): P
     }
     const def = MEMORY_IDENTITY_DEFS[consumer]
     try {
-        await engramindCall("POST", { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: consumer, name: def.name, description: def.description } }, { target })
-        return "created"
+        const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: consumer, name: def.name, description: def.description } }, { target })
+        // Idempotência natural (0.11.0): a repetição equivalente devolve o existente com `created: false`.
+        return written?.created === false ? "exists" : "created"
     } catch (error) {
         if (engramindCodeOf(error) !== "SLUG_ALREADY_EXISTS") throw error
         return "exists"
@@ -95,8 +103,8 @@ async function ensureSubscriptions(consumer: MemoryIdentity, target: EngramindTa
     for (const subscriptionTarget of MEMORY_SUBSCRIPTION_TARGETS[consumer]) {
         if (present.has(subscriptionTarget)) continue
         try {
-            await engramindCall("POST", { path: "/v1/subscriptions", body: { agent: agentRef(consumer), target: subscriptionTarget, mode: "inject" } }, { target })
-            created.push(`${consumer} → ${subscriptionTarget}`)
+            const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/subscriptions", body: { agent: agentRef(consumer), target: subscriptionTarget, mode: "inject" } }, { target })
+            if (written?.created !== false) created.push(`${consumer} → ${subscriptionTarget}`)
         } catch (error) {
             if (engramindCodeOf(error) !== "SUBSCRIPTION_EXISTS") throw error
         }
@@ -163,6 +171,50 @@ async function ensureToken(consumer: MemoryIdentity, target: EngramindTarget, ac
     return true
 }
 
+const APP_TOKEN_SCOPES = ["read", "write", "delete"]
+export const APP_TOKEN_LABEL = "Opex · provisionamento (app)"
+
+/** Segredo gravado do token de app (campo privado da integração). */
+async function storedAppToken(): Promise<string | null> {
+    const { getIntegrationConfig } = await import("@/lib/integrations/config")
+    const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
+    const config = (await getIntegrationConfig(ENGRAMIND_INTEGRATION_ID)) as Record<string, string | undefined>
+    return config.appToken?.trim() || null
+}
+
+/**
+ * Token `kind: app` do app opex para o provisionamento (OPE-117). Confere o gravado pelo `whoami`; sem ele
+ * (ou inválido), emite UMA vez com o admin, grava no campo privado e revoga o anterior. Devolve o alvo com
+ * o token de app, ou `null` (o provisionamento segue com o admin e o motivo vai para os avisos).
+ */
+export async function ensureAppToken(adminTarget: EngramindTarget, actorId: string, warnings: string[] = []): Promise<EngramindTarget | null> {
+    try {
+        const current = await storedAppToken()
+        if (current) {
+            const appTarget = { baseUrl: adminTarget.baseUrl, token: current }
+            const whoami = await engramindCall<{ kind?: string; app?: { slug?: string } } | null>("GET", { path: "/v1/whoami" }, { target: appTarget }).catch(() => null)
+            if (whoami?.kind === "app" && whoami.app?.slug === OPEX_APP_SLUG) return appTarget
+        }
+        const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "app", app: OPEX_APP_SLUG, scopes: APP_TOKEN_SCOPES, label: APP_TOKEN_LABEL } }, { target: adminTarget })
+        if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token de app")
+        const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+        const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
+        await updateIntegration(ENGRAMIND_INTEGRATION_ID, { secrets: { appToken: { action: "set", value: issued.secret } } }, actorId)
+        await engramindDb()
+        const previous = (await EngramindState.findById(ENGRAMIND_STATE_ID).select({ appToken: 1 }).lean())?.appToken
+        await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { appToken: { tokenId: issued.token.id, prefix: issued.token.prefix, issuedAt: new Date() } } }, { upsert: true })
+        if (previous?.tokenId && previous.tokenId !== issued.token.id) await engramindCall("POST", { path: `/v1/tokens/${enc(previous.tokenId)}/revoke`, body: {} }, { target: adminTarget }).catch(() => undefined)
+        await auditEngramind(actorId, "bootstrap", AcaoAuditoria.EXECUTAR, { passo: "agent-memories", tokenDeApp: issued.token.prefix })
+        return { baseUrl: adminTarget.baseUrl, token: issued.secret }
+    } catch (error) {
+        const code = engramindCodeOf(error)
+        const reason = code === "FOREIGN_APP" ? "o token de app pertence a outro app (gere de novo pela Conexão)" : messageOf(error)
+        engramindLog.warn({ err: reason }, "[engramind] token de app indisponível: o provisionamento segue com o token admin")
+        warnings.push(`Token de app indisponível (${reason}); provisionado com o token admin.`)
+        return null
+    }
+}
+
 /** Canais das centrais existentes (import dinâmico: o módulo do agêntico é pesado). */
 async function centralChannels(): Promise<{ slug: string; name: string }[]> {
     const { AgenticCentral } = await import("@/lib/db/models/Agentic")
@@ -193,10 +245,12 @@ async function runNetwork(actorId: string, explicit?: EngramindTarget): Promise<
             if (outcome === "created") summary.channelsCreated.push(channel.slug)
             if (outcome === "restored") summary.channelsRestored.push(channel.slug)
         }
+        // Agentes, assinaturas e tokens de agente: pelo token de app do opex (o admin só emite o de app).
+        const provision = (await ensureAppToken(target, actorId, summary.warnings)) ?? target
         for (const consumer of MEMORY_IDENTITIES) {
-            if ((await ensureAgent(consumer, target)) === "created") summary.agentsCreated.push(consumer)
-            summary.subscriptionsCreated.push(...(await ensureSubscriptions(consumer, target)))
-            if (await ensureToken(consumer, target, actorId)) summary.tokensIssued.push(consumer)
+            if ((await ensureAgent(consumer, provision)) === "created") summary.agentsCreated.push(consumer)
+            summary.subscriptionsCreated.push(...(await ensureSubscriptions(consumer, provision)))
+            if (await ensureToken(consumer, provision, actorId)) summary.tokensIssued.push(consumer)
         }
         const changed = summary.channelsCreated.length + summary.channelsRestored.length + summary.agentsCreated.length + summary.subscriptionsCreated.length + summary.tokensIssued.length
         if (changed) {

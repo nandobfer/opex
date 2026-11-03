@@ -176,7 +176,7 @@ describe('ActionBar', () => {
     expect(screen.getByRole('button', { name: 'Aprovar e abrir PR' })).toBeTruthy()
   })
 
-  it('divisor vertical entre o seletor de modelo e a chave Gerar prévia (oculto junto com a chave)', () => {
+  it('divisor vertical entre o modelo em uso (texto + configuração) e a chave Gerar prévia (oculto junto com a chave)', () => {
     const models = {
       planning: { model: 'anthropic/opus', variant: null, overridden: false },
       implementation: { model: null, variant: null, overridden: false },
@@ -186,7 +186,7 @@ describe('ActionBar', () => {
     const { unmount } = render(<ActionBar workbench={workbench({ stage: 'plan_review', models } as never)} />)
     const divider = screen.getByTestId('workbench-actions-divider')
     expect(divider.getAttribute('aria-orientation')).toBe('vertical')
-    const picker = screen.getByRole('button', { name: /Modelo do Plano/ })
+    const picker = screen.getByRole('button', { name: 'Configurar modelos por etapa' })
     expect(picker.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(divider.compareDocumentPosition(screen.getByText('Gerar prévia')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // Rótulo à esquerda da chave.
@@ -197,7 +197,7 @@ describe('ActionBar', () => {
     expect(screen.queryByTestId('workbench-actions-divider')).toBeNull()
   })
 
-  it('seletor do modelo da etapa fica à esquerda, fora da linha de botões', () => {
+  it('modelo em uso da etapa e o botão de configuração ficam à esquerda, fora da linha de botões (sem o seletor antigo)', () => {
     const models = {
       planning: { model: 'anthropic/opus', variant: null, overridden: false },
       implementation: { model: null, variant: null, overridden: false },
@@ -205,7 +205,11 @@ describe('ActionBar', () => {
       pr: { model: null, variant: null, overridden: false },
     }
     render(<ActionBar workbench={workbench({ stage: 'plan_review', models } as never)} />)
-    const picker = screen.getByRole('button', { name: /Modelo do Plano: Claude Opus \(padrão\)/ })
+    const text = screen.getByRole('status', { name: /Modelo do Plano: Claude Opus/ })
+    expect(text.textContent).toBe('Claude Opus')
+    const picker = screen.getByRole('button', { name: 'Configurar modelos por etapa' })
+    expect(screen.queryByRole('button', { name: /Esforço de raciocínio/ })).toBeNull()
+    expect(text.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const fork = screen.getByRole('button', { name: /Abrir fork/ })
     expect(picker.compareDocumentPosition(fork) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(fork.parentElement!.contains(picker)).toBe(false)
@@ -213,7 +217,8 @@ describe('ActionBar', () => {
 
   it('sem os modelos da central o seletor fica oculto', () => {
     render(<ActionBar workbench={workbench({ stage: 'plan_review', models: null } as never)} />)
-    expect(screen.queryByRole('button', { name: /Modelo do Plano/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Configurar modelos por etapa' })).toBeNull()
+    expect(screen.queryByTestId('model-in-use')).toBeNull()
   })
 
   it('prévia pronta: "Gerar nova prévia" (ícone à direita da chave) reconstrói direto, sem campo de texto', () => {

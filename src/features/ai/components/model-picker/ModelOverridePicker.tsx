@@ -48,7 +48,7 @@ const ModelTrigger = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<type
 ModelTrigger.displayName = "ModelTrigger"
 
 /**
- * Troca do modelo (e da variante) na mesa, no fork e no chat do Agente Maddox (componente compartilhado): busca de modelos do OpenCode, variante quando
+ * Troca do modelo (e da variante) no chat do Agente Maddox (a mesa e o fork usam o popover "Modelos por etapa"): busca de modelos do OpenCode, variante quando
  * o modelo tem variantes e "Voltar ao padrão". Vale a partir do próximo turno.
  */
 export function ModelOverridePicker({ id, label, choice, disabled = false, onChange, models: provided, className }: ModelOverridePickerProps) {

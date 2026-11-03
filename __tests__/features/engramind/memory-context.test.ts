@@ -10,7 +10,7 @@ import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engr
 const TAGGED = ['<memories version="cv_1">', '<channel slug="opex">', '<PROJECT_RULES>', '#m_1: Use pnpm.', '</PROJECT_RULES>', '</channel>', '<channel slug="agentes/desenvolvedor/global">', '<NAMING>', '#m_2: Nomes em pt-BR.', '</NAMING>', '</channel>', '<titles>', '#m_3: Título só', '</titles>', '</memories>'].join('\n')
 
 const holder = vi.hoisted(() => ({ fake: null as unknown as FakeEngramind, token: 'agent-token' as string | null, headers: [] as (Record<string, string> | undefined)[] }))
-const store = vi.hoisted(() => ({ cache: null as unknown as ReturnType<typeof import('../../helpers/memory-model').memoryModel>, state: null as unknown as ReturnType<typeof import('../../helpers/memory-model').memoryModel> }))
+const store = vi.hoisted(() => ({ cache: null as unknown as ReturnType<typeof import('../../helpers/memory-model').memoryModel>, state: null as unknown as ReturnType<typeof import('../../helpers/memory-model').memoryModel>, delivery: null as unknown as ReturnType<typeof import('../../helpers/memory-model').memoryModel> }))
 vi.mock('@/features/engramind/server/client', () => ({
   engramindCall: (method: string, request: { path: string }, options: { headers?: Record<string, string>; target?: { token: string } }) => {
     holder.headers.push(options.headers)
@@ -19,14 +19,16 @@ vi.mock('@/features/engramind/server/client', () => ({
   },
 }))
 vi.mock('@/features/engramind/server/memory-network', () => ({ agentTarget: async () => (holder.token ? { baseUrl: 'http://e', token: holder.token } : null) }))
-vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn() }, publishEngramind: vi.fn(async () => undefined) }))
+const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn() }))
+vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: log, publishEngramind: vi.fn(async () => undefined) }))
 const consumption = vi.hoisted(() => ({ publishConsumption: vi.fn(async () => undefined) }))
 vi.mock('@/features/engramind/server/consumption', () => consumption)
 vi.mock('@/features/engramind/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   store.cache = memoryModel()
   store.state = memoryModel()
-  return { ENGRAMIND_STATE_ID: 'engramind', engramindDb: async () => undefined, EngramindContextCache: store.cache, EngramindState: store.state }
+  store.delivery = memoryModel()
+  return { ENGRAMIND_STATE_ID: 'engramind', engramindDb: async () => undefined, EngramindContextCache: store.cache, EngramindState: store.state, EngramindDelivery: store.delivery }
 })
 
 import { getAgentMemoryContext } from '@/features/engramind/server/memory-context'
@@ -41,6 +43,9 @@ beforeEach(() => {
   holder.headers = []
   store.cache.docs.length = 0
   store.state.docs.length = 0
+  store.delivery.docs.length = 0
+  log.info.mockClear()
+  log.warn.mockClear()
 })
 
 describe('contexto das memórias', () => {
@@ -58,7 +63,7 @@ describe('contexto das memórias', () => {
     await getAgentMemoryContext('desenvolvedor', channels)
     await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
     const event = consumption.publishConsumption.mock.calls[0]![0] as Record<string, unknown>
-    expect(event).toEqual({ agent: 'opex/desenvolvedor', kind: 'context', channels, delivered: ['opex', 'agentes/desenvolvedor/global'], memoryIds: ['m_1', 'm_2'] })
+    expect(event).toEqual({ agent: 'opex/desenvolvedor', kind: 'context', channels, delivered: ['opex', 'agentes/desenvolvedor/global'], memoryIds: ['m_1', 'm_2'], titleIds: ['m_3'], version: 'cv_1' })
     expect(JSON.stringify(event)).not.toContain('Use pnpm')
   })
 
@@ -115,5 +120,71 @@ describe('contexto das memórias', () => {
     const result = await getAgentMemoryContext('opex', ['opex'])
     expect(result.source).toBe('none')
     expect(result.reason).toContain('token do agente')
+  })
+
+  it('OPE-117: manda o foco na query do GET /v1/context e devolve o focus_mode', async () => {
+    const result = await getAgentMemoryContext('opex', ['opex'], { focus: 'como rodar os testes' })
+    const call = holder.fake.state.calls.find((item) => item.path === '/v1/context')!
+    expect(call.method).toBe('GET')
+    expect(call.query).toMatchObject({ channels: 'opex', format: 'tagged', focus: 'como rodar os testes' })
+    expect(result.focusMode).toBe('hybrid')
+  })
+
+  it('OPE-117: Engramind sem suporte ao foco (400) refaz sem foco e o turno segue', async () => {
+    holder.fake.state.contextRejectsFocus = true
+    const result = await getAgentMemoryContext('opex', ['opex'], { focus: 'foco qualquer' })
+    const calls = holder.fake.state.calls.filter((item) => item.path === '/v1/context')
+    expect(calls).toHaveLength(2)
+    expect(calls[0]!.query?.focus).toBe('foco qualquer')
+    expect(calls[1]!.query?.focus).toBeUndefined()
+    expect(result).toMatchObject({ source: 'live', block: TAGGED, focusMode: null })
+  })
+
+  it('OPE-117: o texto do foco nunca vai para log, cache nem evento', async () => {
+    holder.fake.state.contextRejectsFocus = true
+    await getAgentMemoryContext('desenvolvedor', channels, { focus: 'SEGREDO-DO-FOCO detalhe' })
+    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
+    const logged = JSON.stringify([...log.info.mock.calls, ...log.warn.mock.calls])
+    expect(logged).not.toContain('SEGREDO-DO-FOCO')
+    expect(JSON.stringify(store.cache.docs)).not.toContain('SEGREDO-DO-FOCO')
+    expect(JSON.stringify(consumption.publishConsumption.mock.calls)).not.toContain('SEGREDO-DO-FOCO')
+  })
+
+  it('OPE-117: bloco com foco degradado (focus_mode text/none) não entra no cache', async () => {
+    holder.fake.state.focusMode = 'none'
+    const result = await getAgentMemoryContext('opex', ['opex'], { focus: 'algo' })
+    expect(result.focusMode).toBe('none')
+    expect(store.cache.docs).toHaveLength(0)
+  })
+
+  it('OPE-117: foco diferente do bloco em cache não manda If-None-Match', async () => {
+    await getAgentMemoryContext('opex', ['opex'], { focus: 'primeiro' })
+    await getAgentMemoryContext('opex', ['opex'], { focus: 'outro foco' })
+    expect(holder.headers.at(-1)).toBeUndefined()
+    await getAgentMemoryContext('opex', ['opex'], { focus: 'outro foco' })
+    expect(holder.headers.at(-1)).toMatchObject({ 'If-None-Match': expect.any(String) })
+  })
+
+  it('OPE-117: grava a última entrega por consumidor (ids por faixa, canais e version) e sobrescreve no turno seguinte', async () => {
+    await getAgentMemoryContext('desenvolvedor', channels)
+    await vi.waitFor(() => expect(store.delivery.docs).toHaveLength(1))
+    expect(store.delivery.docs[0]).toMatchObject({ _id: 'desenvolvedor', fullIds: ['m_1', 'm_2'], titleIds: ['m_3'], channels, version: 'cv_1', source: 'live' })
+    expect(JSON.stringify(store.delivery.docs[0])).not.toContain('Use pnpm')
+    holder.fake.state.context = { content: '<memories version="cv_9">\n</memories>', version: 'cv_9', counts: { full: 0, titles: 0, overflow: 4 } }
+    await getAgentMemoryContext('desenvolvedor', channels)
+    await vi.waitFor(() => expect((store.delivery.docs[0] as { version: string }).version).toBe('cv_9'))
+    expect(store.delivery.docs).toHaveLength(1)
+    expect(store.delivery.docs[0]).toMatchObject({ fullIds: [], overflow: 4 })
+  })
+
+  it('OPE-117: banco falhando ao gravar a entrega vira aviso, sem rejeição solta', async () => {
+    const original = store.delivery.updateOne
+    store.delivery.updateOne = vi.fn(async () => {
+      throw new Error('mongo fora')
+    }) as never
+    const result = await getAgentMemoryContext('desenvolvedor', channels)
+    expect(result.source).toBe('live')
+    await vi.waitFor(() => expect(log.warn).toHaveBeenCalled())
+    store.delivery.updateOne = original
   })
 })

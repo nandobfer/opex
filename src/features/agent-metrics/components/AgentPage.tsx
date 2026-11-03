@@ -33,6 +33,7 @@ interface AgentPageProps {
     actions?: ReactNode
 }
 
+const TAB_DEFAULTS = { aba: OVERVIEW_TAB }
 const tabMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 
 /**
@@ -51,7 +52,7 @@ export function AgentPage({ agent, tabs = [], availabilityReason, actions }: Age
     )
     const tabValues = useMemo(() => allTabs.map((tab) => tab.value), [allTabs])
     const tabSchema = useMemo<UrlFilterSchema<{ aba: string }>>(() => ({ aba: urlFilterCodecs.string(tabValues) }), [tabValues])
-    const [{ aba }, setTab] = useUrlFilters({ aba: OVERVIEW_TAB }, tabSchema)
+    const [{ aba }, setTab] = useUrlFilters(TAB_DEFAULTS, tabSchema)
     const [filters, setFilters, resetFilters] = useUrlFilters(DEFAULT_AGENT_METRICS_FILTERS, AGENT_METRICS_FILTER_SCHEMA)
     const params = useMemo(() => toMetricsParams(filters), [filters])
     const withFilters = aba === OVERVIEW_TAB || aba === HISTORY_TAB

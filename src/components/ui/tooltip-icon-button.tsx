@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { ButtonHTMLAttributes, ReactNode } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -18,6 +18,8 @@ interface TooltipIconButtonProps {
     external?: boolean
     onClick?: () => void
     className?: string
+    /** Atributos extras do `<button>` (ex.: `aria-haspopup`/`aria-expanded` quando o botão abre um popover). */
+    buttonProps?: ButtonHTMLAttributes<HTMLButtonElement>
     /** Ícone (e extras, como o número da issue). */
     children: ReactNode
 }
@@ -26,7 +28,7 @@ interface TooltipIconButtonProps {
  * Botão de ícone com contorno e dica (cabeçalhos das páginas de tarefa). Bloqueado usa `aria-disabled`
  * em vez de `disabled` para continuar recebendo foco/hover e a dica explicar o motivo.
  */
-export function TooltipIconButton({ label, tooltip, disabledReason, href, external, onClick, className, children }: TooltipIconButtonProps) {
+export function TooltipIconButton({ label, tooltip, disabledReason, href, external, onClick, className, buttonProps, children }: TooltipIconButtonProps) {
     const blocked = Boolean(disabledReason)
     const classes = cn("h-9 min-w-9 px-2.5 [&_svg]:size-4", blocked && "cursor-not-allowed opacity-50", className)
 
@@ -44,7 +46,7 @@ export function TooltipIconButton({ label, tooltip, disabledReason, href, extern
                 )}
             </Button>
         ) : (
-            <Button type="button" variant="outline" className={classes} aria-label={label} aria-disabled={blocked || undefined} onClick={() => !blocked && onClick?.()}>
+            <Button type="button" variant="outline" className={classes} aria-label={label} aria-disabled={blocked || undefined} onClick={() => !blocked && onClick?.()} {...buttonProps}>
                 {children}
             </Button>
         )

@@ -124,11 +124,11 @@ describe('trocar o modelo do fork', () => {
   it('fork novo começa no modelo do papel; a troca vale nas próximas mensagens e mantém o agente do Mode', async () => {
     const id = await workbench()
     const dto = await openFork(id, 'a')
-    expect(dto.model).toEqual({ model: null, variant: null, overridden: false })
+    expect(dto.model).toMatchObject({ model: null, variant: null, overridden: false, source: 'global' })
     await settle(dto.id)
 
     const changed = await setForkModel(id, dto.id, { model: 'openai/gpt-5', variant: 'high' })
-    expect(changed.model).toEqual({ model: 'openai/gpt-5', variant: 'high', overridden: true })
+    expect(changed.model).toMatchObject({ model: 'openai/gpt-5', variant: 'high', overridden: true, source: 'fork' })
     expect(changed.mode).toBe('plan')
     expect(mocks.assertAgentConfigs).toHaveBeenCalledWith([{ label: 'Modelo do fork', config: { agent: null, model: 'openai/gpt-5', variant: 'high' } }], false)
     expect(mocks.publish).toHaveBeenCalledWith(dto.id, expect.objectContaining({ type: 'notice', message: 'Modelo do fork trocado para openai/gpt-5 (high): vale a partir da próxima mensagem.' }))
@@ -150,7 +150,7 @@ describe('trocar o modelo do fork', () => {
     await settle(dto.id)
     await setForkModel(id, dto.id, { model: 'openai/gpt-5', variant: null })
     const reset = await setForkModel(id, dto.id, { model: null, variant: null })
-    expect(reset.model).toEqual({ model: null, variant: null, overridden: false })
+    expect(reset.model).toMatchObject({ model: null, variant: null, overridden: false })
     expect(fork(dto.id)?.modelOverride).toBeNull()
   })
 
@@ -161,7 +161,31 @@ describe('trocar o modelo do fork', () => {
     await setForkModel(id, parent.id, { model: 'openai/gpt-5', variant: null })
     mocks.client.session.fork.mockResolvedValueOnce({ id: 'child-sess-9', location: { directory: '/home/u/app/worktrees/ope-1' } })
     const child = await openFork(id, 'b', { parentForkId: parent.id })
-    expect(child.model).toEqual({ model: null, variant: null, overridden: false })
+    expect(child.model).toMatchObject({ model: null, variant: null, overridden: false })
+  })
+
+  it('Fork da mesa (OPE-126): base dos forks dela; a troca do próprio fork tem precedência e voltar ao padrão cai no Fork da mesa', async () => {
+    const id = await workbench({ modelOverrides: { fork: { model: 'anthropic/opus', variant: 'high' } } })
+    const dto = await openFork(id, 'a')
+    expect(dto.model).toMatchObject({ model: 'anthropic/opus', variant: 'high', overridden: false, source: 'workbench' })
+    await settle(dto.id)
+    expect(lastTurn().agent).toEqual({ agent: 'plan', model: 'anthropic/opus', variant: 'high' })
+
+    const changed = await setForkModel(id, dto.id, { model: 'openai/gpt-5', variant: null })
+    expect(changed.model).toMatchObject({ model: 'openai/gpt-5', overridden: true, source: 'fork', inherited: { model: 'anthropic/opus', variant: 'high' } })
+    // A auditoria compara com o Fork da mesa (não com o papel da central).
+    expect(mocks.recordAudit).toHaveBeenLastCalledWith(expect.objectContaining({ antes: expect.objectContaining({ modelo: 'anthropic/opus (high)', trocado: false }) }))
+    await sendForkMessage(id, dto.id, 'e agora?')
+    expect(lastTurn().agent).toEqual({ agent: 'plan', model: 'openai/gpt-5', variant: null })
+    await settle(dto.id)
+
+    const reset = await setForkModel(id, dto.id, { model: null, variant: null })
+    expect(reset.model).toMatchObject({ model: 'anthropic/opus', variant: 'high', overridden: false, source: 'workbench' })
+    // A troca da mesa é relida a cada mensagem.
+    bench(id).modelOverrides = null
+    await sendForkMessage(id, dto.id, 'e sem a mesa?')
+    expect(lastTurn().agent).toEqual({ agent: 'plan', model: null, variant: null })
+    await settle(dto.id)
   })
 
   it('fork que não está em aberto não troca (409)', async () => {

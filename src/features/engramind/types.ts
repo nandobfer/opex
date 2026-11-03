@@ -1,5 +1,5 @@
 /**
- * Formatos devolvidos pela API do Engramind v0.10.0 (`docs/openapi.json` do repositório
+ * Formatos devolvidos pela API do Engramind v0.11.0 (`docs/openapi.json` do repositório
  * `nandobfer/engramind`). Só os campos que o Opex usa; o resto passa adiante sem tipagem.
  */
 
@@ -8,9 +8,11 @@ export interface Ref {
     slug: string
 }
 
+export type EngramindTokenKind = "admin" | "agent" | "app"
+
 export interface WhoAmI {
     token_id: string
-    kind: "admin" | "agent"
+    kind: EngramindTokenKind
     scopes: string[]
     app: Ref
     agent: Ref | null
@@ -41,7 +43,7 @@ export interface EngramindAgent {
 export interface EngramindToken {
     id: string
     prefix: string
-    kind: "admin" | "agent"
+    kind: EngramindTokenKind
     scopes: string[]
     app: Ref
     agent: Ref | null
@@ -194,6 +196,33 @@ export interface ContextView {
     counts: { full: number; titles: number; overflow: number }
     rendered_tokens: number
     format: string
+    /** Só com `focus` (0.11.0): como o foco foi aplicado. `text`/`none` = degradado (não entra em cache). */
+    focus_mode?: "hybrid" | "text" | "none" | null
+}
+
+/** `POST /v1/hints` (0.11.0): só título, canal e nota; nunca o texto. */
+export interface EngramindHint {
+    id: string
+    title: string
+    channel: string
+    score: number
+    method: "vector" | "text"
+    duplicate: boolean
+}
+
+/** `POST /v1/consolidation/run`: o plano (`dry_run`) ou os jobs enfileirados. */
+export interface ConsolidationPlan {
+    channel: string
+    skipped: Record<string, string>
+    duplicates: { keep: string; archive: string; similarity?: number }[]
+    classify: string[]
+    stale: { flag: string[]; clear: string[]; archive: string[] }
+}
+
+export interface ConsolidationRun {
+    dry_run: boolean
+    channels: ConsolidationPlan[]
+    jobs: { channel: string; job_id: number; already_queued: boolean }[]
 }
 
 export interface ImportResult {
@@ -271,6 +300,7 @@ export interface EngramindStatus {
     embedding: { enabled?: boolean; configured?: boolean; provider: string | null; model: string | null; model_id: string | null; dimensions: number | null; state: "off" | "ready" | "reindexing" | "failed"; total: number | null; done: number | null; missing?: string[]; reindex_started_at: string | null; local?: LocalModelStatus | null }
     webhooks: { enabled: boolean; apps: number; pending: number; delivered_24h: number; failed_24h: number }
     retention: { last_run_at: string; removed?: Record<string, number> } | null
+    consolidation?: { enabled_channels: number; schedule: string; queued: number; running: number; last_scheduled_at?: string | null; next_run_at?: string | null; last_24h?: Record<string, number> } | null
 }
 
 /** Página de uma lista paginada por cursor (`next_cursor = null` na última). */
@@ -311,6 +341,8 @@ export interface EngramindConnectionDto {
     /** Token admin com `read+write+delete`. */
     tokenSufficient: boolean
     webhook: { url: string | null; secretConfigured: boolean; updatedAt: string | null; matches: boolean } | null
+    /** Token `kind: app` do provisionamento (OPE-117), também "Este Opex" e protegido. */
+    appTokenId?: string | null
 }
 
 export interface BootstrapStepDto {

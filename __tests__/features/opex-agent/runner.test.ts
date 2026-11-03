@@ -208,7 +208,7 @@ describe('runner do Agente Opex', () => {
     expect(options.instructions).toContain('- Regra global')
     expect(options.instructions).toContain('- Regra do dono')
     expect(options.instructions).not.toContain('Regra do cliente')
-    expect(Object.keys(options.tools)).toEqual(['list_tasks'])
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories'])
 
     const assistant = messages().docs.find((doc) => doc.role === 'assistant')!
     expect(assistant).toMatchObject({ status: 'complete', text: 'Achei 2 tarefas.', model: 'anthropic/claude-x' })
@@ -326,7 +326,7 @@ describe('runner com MCPs', () => {
     ]
     const lines = await runTurn(sessionId, 'Busque bugs')
     const options = mocks.streamText.mock.calls[0]![0] as { messages: { content: { text: string }[] }[]; tools: Record<string, unknown> }
-    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'mcp_gh_search'])
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories', 'mcp_gh_search'])
     expect(options.messages[0]!.content.at(-1)!.text).toContain('MCP "Jira" indisponível')
     expect(lines.find((line) => line.type === 'tool-start')).toMatchObject({ name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search' })
     expect(mocks.loadMcpTools).toHaveBeenCalledWith({ kind: 'owner' }, expect.anything())

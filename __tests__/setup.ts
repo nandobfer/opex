@@ -19,6 +19,7 @@ vi.mock('@/lib/integrations/store', () => ({
 // montar a mesa. Nos testes ele fica de fora por padrão; os testes do adversário redefinem este mock.
 vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   adversaryApplies: vi.fn(async () => false),
+  adversaryModel: vi.fn(async () => null),
   runAdversaryRound: vi.fn(),
   prepareUserFix: vi.fn(),
   recordRerun: vi.fn(),

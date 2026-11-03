@@ -246,12 +246,13 @@ describe('prévia e serviços pelo agente', () => {
 describe('mesas pelo agente', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('troca o modelo de um papel da mesa e rejeita papel inválido', async () => {
+  it('troca o modelo de um papel da mesa (inclusive o Fork da mesa) e rejeita papel inválido', async () => {
     const tool = findOpexTool('set_workbench_model')!
     expect(tool.risk).toBe('write')
     const result = await tool.execute(tool.input.parse({ workbenchId: 'w1', role: 'planning', model: 'anthropic/claude', variant: 'high' }), context)
     expect(mocks.setWorkbenchModel).toHaveBeenCalledWith('w1', { role: 'planning', model: 'anthropic/claude', variant: 'high' })
     expect(result).toMatchObject({ models: { planning: { overridden: true } } })
-    expect(() => tool.input.parse({ workbenchId: 'w1', role: 'fork', model: null })).toThrow()
+    expect(tool.input.parse({ workbenchId: 'w1', role: 'fork', model: null })).toMatchObject({ role: 'fork', model: null })
+    expect(() => tool.input.parse({ workbenchId: 'w1', role: 'deploy', model: null })).toThrow()
   })
 })

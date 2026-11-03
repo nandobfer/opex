@@ -51,6 +51,34 @@ function encodeBody(body: unknown, sensitive: boolean): string | Blob {
 
 const debug = () => integrationDebug(ENGRAMIND_INTEGRATION_ID)
 
+/** Campos com texto do usuário/turno (foco do contexto, dicas e busca): nunca vão para o debug. */
+const USER_TEXT_QUERY = ["focus"] as const
+const USER_TEXT_BODY: Record<string, readonly string[]> = { "/v1/hints": ["text"], "/v1/memories/search": ["query"] }
+
+const omitted = (value: unknown, label: string) => `[${label} omitido: ${String(value).length} caracteres]`
+
+/** URL e corpo como aparecem no debug, com o texto do usuário trocado pelo tamanho (OPE-117). */
+export function debugView(url: string, request: Pick<EngramindRequest, "path" | "query" | "body">, body: string | Blob | undefined): { url?: string; body?: string } {
+    const view: { url?: string; body?: string } = {}
+    const masked = new URL(url)
+    let changed = false
+    for (const key of USER_TEXT_QUERY) {
+        const value = masked.searchParams.get(key)
+        if (value !== null) {
+            masked.searchParams.set(key, omitted(value, "foco"))
+            changed = true
+        }
+    }
+    if (changed) view.url = masked.toString()
+    const fields = USER_TEXT_BODY[request.path]
+    if (fields && typeof body === "string" && request.body && typeof request.body === "object") {
+        const copy: Record<string, unknown> = { ...(request.body as Record<string, unknown>) }
+        for (const field of fields) if (copy[field] !== undefined) copy[field] = omitted(copy[field], "texto")
+        view.body = JSON.stringify(copy)
+    }
+    return view
+}
+
 /** Chama o Engramind e devolve o JSON (204/corpo vazio → `null`). */
 export async function engramindCall<T = unknown>(method: EngramindMethod, request: EngramindRequest, options: EngramindCallOptions = {}): Promise<T> {
     const target = options.target ?? (await engramindTarget())
@@ -61,7 +89,9 @@ export async function engramindCall<T = unknown>(method: EngramindMethod, reques
     const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS)]) : AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS)
     let res: Response
     try {
-        res = await debugFetch(debug(), "Engramind", buildUrl(target.baseUrl, request), { method, headers, body: hasBody ? encodeBody(request.body, options.sensitiveBody === true) : undefined, cache: "no-store", signal })
+        const url = buildUrl(target.baseUrl, request)
+        const body = hasBody ? encodeBody(request.body, options.sensitiveBody === true) : undefined
+        res = await debugFetch(debug(), "Engramind", url, { method, headers, body, cache: "no-store", signal }, debugView(url, request, body))
     } catch (error) {
         const reason = error instanceof Error ? (error.name === "TimeoutError" || error.name === "AbortError" ? "tempo limite" : ((error as { cause?: { code?: string } }).cause?.code ?? error.message)) : String(error)
         throw unreachableError(reason)

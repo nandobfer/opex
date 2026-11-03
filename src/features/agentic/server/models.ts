@@ -1,8 +1,8 @@
 import type { IAgenticFork, IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "../constants"
-import { applyModelOverride, asModelOverride, resolveAgent, type ModelOverride } from "../logic"
+import { applyModelOverride, asModelOverride, modelSource, resolveAgent, type ModelOverride } from "../logic"
 import type { AgentConfig, AgenticSettings, CentralConfig, ModelOverrideInput } from "../schemas"
-import type { ModelChoiceDto } from "../types"
+import type { ModelChoiceDto, ModelSourceDto } from "../types"
 import { loadCentral } from "./centrals"
 import { assertAgentConfigs, loadAgenticSettings } from "./settings"
 
@@ -11,10 +11,21 @@ import { assertAgentConfigs, loadAgenticSettings } from "./settings"
  * (configuração do papel + troca gravada) e valida a troca no OpenCode.
  */
 
-/** Modelo efetivo de um papel para a tela: o do papel ou o trocado. */
-export function toModelChoice(base: AgentConfig, override: ModelOverride | null): ModelChoiceDto {
+/** Modelo/variante para a tela (variante só com modelo definido). */
+const choiceOf = (agent: AgentConfig) => ({ model: agent.model, variant: agent.model ? agent.variant : null })
+
+/**
+ * Modelo efetivo de um papel para a tela: o do papel ou o trocado, com o valor herdado (sem a troca)
+ * e a origem. `source`/`overrideSource` seguem a precedência fork > mesa > central > global.
+ */
+export function toModelChoice(base: AgentConfig, override: ModelOverride | null, baseSource?: ModelSourceDto, overrideSource: ModelSourceDto = "workbench"): ModelChoiceDto {
     const effective = applyModelOverride(base, override)
-    return { model: effective.model, variant: effective.model ? effective.variant : null, overridden: Boolean(override) }
+    return {
+        ...choiceOf(effective),
+        overridden: Boolean(override),
+        inherited: choiceOf(base),
+        ...(baseSource ? { source: override ? overrideSource : baseSource, inheritedSource: baseSource } : {}),
+    }
 }
 
 /** Trocas da mesa, por papel, já validadas. */
@@ -34,22 +45,40 @@ export function workbenchTurnAgent(settings: AgenticSettings, config: Pick<Centr
     return role === "fork" ? base : applyModelOverride(base, workbenchOverrides(doc)[role] ?? null)
 }
 
+/** Modelo de um papel da mesa para a tela (central/global + troca da mesa). */
+export function workbenchModelChoice(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, doc: Pick<IAgenticWorkbench, "modelOverrides">, role: WorkbenchModelRole): ModelChoiceDto {
+    return toModelChoice(resolveAgent(settings, config, role), workbenchOverrides(doc)[role] ?? null, modelSource(config, role))
+}
+
 /** Modelos efetivos dos papéis da mesa (`null` se a central não puder ser lida). */
 export async function workbenchModels(doc: Pick<IAgenticWorkbench, "centralId" | "modelOverrides">): Promise<Record<WorkbenchModelRole, ModelChoiceDto> | null> {
     try {
         const [{ settings }, { config }] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId)])
-        const overrides = workbenchOverrides(doc)
-        return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, toModelChoice(resolveAgent(settings, config, role), overrides[role] ?? null)])) as Record<WorkbenchModelRole, ModelChoiceDto>
+        return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, workbenchModelChoice(settings, config, doc, role)])) as Record<WorkbenchModelRole, ModelChoiceDto>
     } catch {
         return null
     }
 }
 
+/**
+ * Agente base dos forks de uma mesa: o papel Fork (central/global) com a troca "Fork" da mesa
+ * aplicada. A troca do próprio fork vai por cima (fork > mesa > central > global).
+ */
+export function forkBaseAgent(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, workbench: Pick<IAgenticWorkbench, "modelOverrides"> | null): AgentConfig {
+    return applyModelOverride(resolveAgent(settings, config, "fork"), workbench ? (workbenchOverrides(workbench).fork ?? null) : null)
+}
+
+/** Modelo de um fork para a tela: herdado = Fork da mesa (ou central/global), origem `fork` quando trocado nele. */
+export function forkModelChoice(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, workbench: Pick<IAgenticWorkbench, "modelOverrides"> | null, fork: Pick<IAgenticFork, "modelOverride">): ModelChoiceDto {
+    const baseSource: ModelSourceDto = workbench && workbenchOverrides(workbench).fork ? "workbench" : modelSource(config, "fork")
+    return toModelChoice(forkBaseAgent(settings, config, workbench), asModelOverride(fork.modelOverride), baseSource, "fork")
+}
+
 /** Modelo efetivo de um fork (`null` se a central não puder ser lida). */
-export async function forkModel(doc: Pick<IAgenticFork, "centralId" | "modelOverride">): Promise<ModelChoiceDto | null> {
+export async function forkModel(doc: Pick<IAgenticFork, "centralId" | "modelOverride">, workbench: Pick<IAgenticWorkbench, "modelOverrides"> | null): Promise<ModelChoiceDto | null> {
     try {
         const [{ settings }, { config }] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId)])
-        return toModelChoice(resolveAgent(settings, config, "fork"), asModelOverride(doc.modelOverride))
+        return forkModelChoice(settings, config, workbench, doc)
     } catch {
         return null
     }

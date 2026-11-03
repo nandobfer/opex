@@ -2,9 +2,10 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAiAgents, useAiModels } from "@/features/ai/hooks/useAi"
-import { AGENT_ROLE_LABELS, AGENT_ROLES, type AgentRole } from "../../constants"
+import { AGENT_ROLES, type AgentRole } from "../../constants"
 import type { AgentConfig } from "../../schemas"
 import { AgentConfigFields } from "./AgentConfigFields"
+import { AgentRoleSection } from "./AgentRoleSection"
 
 interface AgentRolesCardProps {
     title: string
@@ -28,15 +29,9 @@ export function AgentRolesCard({ title, description, values, onChange, inherited
             </CardHeader>
             <CardContent className="divide-y">
                 {AGENT_ROLES.map((role) => (
-                    <section key={role} className="space-y-3 py-4 first:pt-0 last:pb-0" aria-labelledby={`${idPrefix}-${role}-title`}>
-                        <div>
-                            <h3 id={`${idPrefix}-${role}-title`} className="text-sm font-medium">
-                                {AGENT_ROLE_LABELS[role].label}
-                            </h3>
-                            <p className="text-xs text-muted-foreground">{AGENT_ROLE_LABELS[role].description}</p>
-                        </div>
+                    <AgentRoleSection key={role} id={`${idPrefix}-${role}`} role={role}>
                         <AgentConfigFields id={`${idPrefix}-${role}`} value={values[role]} onChange={(next) => onChange(role, next)} agents={agents} models={models} inherited={inherited?.[role]} />
-                    </section>
+                    </AgentRoleSection>
                 ))}
             </CardContent>
         </Card>

@@ -19,32 +19,43 @@ import { InfoField } from "../../shared/InfoField"
 import { ScopePicker } from "../../shared/ScopePicker"
 import { useSchemaForm } from "../../shared/useSchemaForm"
 
+/** Emissão já escopada ao app ou ao agente em que está (OPE-117): o dono não precisa escolher. */
+export interface IssueTokenPreset {
+    app: string
+    /** `app/agente` (token de agente). */
+    agent?: string
+}
+
 interface IssueTokenDialogProps {
     apps: EngramindApp[]
     agents: EngramindAgent[]
     open: boolean
     onOpenChange: (open: boolean) => void
+    preset?: IssueTokenPreset
 }
 
-type Values = { kind: "admin" | "agent"; app: string; agent: string; scopes: ScopeCombination; label: string; expiresAt: string }
+type Values = { kind: (typeof TOKEN_KINDS)[number]; app: string; agent: string; scopes: ScopeCombination; label: string; expiresAt: string }
 
 /** Emitir token: app/agente, tipo, escopos (só combinações válidas), rótulo e expiração; o segredo aparece UMA vez. */
-export function IssueTokenDialog({ apps, agents, open, onOpenChange }: IssueTokenDialogProps) {
+export function IssueTokenDialog({ apps, agents, open, onOpenChange, preset }: IssueTokenDialogProps) {
     const [secret, setSecret] = useState<string | null>(null)
     const toPayload = useCallback(
         (values: Values) => ({
             kind: values.kind,
-            ...(values.kind === "admin" ? { app: values.app || undefined, agent: values.agent || undefined } : { agent: values.agent || undefined }),
+            ...(values.kind === "admin" ? { app: values.app || undefined, agent: values.agent || undefined } : values.kind === "app" ? { app: values.app || undefined } : { agent: values.agent || undefined }),
             scopes: scopesOfCombination(values.scopes),
             label: values.label.trim() || undefined,
             expires_at: values.expiresAt ? new Date(values.expiresAt).toISOString() : undefined,
         }),
         [],
     )
-    const form = useSchemaForm(issueTokenInput, { kind: "agent", app: apps[0]?.slug ?? "", agent: "", scopes: "read+write", label: "", expiresAt: "" }, toPayload)
+    const form = useSchemaForm(issueTokenInput, { kind: preset ? (preset.agent ? "agent" : "app") : "agent", app: preset?.app ?? apps[0]?.slug ?? "", agent: preset?.agent ?? "", scopes: "read+write", label: "", expiresAt: "" } as Values, toPayload)
+    const kinds = preset ? (preset.agent ? (["agent"] as const) : (["app", "admin"] as const)) : TOKEN_KINDS
     const issue = useEngramindMutation((payload: Record<string, unknown>) => engramindSend<IssuedToken>("post", "tokens", payload), { invalidate: ["tokens"], success: "Token emitido" })
     const submit = () => form.payload && issue.mutate(form.payload as Record<string, unknown>, { onSuccess: (result) => setSecret(result.secret ?? null) })
     const agentOptions = form.values.kind === "admin" ? agents.filter((agent) => agent.app.slug === form.values.app) : agents
+    const showApp = !preset && (form.values.kind === "admin" || form.values.kind === "app")
+    const showAgent = !preset && form.values.kind !== "app"
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-xl">
@@ -59,10 +70,15 @@ export function IssueTokenDialog({ apps, agents, open, onOpenChange }: IssueToke
                         </motion.div>
                     ) : (
                         <motion.div key="form" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className={FORM_GRID}>
-                            <InfoField id="token-kind" label="Tipo" info={`admin: ${TOKEN_KIND_HELP.admin} agent: ${TOKEN_KIND_HELP.agent}`} className="space-y-1.5 sm:col-span-2">
-                                <OptionTabs id="token-kind" aria-label="Tipo" options={TOKEN_KINDS.map((kind) => ({ value: kind, label: kind, tooltip: TOKEN_KIND_HELP[kind] }))} value={form.values.kind} onChange={(kind) => form.set("kind", kind)} />
+                            {preset && (
+                                <p className="text-xs text-muted-foreground sm:col-span-2" data-testid="issue-preset">
+                                    Token {preset.agent ? `do agente ${preset.agent}` : `do app ${preset.app}`}.
+                                </p>
+                            )}
+                            <InfoField id="token-kind" label="Tipo" info={kinds.map((kind) => `${kind}: ${TOKEN_KIND_HELP[kind]}`).join(" ")} className="space-y-1.5 sm:col-span-2">
+                                <OptionTabs id="token-kind" aria-label="Tipo" options={kinds.map((kind) => ({ value: kind, label: kind, tooltip: TOKEN_KIND_HELP[kind] }))} value={form.values.kind} onChange={(kind) => form.set("kind", kind)} />
                             </InfoField>
-                            {form.values.kind === "admin" && (
+                            {showApp && (
                                 <InfoField id="token-app" label="App" info="App dono do token admin." error={form.error("app")}>
                                     <Select value={form.values.app} onValueChange={(value) => form.set("app", value)}>
                                         <SelectTrigger id="token-app" className="bg-transparent">
@@ -78,6 +94,7 @@ export function IssueTokenDialog({ apps, agents, open, onOpenChange }: IssueToke
                                     </Select>
                                 </InfoField>
                             )}
+                            {showAgent && (
                             <InfoField id="token-agent" label={form.values.kind === "admin" ? "Agente (opcional)" : "Agente"} info={form.values.kind === "agent" ? "Token agent pertence a um agente e só alcança os canais que ele assina." : "Opcional: um agente do mesmo app."} error={form.error("agent")}>
                                 <Select value={form.values.agent || "__none__"} onValueChange={(value) => form.set("agent", value === "__none__" ? "" : value)}>
                                     <SelectTrigger id="token-agent" className="bg-transparent">
@@ -93,6 +110,7 @@ export function IssueTokenDialog({ apps, agents, open, onOpenChange }: IssueToke
                                     </SelectContent>
                                 </Select>
                             </InfoField>
+                            )}
                             <InfoField id="token-scopes" label="Escopos" info="write e delete exigem read. Quem emite não concede o que não tem." error={form.error("scopes")} className="space-y-1.5 sm:col-span-2">
                                 <ScopePicker id="token-scopes" value={form.values.scopes} onChange={(scopes) => form.set("scopes", scopes)} />
                             </InfoField>

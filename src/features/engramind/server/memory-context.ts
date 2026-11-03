@@ -5,6 +5,7 @@ import { engramindCall } from "./client"
 import { agentTarget } from "./memory-network"
 import { ENGRAMIND_STATE_ID, EngramindContextCache, EngramindState, engramindDb } from "./models"
 import { engramindLog, publishEngramind } from "./shared"
+import { engramindCodeOf } from "./errors"
 import { deliveredChannels, parseTaggedContext } from "../context-tagged"
 
 /**
@@ -16,10 +17,16 @@ import { deliveredChannels, parseTaggedContext } from "../context-tagged"
  *
  * Consumo ao vivo (OPE-109): resposta boa (`200` ou `304`) com memórias publica
  * `engramind-consumption` (só ids); cache por indisponibilidade ou turno sem memórias não publica.
+ *
+ * Foco (OPE-117, Engramind 0.11.0): `focus` vai na query do `GET /v1/context`. Um Engramind sem
+ * suporte (400 de validação) recebe de novo sem foco; bloco degradado (`focus_mode` `text`/`none`)
+ * não entra em cache. A última entrega por consumidor vai para `engramind_deliveries` (só ids).
  */
 
 const CONTEXT_TIMEOUT_MS = 5_000
 const CONTEXT_FORMAT = "tagged"
+
+export type FocusMode = "hybrid" | "text" | "none"
 
 export interface MemoryContextResult {
     block: string
@@ -29,21 +36,49 @@ export interface MemoryContextResult {
     counts: { full: number; titles: number; overflow: number }
     /** Motivo da indisponibilidade (sem segredos). */
     reason: string | null
+    /** Como o foco foi aplicado (`null` = turno sem foco ou Engramind sem suporte). */
+    focusMode?: FocusMode | null
+}
+
+export interface MemoryContextOptions {
+    /** Foco do turno (já sem segredos e cortado: `buildMemoryFocus`). Nunca vai para log, cache ou evento. */
+    focus?: string
 }
 
 export const contextCacheKey = (consumer: MemoryConsumer, channels: readonly string[]) => createHash("sha256").update(`${consumer}|${[...channels].sort().join(",")}`).digest("hex")
 
+/** Hash do foco normalizado (o texto nunca é gravado). */
+export const focusHashOf = (focus: string | undefined) => (focus ? createHash("sha256").update(focus.replace(/\s+/g, " ").trim()).digest("hex") : null)
+
 const EMPTY_COUNTS = { full: 0, titles: 0, overflow: 0 }
 
+/** Engramind anterior à 0.11.0 (ou foco recusado): refaz uma vez sem o foco. */
+const isFocusRejection = (error: unknown) => {
+    const code = engramindCodeOf(error)
+    return code === "FOCUS_TOO_LONG" || code === "VALIDATION_ERROR" || code === "UNKNOWN_FIELD" || code === "INVALID_QUERY"
+}
+
+interface DeliveryMeta {
+    titleIds: readonly string[]
+    version: string
+    counts: { full: number; titles: number; overflow: number }
+    focusMode: FocusMode | null
+    source: "live" | "not-modified"
+}
+
 /** Fora do caminho do turno: não atrasa a resposta do agente nem lança. */
-async function publishContextConsumption(consumer: MemoryConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[]): Promise<void> {
+async function publishContextConsumption(consumer: MemoryConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[], meta: DeliveryMeta): Promise<void> {
+    // Rastreio por turno em paralelo ao consumo (nunca lança).
+    void import("./deliveries")
+        .then(({ recordDelivery }) => recordDelivery(consumer, { fullIds: memoryIds, titleIds: meta.titleIds, counts: meta.counts, channels, delivered, version: meta.version, focusMode: meta.focusMode, source: meta.source }))
+        .catch((error: unknown) => engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] última entrega do contexto não registrada"))
     if (!memoryIds.length) {
         engramindLog.info({ consumer, channels }, "[engramind] turno sem memórias entregues: consumo não publicado")
         return
     }
     try {
         const { publishConsumption } = await import("./consumption")
-        await publishConsumption({ agent: `opex/${consumer}`, kind: "context", channels: [...channels], delivered: [...delivered], memoryIds: [...memoryIds] })
+        await publishConsumption({ agent: `opex/${consumer}`, kind: "context", channels: [...channels], delivered: [...delivered], memoryIds: [...memoryIds], titleIds: [...meta.titleIds], version: meta.version })
     } catch (error) {
         engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] consumo do contexto não publicado")
     }
@@ -59,7 +94,7 @@ async function markHealth(ok: boolean, reason: string | null): Promise<void> {
     if (wasUnavailable === ok) await publishEngramind({ type: "memories.context" }).catch(() => undefined)
 }
 
-export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: readonly string[]): Promise<MemoryContextResult> {
+export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: readonly string[], options: MemoryContextOptions = {}): Promise<MemoryContextResult> {
     let cached: Awaited<ReturnType<typeof readCache>> = null
     try {
         await engramindDb()
@@ -70,39 +105,60 @@ export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: 
     try {
         const target = await agentTarget(consumer)
         if (!target) throw new Error("token do agente de memórias indisponível (confira canais e agentes na aba Migração de memórias)")
-        const view = await engramindCall<ContextView | null>(
-            "GET",
-            { path: "/v1/context", query: { channels: channels.join(","), format: CONTEXT_FORMAT } },
-            // Cache de outro formato (markdown, antes da OPE-109) tem outra `version`: relê o bloco.
-            { target, timeoutMs: CONTEXT_TIMEOUT_MS, headers: cached?.version && cached.format === CONTEXT_FORMAT ? { "If-None-Match": cached.version } : undefined },
-        )
+        let focus = options.focus?.trim() ? options.focus : undefined
+        const fetchContext = async (withFocus: string | undefined) => {
+            const hash = focusHashOf(withFocus)
+            // Cache de outro formato (markdown, antes da OPE-109) ou de outro foco tem outra `version`: relê o bloco.
+            const reuse = cached?.version && cached.format === CONTEXT_FORMAT && (cached.focusHash ?? null) === hash
+            return engramindCall<ContextView | null>(
+                "GET",
+                { path: "/v1/context", query: { channels: channels.join(","), format: CONTEXT_FORMAT, focus: withFocus } },
+                { target, timeoutMs: CONTEXT_TIMEOUT_MS, headers: reuse ? { "If-None-Match": cached!.version } : undefined },
+            )
+        }
+        let view: ContextView | null
+        try {
+            view = await fetchContext(focus)
+        } catch (error) {
+            if (!focus || !isFocusRejection(error)) throw error
+            engramindLog.info({ consumer, focus_fallback: true, focus_len: focus.length }, "[engramind] foco recusado pelo Engramind: contexto pedido sem foco")
+            focus = undefined
+            view = await fetchContext(undefined)
+        }
         const now = new Date()
         if (view === null && cached) {
             await EngramindContextCache.updateOne({ _id: cached._id }, { $set: { fetchedAt: now } })
             await markHealth(true, null)
-            void publishContextConsumption(consumer, channels, cached.memoryIds ?? [], cached.delivered ?? [])
-            return { block: cached.content, source: "live", cachedAt: now.toISOString(), counts: cached.counts ?? EMPTY_COUNTS, reason: null }
+            const counts = cached.counts ?? EMPTY_COUNTS
+            const focusMode = focus ? (cached.focusMode ?? null) : null
+            void publishContextConsumption(consumer, channels, cached.memoryIds ?? [], cached.delivered ?? [], { titleIds: cached.titleIds ?? [], version: cached.version, counts, focusMode, source: "not-modified" })
+            return { block: cached.content, source: "live", cachedAt: now.toISOString(), counts, reason: null, focusMode }
         }
         if (!view) throw new Error("o Engramind respondeu sem o contexto")
         const content = typeof view.content === "string" ? view.content : ""
         const counts = view.counts ?? EMPTY_COUNTS
+        const focusMode: FocusMode | null = focus ? (view.focus_mode ?? null) : null
         const ids = parseTaggedContext(content)
         const memoryIds = ids.full.map((item) => item.id)
         const delivered = deliveredChannels(ids)
-        await EngramindContextCache.updateOne(
-            { _id: contextCacheKey(consumer, channels) },
-            { $set: { consumer, channels: [...channels], content, version: view.version ?? "", counts, format: CONTEXT_FORMAT, memoryIds, delivered, fetchedAt: now } },
-            { upsert: true },
-        )
+        const version = view.version ?? ""
+        // Bloco com foco degradado (`text`/`none`) tem outra `version` e não entra no cache (decisão 0029).
+        if (focusMode !== "text" && focusMode !== "none") {
+            await EngramindContextCache.updateOne(
+                { _id: contextCacheKey(consumer, channels) },
+                { $set: { consumer, channels: [...channels], content, version, counts, format: CONTEXT_FORMAT, memoryIds, titleIds: ids.titles, delivered, focusHash: focusHashOf(focus), focusMode, fetchedAt: now } },
+                { upsert: true },
+            )
+        }
         await markHealth(true, null)
-        void publishContextConsumption(consumer, channels, memoryIds, delivered)
-        return { block: content, source: "live", cachedAt: now.toISOString(), counts, reason: null }
+        void publishContextConsumption(consumer, channels, memoryIds, delivered, { titleIds: ids.titles, version, counts, focusMode, source: "live" })
+        return { block: content, source: "live", cachedAt: now.toISOString(), counts, reason: null, focusMode }
     } catch (error) {
         const reason = error instanceof Error ? error.message : String(error)
         engramindLog.warn({ consumer, channels, err: reason, cache: Boolean(cached) }, "[engramind] contexto das memórias indisponível: o turno usa o cache")
         await markHealth(false, reason).catch(() => undefined)
-        if (cached) return { block: cached.content, source: "cache", cachedAt: new Date(cached.fetchedAt).toISOString(), counts: cached.counts ?? EMPTY_COUNTS, reason }
-        return { block: "", source: "none", cachedAt: null, counts: EMPTY_COUNTS, reason }
+        if (cached) return { block: cached.content, source: "cache", cachedAt: new Date(cached.fetchedAt).toISOString(), counts: cached.counts ?? EMPTY_COUNTS, reason, focusMode: null }
+        return { block: "", source: "none", cachedAt: null, counts: EMPTY_COUNTS, reason, focusMode: null }
     }
 }
 
