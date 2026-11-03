@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type Dispatch, type SetStateAction } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Eye, RefreshCw, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
@@ -21,9 +21,14 @@ import { ConsolidationResult } from "./ConsolidationResult"
 export interface SectionRunProps {
     /** Alterações pendentes no formulário (qualquer seção: o PUT é tudo ou nada). */
     dirty: boolean
-    /** Grava as alterações pendentes; `false` quando a gravação falhou (nada é executado). */
-    saveDraft: () => Promise<boolean>
+    /**
+     * Grava as alterações pendentes; `false` quando a gravação falhou ou o dono cancelou (nada é executado).
+     * `{ reindexed: true }`: a gravação trocou o embedding e o próprio Engramind já reindexou.
+     */
+    saveDraft: () => Promise<SaveDraftResult>
 }
+
+export type SaveDraftResult = boolean | { reindexed: true }
 
 type Scope = "all" | "channel"
 const SCOPES: { value: Scope; label: string }[] = [
@@ -31,15 +36,33 @@ const SCOPES: { value: Scope; label: string }[] = [
     { value: "channel", label: "Um canal" },
 ]
 
+/**
+ * Estado visível da consolidação (escopo, execução em curso, resultado e erro). Fica no pai que sobrevive ao
+ * "Salvar e executar": gravar adota a configuração nova e remonta o formulário no meio da execução.
+ */
+export interface ConsolidationUiState {
+    scope: Scope
+    channel: string
+    pending: "plan" | "run" | null
+    result: ConsolidationRun | null
+    error: { message: string; dryRun: boolean } | null
+}
+
+export const INITIAL_CONSOLIDATION_UI: ConsolidationUiState = { scope: "all", channel: "", pending: null, result: null, error: null }
+
 /** Consolidação: escopo (todos ou um canal), "Ver plano" (`dry_run`) e "Executar agora" (`run_consolidation`). */
-export function ConsolidationActions({ dirty, saveDraft }: SectionRunProps) {
+export function ConsolidationActions({ dirty, saveDraft, ui: controlled, onUi }: SectionRunProps & { ui?: ConsolidationUiState; onUi?: Dispatch<SetStateAction<ConsolidationUiState>> }) {
     const channels = useEngramindList<EngramindChannel>("channels", "channels", undefined, { all: true })
-    const [scope, setScope] = useState<Scope>("all")
-    const [channel, setChannel] = useState("")
+    const [local, setLocal] = useState<ConsolidationUiState>(INITIAL_CONSOLIDATION_UI)
+    const ui = controlled ?? local
+    const setUi = onUi ?? setLocal
+    const update = (patch: Partial<ConsolidationUiState>) => setUi((prev) => ({ ...prev, ...patch }))
+    const { scope, channel, result, error } = ui
+    const setScope = (next: Scope) => update({ scope: next })
+    const setChannel = (next: string) => update({ channel: next })
     const [confirm, setConfirm] = useState<"plan" | "run" | null>(null)
-    const [result, setResult] = useState<ConsolidationRun | null>(null)
-    const [error, setError] = useState<{ message: string; dryRun: boolean } | null>(null)
     const run = useEngramindMutation((input: { channel?: string; dry_run?: boolean }) => engramindSend<ConsolidationRun>("post", "consolidation/run", input), { invalidate: ["jobs", "status"], silentError: true })
+    const busy = ui.pending !== null
     const active = channels.items.filter((item) => !item.archived_at)
     const target = scope === "channel" ? channel : ""
     const scopeText = scope === "channel" ? (channel ? `o canal ${channel}` : "um canal") : "todos os canais com consolidação ativa"
@@ -47,15 +70,18 @@ export function ConsolidationActions({ dirty, saveDraft }: SectionRunProps) {
 
     const execute = async (dryRun: boolean) => {
         setConfirm(null)
-        if (dirty && !(await saveDraft())) return
-        setError(null)
+        update({ pending: dryRun ? "plan" : "run", error: null })
+        if (dirty && !(await saveDraft())) {
+            update({ pending: null })
+            return
+        }
         try {
             const response = await run.mutateAsync({ ...(target ? { channel: target } : {}), ...(dryRun ? { dry_run: true } : {}) })
-            setResult(response)
+            update({ pending: null, result: response })
             toast.success(dryRun ? "Plano da consolidação pronto (nada foi gravado)" : `Consolidação enfileirada: ${response.jobs.length} job(s)`)
         } catch (reason) {
             const message = apiErrorMessage(reason, "Não foi possível executar a consolidação.")
-            setError({ message, dryRun })
+            update({ pending: null, error: { message, dryRun } })
             toast.error(message)
         }
     }
@@ -63,11 +89,11 @@ export function ConsolidationActions({ dirty, saveDraft }: SectionRunProps) {
     return (
         <div className="space-y-3 rounded-lg border border-dashed p-3" data-testid="consolidation-actions">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <OptionTabs aria-label="Escopo da consolidação" options={SCOPES} value={scope} onChange={setScope} disabled={run.isPending} />
+                <OptionTabs aria-label="Escopo da consolidação" options={SCOPES} value={scope} onChange={setScope} disabled={busy} />
                 <AnimatePresence initial={false}>
                     {scope === "channel" && (
                         <motion.div key="channel" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} className="w-full min-w-0 sm:flex-1">
-                            <Select value={channel} onValueChange={setChannel} disabled={run.isPending}>
+                            <Select value={channel} onValueChange={setChannel} disabled={busy}>
                                 <SelectTrigger aria-label="Canal da consolidação" className="w-full bg-transparent">
                                     <SelectValue placeholder="Escolha o canal" />
                                 </SelectTrigger>
@@ -83,8 +109,8 @@ export function ConsolidationActions({ dirty, saveDraft }: SectionRunProps) {
                     )}
                 </AnimatePresence>
                 <div className="flex flex-wrap gap-2 sm:ml-auto">
-                    <RunNowButton label="Consolidação" text="Ver plano" icon={Eye} blockReason={blockReason} pending={run.isPending && run.variables?.dry_run === true} onClick={() => setConfirm("plan")} />
-                    <RunNowButton label="Consolidação" blockReason={blockReason} pending={run.isPending && run.variables?.dry_run !== true} onClick={() => setConfirm("run")} />
+                    <RunNowButton label="Consolidação" text="Ver plano" icon={Eye} blockReason={blockReason} pending={ui.pending === "plan"} onClick={() => setConfirm("plan")} />
+                    <RunNowButton label="Consolidação" blockReason={blockReason} pending={ui.pending === "run"} onClick={() => setConfirm("run")} />
                 </div>
             </div>
             <AnimatePresence initial={false}>
@@ -117,20 +143,35 @@ export function ConsolidationActions({ dirty, saveDraft }: SectionRunProps) {
 }
 
 /** Embeddings: "Reindexar agora" (`reembed_all`) com o progresso no status. */
-export function ReindexAction({ dirty, saveDraft }: SectionRunProps) {
+export function ReindexAction({ dirty, saveDraft, pending: controlled, onPending }: SectionRunProps & { pending?: boolean; onPending?: (pending: boolean) => void }) {
     const status = useEngramindQuery<EngramindStatus>("status")
     const [confirm, setConfirm] = useState(false)
+    // Fica no pai: o "Salvar e executar" remonta o formulário no meio da execução.
+    const [local, setLocal] = useState(false)
+    const pending = controlled ?? local
+    const setPending = onPending ?? setLocal
     const reindex = useEngramindMutation(() => engramindSend<{ total?: number }>("post", "embeddings/reembed", {}), { invalidate: ["status"], silentError: true })
     const state = status.data?.embedding?.state
     const blockReason = state === "reindexing" ? "Reindexação em andamento" : state === "off" ? "Embeddings desligados" : null
     const execute = async () => {
         setConfirm(false)
-        if (dirty && !(await saveDraft())) return
+        setPending(true)
         try {
+            if (dirty) {
+                const saved = await saveDraft()
+                if (!saved) return
+                // Gravar o embedding já validou o provedor e reindexou: não dispara a mesma operação de novo.
+                if (typeof saved === "object" && saved.reindexed) {
+                    toast.success("Configurações salvas: o Engramind já está reindexando as memórias")
+                    return
+                }
+            }
             const response = await reindex.mutateAsync(undefined as never)
             toast.success(`Reindexação iniciada${typeof response?.total === "number" ? ` (${response.total} memórias)` : ""}`)
         } catch (reason) {
             toast.error(apiErrorMessage(reason, "Não foi possível reindexar."), { action: { label: "Tentar novamente", onClick: () => void execute() } })
+        } finally {
+            setPending(false)
         }
     }
     return (
@@ -140,7 +181,7 @@ export function ReindexAction({ dirty, saveDraft }: SectionRunProps) {
                     Reindexando: {status.data?.embedding?.done ?? 0} de {status.data?.embedding?.total ?? 0}
                 </span>
             )}
-            <RunNowButton label="Embeddings" text="Reindexar agora" icon={RefreshCw} blockReason={blockReason} pending={reindex.isPending} onClick={() => setConfirm(true)} />
+            <RunNowButton label="Embeddings" text="Reindexar agora" icon={RefreshCw} blockReason={blockReason} pending={pending} onClick={() => setConfirm(true)} />
             <RunNowDialog
                 open={confirm}
                 onOpenChange={setConfirm}

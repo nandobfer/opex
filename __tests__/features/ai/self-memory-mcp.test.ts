@@ -177,4 +177,11 @@ describe('MCP de memórias', () => {
     expect(effect('pin_my_memory')).toBe('deny')
     expect(effect('remember')).toBe('allow')
   })
+
+  it('Maddox com o aprendizado desligado: as de gravação viram deny (nada de pedir confirmação ao dono); as de leitura seguem', () => {
+    const rules = selfMemorySessionPermissions({ overrides: {}, disabled: new Set() }, { write: false })
+    const effect = (name: string) => rules.findLast((rule) => rule.action === `opex_memorias_${name}`)?.effect
+    for (const name of ['list_my_memories', 'remember', 'update_my_memory', 'pin_my_memory', 'set_my_memory_active', 'forget_my_memory']) expect(effect(name)).toBe('deny')
+    for (const name of ['get_hints', 'get_memory', 'search_memories']) expect(effect(name)).toBe('allow')
+  })
 })

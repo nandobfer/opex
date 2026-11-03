@@ -580,15 +580,22 @@ tarefa divergia do contrato, vale o contrato:
   (aprendizado ligado e sem gravar há 14 dias ou mais; nunca gravou com o agente criado há mais de 14
   dias). O card "Aprendizado autônomo" de cada agente (`SelfMemorySwitch` + `AgentMemoryActivity`)
   mostra "Memórias gravadas (7d)", "Última gravação", "Último contexto lido" (zeros explícitos:
-  "0"/"Nunca"), o aviso discreto e o bloco recolhível "Última entrega". Invalidação: `engramind-updated`
+  "0"/"Nunca"), o aviso discreto e o bloco recolhível "Última entrega"; falha ao carregar mostra o erro
+  com "Tentar novamente" (nunca zeros). Invalidação: `engramind-updated`
   (`memory.*`, `memories.context`), `ai-memories-updated` e `engramind-consumption` (3 s depois).
 - **Rede**: o node do agente mostra "N gravadas · M acessíveis" (gravadas: auditoria, só os agentes do app
   opex, com os 7 dias no tooltip; acessíveis: soma das memórias ativas dos canais assinados — o alcance
   já usado no tamanho). Largura e altura fixas (`AGENT_NODE_SIZE_CLASS`), também no skeleton.
 - **Dicas** (`POST /v1/hints`): só `{ id, title, channel, score, method, duplicate }`; sem embeddings,
-  vazio. Usadas pelas ferramentas de leitura da memória própria (ver `aicontext/modules/ai.md`); o
-  Agente Opex e o Maddox do dono usam as mesmas ferramentas (token do agente), sem entrada no catálogo
-  de operações do admin.
+  vazio. Usadas pelas ferramentas de leitura da memória própria (ver `aicontext/modules/ai.md`) e pela
+  operação `get_hints` do catálogo (`get_engramind_hints`, `{ text 1–2000, channels?, limit 1–20 }`,
+  leitura), presente no Agente Opex e no Maddox do dono e ausente no portal. Chamada por eles, vai com o
+  **token do próprio agente** (`opex/opex`, `opex/maddox`), como os outros agentes (decisão do dono); por
+  token de sistema ou sem token do agente, pelo admin.
+- **Debug sem texto do usuário**: no `engramindCall`, o `focus` da query e o `text`/`query` de
+  `/v1/hints` e `/v1/memories/search` aparecem no debug da integração (console, `integration_logs`,
+  stream) só como `[foco|texto omitido: N caracteres]` (`debugView`; `debugFetch` aceita a URL e o corpo
+  registrados).
 - **Consolidação** (0025/0026): `consolidation.schedule` é cron de 5 campos em **UTC** (sem apelidos);
   `POST /v1/consolidation/run { channel?, dry_run?, tasks? }` (admin): `dry_run` → `200 channels[]`
   (plano, sem gravar nem LLM); senão `202 jobs[{ channel, job_id, already_queued }]`; `409
@@ -644,7 +651,13 @@ validado inline (5 campos, sem apelidos); cron fora do editor abre no modo avan�
 card): Consolidação (todos com consolidação ativa ou um canal; "Ver plano" com `dry_run`; resultado com
 jobs/`already_queued` ou o plano) e Embeddings ("Reindexar agora", `reembed_all`); Retenção só mostra a
 última execução. Com alterações pendentes, a confirmação vira "Salvar e executar" (grava antes; falha ao
-gravar não executa). Erro acionável com "Tentar novamente".
+gravar não executa); com chave de embedding pendente, o "Salvar e executar" pede a mesma confirmação
+"Trocar o embedding?" do Salvar (cancelar não grava nem executa), e o "Reindexar agora" não dispara o
+`reembed_all` quando a gravação já reindexou. O resultado/erro da consolidação, o "em execução" das duas
+ações e a busca/"Só alteradas" ficam no `SettingsTab` e sobrevivem ao remonte do formulário depois de
+salvar. O editor de agendamento segue o rascunho ("Voltar ao padrão", "Desfazer"); agendamento que não
+cabe no cron UTC (mensal depois do dia 28) entra no rascunho como marcador inválido e bloqueia o Salvar
+com a mensagem da conversão. Erro acionável com "Tentar novamente".
 
 ### Serviço (`src/features/ai/server/agent-memory-service.ts`)
 

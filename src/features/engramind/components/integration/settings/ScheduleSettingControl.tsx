@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import type { Schedule } from "@/lib/integrations/schedule"
 import { ScheduleEditor } from "@/features/integrations/components/ScheduleEditor"
-import { scheduleToUtcCron, utcCronToSchedule, validateCron } from "../../../schedule-cron"
+import { invalidScheduleMarker, scheduleToUtcCron, utcCronToSchedule, validateCron } from "../../../schedule-cron"
 import { formatDateTime } from "../../shared/format"
 
 type Mode = "schedule" | "cron"
@@ -27,21 +27,34 @@ const fade = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exi
  */
 export function ScheduleSettingControl({ id, value, onChange, disabled, nextRunAt }: { id: string; value: unknown; onChange: (value: unknown) => void; disabled?: boolean; nextRunAt?: string | null }) {
     const expression = typeof value === "string" ? value : ""
-    const parsed = expression ? utcCronToSchedule(expression) : DEFAULT_SCHEDULE
-    const [mode, setMode] = useState<Mode>(parsed ? "schedule" : "cron")
-    const [schedule, setSchedule] = useState<Schedule>(parsed ?? DEFAULT_SCHEDULE)
+    const modeOf = (cron: string): Mode => (utcCronToSchedule(cron) ? "schedule" : "cron")
+    const [mode, setMode] = useState<Mode>(() => modeOf(expression))
+    // O que este controle gravou por último (cron ou marcador de inválido) e o agendamento que o gerou.
+    const [emitted, setEmitted] = useState<{ value: string; schedule: Schedule | null } | null>(null)
+    // O rascunho mudou por fora (Voltar ao padrão, Desfazer, configuração nova): o editor segue o valor.
+    const [seen, setSeen] = useState(expression)
+    if (seen !== expression) {
+        setSeen(expression)
+        if (emitted?.value !== expression) {
+            setEmitted(null)
+            setMode(modeOf(expression))
+        }
+    }
+    const own = emitted?.value === expression ? emitted : null
+    const schedule = own?.schedule ?? utcCronToSchedule(expression) ?? DEFAULT_SCHEDULE
     const cronError = mode === "cron" ? validateCron(expression) : null
 
+    const emit = (next: string, from: Schedule | null) => {
+        setEmitted({ value: next, schedule: from })
+        onChange(next)
+    }
     const changeSchedule = (next: Schedule) => {
-        setSchedule(next)
         const converted = scheduleToUtcCron(next)
-        if (converted.ok) onChange(converted.cron)
+        emit(converted.ok ? converted.cron : invalidScheduleMarker(converted.error), next)
     }
     const changeMode = (next: Mode) => {
-        if (next === "schedule") {
-            const fromCron = utcCronToSchedule(expression)
-            if (fromCron) setSchedule(fromCron)
-        }
+        // Voltar ao agendamento com um cron que não cabe nele: grava o do editor (o padrão do editor).
+        if (next === "schedule" && !own?.schedule && !utcCronToSchedule(expression)) changeSchedule(DEFAULT_SCHEDULE)
         setMode(next)
     }
     const conversionError = (next: Schedule) => {
@@ -59,7 +72,7 @@ export function ScheduleSettingControl({ id, value, onChange, disabled, nextRunA
                     </motion.div>
                 ) : (
                     <motion.div key="cron" {...fade} className="space-y-1">
-                        <Input aria-label="Expressão cron (UTC)" className="font-mono" value={expression} placeholder="0 3 * * *" onChange={(event) => onChange(event.target.value)} disabled={disabled} />
+                        <Input aria-label="Expressão cron (UTC)" className="font-mono" value={expression.startsWith("invalid-schedule:") ? "" : expression} placeholder="0 3 * * *" onChange={(event) => emit(event.target.value, null)} disabled={disabled} />
                         <p className={cronError ? "text-xs text-destructive" : "text-xs text-muted-foreground"} role={cronError ? "alert" : undefined}>
                             {cronError ?? "5 campos (minuto hora dia mês dia-da-semana), avaliados em UTC."}
                         </p>

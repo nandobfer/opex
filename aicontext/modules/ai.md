@@ -484,7 +484,9 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   falha/timeout vira erro acionável (`SELF_MEMORY_UNAVAILABLE`, `SELF_MEMORY_NOT_FOUND`). Valem sempre
   que o agente recebe contexto: o MCP `opex_memorias` é registrado mesmo com o aprendizado desligado (aí
   só as de leitura atendem; gravar responde "aprendizado autônomo desligado"), e o Agente Opex nativo as
-  recebe no turno (dono e portal). O Arquiteto em provedor direto (sem MCP) não as anuncia.
+  recebe no turno (dono e portal). O Arquiteto em provedor direto (sem MCP) não as anuncia. O catálogo do MCP é
+  único por diretório (não muda por sessão): com o aprendizado desligado, a instrução diz para não chamar
+  as de gravação e, no Maddox, as regras da sessão as negam (`selfMemorySessionPermissions(…, { write: false })`).
 - **Duas camadas (OPE-117, decisão do dono: não restringir)**: o desenvolvedor (e o Adversário) gravam o
   que percebem em `developer-global`/`developer-central`; o Agente Mentor é a segunda camada, vê as
   memórias da lista de destino (inclusive as recém-gravadas pelo agente na cadeia) e grava só o que passou

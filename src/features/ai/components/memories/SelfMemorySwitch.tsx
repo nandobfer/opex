@@ -35,7 +35,7 @@ export function SelfMemorySwitch({ consumer }: { consumer: MemoryConsumer }) {
                         <Switch id={id} checked={settings[consumer]} disabled={saving} onCheckedChange={(value) => set(consumer, value)} aria-label={`Aprendizado autônomo do ${label}`} />
                     )}
                 </div>
-                <AgentMemoryActivity agent={consumer} activity={activity.byAgent.get(consumer)} loading={activity.query.isLoading} />
+                <AgentMemoryActivity agent={consumer} activity={activity.byAgent.get(consumer)} loading={activity.query.isLoading} error={activity.query.isError} onRetry={() => void activity.query.refetch()} />
             </CardContent>
         </Card>
     )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Loader2, Save, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ import { StaleFormNotice } from "../../shared/StaleFormNotice"
 import { useFormSnapshot } from "../../shared/useFormSnapshot"
 import { SettingField } from "./SettingField"
 import { SettingsFilters, filterSettingMetas } from "./SettingsFilters"
-import { ConsolidationActions, ReindexAction, RetentionInfo, type SectionRunProps } from "./SectionActions"
+import { ConsolidationActions, INITIAL_CONSOLIDATION_UI, ReindexAction, RetentionInfo, type ConsolidationUiState, type SaveDraftResult, type SectionRunProps } from "./SectionActions"
 import { isCategoryList } from "../../../schemas/settings"
 import type { EngramindStatus } from "../../../types"
 import { useEngramindQuery as useStatusQuery } from "../../../hooks/useEngramind"
@@ -55,6 +55,10 @@ export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (di
     const metas = useMemo(() => visibleMetas(query.data), [query.data])
     // Refazer a consulta (tempo real, reconexão) não descarta o rascunho: só remonta quando o conteúdo muda sem alterações pendentes.
     const snapshot = useFormSnapshot(metas, dirty)
+    // Sobrevivem ao remonte do formulário depois de salvar (inclusive no "Salvar e executar").
+    const [filters, setFilters] = useState<SettingsFilterState>({ term: "", onlyChanged: false })
+    const [consolidationUi, setConsolidationUi] = useState<ConsolidationUiState>(INITIAL_CONSOLIDATION_UI)
+    const [reindexPending, setReindexPending] = useState(false)
     const changeDirty = useCallback(
         (next: boolean) => {
             setDirty(next)
@@ -66,13 +70,43 @@ export function SettingsTab({ onDirtyChange, onConfigure }: { onDirtyChange: (di
         <QueryBoundary isLoading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} skeleton={<SettingsSkeleton />} onConfigure={onConfigure}>
             <div className="flex flex-col gap-4">
                 <StaleFormNotice stale={snapshot.stale} onReload={() => snapshot.adopt()} />
-                {snapshot.data && <SettingsForm key={snapshot.key} metas={snapshot.data} onDirtyChange={changeDirty} onSaved={async () => snapshot.adopt(visibleMetas((await query.refetch()).data))} />}
+                {snapshot.data && (
+                    <SettingsForm
+                        key={snapshot.key}
+                        metas={snapshot.data}
+                        onDirtyChange={changeDirty}
+                        onSaved={async () => snapshot.adopt(visibleMetas((await query.refetch()).data))}
+                        filters={filters}
+                        onFilters={setFilters}
+                        consolidationUi={consolidationUi}
+                        onConsolidationUi={setConsolidationUi}
+                        reindexPending={reindexPending}
+                        onReindexPending={setReindexPending}
+                    />
+                )}
             </div>
         </QueryBoundary>
     )
 }
 
-function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[]; onDirtyChange: (dirty: boolean) => void; onSaved: () => Promise<void> }) {
+interface SettingsFilterState {
+    term: string
+    onlyChanged: boolean
+}
+
+interface SettingsFormProps {
+    metas: SettingMeta[]
+    onDirtyChange: (dirty: boolean) => void
+    onSaved: () => Promise<void>
+    filters: SettingsFilterState
+    onFilters: Dispatch<SetStateAction<SettingsFilterState>>
+    consolidationUi: ConsolidationUiState
+    onConsolidationUi: Dispatch<SetStateAction<ConsolidationUiState>>
+    reindexPending: boolean
+    onReindexPending: (pending: boolean) => void
+}
+
+function SettingsForm({ metas, onDirtyChange, onSaved, filters, onFilters, consolidationUi, onConsolidationUi, reindexPending, onReindexPending }: SettingsFormProps) {
     const saved = useMemo(() => Object.fromEntries(metas.map((meta) => [meta.key, initialOf(meta)])), [metas])
     const [draft, setDraft] = useState<Record<string, unknown>>(saved)
     const [confirmReindex, setConfirmReindex] = useState(false)
@@ -83,8 +117,9 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
     const reindex = Object.keys(changes).some((key) => REINDEX_SETTING_KEYS.includes(key))
     const save = useEngramindMutation((settings: Record<string, unknown>) => engramindSend("put", "settings", { settings }), { invalidate: ["settings", "status"], success: "Configurações do Engramind salvas" })
     const status = useStatusQuery<EngramindStatus>("status")
-    const [term, setTerm] = useState("")
-    const [onlyChanged, setOnlyChanged] = useState(false)
+    const { term, onlyChanged } = filters
+    const setTerm = (next: string) => onFilters((prev) => ({ ...prev, term: next }))
+    const setOnlyChanged = (next: boolean) => onFilters((prev) => ({ ...prev, onlyChanged: next }))
     const shown = useMemo(() => filterSettingMetas(metas, { term, onlyChanged, draft }), [metas, term, onlyChanged, draft])
     const categories = useMemo(() => {
         const current = draft["categories.list"] ?? metas.find((meta) => meta.key === "categories.list")?.default
@@ -93,11 +128,25 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
 
     const groups = SETTING_GROUPS.map((group) => ({ group, items: shown.filter((meta) => settingGroupOf(meta.key) === group) })).filter((entry) => entry.items.length > 0)
     const others = shown.filter((meta) => !(SETTING_GROUPS as readonly string[]).includes(settingGroupOf(meta.key)))
+    // Gravação aguardando a confirmação "Trocar o embedding?" (do Salvar ou de um "Salvar e executar").
+    const pendingRun = useRef<((result: SaveDraftResult) => void) | null>(null)
+    const settleRun = (result: SaveDraftResult) => {
+        pendingRun.current?.(result)
+        pendingRun.current = null
+    }
     const submit = () => (reindex ? setConfirmReindex(true) : save.mutate(changes, { onSuccess: () => void onSaved() }))
     // "Salvar e executar": grava as pendentes (tudo ou nada) e só então a ação roda; falha → nada executa.
-    const saveDraft = useCallback(async () => {
+    // Com chave de embedding, pede a mesma confirmação do Salvar (o PUT valida o provedor e reindexa).
+    const saveDraft = useCallback(async (): Promise<SaveDraftResult> => {
         if (!dirty) return true
         if (!validation.success) return false
+        if (reindex) {
+            return new Promise<SaveDraftResult>((resolve) => {
+                pendingRun.current?.(false)
+                pendingRun.current = resolve
+                setConfirmReindex(true)
+            })
+        }
         try {
             await save.mutateAsync(changes)
             await onSaved()
@@ -105,10 +154,22 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
         } catch {
             return false
         }
-    }, [dirty, validation.success, save, changes, onSaved])
+    }, [dirty, validation.success, reindex, save, changes, onSaved])
+    const confirmReindexSave = () =>
+        save.mutate(changes, {
+            onSuccess: () => {
+                setConfirmReindex(false)
+                settleRun({ reindexed: true })
+                void onSaved()
+            },
+            onError: () => {
+                setConfirmReindex(false)
+                settleRun(false)
+            },
+        })
     const run: SectionRunProps = { dirty, saveDraft }
-    const sectionExtra: Record<string, ReactNode> = { consolidation: <ConsolidationActions {...run} />, retention: <RetentionInfo /> }
-    const sectionActions: Record<string, ReactNode> = { embedding: <ReindexAction {...run} /> }
+    const sectionExtra: Record<string, ReactNode> = { consolidation: <ConsolidationActions {...run} ui={consolidationUi} onUi={onConsolidationUi} />, retention: <RetentionInfo /> }
+    const sectionActions: Record<string, ReactNode> = { embedding: <ReindexAction {...run} pending={reindexPending} onPending={onReindexPending} /> }
 
     return (
         <div className="flex flex-col gap-6">
@@ -163,13 +224,17 @@ function SettingsForm({ metas, onDirtyChange, onSaved }: { metas: SettingMeta[];
             </AnimatePresence>
             <ConfirmDialog
                 open={confirmReindex}
-                onOpenChange={setConfirmReindex}
+                onOpenChange={(open) => {
+                    setConfirmReindex(open)
+                    // Cancelou a troca do embedding: a ação que esperava a gravação não roda.
+                    if (!open) settleRun(false)
+                }}
                 title="Trocar o embedding?"
                 description="O Engramind valida o provedor na mesma requisição (com ele fora do ar, nada é gravado) e reindexa todas as memórias. Enquanto isso, a busca por sentido usa os vetores antigos."
                 items={Object.keys(changes).filter((key) => REINDEX_SETTING_KEYS.includes(key))}
                 confirmLabel="Salvar e reindexar"
                 pending={save.isPending}
-                onConfirm={() => save.mutate(changes, { onSuccess: () => void onSaved(), onSettled: () => setConfirmReindex(false) })}
+                onConfirm={confirmReindexSave}
             />
         </div>
     )

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { AlertTriangle, ChevronDown } from "lucide-react"
+import { AlertTriangle, ChevronDown, RotateCcw } from "lucide-react"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -72,9 +72,21 @@ function DeliveryDetails({ activity }: { activity: AgentActivityDto }) {
 }
 
 /** Adoção do aprendizado autônomo de um agente (OPE-117): gravações em 7 dias, última gravação e último contexto lido. */
-export function AgentMemoryActivity({ agent, activity, loading }: { agent: MemoryIdentity; activity: AgentActivityDto | undefined; loading: boolean }) {
+export function AgentMemoryActivity({ agent, activity, loading, error = false, onRetry }: { agent: MemoryIdentity; activity: AgentActivityDto | undefined; loading: boolean; error?: boolean; onRetry?: () => void }) {
     const [open, setOpen] = useState(false)
     if (loading) return <AgentMemoryActivitySkeleton />
+    // Falha ao carregar não vira "0 / Nunca" (pareceria que o agente nunca gravou).
+    if (error && !activity)
+        return (
+            <div role="alert" data-testid={`agent-activity-error-${agent}`} className={cn(ACTIVITY_CELL, "flex flex-wrap items-center gap-2 text-xs text-destructive")}>
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden /> Não foi possível carregar a adoção do aprendizado.
+                {onRetry && (
+                    <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={onRetry}>
+                        <RotateCcw className="mr-1 h-3 w-3" aria-hidden /> Tentar novamente
+                    </Button>
+                )}
+            </div>
+        )
     const row: AgentActivityDto = activity ?? { agent, total: 0, last7d: 0, lastWriteAt: null, delivery: null, selfMemory: null, stale: false }
     return (
         <div className="space-y-2" data-testid={`agent-activity-${agent}`}>

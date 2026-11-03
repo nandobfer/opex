@@ -84,6 +84,28 @@ describe('agendamento da consolidação', () => {
   })
 })
 
+describe('agendamento controlado pelo rascunho (OPE-117)', () => {
+  /** Simula o formulário: o valor vem do rascunho; "trocar por fora" é o "Voltar ao padrão"/"Desfazer". */
+  function Controlled({ initial, external }: { initial: string; external: { set?: (value: string | null) => void } }) {
+    const [value, setValue] = React.useState<string | null>(initial)
+    external.set = setValue
+    return <SettingField meta={cronMeta} value={value} dirty={value !== null} onChange={(next) => setValue(next as string | null)} />
+  }
+
+  it('mensal no dia 31 emite o marcador e mostra a mensagem; voltar o valor por fora traz o editor ao horário dele', async () => {
+    const external: { set?: (value: string | null) => void } = {}
+    render(<Controlled initial="0 13 5 * *" external={external} />)
+    fireEvent.change(screen.getByLabelText('Dia do mês'), { target: { value: '31' } })
+    expect(screen.getAllByText(/Mensal só até o dia 28/).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('radio', { name: 'Expressão cron' }))
+    expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('Mensal só até o dia 28'))).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: 'Agendamento' }))
+    React.act(() => external.set!(null))
+    expect(screen.getAllByLabelText('Horário')[0]!.textContent).toContain('00:00')
+    expect(screen.queryByLabelText('Dia do mês')).toBeNull()
+  })
+})
+
 describe('controles por tipo', () => {
   it('prioridade por categoria (map): número por categoria, vazio sai do mapa e "por canal" quando sobrepõe', () => {
     const onChange = vi.fn()

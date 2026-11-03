@@ -56,13 +56,19 @@ const isSelfMemoryTool = (name: string): name is SelfMemoryToolName => (SELF_MEM
  * Regras da sessão do Maddox para as ferramentas de memória própria: desligada → `deny`; pede confirmação →
  * `ask` (Confirmar/Cancelar no chat); demais → `allow`.
  */
-export function selfMemorySessionPermissions(policy: { overrides: Readonly<Record<string, boolean>>; disabled: ReadonlySet<string> }): { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] {
+/**
+ * Regras da sessão do OpenCode para as ferramentas do MCP. Com o aprendizado desligado (`write: false`), as
+ * de gravação viram `deny`: o catálogo do MCP é único por diretório (não muda por sessão), e assim o Maddox
+ * nem as chama nem pede ao dono a confirmação de algo que o servidor recusaria.
+ */
+export function selfMemorySessionPermissions(policy: { overrides: Readonly<Record<string, boolean>>; disabled: ReadonlySet<string> }, options: { write?: boolean } = {}): { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] {
+    const write = options.write !== false
     return [
         { action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}*`, resource: "*", effect: "allow" },
         ...SELF_MEMORY_TOOL_NAMES.map((name) => ({
             action: `${AGENT_MEMORY_MCP_TOOL_PREFIX}${name}`,
             resource: "*",
-            effect: policy.disabled.has(name) ? ("deny" as const) : selfMemoryToolConfirms(name, policy.overrides) ? ("ask" as const) : ("allow" as const),
+            effect: policy.disabled.has(name) || (!write && !isSelfMemoryReadTool(name)) ? ("deny" as const) : selfMemoryToolConfirms(name, policy.overrides) ? ("ask" as const) : ("allow" as const),
         })),
     ]
 }

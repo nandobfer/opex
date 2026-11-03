@@ -87,7 +87,28 @@ export async function publishSearchConsumption(input: unknown, result: unknown, 
     })
 }
 
+/**
+ * Dicas pelo próprio agente (OPE-117, decisão do dono): o Agente Opex e o Maddox do dono pedem as dicas com o
+ * token do agente (`opex/opex`, `opex/maddox`), como os outros agentes — o Engramind exclui o que já está em
+ * texto completo no contexto desse token. Sem token do agente, ou por token de sistema, segue pelo admin.
+ */
+async function agentHints(input: unknown, context: OpexToolContext): Promise<unknown | undefined> {
+    const agent = searchConsumer(context)
+    if (!agent) return undefined
+    const { agentTokenFor } = await import("@/features/engramind/server/memory-network")
+    const token = await agentTokenFor(agent === "opex/maddox" ? "maddox" : "opex")
+    if (!token) return undefined
+    const { engramindCall, engramindTarget } = await import("@/features/engramind/server/client")
+    const { baseUrl } = await engramindTarget()
+    const operation = ENGRAMIND_OPERATIONS.find((item) => item.id === "get_hints")!
+    return engramindCall("POST", operation.request(operation.input.parse(input)), { target: { baseUrl, token } })
+}
+
 async function runOperation(operation: EngramindOperation, input: unknown, context: OpexToolContext): Promise<unknown> {
+    if (operation.id === "get_hints") {
+        const own = await agentHints(input, context)
+        if (own !== undefined) return own
+    }
     const result = await (await runner()).runEngramindOperation(operation.id, input, context.actorId)
     if (operation.id === "search_memories") void publishSearchConsumption(input, result, context).catch(() => undefined)
     return result

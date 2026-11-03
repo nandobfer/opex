@@ -640,6 +640,22 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         request: (input) => ({ path: "/v1/memories/search", body: input }),
     }),
     op({
+        id: "get_hints",
+        method: "POST",
+        route: "hints",
+        area: "memories",
+        risk: "read",
+        tool: "get_engramind_hints",
+        label: "Dicas de memórias do Engramind",
+        description: "Dicas de memórias relevantes para uma mensagem ou cena (só id, título, canal e nota; sem texto). Sem embeddings, a lista vem vazia: use a busca. Leia a escolhida com get_engramind_memory.",
+        input: z.object({
+            text: z.string().trim().min(1, "Informe a mensagem ou a cena atual").max(2000, "Até 2000 caracteres"),
+            channels: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
+            limit: z.number().int().min(1).max(20).optional(),
+        }),
+        request: (input) => ({ path: "/v1/hints", body: input }),
+    }),
+    op({
         id: "get_memory",
         method: "GET",
         route: "memories/:memory",

@@ -301,7 +301,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
             selfMemory = false
         } else {
             // Inativar/excluir pedem Confirmar/Cancelar no chat (padrão das destrutivas; o dono ajusta no Agente Opex).
-            selfRules = selfMemorySessionPermissions(await selfMemoryToolPolicy())
+            selfRules = selfMemorySessionPermissions(await selfMemoryToolPolicy(), { write: selfMemory })
         }
         const sessionPermissions = memoryRead ? [...permissions, ...selfRules] : permissions
         const counts = memories.source === "none" ? null : { titles: memories.counts.titles, overflow: memories.counts.overflow }

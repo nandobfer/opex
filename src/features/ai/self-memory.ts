@@ -152,6 +152,8 @@ export function selfMemoryInstructions(consumer: MemoryConsumer, turn: MemoryTur
             "## Memórias fora do contexto (leitura)",
             ...(outside ? [outside] : []),
             `Se um título da faixa \`<titles>\` parecer relevante para o pedido, chame ${tool("get_hints")} com a mensagem ou a cena atual e leia a escolhida com ${tool("get_memory")}. Quando as dicas vierem vazias, use ${tool("search_memories")} com os termos do título. Não despeje todas as memórias no prompt e não invente uma memória que não existe: se não encontrar, siga sem ela.`,
+            // Com o aprendizado desligado, o MCP ainda anuncia as de gravação (catálogo único por diretório): o servidor as recusa.
+            ...(write ? [] : [`O aprendizado autônomo está desligado: use só ${tool("get_hints")}, ${tool("get_memory")} e ${tool("search_memories")}. Não chame as ferramentas de gravação (${SELF_MEMORY_WRITE_TOOL_NAMES.map((name) => tool(name)).join(", ")}): elas são recusadas.`]),
         )
     }
     if (write) {

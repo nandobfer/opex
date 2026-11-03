@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scheduleToUtcCron, utcCronToSchedule, utcOffsetMinutes, validateCron } from '@/features/engramind/schedule-cron'
+import { invalidScheduleMarker, scheduleToUtcCron, utcCronToSchedule, utcOffsetMinutes, validateCron } from '@/features/engramind/schedule-cron'
 
 /** OPE-117: `consolidation.schedule` (cron UTC do Engramind) ↔ `Schedule` das Rotinas (Brasília). */
 
@@ -61,5 +61,13 @@ describe('agendamento da consolidação em cron UTC', () => {
     expect(validateCron('0 3 * *')).toContain('5 campos')
     expect(validateCron('0 25 * * *')).toContain('fora do intervalo')
     expect(validateCron('')).toContain('Informe')
+  })
+})
+
+describe('marcador de agendamento inválido (OPE-117)', () => {
+  it('a validação recusa o marcador com a mensagem da conversão (o Salvar fica bloqueado)', () => {
+    expect(validateCron(invalidScheduleMarker('Mensal só até o dia 28'))).toBe('Mensal só até o dia 28')
+    expect(validateCron(invalidScheduleMarker(''))).toBe('Agendamento inválido')
+    expect(utcCronToSchedule(invalidScheduleMarker('x'))).toBeNull()
   })
 })

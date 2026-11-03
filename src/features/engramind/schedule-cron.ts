@@ -76,9 +76,19 @@ const RANGES: [number, number][] = [
     [0, 7],
 ]
 
+/**
+ * Rascunho de um agendamento que não cabe no cron UTC (ex.: mensal no dia 30): vai para o formulário como
+ * este marcador, que a validação recusa com a mensagem da conversão — o Salvar fica bloqueado em vez de
+ * manter o cron anterior em silêncio.
+ */
+const INVALID_SCHEDULE_PREFIX = "invalid-schedule:"
+
+export const invalidScheduleMarker = (error: string) => `${INVALID_SCHEDULE_PREFIX}${error}`
+
 /** Mensagem de erro de uma expressão cron de 5 campos (sem apelidos nem segundos), ou `null` quando válida. */
 export function validateCron(expression: string): string | null {
     const value = expression.trim()
+    if (value.startsWith(INVALID_SCHEDULE_PREFIX)) return value.slice(INVALID_SCHEDULE_PREFIX.length) || "Agendamento inválido"
     if (!value) return "Informe a expressão cron"
     if (value.startsWith("@")) return "Apelidos (@daily, @hourly…) não são aceitos: use os 5 campos"
     const fields = value.split(/\s+/)

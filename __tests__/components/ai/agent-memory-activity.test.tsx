@@ -57,4 +57,14 @@ describe('adoção no card do agente', () => {
     expect(skeleton.querySelector('.grid')!.className).toContain('sm:grid-cols-3')
     expect(skeleton.querySelectorAll('.min-h-\\[3\\.25rem\\]').length).toBe(3)
   })
+
+  it('falha ao carregar mostra o erro com "Tentar novamente", nunca zeros nem "Nunca"', () => {
+    const onRetry = vi.fn()
+    render(<AgentMemoryActivity agent="opex" activity={undefined} loading={false} error onRetry={onRetry} />)
+    expect(screen.getByRole('alert').textContent).toContain('Não foi possível carregar a adoção')
+    expect(screen.queryByTestId('activity-7d')).toBeNull()
+    expect(screen.queryByText('Nunca')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
+    expect(onRetry).toHaveBeenCalledTimes(1)
+  })
 })

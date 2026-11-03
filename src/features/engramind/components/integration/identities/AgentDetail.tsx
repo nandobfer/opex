@@ -130,7 +130,7 @@ export function AgentDetail({ agent, apps, agents, tokens, subscriptions, ownTok
                 <TabsContent value="written">
                     <motion.div {...fade}>
                         <Section title="Memórias gravadas" info="Gravações do próprio agente na auditoria do Opex (só os agentes de memórias do Opex).">
-                            {opexIdentity ? <AgentMemoryActivity agent={opexIdentity} activity={activity.byAgent.get(opexIdentity)} loading={activity.query.isLoading} /> : <p className="text-sm text-muted-foreground">Sem registro no Opex: só os agentes de memórias do Opex têm a auditoria das gravações.</p>}
+                            {opexIdentity ? <AgentMemoryActivity agent={opexIdentity} activity={activity.byAgent.get(opexIdentity)} loading={activity.query.isLoading} error={activity.query.isError} onRetry={() => void activity.query.refetch()} /> : <p className="text-sm text-muted-foreground">Sem registro no Opex: só os agentes de memórias do Opex têm a auditoria das gravações.</p>}
                         </Section>
                     </motion.div>
                 </TabsContent>

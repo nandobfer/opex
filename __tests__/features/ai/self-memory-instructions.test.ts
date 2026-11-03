@@ -52,7 +52,10 @@ describe('instrução de memória própria', () => {
     const readOnly = selfMemoryInstructions('maddox', { kind: 'client', clientId: 'b'.repeat(24) }, { write: false, counts: { titles: 2, overflow: 0 } })
     expect(readOnly).toContain('`get_hints`')
     expect(readOnly).not.toContain('Checklist')
-    expect(readOnly).not.toContain('remember')
+    expect(readOnly).not.toContain('é o seu caminho de aprendizado')
+    // O catálogo do MCP é único por diretório: a instrução avisa que as de gravação são recusadas.
+    expect(readOnly).toContain('Não chame as ferramentas de gravação')
+    expect(readOnly).toContain('`remember`')
     expect(selfMemoryInstructions('maddox', { kind: 'owner' }, { write: false, counts: { titles: 0, overflow: 0 } })).toBe('')
   })
 
