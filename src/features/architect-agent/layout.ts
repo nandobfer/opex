@@ -8,8 +8,11 @@ import type { ViewGraph, ViewNode } from "./filters"
  * (árvore radial a partir do objetivo). Devolve posições de canto superior esquerdo, como o React Flow.
  */
 
-export const NODE_WIDTH = 220
-export const NODE_HEIGHT = 68
+/** Cartão do nó: largo e alto o bastante para o título em até 2 linhas (rótulos de ~60 caracteres). */
+export const NODE_WIDTH = 260
+export const NODE_HEIGHT = 88
+/** Tamanho do cartão no `style` (nós do canvas e skeletons): uma só fonte com o layout. */
+export const NODE_SIZE_STYLE = { width: NODE_WIDTH, height: NODE_HEIGHT } as const
 const GROUP_PADDING = 24
 const GROUP_HEADER = 32
 const RANK_GAP = 90

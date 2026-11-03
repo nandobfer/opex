@@ -304,6 +304,11 @@ vale só para aquele pedido.
     viram filhos da raiz; arestas fora da árvore ficam mais apagadas) (`layoutMindMap`); o raio de
     cada anel cresce com a quantidade de nós dele (`ringRadii`: os vizinhos mais próximos ficam a pelo
     menos a largura de um cartão), então os cartões nunca se sobrepõem — nem em estrela de 120 nós;
+  - cartão do nó de **260 × 88 px** (`NODE_WIDTH`/`NODE_HEIGHT`/`NODE_SIZE_STYLE` de `layout.ts`, a
+    mesma fonte para o layout, os nós, o nó recolhido e os skeletons): o **título ocupa a largura toda e
+    quebra em até 2 linhas** (`line-clamp-2`, texto inteiro no `title`), cobrindo os rótulos de ~60
+    caracteres pedidos pelo prompt; a linha de baixo traz o tipo, o começo da descrição (1 linha; a
+    completa fica no painel) e o selo, que assim nunca cobre o título;
   - nós com ícone por tipo e selo **Novo**/**Alterado**; hover destaca o nó, os vizinhos e as arestas
     dele e esmaece o resto; clique abre o **painel lateral** (descrição, vizinhos
     clicáveis e "Recolher o grupo"), numa camada fora do viewport transformado; grupos recolhem pelo
