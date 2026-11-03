@@ -77,15 +77,11 @@ vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn
 // O app roda o comando do build no host (aba Build).
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
-<<<<<<< HEAD
 vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
-=======
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 // OPE-117: memórias (contexto e MCP) mockadas, para o turno não depender do Engramind nem do OpenCode.
 vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('../../helpers/memory-context')).memoryContextModule())
 vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
 vi.mock('@/features/ai/server/self-memory/mcp', async () => (await import('../../helpers/memory-context')).selfMemoryMcpModule())
->>>>>>> origin/main
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
