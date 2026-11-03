@@ -83,6 +83,8 @@ export interface AgentMetricsDto {
     emptyReason: string
     /** "Dados desde dd/mm/aaaa" das métricas não retroativas. */
     notices: MetricsNoticeDto[]
+    /** Agente desligado ou indisponível: o motivo vira o aviso da página. */
+    availability: { available: boolean; reason: string | null }
     /** Opções dos filtros de cliente e repositório. */
     clients: { id: string; name: string }[]
     projects: { id: string; name: string; repo: string | null }[]

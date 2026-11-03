@@ -5,6 +5,7 @@ import { adversarialMetrics, architectMetrics, budgetMetrics, catalogMetrics, co
 import { createMetricsContext, filterOptions, lastUsedAt, usageOf, type MetricsContext } from "./context"
 import { developerMetrics } from "./developer"
 import { ensureFreshRuns } from "./usage-daily"
+import { agentAvailability } from "./availability"
 
 const USAGE_UNITS: Record<AgentId, string> = {
     opex: "respostas",
@@ -39,7 +40,7 @@ const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<Partial<AgentMet
 export async function getAgentMetrics(agent: AgentId, query: AgentMetricsQuery, now: Date = new Date()): Promise<AgentMetricsDto> {
     await ensureFreshRuns(agent, now.getTime())
     const ctx = await createMetricsContext(agent, query, now)
-    const [specific, usage, last, options] = await Promise.all([COMPUTE[agent](ctx), usageOf(ctx), lastUsedAt(agent), filterOptions()])
+    const [specific, usage, last, options, availability] = await Promise.all([COMPUTE[agent](ctx), usageOf(ctx), lastUsedAt(agent), filterOptions(), agentAvailability(agent)])
     return {
         agent,
         range: { from: ctx.range.from.toISOString(), to: ctx.range.to.toISOString() },
@@ -54,6 +55,7 @@ export async function getAgentMetrics(agent: AgentId, query: AgentMetricsQuery, 
         baseLabel: specific.baseLabel ?? "",
         emptyReason: specific.emptyReason ?? "Sem dados no período.",
         notices: specific.notices ?? [],
+        availability,
         clients: options.clients,
         projects: options.projects,
     }

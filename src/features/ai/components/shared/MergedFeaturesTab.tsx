@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Loader2, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -46,27 +46,23 @@ export function MergedFeaturesTab({ sections, onDirtyChange }: { sections: reado
         return () => window.clearTimeout(timer)
     }, [sections])
 
-    const stateHandlers = useRef(new Map<string, (state: FeatureSectionState) => void>())
-    const onStateOf = useCallback((id: string) => {
-        let handler = stateHandlers.current.get(id)
-        if (!handler) {
-            handler = (state: FeatureSectionState) => setStates((current) => (sameState(current[id], state) ? current : { ...current, [id]: state }))
-            stateHandlers.current.set(id, handler)
-        }
-        return handler
-    }, [])
-    const refHandlers = useRef(new Map<string, (handle: FeatureSectionHandle | null) => void>())
-    const refOf = useCallback((id: string) => {
-        let handler = refHandlers.current.get(id)
-        if (!handler) {
-            handler = (handle: FeatureSectionHandle | null) => {
-                if (handle) handles.current.set(id, handle)
-                else handles.current.delete(id)
-            }
-            refHandlers.current.set(id, handler)
-        }
-        return handler
-    }, [])
+    // Callbacks estáveis por seção (o ref e o estado de cada uma chegam por eles, nunca durante o render).
+    const bindings = useMemo(
+        () =>
+            new Map(
+                sections.map((section) => [
+                    section.id,
+                    {
+                        ref: (handle: FeatureSectionHandle | null) => {
+                            if (handle) handles.current.set(section.id, handle)
+                            else handles.current.delete(section.id)
+                        },
+                        onStateChange: (state: FeatureSectionState) => setStates((current) => (sameState(current[section.id], state) ? current : { ...current, [section.id]: state })),
+                    },
+                ]),
+            ),
+        [sections],
+    )
 
     const saveAll = async () => {
         setSaving(true)
@@ -87,7 +83,7 @@ export function MergedFeaturesTab({ sections, onDirtyChange }: { sections: reado
             {sections.map((section) => (
                 <section key={section.id} id={mergedSectionAnchor(section.id)} aria-label={section.title} className="flex scroll-mt-6 flex-col gap-6">
                     <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</h2>
-                    {section.render({ ref: refOf(section.id), onStateChange: onStateOf(section.id) })}
+                    {section.render(bindings.get(section.id)!)}
                 </section>
             ))}
             <div className="flex flex-wrap justify-end gap-2 border-t pt-6">

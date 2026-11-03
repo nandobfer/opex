@@ -1,29 +1,15 @@
 "use client"
 
 import { useMemo } from "react"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ShieldQuestion, Swords } from "lucide-react"
-import { OptionTabs } from "@/components/ui/option-tabs"
-import { AvailabilityNotice } from "@/components/feedback/AvailabilityNotice"
-import { AgentPageHeader } from "@/components/list/AgentPageHeader"
+import { ShieldQuestion } from "lucide-react"
 import { InfiniteListView } from "@/components/list/InfiniteListView"
-import { urlFilterCodecs, useUrlFilters, type UrlFilterSchema } from "@/hooks/useUrlFilters"
-import { ADVERSARIAL_SETTINGS_HREF } from "../../constants"
+import { useUrlFilters } from "@/hooks/useUrlFilters"
+import { AgentPage, type AgentPageTab } from "@/features/agent-metrics/components/AgentPage"
 import { ADVERSARIAL_REVIEW_FILTER_SCHEMA, DEFAULT_ADVERSARIAL_REVIEW_FILTERS, hasAdversarialReviewFilters, toAdversarialReviewListParams } from "../../filters"
 import { useAdversarialRealtime, useAdversarialReviewPages, useAdversarialSettings } from "../../hooks/useAdversarial"
 import { AdversarialReviewList } from "../AdversarialReviewList"
 import { MemoriesSection } from "../settings/MemoriesSection"
 import { AdversarialFiltersBar } from "./AdversarialFiltersBar"
-
-const TABS = ["revisoes", "memorias"] as const
-type Tab = (typeof TABS)[number]
-const TAB_OPTIONS: { value: Tab; label: string }[] = [
-    { value: "revisoes", label: "Revisões" },
-    { value: "memorias", label: "Memórias" },
-]
-const TAB_DEFAULTS = { aba: "revisoes" as Tab }
-const TAB_SCHEMA: UrlFilterSchema<{ aba: Tab }> = { aba: urlFilterCodecs.string<Tab>(TABS) }
-const tabMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 
 /** Aba "Revisões": rodadas de todas as mesas com os filtros na URL, rolagem infinita e tempo real. */
 function ReviewsTab() {
@@ -58,28 +44,19 @@ function ReviewsTab() {
     )
 }
 
+const TABS: AgentPageTab[] = [
+    { value: "revisoes", label: "Revisões", render: () => <ReviewsTab /> },
+    { value: "memorias", label: "Memórias", render: () => <MemoriesSection /> },
+]
+
 /**
- * Agente Adversário (`/agente-adversario`): aba **Revisões** (rodadas das mesas, mais recentes
- * primeiro, com filtros) e aba **Memórias** (lista `adversarial`). A aba fica na URL (`?aba=memorias`).
- * A configuração fica em Integrações › Inteligência Artificial › Agente Adversário.
+ * Agente Adversário (`/agente-adversario`): **Visão geral** (métricas, primeira aba, OPE-122), **Revisões**
+ * (rodadas das mesas, mais recentes primeiro, com filtros) e **Memórias** (lista `adversarial`). A aba
+ * fica na URL (`?aba=memorias`). A configuração fica em Integrações › Inteligência Artificial › Adversário.
  */
 export function AdversarialReviewsPage() {
-    const reduceMotion = useReducedMotion()
     useAdversarialRealtime()
     const settings = useAdversarialSettings()
-    const [{ aba }, setTab] = useUrlFilters(TAB_DEFAULTS, TAB_SCHEMA)
     const availability = settings.data?.availability
-
-    return (
-        <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <AgentPageHeader icon={Swords} title="Agente Adversário" description="Revisões do código das mesas antes da prévia ou do PR, e as memórias do agente. Atualiza em tempo real." settingsHref={ADVERSARIAL_SETTINGS_HREF} />
-            <AvailabilityNotice reason={availability && !availability.available ? availability.reason : null} />
-            <OptionTabs<Tab> id="adversarial-page-tab" options={TAB_OPTIONS} value={aba} onChange={(value) => setTab({ aba: value })} className="w-full" />
-            <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={aba} {...tabMotion}>
-                    {aba === "revisoes" ? <ReviewsTab /> : <MemoriesSection />}
-                </motion.div>
-            </AnimatePresence>
-        </motion.section>
-    )
+    return <AgentPage agent="adversario" tabs={TABS} availabilityReason={availability && !availability.available ? availability.reason : null} />
 }
