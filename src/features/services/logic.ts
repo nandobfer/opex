@@ -95,3 +95,46 @@ export function formatMoneyInput(value: number): string {
 export function todayDateInput(now: Date = new Date()): string {
     return format(now, "yyyy-MM-dd")
 }
+
+/** Hora UTC em que a data do serviço é gravada: meio-dia cai no mesmo dia de calendário de UTC−11 a UTC+11. */
+export const SERVICE_DATE_UTC_HOUR = 12
+
+const DATE_KEY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * Data do serviço (`yyyy-MM-dd`, sem hora) → instante gravado no banco, ao **meio-dia UTC**. Assim o
+ * filtro do período (início/fim do dia no fuso do navegador) e a exibição local não recuam nem avançam
+ * um dia (OPE-125: meia-noite UTC virava o dia anterior em America/Sao_Paulo). `null` se inválida.
+ */
+export function serviceDateFromInput(value: string): Date | null {
+    const match = DATE_KEY.exec(value)
+    if (!match) return null
+    const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
+    const date = new Date(Date.UTC(year, month - 1, day, SERVICE_DATE_UTC_HOUR))
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+    return date
+}
+
+/** Instante gravado (ISO, `Date` ou ms) → data do serviço `yyyy-MM-dd`, pelo calendário UTC (sem fuso). */
+export function serviceDateKey(value: string | number | Date): string {
+    return new Date(value).toISOString().slice(0, 10)
+}
+
+/** Data do serviço como `dd/MM/yyyy`, a partir da própria data (independe do fuso de quem vê). */
+export function formatServiceDate(value: string | number | Date | null | undefined): string {
+    if (value === null || value === undefined || value === "") return "—"
+    const time = new Date(value).getTime()
+    if (Number.isNaN(time)) return "—"
+    const [year, month, day] = serviceDateKey(time).split("-")
+    return `${day}/${month}/${year}`
+}
+
+/**
+ * Limite do período da consulta de serviços → instante. ISO completo vale como veio (o navegador
+ * envia início/fim do dia local); só data (`yyyy-MM-dd`, ex.: Agente Opex) vira o dia UTC inteiro —
+ * início `00:00:00.000Z`, fim `23:59:59.999Z` —, para incluir o serviço gravado ao meio-dia UTC.
+ */
+export function serviceRangeBound(value: string, edge: "from" | "to"): Date {
+    if (DATE_KEY.test(value)) return new Date(`${value}T${edge === "from" ? "00:00:00.000" : "23:59:59.999"}Z`)
+    return new Date(value)
+}

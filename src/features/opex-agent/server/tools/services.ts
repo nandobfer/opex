@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { SERVICE_CALC_ORIGINS, SERVICE_CALC_ORIGIN_LABELS } from "@/features/services/constants"
+import { serviceDateKey } from "@/features/services/logic"
 import { serviceWriteSchema, type ServiceWriteInput } from "@/features/services/schemas"
 import { createService, getService, listServiceAggregates, requestServiceAi, setServiceArchived, updateService } from "@/features/services/server/service"
 import type { ServiceDto } from "@/features/services/types"
@@ -36,7 +37,7 @@ function slimService(service: ServiceDto) {
     return {
         ...service,
         description: clipText(service.description, 8000),
-        serviceDate: service.serviceDate.slice(0, 10),
+        serviceDate: serviceDateKey(service.serviceDate),
     }
 }
 
@@ -48,8 +49,8 @@ export const serviceTools = [
         risk: "read",
         description: "Serviços (lançamentos manuais de faturamento) num período, com cliente, repositório, horas e faturamento. Arquivados só com includeArchived.",
         input: z.object({
-            from: z.string().optional().describe("ISO 8601 (início do período, pela data do serviço)"),
-            to: z.string().optional().describe("ISO 8601 (fim do período)"),
+            from: z.string().optional().describe("ISO 8601 ou yyyy-MM-dd (início do período, pela data do serviço; só data = desde o início do dia)"),
+            to: z.string().optional().describe("ISO 8601 ou yyyy-MM-dd (fim do período; só data = inclui o dia inteiro)"),
             clientIds: z.array(z.string()).optional(),
             projectIds: z.array(z.string()).optional(),
             includeArchived: z.boolean().optional(),
@@ -61,7 +62,7 @@ export const serviceTools = [
             return {
                 total: rows.length,
                 returned: Math.min(limit, rows.length),
-                services: rows.slice(0, limit).map((row) => ({ ...row, project: row.project?.name ?? null, serviceDate: new Date(row.serviceDate).toISOString().slice(0, 10) })),
+                services: rows.slice(0, limit).map((row) => ({ ...row, project: row.project?.name ?? null, serviceDate: serviceDateKey(row.serviceDate) })),
             }
         },
     }),
@@ -124,7 +125,7 @@ export const serviceTools = [
                 projectId: current.project?.id ?? null,
                 taskId: current.task?.id ?? null,
                 description: current.description,
-                serviceDate: current.serviceDate.slice(0, 10),
+                serviceDate: serviceDateKey(current.serviceDate),
                 origin: "hours",
                 hours: current.hours,
                 clientHours: current.clientHours,

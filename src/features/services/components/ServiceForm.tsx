@@ -28,7 +28,7 @@ import { useTaskList, useTaskOptions } from "@/features/tasks/hooks/useTasks"
 import type { ProjectRef } from "@/features/tasks/types"
 import { formatBillingBrl, formatHours } from "@/features/finance/format"
 import { SERVICES_PATH, serviceDetailPath } from "../constants"
-import { computeServiceAmounts, todayDateInput } from "../logic"
+import { computeServiceAmounts, serviceDateKey, todayDateInput } from "../logic"
 import { fetchTaskForService, useCreateService, useUpdateService } from "../hooks"
 import { serviceFormSchema, type ServiceFormValues, type ServiceWriteInput } from "../schemas"
 import type { ServiceDto } from "../types"
@@ -66,7 +66,7 @@ export function ServiceForm({ service }: { service?: ServiceDto }) {
                   projectId: service.project?.id ?? "",
                   taskId: service.task?.exists ? service.task.id : "",
                   description: service.description,
-                  serviceDate: service.serviceDate.slice(0, 10),
+                  serviceDate: serviceDateKey(service.serviceDate),
                   title: service.title ?? "",
                   summary: service.summary ?? "",
               }

@@ -9,8 +9,8 @@ import { GithubRepoLabel } from "@/features/github/components/shared"
 import { useRepoIndex } from "@/features/github/components/RepoIndexProvider"
 import { repoLabelFrom } from "@/features/orcamentos/logic"
 import { serviceDetailPath } from "@/features/services/constants"
-import { formatDate } from "@/features/tasks/format"
 import { formatBillingBrl, formatHours } from "../format"
+import { formatServiceDate } from "@/features/services/logic"
 import type { FinanceServiceDto } from "../types"
 
 /**
@@ -51,7 +51,7 @@ export function FinanceServiceRow({ service }: { service: FinanceServiceDto }) {
                         )}
                         <span className="inline-flex items-center gap-1">
                             <CalendarDays className="h-3 w-3" aria-hidden />
-                            {formatDate(service.serviceDate)}
+                            {formatServiceDate(service.serviceDate)}
                         </span>
                     </div>
                 </div>
