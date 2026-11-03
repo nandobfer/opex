@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { useCallback, useId, useState, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -9,10 +9,21 @@ import { ActiveFilterChips, type ActiveFilterChip } from "./ActiveFilterChips"
 
 /**
  * Peças compartilhadas das áreas de filtros recolhíveis (`ListFilters` de /tarefas e a coluna
- * Tarefas da Central de desenvolvimento): o chevron que alterna, o resumo em chips enquanto
- * recolhida e o conteúdo que abre/fecha com a altura animada (Framer Motion, movimento reduzido só
+ * Tarefas da Central de desenvolvimento): o estado compartilhado (`useFiltersCollapse`), o chevron que
+ * alterna, o resumo em chips enquanto recolhida e o conteúdo que abre/fecha com a altura animada (Framer Motion, movimento reduzido só
  * com opacidade).
  */
+
+/**
+ * Estado aberto/recolhido da área de filtros. O mesmo `toggle` vai na linha do título e no chevron:
+ * clicar em qualquer ponto da linha expande e recolhe.
+ */
+export function useFiltersCollapse(defaultCollapsed = true) {
+    const [collapsed, setCollapsed] = useState(defaultCollapsed)
+    const contentId = useId()
+    const toggle = useCallback(() => setCollapsed((value) => !value), [])
+    return { collapsed, toggle, contentId }
+}
 
 interface CollapseToggleProps {
     collapsed: boolean
@@ -21,7 +32,7 @@ interface CollapseToggleProps {
     controls: string
 }
 
-/** Botão ⌄/⌃ que expande/recolhe os filtros (não propaga o clique ao cabeçalho). */
+/** Botão ⌄/⌃ que expande/recolhe os filtros (não propaga o clique à linha do título, que alternaria de novo). */
 export function CollapseToggle({ collapsed, onToggle, controls }: CollapseToggleProps) {
     const label = collapsed ? "Expandir filtros" : "Recolher filtros"
     return (

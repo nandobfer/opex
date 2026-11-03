@@ -1,6 +1,6 @@
 "use client"
 
-import { useId, useState, type ReactNode } from "react"
+import type { ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Filter, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { useDebouncedSearch } from "@/hooks/useDebouncedSearch"
 import type { ActiveFilterChip } from "./ActiveFilterChips"
-import { CollapseToggle, CollapsedChips, CollapsibleBody } from "./CollapsibleFilters"
+import { CollapseToggle, CollapsedChips, CollapsibleBody, useFiltersCollapse } from "./CollapsibleFilters"
 import { CadastroFilterCard } from "./CadastroFilterCard"
 import { FilterGroup } from "./FilterGroup"
 
@@ -54,12 +54,12 @@ interface ListFiltersProps {
  * celular quebra. O estado vive na página que o usa (URL ou navegador).
  *
  * Com `collapsible`, o cartão começa recolhido numa linha: título, chips dos filtros ativos
- * (removíveis), total, limpar e expandir. Abre/fecha animado (Framer Motion).
+ * (removíveis), total, limpar e expandir. Clicar na linha do título expande e recolhe (o chevron
+ * também alterna). Abre/fecha animado (Framer Motion).
  */
 export function ListFilters({ total, search, onClear, children, secondary, collapsible = false, defaultCollapsed = true, chips = [] }: ListFiltersProps) {
     const [localSearch, setLocalSearch] = useDebouncedSearch(search?.value ?? "", search?.onChange, SEARCH_DEBOUNCE_MS)
-    const [collapsed, setCollapsed] = useState(collapsible && defaultCollapsed)
-    const contentId = useId()
+    const { collapsed, toggle, contentId } = useFiltersCollapse(collapsible && defaultCollapsed)
 
     const clear = () => {
         setLocalSearch("")
@@ -110,18 +110,14 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
     if (!collapsible) return <CadastroFilterCard total={total}>{fields}</CadastroFilterCard>
 
     const hasActive = chips.some((chip) => !chip.subtle)
-    const expand = () => collapsed && setCollapsed(false)
 
     return (
         <TooltipProvider>
             <Card>
                 <CardHeader className={cn("transition-[padding]", collapsed ? "py-3" : "pb-3")}>
                     <div
-                        className={cn(
-                            "grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 md:grid-cols-[auto_1fr_auto]",
-                            collapsed && "cursor-pointer",
-                        )}
-                        onClick={expand}
+                        className="grid cursor-pointer grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 md:grid-cols-[auto_1fr_auto]"
+                        onClick={toggle}
                         data-testid="list-filters-header"
                     >
                         <div className="col-start-1 col-end-2 row-start-1 flex min-w-0 items-center gap-2">
@@ -155,7 +151,7 @@ export function ListFilters({ total, search, onClear, children, secondary, colla
                                     </motion.span>
                                 )}
                             </AnimatePresence>
-                            <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} controls={contentId} />
+                            <CollapseToggle collapsed={collapsed} onToggle={toggle} controls={contentId} />
                         </div>
                     </div>
                 </CardHeader>
