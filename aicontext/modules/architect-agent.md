@@ -309,6 +309,9 @@ vale só para aquele pedido.
     quebra em até 2 linhas** (`line-clamp-2`, texto inteiro no `title`), cobrindo os rótulos de ~60
     caracteres pedidos pelo prompt; a linha de baixo traz o tipo, o começo da descrição (1 linha; a
     completa fica no painel) e o selo, que assim nunca cobre o título;
+  - arestas e setas na **cor primária do tema** (`stroke-primary`/`fill-primary`, nunca cinza), em
+    qualquer estado: o foco se destaca pela espessura e o resto esmaece pela opacidade (`edgeOpacity`:
+    0,8 normal, 0,35 secundária, 0,12 fora do foco); o rótulo da aresta segue discreto;
   - nós com ícone por tipo e selo **Novo**/**Alterado**; hover destaca o nó, os vizinhos e as arestas
     dele e esmaece o resto; clique abre o **painel lateral** (descrição, vizinhos
     clicáveis e "Recolher o grupo"), numa camada fora do viewport transformado; grupos recolhem pelo
@@ -344,7 +347,7 @@ vale só para aquele pedido.
   cada bloco faz — nunca arquivos).
 - PNG do diagrama inteiro com `html-to-image` (`getNodesBounds` + `getViewportForBounds`), fundo do token.
   A seta de cada aresta é um `<marker>` dentro do SVG da própria aresta (dentro do viewport que o PNG
-  clona), então a imagem leva as setas.
+  clona), então a imagem leva as setas, na mesma cor primária das linhas.
 - Cópia por `copyText` (`src/lib/clipboard.ts`), com alternativa fora de contexto seguro.
 
 ## Configuração (`/integracoes/ia?aba=agente-arquiteto`)
