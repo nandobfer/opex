@@ -197,6 +197,8 @@ export const TASK_TAGS_CONCLUDED_JOB_ID = "ai-task-tags-concluded"
 export const ATTACHMENT_CLEANUP_JOB_ID = "task-attachments-cleanup"
 /** Limpeza dos arquivos do chat do Agente Opex enviados e não usados numa mensagem em 24 h (S3 + metadados). */
 export const OPEX_FILES_CLEANUP_JOB_ID = "opex-files-cleanup"
+/** Métricas dos agentes (OPE-122): sincroniza as execuções e conversas e gera o resumo diário de uso. */
+export const AGENT_USAGE_DAILY_JOB_ID = "agent-usage-daily"
 /** Builder Machine: limpeza das imagens órfãs e do cache do builder do PC. */
 export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
 /** Pede a quota ao plugin opencode-quota (RPC, motivo poll) e avisa a tela quando muda. */
@@ -307,6 +309,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
     {
         id: OPEX_FILES_CLEANUP_JOB_ID,
         label: "Limpar arquivos pendentes do chat do Agente Opex",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 60 },
+        enabled: true,
+    },
+    {
+        id: AGENT_USAGE_DAILY_JOB_ID,
+        label: "Gerar o resumo diário de uso dos agentes (métricas)",
         kind: "internal",
         schedule: { type: "interval", minutes: 60 },
         enabled: true,

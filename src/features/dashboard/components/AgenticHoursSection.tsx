@@ -2,12 +2,12 @@
 
 import type { ChartConfig } from "@/components/ui/chart"
 import { formatMinutes } from "@/features/tasks/format"
-import { BarsChart } from "./charts/BarsChart"
-import { ChartCard } from "./charts/ChartCard"
-import { EmptyChart } from "./charts/EmptyChart"
-import { RankedBarsCard } from "./charts/RankedBarsCard"
-import { TrendLineChart } from "./charts/TrendLineChart"
-import { colorAt } from "./charts/palette"
+import { BarsChart } from "@/components/metrics/charts/BarsChart"
+import { ChartCard } from "@/components/metrics/charts/ChartCard"
+import { EmptyChart } from "@/components/metrics/charts/EmptyChart"
+import { RankedBarsCard } from "@/components/metrics/charts/RankedBarsCard"
+import { TrendLineChart } from "@/components/metrics/charts/TrendLineChart"
+import { colorAt } from "@/components/metrics/charts/palette"
 import { formatBucketLabel, formatTokens, formatUsd } from "../format"
 import type { DashboardDto } from "../types"
 

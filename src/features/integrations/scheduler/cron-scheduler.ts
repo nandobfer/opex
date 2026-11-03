@@ -14,6 +14,7 @@ import {
     OPENCODE_SESSIONS_CLEANUP_JOB_ID,
     OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPEX_FILES_CLEANUP_JOB_ID,
+    AGENT_USAGE_DAILY_JOB_ID,
     TASK_SUMMARY_JOB_ID,
     TASK_TAGS_CONCLUDED_JOB_ID,
     TASK_TAGS_JOB_ID,
@@ -368,6 +369,10 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(OPEX_FILES_CLEANUP_JOB_ID, async () => {
         const { cleanupPendingOpexFiles } = await import("@/features/opex-agent/server/files")
         return cleanupPendingOpexFiles()
+    })
+    registerInternalJob(AGENT_USAGE_DAILY_JOB_ID, async () => {
+        const { runAgentMetricsRoutine } = await import("@/features/agent-metrics/server/usage-daily")
+        return runAgentMetricsRoutine()
     })
     // Builder Machine (só faz algo com a integração ativa): ponto de montagem — ver aicontext/modules/builder-machine.md.
     registerInternalJob(ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, async () => {

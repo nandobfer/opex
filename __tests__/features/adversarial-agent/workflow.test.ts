@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
   mentorDiscardLive: vi.fn(),
 }))
 
+// Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
+vi.mock('@/features/agent-metrics/server/record', () => ({ recordWorkbenchEvent: vi.fn(async () => undefined), recordPrReviewReplanned: vi.fn(async () => undefined), recordAgentEvent: vi.fn(), recordAgentRun: vi.fn() }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 // Builder Machine desativada: o build e a limpeza seguem no servidor.
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
@@ -75,7 +77,7 @@ vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn
 // O app roda o comando do build no host (aba Build).
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: vi.fn(async () => undefined) }))
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   adversaryApplies: mocks.applies,
   adversaryModel: vi.fn(async () => ({ model: 'openai/gpt-5', variant: null })),

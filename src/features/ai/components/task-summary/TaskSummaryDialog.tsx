@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { dialogPanelMotion } from "@/components/motion/dialog-panel-motion"
 import { taskDetailKey, TASKS_QUERY_KEY } from "@/features/tasks/hooks/useTasks"
 import { useTaskSummaryStream } from "../../hooks/useTaskSummaryStream"
-import { UnderstandActivity, UnderstandUsage } from "../understand-task/UnderstandStatus"
+import { AiStreamActivity, AiStreamUsage } from "../shared/AiStreamStatus"
 
 interface TaskSummaryDialogProps {
     open: boolean
@@ -65,7 +65,7 @@ export function TaskSummaryDialog({ open, onOpenChange, taskId, taskCode }: Task
                     </DialogHeader>
 
                     <div className="min-h-[160px] flex-1 overflow-y-auto p-5 text-sm" aria-live="polite" aria-busy={running}>
-                        <UnderstandActivity state={state} />
+                        <AiStreamActivity state={state} />
                         {state.text && (
                             <div ref={scrollRef} className="relative whitespace-pre-wrap break-words">
                                 {state.text}
@@ -82,7 +82,7 @@ export function TaskSummaryDialog({ open, onOpenChange, taskId, taskCode }: Task
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 border-t p-4">
-                        <UnderstandUsage state={state} />
+                        <AiStreamUsage state={state} />
                         <div className="ml-auto flex gap-2">
                             <AnimatePresence mode="wait" initial={false}>
                                 {running ? (

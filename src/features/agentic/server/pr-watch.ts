@@ -304,7 +304,10 @@ export async function watchPullRequests(): Promise<string> {
                     report.step(`Pedido de mudança encontrado${authors.length ? ` (${authors.join(", ")})` : ""}`, "warn")
                     await report.finish("action", feedback.trim() ? "Pedido de mudança → replanejando" : "Pedido de mudança sem texto → aguardando você descrever as mudanças")
                     log.warn(`PR #${pr.number}: pedido de mudança (comentário ou revisão)`, { workbenchId: id })
-                    if (sections.some((section) => section.auto)) await savePrCursors(id, { autoReviewReplans: autoReplans + 1 })
+                    if (sections.some((section) => section.auto)) {
+                        await savePrCursors(id, { autoReviewReplans: autoReplans + 1 })
+                        void import("@/features/agent-metrics/server/record").then((metrics) => metrics.recordPrReviewReplanned(doc, repo, pr.number)).catch(() => undefined)
+                    }
                     await handlePrFeedback(id, feedback)
                     replans++
                     replanned = true
@@ -361,6 +364,8 @@ export async function watchPullRequests(): Promise<string> {
                     report.step(described.text, described.level)
                     if ((state.state === "passed" || state.state === "none") && attempts > 0) {
                         await savePrCursors(id, { ciFixAttempts: 0, ciFixLimitNotified: false })
+                        // CI verde depois da correção automática (Agente Desenvolvedor: % de CI corrigido).
+                        void import("@/features/agent-metrics/server/record").then((metrics) => metrics.recordWorkbenchEvent(doc, "ci-fixed", { pr: pr.number, attempts })).catch(() => undefined)
                         report.step("CI sem falhas: a contagem de correções automáticas foi zerada", "success")
                     }
                 }

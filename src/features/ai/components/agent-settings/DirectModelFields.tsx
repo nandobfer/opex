@@ -8,7 +8,7 @@ import { ModelPickerField, VariantSelectField } from "../ModelFields"
 
 /**
  * Modelo e raciocínio de um provedor direto (sem agente nem fallbacks, que são do OpenCode), gravados
- * no mesmo `AgentConfig` do formulário. Mesmos campos de "Entender tarefas".
+ * no mesmo `AgentConfig` do formulário. Mesmos campos das features de IA (`ProviderModelCard`).
  */
 export function DirectModelFields({ id, provider, value, onChange, error }: { id: string; provider: AiProviderId; value: AgentConfig; onChange: (next: AgentConfig) => void; error?: string }) {
     const models = useAiModels(provider)

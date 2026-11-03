@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { TaskSummarySettings, TaskTagsSettings, UnderstandTaskSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, UnderstandTaskSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
+import type { TaskSummarySettings, TaskTagsSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -72,20 +72,6 @@ export function useRefreshAiSkills() {
         queryClient
             .fetchQuery({ queryKey: key("skills"), queryFn: () => get<AiSkillDto[]>("/ai/skills?refresh=1") })
             .catch((error: unknown) => toast.error(apiErrorMessage(error, "Não foi possível atualizar as skills")))
-}
-
-export const useUnderstandTaskSettings = () => useQuery({ queryKey: key("feature", "understand-task"), queryFn: () => get<UnderstandTaskSettingsDto>("/ai/features/understand-task") })
-
-export function useSaveUnderstandTaskSettings() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: async (input: UnderstandTaskSettings) => unwrapApi((await api.put<ApiResponse<UnderstandTaskSettingsDto>>("/ai/features/understand-task", input)).data),
-        onSuccess: (saved) => {
-            queryClient.setQueryData(key("feature", "understand-task"), saved)
-            toast.success("Configuração de \"Entender tarefas\" salva")
-        },
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
-    })
 }
 
 export const useTaskSummarySettings = () => useQuery({ queryKey: key("feature", "task-summary"), queryFn: () => get<TaskSummarySettingsDto>("/ai/features/task-summary") })

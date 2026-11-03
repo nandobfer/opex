@@ -8,7 +8,7 @@ import type { IntegrationId } from "@/lib/integrations/catalog"
 export const AI_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "jev"] as const
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
 
-/** Provedores que geram texto (usados por "Entender tarefas" e "Resumos de tarefas"). */
+/** Provedores que geram texto (ex.: "Resumos de tarefas" e "Tags de tarefas"). */
 export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek"] as const
 export type AiTextProviderId = (typeof AI_TEXT_PROVIDER_IDS)[number]
 

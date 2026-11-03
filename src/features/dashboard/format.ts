@@ -1,5 +1,3 @@
-import { format, parseISO } from "date-fns"
-import { ptBR } from "date-fns/locale"
 import { formatNumberBR } from "@/lib/format"
 import { formatHoursLabel } from "@/features/orcamentos/logic"
 
@@ -32,8 +30,4 @@ export function formatTokens(value: number): string {
     return formatCount(value)
 }
 
-/** Rótulo do bucket: dia/semana → `dd/MM`; mês (`YYYY-MM`) → `MMM/yy`. */
-export function formatBucketLabel(bucket: string): string {
-    if (/^\d{4}-\d{2}$/.test(bucket)) return format(parseISO(`${bucket}-01`), "MMM/yy", { locale: ptBR })
-    return format(parseISO(bucket), "dd/MM", { locale: ptBR })
-}
+export { formatBucketLabel } from "@/components/metrics/format"

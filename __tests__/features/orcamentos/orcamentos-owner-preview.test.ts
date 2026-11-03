@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
     recordAudit: vi.fn(),
+    metricEvent: vi.fn(async () => undefined),
     createTaskWithIssue: vi.fn(),
     listGithubRepos: vi.fn(),
     clients: null as unknown,
@@ -9,6 +10,8 @@ const mocks = vi.hoisted(() => ({
     projects: null as unknown,
 }))
 
+// Métricas dos agentes (OPE-122): o fato "prévia corrigida" do Orçamentista.
+vi.mock("@/features/agent-metrics/server/record", () => ({ recordAgentEvent: mocks.metricEvent }))
 vi.mock("@/lib/db", () => ({
     dbConnect: vi.fn(),
     recordAudit: mocks.recordAudit,
@@ -197,6 +200,18 @@ describe("prévia do dono (servidor)", () => {
         await expect(setOwnerCorrection(draft.id, "mude")).rejects.toMatchObject({ code: "DRAFT_APPROVED" })
         await expect(setDraftEstimateClient(OWNER_SCOPE, draft.id, null)).rejects.toMatchObject({ code: "DRAFT_APPROVED" })
         await expect(approveOwnerDraft(draft.id, "local")).rejects.toMatchObject({ code: "DRAFT_APPROVED" })
+    })
+
+    it("pedir correção da prévia grava o fato do Orçamentista; sem prévia ou com texto vazio, não", async () => {
+        const draft = await createOwnerDraft({ projectId, description: "x" })
+        await setOwnerCorrection(draft.id, "mude")
+        await saveDraftPreview(OWNER_SCOPE, draft.id, preview)
+        await setOwnerCorrection(draft.id, "   ")
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        expect(mocks.metricEvent).not.toHaveBeenCalled()
+        await setOwnerCorrection(draft.id, "Troque o título")
+        await vi.waitFor(() => expect(mocks.metricEvent).toHaveBeenCalledTimes(1))
+        expect(mocks.metricEvent).toHaveBeenCalledWith(expect.objectContaining({ agent: "orcamentista", type: "budget-correction-requested", refId: draft.id }))
     })
 
     it("corrigir e regenerar a prévia zera a estimativa anterior", async () => {

@@ -25,6 +25,8 @@ export interface IPrReview {
     state: string
     verdict: string | null
     blocking: number | null
+    /** Total de achados informado pelo agente (OPE-122; `null` nas revisões anteriores). */
+    findings?: number | null
     summary: string | null
     report: string | null
     error: string | null
@@ -55,6 +57,7 @@ const PrReviewSchema = new Schema<IPrReview>(
         state: { type: String, required: true, default: "queued", index: true },
         verdict: { type: String, default: null },
         blocking: { type: Number, default: null },
+        findings: { type: Number, default: null },
         summary: { type: String, default: null },
         report: { type: String, default: null },
         error: { type: String, default: null },

@@ -50,7 +50,6 @@ vi.mock('@/features/integrations/components/detail/DetailHeader', () => stub('De
 vi.mock('@/features/integrations/components/detail/DetailActions', () => stub('DetailActions'))
 vi.mock('@/features/integrations/components/detail/GeneralCard', () => stub('GeneralCard'))
 vi.mock('@/features/ai/components/AiProvidersTab', () => stub('AiProvidersTab'))
-vi.mock('@/features/ai/components/understand-task/UnderstandTaskTab', () => stub('UnderstandTaskTab'))
 vi.mock('@/features/ai/components/task-summary/TaskSummaryTab', () => stub('TaskSummaryTab'))
 vi.mock('@/features/ai/components/task-tags/TaskTagsTab', () => stub('TaskTagsTab'))
 vi.mock('@/features/ai/components/budget-preview/BudgetPreviewTab', () => stub('BudgetPreviewTab'))
@@ -158,20 +157,21 @@ describe('página Inteligência Artificial (AiEditorForm)', () => {
     <AiEditorForm def={{} as never} data={{} as never} draft={{} as never} setDraft={vi.fn()} dirty={false} pending={false} onSave={vi.fn(async () => true)} onUndo={vi.fn()} />
   )
 
-  it('?aba=agente-mentor monta a aba com a configuração salva, logo depois do Agente Adversário', () => {
+  it('?aba=agente-mentor monta a aba com a configuração salva, por último, logo depois do Revisor (OPE-122)', () => {
     window.history.replaceState(null, '', '/integracoes/ia?aba=agente-mentor')
     render(page())
-    expect(screen.getByRole('tab', { name: /Agente Mentor/ })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /^Mentor/ })).toBeTruthy()
     const names = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())
-    expect(names.indexOf('Agente Mentor')).toBe(names.indexOf('Agente Adversário') + 1)
+    expect(names.indexOf('Mentor')).toBe(names.indexOf('Revisor') + 1)
+    expect(names.at(-1)).toBe('Mentor')
     expectSavedValuesShown()
   })
 
-  it('a aba do desenvolvimento agêntico se chama "Agente Desenvolvedor" e usa o ícone </> (code-xml)', () => {
+  it('a aba do desenvolvimento agêntico se chama "Desenvolvedor" (sem "Agente") e usa o ícone </> (code-xml)', () => {
     window.history.replaceState(null, '', '/integracoes/ia?aba=agente-mentor')
     render(page())
     expect(screen.getByRole('tablist', { name: 'Seções de Inteligência Artificial' })).toBeTruthy()
-    const tab = screen.getByRole('tab', { name: /Agente Desenvolvedor/ })
+    const tab = screen.getByRole('tab', { name: /^Desenvolvedor/ })
     expect(tab.querySelector('svg')?.getAttribute('class')).toContain('lucide-code-xml')
     expect(screen.queryByRole('tab', { name: /Desenvolvimento agêntico/ })).toBeNull()
   })

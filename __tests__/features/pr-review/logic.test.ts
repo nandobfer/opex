@@ -62,7 +62,9 @@ describe("utilitários", () => {
 
     it("lê o veredito do bloco JSON final e separa o relatório", () => {
         const result = parseReviewResult('## Bloqueios reais\nNenhum\n\n```json\n{"verdict": "approved", "blocking": 0, "summary": "Tudo certo"}\n```')
-        expect(result).toEqual({ verdict: "approved", blocking: 0, summary: "Tudo certo", report: "## Bloqueios reais\nNenhum" })
+        expect(result).toEqual({ verdict: "approved", blocking: 0, findings: null, summary: "Tudo certo", report: "## Bloqueios reais\nNenhum" })
+        // OPE-122: o total de achados (bloqueantes ou não) vem do mesmo bloco quando o agente informa.
+        expect(parseReviewResult('```json\n{"verdict": "changes_requested", "blocking": 1, "findings": 4}\n```').findings).toBe(4)
         expect(parseReviewResult("sem json").verdict).toBeNull()
         expect(verdictFromGithubState("CHANGES_REQUESTED")).toBe("changes_requested")
         expect(verdictFromGithubState("DISMISSED")).toBeNull()

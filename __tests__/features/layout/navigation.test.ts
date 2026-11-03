@@ -4,6 +4,8 @@ import { join } from "node:path"
 import { Bot, CodeXml, GraduationCap, Landmark, Plug, Settings, Swords } from "lucide-react"
 import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, navGroupActive, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
 import { isNavGroup } from "@/features/layout/types"
+import { AGENT_CATALOG } from "@/features/agent-metrics/catalog"
+import { AI_EDITOR_TABS } from "@/features/ai/tabs"
 
 describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
     it("toda seção tem id único e no máximo 7 itens", () => {
@@ -22,9 +24,16 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             [
                 "Agentes",
                 [
-                    ["Agente Revisor", "/agente-revisor"],
-                    ["Agente Adversário", "/agente-adversario"],
-                    ["Agente Mentor", "/agente-mentor"],
+                    ["Opex", "/agente-opex"],
+                    ["Maddox", "/agente-maddox"],
+                    ["Orçamentista", "/agente-orcamentista"],
+                    ["Catalogador", "/agente-catalogador"],
+                    ["Refinador", "/agente-refinador"],
+                    ["Desenvolvedor", "/agente-desenvolvedor"],
+                    ["Arquiteto", "/agente-arquiteto"],
+                    ["Adversário", "/agente-adversario"],
+                    ["Revisor", "/agente-revisor"],
+                    ["Mentor", "/agente-mentor"],
                 ],
             ],
             [
@@ -52,8 +61,15 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             "/tarefas",
             "/desenvolvimento",
             "/engramind",
-            "/agente-revisor",
+            "/agente-opex",
+            "/agente-maddox",
+            "/agente-orcamentista",
+            "/agente-catalogador",
+            "/agente-refinador",
+            "/agente-desenvolvedor",
+            "/agente-arquiteto",
             "/agente-adversario",
+            "/agente-revisor",
             "/agente-mentor",
             "/tarefas/horas",
             "/financeiro",
@@ -139,5 +155,29 @@ describe("contadores do menu", () => {
         expect(badgeLabel("tasks", 1)).toBe("1 tarefa")
         expect(badgeLabel("tasks", 3)).toBe("3 tarefas")
         expect(badgeLabel("tasks", 1200)).toBe("1.200 tarefas")
+    })
+})
+
+describe("categoria Agentes (OPE-122)", () => {
+    const agentes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "agentes")!
+
+    it("lista os 10 agentes do catálogo, na ordem do fluxo, sem a palavra Agente no rótulo", () => {
+        expect(agentes.items.map((item) => item.href)).toEqual(AGENT_CATALOG.map((agent) => agent.href))
+        expect(agentes.items).toHaveLength(10)
+        for (const item of agentes.items) expect(item.label).not.toMatch(/agente/i)
+        for (const item of agentes.items) expect(item.title).toMatch(/^Agente /)
+    })
+
+    it("nome e ícone de cada item são os mesmos da aba de configuração em Integrações › Inteligência Artificial", () => {
+        const tabs = AI_EDITOR_TABS.slice(1)
+        expect(tabs.map((tab) => tab.id)).toEqual(AGENT_CATALOG.map((agent) => agent.settingsTab))
+        agentes.items.forEach((item, index) => {
+            expect(item.label).toBe(tabs[index]!.label)
+            expect(item.icon).toBe(tabs[index]!.icon)
+        })
+    })
+
+    it("todo agente tem página em src/app/(app)", () => {
+        for (const agent of AGENT_CATALOG) expect(existsSync(join(process.cwd(), `src/app/(app)${agent.href}/page.tsx`)), agent.href).toBe(true)
     })
 })

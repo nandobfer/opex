@@ -232,20 +232,6 @@ export const taskTools = [
         },
     }),
     defineTool({
-        name: "understand_task",
-        group: "tasks",
-        label: "Entender tarefa",
-        risk: "read",
-        description: 'Gera com a feature de IA "Entender tarefas" uma explicação da tarefa (resumo, o que fazer, riscos e dúvidas).',
-        input: z.object({ task: taskRefSchema }),
-        execute: async ({ task }, context) => {
-            const { prepareUnderstandTask, runUnderstandTask } = await import("@/features/ai/server/understand-task")
-            const { id } = await resolveTask(task)
-            const { text } = await collectFeatureStream(runUnderstandTask(await prepareUnderstandTask(id), context.signal))
-            return { explanation: text }
-        },
-    }),
-    defineTool({
         name: "generate_task_summary",
         group: "tasks",
         label: "Gerar resumo",

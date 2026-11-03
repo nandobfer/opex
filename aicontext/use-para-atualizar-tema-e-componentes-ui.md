@@ -131,7 +131,7 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
   (entrada dos itens, `whileHover x:4`, `whileTap 0.98`, largura, gaveta).
 - **Seções** (`NavSectionDef { id, label?, items }` em `src/features/layout/navigation.ts`,
   `APP_NAV`): uma seção sem título com Tarefas, Central de desenvolvimento, Engramind e os grupos
-  Agentes (Revisor, Adversário, Mentor), Contábil (Horas agênticas, Financeiro), o item Integrações e
+  Agentes (os 10 agentes do catálogo `AGENT_CATALOG`, OPE-122), Contábil (Horas agênticas, Financeiro), o item Integrações e
   o grupo Configurações (Ambientes). Até 7 entradas por seção. Título em
   caixa-alta é um botão com `aria-expanded` que abre/fecha a lista; fechadas ficam no
   `localStorage` (`opex-sidebar-closed-sections`); a seção da página atual sempre abre ao
@@ -274,9 +274,12 @@ repassar ao elemento DOM.)
   valor formatado em pt-BR (`valueFormatter`) e uma linha de contexto (`footer`: %, origem, o que
   fazer). Não desenhe gráfico em SVG à mão.
 - Os gráficos prontos do CRM (`BarsChart`, `DonutChart`, `TrendLineChart`, `RankedBarsCard`…) NÃO
-  foram copiados (o CRM não está disponível nesta máquina); a tela Dashboards implementou os seus em
-  `src/features/dashboard/components/charts/` sobre a base acima, e novos gráficos devem reusar esses
-  componentes (copiando/adaptando de `~/code/crm-marketing-campanhas` quando ele estiver acessível).
+  foram copiados (o CRM não está disponível nesta máquina); a tela Dashboards implementou os seus, hoje compartilhados em
+  `src/components/metrics/charts/` (usados pelos Dashboards, pelo portal e pelas páginas dos agentes),
+  sobre a base acima, e novos gráficos devem reusar esses componentes — junto com os de
+  `src/components/metrics/` (`KpiCard`/`KpiGrid`, `LastUsedKpi`, `MultiLineChart` com legenda de caixas
+  de seleção salva no navegador, `UsageByDateChart`, `MetricsFiltersBar` e `MetricsOverviewSkeleton`,
+  com as classes de `layout.ts`) — (copiando/adaptando de `~/code/crm-marketing-campanhas` quando ele estiver acessível).
 - Número sobreposto ao centro (rosca, medidor, anel) fica atrás do tooltip: `wrapperStyle=
   {TOOLTIP_ON_TOP}` no tooltip e `z-0` no número.
 - A tabela oculta fica num contêiner `relative` (e o `<main>` do `AppShell` é `relative`):

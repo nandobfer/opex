@@ -1,5 +1,5 @@
 import type { AiUsage } from "@/lib/ai/stream"
-import type { BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings, UnderstandTaskSettings } from "./schemas"
+import type { BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings } from "./schemas"
 
 export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/lib/ai/providers"
 
@@ -7,14 +7,6 @@ export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/
 export interface AiFeatureAvailability {
     available: boolean
     reason: string | null
-}
-
-export interface UnderstandTaskSettingsDto {
-    settings: UnderstandTaskSettings
-    /** Nada salvo ainda: valores iniciais do código. */
-    isDefault: boolean
-    availability: AiFeatureAvailability
-    updatedAt: string | null
 }
 
 export interface TaskSummarySettingsDto {
@@ -70,8 +62,8 @@ export interface TaskRefinementSettingsDto {
     updatedAt: string | null
 }
 
-/** Linha do stream NDJSON de `POST /api/tasks/[id]/understand`. */
-export type UnderstandTaskEvent =
+/** Linha de um stream NDJSON de texto de IA (ex.: `POST /api/tasks/[id]/summary`). */
+export type AiStreamEvent =
     | { type: "start"; provider: string; model: string; agent: string | null }
     | { type: "delta"; text: string }
     | { type: "reasoning" }
@@ -80,8 +72,8 @@ export type UnderstandTaskEvent =
     | { type: "done"; finishReason: string; usage: AiUsage; durationMs: number }
     | { type: "error"; message: string }
 
-/** Linha do stream NDJSON de `POST /api/tasks/[id]/summary` (mesma forma de "Entender tarefas"). */
-export type TaskSummaryEvent = UnderstandTaskEvent
+/** Linha do stream NDJSON de `POST /api/tasks/[id]/summary`. */
+export type TaskSummaryEvent = AiStreamEvent
 
 /** Memória exibida na lista compacta de um agente. */
 /**

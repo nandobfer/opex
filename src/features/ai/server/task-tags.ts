@@ -103,7 +103,15 @@ async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]
 export async function runTaskTags(prepared: PreparedTaskTags): Promise<string[]> {
     const startedAt = Date.now()
     const dbg = integrationDebug("ai")
-    const { tags, streamed } = await resolveTags(prepared)
+    let resolved: Awaited<ReturnType<typeof resolveTags>>
+    try {
+        resolved = await resolveTags(prepared)
+    } catch (error) {
+        // A falha também fica no uso (Agente Catalogador: % de falhas das gerações de tags).
+        if (prepared.settings.provider !== "jev") await logUsage("task-tags", prepared.settings.provider, prepared.settings.model, prepared.taskId, false, error instanceof Error ? error.message : String(error), startedAt, null)
+        throw error
+    }
+    const { tags, streamed } = resolved
     await dbConnect()
     await DevTask.updateOne({ _id: prepared.taskId }, { $set: { tags, tagsSourceHash: taskTagsSourceHash(prepared.source), tagsUpdatedAt: new Date() } }, { timestamps: false })
     await publishTasksUpdated([prepared.taskId])

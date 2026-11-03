@@ -147,6 +147,13 @@ export async function setDraftCorrection(scope: DraftScope, id: string, correcti
     const draft = await getDraftDoc(scope, id)
     assertDraftEditable(draft)
     await OrcamentoDraft.updateOne({ _id: draft._id }, { $set: { correction } })
+    // Agente Orçamentista: % de prévias corrigidas (o campo pode ser limpo depois; o fato fica).
+    if (correction.trim() && draft.preview) {
+        const at = new Date()
+        void import("@/features/agent-metrics/server/record")
+            .then(({ recordAgentEvent }) => recordAgentEvent({ agent: "orcamentista", type: "budget-correction-requested", at, refId: String(draft._id), clientId: draft.clientId ?? null, projectId: draft.projectId ?? null, data: null }))
+            .catch(() => undefined)
+    }
     return draftToDto({ ...draft, correction })
 }
 

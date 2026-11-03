@@ -7,6 +7,10 @@ ferramentas nativas do OpenCode no host do dono (terminal, arquivos, skills e os
 OpenCode) e recebe as ferramentas do Opex por um **servidor MCP do Opex**. Por padrão só o dono tem
 acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
 
+
+Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão geral das conversas, Histórico
+(conversas do dono e do portal, só leitura) e Memórias — ver `modules/agent-metrics.md`.
+
 ## Onde fica e como abre (item único dos agentes)
 
 - O Maddox **divide o item da barra lateral com o Agente Opex** (`AgentChatNavItem`, em

@@ -9,6 +9,7 @@ import { memoryModel } from '../../helpers/memory-model'
 
 const store = vi.hoisted(() => ({ sessions: null as unknown, jobs: null as unknown, messages: null as unknown }))
 const mocks = vi.hoisted(() => ({
+  preserveConversations: vi.fn(async (_ids: readonly string[]) => {}),
   audit: vi.fn(async () => {}),
   publishAppEvent: vi.fn(async () => {}),
   publishToChannels: vi.fn(async () => {}),
@@ -17,6 +18,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
+// Métricas dos agentes (OPE-122): a estatística da conversa é preservada antes de apagar.
+vi.mock('@/features/agent-metrics/server/conversations', () => ({ preserveConversations: mocks.preserveConversations }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
 vi.mock('@/lib/db/models/Opex', () => {
   const model = memoryModel()
@@ -133,6 +136,8 @@ describe('cleanupIdleAgentSessions — excluir as arquivadas', () => {
     expect(docOf(id)).toBeUndefined()
     expect(messages().docs).toHaveLength(0)
     expect(mocks.deleteFiles).toHaveBeenCalledWith(id)
+    // A estatística da conversa fica nas métricas dos agentes, marcada como removida (OPE-122).
+    expect(mocks.preserveConversations).toHaveBeenCalledWith([id])
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ entidadeId: id, acao: 'EXCLUIR', antes: expect.objectContaining({ motivo: 'inatividade' }) }))
     expect(mocks.publishAppEvent).toHaveBeenCalledWith('opex-session-deleted', { id })
   })

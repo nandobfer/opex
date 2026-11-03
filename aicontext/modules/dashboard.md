@@ -87,7 +87,7 @@ Nenhum evento ou `publishAppEvent` novo — o servidor já publica nesses pontos
 ## Gráficos
 
 Base do shadcn (`src/components/ui/chart.tsx`) com componentes da feature em
-`components/charts/` (`BarsChart`, `TrendLineChart`, `DonutChart`, `RankedBarsCard`, `ChartCard`,
+`src/components/metrics/charts/` (compartilhados com as páginas dos agentes, OPE-122; `BarsChart`, `TrendLineChart`, `DonutChart`, `RankedBarsCard`, `ChartCard`,
 `ChartDataTable`, `EmptyChart`, `useChartAnimation`, `palette`). Cores só por `var(--chart-n)` e
 `var(--color-*-400)`; cada gráfico tem `role="img"` + `aria-label` e uma **tabela oculta**
 (`ChartDataTable`, linhas `data-barra`) com os mesmos números. A animação das séries usa a do
@@ -105,7 +105,7 @@ recharts, desligada com movimento reduzido.
 O portal tem um dashboard **próprio** (`/cliente/dashboard`, `GET /api/cliente/dashboard`) com a
 **mesma apresentação** do dashboard do dono: reusa o `DashboardHeader` (título com ícone, atalho
 **Nova prévia**, período global `OptionTabs` e Atualizar), a linha de KPIs (`DashboardKpis`) e os
-gráficos de `components/charts/` (rosca por coluna, barras por tipo, barras ranqueadas por projeto e a
+gráficos de `src/components/metrics/charts/` (rosca por coluna, barras por tipo, barras ranqueadas por projeto e a
 linha criadas × concluídas) — o cartão **Por tipo** conta as **tags** da tarefa, não o tipo. O período
 usa as mesmas opções do dono (`period.ts`) com **chave própria** de persistência
 (`opex:cliente:dashboard:period:v1`) e envia o fuso do navegador. O bloco de **custo** (custo por

@@ -65,12 +65,15 @@ export function reviewWorktreePath(root: string, repo: string, number: number, h
 const resultSchema = z.object({
     verdict: z.enum(PR_REVIEW_VERDICTS),
     blocking: z.number().int().min(0).optional(),
+    findings: z.number().int().min(0).optional(),
     summary: z.string().optional(),
 })
 
 export interface PrReviewResult {
     verdict: PrReviewVerdict | null
     blocking: number | null
+    /** Total de achados (bloqueantes ou não), quando o agente informa (OPE-122). */
+    findings: number | null
     summary: string | null
     /** Relatório (texto do agente sem o bloco JSON final). */
     report: string
@@ -80,8 +83,8 @@ export interface PrReviewResult {
 export function parseReviewResult(text: string): PrReviewResult {
     const parsed = resultSchema.safeParse(extractJsonBlock(text))
     const report = text.replace(/```json\s*\n[\s\S]*?```\s*$/, "").trim()
-    if (!parsed.success) return { verdict: null, blocking: null, summary: null, report }
-    return { verdict: parsed.data.verdict, blocking: parsed.data.blocking ?? null, summary: parsed.data.summary?.trim() || null, report }
+    if (!parsed.success) return { verdict: null, blocking: null, findings: null, summary: null, report }
+    return { verdict: parsed.data.verdict, blocking: parsed.data.blocking ?? null, findings: parsed.data.findings ?? null, summary: parsed.data.summary?.trim() || null, report }
 }
 
 /** Estado de uma revisão do GitHub → veredito. */

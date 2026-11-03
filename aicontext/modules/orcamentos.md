@@ -9,6 +9,11 @@ estimativa, que ele aprova ou corrige) e, sendo admin, vê o **custo** e gere **
 
 Logins e sessões: `aicontext/modules/auth.md`.
 
+
+Agente **Orçamentista** (OPE-122): as features Orçamentos e Estimar prazos ficam numa aba única de
+`/integracoes/ia` (`orcamentista`) e têm a página `/agente-orcamentista` (erro da estimativa, margem,
+aprovados e prévias corrigidas) — ver `modules/agent-metrics.md`.
+
 ## Papéis e terminologia
 
 - **Dono**: vê **"Faturamento"** e as **horas reais**; administra todos os clientes e usuários.
