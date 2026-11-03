@@ -466,6 +466,31 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   pede confirmação é recusada e o agente edita em vez de excluir.
 - Liga/desliga por agente: `ai_feature_settings` `feature: "agent-self-memory"` (padrão: ligado),
   `SelfMemorySwitch` no topo da seção de memórias de cada agente (`GET/PUT /api/ai/features/agent-self-memory`).
+- **Instrução acionável (OPE-117)**: `selfMemoryInstructions(consumer, turn, { toolPrefix, counts, write, read })`
+  monta dois blocos separados. Leitura ("Memórias fora do contexto"): "N só pelo título e M fora do bloco"
+  da entrega do turno (sem overflow, "0 fora do contexto"; Engramind indisponível, a linha some) e o
+  gatilho título relevante → `get_hints` com a mensagem/cena → `get_memory` (reserva: `search_memories`),
+  sem despejar tudo nem inventar memória. Gravação ("Checklist de fim de turno"): correção do
+  dono/usuário, decisão repetida, comando/caminho novo e preferência confirmada; `remember` é o caminho de
+  aprendizado e as ferramentas de gestão do Engramind gravam como o dono (memória protegida); lembrete de
+  consolidar; limite de 5 e guia de listas. Só leitura e nada fora do contexto → nenhum bloco. Os
+  chamadores (Opex, Maddox, desenvolvedor, Adversário e Arquiteto) buscam o contexto antes, para passar
+  `counts`.
+- **Leitura da faixa de títulos (OPE-117)**: `get_hints` (`text`, `limit?`), `get_memory` (`memoryId`) e
+  `search_memories` (`query`, `limit` até 10; trecho de até 240 caracteres) em
+  `server/self-memory/read-tools.ts`, risco `read`, sem confirmação, com o token do agente e restritas a
+  `contextChannelsFor` do turno — o canal da memória lida é conferido **no Opex** (o agente opex/maddox
+  assina `agentes/<agente>/*` e alcançaria outros clientes). Não entram no cache nem publicam consumo;
+  falha/timeout vira erro acionável (`SELF_MEMORY_UNAVAILABLE`, `SELF_MEMORY_NOT_FOUND`). Valem sempre
+  que o agente recebe contexto: o MCP `opex_memorias` é registrado mesmo com o aprendizado desligado (aí
+  só as de leitura atendem; gravar responde "aprendizado autônomo desligado"), e o Agente Opex nativo as
+  recebe no turno (dono e portal). O Arquiteto em provedor direto (sem MCP) não as anuncia.
+- **Duas camadas (OPE-117, decisão do dono: não restringir)**: o desenvolvedor (e o Adversário) gravam o
+  que percebem em `developer-global`/`developer-central`; o Agente Mentor é a segunda camada, vê as
+  memórias da lista de destino (inclusive as recém-gravadas pelo agente na cadeia) e grava só o que passou
+  batido, fundindo em vez de duplicar (`MENTOR_TWO_LAYERS` no redator).
+- **Adoção (OPE-117)**: o card do `SelfMemorySwitch` mostra gravações em 7 dias, última gravação, último
+  contexto lido e a última entrega (`AgentMemoryActivity`); ver `modules/engramind.md`, "Contratos 0.11.0 e OPE-117".
 
 ## APIs
 
