@@ -32,10 +32,11 @@ export const lineSelectionKey = (persistKey: string) => `opex:metrics:lines:${pe
 /**
  * Gráfico de várias linhas ao longo do tempo (eixo X = data), com legenda de caixas de seleção para
  * mostrar ou ocultar cada linha (seleção salva no navegador por gráfico). Cada série tem cor e traço
- * fixos (`lineSeriesItems`); as linhas são retas (`linear`, nunca passam dos valores reais) e, por
- * decisão do dono na OPE-122, contínuas: o bucket sem dados (`null`) não tem ponto, e a linha liga os
- * pontos vizinhos. Com amostras (`sampleLabel`), o eixo e o tooltip mostram o n de cada bucket e o
- * ponto com n abaixo de `minSample` sai vazado (pouco representativo).
+ * fixos (`lineSeriesItems`); as linhas são suaves (`monotone`, uma curva entre os pontos que nunca
+ * ultrapassa os valores reais — decisão do dono na OPE-131, que restaurou a curva em vigor antes da
+ * OPE-122) e, por decisão do dono na OPE-122, contínuas: o bucket sem dados (`null`) não tem ponto, e
+ * a linha liga os pontos vizinhos. Com amostras (`sampleLabel`), o eixo e o tooltip mostram o n de
+ * cada bucket e o ponto com n abaixo de `minSample` sai vazado (pouco representativo).
  */
 export function MultiLineChart({
     persistKey,
@@ -99,7 +100,7 @@ export function MultiLineChart({
                                 {visible.map((item) => (
                                     <Line
                                         key={item.key}
-                                        type="linear"
+                                        type="monotone"
                                         dataKey={item.key}
                                         name={item.label}
                                         stroke={item.color}

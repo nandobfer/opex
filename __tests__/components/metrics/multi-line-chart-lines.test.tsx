@@ -78,10 +78,10 @@ describe('linhas do gráfico de métricas', () => {
     expect(lastLines().has('interrupted')).toBe(false)
   })
 
-  it('critério aprovado (linha contínua): toda linha é reta e liga os pontos nos dias sem dados', () => {
+  it('critério aprovado (OPE-131, linha suave e contínua): toda linha é curva e liga os pontos nos dias sem dados', () => {
     renderChart()
     for (const props of lastLines().values()) {
-      expect(props.type).toBe('linear')
+      expect(props.type).toBe('monotone')
       expect(props.connectNulls).toBe(true)
     }
   })
