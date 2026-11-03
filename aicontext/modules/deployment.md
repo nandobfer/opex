@@ -36,6 +36,16 @@ Workflow `CI/CD` (`.github/workflows/ci-cd.yml`), com três jobs encadeados:
 - A tag é o SHA completo do commit (`opex:<sha>`), o que torna cada imagem imutável e permite
   rollback por tag.
 - A imagem é salva com `docker save | gzip -9` e acompanhada do arquivo `opex-image.tar.gz.sha256`.
+- O `next build` roda com **Turbopack**, o padrão do Next 16. A versão do `next` é fixada
+  exatamente no `package.json` (hoje `16.4.5`): o `16.1.4` derrubava o build com o panic interno
+  do Turbopack `Dependency tracking is disabled so invalidation is not allowed`
+  ([vercel/next.js#85496](https://github.com/vercel/next.js/issues/85496)) na geração das rotas —
+  os testes passavam e só o job `Build image` falhava, de forma determinística. Se o panic voltar
+  numa versão fixada, o caminho de contenção é `next build --webpack` (o defeito é exclusivo do
+  Turbopack; a flag existe no Next 16) e, para achar o gatilho, `next build --debug-build-paths`
+  com um recorte de rotas.
+- Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
+  `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 
 ## Deploy no servidor
 
