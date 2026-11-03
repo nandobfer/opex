@@ -61,8 +61,11 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
       com os dois roxos nas pontas); acima de 10 séries a cor se repete com traço tracejado, e a
       combinação cor + traço nunca se repete. A legenda e o tooltip mostram o mesmo traço
       (`LineSwatch`);
-    - **linha reta** (`type="linear"`, nunca passa dos valores reais) e eixo de % fixo em 0–100 (marcas
-      de 25), que só cresce quando um valor passa de 100 de verdade (ex.: erro da estimativa);
+    - **linha suave** (`type="monotone"`): a curva passa por todos os pontos e, por ser monotônica
+      entre dois deles, nunca ultrapassa os valores reais (sem "bicos" nem picos inventados). Decisão
+      do dono na OPE-131, que substitui a linha reta (`type="linear"`) da OPE-122. O eixo de % é fixo
+      em 0–100 (marcas de 25) e só cresce quando um valor passa de 100 de verdade (ex.: erro da
+      estimativa);
     - **dias sem dados**: o bucket sem base continua `null` (sem ponto, nunca 0%), e a **linha é
       contínua**, ligando os pontos vizinhos (`connectNulls`). Decisão do dono na revisão do plano da
       OPE-122, que substitui o critério original "dias sem dados quebram a linha" (a linha quebrada
@@ -227,6 +230,6 @@ Extraídos dos Dashboards (que passaram a usá-los): `charts/` (`ChartCard`, `Tr
 banco não rejeita, rotina e marcadores —, `routes` e `agent-page`), `__tests__/components/metrics/`
 (legenda selecionável salva no navegador, "Selecione ao menos uma métrica", "—" e Último uso;
 `line-chart-model` — cores e traços únicos, eixo 0–100, amostra pequena; `multi-line-chart-lines` —
-recharts simulado: cores do print, linha reta e contínua, marcador vazado, tooltip com n e esqueleto),
+recharts simulado: cores do print, linha suave e contínua, marcador vazado, tooltip com n e esqueleto),
 `__tests__/features/layout/navigation.test.ts` (10 agentes, ordem, nomes e ícones iguais às abas,
 página de cada um) e `__tests__/features/ai/ai-tabs.test.tsx`.
