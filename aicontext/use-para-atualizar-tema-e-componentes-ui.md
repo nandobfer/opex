@@ -131,8 +131,8 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
   (entrada dos itens, `whileHover x:4`, `whileTap 0.98`, largura, gaveta).
 - **Seções** (`NavSectionDef { id, label?, items }` em `src/features/layout/navigation.ts`,
   `APP_NAV`): uma seção sem título com Tarefas, Central de desenvolvimento, Engramind e os grupos
-  Agentes (Revisor, Adversário, Mentor), Contábil (Horas agênticas, Financeiro) e Configurações
-  (Integrações, Ambientes). Até 7 entradas por seção. Título em
+  Agentes (Revisor, Adversário, Mentor), Contábil (Horas agênticas, Financeiro), o item Integrações e
+  o grupo Configurações (Ambientes). Até 7 entradas por seção. Título em
   caixa-alta é um botão com `aria-expanded` que abre/fecha a lista; fechadas ficam no
   `localStorage` (`opex-sidebar-closed-sections`); a seção da página atual sempre abre ao
   navegar para ela. Recolhido, o título vira divisor. `APP_NAV_ITEMS` (`flattenNav`) serve o
@@ -140,6 +140,10 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 - **Grupos** (`NavGroupDef`, `SidebarNavGroup`): um item da barra que abre um painel à direita
   (portal, fora da barra) ao passar o mouse, por clique, toque ou teclado. Detalhes em
   `modules/layout.md`. Use grupo, e não seção com título, para juntar itens na barra recolhida.
+- **Item com painel de hover** (`NavItemDef.panel`, `SidebarHoverNavItem`): navega no clique e abre um
+  painel à direita no hover (ex.: Integrações com o submenu das integrações). Reaproveita a moldura dos
+  grupos (`SidebarHoverPanel`) e as classes de link de painel (`SIDEBAR_PANEL_LINK*` de
+  `sidebar-styles.ts`). Detalhes em `modules/layout.md`.
 - **Itens**: ícone 20px, rótulo 14px, `aria-current="page"` no ativo; recolhido, nome acessível
   (`aria-label`) e Tooltip à direita.
 - **Contadores** (`SidebarBadge`, `NavItemDef.badge`): número pt-BR com "99+" (`formatBadge`), texto
@@ -151,7 +155,7 @@ Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design Sy
 - **Gaveta (< 1024px)**: botão de menu com `aria-expanded`/`aria-controls`; ao abrir, foco no
   primeiro link e resto da tela `inert`; fecha com Esc, fundo, "Fechar menu" (foco volta ao botão)
   ou ao escolher um link (`useDrawerFocus`).
-- Testes: `__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,sidebar-nav-group}.test.*`.
+- Testes: `__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,sidebar-nav-group,sidebar-hover-nav-item}.test.*`.
 
 ## Estados obrigatórios
 

@@ -107,6 +107,30 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - Ações por card (fora do link): **Testar conexão** e **Debug** (desabilitado com motivo quando o
   debug está desligado).
 - Cards "Em desenvolvimento" (Google Drive) no fim, sem ações.
+- Peças compartilhadas com o submenu da sidebar: `useTopLevelIntegrations` (lista sem as filhas, na
+  ordem da API, com o status ao vivo), `IntegrationRowActions` (Testar conexão e Debug, com
+  `DEBUG_DISABLED_REASON`) e `IntegrationActionDialogs` + `useIntegrationActionDialogs` (os dois diálogos).
+
+### Submenu de Integrações na sidebar (OPE-120)
+
+"Integrações" é um item próprio do menu do dono (fora do grupo Configurações, que ficou só com
+Ambientes). Com a barra recolhida (desktop), o **clique navega para `/integracoes`** e **passar o
+mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
+`src/features/integrations/components/sidebar/`, montado pelo `AppLayoutShell` via
+`itemPanels.integrations`; comportamento do painel em `modules/layout.md`).
+
+- Lista as mesmas integrações da página, **na mesma ordem**, sem as filhas (provedores de IA) e sem as
+  "Em desenvolvimento" (não têm status, teste nem debug).
+- Cada linha: bolinha de status (`IntegrationStatusDot`) e nome formam um **link para a página da
+  integração** (`integrationPath`, a linha inteira menos os botões); à direita, os botões **Testar
+  conexão** e **Debug** (`IntegrationRowActions size="sm"`), com a mesma ação da página. A integração
+  da rota atual fica marcada (`aria-current`).
+- Testar/Debug fecham o submenu e abrem os mesmos diálogos da página, montados fora do painel.
+- A consulta (`useIntegrations`, mesmo cache da página) e as assinaturas do status ao vivo só existem
+  com o submenu aberto: a sidebar não faz polling nem assina os canais em todas as telas. Estados:
+  skeleton no formato das linhas (constantes em `integrations-nav-layout.ts`), erro com "Tentar
+  novamente" e vazio com atalho para `/integracoes`.
+- Na gaveta do celular não há submenu: "Integrações" é só um link.
 
 ### Página da integração (`/integracoes/[id]`)
 

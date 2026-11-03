@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { Bot, CodeXml, GraduationCap, Landmark, Settings, Swords } from "lucide-react"
+import { Bot, CodeXml, GraduationCap, Landmark, Plug, Settings, Swords } from "lucide-react"
 import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, navGroupActive, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
 import { isNavGroup } from "@/features/layout/types"
 
@@ -12,7 +12,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         for (const section of APP_NAV) expect(section.items.length).toBeLessThanOrEqual(7)
     })
 
-    it("itens soltos (Tarefas, Central de desenvolvimento, Engramind) e grupos Agentes, Contábil e Configurações, nesta ordem", () => {
+    it("itens soltos (Tarefas, Central de desenvolvimento, Engramind), grupos Agentes e Contábil, Integrações e Configurações, nesta ordem", () => {
         expect(APP_NAV.map((section) => [section.id, section.label])).toEqual([["inicio", undefined]])
         const entries = APP_NAV[0]!.items.map((entry) => (isNavGroup(entry) ? [entry.label, entry.items.map((item) => [item.label, item.href])] : [entry.label, entry.href]))
         expect(entries).toEqual([
@@ -34,14 +34,17 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
                     ["Financeiro", "/financeiro"],
                 ],
             ],
-            [
-                "Configurações",
-                [
-                    ["Integrações", "/integracoes"],
-                    ["Ambientes", "/ambientes"],
-                ],
-            ],
+            ["Integrações", "/integracoes"],
+            ["Configurações", [["Ambientes", "/ambientes"]]],
         ])
+    })
+
+    it("Integrações é item próprio (não está em Configurações) e abre o submenu das integrações no hover (OPE-120)", () => {
+        const integracoes = APP_NAV[0]!.items.find((entry) => !isNavGroup(entry) && entry.href === "/integracoes")
+        expect(integracoes && !isNavGroup(integracoes) ? [integracoes.label, integracoes.icon, integracoes.panel] : null).toEqual(["Integrações", Plug, "integrations"])
+        const configuracoes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "configuracoes")
+        expect(configuracoes?.items.map((item) => item.href)).toEqual(["/ambientes"])
+        expect(activeNavHref("/integracoes/github", APP_NAV_ITEMS)).toBe("/integracoes")
     })
 
     it("APP_NAV_ITEMS (flattenNav) inclui os itens de dentro dos grupos, na ordem do menu", () => {

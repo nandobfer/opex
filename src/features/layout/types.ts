@@ -3,6 +3,12 @@ import type { LucideIcon } from "lucide-react"
 /** Contadores que um item do menu pode exibir (nenhum por enquanto). */
 export type NavBadgeKey = "tasks"
 
+/**
+ * Painéis de hover que um item do menu pode abrir (o conteúdo vem de fora do layout, por
+ * `AppSidebar.itemPanels`). `integrations`: submenu das integrações (OPE-120).
+ */
+export type NavPanelKey = "integrations"
+
 /** Item de navegação. */
 export interface NavItemDef {
     label: string
@@ -11,6 +17,8 @@ export interface NavItemDef {
     href: string
     icon: LucideIcon
     badge?: NavBadgeKey
+    /** O item também abre um painel ao passar o mouse (o clique continua navegando para `href`). */
+    panel?: NavPanelKey
 }
 
 /**
@@ -42,6 +50,14 @@ export interface NavSectionDef {
     id: string
     label?: string
     items: readonly NavEntryDef[]
+}
+
+/** Props do componente que renderiza um item com painel (`AppSidebar.itemPanels`); renderiza o próprio `<li>`. */
+export interface SidebarPanelItemProps {
+    item: NavItemDef
+    active: boolean
+    reduceMotion: boolean
+    onNavigate?: () => void
 }
 
 export type NavBadges = Partial<Record<NavBadgeKey, number>>

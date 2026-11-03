@@ -1,23 +1,20 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 import { CadastroHeader } from "@/components/list/CadastroHeader"
 import { CadastroTableCard } from "@/components/list/CadastroTableCard"
 import { CadastroTableSkeleton } from "@/components/list/CadastroTableSkeleton"
-import { TableAction } from "@/components/list/TableAction"
 import { Badge } from "@/components/ui/badge"
-import { IN_DEVELOPMENT_INTEGRATIONS, integrationPath, type IntegrationId } from "@/lib/integrations/catalog"
+import { IN_DEVELOPMENT_INTEGRATIONS, integrationPath } from "@/lib/integrations/catalog"
 import { InDevelopmentBadge } from "@/features/layout/components/ModulePlaceholder"
-import { useIntegrations } from "../hooks/useIntegrations"
-import { useIntegrationStatusLive } from "../hooks/useIntegrationStatusLive"
+import { useTopLevelIntegrations } from "../hooks/useTopLevelIntegrations"
 import { EnvironmentBadge, IntegrationStatusDot } from "./IntegrationBadges"
-import { IntegrationDebugDialog } from "./IntegrationDebugDialog"
-import { IntegrationTestDialog } from "./IntegrationTestDialog"
+import { IntegrationActionDialogs, useIntegrationActionDialogs } from "./IntegrationActionDialogs"
+import { IntegrationRowActions } from "./IntegrationRowActions"
 
-export const DEBUG_DISABLED_REASON = "Ative o modo debug na integração para acompanhar os logs"
+export { DEBUG_DISABLED_REASON } from "./IntegrationRowActions"
 
 /**
  * Lista das integrações. Cada linha é um card clicável (o próprio link navega para a página da
@@ -25,14 +22,10 @@ export const DEBUG_DISABLED_REASON = "Ative o modo debug na integração para ac
  * dos provedores de IA (`AiProvidersTab`).
  */
 export function IntegrationList() {
-    const { data: all = [], isLoading, isError } = useIntegrations()
-    // Integrações-filhas (provedores de IA) aparecem só dentro da página da mãe.
-    const integrations = all.filter((integration) => !integration.parent)
+    const { integrations, isLoading, isError } = useTopLevelIntegrations()
     // Integrações futuras: só a linha informativa, sem status, teste, debug nem edição.
     const inDevelopment = IN_DEVELOPMENT_INTEGRATIONS
-    const [testing, setTesting] = useState<IntegrationId | null>(null)
-    const [debugging, setDebugging] = useState<IntegrationId | null>(null)
-    useIntegrationStatusLive(integrations.map((integration) => integration.id))
+    const dialogs = useIntegrationActionDialogs()
 
     return (
         <div className="flex flex-col gap-6">
@@ -78,15 +71,7 @@ export function IntegrationList() {
                                     </span>
                                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
                                 </Link>
-                                <div className="flex shrink-0 items-center gap-1">
-                                    <TableAction type="test" onClick={() => setTesting(integration.id)} />
-                                    <TableAction
-                                        type="debug"
-                                        onClick={() => setDebugging(integration.id)}
-                                        disabled={!integration.debugMode}
-                                        disabledReason={DEBUG_DISABLED_REASON}
-                                    />
-                                </div>
+                                <IntegrationRowActions integration={integration} onTest={() => dialogs.openTest(integration.id)} onDebug={() => dialogs.openDebug(integration.id)} />
                             </motion.li>
                         ))}
                         {inDevelopment.map((item) => (
@@ -111,8 +96,7 @@ export function IntegrationList() {
                 )}
             </CadastroTableCard>
 
-            <IntegrationTestDialog integrationId={testing} onOpenChange={(open) => !open && setTesting(null)} />
-            <IntegrationDebugDialog integrationId={debugging} onOpenChange={(open) => !open && setDebugging(null)} />
+            <IntegrationActionDialogs state={dialogs} />
         </div>
     )
 }

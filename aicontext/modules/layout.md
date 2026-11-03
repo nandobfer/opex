@@ -62,7 +62,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `navigation.ts`: `APP_NAV`, uma seção sem título com, nesta ordem: Tarefas, Central de
   desenvolvimento (ícone `</>` `CodeXml`), Engramind e os **grupos** (`NavGroupDef`, `kind: "group"`)
   **Agentes** (`Bot`: Agente Revisor, Agente Adversário, Agente Mentor), **Contábil** (`Landmark`: Horas
-  agênticas, Financeiro) e **Configurações** (`Settings`: Integrações, Ambientes). Dashboards não tem
+  agênticas, Financeiro), o item **Integrações** (`Plug`, `panel: "integrations"`) e o grupo
+  **Configurações** (`Settings`: Ambientes). Dashboards não tem
   item (a logo leva a ela). Também exporta `HOME_HREF` (`/dashboard`), `PERSISTENT_PAGE_HREFS`,
   `pageTransitionKey`, `flattenNav` (expande os grupos: `APP_NAV_ITEMS` tem todas as rotas
   navegáveis), `navGroupActive`, `formatBadge`, `badgeLabel`, `isActiveHref` e `activeNavHref`.
@@ -82,6 +83,18 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   Na gaveta do celular (expandida, 240px), o painel abre por toque **abaixo do gatilho** (`side="bottom"`),
   porque à direita da gaveta não caberia em telas de 360–430px; a largura fica limitada ao espaço
   disponível (`--radix-popover-content-available-width`).
+- `sidebar/SidebarHoverPanel`: moldura comum dos painéis (grupos e itens com painel): portal do Radix
+  Popover, posição/limites, animação, título e setas entre os links.
+- **Item com painel de hover** (`NavItemDef.panel`, `sidebar/SidebarHoverNavItem`): um link que
+  **navega no clique** e, com a barra recolhida, abre um painel à direita ao passar o mouse (mesmo
+  `useHoverPopover` dos grupos: dois sinais de presença, fecha 150 ms depois de sair dos dois; toque não
+  abre). O link é `Popover.Anchor` (não gatilho), então o clique não alterna o painel. Teclado: Enter
+  navega, **seta →** abre o painel com o foco no primeiro link (`openFromKeyboard`) e Esc fecha
+  devolvendo o foco ao item. Mudar de rota fecha. O conteúdo vem de fora do layout:
+  `AppSidebar.itemPanels` (repassado pelo `AppShell` como `sidebarItemPanels`) mapeia a chave
+  (`NavPanelKey`, hoje só `integrations`) para o componente do item; o `AppLayoutShell` liga
+  `integrations` ao `IntegrationsSidebarItem` (ver `modules/integrations.md`, "Submenu de Integrações
+  na sidebar"). Na gaveta do celular, ou sem o componente (portal do cliente), o item é um link simples.
 - `sidebar/SidebarItemSurface`: superfície visual comum dos itens (link, grupo e o item do agente de
   chat): entrada, `whileHover x:4`, `whileTap`, estado ativo e barra primária com `layoutId`.
 
@@ -111,5 +124,6 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 ## Testes
 
-`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,app-shell-padding,sidebar-nav-group}.test.*` e
+`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,app-shell-padding,sidebar-nav-group,sidebar-hover-nav-item}.test.*`,
+`__tests__/features/integrations/integrations-sidebar-item.test.tsx` e
 `__tests__/app/in-development-pages.test.tsx`.
