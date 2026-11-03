@@ -16,8 +16,8 @@ import { emptyTo, useSchemaForm } from "../../shared/useSchemaForm"
 
 type Values = { slug: string; name: string; description: string; priority: string }
 
-/** Criar ou editar canal (o slug é imutável). */
-export function ChannelDialog({ channel, open, onOpenChange }: { channel: EngramindChannel | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+/** Criar ou editar canal (o slug é imutável). `onCreated`: só na criação, com o slug do canal novo. */
+export function ChannelDialog({ channel, open, onOpenChange, onCreated }: { channel: EngramindChannel | null; open: boolean; onOpenChange: (open: boolean) => void; onCreated?: (slug: string) => void }) {
     const editing = channel !== null
     const toPayload = useCallback(
         (values: Values) => {
@@ -55,7 +55,12 @@ export function ChannelDialog({ channel, open, onOpenChange }: { channel: Engram
                     </InfoField>
                 </div>
                 <DialogFooter>
-                    <Button type="button" disabled={!form.valid || save.isPending} onClick={() => form.payload && save.mutate(form.payload as Record<string, unknown>, { onSuccess: () => onOpenChange(false) })}>
+                    <Button type="button" disabled={!form.valid || save.isPending} onClick={() => form.payload && save.mutate(form.payload as Record<string, unknown>, {
+                                onSuccess: (_data, variables) => {
+                                    onOpenChange(false)
+                                    if (!editing && typeof variables.slug === "string") onCreated?.(variables.slug)
+                                },
+                            })}>
                         {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />} {editing ? "Salvar" : "Criar canal"}
                     </Button>
                 </DialogFooter>

@@ -23,22 +23,20 @@ export const networkFiltersSchema = z.object({
     from: day,
     to: day,
     includeArchived: z.boolean().catch(false),
-    /** Apps cujos agentes aparecem na visão inicial (vazio = todos). */
-    apps: list,
     /** Distribuição da visão inicial (escolhida na legenda; o Limpar não mexe). */
     overviewLayout: z.enum(OVERVIEW_LAYOUT_MODES).catch(DEFAULT_OVERVIEW_LAYOUT),
 })
 
 export type NetworkFilters = z.infer<typeof networkFiltersSchema>
 
-export const DEFAULT_NETWORK_FILTERS: NetworkFilters = { search: "", channels: [], statuses: [], categories: [], authors: [], from: "", to: "", includeArchived: false, apps: [], overviewLayout: DEFAULT_OVERVIEW_LAYOUT }
+export const DEFAULT_NETWORK_FILTERS: NetworkFilters = { search: "", channels: [], statuses: [], categories: [], authors: [], from: "", to: "", includeArchived: false, overviewLayout: DEFAULT_OVERVIEW_LAYOUT }
 
-/** Campos que o "Limpar" zera (os apps e a distribuição escolhidos no card de estatísticas ficam). */
+/** Campos que o "Limpar" zera (a distribuição escolhida no card "O que é o Engramind" fica). */
 export const NETWORK_FILTER_KEYS = ["search", "channels", "statuses", "categories", "authors", "from", "to", "includeArchived"] as const satisfies readonly (keyof NetworkFilters)[]
 
-export const clearNetworkFilters = (filters: NetworkFilters): NetworkFilters => ({ ...DEFAULT_NETWORK_FILTERS, apps: filters.apps, overviewLayout: filters.overviewLayout })
+export const clearNetworkFilters = (filters: NetworkFilters): NetworkFilters => ({ ...DEFAULT_NETWORK_FILTERS, overviewLayout: filters.overviewLayout })
 
-/** Filtros que destacam memórias (sem a busca, que vem do servidor, e sem os arquivados/apps). */
+/** Filtros que destacam memórias (sem a busca, que vem do servidor, e sem os arquivados). */
 export const hasMemoryFilters = (filters: NetworkFilters): boolean => Boolean(filters.channels.length || filters.statuses.length || filters.categories.length || filters.authors.length || filters.from || filters.to)
 
 export const hasActiveFilters = (filters: NetworkFilters, searchIds: ReadonlySet<string> | null): boolean => Boolean(searchIds) || hasMemoryFilters(filters)
