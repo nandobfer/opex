@@ -17,7 +17,7 @@ vi.mock('@xyflow/react', async () => (await import('../../helpers/xyflow-interac
 import { ArchitectDiagramView } from '@/features/architect-agent/components/workbench/ArchitectDiagramView'
 import { positionsKey } from '@/features/architect-agent/hooks/useDiagramLayout'
 import { ARCHITECT_NODE_KINDS, type ArchitectView } from '@/features/architect-agent/constants'
-import { FLOW_THEME_STYLE } from '@/components/flow/flow-theme'
+import { FLOW_EDGE_PRIMARY_STROKE, FLOW_THEME_STYLE } from '@/components/flow/flow-theme'
 import { flowSpies } from '../../helpers/xyflow-interactive'
 import { buildNodes } from '@/features/architect-agent/components/workbench/ArchitectCanvas'
 import { ARCHITECT_GROUP_NODE_TYPE, ARCHITECT_NODE_TYPES } from '@/features/architect-agent/components/workbench/ArchitectNodes'
@@ -45,18 +45,23 @@ describe('ArchitectDiagramView', () => {
     expect(node('objective').getAttribute('data-dimmed')).toBe('true')
     expect(screen.getByTestId('architect-edge-e3').getAttribute('data-dimmed')).toBe('false')
     expect(screen.getByTestId('architect-edge-e1').getAttribute('data-dimmed')).toBe('true')
-    expect(screen.getByTestId('architect-edge-e3').getAttribute('class')).toContain('stroke-primary')
+    expect(screen.getByTestId('architect-edge-e3').style.stroke).toBe('var(--color-primary)')
     fireEvent.mouseLeave(screen.getByTestId('rf-node-route'))
     expect(node('view').getAttribute('data-dimmed')).toBe('false')
   })
 
-  it('arestas e setas usam a cor primária do tema (no lugar do cinza), com ou sem foco', () => {
+  it('linhas roxas pelo style inline (a folha do React Flow vence classe utilitária) e setas fill-primary, com ou sem foco', () => {
     render(view())
     const edges = () => screen.getAllByTestId(/^architect-edge-e\d+$/)
     const assertPrimary = () => {
       for (const edge of edges()) {
-        expect(edge.classList.contains('stroke-primary')).toBe(true)
+        // Classe utilitária em `.react-flow__edge-path` não tem efeito: a cor tem de ir inline.
+        expect(edge.style.stroke).toBe(FLOW_EDGE_PRIMARY_STROKE)
+        expect(FLOW_EDGE_PRIMARY_STROKE).toBe('var(--color-primary)')
+        expect(edge.classList.contains('react-flow__edge-path')).toBe(true)
         expect(edge.classList.contains('stroke-muted-foreground')).toBe(false)
+        // O atributo `stroke-width` perderia para a folha da biblioteca: a espessura também vai inline.
+        expect(edge.hasAttribute('stroke-width')).toBe(false)
       }
     }
     expect(edges().length).toBeGreaterThan(0)
@@ -72,7 +77,8 @@ describe('ArchitectDiagramView', () => {
     const focused = screen.getByTestId('architect-edge-e3')
     const dimmed = screen.getByTestId('architect-edge-e1')
     expect(dimmed.getAttribute('data-dimmed')).toBe('true')
-    expect(Number(focused.getAttribute('stroke-width'))).toBeGreaterThan(Number(dimmed.getAttribute('stroke-width')))
+    expect(Number(focused.style.strokeWidth)).toBeGreaterThan(Number(dimmed.style.strokeWidth))
+    expect(Number(dimmed.style.strokeWidth)).toBeGreaterThan(0)
   })
 
   it('opacidade da aresta preservada: 0,8 normal, 0,35 secundária e 0,12 fora do foco', () => {
