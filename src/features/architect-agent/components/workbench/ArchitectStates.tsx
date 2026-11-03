@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FLOW_SURFACE_CLASS } from "@/components/flow/flow-theme"
 import { type ArchitectDepth, type ArchitectPhase } from "../../constants"
 import type { ArchitectDiagramDto } from "../../types"
+import { NODE_SIZE_STYLE } from "../../layout"
 import { DepthControl } from "./DepthControl"
 import { ArchitectLiveBar } from "./ArchitectLiveBar"
 import { ARCHITECT_CANVAS_TOOLBAR_CLASS } from "./ArchitectCanvasToolbar"
@@ -68,7 +69,7 @@ export function ArchitectCanvasSkeleton({ label }: { label?: string }) {
                         {columns.map((count, column) => (
                             <div key={column} className="flex flex-col gap-4">
                                 {Array.from({ length: count }, (_, row) => (
-                                    <Skeleton key={row} className="h-[68px] w-[180px] rounded-lg" />
+                                    <Skeleton key={row} className="rounded-lg" style={NODE_SIZE_STYLE} />
                                 ))}
                             </div>
                         ))}
@@ -99,7 +100,8 @@ export function ArchitectLiveWaiting({ phase, tools, connected, provider = null 
                     <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} provider={provider} />
                     <div className="flex h-full items-center justify-center p-8">
                         <motion.div
-                            className="flex h-[68px] w-[220px] items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"
+                            style={NODE_SIZE_STYLE}
+                            className="flex items-center gap-2 rounded-lg border border-dashed border-primary/60 bg-primary/10 px-3 text-xs text-muted-foreground"
                             animate={reducedMotion ? undefined : { opacity: [0.45, 1, 0.45], scale: [0.98, 1, 0.98] }}
                             transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
                         >

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { collapsedId, filterGraph, neighborsOf, toViewGraph } from '@/features/architect-agent/filters'
-import { layoutArchitecture, layoutMindMap } from '@/features/architect-agent/layout'
+import { NODE_HEIGHT, NODE_WIDTH, layoutArchitecture, layoutMindMap } from '@/features/architect-agent/layout'
 import { diagramPlanVersionOf } from '@/features/architect-agent/plan-version'
 import { ARCHITECT_NODE_KINDS } from '@/features/architect-agent/constants'
 import { sampleGraph } from './fixtures'
@@ -60,6 +60,32 @@ describe('layoutArchitecture', () => {
     expect(edges).toHaveLength(5)
     // O grupo vem antes dos filhos (exigência do React Flow).
     expect(items.findIndex((item) => item.id === 'cluster:g-ui')).toBeLessThan(items.findIndex((item) => item.id === 'tab'))
+  })
+})
+
+describe('layoutArchitecture com cartões do tamanho do nó', () => {
+  it('nós com o tamanho do cartão, sem sobreposição e dentro da caixa do grupo', () => {
+    const { items } = layoutArchitecture(toViewGraph(sampleGraph()))
+    const nodes = items.filter((item) => item.kind === 'node')
+    const groups = new Map(items.filter((item) => item.kind === 'group').map((item) => [item.id, item]))
+    const absolute = (item: (typeof items)[number]) => {
+      const parent = item.parentId ? groups.get(item.parentId)! : { x: 0, y: 0 }
+      return { x: item.x + parent.x, y: item.y + parent.y, width: item.width, height: item.height }
+    }
+    for (const item of nodes) {
+      expect(item.width).toBe(NODE_WIDTH)
+      expect(item.height).toBe(NODE_HEIGHT)
+      if (item.parentId) {
+        const group = groups.get(item.parentId)!
+        expect(item.x + item.width).toBeLessThanOrEqual(group.width)
+        expect(item.y + item.height).toBeLessThanOrEqual(group.height)
+      }
+    }
+    for (let a = 0; a < nodes.length; a++)
+      for (let b = a + 1; b < nodes.length; b++) {
+        const [p, q] = [absolute(nodes[a]!), absolute(nodes[b]!)]
+        expect(p.x < q.x + q.width && q.x < p.x + p.width && p.y < q.y + q.height && q.y < p.y + p.height, `${nodes[a]!.id} × ${nodes[b]!.id}`).toBe(false)
+      }
   })
 })
 
