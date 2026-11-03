@@ -3,7 +3,7 @@
 import { memo } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react"
-import { Archive, Hash, MoreHorizontal, type LucideIcon } from "lucide-react"
+import { AppWindow, Archive, Hash, MoreHorizontal, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { AgentIcon } from "./agent-icons"
@@ -88,6 +88,39 @@ export const AgentNode = memo(function AgentNode({ data }: NodeProps<Node<AgentN
                     <span className="truncate text-sm font-medium text-foreground">{data.name}</span>
                     <span className="truncate text-[10px] text-muted-foreground">{data.app}</span>
                     <AgentCounts data={data} />
+                </span>
+            )}
+        </div>
+        </OverviewNodeShell>
+    )
+})
+
+export type AppNodeData = {
+    slug: string
+    name: string
+    /** Agentes ativos do app. */
+    agents: number
+    /** Memórias ativas dos canais que os agentes do app assinam. */
+    reachable: number
+} & OverviewNodeLook
+
+/** Card do app na visão inicial Apps x canais (OPE-129): mesmas dimensões do card do agente. */
+export const AppNode = memo(function AppNode({ data }: NodeProps<Node<AppNodeData, "app">>) {
+    const showLabel = useZoom() >= LABEL_MIN_ZOOM
+    return (
+        <OverviewNodeShell look={data}>
+        <div data-testid={`app-node-${data.slug}`} data-scale={data.scale ?? 1} title={data.slug} className={cn("relative flex cursor-pointer items-center gap-2 rounded-full border border-primary/40 bg-card px-3 py-2 shadow-sm transition-opacity hover:border-primary", AGENT_NODE_SIZE_CLASS)}>
+            <PulseRing nodeKey={`app:${data.slug}`} />
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <AppWindow className="h-4 w-4" aria-hidden />
+            </span>
+            {showLabel && (
+                <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="truncate text-sm font-medium text-foreground">{data.name}</span>
+                    <span className="truncate text-[10px] text-muted-foreground">{data.slug}</span>
+                    <span className="truncate text-[10px] text-muted-foreground" data-testid={`app-counts-${data.slug}`}>
+                        {plural(data.agents, "agente", "agentes")} · {plural(data.reachable, "acessível", "acessíveis")}
+                    </span>
                 </span>
             )}
         </div>

@@ -207,7 +207,33 @@ rede (teste estático).
 
 ### Visões
 
-- **Inicial** (`OverviewView`): todos os agentes **ativos** de todos os apps (`disabled_at` nulo), com
+- **Inicial: Apps x canais** (`AppsOverviewView`, OPE-129): um card por **app ativo** do Engramind
+  (`AppNode`, tipo `app`, com as mesmas dimensões do card do agente: ícone, nome, slug e "N agentes · M
+  acessíveis") e os canais, no mesmo canvas, com as mesmas distribuições, escala e enquadramento da
+  visão de agentes (o `layoutOverview` recebe os apps no lugar dos agentes). O link app → canal agrega
+  as assinaturas de todos os agentes ativos do app naquele canal (`appLinks` em
+  `network/app-network.ts`, puro: um link por par, aresta `app:<app>→<canal>`); a dica do link mostra
+  "N agentes · modos". O tamanho do app é o **alcance** (`appReach`: memórias ativas dos canais que os
+  agentes dele assinam). Estatísticas: apps, canais, memórias ativas/inativas, consumos ao vivo, "Por
+  canal" e "Por app (alcance)". O consumo ao vivo e a partícula verde de criação de um agente pulsam o
+  app dele e viajam pelo link do app (`useHubLive` em `overview-shared.tsx`, compartilhado com a visão do
+  app). **Clicar no app** abre a visão dele (`?app=<slug>`); clicar no canal abre o universo do canal;
+  menu "⋯" ou botão direito abre o `ChannelPanel`. Sem app ativo: estado vazio "Nenhum app no
+  Engramind" com **Configurar** (aba Identidades da integração).
+- **Canais vazios fora das redes** (OPE-129, decisão do dono): as duas redes (Apps x canais e a do app)
+  só mostram canais com **ao menos uma memória de qualquer status** (`channelsWithMemories`; inativas
+  contam), e os links para os escondidos saem junto. "Canais" e "Por canal" contam só os mostrados, e a
+  busca cita só eles. Ao vivo: a primeira memória faz o canal aparecer; excluir ou mover a última o faz
+  sumir. Agentes e apps sem canal com memórias continuam na tela, sem links. Os universos, o filtro
+  **Canal**, o Importar e `/engramind/canais/<slug>` continuam com todos os canais.
+- **Acesso aos canais sem memória** (OPE-129): como o node só existe com memória, os canais fora da
+  rede ficam na lista **"Sem memórias (N)"** do card de estatísticas — nas duas redes; no app, só os
+  canais que os agentes dele assinam — e, no estado vazio do app, na mesma lista (`EmptyChannelList`).
+  Cada linha tem o menu do canal e abre o `ChannelPanel` (editar, assinantes, configurações,
+  arquivar/restaurar, excluir de vez). No universo do canal, **Ações do canal** na trilha (ao lado de
+  Importar/Novo canal) abre o mesmo painel — o caminho para `?universo=canal:<slug>` não depende de
+  memória.
+- **Visão do app: Agentes x canais** (`OverviewView`, `?app=<slug>`): todos os agentes **ativos** do app (`disabled_at` nulo), com
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
   `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`) e os canais ativos, numa das
   **duas distribuições** escolhidas no card "O que é o Engramind" (`OptionTabs` "Distribuição da rede";
@@ -245,8 +271,9 @@ rede (teste estático).
   escalados com 10% de folga. O Centralizar volta a esse enquadramento. Os links da visão inicial são sempre roxo primário. Cada assinatura vira um link por canal casado (`subscriptionLinks`:
   `reaches` do Engramind para os ativos; com **Mostrar arquivados**, os arquivados casados localmente
   por `subscriptionReaches`, com aparência apagada); prefixo sem canal não gera link. Hover no link
-  mostra o modo (`inject`/`search`/`manage`). Filtro por app no card de estatísticas (padrão todos; ver
-  "Estatísticas").
+  mostra o modo (`inject`/`search`/`manage`). Só entram os canais que os agentes do app assinam (e
+  que têm memórias); o card de estatísticas tem o nome do app como título. App sem agentes ativos ou
+  sem canal com memórias: estado vazio com "Voltar à rede".
   Clicar no agente/canal abre o universo; menu "⋯" ou botão direito no canal abre o `ChannelPanel`.
 - **Partícula de criação** (OPE-113): memória criada por um agente (`authorAgent` = `author.agent` do
   Engramind, `app/agente`) que chega pelo tempo real (`memory.created` → relê as memórias) pulsa o
@@ -295,9 +322,11 @@ rede (teste estático).
   traço mais grosso (`ORBIT_STROKE_WIDTH`: 2,25 contra 1) e mais opaco (`data-authored`); o card de
   estatísticas explica ("Link destacado: memória escrita por este agente"). No universo do canal (e
   nos de `/integracoes/ia`), links fracos em roxo primário, sem destaque.
-- **Navegação** (`useUniverseParam`): `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
-  link compartilhável e voltar do navegador); trilha "Rede › Canal X" / "Rede › Agente Y" com
-  **Voltar**; **Esc** volta (fora de diálogos e campos). Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
+- **Navegação** (`useUniverseParam`): `?app=<slug>` (visão do app, OPE-129) e `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
+  link compartilhável e voltar do navegador); trilha "Rede › App X › Agente Y" / "Rede › Canal X" com
+  **Voltar**; no universo do canal, **Ações do canal** abre o `ChannelPanel`; Voltar e **Esc** sobem **um nível** (universo → app, se houver → Apps x canais; fora de diálogos e campos), e o
+  universo aberto a partir do app mantém o `?app=`. App inexistente → toast "App não encontrado: voltando à rede." e
+  a visão inicial com `router.replace`. Universo inexistente → toast e visão inicial com `router.replace` (o endereço inválido sai do
   histórico, e o voltar do navegador não fica preso nele).
   A troca de visão anima (escala/opacidade + `fitView` com duração; 0 com movimento reduzido).
 
@@ -362,13 +391,12 @@ provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento redu
 
 ### Estatísticas (`StatsCard`, números com `AnimatedNumber`)
 
-- Inicial: agentes, canais, memórias ativas/inativas, consumos ao vivo desde que a tela abriu, filtro
-  por app, total por canal e por agente (alcance = soma das memórias dos canais ligados). Respeita o
-  filtro por app.
-- **Filtro por app** (OPE-113): picker compacto e pesquisável com várias escolhas (`CadastroMultiSelect`
-  `searchable`, `h-8`, "Todos os apps", "Buscar app..."). Nada escolhido = todos; escolhidos = só os
-  agentes desses apps (e os links deles). App escolhido que não existe mais é ignorado. A escolha fica
-  no navegador junto dos filtros (`apps`), e o Limpar dos filtros não a zera.
+- Apps x canais: apps, canais, memórias ativas/inativas, consumos ao vivo, total por canal e por app
+  (alcance). Visão do app: agentes, canais, memórias ativas/inativas, consumos ao vivo desde que a tela
+  abriu, total por canal e por agente (alcance = soma das memórias dos canais ligados). Os canais
+  contados são os mostrados (sem os vazios).
+- O antigo **filtro por app** do card (OPE-113) saiu (OPE-129): a escolha do app é a navegação
+  (`?app=`), e o valor `apps` salvo no navegador é ignorado pelo schema.
 - Universos: ativas, inativas, fixadas, consultas + injeções, última consulta, assinantes (canal),
   esquecidas (cinza) e consumos ao vivo; no do agente, a legenda por canal.
 
@@ -383,8 +411,8 @@ na visão atual), com a busca ("Buscar por sentido e por texto"), **Canal** e **
 linha e **Status**, **Autor**, **Período** (`PresetDateRangeFilter`, pela última alteração, de/até) e
 **Arquivados** (`FilterSwitch` "Mostrar", compartilhado com `/tarefas`) na segunda. Canal, Status,
 Categoria e Autor são `CadastroMultiSelect` com várias escolhas (pesquisáveis, menos Status; Autor
-lista os autores que aparecem nas memórias). O **Limpar** zera busca e filtros, mas não os apps.
-Filtros, busca, Arquivados e apps ficam **no navegador** (`usePersistentState`, chave
+lista os autores que aparecem nas memórias). O **Limpar** zera busca e filtros, mas não a distribuição.
+Filtros, busca, Arquivados e a distribuição ficam **no navegador** (`usePersistentState`, chave
 `opex.engramind.network-filters.v1`, schema `networkFiltersSchema` em `network/filters.ts`; valor
 inválido cai no padrão campo a campo).
 
@@ -414,6 +442,10 @@ ativo. `ChannelPanel` (Sheet): Editar (slug imutável), Arquivar / Restaurar / E
 arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard`
 (sobreposições com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar
 leva ao universo do canal).
+
+**Novo canal** (OPE-129): depois de criar, a tela abre o universo do canal novo (`ChannelDialog.onCreated`),
+onde fica **Nova memória**; como nasce vazio, ele só entra nas redes quando ganhar a primeira memória. O aviso
+de canal inexistente espera a releitura da lista de canais (`channelsFetching`).
 
 Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
 `layout-classes.ts`; a distribuição padrão: agentes em volta do centro, cada um com canais em órbita), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
@@ -790,6 +822,13 @@ fim da página, sumindo nos universos; escala); `engramind-page.test.tsx` (card 
 Configurar e Saiba mais) e o bloco "rodada 3" de `overview-layout.test.ts` (rótulos, Radial abaixo de
 3.900 px, Órbita até 1,3× a Radial com vizinho mais próximo em até 400 px, compartilhados no mesmo
 centroide sem fazer o círculo crescer, órbita justa pela caixa).
+OPE-129: `app-network.test.ts` (canais vazios fora das redes com inativas contando, agregação por app,
+canais e alcance do app) e o bloco `OPE-129: Apps x canais` de `network.test.tsx` (cards de app e
+links agregados, seleção do app por `?app=`, Voltar/Esc por nível, app inexistente, clique no canal,
+canais vazios escondidos e aparecendo/sumindo ao vivo, Novo canal abrindo o universo, estados vazio e
+carregando); os testes da visão de agentes abrem o app (`inApp`). Acesso aos canais sem memória: o
+card lista só os do app e abre o painel (Editar/Arquivar), e no universo **Ações do canal** abre o
+mesmo painel.
 Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,

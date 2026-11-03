@@ -121,6 +121,8 @@ export function useEngramindNetwork() {
         searchFusion: searchFusionOf(setting),
         staleAfterDays: typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS,
         memoriesUpdatedAt: memories.dataUpdatedAt,
+        /** Lista de canais sendo relida (canal recém-criado ainda não chegou). */
+        channelsFetching: channels.isFetching,
         isLoading: loading && !error,
         error,
         refetch: () => {

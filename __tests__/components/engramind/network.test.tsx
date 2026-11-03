@@ -109,6 +109,10 @@ const pickOption = async (trigger: string, option: string) => {
   fireEvent.click(await screen.findByRole('button', { name: trigger }))
   fireEvent.click(await screen.findByText(option, { selector: 'div' }))
 }
+/** OPE-129: a visão Agentes x canais é a de um app (`?app=`); a inicial é Apps x canais. */
+const inApp = (slug: string) => {
+  nav.params = new URLSearchParams(`app=${slug}`)
+}
 const emit = (event: string, payload: unknown) => act(() => (pusher.handlers.get(event) ?? []).forEach((handler) => handler(payload)))
 
 beforeEach(() => {
@@ -125,15 +129,20 @@ afterEach(cleanup)
 
 describe('visão inicial', () => {
   it('OPE-117: node do agente do Opex mostra "N gravadas · M acessíveis" (zero explícito); agente de outro app só as acessíveis', async () => {
+    inApp('opex')
     mount()
     const opex = await screen.findByTestId('agent-counts-opex/opex')
     await waitFor(() => expect(opex.textContent).toBe('0 gravadas · 2 acessíveis'))
-    expect(screen.getByTestId('agent-counts-outro/bot').textContent).toBe('1 acessível')
-    expect(screen.queryByTestId('agent-written-outro/bot')).toBeNull()
     expect(screen.getByTestId('agent-node-opex/opex').className).toContain('w-[11.25rem]')
+    cleanup()
+    inApp('outro')
+    mount()
+    expect((await screen.findByTestId('agent-counts-outro/bot')).textContent).toBe('1 acessível')
+    expect(screen.queryByTestId('agent-written-outro/bot')).toBeNull()
   })
 
   it('OPE-117: a contagem de gravadas atualiza depois do engramind-updated (memória criada) e o tooltip traz os 7 dias', async () => {
+    inApp('opex')
     mount()
     await waitFor(() => expect(screen.getByTestId('agent-counts-opex/opex').textContent).toContain('0 gravadas'))
     activity = [{ agent: 'opex', total: 4, last7d: 1 }]
@@ -142,19 +151,25 @@ describe('visão inicial', () => {
     expect(screen.getByTestId('agent-written-opex/opex').getAttribute('title')).toBe('1 nos últimos 7 dias')
   })
 
-  it('agentes ativos de todos os apps sem o prefixo "Agente", canais ativos e um link por canal casado', async () => {
+  it('visão do app: agentes ativos do app sem o prefixo "Agente", canais ativos e um link por canal casado', async () => {
+    inApp('opex')
     mount()
     expect((await screen.findByTestId('agent-node-opex/opex')).textContent).toContain('Opex')
     expect(screen.getByTestId('agent-node-opex/opex').textContent).not.toContain('Agente')
-    expect(screen.getByTestId('agent-node-outro/bot').textContent).toContain('Externo')
-    expect(screen.queryByTestId('agent-node-outro/off')).toBeNull()
+    expect(screen.queryByTestId('agent-node-outro/bot')).toBeNull()
     expect(screen.getByTestId('channel-node-opex')).toBeTruthy()
     expect(screen.queryByTestId('channel-node-agentes/opex/velho')).toBeNull()
     expect(screen.getByTestId('edge-opex/opex→agentes/opex/global')).toBeTruthy()
-    expect(screen.getByTestId('edge-outro/bot→opex')).toBeTruthy()
-    expect(screen.getByTestId('stat-agents').textContent).toBe('2')
+    expect(screen.getByTestId('stat-agents').textContent).toBe('1')
     expect(screen.getByTestId('stat-active').textContent).toBe('2')
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
+    cleanup()
+    inApp('outro')
+    mount()
+    expect((await screen.findByTestId('agent-node-outro/bot')).textContent).toContain('Externo')
+    expect(screen.queryByTestId('agent-node-outro/off')).toBeNull()
+    expect(screen.getByTestId('edge-outro/bot→opex')).toBeTruthy()
+    expect(screen.queryByTestId('channel-node-agentes/opex/global')).toBeNull()
   })
 
   it('nome do canal: prefixo discreto em cima e a ponta final como título; o slug inteiro no hover', async () => {
@@ -174,6 +189,7 @@ describe('visão inicial', () => {
     const slug = 'agentes/desenvolvedor/central/c1'
     channels.push({ id: 'ch_9', slug, name: 'Central', description: null, priority: 0, version: 1, created_at: now, archived_at: null })
     centrals = [{ id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' }]
+    memories = [...memories, memory('m_c1', slug)]
     try {
       mount()
       const node = await screen.findByTestId(`channel-node-${slug}`)
@@ -196,6 +212,7 @@ describe('visão inicial', () => {
   })
 
   it('visão horizontal: enquadra a linha de agentes com folga (fitBounds) e o Centralizar volta a ela', async () => {
+    inApp('opex')
     fitBounds.calls.length = 0
     mount()
     await screen.findByTestId('agent-node-opex/opex')
@@ -207,6 +224,7 @@ describe('visão inicial', () => {
   })
 
   it('fundo no padrão do tema: canvas bg-background e React Flow transparente com pontos por token', async () => {
+    inApp('opex')
     mount()
     await screen.findByTestId('agent-node-opex/opex')
     const canvas = screen.getByTestId('network-canvas')
@@ -219,24 +237,20 @@ describe('visão inicial', () => {
   })
 
   it('o modo da assinatura aparece no hover do link', async () => {
+    inApp('outro')
     mount()
     fireEvent.mouseEnter(await screen.findByTestId('link-outro/bot→opex'))
     expect(screen.getByRole('tooltip').textContent).toContain('search')
   })
 
-  it('filtro por app (picker pesquisável): começa em todos; escolher um app esconde os agentes e os links dos outros; Mostrar arquivados exibe o canal arquivado apagado', async () => {
+  it('OPE-129: o filtro "Apps" saiu; dentro do app, Mostrar arquivados exibe o canal arquivado (com memória) apagado', async () => {
+    memories = [...memories, memory('m_v', 'agentes/opex/velho')]
+    inApp('opex')
     mount()
-    const picker = await screen.findByRole('button', { name: 'Filtrar agentes por app' })
-    expect(picker.textContent).toContain('Todos os apps')
-    expect(screen.getByTestId('agent-node-outro/bot')).toBeTruthy()
-    fireEvent.click(picker)
-    fireEvent.change(await screen.findByPlaceholderText('Buscar app...'), { target: { value: 'Opx' } })
-    expect(screen.queryByText('Outro', { selector: 'div' })).toBeNull()
-    fireEvent.change(screen.getByPlaceholderText('Buscar app...'), { target: { value: '' } })
-    fireEvent.click(await screen.findByText('Opex', { selector: 'div' }))
-    await waitFor(() => expect(screen.queryByTestId('agent-node-outro/bot')).toBeNull())
-    expect(screen.getByTestId('agent-node-opex/opex')).toBeTruthy()
-    expect(screen.queryByTestId('edge-outro/bot→opex')).toBeNull()
+    await screen.findByTestId('agent-node-opex/opex')
+    expect(screen.queryByRole('button', { name: 'Filtrar agentes por app' })).toBeNull()
+    expect(screen.queryByTestId('app-filter')).toBeNull()
+    expect(screen.queryByTestId('channel-node-agentes/opex/velho')).toBeNull()
     await expandFilters()
     fireEvent.click(screen.getByLabelText('Mostrar arquivados'))
     const archived = await screen.findByTestId('channel-node-agentes/opex/velho')
@@ -244,15 +258,17 @@ describe('visão inicial', () => {
     expect(screen.getByTestId('edge-opex/opex→agentes/opex/velho')).toBeTruthy()
   })
 
-  it('clicar num canal ou agente abre o universo pelo endereço', async () => {
+  it('clicar num canal ou agente abre o universo pelo endereço (mantendo o app aberto)', async () => {
+    inApp('opex')
     mount()
     fireEvent.click(await screen.findByTestId('channel-node-opex'))
-    expect(nav.push).toHaveBeenCalledWith('/engramind?universo=canal%3Aopex', { scroll: false })
+    expect(nav.push).toHaveBeenCalledWith('/engramind?app=opex&universo=canal%3Aopex', { scroll: false })
     fireEvent.click(screen.getByTestId('agent-node-opex/opex'))
-    expect(nav.push).toHaveBeenCalledWith('/engramind?universo=agente%3Aopex%2Fopex', { scroll: false })
+    expect(nav.push).toHaveBeenCalledWith('/engramind?app=opex&universo=agente%3Aopex%2Fopex', { scroll: false })
   })
 
   it('consumo ao vivo de um agente conta na estatística; agente desconhecido é ignorado', async () => {
+    inApp('opex')
     mount()
     await screen.findByTestId('agent-node-opex/opex')
     emit('engramind-consumption', { agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
@@ -601,6 +617,7 @@ describe('celular', () => {
   })
 
   it('o card de estatísticas começa recolhido com o resumo, abre e recolhe', async () => {
+    inApp('opex')
     mount()
     const toggle = await screen.findByTestId('network-stats-toggle')
     expect(toggle.textContent).toMatch(/agentes? · \d+ cana(l|is)/)
@@ -685,6 +702,7 @@ describe('celular', () => {
   })
 
   it('toque no link mostra o modo da assinatura por um instante', async () => {
+    inApp('outro')
     mount()
     fireEvent.pointerDown(await screen.findByTestId('link-outro/bot→opex'), { pointerType: 'touch' })
     expect(screen.getByRole('tooltip').textContent).toContain('search')
@@ -723,7 +741,7 @@ describe('OPE-113', () => {
     expect(screen.getByTestId('edge-orbit:m_1').getAttribute('data-authored')).toBeNull()
     expect(screen.queryByTestId('authored-link-legend')).toBeNull()
     cleanup()
-    nav.params = new URLSearchParams()
+    inApp('opex')
     mount()
     expect((await screen.findByTestId('edge-opex/opex→opex')).getAttribute('data-stroke')).toBe('var(--color-primary)')
   })
@@ -780,6 +798,7 @@ describe('OPE-113', () => {
   })
 
   it('memória criada por um agente: partícula verde do agente até o canal na visão inicial; a do dono não', async () => {
+    inApp('opex')
     motionPrefs.reduced = false
     mount()
     await screen.findByTestId('edge-opex/opex→opex')
@@ -793,6 +812,7 @@ describe('OPE-113', () => {
   })
 
   it('memória antiga que só aparece agora (Mostrar arquivados) não gera partícula de criação', async () => {
+    inApp('opex')
     motionPrefs.reduced = false
     memories = [...memories, memory('m_7', 'agentes/opex/velho', { created_at: '2026-01-01T00:00:00Z' })]
     mount()
@@ -814,6 +834,7 @@ describe('OPE-113', () => {
   })
 
   it('cartão de filtros recolhível (padrão /tarefas): chips no resumo, remover o chip limpa o filtro e os filtros ficam no navegador', async () => {
+    inApp('opex')
     const view = mount()
     await screen.findByTestId('agent-node-opex/opex')
     expect(screen.queryByLabelText('Buscar memórias')).toBeNull()
@@ -928,6 +949,7 @@ describe('OPE-113 (rodada 2)', () => {
   })
 
   it('distribuição no card "O que é o Engramind" (no fim, depois da rede): Órbita padrão, Radial; fica no navegador e o Limpar não a desfaz', async () => {
+    inApp('opex')
     const view = mount()
     await screen.findByTestId('agent-node-opex/opex')
     const group = await screen.findByRole('radiogroup', { name: 'Distribuição da rede' })
@@ -965,10 +987,209 @@ describe('OPE-113 (rodada 2)', () => {
     expect(within(actions).getByRole('button', { name: /Saiba mais/ })).toBeTruthy()
   })
 
-  it('o card do agente com maior alcance tem a maior escala', async () => {
+  it('OPE-129: na visão de apps, o card do app com maior alcance tem a maior escala', async () => {
     mount()
-    const opex = await screen.findByTestId('agent-node-opex/opex')
-    const bot = screen.getByTestId('agent-node-outro/bot')
+    const opex = await screen.findByTestId('app-node-opex')
+    const bot = screen.getByTestId('app-node-outro')
     expect(Number(opex.getAttribute('data-scale'))).toBeGreaterThan(Number(bot.getAttribute('data-scale')))
+  })
+})
+
+describe('OPE-129: Apps x canais', () => {
+  const withExtra = async <T,>(list: T[], extra: T[], run: () => Promise<void>) => {
+    list.push(...extra)
+    try {
+      await run()
+    } finally {
+      list.splice(list.length - extra.length, extra.length)
+    }
+  }
+
+  it('visão inicial: um card por app ativo, os canais e um link por app e canal (agentes e modos na dica)', async () => {
+    await withExtra(apps, [{ id: 'app_9', slug: 'velho', name: 'Velho', description: null, created_at: now, disabled_at: now, webhook: null }], async () => {
+      mount()
+      expect((await screen.findByTestId('app-node-opex')).textContent).toContain('Opex')
+      expect(screen.getByTestId('app-counts-opex').textContent).toBe('1 agente · 2 acessíveis')
+      expect(screen.getByTestId('app-node-outro')).toBeTruthy()
+      expect(screen.queryByTestId('app-node-velho')).toBeNull()
+      expect(screen.queryByTestId('agent-node-opex/opex')).toBeNull()
+      expect(screen.getByTestId('channel-node-opex')).toBeTruthy()
+      expect(screen.getByTestId('channel-node-agentes/opex/global')).toBeTruthy()
+      expect(screen.getByTestId('edge-app:opex→opex')).toBeTruthy()
+      expect(screen.getByTestId('edge-app:opex→agentes/opex/global')).toBeTruthy()
+      expect(screen.getByTestId('edge-app:outro→opex')).toBeTruthy()
+      expect(screen.getByTestId('stat-apps').textContent).toBe('2')
+      expect(screen.getByTestId('stat-channels').textContent).toBe('2')
+      expect(screen.getByTestId('stats-by-app').textContent).toContain('Opex')
+      expect(screen.queryByTestId('breadcrumb-current')).toBeNull()
+      fireEvent.mouseEnter(screen.getByTestId('link-app:outro→opex'))
+      expect(screen.getByRole('tooltip').textContent).toBe('1 agente · search')
+    })
+  })
+
+  it('seleção do app: o clique abre ?app=; com o app aberto, só os agentes dele e os canais que eles assinam', async () => {
+    mount()
+    fireEvent.click(await screen.findByTestId('app-node-outro'))
+    expect(nav.push).toHaveBeenCalledWith('/engramind?app=outro', { scroll: false })
+    cleanup()
+    inApp('outro')
+    mount()
+    expect(await screen.findByTestId('agent-node-outro/bot')).toBeTruthy()
+    expect(screen.queryByTestId('agent-node-opex/opex')).toBeNull()
+    expect(screen.queryByTestId('app-node-outro')).toBeNull()
+    expect(screen.getByTestId('channel-node-opex')).toBeTruthy()
+    expect(screen.queryByTestId('channel-node-agentes/opex/global')).toBeNull()
+    expect(screen.getByTestId('breadcrumb-current').textContent).toBe('App Outro')
+    expect(within(screen.getByTestId('network-stats')).getByText('Outro')).toBeTruthy()
+  })
+
+  it('Voltar e Esc sobem um nível: universo → app → apps', async () => {
+    inApp('opex')
+    mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(nav.push).toHaveBeenLastCalledWith('/engramind', { scroll: false })
+    fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
+    expect(nav.push).toHaveBeenLastCalledWith('/engramind', { scroll: false })
+    cleanup()
+    nav.push.mockClear()
+    nav.params = new URLSearchParams('app=opex&universo=agente:opex/opex')
+    mount()
+    await screen.findByTestId('memory-node-m_1')
+    expect(screen.getByTestId('breadcrumb-current').textContent).toBe('Agente Opex')
+    fireEvent.click(screen.getByRole('button', { name: /Voltar/ }))
+    expect(nav.push).toHaveBeenLastCalledWith('/engramind?app=opex', { scroll: false })
+    fireEvent.click(screen.getByTestId('breadcrumb-app'))
+    expect(nav.push).toHaveBeenLastCalledWith('/engramind?app=opex', { scroll: false })
+    fireEvent.click(screen.getByRole('button', { name: /Rede/ }))
+    expect(nav.push).toHaveBeenLastCalledWith('/engramind', { scroll: false })
+  })
+
+  it('app inexistente no endereço volta à visão de apps com toast, substituindo o endereço', async () => {
+    inApp('nao-existe')
+    mount()
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('App não encontrado: voltando à rede.'))
+    expect(nav.replace).toHaveBeenCalledWith('/engramind', { scroll: false })
+  })
+
+  it('clicar num canal na visão de apps abre o universo do canal', async () => {
+    mount()
+    fireEvent.click(await screen.findByTestId('channel-node-opex'))
+    expect(nav.push).toHaveBeenCalledWith('/engramind?universo=canal%3Aopex', { scroll: false })
+  })
+
+  it('decisão aprovada: canal sem nenhuma memória fica fora das duas redes; só com inativas fica; aparece e some ao vivo', async () => {
+    const extra = [
+      { id: 'ch_v', slug: 'agentes/opex/vazio', name: 'Vazio', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+      { id: 'ch_i', slug: 'agentes/opex/inativas', name: 'Inativas', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+    ]
+    await withExtra(channels, extra, async () => {
+      subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio', 'agentes/opex/inativas']
+      memories = [...memories, memory('m_i', 'agentes/opex/inativas', { status: 'archived' })]
+      try {
+        mount()
+        await screen.findByTestId('channel-node-agentes/opex/inativas')
+        expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
+        expect(screen.queryByTestId('edge-app:opex→agentes/opex/vazio')).toBeNull()
+        expect(screen.getByTestId('stat-channels').textContent).toBe('3')
+        expect(screen.getByTestId('stats-by-channel').textContent).not.toContain('vazio')
+        cleanup()
+        inApp('opex')
+        mount()
+        await screen.findByTestId('channel-node-agentes/opex/inativas')
+        expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
+        expect(screen.queryByTestId('edge-opex/opex→agentes/opex/vazio')).toBeNull()
+        memories = [...memories, memory('m_novo', 'agentes/opex/vazio')]
+        emit('engramind-updated', { type: 'memory.created', channel: 'agentes/opex/vazio' })
+        expect(await screen.findByTestId('channel-node-agentes/opex/vazio')).toBeTruthy()
+        expect(screen.getByTestId('edge-opex/opex→agentes/opex/vazio')).toBeTruthy()
+        memories = memories.filter((item) => item.id !== 'm_novo')
+        emit('engramind-updated', { type: 'memory.deleted', channel: 'agentes/opex/vazio' })
+        await waitFor(() => expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull())
+      } finally {
+        subscriptions[0]!.reaches = ['agentes/opex/global']
+      }
+    })
+  })
+
+  it('canal sem memória: fica fora do canvas, mas o card de estatísticas abre o painel do canal (editar/arquivar)', async () => {
+    const extra = [{ id: 'ch_v', slug: 'agentes/opex/vazio', name: 'Vazio', description: null, priority: 0, version: 1, created_at: now, archived_at: null }]
+    await withExtra(channels, extra, async () => {
+      subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio']
+      try {
+        mount()
+        expect(await screen.findByTestId('empty-channels')).toBeTruthy()
+        expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' }))
+        expect(await screen.findByRole('heading', { name: 'Vazio' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /^Editar$/ })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /Arquivar/ })).toBeTruthy()
+      } finally {
+        subscriptions[0]!.reaches = ['agentes/opex/global']
+      }
+    })
+  })
+
+  it('canal sem memória no app: o card de estatísticas lista só os canais do app; no universo, "Ações do canal" abre o painel', async () => {
+    const extra = [
+      { id: 'ch_v', slug: 'agentes/opex/vazio', name: 'Vazio', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+      { id: 'ch_o', slug: 'agentes/outro/vazio', name: 'Vazio do outro', description: null, priority: 0, version: 1, created_at: now, archived_at: null },
+    ]
+    await withExtra(channels, extra, async () => {
+      subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio']
+      subscriptions.push({ id: 's9', agent: { ...ref('ag_2', 'bot'), qualified_slug: 'outro/bot' }, target: 'agentes/outro/vazio', is_prefix: false, mode: 'inject', access: null, priority: null, reaches: ['agentes/outro/vazio'], created_at: now })
+      try {
+        inApp('opex')
+        mount()
+        const list = await screen.findByTestId('empty-channels')
+        expect(within(list).getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' })).toBeTruthy()
+        expect(within(list).queryByRole('button', { name: 'Abrir o canal agentes/outro/vazio' })).toBeNull()
+        cleanup()
+        nav.params = new URLSearchParams('universo=canal:agentes/opex/vazio')
+        mount()
+        expect((await screen.findByTestId('universe-center')).textContent).toContain('vazio')
+        fireEvent.click(within(screen.getByTestId('network-actions')).getByRole('button', { name: 'Ações do canal' }))
+        expect(await screen.findByRole('heading', { name: 'Vazio' })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /^Editar$/ })).toBeTruthy()
+      } finally {
+        subscriptions.pop()
+        subscriptions[0]!.reaches = ['agentes/opex/global']
+      }
+    })
+  })
+
+  it('Novo canal: depois de criar, abre o universo do canal novo', async () => {
+    net.post.mockResolvedValue({ data: { data: { id: 'ch_n', slug: 'eng/novo' } } })
+    mount()
+    await screen.findByTestId('app-node-opex')
+    fireEvent.click(within(screen.getByTestId('network-breadcrumb')).getByRole('button', { name: /Novo canal/ }))
+    fireEvent.change(await screen.findByLabelText('Slug'), { target: { value: 'eng/novo' } })
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Novo' } })
+    fireEvent.click(screen.getByRole('button', { name: /Criar canal/ }))
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/engramind?universo=canal%3Aeng%2Fnovo', { scroll: false }))
+    expect(net.post).toHaveBeenCalledWith('/engramind/channels', expect.objectContaining({ slug: 'eng/novo', name: 'Novo' }))
+  })
+
+  it('estados: sem app ativo, vazio com Configurar; app sem agentes ativos, vazio do app; carregando, skeleton', async () => {
+    const saved = apps.splice(0, apps.length)
+    try {
+      mount()
+      const empty = (await screen.findByText('Nenhum app no Engramind')).parentElement!.parentElement!
+      fireEvent.click(within(empty).getByRole('button', { name: 'Configurar' }))
+      expect(nav.push).toHaveBeenCalledWith('/integracoes/engramind?aba=identidades')
+    } finally {
+      apps.push(...saved)
+    }
+    cleanup()
+    await withExtra(apps, [{ id: 'app_8', slug: 'sem-agentes', name: 'Sem agentes', description: null, created_at: now, disabled_at: null, webhook: null }], async () => {
+      inApp('sem-agentes')
+      mount()
+      expect(await screen.findByText('Este app não tem agentes ativos')).toBeTruthy()
+    })
+    cleanup()
+    net.get.mockImplementation(() => new Promise(() => {}))
+    nav.params = new URLSearchParams()
+    mount()
+    expect(await screen.findByTestId('network-skeleton')).toBeTruthy()
   })
 })

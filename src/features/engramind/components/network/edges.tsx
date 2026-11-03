@@ -9,7 +9,8 @@ import { OVERVIEW_LINK_BEND, overviewLinkMidpoint, overviewLinkPath } from "../.
 import type { SubscriptionMode } from "../../network/types"
 
 /** `bend`: curvatura do link (o sinal alterna entre links vizinhos, para não se sobreporem). */
-export type LinkEdgeData = { mode: SubscriptionMode; dimmed?: boolean; bend?: number }
+/** `label`: dica no lugar do modo (link app → canal: agentes e modos agregados, OPE-129). */
+export type LinkEdgeData = { mode: SubscriptionMode; dimmed?: boolean; bend?: number; label?: string }
 /** `color`: cor do canal (universo do agente); `authored`: memória escrita pelo agente do centro (link destacado). */
 export type OrbitEdgeData = { color?: string; authored?: boolean; dimmed?: boolean; entering?: boolean }
 
@@ -45,7 +46,7 @@ export const LinkEdge = memo(function LinkEdge({ id, sourceX, sourceY, targetX, 
                         className="pointer-events-none absolute rounded-md border bg-popover px-2 py-0.5 text-xs text-popover-foreground shadow"
                         style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
                     >
-                        {SUBSCRIPTION_MODE_LABEL[data.mode]}
+                        {data.label ?? SUBSCRIPTION_MODE_LABEL[data.mode]}
                     </div>
                 </EdgeLabelRenderer>
             )}

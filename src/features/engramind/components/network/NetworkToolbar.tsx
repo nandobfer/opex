@@ -2,7 +2,7 @@
 
 import { useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { AlertTriangle, FileUp, Info, Plus, RotateCw, Search, X } from "lucide-react"
+import { AlertTriangle, FileUp, Info, MoreHorizontal, Plus, RotateCw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SEARCH_DEBOUNCE_MS } from "@/components/list/ListFilters"
@@ -27,17 +27,25 @@ export interface NetworkActionsProps {
     onNewChannel: () => void
     onImport: () => void
     importDisabled: boolean
+    /** Universo do canal aberto: o menu do canal (editar, assinantes, arquivar/excluir) fica aqui. */
+    onChannelMenu?: () => void
 }
 
 /**
- * Importar e Novo canal, na linha da trilha (à direita do Voltar / Rede / nome, OPE-113). No celular, só
- * com ícone e dica.
+ * Importar e Novo canal, na linha da trilha (à direita do Voltar / Rede / nome, OPE-113). No universo do
+ * canal, o menu do canal vem antes (OPE-129: canal sem memória não tem node, mas continua editável). No
+ * celular, só com ícone e dica.
  */
-export function NetworkActions({ onNewChannel, onImport, importDisabled }: NetworkActionsProps) {
+export function NetworkActions({ onNewChannel, onImport, importDisabled, onChannelMenu }: NetworkActionsProps) {
     const mobile = useIsMobile()
     if (mobile)
         return (
             <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+                {onChannelMenu && (
+                    <TooltipIconButton label="Ações do canal" className="h-10 min-w-10 bg-transparent" onClick={onChannelMenu}>
+                        <MoreHorizontal aria-hidden />
+                    </TooltipIconButton>
+                )}
                 <TooltipIconButton label="Importar" className="h-10 min-w-10 bg-transparent" disabledReason={importDisabled ? "Nenhum canal ativo para importar" : null} onClick={onImport}>
                     <FileUp aria-hidden />
                 </TooltipIconButton>
@@ -48,6 +56,11 @@ export function NetworkActions({ onNewChannel, onImport, importDisabled }: Netwo
         )
     return (
         <span className="ml-auto flex shrink-0 items-center gap-2" data-testid="network-actions">
+            {onChannelMenu && (
+                <Button type="button" variant="outline" aria-label="Ações do canal" onClick={onChannelMenu}>
+                    <MoreHorizontal className="mr-1.5 h-4 w-4" aria-hidden /> Canal
+                </Button>
+            )}
             <Button type="button" variant="outline" onClick={onImport} disabled={importDisabled}>
                 <FileUp className="mr-1.5 h-4 w-4" aria-hidden /> Importar
             </Button>
