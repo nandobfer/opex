@@ -78,6 +78,7 @@ vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, move
 vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   adversaryApplies: mocks.applies,
+  adversaryModel: vi.fn(async () => ({ model: 'openai/gpt-5', variant: null })),
   runAdversaryRound: mocks.round,
   prepareUserFix: mocks.prepareUserFix,
   recordSkip: mocks.recordSkip,
@@ -325,9 +326,10 @@ describe('reinício e chat durante a revisão', () => {
 
   it('a mesa expõe se o adversário se aplica (passo na trilha)', async () => {
     const wb = await workbench()
-    expect((await getWorkbench(wb._id)).adversarial).toBe(true)
+    // OPE-126: com o adversário aplicável, a mesa traz o modelo dele (texto da revisão adversária).
+    expect(await getWorkbench(wb._id)).toMatchObject({ adversarial: true, adversarialModel: { model: 'openai/gpt-5', variant: null } })
     mocks.applies.mockResolvedValue(false)
-    expect((await getWorkbench(wb._id)).adversarial).toBe(false)
+    expect(await getWorkbench(wb._id)).toMatchObject({ adversarial: false, adversarialModel: null })
   })
 
   it('sem chat durante a revisão (guarda no servidor)', async () => {

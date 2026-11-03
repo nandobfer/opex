@@ -30,7 +30,7 @@ import { LiveMessageComposer } from "./LiveMessageComposer"
 import { useAutoReconnect } from "../../hooks/useAutoReconnect"
 import { ReconnectButton } from "./ReconnectButton"
 import { PreviewSwitch, previewSwitchVisible } from "./PreviewSwitch"
-import { WorkbenchModelPicker } from "./WorkbenchModelPicker"
+import { WorkbenchModelSettings } from "./WorkbenchModelSettings"
 import { AdversarialActions } from "@/features/adversarial-agent/components/workbench/AdversarialActions"
 
 type FeedbackAction = Extract<WorkbenchAction, "revise-plan" | "request-correction" | "submit-pr-feedback" | "reopen">
@@ -230,7 +230,7 @@ export function ActionBar({ workbench, onForkOpened }: { workbench: WorkbenchDto
                 <div className="flex flex-wrap items-center gap-2">
                     {/* Modelo da etapa atual e "Gerar prévia" (à esquerda); os botões ficam à direita. */}
                     <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
-                        <WorkbenchModelPicker workbench={workbench} />
+                        <WorkbenchModelSettings workbench={workbench} buttonClassName={ICON_BUTTON} />
                         {previewSwitchVisible(workbench.stage) && <Separator orientation="vertical" className="h-5" data-testid="workbench-actions-divider" />}
                         <PreviewSwitch workbench={workbench} rebuildAvailable={actions.includes("rebuild-preview")} actionPending={pending} onRebuild={() => run("rebuild-preview")} />
                     </div>

@@ -543,7 +543,7 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   - Tela: resposta otimista (`useSetWorkbenchStage`, "Concluindo" enquanto a conclusão roda) com
     reversão e toast em falha.
 - **Gerar prévia (chave da mesa)**: com a mesa aberta, a chave **Gerar prévia** (`PreviewSwitch`, no
-  canto esquerdo da barra inferior, depois do seletor de modelo e de um divisor vertical; rótulo à
+  canto esquerdo da barra inferior, depois do modelo em uso (texto + botão de configuração) e de um divisor vertical; rótulo à
   esquerda da chave, com a explicação na dica do rótulo) troca o fluxo **só desta mesa**
   (`agenticFlow` da mesa; a tarefa mantém o fluxo salvo) — útil, por exemplo, enquanto o PR é
   corrigido. Oculta em Finalizando e Concluída (409 na rota) e enquanto um campo de texto está aberto
@@ -885,55 +885,78 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 
 ## Trocar o modelo na mesa e no fork
 
-- **Seletor de modelo** no canto esquerdo da barra inferior, na mesa (`WorkbenchModelPicker`, modelo do
-  papel da etapa) e no fork (ao lado do Modo, `ForkActionBar`, só com o fork em aberto). Ambos usam
-  `ModelOverridePicker`:
-  - **botão do modelo**: só o ícone e o **nome do modelo** (sem "Modelo do Plano:"); modelo trocado
-    fica destacado na cor primária. O contexto ("Modelo do Plano: X (padrão | trocado)") vai na dica e
-    no rótulo acessível. Abre a busca de modelos do OpenCode (o mesmo `ModelSearchPicker`
-    compartilhado com as configurações dos papéis em `AgentConfigFields`) com **Voltar ao padrão** no
-    rodapé quando trocado;
-  - **botão do esforço de raciocínio** (variante): **só um ícone** (cérebro), exibido quando o modelo
-    tem variantes; destacado quando há variante definida, que aparece na dica. Abre um menu com
-    "Padrão do modelo" e as variantes.
-  - Compacto assim, o seletor, a chave **Gerar prévia** e os botões da etapa cabem numa linha só no
-    desktop.
+- **Na barra inferior da mesa** (`WorkbenchModelSettings`, à esquerda, antes do divisor e da chave
+  **Gerar prévia**): o **texto do modelo em uso** (`ModelInUse`: ícone + nome do modelo e, com variante,
+  ícone de cérebro + variante; cor primária quando definido nesta mesa; a dica/rótulo acessível traz
+  "Modelo do Plano: X (high), da central | do padrão global | definido nesta mesa") e **um único botão de
+  configuração** (ícone `Settings2`, "Configurar modelos por etapa"). Não há mais o seletor de modelo nem
+  o botão de variante separados (OPE-126).
+  - O texto mostra o papel da **etapa atual** (`STAGE_MODEL_ROLE`, tabela abaixo). Na **Revisão adversária**
+    mostra o modelo do **Agente Adversário** (só leitura, `WorkbenchDto.adversarialModel`; configurado na
+    aba Agente Adversário), com o botão disponível. Em **Concluindo** e **Concluída**, e quando a central não
+    pôde ser lida (`models: null`), texto e botão ficam ocultos.
+- **Popover "Modelos por etapa"** (`ModelSettingsPopover`, abre acima do botão): cabeçalho "Vale a partir do
+  próximo turno. Precedência: mesa > central > padrão global." e uma seção por etapa — **Planejamento**,
+  **Implementação**, **Build e ambiente**, **Pull Request** e **Fork da conversa** — no padrão da aba Agentes da
+  central (mesmos `AgentRoleSection` e `ModelVariantFields` compartilhados com `AgentRolesCard`/`AgentConfigFields`):
+  - `OptionTabs` **Padrão da central** / **Personalizar nesta mesa**. No padrão, um resumo do valor herdado com
+    a origem ("Claude Opus (high) · da central" ou "· do padrão global"). Personalizado: campos **Modelo**
+    (busca do OpenCode) e **Variante (raciocínio)** (só quando o modelo tem variantes). Agente e fallbacks não
+    mudam aqui (são os da central).
+  - **Grava na hora, por etapa**: escolher modelo ou variante chama `PUT .../model` com o **papel daquela
+    seção**; "Personalizar" sozinho só abre os campos (preenchidos com o herdado) e não grava; "Padrão da
+    central" numa etapa trocada envia `model: null`. Escolher um modelo **qualquer**, inclusive o mesmo que já
+    está no campo, grava e zera a variante — é assim que se fixa na mesa o modelo que hoje é herdado (e que,
+    na central, se volta à variante padrão).
+  - **Qual etapa é afetada**: badge **Etapa atual** na seção do papel da etapa em que a mesa está; a seção em
+    gravação ganha borda/fundo primário e "Alterando" (texto ao vivo "Alterando: <etapa>" para leitores de
+    tela); o toast nomeia o papel ("Modelo da Implementação trocado: vale a partir do próximo turno").
+- **Precedência por etapa**: troca da mesa > central (só quando a central personaliza o **modelo** do papel)
+  > Configurações Padrão (`resolveAgent` + `applyModelOverride`; origem em `modelSource`, `logic.ts`).
 - **Troca modelo e variante; o agente não muda** (o da etapa na mesa; no fork, o do modo Plan/Build).
   Conferida no OpenCode como nas configurações (`assertAgentConfigs`; modelo ou variante inexistente →
   400; OpenCode desconectado não bloqueia).
-- **Alcance na mesa: só o papel da etapa atual, só nesta mesa** (`modelOverrides` por papel no
-  `agentic_workbenches`, `STAGE_MODEL_ROLE` em `constants.ts`); os outros papéis seguem o modelo
-  configurado até serem trocados também. A troca fica gravada (inclusive ao reabrir a mesa) e vale para
-  todos os turnos do papel — inclusive os automáticos (conflito, merge automático e apagar a branch, no
-  papel Pull Request) — e para o apontamento de horas (`timer-sync`). A revisão automática do PR
-  (`pr-review`) tem configuração própria e não usa a troca.
+- **Alcance na mesa: só o papel escolhido, só nesta mesa** (`modelOverrides` por papel no
+  `agentic_workbenches`). A troca fica gravada (inclusive ao reabrir a mesa) e vale para todos os turnos do
+  papel — inclusive os automáticos (conflito, merge automático e apagar a branch, no papel Pull Request) — e
+  para o apontamento de horas (`timer-sync`). A revisão automática do PR (`pr-review`) tem configuração
+  própria e não usa a troca.
 
-  | Etapa da mesa | Seletor troca o modelo de |
+  | Etapa da mesa | Texto mostra / "Etapa atual" no popover |
   |---|---|
   | Planejando, Plano pronto, Mudanças pedidas no PR | Plano (papel Planejamento) |
   | Implementando, Revisão bloqueou | Implementação |
-  | Revisão adversária | seletor oculto (modelo na aba Agente Adversário) |
+  | Revisão adversária | modelo do Agente Adversário (só leitura); sem "Etapa atual" |
   | Na fila do build, Subindo a prévia, Prévia pronta | Prévia (papel Build e ambiente) |
   | Abrindo o PR, PR aberto, Resolvendo conflitos, Corrigindo o CI, Mergeando o PR, Excluindo a branch remota | Pull Request |
-  | Concluindo, Concluída | seletor oculto |
+  | Concluindo, Concluída | texto e botão ocultos |
 
-  Com falha, vale a etapa em que a mesa parou. "Mudanças pedidas" troca o do Plano (o turno seguinte
-  é o replanejamento). `STAGE_MODEL_ROLE` é um `Record` exaustivo: etapa nova precisa entrar nele.
-- **Alcance no fork**: todas as mensagens daquele fork (inclusive a consolidação do resumo;
-  `modelOverride` no `agentic_forks`). Fork novo — inclusive fork de fork — começa no modelo do papel
-  Fork da conversa (não herda a troca da origem). Fork integrado ou concluído → 409.
-- **Com o agente respondendo**: o seletor continua habilitado; o turno em andamento termina com o
-  modelo antigo e a troca vale **a partir do próximo turno** (a mesa relê a troca a cada turno em
-  `executeTurns`). A saída avisa ("Modelo do Plano trocado para X (high): vale a partir do próximo
-  turno."; no fork, "…da próxima mensagem").
-- Resposta otimista com reversão e toast (`useSetWorkbenchModel`, `useSetForkModel`); auditoria
-  (`MesaDeTrabalho`/`ForkDaMesa`: etapa, modelo antes/depois, `trocado`) e `agentic-updated` no Pusher.
-- DTO: `WorkbenchDto.models` (por papel, `{ model, variant, overridden }` já resolvido) e
-  `ForkDto.model`; `null` quando a central não pôde ser lida (seletor oculto). Regras:
-  `applyModelOverride`/`asModelOverride` (`logic.ts`) e `server/models.ts`.
+  Com falha, vale a etapa em que a mesa parou. "Mudanças pedidas" é do Plano (o turno seguinte é o
+  replanejamento). `STAGE_MODEL_ROLE` é um `Record` exaustivo: etapa nova precisa entrar nele.
+- **Papel Fork da mesa** (`modelOverrides.fork`, OPE-126): o modelo da seção **Fork da conversa** vale para os
+  forks desta mesa, a partir da próxima mensagem (relido a cada mensagem e na consolidação do resumo),
+  exceto os forks com troca própria. Não afeta os turnos da conversa principal (`workbenchTurnAgent`).
+- **No fork** (`ForkModelSettings`, ao lado do Modo, só com o fork em aberto): mesmo padrão — texto do modelo
+  do fork + um único botão que abre o mesmo popover, começando por **Este fork** ("Padrão da mesa" /
+  "Personalizar neste fork", grava `PUT .../forks/[forkId]/model`, badge "Etapa atual" só nele) e seguido das
+  etapas da mesa (gravam na mesa). **Precedência no fork**: troca do fork > Fork da mesa > central > global
+  (`forkBaseAgent`/`forkModelChoice` em `server/models.ts`). Fork novo — inclusive fork de fork — começa no
+  Fork da mesa (não herda a troca da origem). Fork integrado ou concluído → 409.
+- **Com o agente respondendo**: o botão continua habilitado; o turno em andamento termina com o modelo antigo e
+  a troca vale **a partir do próximo turno** (a mesa relê a troca a cada turno em `executeTurns`). A saída avisa
+  ("Modelo do Plano trocado para X (high): vale a partir do próximo turno."; Fork da mesa: "…vale a partir da
+  próxima mensagem dos forks desta mesa (exceto os que têm modelo próprio)"; no fork, "…da próxima mensagem").
+- Resposta otimista com reversão e toast (`useSetWorkbenchModel`, `useSetForkModel`, regra pura
+  `optimisticModelChoice`: voltar ao padrão mostra o herdado na hora); auditoria (`MesaDeTrabalho`/`ForkDaMesa`:
+  etapa, modelo antes/depois, `trocado`) e `agentic-updated` no Pusher (atualiza mesa e forks).
+- DTO: `WorkbenchDto.models` (5 papéis: `planning`, `implementation`, `build`, `pr`, `fork`) e `ForkDto.model`,
+  cada um `{ model, variant, overridden, inherited, source, inheritedSource }` já resolvido (`source`: `fork` |
+  `workbench` | `central` | `global`); `null` quando a central não pôde ser lida. `WorkbenchDto.adversarialModel`
+  quando o adversário se aplica à mesa. Regras: `applyModelOverride`/`asModelOverride`/`modelSource`
+  (`logic.ts`) e `server/models.ts`.
 - Rotas: `PUT /api/agentic/workbenches/[id]/model` `{ role, model, variant }` (papéis `planning`,
-  `implementation`, `build`, `pr`) e `PUT /api/agentic/workbenches/[id]/forks/[forkId]/model`
-  `{ model, variant }`; `model: null` volta ao padrão.
+  `implementation`, `build`, `pr`, `fork`; mesma regra na ferramenta `set_workbench_model` do Agente Opex) e
+  `PUT /api/agentic/workbenches/[id]/forks/[forkId]/model` `{ model, variant }`; `model: null` volta ao padrão.
 
 ## Filtros avançados e builder Docker
 
@@ -1086,7 +1109,7 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 | `GET /workbenches/[id]/events` | stream NDJSON |
 | `GET /workbenches/[id]/builds`, `GET /workbenches/[id]/builds/[buildId]/log` | builds da prévia (aba "Build (N)", sem o log) e o log de um build em NDJSON (`snapshot`/`append`/`status`/`ping`) |
 | `PUT /workbenches/[id]/preview` `{enabled}` | chave "Gerar prévia" da mesa (desligada = PR automático só nesta mesa; religada em PR aberto gera a prévia na hora) |
-| `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`); `model: null` volta ao padrão |
+| `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`, `fork` — base dos forks da mesa); `model: null` volta ao padrão |
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
 
 Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (abrir, PR,
@@ -1100,7 +1123,7 @@ andamento (`in-progress`), hub, runner com cliente falso — incluindo **reconex
 releitura das pendências no buraco do SSE —, o ciclo automático de reconexão (`reconnect`,
 `auto-reconnect`), acompanhamento do PR (inclusive o relato ao vivo: `pr-watch`, `pr-watch-report`,
 `pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
-`forks-model`, `model-routes`, `ModelOverridePicker`), modelos de fallback
+`forks-model`, `model-routes`, `ModelOverridePicker`, `ModelSettingsPopover`), modelos de fallback
 (`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`, `opencode-run-provider-limit`, `opencode-events` › limite do provedor), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), CI falho do PR (`ci`, `workflow-pr-ci`, prioridades e limite em

@@ -60,7 +60,7 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, deleteForkFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
-import { describeModel, forkModel, toModelChoice, validatedModelOverride } from "./models"
+import { describeModel, forkBaseAgent, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
@@ -173,15 +173,20 @@ async function assertForkReady(config: CentralConfig): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function listForks(workbenchId: string): Promise<ForkDto[]> {
-    await loadWorkbenchDoc(workbenchId)
+    const workbench = await loadWorkbenchDoc(workbenchId)
     const docs = (await AgenticFork.find({ workbenchId }).sort({ number: 1 }).lean()) as unknown as IAgenticFork[]
     const liveChat = docs.length ? await liveChatEnabled(docs[0]!.centralId) : false
-    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc), liveChat)))
+    return Promise.all(docs.map(async (doc) => toForkDto(await reconcile(doc), await forkModel(doc, workbench), liveChat)))
 }
 
 export async function getFork(workbenchId: string, forkId: string): Promise<ForkDto> {
     const doc = await loadFork(workbenchId, forkId)
-    return toForkDto(doc, await forkModel(doc), await liveChatEnabled(doc.centralId))
+    return toForkDto(doc, await forkModel(doc, await workbenchModelOverrides(workbenchId)), await liveChatEnabled(doc.centralId))
+}
+
+/** Trocas de modelo da mesa (só o campo): a troca "Fork" da mesa é a base dos forks dela (`null` se a mesa sumiu). */
+async function workbenchModelOverrides(workbenchId: string): Promise<Pick<IAgenticWorkbench, "modelOverrides"> | null> {
+    return (await AgenticWorkbench.findById(workbenchId).select({ modelOverrides: 1 }).lean()) as unknown as Pick<IAgenticWorkbench, "modelOverrides"> | null
 }
 
 /** Confere que o fork existe (stream de eventos: 404 antes de abrir). */
@@ -331,9 +336,9 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
     if (!fork.sessionId) throw new Error("O fork não tem uma sessão do OpenCode")
     const { config } = await loadCentral(fork.centralId)
     const { settings } = await loadAgenticSettings()
-    // Agente do turno pelo modo atual (Plan = `plan`); modelo e variante vêm do papel Fork ou da troca
-    // feita neste fork (relida a cada mensagem, inclusive na consolidação do resumo).
-    const configured = applyModelOverride(resolveAgent(settings, config, "fork"), asModelOverride(fork.modelOverride))
+    // Agente do turno pelo modo atual (Plan = `plan`); modelo e variante: troca deste fork > Fork da mesa >
+    // central > global (relidos a cada mensagem, inclusive na consolidação do resumo).
+    const configured = applyModelOverride(forkBaseAgent(settings, config, await workbenchModelOverrides(fork.workbenchId)), asModelOverride(fork.modelOverride))
     const agent = { ...configured, agent: forkTurnAgent(effectiveForkMode(fork.mode, fork.readOnly), configured.agent) }
     const client = await getOpencodeClient()
     const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
@@ -651,7 +656,7 @@ export async function lockFork(workbenchId: string, forkId: string): Promise<For
 }
 
 /**
- * Troca o modelo (e a variante) deste fork; `model: null` volta ao modelo do papel Fork da conversa.
+ * Troca o modelo (e a variante) deste fork; `model: null` volta ao Fork da mesa (ou ao papel Fork da central/global).
  * Vale a partir da próxima mensagem (inclusive a consolidação do resumo); o modo não muda.
  */
 export async function setForkModel(workbenchId: string, forkId: string, input: ModelOverrideInput): Promise<ForkDto> {
@@ -659,7 +664,7 @@ export async function setForkModel(workbenchId: string, forkId: string, input: M
     if (!OPEN_FORK_STATUSES.includes(asForkStatus(fork.status))) throw new DomainError(409, "O fork não está mais em aberto: não é possível trocar o modelo", "FORK_INVALID_STATE")
     const override = await validatedModelOverride(input, "Modelo do fork")
     const { settings } = await loadAgenticSettings()
-    const base = resolveAgent(settings, (await loadCentral(fork.centralId)).config, "fork")
+    const base = forkBaseAgent(settings, (await loadCentral(fork.centralId)).config, await workbenchModelOverrides(workbenchId))
     const before = toModelChoice(base, asModelOverride(fork.modelOverride))
     const after = toModelChoice(base, override)
     const id = String(fork._id)

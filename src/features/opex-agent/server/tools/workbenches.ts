@@ -222,7 +222,7 @@ export const workbenchTools: OpexTool[] = [
         label: "Trocar modelo da mesa",
         risk: "write",
         description:
-            "Troca o modelo (e a variante) de um papel da mesa: planning, implementation, build ou pr. Vale a partir do próximo turno; `model: null` volta ao modelo configurado na central.",
+            "Troca o modelo (e a variante) de um papel da mesa: planning, implementation, build, pr ou fork (forks desta mesa, exceto os que têm modelo próprio). Precedência: mesa > central > configuração global. Vale a partir do próximo turno; `model: null` volta ao modelo configurado na central.",
         input: workbenchModelSchema.extend({ workbenchId }),
         summarize: (input) => (input.model ? `Trocar o modelo do papel ${input.role} para ${input.model}` : `Voltar o papel ${input.role} ao modelo padrão`),
         execute: async ({ workbenchId: id, ...input }) => slimWorkbench(await setWorkbenchModel(id, input)),
