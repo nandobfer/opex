@@ -1,9 +1,5 @@
 /**
- * @vitest-environment jsdom
- *
- * jsdom de propósito: no happy-dom o `paste` despachado no conteúdo do CodeMirror não chega ao
- * encaminhamento de arquivos do editor (o handler de colar do CodeMirror não roda), então o arquivo
- * nunca é enfileirado.
+ * @vitest-environment happy-dom
  */
 
 import { useState } from 'react'
@@ -18,16 +14,11 @@ import { MarkdownField, type MarkdownUploads } from '@/components/ui/markdown-fi
 import { EDITOR_MODE_KEY } from '@/features/editor-mode/preference'
 
 /**
- * O jsdom não implementa `ClipboardEvent`; o editor o usa ao encaminhar o arquivo colado ao
- * `<textarea>` do campo. O stub preserva apenas o `clipboardData` que o encaminhamento carrega.
+ * Como no navegador: um evento de colar criado por código não leva os arquivos da colagem (o
+ * `DataTransfer` é protegido). O campo lê os arquivos do evento original (OPE-119).
  */
-class TestClipboardEvent extends Event {
-  readonly clipboardData: unknown
-
-  constructor(type: string, init: ClipboardEventInit = {}) {
-    super(type, init)
-    this.clipboardData = init.clipboardData ?? null
-  }
+class BrowserLikeClipboardEvent extends Event {
+  readonly clipboardData = null
 }
 
 beforeAll(() => {
@@ -35,7 +26,7 @@ beforeAll(() => {
   Range.prototype.getClientRects = rects
   Range.prototype.getBoundingClientRect = () => new DOMRect()
   Element.prototype.scrollIntoView = () => undefined
-  vi.stubGlobal('ClipboardEvent', TestClipboardEvent)
+  vi.stubGlobal('ClipboardEvent', BrowserLikeClipboardEvent)
 })
 
 afterAll(() => {
@@ -74,42 +65,18 @@ function Harness({ uploads, ariaLabel }: { uploads?: MarkdownUploads; ariaLabel?
   return <MarkdownField value={value} onChange={setValue} uploads={uploads} ariaLabel={ariaLabel} />
 }
 
-/**
- * Como no navegador: o evento repetido no `<textarea>` não leva os arquivos da colagem (o
- * `DataTransfer` é protegido). Era por isso que colar imagem no modo Vim não funcionava (OPE-119).
- */
-class BrowserLikeClipboardEvent extends Event {
-  readonly clipboardData = null
-}
-
-/** O jsdom não implementa `DragEvent`: o stub carrega o `dataTransfer` e as coordenadas. */
-class TestDragEvent extends Event {
-  readonly dataTransfer: unknown
-  readonly clientX: number
-  readonly clientY: number
-
-  constructor(type: string, init: { dataTransfer?: unknown; clientX?: number; clientY?: number } & EventInit = {}) {
-    super(type, init)
-    this.dataTransfer = init.dataTransfer ?? null
-    this.clientX = init.clientX ?? 0
-    this.clientY = init.clientY ?? 0
-  }
+function dropEvent(files: File[]): Event {
+  const event = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: { files, getData: () => '' } })
+  return event
 }
 
 function uploadsWith(enqueue: MarkdownUploads['enqueue']): MarkdownUploads {
   return { enqueue, items: [], retry: () => undefined, cancel: () => undefined, dismiss: () => undefined }
 }
 
-describe('MarkdownField no modo Vim: arquivos entregues direto ao campo (OPE-119)', () => {
-  beforeEach(() => {
-    vi.stubGlobal('ClipboardEvent', BrowserLikeClipboardEvent)
-  })
-
-  afterEach(() => {
-    vi.stubGlobal('ClipboardEvent', TestClipboardEvent)
-  })
-
-  it('colar um print no comentário envia a imagem e insere a referência mesmo sem o evento repetido levar os arquivos', async () => {
+describe('MarkdownField no modo Vim: arquivos capturados no contêiner do campo (OPE-119)', () => {
+  it('colar um print no comentário envia a imagem e insere a referência lendo os arquivos do evento original', async () => {
     const enqueue = vi.fn((file: File) => ({ id: 'c1', markdown: Promise.resolve(`![${file.name}](/api/attachments/c1/content)`) }))
     const { container } = render(<Harness uploads={uploadsWith(enqueue)} ariaLabel="Novo comentário" />)
     const view = await editorIn(container)
@@ -147,29 +114,22 @@ describe('MarkdownField no modo Vim: arquivos entregues direto ao campo (OPE-119
   })
 
   it('soltar um arquivo no editor envia e insere a referência', async () => {
-    vi.stubGlobal('DragEvent', TestDragEvent)
-    const elementFromPoint = document.elementFromPoint
-    document.elementFromPoint = () => null
-    try {
-      const enqueue = vi.fn((file: File) => ({ id: 'd1', markdown: Promise.resolve(`![${file.name}](/api/attachments/d1/content)`) }))
-      const { container } = render(<Harness uploads={uploadsWith(enqueue)} />)
-      const view = await editorIn(container)
-      const file = new File(['x'], 'solta.png', { type: 'image/png' })
-      const event = new TestDragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: { files: [file], getData: () => '' } })
+    const enqueue = vi.fn((file: File) => ({ id: 'd1', markdown: Promise.resolve(`![${file.name}](/api/attachments/d1/content)`) }))
+    const { container } = render(<Harness uploads={uploadsWith(enqueue)} />)
+    const view = await editorIn(container)
+    const file = new File(['x'], 'solta.png', { type: 'image/png' })
+    const event = dropEvent([file])
 
-      act(() => {
-        view.contentDOM.dispatchEvent(event)
-      })
+    act(() => {
+      view.contentDOM.dispatchEvent(event)
+    })
 
-      expect(event.defaultPrevented).toBe(true)
-      expect(enqueue).toHaveBeenCalledWith(file)
-      await waitFor(() => expect(view.state.doc.toString()).toContain('/api/attachments/d1/content'))
-    } finally {
-      document.elementFromPoint = elementFromPoint
-    }
+    expect(event.defaultPrevented).toBe(true)
+    expect(enqueue).toHaveBeenCalledWith(file)
+    await waitFor(() => expect(view.state.doc.toString()).toContain('/api/attachments/d1/content'))
   })
 
-  it('sem envio de mídia no campo, o arquivo colado fica com o editor e nada é inserido', async () => {
+  it('sem envio de mídia no campo, o arquivo colado não é capturado e nada é inserido', async () => {
     const { container } = render(<Harness />)
     const view = await editorIn(container)
     const textareaPaste = vi.fn()
@@ -180,7 +140,6 @@ describe('MarkdownField no modo Vim: arquivos entregues direto ao campo (OPE-119
     })
 
     expect(view.state.doc.toString()).toBe('')
-    // O campo recusou os arquivos: o evento não é repetido no `<textarea>` (nada é enviado em dobro).
     expect(textareaPaste).not.toHaveBeenCalled()
   })
 })

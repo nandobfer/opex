@@ -351,9 +351,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   monta em ~metade do tempo do jsdom, e é o que torna a suíte paralela viável.
 - **`jsdom` é exceção, não padrão.** Hoje pedem jsdom, com o motivo no docblock:
   - `__tests__/components/ctrl-enter-submit.test.tsx`: o `setRangeText` do happy-dom passa pelo
-    setter de `value` (o React não chama o `onChange`) e ignora `selectMode "end"`;
-  - `__tests__/components/vim-editor/media.test.tsx`: o `paste` despachado no conteúdo do
-    CodeMirror não chega ao encaminhamento de arquivos do editor no happy-dom.
+    setter de `value` (o React não chama o `onChange`) e ignora `selectMode "end"`.
 
   Ao criar um teste de UI, comece com happy-dom e só troque se a semântica faltante for necessária
   de fato — e registre o motivo no docblock e nesta lista.

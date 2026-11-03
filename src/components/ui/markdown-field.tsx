@@ -8,7 +8,7 @@ import { Markdown } from "@/components/ui/markdown"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { registerFileTarget } from "@/components/ui/vim-editor/file-target"
+import { captureFiles } from "@/components/chat-attachments/capture-files"
 
 /**
  * Estado de um envio exibido inline no campo. A fila de anexos da feature satisfaz este contrato.
@@ -135,19 +135,9 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
         setTab("write")
     }, [])
 
-    /** Arquivos entregues direto pelo editor Vim (que esconde o `<textarea>`): o envio mais recente. */
-    const filesTarget = useRef<(files: File[], position: number) => boolean>(() => false)
-    /** Desfaz o registro do destino de arquivos do `<textarea>` anterior. */
-    const releaseTarget = useRef<(() => void) | null>(null)
-
-    /**
-     * Ref do campo de texto: aplica o foco pendente assim que a aba Escrever monta (troca animada) e
-     * registra o campo como destino dos arquivos colados/soltos no editor Vim.
-     */
+    /** Ref do campo de texto: aplica o foco pendente assim que a aba Escrever monta (troca animada). */
     const attachArea = useCallback((node: HTMLTextAreaElement | null) => {
         areaRef.current = node
-        releaseTarget.current?.()
-        releaseTarget.current = node ? registerFileTarget(node, (files, position) => filesTarget.current(files, position)) : null
         if (node && pendingFocus.current) {
             pendingFocus.current = false
             node.focus()
@@ -208,18 +198,15 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
         }
     }
 
-    useEffect(() => {
-        filesTarget.current = (files, position) => {
-            if (!uploads || files.length === 0) return false
-            sendFiles(files, position)
-            return true
-        }
-    })
-
-    const handleFiles = (event: { preventDefault: () => void }, files: File[], position: number) => {
-        if (!uploads || files.length === 0) return
-        event.preventDefault()
-        sendFiles(files, position)
+    /**
+     * Mídia colada/solta no campo, capturada no contêiner (mesmo padrão da mesa, `captureFiles`):
+     * vale também no modo Vim, em que o editor esconde o `<textarea>`. A posição é o cursor do
+     * `<textarea>`, que o editor Vim mantém espelhado.
+     */
+    const onFilesCapture = (event: Parameters<typeof captureFiles>[0]) => {
+        if (!uploads) return
+        const area = areaRef.current
+        captureFiles(event, (files) => sendFiles(files, area?.selectionStart ?? valueRef.current.length))
     }
 
     const pending = uploads ? jobs.flatMap((job) => (uploads.items.some((item) => item.id === job.id) ? [{ job, item: uploads.items.find((item) => item.id === job.id)! }] : [])) : []
@@ -252,7 +239,14 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={tab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
                     {tab === "write" ? (
-                        <div className="rounded-md border focus-within:ring-2 focus-within:ring-ring">
+                        <div
+                            className="rounded-md border focus-within:ring-2 focus-within:ring-ring"
+                            onPasteCapture={onFilesCapture}
+                            onDropCapture={onFilesCapture}
+                            onDragOver={(event) => {
+                                if (uploads) event.preventDefault()
+                            }}
+                        >
                             <div className="flex flex-wrap gap-0.5 border-b p-1" role="toolbar" aria-label="Formatação">
                                 {TOOLS.map((tool) => (
                                     <Button key={tool.label} type="button" variant="ghost" size="icon" className="h-7 w-7" title={tool.label} aria-label={tool.label} onMouseDown={(event) => event.preventDefault()} onClick={() => apply(tool)}>
@@ -270,19 +264,6 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
                                 aria-label={ariaLabel}
                                 aria-invalid={invalid ? true : undefined}
                                 className="rounded-t-none border-0 shadow-none focus-visible:ring-0"
-                                onPaste={(event) => {
-                                    const files = Array.from(event.clipboardData?.files ?? []).filter((file) => file.size > 0)
-                                    if (files.length === 0) return
-                                    handleFiles(event, files, event.currentTarget.selectionStart)
-                                }}
-                                onDrop={(event) => {
-                                    const files = Array.from(event.dataTransfer?.files ?? []).filter((file) => file.size > 0)
-                                    if (files.length === 0) return
-                                    handleFiles(event, files, event.currentTarget.selectionStart)
-                                }}
-                                onDragOver={(event) => {
-                                    if (uploads) event.preventDefault()
-                                }}
                             />
                         </div>
                     ) : (

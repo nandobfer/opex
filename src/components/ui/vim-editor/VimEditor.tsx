@@ -13,7 +13,7 @@ import { minimalChange, mirrorSelection, watchExternalValue, writeTextareaValue 
 import { configureVim, currentVimMode, enterInsertMode, escapeBelongsToVim, modeFromChange, pullSystemClipboard, sendVimEscape, vimInsertLineBreak, vimLineEnd, type VimMode } from "./vim-setup"
 import { vimTheme } from "./theme"
 import { lineNumbersExtension } from "./line-numbers"
-import { accessibleName, editableExtensions, forwardFiles, hostClassName } from "./dom"
+import { accessibleName, editableExtensions, hostClassName } from "./dom"
 
 export interface VimEditorProps {
     /** `<textarea>` escondido que guarda o valor do campo. */
@@ -116,18 +116,6 @@ export function VimEditor({ textarea, className, rows = 2, disabled, readOnly, p
             }
         })
 
-        // Arquivos colados/soltos são lidos na captura, dentro do evento original: o CodeMirror pode
-        // adiar os próprios handlers (editor atualizando), e aí o `DataTransfer` já não tem os arquivos.
-        // Assumidos pelo campo, não chegam ao CodeMirror; texto segue para ele normalmente.
-        const onFiles = (type: "paste" | "drop") => (event: Event) => {
-            if (!forwardFiles(textarea, view, event as ClipboardEvent | DragEvent, type)) return
-            event.stopPropagation()
-        }
-        const onPaste = onFiles("paste")
-        const onDrop = onFiles("drop")
-        host.addEventListener("paste", onPaste, true)
-        host.addEventListener("drop", onDrop, true)
-
         // Foco no `<textarea>` (label, barra de formatação) vai para o editor, com a seleção pedida.
         const onTextareaFocus = () => {
             view.focus()
@@ -168,8 +156,6 @@ export function VimEditor({ textarea, className, rows = 2, disabled, readOnly, p
             const focused = view.hasFocus
             window.removeEventListener("keydown", onEscape, true)
             textarea.removeEventListener("focus", onTextareaFocus)
-            host.removeEventListener("paste", onPaste, true)
-            host.removeEventListener("drop", onDrop, true)
             cm?.off("vim-mode-change", onModeChange)
             unwatch()
             unregister()
