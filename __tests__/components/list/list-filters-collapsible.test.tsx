@@ -10,7 +10,7 @@ vi.mock('framer-motion', () => framerMotionMock())
 import { FilterGroup } from '@/components/list/FilterGroup'
 import { ListFilters, type ActiveFilterChip } from '@/components/list/ListFilters'
 
-/** `ListFilters` recolhível: resumo com chips, expandir pelo cartão e recolher pelo ⌃. */
+/** `ListFilters` recolhível: resumo com chips; a linha do título e o chevron expandem e recolhem. */
 
 function Harness({ initial = ['abertas'] }: { initial?: string[] }) {
   const [status, setStatus] = useState<string[]>(initial)
@@ -44,6 +44,39 @@ describe('ListFilters recolhível', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Recolher filtros' }))
     expect(screen.queryByText('Campo de status')).toBeNull()
     expect(screen.getByTestId('filter-chip-abertas')).toBeTruthy()
+  })
+
+  it('regressão OPE-121: clicar de novo na linha do título recolhe (não só o chevron)', () => {
+    render(<Harness />)
+    const header = screen.getByTestId('list-filters-header')
+    fireEvent.click(header)
+    expect(screen.getByText('Campo de status')).toBeTruthy()
+    fireEvent.click(header)
+    expect(screen.queryByText('Campo de status')).toBeNull()
+    expect(screen.getByTestId('filter-chip-abertas')).toBeTruthy()
+    expect(header.classList.contains('cursor-pointer')).toBe(true)
+  })
+
+  it('o chevron alterna uma única vez por clique (o clique não sobe para a linha do título)', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir filtros', expanded: false }))
+    expect(screen.getByText('Campo de status')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher filtros', expanded: true }))
+    expect(screen.queryByText('Campo de status')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Expandir filtros', expanded: false })).toBeTruthy()
+  })
+
+  it('clicar num campo do painel aberto não recolhe', () => {
+    render(<Harness />)
+    fireEvent.click(screen.getByTestId('list-filters-header'))
+    fireEvent.click(screen.getByText('Campo de status'))
+    expect(screen.getByText('Campo de status')).toBeTruthy()
+  })
+
+  it('o × limpar do resumo não expande a área', async () => {
+    render(<Harness />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' })))
+    expect(screen.queryByText('Campo de status')).toBeNull()
   })
 
   it('× do chip remove só aquele filtro, sem expandir', () => {
