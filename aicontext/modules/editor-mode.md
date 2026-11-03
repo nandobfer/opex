@@ -42,8 +42,12 @@ Portado de `~/code/sipal/my-tasks` (modo Vim nos campos de texto) e adaptado às
     `minimalChange`);
   - a seleção do editor é espelhada nele (barra de formatação e envio de mídia na posição do cursor);
   - foco no `<textarea>` (label, `focus()` de código) vai para o editor com a seleção pedida;
-  - colar/arrastar **arquivos** no editor repete o evento no `<textarea>` (envio de mídia do
-    `MarkdownField`), na posição do cursor.
+  - colar (modo inserção) ou soltar **arquivos** no editor é tratado pelo **contêiner do campo**, na
+    captura (`captureFiles` de `src/components/chat-attachments/capture-files.ts`, o mesmo usado pelo
+    `AttachableTextarea` da mesa e pelo `MarkdownField`): os arquivos são lidos do evento original
+    antes do CodeMirror e entram na posição do cursor espelhada no `<textarea>`; assumidos, não
+    chegam ao editor. Colar texto segue igual, e no modo normal o Ctrl+V continua sendo o bloco
+    visual do Vim.
 - `disabled`/`readOnly`/`placeholder` são repassados ao editor por `Compartment`, sem remontá-lo.
 - Tema por tokens (`theme.ts`): fonte monoespaçada, cursor em bloco no modo normal, seleção em
   `--primary`. O Vim esconde a seleção nativa do navegador, então o editor usa a camada desenhada do

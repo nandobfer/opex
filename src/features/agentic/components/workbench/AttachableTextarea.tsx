@@ -2,6 +2,7 @@
 
 import type { ClipboardEvent, ComponentProps } from "react"
 import { AttachButton } from "@/components/chat-attachments/AttachButton"
+import { captureFiles } from "@/components/chat-attachments/capture-files"
 import { AttachmentChips } from "@/components/chat-attachments/AttachmentChips"
 import { FileDropZone } from "@/components/chat-attachments/FileDropZone"
 import { ReplyTextarea } from "@/components/agent-reply/ReplyTextarea"
@@ -19,11 +20,7 @@ export function AttachableTextarea({ attachments, className, ...props }: Attacha
     if (!attachments.available) return <ReplyTextarea className={className} {...props} />
     const disabled = Boolean(props.disabled)
     const onPasteCapture = (event: ClipboardEvent<HTMLDivElement>) => {
-        const files = Array.from(event.clipboardData?.files ?? [])
-        if (!files.length || disabled) return
-        event.preventDefault()
-        event.stopPropagation()
-        attachments.onFiles(files)
+        captureFiles(event, attachments.onFiles, disabled)
     }
     return (
         <FileDropZone onFiles={attachments.onFiles} disabled={disabled} className="relative" label="Solte para anexar" compact>
