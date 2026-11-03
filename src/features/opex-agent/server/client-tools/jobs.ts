@@ -3,7 +3,8 @@ import { OPEX_JOB_FILTERS } from "../../jobs"
 import { cancelOpexJob, listOpexJobs } from "../jobs"
 import { clientOpexScope } from "../scope"
 import { defineTool } from "../tools/define"
-import { jobIdField, jobScheduleInput, jobUpdateInput, jobView, scheduleJobTool, summarizeSchedule, updateJobTool } from "../tools/jobs"
+import { jobIdField, jobScheduleInput, jobUpdateInput, jobView, summarizeSchedule } from "../tools/job-shared"
+import { scheduleJobTool, updateJobTool } from "../tools/jobs"
 import { requireClientActor } from "./helpers"
 
 /**
