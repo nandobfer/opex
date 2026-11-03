@@ -11,8 +11,8 @@ import type { AgentId } from "../catalog"
 import type { AgentMetricsDto } from "../types"
 
 /**
- * Gráficos da Visão geral: as linhas do agente (uma linha por métrica, legenda com caixas de seleção
- * salvas no navegador), Uso por data e as distribuições em barras.
+ * Gráficos da Visão geral: as linhas do agente (uma linha por métrica com cor própria e o n de cada
+ * ponto, legenda com caixas de seleção salvas no navegador), Uso por data e as distribuições em barras.
  */
 export function OverviewCharts({ agent, data, showSpecific }: { agent: AgentId; data: AgentMetricsDto; showSpecific: boolean }) {
     return (
@@ -20,7 +20,17 @@ export function OverviewCharts({ agent, data, showSpecific }: { agent: AgentId; 
             {showSpecific &&
                 data.lines.map((chart) => (
                     <ChartCard key={chart.id} title={chart.title} description={chart.description} className="lg:col-span-2">
-                        <MultiLineChart persistKey={`${agent}:${chart.id}`} series={chart.series} points={chart.points} format={chart.format} ariaLabel={chart.title} />
+                        <MultiLineChart
+                            persistKey={`${agent}:${chart.id}`}
+                            series={chart.series}
+                            points={chart.points}
+                            format={chart.format}
+                            ariaLabel={chart.title}
+                            samples={chart.samples}
+                            sampleLabel={chart.sampleLabel}
+                            minSample={chart.minSample}
+                            bucketMode={data.bucketMode}
+                        />
                     </ChartCard>
                 ))}
             <ChartCard title="Uso por data" description={`Quantidade de ${data.usageUnit} por ${data.bucketMode === "day" ? "dia" : data.bucketMode === "week" ? "semana" : "mês"}.`}>

@@ -23,7 +23,9 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
 - Cores de estado (alerta, sucesso, erro) em fundo escuro: prefira translúcidos com texto claro
   (`bg-amber-500/15 text-amber-300 ring-amber-400/30`), nunca `bg-*-100 text-*-800` sem variante
   `dark:`.
-- Gráficos usam `--chart-1..6` (derivadas da primária, definidas no `globals.css`).
+- Gráficos usam `--chart-1..10` (definidas no `globals.css`): `CHART_COLORS`/`colorAt` (1..6) nos
+  Dashboards e `LINE_SERIES_COLORS`/`lineStyleAt` (`src/components/metrics/charts/palette.ts`) nas linhas
+  das métricas, uma cor (e, acima de 10 séries, um traço) por série.
 
 ## Componentes UI (Shadcn/Radix)
 

@@ -1,6 +1,6 @@
 import { bucketKeyFor, bucketKeys, type BucketMode } from "@/lib/time/buckets"
 import { METRICS_TIME_ZONE } from "../constants"
-import type { MetricPointDto, UsagePointDto } from "../types"
+import type { MetricLineChartDto, MetricLineChartInput, MetricPointDto, MetricSampleDto, UsagePointDto } from "../types"
 
 /** Helpers puros das métricas dos agentes (OPE-122). */
 
@@ -33,6 +33,52 @@ export function bucketsOf(ctx: BucketContext): string[] {
 }
 
 /**
+ * Amostra (n) de cada série no ponto: `percentSeries` e `valueSeries` gravam, junto do valor, a chave
+ * `n:<série>` com a quantidade de itens da base daquele bucket. `finalizeLineChart` tira essas chaves
+ * dos pontos e as devolve em `samples` (o gráfico mostra o n no eixo, no tooltip e na tabela).
+ */
+export const SAMPLE_KEY_PREFIX = "n:"
+export const sampleKey = (key: string) => `${SAMPLE_KEY_PREFIX}${key}`
+
+/** Abaixo deste n, o ponto é pouco representativo (marcador vazado no gráfico). */
+export const MIN_RELIABLE_SAMPLE = 3
+
+/** "em cada dia", "em cada semana" ou "em cada mês", conforme o agrupamento. */
+export function eachBucketLabel(mode: BucketMode): string {
+    return mode === "day" ? "em cada dia" : mode === "week" ? "em cada semana" : "em cada mês"
+}
+
+/** Junta séries com os mesmos buckets (cada uma traz as próprias chaves, inclusive as amostras). */
+export function mergeLineSeries(...series: MetricPointDto[][]): MetricPointDto[] {
+    const first = series[0] ?? []
+    return first.map((point, index) => Object.assign({}, ...series.map((list) => list[index] ?? {}), { bucket: point.bucket }) as MetricPointDto)
+}
+
+/**
+ * Fecha o gráfico de linhas para o DTO: separa as amostras (`n:<série>`) dos valores. A base do
+ * bucket é o maior n entre as séries (a base principal; séries com base própria, como "% de CI
+ * corrigido", mostram o próprio n no tooltip). Gráfico de soma (`sampleLabel: null`) não leva n.
+ */
+export function finalizeLineChart(chart: MetricLineChartInput): MetricLineChartDto {
+    const keys = chart.series.map((item) => item.key)
+    const points: MetricPointDto[] = []
+    const samples: MetricSampleDto[] = []
+    for (const raw of chart.points) {
+        const point: MetricPointDto = { bucket: raw.bucket }
+        const bySeries: Record<string, number> = {}
+        for (const [key, value] of Object.entries(raw)) {
+            if (key.startsWith(SAMPLE_KEY_PREFIX)) bySeries[key.slice(SAMPLE_KEY_PREFIX.length)] = Number(value) || 0
+            else point[key] = value
+        }
+        for (const key of keys) if (!(key in point)) point[key] = null
+        const counts = keys.map((key) => bySeries[key] ?? 0)
+        points.push(point)
+        samples.push({ bucket: raw.bucket, base: counts.length ? Math.max(...counts) : 0, bySeries: Object.fromEntries(keys.map((key, index) => [key, counts[index]!])) })
+    }
+    return { ...chart, points, samples: chart.sampleLabel === null ? [] : samples, minSample: chart.sampleLabel === null ? null : MIN_RELIABLE_SAMPLE }
+}
+
+/**
  * Série de porcentagens por bucket: em cada bucket, a fração dos itens (base) com a marca de cada
  * série. Bucket sem base fica `null` (sem ponto, nunca zero); série não retroativa (`since`) também
  * fica `null` nos buckets anteriores à data de início, e a base dela só conta itens depois dessa data.
@@ -58,10 +104,12 @@ export function percentSeries<K extends string>(
             const start = since[key] ?? null
             if (start !== null && sinceBucket[key] && bucket < sinceBucket[key]!) {
                 point[key] = null
+                point[sampleKey(key)] = 0
                 continue
             }
             const eligible = start === null ? list : list.filter((item) => item.at >= start)
             point[key] = pct(eligible.filter((item) => item.flags[key]).length, eligible.length)
+            point[sampleKey(key)] = eligible.length
         }
         return point
     })
@@ -80,6 +128,7 @@ export function valueSeries<K extends string>(items: readonly { at: number; valu
         for (const key of keys) {
             const values = list.map((item) => item.values[key]).filter((value): value is number => typeof value === "number")
             point[key] = values.length ? (mode === "sum" ? sum(values) : avg(values)) : null
+            point[sampleKey(key)] = values.length
         }
         return point
     })

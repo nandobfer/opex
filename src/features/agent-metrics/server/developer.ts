@@ -5,6 +5,7 @@ import { METRIC_EVENT, type CorrectionKind } from "../constants"
 import {
     classifyLegacyCorrections,
     DEVELOPER_DEFAULT_LINES,
+    DEVELOPER_LINE_ORDER,
     DEVELOPER_PERCENT_KEYS,
     mergeCorrections,
     PR_REQUEST_PREFIX,
@@ -15,7 +16,8 @@ import {
     type DeveloperPercentKey,
     type DeveloperWorkbenchFacts,
 } from "../logic/developer"
-import type { AgentMetricsDto } from "../types"
+import type { AgentMetricsPart } from "../types"
+import { eachBucketLabel } from "../logic/common"
 import { iso, kpi, loadTasks, matchesFilters, type MetricsContext } from "./context"
 
 /** KPIs que dependem do tipo das correções: antes dos eventos `correction` são aproximados (classificação retroativa). */
@@ -61,7 +63,7 @@ interface UserEvent {
 type RawEvent = { workbenchId: unknown; ts: Date; payload: { type?: string; stage?: string; text?: string } }
 
 /** Agente Desenvolvedor: mesas concluídas no período (com os filtros), com as definições da issue. */
-export async function developerMetrics(ctx: MetricsContext): Promise<Partial<AgentMetricsDto>> {
+export async function developerMetrics(ctx: MetricsContext): Promise<AgentMetricsPart> {
     const docs = await AgenticWorkbench.find({ stage: "done", completedAt: { $gte: ctx.range.from, $lte: ctx.range.to } })
         .select({ taskId: 1, centralId: 1, startedAt: 1, createdAt: 1, completedAt: 1, plans: 1, pastPrs: 1, pr: 1, usage: 1 })
         .lean()
@@ -172,9 +174,10 @@ export async function developerMetrics(ctx: MetricsContext): Promise<Partial<Age
             {
                 id: "percentages",
                 title: "Métricas ao longo do tempo",
-                description: "Porcentagem das mesas concluídas em cada data. Sem mesas na data, não há ponto.",
+                description: `Porcentagem das mesas concluídas ${eachBucketLabel(ctx.mode)}. Nos dias sem mesas, a linha liga os pontos vizinhos.`,
                 format: "percent",
-                series: DEVELOPER_PERCENT_KEYS.map((key) => ({ key, label: DEVELOPER_PERCENT_LABELS[key], defaultSelected: DEVELOPER_DEFAULT_LINES.includes(key) })),
+                sampleLabel: "mesas concluídas",
+                series: DEVELOPER_LINE_ORDER.map((key) => ({ key, label: DEVELOPER_PERCENT_LABELS[key].replace("↳ ", "Regressão: "), defaultSelected: DEVELOPER_DEFAULT_LINES.includes(key) })),
                 points: summary.series,
             },
         ],

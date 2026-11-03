@@ -7,19 +7,13 @@ import { TimeLog } from "@/lib/db/models/TimeLog"
 import { FINDING_CATEGORY_LABELS } from "@/features/adversarial-agent/constants"
 import { MENTOR_TARGET_LABELS } from "@/features/adversarial-agent/mentor/constants"
 import { METRIC_EVENT } from "../constants"
-import { percentSeries, pct, valueSeries } from "../logic/common"
+import { eachBucketLabel, mergeLineSeries, percentSeries, pct, valueSeries } from "../logic/common"
 import { summarizeAdversarial, summarizeBudgets, summarizeCatalog, summarizeConversations, summarizeDiagrams, summarizeEstimates, summarizeMentor, summarizeRefinements, summarizeReviews, suggestionOutcome, type ReviewFacts } from "../logic/agents"
-import type { AgentMetricsDto, MetricPointDto } from "../types"
+import type { AgentMetricsPart } from "../types"
 import { iso, kpi, loadTasks, matchesFilters, mongoFilters, taskCompletionTimes, type MetricsContext } from "./context"
 import { COUNTED_RUN } from "./exclusions"
 
-type Partial_ = Partial<AgentMetricsDto>
-
-/** Junta séries com os mesmos buckets (cada uma traz as próprias chaves). */
-function mergePoints(...series: MetricPointDto[][]): MetricPointDto[] {
-    const first = series[0] ?? []
-    return first.map((point, index) => Object.assign({}, ...series.map((list) => list[index] ?? {}), { bucket: point.bucket }) as MetricPointDto)
-}
+type Partial_ = AgentMetricsPart
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
@@ -89,13 +83,14 @@ export async function budgetMetrics(ctx: MetricsContext): Promise<Partial_> {
                 title: "Métricas ao longo do tempo",
                 description: "Estimativas pela data de conclusão da tarefa; orçamentos pela data de criação.",
                 format: "percent",
+                sampleLabel: "tarefas concluídas com estimativa ou orçamentos",
                 series: [
-                    { key: "meanError", label: "Erro médio da estimativa", defaultSelected: true },
                     { key: "withinMargin", label: `% dentro da margem (±${ctx.margin}%)`, defaultSelected: true },
                     { key: "approved", label: "% de orçamentos aprovados", defaultSelected: true },
-                    { key: "corrected", label: "% de prévias corrigidas", defaultSelected: true },
+                    { key: "meanError", label: "Erro médio da estimativa", defaultSelected: false },
+                    { key: "corrected", label: "% de prévias corrigidas", defaultSelected: false },
                 ],
-                points: mergePoints(errorSeries, estimateSeries, draftSeries),
+                points: mergeLineSeries(errorSeries, estimateSeries, draftSeries),
             },
         ],
         bars: [],
@@ -137,12 +132,13 @@ export async function catalogMetrics(ctx: MetricsContext): Promise<Partial_> {
                 title: "Métricas ao longo do tempo",
                 description: "Cobertura pela data de criação da tarefa; falhas pela data da geração.",
                 format: "percent",
+                sampleLabel: "tarefas criadas ou gerações",
                 series: [
                     { key: "summary", label: "% com resumo", defaultSelected: true },
                     { key: "tags", label: "% com tags", defaultSelected: true },
-                    { key: "failures", label: "% de falhas", defaultSelected: true },
+                    { key: "failures", label: "% de falhas", defaultSelected: false },
                 ],
-                points: mergePoints(coverage, failureSeries),
+                points: mergeLineSeries(coverage, failureSeries),
             },
         ],
         bars: [{ id: "tags", title: "Tags mais usadas", description: "Tarefas criadas no período, por tag.", format: "count", items: summary.topTags.map((item) => ({ key: item.key, label: item.key, value: item.count })) }],
@@ -187,7 +183,7 @@ export async function refinerMetrics(ctx: MetricsContext): Promise<Partial_> {
             kpi("questions", "Perguntas por refinamento", summary.questionsPerRefinement, "decimal", "Média de perguntas feitas pelo agente", since),
             kpi("hoursToSpec", "Tempo até o refinamento", summary.hoursToSpec, "hours", "Do início até a especificação aplicada", since),
         ],
-        lines: [{ id: "percentages", title: "Métricas ao longo do tempo", description: "Pela data de início do refinamento.", format: "percent", series: [{ key: "completed", label: "% concluídos sem abandono", defaultSelected: true }], points: series }],
+        lines: [{ id: "percentages", title: "Métricas ao longo do tempo", description: "Pela data de início do refinamento.", format: "percent", sampleLabel: "refinamentos", series: [{ key: "completed", label: "% concluídos sem abandono", defaultSelected: true }], points: series }],
         bars: [],
         notices: since ? [{ label: "Conclusão, perguntas e tempo do refinamento", since: iso(since)! }] : [],
     }
@@ -227,8 +223,9 @@ export async function architectMetrics(ctx: MetricsContext): Promise<Partial_> {
             {
                 id: "size",
                 title: "Tamanho do diagrama ao longo do tempo",
-                description: "Média de nós e de ligações das versões concluídas em cada data.",
+                description: `Média de nós e de ligações das versões concluídas ${eachBucketLabel(ctx.mode)}.`,
                 format: "decimal",
+                sampleLabel: "versões concluídas",
                 series: [
                     { key: "nodes", label: "Nós", defaultSelected: true },
                     { key: "edges", label: "Ligações", defaultSelected: true },
@@ -275,13 +272,14 @@ export async function adversarialMetrics(ctx: MetricsContext): Promise<Partial_>
             {
                 id: "percentages",
                 title: "Métricas ao longo do tempo",
-                description: "Porcentagem das rodadas concluídas em cada data.",
+                description: `Porcentagem das rodadas concluídas ${eachBucketLabel(ctx.mode)}. Nos dias sem rodadas, a linha liga os pontos vizinhos.`,
                 format: "percent",
+                sampleLabel: "rodadas concluídas",
                 series: [
                     { key: "blocked", label: "% de bloqueio", defaultSelected: true },
                     { key: "ignored", label: "% de bloqueios ignorados", defaultSelected: true },
                 ],
-                points: mergePoints(
+                points: mergeLineSeries(
                     percentSeries(rounds.map((round) => ({ at: round.at, flags: { blocked: round.blocked } })), ["blocked"] as const, ctx.bucket),
                     percentSeries(rounds.filter((round) => round.blocked).map((round) => ({ at: round.at, flags: { ignored: round.decision === "skipped" } })), ["ignored"] as const, ctx.bucket),
                 ),
@@ -291,7 +289,8 @@ export async function adversarialMetrics(ctx: MetricsContext): Promise<Partial_>
                 title: "Achados por categoria ao longo do tempo",
                 description: "Quantidade de achados de cada categoria nas rodadas concluídas.",
                 format: "count",
-                series: categoryKeys.map((key, index) => ({ key, label: label(key), defaultSelected: index < 5 })),
+                sampleLabel: null,
+                series: categoryKeys.map((key, index) => ({ key, label: label(key), defaultSelected: index < 3 })),
                 points: valueSeries(
                     rounds.map((round) => ({ at: round.at, values: Object.fromEntries(categoryKeys.map((key) => [key, round.categories.filter((category) => category === key).length])) })),
                     categoryKeys,
@@ -379,12 +378,13 @@ export async function reviewerMetrics(ctx: MetricsContext): Promise<Partial_> {
                 title: "Métricas ao longo do tempo",
                 description: "Pela data em que a revisão terminou.",
                 format: "percent",
+                sampleLabel: "revisões",
                 series: [
                     { key: "firstApproval", label: "% de aprovação na 1ª revisão", defaultSelected: true },
                     { key: "accepted", label: "% de sugestões aceitas", defaultSelected: true },
-                    { key: "failures", label: "% de falhas", defaultSelected: true },
+                    { key: "failures", label: "% de falhas", defaultSelected: false },
                 ],
-                points: mergePoints(
+                points: mergeLineSeries(
                     percentSeries(firstFlags.map((item) => ({ at: item.at, flags: { firstApproval: item.verdict === "approved" } })), ["firstApproval"] as const, ctx.bucket),
                     percentSeries(
                         items
@@ -440,11 +440,12 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
                 title: "Métricas ao longo do tempo",
                 description: "Pela data em que a execução terminou.",
                 format: "percent",
+                sampleLabel: "execuções",
                 series: [
                     { key: "lessons", label: "% de lições registradas", defaultSelected: true },
                     { key: "failures", label: "% de falhas", defaultSelected: true },
                 ],
-                points: mergePoints(
+                points: mergeLineSeries(
                     percentSeries(
                         finished.filter((run) => ["created", "updated", "discarded", "skipped"].includes(run.status)).map((run) => ({ at: run.at, flags: { lessons: run.status === "created" || run.status === "updated" } })),
                         ["lessons"] as const,
@@ -491,6 +492,7 @@ export async function conversationMetrics(ctx: MetricsContext, agent: "opex" | "
                 title: "Métricas ao longo do tempo",
                 description: "Pela data de início da conversa.",
                 format: "percent",
+                sampleLabel: "conversas",
                 series: [
                     { key: "confirmed", label: "% de ações confirmadas", defaultSelected: true },
                     { key: "failedReplies", label: "% de respostas com erro", defaultSelected: true },
@@ -507,6 +509,7 @@ export async function conversationMetrics(ctx: MetricsContext, agent: "opex" | "
                 title: "Conversas por data",
                 description: "Conversas iniciadas pelo dono e pelo portal.",
                 format: "count",
+                sampleLabel: null,
                 series: [
                     { key: "owner", label: "Dono", defaultSelected: true },
                     { key: "portal", label: "Portal", defaultSelected: true },
@@ -518,6 +521,7 @@ export async function conversationMetrics(ctx: MetricsContext, agent: "opex" | "
                 title: "Tokens por data",
                 description: "Tokens de entrada e saída das conversas iniciadas em cada data.",
                 format: "tokens",
+                sampleLabel: null,
                 series: [{ key: "tokens", label: "Tokens", defaultSelected: true }],
                 points: valueSeries(docs.map((doc) => ({ at: at(doc), values: { tokens: doc.inputTokens + doc.outputTokens } })), ["tokens"] as const, ctx.bucket, "sum"),
             },
