@@ -36,7 +36,7 @@ describe('AiProviderTabs', () => {
 
   it('as telas de IA, do Agente Opex, do Agente Mentor e do Engramind usam o componente, sem OptionTabs próprio', () => {
     const files = [
-      'src/features/ai/components/understand-task/ProviderModelCard.tsx',
+      'src/features/ai/components/shared/ProviderModelCard.tsx',
       'src/features/opex-agent/components/settings/OpexModelCard.tsx',
       'src/features/adversarial-agent/components/mentor/MentorModelFields.tsx',
       'src/features/engramind/components/shared/OpexAiModelPicker.tsx',
@@ -75,7 +75,6 @@ describe('TemperatureInput', () => {
       'src/features/ai/components/task-summary/SummaryPromptCard.tsx',
       'src/features/ai/components/estimate-hours/EstimateHoursTab.tsx',
       'src/features/ai/components/budget-preview/BudgetPreviewTab.tsx',
-      'src/features/ai/components/understand-task/ResponseCard.tsx',
       'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx',
     ]
     for (const file of files) {

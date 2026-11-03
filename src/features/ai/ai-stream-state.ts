@@ -1,32 +1,32 @@
 import type { AiUsage } from "@/lib/ai/stream"
-import type { UnderstandTaskEvent } from "./types"
+import type { AiStreamEvent } from "./types"
 
-/** Estado do modal "Entender tarefa" (módulo puro: o hook só aplica os eventos do stream). */
+/** Estado de um stream de texto de IA (módulo puro: o hook só aplica os eventos do stream). */
 
-export type UnderstandStatus = "idle" | "running" | "done" | "error" | "cancelled"
+export type AiStreamPhase = "idle" | "running" | "done" | "error" | "cancelled"
 
-export interface UnderstandToolCall {
+export interface AiStreamToolCall {
     id: string
     name: string
     state: "running" | "done" | "error"
 }
 
-export interface UnderstandState {
-    status: UnderstandStatus
+export interface AiStreamState {
+    status: AiStreamPhase
     text: string
     provider: string | null
     model: string | null
     agent: string | null
     /** O modelo está raciocinando (antes do primeiro texto). */
     reasoning: boolean
-    tools: UnderstandToolCall[]
+    tools: AiStreamToolCall[]
     notices: string[]
     usage: AiUsage | null
     durationMs: number | null
     error: string | null
 }
 
-export const INITIAL_UNDERSTAND_STATE: UnderstandState = {
+export const INITIAL_AI_STREAM_STATE: AiStreamState = {
     status: "idle",
     text: "",
     provider: null,
@@ -40,10 +40,10 @@ export const INITIAL_UNDERSTAND_STATE: UnderstandState = {
     error: null,
 }
 
-export function applyUnderstandEvent(state: UnderstandState, event: UnderstandTaskEvent): UnderstandState {
+export function applyAiStreamEvent(state: AiStreamState, event: AiStreamEvent): AiStreamState {
     switch (event.type) {
         case "start":
-            return { ...INITIAL_UNDERSTAND_STATE, status: "running", provider: event.provider, model: event.model, agent: event.agent }
+            return { ...INITIAL_AI_STREAM_STATE, status: "running", provider: event.provider, model: event.model, agent: event.agent }
         case "delta":
             return { ...state, text: state.text + event.text, reasoning: false }
         case "reasoning":
@@ -63,6 +63,6 @@ export function applyUnderstandEvent(state: UnderstandState, event: UnderstandTa
 }
 
 /** Fim do stream sem `done`/`error` (conexão caiu): vira erro, preservando o texto parcial. */
-export function finishUnderstandStream(state: UnderstandState): UnderstandState {
+export function finishAiStream(state: AiStreamState): AiStreamState {
     return state.status === "running" ? { ...state, status: "error", reasoning: false, error: "A conexão com o servidor foi interrompida antes do fim da resposta" } : state
 }

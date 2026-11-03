@@ -2,9 +2,25 @@
 
 import type { AiProviderId } from "@/lib/ai/providers"
 
-/** Abas da página "Inteligência Artificial". `provedores` é a padrão (omitida da URL). */
-export const AI_TABS = ["provedores", "entender-tarefas", "resumos-tarefas", "tags-tarefas", "orcamentos", "estimar-prazos", "refinar-tarefa", "revisao-pr", "desenvolvimento-agentico", "agente-maddox", "agente-opex", "agente-adversario", "agente-mentor", "agente-arquiteto"] as const
+/**
+ * Abas da página "Inteligência Artificial": Provedores (padrão, omitida da URL) e uma aba por agente,
+ * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122). Orçamentista e Catalogador fundem duas
+ * features cada (uma seção por feature).
+ */
+export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor"] as const
 export type AiTab = (typeof AI_TABS)[number]
+
+/**
+ * Ids antigos de `?aba=` (abas fundidas ou removidas na OPE-122) → aba atual e a seção dentro dela.
+ * Um id desconhecido continua abrindo Provedores.
+ */
+export const AI_TAB_ALIASES: Readonly<Record<string, { tab: AiTab; section?: string }>> = {
+    orcamentos: { tab: "orcamentista", section: "budget-preview" },
+    "estimar-prazos": { tab: "orcamentista", section: "estimate-hours" },
+    "resumos-tarefas": { tab: "catalogador", section: "task-summary" },
+    "tags-tarefas": { tab: "catalogador", section: "task-tags" },
+    "entender-tarefas": { tab: "provedores" },
+}
 
 /**
  * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
@@ -26,7 +42,7 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
 }
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["understand-task", "task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review"] as const
+export const AI_FEATURE_IDS = ["task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -39,29 +55,6 @@ export const AI_FEATURE_UPDATED_EVENT = "ai-feature-updated"
 export const AI_MEMORY_AUDIT_ENTITY = "MemoriaAgente"
 /** Evento no canal da integração "Inteligência Artificial" quando as memórias de uma lista mudam. Payload: `{ agentId, centralId?, clientId? }`. */
 export const AI_MEMORIES_UPDATED_EVENT = "ai-memories-updated"
-
-export const UNDERSTAND_TASK_FORMATS = ["sections", "free"] as const
-export type UnderstandTaskFormat = (typeof UNDERSTAND_TASK_FORMATS)[number]
-
-export const UNDERSTAND_TASK_FORMAT_LABELS: Record<UnderstandTaskFormat, string> = {
-    sections: "Seções fixas",
-    free: "Texto livre",
-}
-
-/** Seções pedidas no formato "Seções fixas". */
-export const UNDERSTAND_TASK_SECTIONS = ["Resumo", "O que precisa ser feito", "Pontos de atenção e riscos", "Dúvidas para o solicitante"] as const
-
-export const DEFAULT_UNDERSTAND_TASK_INSTRUCTIONS = [
-    "Você é um analista de desenvolvimento sênior que ajuda um desenvolvedor a entender uma tarefa do Centro de Desenvolvimento antes de começar.",
-    "Explique em português do Brasil, de forma objetiva, o que a tarefa pede, o contexto de negócio e o que precisa ser entregue.",
-    "Use os comentários e o histórico para identificar decisões, mudanças de escopo e pendências. Não invente requisitos: quando algo não estiver claro, aponte como dúvida.",
-].join("\n")
-
-export const UNDERSTAND_TASK_INCLUDE_LABELS = {
-    comments: { label: "Comentários", description: "Data e texto de cada comentário" },
-    history: { label: "Histórico", description: "Mudanças de coluna, prioridade e campos" },
-    timeLogs: { label: "Apontamentos de horas", description: "Quando e a descrição" },
-} as const
 
 // ── Resumos de tarefas ───────────────────────────────────────────────────────
 

@@ -55,6 +55,39 @@ function assertRefinementId(id: string): void {
     if (!isValidObjectId(id)) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
 }
 
+/** Fato das métricas do Agente Refinador (OPE-122), sem bloquear o refinamento. */
+function refinementMetric(doc: Pick<ITaskRefinement, "_id" | "taskId" | "centralId" | "projectId">, type: "refinement-started" | "refinement-questions" | "refinement-completed" | "refinement-abandoned", extra: { dedupKey: string; data?: Record<string, unknown> }): void {
+    const at = new Date()
+    void import("@/features/agent-metrics/server/record")
+        .then(({ recordAgentEvent }) => recordAgentEvent({ agent: "refinador", type, at, dedupKey: extra.dedupKey, taskId: doc.taskId, centralId: doc.centralId ?? null, refId: String(doc._id), data: extra.data ?? null }))
+        .catch(() => undefined)
+}
+
+/** Execução (turno) do Agente Refinador para o uso por data. */
+function refinementRun(doc: Pick<ITaskRefinement, "_id" | "taskId" | "taskCode" | "taskTitle" | "centralId">, result: { ok: boolean; error: string | null; durationMs: number | null; costUsd: number | null }): void {
+    const finishedAt = new Date()
+    void import("@/features/agent-metrics/server/record")
+        .then(({ recordAgentRun }) =>
+            recordAgentRun({
+                dedupKey: `refinement-turn:${String(doc._id)}:${finishedAt.getTime()}`,
+                agent: "refinador",
+                kind: "refinement-turn",
+                finishedAt,
+                startedAt: result.durationMs ? new Date(finishedAt.getTime() - result.durationMs) : null,
+                ok: result.ok,
+                error: result.error,
+                refId: String(doc._id),
+                title: doc.taskTitle ?? null,
+                taskId: doc.taskId,
+                taskCode: doc.taskCode,
+                centralId: doc.centralId ?? null,
+                costUsd: result.costUsd,
+                durationMs: result.durationMs,
+            }),
+        )
+        .catch(() => undefined)
+}
+
 async function loadRefinement(id: string): Promise<ITaskRefinement> {
     assertRefinementId(id)
     await dbConnect()
@@ -249,6 +282,7 @@ function turnHooks(doc: ITaskRefinement) {
                 // Deduplica por id: a reconexão pode reenviar uma pergunta que já está pendente.
                 await TaskRefinement.updateOne(filter, { $pull: { pendingForms: { id: form.id } } })
                 await TaskRefinement.updateOne(filter, { $push: { pendingForms: form } })
+                refinementMetric(doc, "refinement-questions", { dedupKey: `refinement-questions:${String(doc._id)}:${form.id}`, data: { questions: form.fields?.length ?? 1 } })
                 // Rodada concluída: a especificação atualizada é gravada na tarefa.
                 await saveSpec(doc.taskId, accumulated.text).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
                 await changed()
@@ -380,6 +414,8 @@ async function executeTurn(id: string, text: string, controller: AbortController
                 : REFINEMENT_SPEC_MISSING_ERROR
             : (result.message ?? "O agente não concluiu o refinamento")
     await TaskRefinement.updateOne({ _id: id }, { $set: { runState, resolved, finalizing: false, error, lastText: textOut, pendingForms: [], pendingPermissions: [] } })
+    refinementRun(doc, { ok: succeeded, error: succeeded ? null : error, durationMs: result.durationMs ?? null, costUsd: result.costUsd ?? null })
+    if (resolved) refinementMetric(doc, "refinement-completed", { dedupKey: `refinement-completed:${id}`, data: { durationMs: Date.now() - new Date(doc.startedAt ?? doc.createdAt ?? Date.now()).getTime() } })
     if (resolved) {
         log.info({ refinementId: id, costUsd: result.costUsd }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: concluído`)
         await finishRefinementSession(id, sessionId)
@@ -434,6 +470,7 @@ export async function startRefinement(taskId: string, carriedPending: string[] =
         throw error
     }
     await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: String(doc._id), acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, projeto: central.projectName } })
+    refinementMetric(doc, "refinement-started", { dedupKey: `refinement-started:${String(doc._id)}`, data: { taskTitle: task.title } })
     // Pendências herdadas de um recomeço: tenta excluí-las já (nunca tocam a sessão nova).
     if (carriedPending.length) await flushRefinementSessionDeletions(String(doc._id), carriedPending).catch(() => undefined)
     await launchTurn(String(doc._id), buildRefinementPrompt(task, settings.include))
@@ -584,6 +621,8 @@ async function destroyRefinement(doc: ITaskRefinement): Promise<string[]> {
     const remaining = pending.length ? await flushRefinementSessionDeletions(id, pending).catch(() => pending) : []
     await dropWorkbenchEvents(id)
     await TaskRefinement.deleteOne({ _id: doc._id })
+    // Refinamento apagado antes da especificação final: abandonado (Agente Refinador: % concluídos).
+    if (!doc.resolved) refinementMetric(doc, "refinement-abandoned", { dedupKey: `refinement-abandoned:${id}`, data: { runState: doc.runState } })
     return remaining
 }
 

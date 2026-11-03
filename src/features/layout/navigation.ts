@@ -1,7 +1,5 @@
-import { Banknote, Bot, Clock, CodeXml, GitPullRequest, GraduationCap, Landmark, ListTodo, Network, Plug, Server, Settings, Swords } from "lucide-react"
-import { ADVERSARIAL_PAGE_HREF } from "@/features/adversarial-agent/constants"
-import { MENTOR_PAGE_HREF } from "@/features/adversarial-agent/mentor/constants"
-import { PR_REVIEWS_HREF } from "@/features/pr-review/constants"
+import { Banknote, Bot, Clock, CodeXml, Landmark, ListTodo, Network, Plug, Server, Settings } from "lucide-react"
+import { AGENT_CATALOG } from "@/features/agent-metrics/catalog"
 import { isNavGroup, type NavBadgeKey, type NavGroupDef, type NavItemDef, type NavSectionDef } from "./types"
 
 /**
@@ -21,11 +19,8 @@ export const APP_NAV: readonly NavSectionDef[] = [
                 id: "agentes",
                 label: "Agentes",
                 icon: Bot,
-                items: [
-                    { href: PR_REVIEWS_HREF, label: "Agente Revisor", title: "Agente Revisor", icon: GitPullRequest },
-                    { href: ADVERSARIAL_PAGE_HREF, label: "Agente Adversário", title: "Agente Adversário", icon: Swords },
-                    { href: MENTOR_PAGE_HREF, label: "Agente Mentor", title: "Agente Mentor", icon: GraduationCap },
-                ],
+                // Todos os agentes configuráveis, na ordem do fluxo e sem a palavra "Agente" (OPE-122).
+                items: AGENT_CATALOG.map((agent) => ({ href: agent.href, label: agent.navLabel, title: agent.title, icon: agent.icon })),
             },
             {
                 kind: "group",

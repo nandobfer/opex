@@ -4,12 +4,12 @@ import { AnimatePresence, motion } from "framer-motion"
 import { AlertTriangle, Brain, Check, Loader2, Wrench, X } from "lucide-react"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { formatNumberBR } from "@/lib/format"
-import type { UnderstandState } from "../../understand-stream"
+import type { AiStreamState } from "../../ai-stream-state"
 
 const itemMotion = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.18 } }
 
 /** Atividade antes/durante o texto: preparo, raciocínio, ferramentas do agente, avisos e erro. */
-export function UnderstandActivity({ state }: { state: UnderstandState }) {
+export function AiStreamActivity({ state }: { state: AiStreamState }) {
     const waiting = state.status === "running" && !state.text && !state.reasoning
     return (
         <div className="space-y-2 empty:hidden [&:not(:empty)]:mb-4">
@@ -55,7 +55,7 @@ export function UnderstandActivity({ state }: { state: UnderstandState }) {
 }
 
 /** Tokens, custo e duração da geração concluída. */
-export function UnderstandUsage({ state }: { state: UnderstandState }) {
+export function AiStreamUsage({ state }: { state: AiStreamState }) {
     const usage = state.usage
     return (
         <AnimatePresence initial={false}>

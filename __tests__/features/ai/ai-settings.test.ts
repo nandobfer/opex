@@ -24,11 +24,11 @@ vi.mock('@/lib/ai/connection', () => ({ confirmAiProviderConnection: mocks.confi
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 
 import { DomainError } from '@/lib/api/route'
-import { DEFAULT_UNDERSTAND_TASK_SETTINGS, understandTaskSettingsSchema, type UnderstandTaskSettings } from '@/features/ai/schemas'
-import { availabilityOf, getUnderstandTaskSettings, normalizeSettings, saveUnderstandTaskSettings } from '@/features/ai/server/settings'
+import { DEFAULT_BUDGET_PREVIEW_SETTINGS, budgetPreviewSettingsSchema, type BudgetPreviewSettings } from '@/features/ai/schemas'
+import { availabilityOfBudgetPreview, getBudgetPreviewSettings, normalizeBudgetPreviewSettings, saveBudgetPreviewSettings } from '@/features/ai/server/settings'
 
-const settings = (overrides: Partial<UnderstandTaskSettings> = {}): UnderstandTaskSettings => ({
-  ...DEFAULT_UNDERSTAND_TASK_SETTINGS,
+const settings = (overrides: Partial<BudgetPreviewSettings> = {}): BudgetPreviewSettings => ({
+  ...DEFAULT_BUDGET_PREVIEW_SETTINGS,
   enabled: true,
   provider: 'opencode',
   model: 'anthropic/claude',
@@ -52,20 +52,20 @@ beforeEach(() => {
   mocks.agents.mockResolvedValue([{ id: 'leitor', name: 'Leitor', description: null }])
 })
 
-describe('schema de "Entender tarefas"', () => {
+describe('schema de "Orçamentos" (referência das features de IA)', () => {
   it('ativa exige provedor e modelo; desativada aceita vazio', () => {
-    const result = understandTaskSettingsSchema.safeParse({ ...DEFAULT_UNDERSTAND_TASK_SETTINGS, enabled: true })
+    const result = budgetPreviewSettingsSchema.safeParse({ ...DEFAULT_BUDGET_PREVIEW_SETTINGS, enabled: true })
     expect(result.success).toBe(false)
     expect(result.error?.issues.map((issue) => issue.message)).toEqual(['Selecione o provedor', 'Selecione o modelo'])
-    expect(understandTaskSettingsSchema.safeParse(DEFAULT_UNDERSTAND_TASK_SETTINGS).success).toBe(true)
+    expect(budgetPreviewSettingsSchema.safeParse(DEFAULT_BUDGET_PREVIEW_SETTINGS).success).toBe(true)
   })
 
   it('temperatura fora de 0 a 2 é recusada', () => {
-    expect(understandTaskSettingsSchema.safeParse(settings({ provider: 'gemini', temperature: 3 })).success).toBe(false)
+    expect(budgetPreviewSettingsSchema.safeParse(settings({ provider: 'gemini', temperature: 3 })).success).toBe(false)
   })
 
   it('recusa o JEV: provedor sem geração de texto não é oferecido às features de texto', () => {
-    const result = understandTaskSettingsSchema.safeParse({ ...settings(), provider: 'jev' })
+    const result = budgetPreviewSettingsSchema.safeParse({ ...settings(), provider: 'jev' })
     expect(result.success).toBe(false)
     expect(result.error?.issues.some((issue) => issue.path[0] === 'provider')).toBe(true)
   })
@@ -73,56 +73,56 @@ describe('schema de "Entender tarefas"', () => {
 
 describe('configuração e disponibilidade', () => {
   it('sem nada salvo, devolve os valores iniciais (desativada)', async () => {
-    const dto = await getUnderstandTaskSettings()
-    expect(dto).toMatchObject({ isDefault: true, settings: DEFAULT_UNDERSTAND_TASK_SETTINGS, availability: { available: false } })
+    const dto = await getBudgetPreviewSettings()
+    expect(dto).toMatchObject({ isDefault: true, settings: DEFAULT_BUDGET_PREVIEW_SETTINGS, availability: { available: false } })
     expect(dto.availability.reason).toContain('desativada')
   })
 
   it('disponível só com a feature ativa e o provedor conectado', async () => {
-    expect(await availabilityOf(settings())).toEqual({ available: true, reason: null })
+    expect(await availabilityOfBudgetPreview(settings())).toEqual({ available: true, reason: null })
     mocks.statuses.mockResolvedValue(connected({ connected: false }))
-    expect((await availabilityOf(settings())).reason).toContain('OpenCode não está conectado')
+    expect((await availabilityOfBudgetPreview(settings())).reason).toContain('OpenCode não está conectado')
   })
 
   it('status gravado desatualizado: com a conexão confirmada na hora, fica disponível (OPE-91)', async () => {
     mocks.statuses.mockResolvedValue(connected({ connected: false }))
     mocks.confirm.mockResolvedValue({ configured: true, connected: true, detail: null })
-    expect(await availabilityOf(settings())).toEqual({ available: true, reason: null })
+    expect(await availabilityOfBudgetPreview(settings())).toEqual({ available: true, reason: null })
     expect(mocks.confirm).toHaveBeenCalledWith('opencode')
   })
 
   it('desconectado de fato: o motivo traz a falha real', async () => {
     mocks.confirm.mockResolvedValue({ configured: true, connected: false, detail: 'ECONNREFUSED' })
-    expect((await availabilityOf(settings())).reason).toContain('OpenCode não está conectado (ECONNREFUSED)')
+    expect((await availabilityOfBudgetPreview(settings())).reason).toContain('OpenCode não está conectado (ECONNREFUSED)')
   })
 
   it('normaliza: OpenCode descarta temperatura/tokens; Gemini descarta agente', () => {
-    expect(normalizeSettings(settings({ temperature: 1, maxOutputTokens: 1024, agent: 'leitor' }))).toMatchObject({ temperature: null, maxOutputTokens: null, agent: 'leitor' })
-    expect(normalizeSettings(settings({ provider: 'gemini', model: 'g', temperature: 1, agent: 'leitor' }))).toMatchObject({ temperature: 1, agent: null })
+    expect(normalizeBudgetPreviewSettings(settings({ temperature: 1, maxOutputTokens: 1024, agent: 'leitor' }))).toMatchObject({ temperature: null, maxOutputTokens: null, agent: 'leitor' })
+    expect(normalizeBudgetPreviewSettings(settings({ provider: 'gemini', model: 'g', temperature: 1, agent: 'leitor' }))).toMatchObject({ temperature: 1, agent: null })
   })
 })
 
 describe('salvar', () => {
   it('confere o catálogo, grava, audita e avisa as telas', async () => {
-    await saveUnderstandTaskSettings(settings({ agent: 'leitor', variant: 'high' }), 'local')
-    expect(mocks.updateOne).toHaveBeenCalledWith({ feature: 'understand-task' }, expect.objectContaining({ $set: expect.objectContaining({ settings: expect.objectContaining({ agent: 'leitor', variant: 'high' }), updatedBy: 'local' }) }), { upsert: true })
-    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'FeatureIA', entidadeId: 'understand-task', acao: 'CRIAR' }))
-    expect(mocks.publish).toHaveBeenCalledWith('ai-feature-updated', { feature: 'understand-task' })
+    await saveBudgetPreviewSettings(settings({ agent: 'leitor', variant: 'high' }), 'local')
+    expect(mocks.updateOne).toHaveBeenCalledWith({ feature: 'budget-preview' }, expect.objectContaining({ $set: expect.objectContaining({ settings: expect.objectContaining({ agent: 'leitor', variant: 'high' }), updatedBy: 'local' }) }), { upsert: true })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'FeatureIA', entidadeId: 'budget-preview', acao: 'CRIAR' }))
+    expect(mocks.publish).toHaveBeenCalledWith('ai-feature-updated', { feature: 'budget-preview' })
   })
 
   it('modelo, variante ou agente inexistentes são recusados sem gravar', async () => {
-    await expect(saveUnderstandTaskSettings(settings({ model: 'x/y' }), 'local')).rejects.toMatchObject({ status: 400, code: 'AI_MODEL_NOT_FOUND' })
-    await expect(saveUnderstandTaskSettings(settings({ variant: 'max' }), 'local')).rejects.toMatchObject({ code: 'AI_VARIANT_NOT_FOUND' })
-    await expect(saveUnderstandTaskSettings(settings({ agent: 'build' }), 'local')).rejects.toMatchObject({ code: 'AI_AGENT_NOT_FOUND' })
+    await expect(saveBudgetPreviewSettings(settings({ model: 'x/y' }), 'local')).rejects.toMatchObject({ status: 400, code: 'AI_MODEL_NOT_FOUND' })
+    await expect(saveBudgetPreviewSettings(settings({ variant: 'max' }), 'local')).rejects.toMatchObject({ code: 'AI_VARIANT_NOT_FOUND' })
+    await expect(saveBudgetPreviewSettings(settings({ agent: 'build' }), 'local')).rejects.toMatchObject({ code: 'AI_AGENT_NOT_FOUND' })
     expect(mocks.updateOne).not.toHaveBeenCalled()
   })
 
   it('ativar com o provedor desconectado é recusado (409); desativada pode ser salva', async () => {
     mocks.statuses.mockResolvedValue(connected({ connected: false }))
-    const error = await saveUnderstandTaskSettings(settings(), 'local').catch((e: unknown) => e)
+    const error = await saveBudgetPreviewSettings(settings(), 'local').catch((e: unknown) => e)
     expect(error).toBeInstanceOf(DomainError)
     expect(error).toMatchObject({ status: 409 })
-    await saveUnderstandTaskSettings(settings({ enabled: false }), 'local')
+    await saveBudgetPreviewSettings(settings({ enabled: false }), 'local')
     expect(mocks.updateOne).toHaveBeenCalledTimes(1)
   })
 })

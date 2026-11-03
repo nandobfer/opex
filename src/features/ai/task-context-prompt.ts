@@ -1,21 +1,25 @@
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS } from "@/features/tasks/constants"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { UNDERSTAND_TASK_SECTIONS } from "./constants"
-import type { UnderstandTaskSettings } from "./schemas"
 
 /**
- * Entrada da feature "Entender tarefas" (módulo puro): instruções (prompt de sistema + formato) e
- * a tarefa completa em Markdown, conforme o que a configuração manda enviar.
+ * Tarefa completa em Markdown (módulo puro), com o que o chamador manda incluir: usada como entrada
+ * do desenvolvimento agêntico (mesa) e do Agente Refinador.
  */
 
 const MAX_TEXT = 6000
 
+/** O que entra além dos dados principais. */
+export interface TaskContextInclude {
+    comments: boolean
+    history: boolean
+    timeLogs: boolean
+}
+
 /**
  * Opções de montagem da entrada. `fullText` envia descrição, especificação e comentários **sem
- * cortes** — usado pelo desenvolvimento agêntico (mesa e refinamento), que precisam da tarefa
- * inteira; o padrão (Entender tarefas) continua limitando o tamanho de textos muito longos.
+ * cortes** (mesa e refinamento precisam da tarefa inteira); o padrão limita textos muito longos.
  */
-export interface UnderstandTaskPromptOptions {
+export interface TaskContextPromptOptions {
     fullText?: boolean
 }
 
@@ -30,19 +34,11 @@ function when(iso: string | null): string {
     return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })
 }
 
-export function buildUnderstandTaskInstructions(settings: Pick<UnderstandTaskSettings, "instructions" | "responseFormat">): string {
-    const format =
-        settings.responseFormat === "sections"
-            ? `Responda em Markdown exatamente com estas seções, nesta ordem, cada uma como título de nível 2 (##): ${UNDERSTAND_TASK_SECTIONS.join("; ")}. Em seção sem conteúdo, escreva "Nada relevante".`
-            : "Responda em Markdown, organizando o texto como achar melhor."
-    return `${settings.instructions.trim()}\n\n${format}`
-}
-
 function section(title: string, body: string): string {
     return body ? `## ${title}\n${body}` : ""
 }
 
-export function buildUnderstandTaskPrompt(task: TaskDetailDto, include: UnderstandTaskSettings["include"], options: UnderstandTaskPromptOptions = {}): string {
+export function buildTaskContextPrompt(task: TaskDetailDto, include: TaskContextInclude, options: TaskContextPromptOptions = {}): string {
     const text = (value: string | null | undefined, max = MAX_TEXT) => clip(value, max, options.fullText === true)
     const facts = [
         `- Código: ${task.code}`,

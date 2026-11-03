@@ -74,7 +74,7 @@ vi.mock('@/features/agentic/server/build-queue', () => ({ buildQueuePosition: vi
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, moveTask: mocks.moveTask }))
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: vi.fn(async () => false) }))
 vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ teardownForCleanup: vi.fn(async () => false), resolveBuildTarget: vi.fn(async () => null) }))
 

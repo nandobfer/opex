@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Info, Loader2, RotateCcw, Save, Undo2 } from "lucide-react"
+import { Info, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
@@ -19,7 +19,8 @@ import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 import { DEFAULT_TASK_TAGS_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_TASK_TAGS_SETTINGS, taskTagsSettingsSchema, type TaskTagsSettings } from "../../schemas"
 import { useAiProviderStatuses, useSaveTaskTagsSettings, useTaskTagsSettings } from "../../hooks/useAi"
-import { ProviderModelCard } from "../understand-task/ProviderModelCard"
+import { ProviderModelCard } from "../shared/ProviderModelCard"
+import { useFeatureSection, type FeatureSectionProps } from "../shared/feature-section"
 import { TaxonomyEditor } from "./TaxonomyEditor"
 import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
 
@@ -30,7 +31,7 @@ const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1
  * A IA gera as tags das tarefas (e das prévias do portal) a partir dessa taxonomia; com JEV cada
  * tag vira uma pergunta `noul` e vale o limiar (`jevThreshold`).
  */
-export function TaskTagsTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
+export function TaskTagsSection({ ref, onStateChange }: FeatureSectionProps) {
     const query = useTaskTagsSettings()
     const save = useSaveTaskTagsSettings()
     // A tags pode usar o JEV (decisão estruturada), então a lista inclui os três provedores.
@@ -44,19 +45,12 @@ export function TaskTagsTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
     useEffect(() => {
         if (query.data) form.reset(query.data.settings)
     }, [query.data, form])
-    useEffect(() => {
-        onDirtyChange(dirty)
-        return () => onDirtyChange(false)
-    }, [dirty, onDirtyChange])
+    useFeatureSection(ref, { form, data: query.data, save: save.mutateAsync, pending: save.isPending, onStateChange })
 
     if (query.isLoading) return <Skeleton className="h-96 w-full" />
     if (query.isError || !query.data) return <ErrorState title="Não foi possível carregar a configuração" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
 
     const availability = query.data.availability
-    const submit = form.handleSubmit(async (values) => {
-        const saved = await save.mutateAsync(values).catch(() => null)
-        if (saved) form.reset(saved.settings)
-    })
     const changeProvider = (next: AiProviderId) => {
         if (next === provider) return
         form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
@@ -163,15 +157,6 @@ export function TaskTagsTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                 </CardContent>
             </Card>
 
-            <div className="flex flex-wrap justify-end gap-2 border-t pt-6">
-                <Button type="button" variant="outline" className="gap-1.5" disabled={!dirty || save.isPending} onClick={() => form.reset(query.data.settings)}>
-                    <Undo2 className="h-4 w-4" aria-hidden /> Desfazer
-                </Button>
-                <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={(!dirty && !query.data.isDefault) || save.isPending} onClick={() => void submit()}>
-                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                    Salvar
-                </Button>
-            </div>
         </>
     )
 }

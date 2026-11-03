@@ -1,10 +1,11 @@
 import { isValidObjectId } from "mongoose"
+import { METRIC_EVENT, type MetricEventType } from "@/features/agent-metrics/constants"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWorkbenchPr } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
-import { buildUnderstandTaskPrompt } from "@/features/ai/understand-task"
+import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import { getTask, moveTask } from "@/features/tasks/server/service"
 import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
@@ -93,8 +94,19 @@ async function loadWorkbench(id: string): Promise<IAgenticWorkbench> {
     return doc
 }
 
+/**
+ * Fato das métricas do Agente Desenvolvedor (OPE-122), sem bloquear a mesa: o módulo entra sob demanda
+ * e qualquer falha vira aviso no log (`recordWorkbenchEvent`).
+ */
+function metricEvent(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId">, type: MetricEventType, data?: Record<string, unknown>): void {
+    const at = new Date()
+    void import("@/features/agent-metrics/server/record").then(({ recordWorkbenchEvent }) => recordWorkbenchEvent(doc, type, data, at)).catch(() => undefined)
+}
+
 async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId">, set: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<void> {
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: set, ...extra })
+    // Tempo por etapa (Agente Desenvolvedor): cada entrada de etapa fica registrada com o horário.
+    if (typeof set.stage === "string") metricEvent(doc, METRIC_EVENT.stageEntered, { stage: set.stage })
     // O apontamento agêntico acompanha o estado da mesa (abre/atualiza/fecha o período).
     await syncWorkbenchTimer(String(doc._id))
     await publishAgentic({ centralId: doc.centralId, workbenchId: String(doc._id), taskId: doc.taskId })
@@ -1265,7 +1277,7 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
 
 /** A tarefa inteira (sem cortes) entregue ao planejador da mesa. */
 function taskMarkdown(task: TaskDetailDto, config: CentralConfig): string {
-    return buildUnderstandTaskPrompt(task, { ...config.include, timeLogs: false }, { fullText: true })
+    return buildTaskContextPrompt(task, { ...config.include, timeLogs: false }, { fullText: true })
 }
 
 /** Efeitos na tarefa ao abrir a mesa (melhor esforço: falha vira aviso na mesa). */
@@ -1433,6 +1445,7 @@ export async function revisePlan(id: string, feedback: string, fileIds?: string[
     assertAction(loaded.doc, "revise-plan")
     const files = await loadClaimableFiles(fileIds, id)
     await launchOrQueue(loaded, "revise-plan", { stage: "planning", text: revisePlanPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    metricEvent(loaded.doc, METRIC_EVENT.correction, { kind: "plan" })
     await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
@@ -1467,6 +1480,7 @@ export async function requestCorrection(id: string, feedback: string, fileIds?: 
     const files = await loadClaimableFiles(fileIds, id)
     await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
     await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    metricEvent(loaded.doc, METRIC_EVENT.correction, { kind: "preview" })
     await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
@@ -1544,6 +1558,7 @@ export async function submitPrFeedback(id: string, feedback: string, fileIds?: s
     assertAction(loaded.doc, "submit-pr-feedback")
     const files = await loadClaimableFiles(fileIds, id)
     await launchOrQueue(loaded, "submit-pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
+    metricEvent(loaded.doc, METRIC_EVENT.correction, { kind: "pr", source: "app" })
     await claimAgenticFiles(files, { workbenchId: id })
     return getWorkbench(id)
 }
@@ -1571,6 +1586,7 @@ async function applyReopen(loaded: Loaded): Promise<Loaded> {
     // Reabrir dispensa a pergunta sobre os forks em aberto (eles seguem utilizáveis).
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { pr: null, completedAt: null, previewBackup: null, forksDonePrompt: null, manualCompletion: null }, ...pastPr })
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: loaded.doc.taskCode, reaberta: true } })
+    metricEvent(loaded.doc, METRIC_EVENT.reopened)
     await applyReopenEffects(id, loaded)
     return { ...loaded, doc: { ...loaded.doc, pr: null } }
 }
@@ -1702,6 +1718,7 @@ export async function reconnect(id: string): Promise<WorkbenchDto> {
     const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
     const probe = await probeReconnect(doc.sessionId, startedAt)
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { reconnect: { outcome: probe.outcome, message: probe.message, at: new Date() } } })
+    if (probe.follow) metricEvent(doc, METRIC_EVENT.resumed, { outcome: probe.outcome })
     if (!probe.follow) {
         await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
         return getWorkbench(id)
@@ -1723,6 +1740,7 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     assertAction(doc, "retry")
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
+    metricEvent(doc, METRIC_EVENT.retried, { stage })
     if (stage === "finishing" && doc.manualCompletion) {
         // Conclusão manual: refaz só a limpeza do que a mesa registrou (nunca caminhos inferidos).
         const ready = { ...loaded, doc }
@@ -1766,6 +1784,7 @@ export async function interrupt(id: string): Promise<WorkbenchDto> {
     // Registra a intenção ANTES de abortar: a interrupção pedida pelo usuário nunca dispara a
     // reconexão automática (ao contrário das perdas por queda/reinício).
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { stopRequestedAt: new Date() } })
+    metricEvent(doc, METRIC_EVENT.interrupted, { stage: asStage(doc.stage) })
     if (!isWorkbenchActive(id)) {
         await reconcile(doc)
         return getWorkbench(id)
@@ -1976,6 +1995,7 @@ export async function handlePrFeedback(id: string, feedback: string): Promise<vo
     try {
         // Com o limite cheio, o replanejamento aguarda vaga (a mesa segue em PR aberto até lá).
         await launchOrQueue(loaded, "pr-feedback", { stage: "planning", text: prChangesPrompt(loaded.config, loaded.doc.pr?.url ?? "PR", feedback) }, { userText: `Pedido de mudança no PR:\n\n${feedback}`, feedback })
+        metricEvent(loaded.doc, METRIC_EVENT.correction, { kind: "pr", source: "github" })
     } catch (error) {
         // Sem como replanejar agora (ex.: OpenCode indisponível): guarda o pedido para o usuário reenviar.
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O PR pediu mudanças, mas o replanejamento não pôde começar (${errorText(error)}). Pedido:\n\n${feedback}` })
@@ -2007,6 +2027,7 @@ export async function handlePrConflict(id: string, info: { baseBranch: string; h
             { userText: `Conflito de merge no PR #${pr.number}: resolvendo automaticamente contra ${info.baseBranch}.`, extraSet: { "pr.conflictBaseSha": info.baseSha, "pr.conflictHeadSha": info.headSha } },
         )
         if (started) centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: conflito de merge — resolução automática iniciada`, { workbenchId: id })
+        metricEvent(doc, METRIC_EVENT.conflict, { pr: pr.number })
         return true
     } catch (error) {
         // Sem como resolver agora (OpenCode indisponível, limite de mesas…): mantém elegível à próxima varredura.
@@ -2042,6 +2063,7 @@ export async function handlePrCiFailure(id: string, info: { headBranch: string; 
         )
         if (started) centralLogger(doc.centralId, doc.taskCode).warn(`PR #${pr.number}: CI falhou (${names}) — correção automática iniciada`, { workbenchId: id })
         await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: doc.taskCode, pr: pr.url, ciFalhou: names, tentativa: info.attempt } })
+        metricEvent(doc, METRIC_EVENT.ciFailed, { pr: pr.number, attempt: info.attempt })
         return true
     } catch (error) {
         publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O CI do PR #${pr.number} falhou, mas a correção não pôde começar (${errorText(error)}).` })

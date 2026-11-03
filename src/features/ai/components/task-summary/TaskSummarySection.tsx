@@ -4,47 +4,39 @@ import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertTriangle, Info, Loader2, Save, Undo2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { AlertTriangle, Info } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { isAiTextProviderId, type AiProviderId } from "@/lib/ai/providers"
-import { DEFAULT_UNDERSTAND_TASK_SETTINGS, understandTaskSettingsSchema, type UnderstandTaskSettings } from "../../schemas"
-import { useAiProviderStatuses, useSaveUnderstandTaskSettings, useUnderstandTaskSettings } from "../../hooks/useAi"
-import { IncludeCard } from "./IncludeCard"
-import { ProviderModelCard } from "./ProviderModelCard"
-import { ResponseCard } from "./ResponseCard"
+import { DEFAULT_TASK_SUMMARY_SETTINGS, taskSummarySettingsSchema, type TaskSummarySettings } from "../../schemas"
+import { useAiProviderStatuses, useSaveTaskSummarySettings, useTaskSummarySettings } from "../../hooks/useAi"
+import { ProviderModelCard } from "../shared/ProviderModelCard"
+import { useFeatureSection, type FeatureSectionProps } from "../shared/feature-section"
+import { SummaryPromptCard } from "./SummaryPromptCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
-/** Aba "Entender tarefas": provedor, modelo e demais opções do botão "Entender tarefa". */
-export function UnderstandTaskTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
-    const query = useUnderstandTaskSettings()
-    const save = useSaveUnderstandTaskSettings()
+/** Aba "Resumos de tarefas": provedor, modelo e opções do resumo de 1 linha do card e da tarefa. */
+export function TaskSummarySection({ ref, onStateChange }: FeatureSectionProps) {
+    const query = useTaskSummarySettings()
+    const save = useSaveTaskSummarySettings()
     const { providers } = useAiProviderStatuses()
-    const form = useForm<UnderstandTaskSettings>({ resolver: zodResolver(understandTaskSettingsSchema), mode: "onChange", defaultValues: DEFAULT_UNDERSTAND_TASK_SETTINGS })
+    const form = useForm<TaskSummarySettings>({ resolver: zodResolver(taskSummarySettingsSchema), mode: "onChange", defaultValues: DEFAULT_TASK_SUMMARY_SETTINGS })
     const dirty = form.formState.isDirty
     const provider = useWatch({ control: form.control, name: "provider" })
 
     useEffect(() => {
         if (query.data) form.reset(query.data.settings)
     }, [query.data, form])
-    useEffect(() => {
-        onDirtyChange(dirty)
-        return () => onDirtyChange(false)
-    }, [dirty, onDirtyChange])
+    useFeatureSection(ref, { form, data: query.data, save: save.mutateAsync, pending: save.isPending, onStateChange })
 
     if (query.isLoading) return <Skeleton className="h-96 w-full" />
     if (query.isError || !query.data) return <ErrorState title="Não foi possível carregar a configuração" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
 
     const availability = query.data.availability
-    const submit = form.handleSubmit(async (values) => {
-        const saved = await save.mutateAsync(values).catch(() => null)
-        if (saved) form.reset(saved.settings)
-    })
     const changeProvider = (next: AiProviderId) => {
         if (next === provider || !isAiTextProviderId(next)) return
         form.setValue("provider", next, { shouldDirty: true, shouldValidate: true })
@@ -57,12 +49,12 @@ export function UnderstandTaskTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         <>
             <Card>
                 <CardContent className="space-y-3 pt-6">
-                    <FormToggleCard<UnderstandTaskSettings>
+                    <FormToggleCard<TaskSummarySettings>
                         control={form.control}
                         name="enabled"
-                        id="ai-understand-enabled"
-                        label="Entender tarefa"
-                        description="Botão na página da tarefa que explica a tarefa com IA, em streaming, a partir de todo o conteúdo dela"
+                        id="ai-task-summary-enabled"
+                        label="Resumos de tarefas"
+                        description="Gera um resumo de 1 linha por tarefa com IA (substitui a descrição no card e na página). Ao ativar, resume também as tarefas não concluídas que ainda não têm resumo"
                     />
                     <AnimatePresence initial={false}>
                         {!dirty && !availability.available && availability.reason && (
@@ -90,18 +82,8 @@ export function UnderstandTaskTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                 )}
             </AnimatePresence>
 
-            <ResponseCard form={form} />
-            <IncludeCard form={form} />
+            <SummaryPromptCard form={form} />
 
-            <div className="flex flex-wrap justify-end gap-2 border-t pt-6">
-                <Button type="button" variant="outline" className="gap-1.5" disabled={!dirty || save.isPending} onClick={() => form.reset(query.data.settings)}>
-                    <Undo2 className="h-4 w-4" aria-hidden /> Desfazer
-                </Button>
-                <Button type="button" data-ctrl-enter-submit className="gap-1.5" disabled={(!dirty && !query.data.isDefault) || save.isPending} onClick={() => void submit()}>
-                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Save className="h-4 w-4" aria-hidden />}
-                    Salvar
-                </Button>
-            </div>
         </>
     )
 }

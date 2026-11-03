@@ -62,7 +62,7 @@ vi.mock('@/features/agentic/server/settings', async () => {
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(async () => ({ id: 't1', columnId: 'todo' })), moveTask: vi.fn() }))
 vi.mock('@/features/agentic/server/timer-sync', () => ({ syncWorkbenchTimer: vi.fn(async () => undefined) }))
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig } from '@/features/agentic/schemas'

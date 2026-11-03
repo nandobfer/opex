@@ -14,6 +14,7 @@ import { backfillTaskAgenticFlow } from "./backfill-task-agentic-flow"
 import { ensureOpexIndexes } from "./ensure-opex-indexes"
 import { migrateOpencodeQuotaCronInterval } from "./opencode-quota-cron-interval"
 import { backfillOpexSessionAgent } from "./backfill-opex-session-agent"
+import { removeUnderstandTaskFeature } from "./remove-understand-task-feature"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -27,4 +28,5 @@ registerMigrations(
     { name: "ensure-opex-indexes", run: () => ensureOpexIndexes() },
     { name: "opencode-quota-cron-interval", run: () => migrateOpencodeQuotaCronInterval() },
     { name: "backfill-opex-session-agent", run: () => backfillOpexSessionAgent() },
+    { name: "remove-understand-task-feature", run: () => removeUnderstandTaskFeature() },
 )

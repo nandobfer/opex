@@ -60,7 +60,7 @@ vi.mock('@/features/agentic/server/queue', () => ({ pumpCentralQueue: vi.fn(asyn
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: mocks.settings, agenticAvailability: mocks.availability }))
 vi.mock('@/features/agentic/server/runner', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(), moveTask: vi.fn() }))
-vi.mock('@/features/ai/understand-task', () => ({ buildUnderstandTaskPrompt: vi.fn(() => 'tarefa') }))
+vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/agentic/server/files', () => ({
   loadClaimableFiles: mocks.loadClaimable,
   claimAgenticFiles: mocks.claim,
