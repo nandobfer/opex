@@ -100,7 +100,14 @@ describe('WorkbenchModelSettings', () => {
 
   it('popover lista as cinco etapas, marca a etapa atual e mostra o padrão herdado com a origem', () => {
     render(<WorkbenchModelSettings workbench={workbench({ stage: 'preview' })} />)
+    const button = screen.getByRole('button', { name: 'Configurar modelos por etapa' })
+    // O estado do popover fica no próprio botão (o span é só a âncora): leitor de tela e foco corretos.
+    expect(button.getAttribute('aria-haspopup')).toBe('dialog')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(button.parentElement?.getAttribute('aria-expanded')).toBeNull()
     const dialog = open()
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    expect(button.getAttribute('aria-controls')).toBe(dialog.id)
     const titles = within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
     expect(titles).toEqual(['Planejamento', 'Implementação', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
     expect(within(section(dialog, 'Build e ambiente')).getByText('Etapa atual')).toBeTruthy()
@@ -123,6 +130,16 @@ describe('WorkbenchModelSettings', () => {
     fireEvent.click(within(planning).getByRole('radio', { name: 'Personalizar nesta mesa' }))
     fireEvent.click(within(planning).getByRole('button', { name: 'variante low' }))
     expect(mocks.setWorkbenchModel).toHaveBeenLastCalledWith({ role: 'planning', model: 'anthropic/opus', variant: 'low' })
+  })
+
+  it('escolher o mesmo modelo herdado grava a troca (fixa o modelo na mesa) em vez de ser ignorada', () => {
+    render(<WorkbenchModelSettings workbench={workbench()} />)
+    const build = section(open(), 'Build e ambiente')
+    fireEvent.click(within(build).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    // O campo abre com o valor herdado; repetir o modelo precisa gravar (regressão: o clique era ignorado).
+    expect(within(build).getByRole('button', { name: 'escolher Claude Opus' })).toBeTruthy()
+    fireEvent.click(within(build).getByRole('button', { name: 'escolher Claude Opus' }))
+    expect(mocks.setWorkbenchModel).toHaveBeenCalledWith({ role: 'build', model: 'anthropic/opus', variant: null })
   })
 
   it('"Padrão da central" numa etapa trocada volta ao padrão (model: null)', () => {

@@ -25,8 +25,13 @@ export function ModelSettingsPopover({ id, label, liveText = null, className, ch
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverAnchor asChild>
-                <span ref={anchor} className="inline-flex shrink-0" id={`${id}-trigger`} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? `${id}-content` : undefined}>
-                    <TooltipIconButton label={label} className={className} onClick={() => setOpen((value) => !value)}>
+                <span ref={anchor} className="inline-flex shrink-0" id={`${id}-trigger`}>
+                    <TooltipIconButton
+                        label={label}
+                        className={className}
+                        onClick={() => setOpen((value) => !value)}
+                        buttonProps={{ "aria-haspopup": "dialog", "aria-expanded": open, "aria-controls": open ? `${id}-content` : undefined }}
+                    >
                         <Settings2 aria-hidden />
                     </TooltipIconButton>
                 </span>
@@ -41,6 +46,11 @@ export function ModelSettingsPopover({ id, label, liveText = null, className, ch
                 className="w-[min(30rem,calc(100vw-2rem))] p-0"
                 // O clique no próprio botão alterna pelo `onClick` (sem fechar e reabrir).
                 onInteractOutside={(event) => anchor.current?.contains(event.target as Node) && event.preventDefault()}
+                // O botão é a âncora (não há `PopoverTrigger`): devolve o foco a ele ao fechar com Esc ou clique fora.
+                onCloseAutoFocus={(event) => {
+                    event.preventDefault()
+                    anchor.current?.querySelector("button")?.focus()
+                }}
             >
                 <div className="border-b px-4 py-3">
                     <h2 id={`${id}-title`} className="text-sm font-semibold">

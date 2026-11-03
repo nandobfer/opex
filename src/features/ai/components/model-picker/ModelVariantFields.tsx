@@ -40,7 +40,9 @@ export function ModelVariantFields({ id, value, onChange, models, clearLabel, pl
                     trigger={<FieldTrigger id={`${id}-model`} placeholder={placeholder} value={model ? model.name : value.model || undefined} disabled={disabled} />}
                     models={models}
                     disabled={disabled}
-                    onPick={(item) => item.id !== value.model && onChange({ model: item.id, variant: null })}
+                    // Escolher qualquer modelo (inclusive o que já está no campo) grava e zera a variante: repetir o
+                    // modelo herdado é como se fixa o modelo na mesa e, na central, como se volta à variante padrão.
+                    onPick={(item) => onChange({ model: item.id, variant: null })}
                     matchTriggerWidth
                     footer={
                         clearLabel && value.model ? (

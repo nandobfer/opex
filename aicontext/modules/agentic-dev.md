@@ -879,7 +879,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
     mudam aqui (são os da central).
   - **Grava na hora, por etapa**: escolher modelo ou variante chama `PUT .../model` com o **papel daquela
     seção**; "Personalizar" sozinho só abre os campos (preenchidos com o herdado) e não grava; "Padrão da
-    central" numa etapa trocada envia `model: null`. Trocar o modelo zera a variante.
+    central" numa etapa trocada envia `model: null`. Escolher um modelo **qualquer**, inclusive o mesmo que já
+    está no campo, grava e zera a variante — é assim que se fixa na mesa o modelo que hoje é herdado (e que,
+    na central, se volta à variante padrão).
   - **Qual etapa é afetada**: badge **Etapa atual** na seção do papel da etapa em que a mesa está; a seção em
     gravação ganha borda/fundo primário e "Alterando" (texto ao vivo "Alterando: <etapa>" para leitores de
     tela); o toast nomeia o papel ("Modelo da Implementação trocado: vale a partir do próximo turno").
