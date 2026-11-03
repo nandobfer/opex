@@ -71,9 +71,20 @@ describe('contexto tagged', () => {
     expect(deliveredChannels(ids)).toEqual(['opex', 'agentes/opex/dono'])
   })
 
+  it('lê a faixa de títulos da 0.11.0 (#id [CATEGORIA] @canal: título) com categoria e canal', () => {
+    const v11 = ['<memories version="cv_9">', '<channel slug="opex">', '<PROJECT_RULES>', '#m_a: Texto.', '</PROJECT_RULES>', '</channel>', '<titles>', '#m_d [NAMING] @agentes/opex/dono: Nomes: com dois-pontos', '#m_e [CONSTRAINTS] @opex: Outra', '</titles>', '</memories>'].join('\n')
+    const ids = parseTaggedContext(v11)
+    expect(ids.full).toEqual([{ id: 'm_a', channel: 'opex' }])
+    expect(ids.titles).toEqual(['m_d', 'm_e'])
+    expect(ids.titleItems).toEqual([
+      { id: 'm_d', category: 'NAMING', channel: 'agentes/opex/dono' },
+      { id: 'm_e', category: 'CONSTRAINTS', channel: 'opex' },
+    ])
+  })
+
   it('bloco vazio, nulo ou em markdown não traz ids', () => {
-    expect(parseTaggedContext('<memories version="cv_1">\n</memories>')).toEqual({ full: [], titles: [] })
-    expect(parseTaggedContext(null)).toEqual({ full: [], titles: [] })
+    expect(parseTaggedContext('<memories version="cv_1">\n</memories>')).toEqual({ full: [], titles: [], titleItems: [] })
+    expect(parseTaggedContext(null)).toEqual({ full: [], titles: [], titleItems: [] })
     expect(parseTaggedContext('## opex\n\n### PROJECT_RULES\n- Use pnpm.').full).toEqual([])
   })
 })

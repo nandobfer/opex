@@ -23,3 +23,12 @@ export function memoryContextModule(blocks: Record<string, string[]> = {}, sourc
 export function selfMemorySettingsModule(enabled = false) {
   return { selfMemoryEnabled: vi.fn(async () => enabled), loadSelfMemorySettings: vi.fn(), getSelfMemorySettings: vi.fn(), saveSelfMemorySettings: vi.fn() }
 }
+
+/** Mock do MCP "Memória própria" (OPE-117: registrado sempre que há contexto, para a leitura da faixa de títulos). */
+export function selfMemoryMcpModule(ok = true) {
+  return {
+    ensureAgentMemoryMcp: vi.fn(async () => ({ ok, error: ok ? null : 'sem URL', skipped: [] as string[] })),
+    selfMemorySessionPermissions: vi.fn(() => []),
+    selfMemoryToolPolicy: vi.fn(async () => ({ overrides: {}, disabled: new Set<string>() })),
+  }
+}

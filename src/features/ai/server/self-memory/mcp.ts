@@ -8,7 +8,7 @@ import { JSON_RPC_ERRORS, MCP_UNAUTHORIZED_CODE, OPENCODE_SESSION_META, handleMc
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { AI_AGENT_IDS, MEMORY_CONSUMER_DEFS } from "../../agents"
-import { SELF_MEMORY_TOOL_NAMES, selfMemoryToolConfirms, type SelfMemoryToolName } from "../../self-memory"
+import { SELF_MEMORY_TOOL_NAMES, isSelfMemoryReadTool, selfMemoryToolConfirms, type SelfMemoryToolName } from "../../self-memory"
 import { selfMemoryEnabled } from "./settings"
 import { selfMemoryTools, type SelfMemoryContext } from "./tools"
 
@@ -180,7 +180,9 @@ export async function callSelfMemoryTool(name: string, args: Record<string, unkn
         if (!sessionId) throw new SessionRefusal("Chamada sem a sessão do OpenCode: as memórias só atendem um agente do Opex.")
         const context = await selfMemoryContextOfSession(sessionId)
         if (!context) throw new SessionRefusal("Esta sessão do OpenCode não é de um agente do Opex (mesa, fork, revisão do Adversário ou Agente Maddox).")
-        if (!(await selfMemoryEnabled(context.consumer))) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado.`)
+        // Leitura (faixa de títulos) vale sempre que o agente recebe contexto; gravar exige o aprendizado autônomo.
+        const write = isSelfMemoryReadTool(name) ? true : await selfMemoryEnabled(context.consumer)
+        if (!write) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado: só as ferramentas de leitura (get_hints, get_memory, search_memories) atendem.`)
         const tool = selfMemoryTools(context).find((item) => item.name === name)
         if (!tool || !isSelfMemoryTool(name)) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
         const policy = await selfMemoryToolPolicy()

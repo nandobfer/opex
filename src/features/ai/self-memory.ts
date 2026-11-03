@@ -26,8 +26,13 @@ export const DEFAULT_SELF_MEMORY_SETTINGS: SelfMemorySettings = { opex: true, ma
 /** Gravações (criar, editar, fixar, ativar/inativar, excluir) aceitas por turno do agente. */
 export const SELF_MEMORY_TURN_LIMIT = 5
 
-export const SELF_MEMORY_TOOL_NAMES = ["list_my_memories", "remember", "update_my_memory", "pin_my_memory", "set_my_memory_active", "forget_my_memory"] as const
+/** Ferramentas de gravação (só com o aprendizado autônomo ligado). */
+export const SELF_MEMORY_WRITE_TOOL_NAMES = ["list_my_memories", "remember", "update_my_memory", "pin_my_memory", "set_my_memory_active", "forget_my_memory"] as const
+/** Ferramentas de leitura da faixa de títulos (OPE-117): valem sempre que o agente recebe contexto. */
+export const SELF_MEMORY_READ_TOOL_NAMES = ["get_hints", "get_memory", "search_memories"] as const
+export const SELF_MEMORY_TOOL_NAMES = [...SELF_MEMORY_WRITE_TOOL_NAMES, ...SELF_MEMORY_READ_TOOL_NAMES] as const
 export type SelfMemoryToolName = (typeof SELF_MEMORY_TOOL_NAMES)[number]
+export const isSelfMemoryReadTool = (name: string) => (SELF_MEMORY_READ_TOOL_NAMES as readonly string[]).includes(name)
 
 /**
  * Metadados das ferramentas "Memória própria" (mesmos nomes em todos os agentes). Inativar e excluir são
@@ -57,6 +62,17 @@ export const SELF_MEMORY_TOOL_METAS: Record<SelfMemoryToolName, { label: string;
         label: "Excluir memória",
         risk: "destructive",
         description: "Exclui de vez uma memória sua que ficou errada ou superada (prefira inativar quando houver dúvida). As do dono você não exclui. Pode pedir a confirmação do dono.",
+    },
+    get_hints: {
+        label: "Dicas de memórias",
+        risk: "read",
+        description: "Memórias dos seus canais que ficaram fora do texto completo e combinam com o texto informado (a mensagem ou a cena atual): só id, título e canal, nunca o texto. Leia a escolhida com get_memory.",
+    },
+    get_memory: { label: "Ler memória", risk: "read", description: "Lê uma memória dos seus canais pelo id (da faixa <titles> ou de get_hints): texto, título, categoria e canal." },
+    search_memories: {
+        label: "Buscar memórias",
+        risk: "read",
+        description: "Busca nos seus canais por termos (reserva quando get_hints vem vazio): título, canal e um trecho curto de cada resultado.",
     },
 }
 
@@ -91,16 +107,70 @@ function listGuide(consumer: MemoryConsumer, turn: MemoryTurn): string[] {
     })
 }
 
-/** Instrução do aprendizado autônomo, anexada depois do bloco de memórias. */
-export function selfMemoryInstructions(consumer: MemoryConsumer, turn: MemoryTurn, options: { toolPrefix?: string } = {}): string {
+/** Contagem do turno (`counts` da entrega do contexto). */
+export interface SelfMemoryTurnCounts {
+    titles: number
+    overflow: number
+}
+
+export interface SelfMemoryInstructionOptions {
+    toolPrefix?: string
+    /** Faixa 2 e overflow da entrega do turno; ausente = Engramind indisponível (a linha é omitida). */
+    counts?: SelfMemoryTurnCounts | null
+    /** Bloco de gravação (aprendizado autônomo ligado). Padrão: `true`. */
+    write?: boolean
+    /** Bloco de leitura (`get_hints`/`get_memory`/`search_memories` disponíveis). Padrão: `true`. */
+    read?: boolean
+}
+
+/** Agentes das mesas com o Agente Mentor como segunda camada (OPE-117). */
+const MENTORED: readonly MemoryConsumer[] = ["desenvolvedor", "adversario"]
+
+function outsideLine(counts: SelfMemoryTurnCounts | null | undefined): string | null {
+    if (!counts) return null
+    const total = counts.titles + counts.overflow
+    if (total === 0) return "Memórias fora do contexto neste turno: 0 fora do contexto."
+    return `Memórias fora do contexto neste turno: ${counts.titles} só pelo título (faixa \`<titles>\`) e ${counts.overflow} fora do bloco.`
+}
+
+/**
+ * Instrução do aprendizado autônomo (OPE-117), anexada depois do bloco de memórias: o bloco de LEITURA
+ * (faixa de títulos acionável) e o CHECKLIST DE FIM DE TURNO (gatilhos concretos de gravação), em
+ * seções separadas. Sem `write`, só a leitura; sem `read`, só a gravação.
+ */
+export function selfMemoryInstructions(consumer: MemoryConsumer, turn: MemoryTurn, options: SelfMemoryInstructionOptions = {}): string {
     const tool = (name: SelfMemoryToolName) => `\`${options.toolPrefix ?? ""}${name}\``
-    return [
-        "",
-        "## Memória própria (aprendizado autônomo)",
-        `Você aprende sozinho: use ${tool("remember")} quando descobrir algo durável e reaproveitável (regra, preferência confirmada, convenção, comando, caminho, decisão, lição de uma correção). Antes de gravar, confira ${tool("list_my_memories")}; quando a resposta trouxer \`similares\`, prefira ${tool("update_my_memory")} e funda o conteúdo em vez de duplicar. Inative (${tool("set_my_memory_active")}) ou exclua (${tool("forget_my_memory")}) o que ficou superado: essas duas podem pedir a confirmação do dono (ou ser recusadas quando não há chat); se forem recusadas, edite a memória em vez de insistir.`,
-        "Pode registrar códigos de tarefa, URLs, rotas, nomes, tokens e chaves quando forem úteis, mas grave cada memória na lista mais específica que couber: as listas globais só recebem o que vale em qualquer contexto.",
-        "Listas que você grava:",
-        ...listGuide(consumer, turn),
-        `Memórias escritas pelo dono (\`doDono\`) você pode editar, mas não excluir nem inativar. Não grave o estado passageiro do trabalho atual. No máximo ${SELF_MEMORY_TURN_LIMIT} gravações por turno.`,
-    ].join("\n")
+    const write = options.write !== false
+    // Só leitura e nada fora do contexto: o bloco seria ruído (com gravação, mostra "0 fora do contexto").
+    const nothingOutside = options.counts ? options.counts.titles + options.counts.overflow === 0 : false
+    const read = options.read !== false && (write || !nothingOutside)
+    const lines: string[] = []
+    if (read) {
+        const outside = outsideLine(options.counts)
+        lines.push(
+            "",
+            "## Memórias fora do contexto (leitura)",
+            ...(outside ? [outside] : []),
+            `Se um título da faixa \`<titles>\` parecer relevante para o pedido, chame ${tool("get_hints")} com a mensagem ou a cena atual e leia a escolhida com ${tool("get_memory")}. Quando as dicas vierem vazias, use ${tool("search_memories")} com os termos do título. Não despeje todas as memórias no prompt e não invente uma memória que não existe: se não encontrar, siga sem ela.`,
+        )
+    }
+    if (write) {
+        lines.push(
+            "",
+            "## Memória própria (aprendizado autônomo)",
+            `Você aprende sozinho: ${tool("remember")} é o seu caminho de aprendizado. As ferramentas de gestão do Engramind (\`*_engramind_*\`) gravam como o DONO e a memória fica protegida (você não a exclui nem inativa depois): para aprender, use sempre ${tool("remember")}.`,
+            "Checklist de fim de turno (antes de encerrar a resposta, confira cada gatilho):",
+            "1. O dono ou o usuário corrigiu você ou o seu trabalho? Grave a regra que evita repetir o erro.",
+            "2. Uma decisão se repetiu (você ou o dono escolheu o mesmo caminho de novo)? Grave a decisão.",
+            "3. Descobriu um comando, caminho, rota ou nome novo que vai precisar de novo? Grave-o.",
+            "4. Uma preferência foi confirmada (o dono aprovou ou pediu explicitamente)? Grave a preferência.",
+            `Se nenhum gatilho bateu, não grave nada. Antes de gravar, confira ${tool("list_my_memories")}; quando a resposta trouxer \`similares\`, prefira ${tool("update_my_memory")} e funda o conteúdo em vez de duplicar. Com muitas memórias fora do contexto, consolide: funda as parecidas e inative (${tool("set_my_memory_active")}) ou exclua (${tool("forget_my_memory")}) o que ficou superado. Essas duas podem pedir a confirmação do dono (ou ser recusadas quando não há chat); se forem recusadas, edite a memória em vez de insistir.`,
+            "Cada memória é um fato durável e autossuficiente (quem lê não tem o contexto desta conversa), na categoria certa: escreva o fato, não a conversa. Pode registrar códigos de tarefa, URLs, rotas, nomes, tokens e chaves quando forem úteis, mas grave cada memória na lista mais específica que couber: as listas globais só recebem o que vale em qualquer contexto.",
+            ...(MENTORED.includes(consumer) ? ["Duas camadas: grave o que você percebeu, sem esperar por ninguém. O Agente Mentor revisa a cadeia depois e grava só o que passou batido (ele vê as suas memórias e funde em vez de duplicar)."] : []),
+            "Listas que você grava:",
+            ...listGuide(consumer, turn),
+            `Memórias escritas pelo dono (\`doDono\`) você pode editar, mas não excluir nem inativar. Não grave o estado passageiro do trabalho atual. No máximo ${SELF_MEMORY_TURN_LIMIT} gravações por turno.`,
+        )
+    }
+    return lines.join("\n")
 }

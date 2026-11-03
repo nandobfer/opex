@@ -19,7 +19,7 @@ const SEVERITY_GUIDE: Record<(typeof FINDING_SEVERITIES)[number], string> = {
 /** Prefixo das ferramentas do MCP "Memória própria" no OpenCode (`opex_memorias_<ferramenta>`). */
 export const SELF_MEMORY_TOOL_PREFIX = "opex_memorias_"
 
-export function buildAdversarialInstructions(input: { level: AdversarialLevel; instructions: string; memories: string; selfMemory?: boolean }): string {
+export function buildAdversarialInstructions(input: { level: AdversarialLevel; instructions: string; memories: string; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null }): string {
     const level = ADVERSARIAL_LEVEL_DEFS[input.level]
     const extra = input.instructions.trim()
     return [
@@ -61,7 +61,9 @@ export function buildAdversarialInstructions(input: { level: AdversarialLevel; i
         "- `previous` só existe a partir da 2ª rodada: o estado de cada achado bloqueante anterior.",
         extra ? `\n## Instruções adicionais\n${extra}` : "",
         memoriesSection(input.memories),
-        input.selfMemory ? selfMemoryInstructions("adversario", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX }) : "",
+        input.selfMemory || input.memoryRead
+            ? selfMemoryInstructions("adversario", { kind: "review" }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX, counts: input.counts, write: Boolean(input.selfMemory), read: Boolean(input.memoryRead) })
+            : "",
     ]
         .filter((line) => line !== "")
         .join("\n")

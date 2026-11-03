@@ -37,7 +37,7 @@ export interface FakeCall {
 const fail = (status: number, code: string, details?: Record<string, unknown>) => toEngramindError(status, { code, message: code, details } as never)
 
 /**
- * Rotas do contrato publicado pelo Engramind (`~/code/engramind/docs/openapi.json`, v0.10.0) que este fake
+ * Rotas do contrato publicado pelo Engramind (`~/code/engramind/docs/openapi.json`, v0.11.0) que este fake
  * implementa. Chamada fora da lista responde 405 `METHOD_NOT_ALLOWED`, como o serviço real: o fake nunca
  * aceita rota inventada. Rota nova aqui exige conferir método e caminho no contrato antes.
  */
@@ -66,6 +66,11 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
   ['GET', '/v1/tokens'],
   ['POST', '/v1/tokens'],
   ['POST', '/v1/tokens/{token}/revoke'],
+  ['POST', '/v1/tokens/{token}/rotate'],
+  ['POST', '/v1/hints'],
+  ['POST', '/v1/memories/search'],
+  ['POST', '/v1/consolidation/run'],
+  ['POST', '/v1/embeddings/reembed'],
 ]
 const CONTRACT_PATTERNS = CONTRACT_ROUTES.map(([method, template]) => ({ method, pattern: new RegExp(`^${template.replace(/\{[^}]+\}/g, '[^/]+')}$`) }))
 const inContract = (method: string, path: string) => CONTRACT_PATTERNS.some((route) => route.method === method && route.pattern.test(path))
@@ -83,6 +88,13 @@ export function createFakeEngramind() {
     imports: new Map<string, unknown>(),
     context: { content: '', version: 'cv_1', counts: { full: 0, titles: 0, overflow: 0 } },
     contextFails: false,
+    /** Engramind anterior à 0.11.0: `focus` desconhecido → 400 `VALIDATION_ERROR`. */
+    contextRejectsFocus: false,
+    /** Sem embeddings: `get_hints` vem vazio (contrato 0.11.0). */
+    embeddingsOff: false,
+    /** `focus_mode` devolvido quando há foco (padrão `hybrid`). */
+    focusMode: 'hybrid' as 'hybrid' | 'text' | 'none',
+    hintsFail: false,
     calls: [] as FakeCall[],
   }
   const now = () => new Date((state.clock += 1000)).toISOString()
@@ -184,6 +196,37 @@ export function createFakeEngramind() {
       if (options.idempotencyKey) state.imports.set(options.idempotencyKey, response)
       return response
     }
+    if (method === 'POST' && path === '/v1/memories/search') {
+      const query = String(body.query ?? '').toLowerCase()
+      const channels = Array.isArray(body.channels) ? (body.channels as string[]) : null
+      const limit = Number(body.limit ?? 10)
+      const results = [...state.memories.values()]
+        .filter((item) => item.status !== 'archived' && (!channels || channels.includes(item.channel)) && query.split(/\s+/).some((term) => term && item.text.toLowerCase().includes(term)))
+        .slice(0, limit)
+        .map((memory, index) => ({ rank: index + 1, score: 0.5, memory: { ...memory } }))
+      return { mode: 'text', results, context_version: state.context.version }
+    }
+    if (method === 'POST' && path === '/v1/hints') {
+      if (state.hintsFail) throw toEngramindError(503, null)
+      const text = String(body.text ?? '')
+      if (!text || text.length > 2000) throw fail(400, 'VALIDATION_ERROR')
+      if (state.embeddingsOff) return { hints: [] }
+      const channels = Array.isArray(body.channels) ? (body.channels as string[]) : null
+      const terms = text.toLowerCase().split(/\s+/).filter(Boolean)
+      const hints = [...state.memories.values()]
+        .filter((item) => item.status !== 'archived' && (!channels || channels.includes(item.channel)) && terms.some((term) => item.text.toLowerCase().includes(term)))
+        .slice(0, Number(body.limit ?? 5))
+        .map((item) => ({ id: item.id, title: item.title ?? item.text.slice(0, 40), channel: item.channel, score: 0.8, method: 'vector', duplicate: false }))
+      return { hints }
+    }
+    if (method === 'POST' && path === '/v1/consolidation/run') {
+      const channel = typeof body.channel === 'string' ? body.channel : null
+      const enabled = [...state.channels.values()].filter((item) => !item.archived_at).map((item) => item.slug)
+      const targets = channel ? [channel] : enabled
+      if (body.dry_run === true) return { dry_run: true, channels: targets.map((slug) => ({ channel: slug, skipped: {}, duplicates: [], classify: [], stale: { flag: [], clear: [], archive: [] } })), jobs: [] }
+      return { dry_run: false, channels: [], jobs: targets.map((slug, index) => ({ channel: slug, job_id: 100 + index, already_queued: false })) }
+    }
+    if (method === 'POST' && path === '/v1/embeddings/reembed') return { model_id: 'm1', started_at: now(), total: state.memories.size }
     if (method === 'POST' && path === '/v1/memories') {
       const result = createMemory(String(body.channel), body as never, token)
       return { memory: { ...result.memory }, duplicate: result.duplicate, similar: [] }
@@ -217,14 +260,22 @@ export function createFakeEngramind() {
       return { slug: agent.slug, disabled_at: agent.disabled_at }
     }
     if (method === 'POST' && path === '/v1/agents') {
+      // Idempotência natural (0.11.0): repetição equivalente devolve o existente com `created: false`.
+      if (state.agents.has(`${body.app}/${body.slug}`)) return { slug: body.slug, created: false }
       state.agents.set(`${body.app}/${body.slug}`, { slug: String(body.slug), disabled_at: null })
-      return { slug: body.slug }
+      return { slug: body.slug, created: true }
     }
     if (method === 'GET' && path === '/v1/subscriptions') return { subscriptions: state.subscriptions.filter((item) => item.agent === request.query?.agent).map((item) => ({ target: item.target })) }
     if (method === 'POST' && path === '/v1/subscriptions') {
-      if (state.subscriptions.some((item) => item.agent === body.agent && item.target === body.target)) throw fail(409, 'SUBSCRIPTION_EXISTS')
+      const existing = state.subscriptions.find((item) => item.agent === body.agent && item.target === body.target)
+      if (existing && existing.mode === String(body.mode)) return { created: false }
+      if (existing) throw fail(409, 'SUBSCRIPTION_EXISTS')
       state.subscriptions.push({ agent: String(body.agent), target: String(body.target), mode: String(body.mode) })
-      return {}
+      // Alvo exato inexistente cria o canal (decisão 0033).
+      const target = String(body.target)
+      const createdChannel = !target.endsWith('*') && !state.channels.has(target)
+      if (createdChannel) state.channels.set(target, { slug: target, archived_at: null })
+      return { created: true, channel_created: createdChannel }
     }
     if (method === 'POST' && path === '/v1/tokens') {
       const id = `tk_${(++state.seq).toString(16).padStart(6, '0')}`
@@ -248,9 +299,23 @@ export function createFakeEngramind() {
       if (tokenRow) tokenRow.status = 'revoked'
       return tokenRow ?? null
     }
+    if (method === 'POST' && /^\/v1\/tokens\/.+\/rotate$/.test(path)) {
+      const old = state.tokens.get(decodeURIComponent(path.slice('/v1/tokens/'.length, -'/rotate'.length)))
+      if (!old) throw fail(404, 'TOKEN_NOT_FOUND')
+      if (old.status !== 'active') throw fail(400, 'TOKEN_NOT_ACTIVE')
+      old.status = 'revoked'
+      const id = `tk_${(++state.seq).toString(16).padStart(6, '0')}`
+      state.tokens.set(id, { ...old, id, prefix: `eng.${id}`, status: 'active' })
+      return { token: { id, prefix: `eng.${id}`, status: 'active' }, secret: `eng.${id}.segredo` }
+    }
     if (method === 'GET' && path === '/v1/context') {
       if (state.contextFails) throw toEngramindError(503, null)
-      return { ...state.context, rendered_tokens: 10, format: (request.query as { format?: string } | undefined)?.format ?? 'markdown' }
+      const query = (request.query ?? {}) as { format?: string; focus?: string }
+      const focus = typeof query.focus === 'string' ? query.focus.replace(/\s+/g, ' ').trim() : ''
+      if (focus && state.contextRejectsFocus) throw fail(400, 'VALIDATION_ERROR', { field: 'focus' })
+      if (focus.length > 2000) throw fail(400, 'FOCUS_TOO_LONG')
+      const version = focus ? `${state.context.version}_f${focus.length}` : state.context.version
+      return { ...state.context, version, rendered_tokens: 10, format: query.format ?? 'markdown', focus_mode: focus ? state.focusMode : null }
     }
     throw fail(404, 'ROUTE_NOT_FOUND', { method, path })
   }

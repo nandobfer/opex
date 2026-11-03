@@ -59,7 +59,13 @@ type SessionDoc = Awaited<ReturnType<typeof loadSession>>
 const maddoxScope = (scope: OpexServerScope): OpexServerScope => withAgent(scope, "maddox")
 
 /** Instruções da sessão: as configuradas (dono) ou as fixas do portal + escopo + memórias. */
-export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: OpexServerScope, memories = "", notices: readonly string[] = [], options: { selfMemory?: boolean } = {}): string {
+export function maddoxInstructionsFor(
+    settings: MaddoxAgentSettings,
+    scope: OpexServerScope,
+    memories = "",
+    notices: readonly string[] = [],
+    options: { selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null } = {},
+): string {
     const head =
         scope.kind === "owner"
             ? [settings.instructions, "", `Dono do app: ${getLocalUser().name}.`]
@@ -68,7 +74,9 @@ export function maddoxInstructionsFor(settings: MaddoxAgentSettings, scope: Opex
                   "",
                   `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"}).`,
               ]
-    const self = options.selfMemory ? [selfMemoryInstructions("maddox", maddoxMemoryTurn(scope), { toolPrefix: "opex_memorias_" })] : []
+    const read = options.memoryRead ?? false
+    const write = options.selfMemory ?? false
+    const self = read || write ? [selfMemoryInstructions("maddox", maddoxMemoryTurn(scope), { toolPrefix: "opex_memorias_", counts: options.counts, read, write })] : []
     return [...head, ...notices, memoriesSection(memories), ...self].join("\n")
 }
 
@@ -276,25 +284,28 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const permissions = await maddoxPermissionsFor(scope, settings)
         const ocSessionId = await opencodeSessionFor(client, session, directory, permissions)
         const { agentMemoryContext } = await import("@/features/ai/server/agent-memory-context")
-        const memories = await agentMemoryContext("maddox", maddoxMemoryTurn(scope))
+        const { buildMemoryFocus } = await import("@/features/ai/memory-focus")
+        const memories = await agentMemoryContext("maddox", maddoxMemoryTurn(scope), { focus: buildMemoryFocus("maddox", { kind: "message", text: args.text }) })
         const cacheNotice = memoryCacheNotice(memories)
         if (cacheNotice) publishLine(sessionId, { type: "text-delta", text: `> ${cacheNotice}\n\n` })
         const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
         let selfMemory = await selfMemoryEnabled("maddox")
+        // O MCP de memórias vale sempre que há contexto: leitura da faixa de títulos; gravação só com o aprendizado ligado.
+        let memoryRead = true
         let selfRules: { action: string; resource: string; effect: "allow" | "deny" | "ask" }[] = []
-        if (selfMemory) {
-            const { ensureAgentMemoryMcp, selfMemorySessionPermissions, selfMemoryToolPolicy } = await import("@/features/ai/server/self-memory/mcp")
-            const registered = await ensureAgentMemoryMcp(client, [directory])
-            if (!registered.ok) {
-                selfMemory = false
-                notices.push(`Aviso: o aprendizado autônomo (memória própria) está indisponível neste turno (${registered.error}).`)
-            } else {
-                // Inativar/excluir pedem Confirmar/Cancelar no chat (padrão das destrutivas; o dono ajusta no Agente Opex).
-                selfRules = selfMemorySessionPermissions(await selfMemoryToolPolicy())
-            }
+        const { ensureAgentMemoryMcp, selfMemorySessionPermissions, selfMemoryToolPolicy } = await import("@/features/ai/server/self-memory/mcp")
+        const registered = await ensureAgentMemoryMcp(client, [directory])
+        if (!registered.ok) {
+            memoryRead = false
+            if (selfMemory) notices.push(`Aviso: o aprendizado autônomo (memória própria) está indisponível neste turno (${registered.error}).`)
+            selfMemory = false
+        } else {
+            // Inativar/excluir pedem Confirmar/Cancelar no chat (padrão das destrutivas; o dono ajusta no Agente Opex).
+            selfRules = selfMemorySessionPermissions(await selfMemoryToolPolicy())
         }
-        const sessionPermissions = selfMemory ? [...permissions, ...selfRules] : permissions
-        await applySessionSetup(client, ocSessionId, { permissions: sessionPermissions, instructions: maddoxInstructionsFor(settings, scope, memories.block, notices, { selfMemory }) })
+        const sessionPermissions = memoryRead ? [...permissions, ...selfRules] : permissions
+        const counts = memories.source === "none" ? null : { titles: memories.counts.titles, overflow: memories.counts.overflow }
+        await applySessionSetup(client, ocSessionId, { permissions: sessionPermissions, instructions: maddoxInstructionsFor(settings, scope, memories.block, notices, { selfMemory, memoryRead, counts }) })
         const { uris, references } = await turnFiles(args.files)
         const prompt = references.length ? `${args.text}${args.text ? "\n\n" : ""}Arquivos enviados nesta mensagem:\n${references.join("\n")}` : args.text
 

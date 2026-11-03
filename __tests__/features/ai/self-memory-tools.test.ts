@@ -97,7 +97,7 @@ describe('memória própria', () => {
 
   it('inativar e excluir são destrutivas (pedem Confirmar/Cancelar no Agente Opex); as demais não', () => {
     const risks = Object.fromEntries(selfMemoryTools(ctx()).map((item) => [item.name, item.risk]))
-    expect(risks).toEqual({ list_my_memories: 'read', remember: 'write', update_my_memory: 'write', pin_my_memory: 'write', set_my_memory_active: 'destructive', forget_my_memory: 'destructive' })
+    expect(risks).toEqual({ list_my_memories: 'read', remember: 'write', update_my_memory: 'write', pin_my_memory: 'write', set_my_memory_active: 'destructive', forget_my_memory: 'destructive', get_hints: 'read', get_memory: 'read', search_memories: 'read' })
   })
 
   it('no Agente Opex, excluir pede Confirmar/Cancelar e não toca na memória até o dono confirmar', async () => {
