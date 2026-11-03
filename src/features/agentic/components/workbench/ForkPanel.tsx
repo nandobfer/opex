@@ -90,6 +90,7 @@ export function ForkPanel({ workbench, fork, parent, onSelectFork }: { workbench
             </AnimatePresence>
             <ForkActionBar
                 workbenchId={workbench.id}
+                workbench={workbench}
                 fork={fork}
                 onForkOpened={(child) => onSelectFork(child.id)}
                 extra={fork.status === "integrating" ? <ForkIntegrationActions fork={fork} state={integration} /> : null}

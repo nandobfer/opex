@@ -8,9 +8,9 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
-import { AGENTIC_UPDATED_EVENT } from "../constants"
+import { AGENTIC_UPDATED_EVENT, WORKBENCH_MODEL_ROLE_LABELS } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
-import type { WorkbenchAction } from "../logic"
+import { optimisticModelChoice, type WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
@@ -249,7 +249,8 @@ export function useSetWorkbenchModel(workbench: WorkbenchDto) {
             queryClient.setQueryData<WorkbenchDto | null>(key, (current) => {
                 const models = (current ?? workbench).models
                 if (!models) return current
-                const choice = input.model ? { model: input.model, variant: input.variant, overridden: true } : { ...models[input.role], overridden: false }
+                const previousChoice = models[input.role]
+                const choice = optimisticModelChoice(previousChoice, input, "workbench")
                 return { ...(current ?? workbench), models: { ...models, [input.role]: choice } }
             })
             return { previous }
@@ -260,7 +261,9 @@ export function useSetWorkbenchModel(workbench: WorkbenchDto) {
         },
         onSuccess: (saved, input) => {
             setWorkbench(saved)
-            toast.success(input.model ? "Modelo trocado: vale a partir do próximo turno" : "Modelo de volta ao padrão: vale a partir do próximo turno")
+            const title = WORKBENCH_MODEL_ROLE_LABELS[input.role]
+            const when = input.role === "fork" ? "vale a partir da próxima mensagem dos forks" : "vale a partir do próximo turno"
+            toast.success(input.model ? `${title} trocado: ${when}` : `${title} de volta ao padrão da central: ${when}`)
         },
     })
 }

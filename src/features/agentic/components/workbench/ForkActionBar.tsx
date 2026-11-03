@@ -17,23 +17,22 @@ import { Button } from "@/components/ui/button"
 import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
 import { AttachableTextarea } from "./AttachableTextarea"
 import { canOpenChildFork, forkActions, isOpenFork } from "../../fork-logic"
-import { useDiscardFork, useForkAction, useSetForkModel } from "../../hooks/useForks"
-import type { ForkDto } from "../../types"
+import { useDiscardFork, useForkAction } from "../../hooks/useForks"
+import type { ForkDto, WorkbenchDto } from "../../types"
 import { ForkComposer } from "./ForkComposer"
 import { ForkModeSelect } from "./ForkModeSelect"
 import { LiveMessageComposer } from "./LiveMessageComposer"
-import { ModelOverridePicker } from "@/features/ai/components/model-picker/ModelOverridePicker"
+import { ForkModelSettings } from "./ForkModelSettings"
 
 /**
  * Conversa e ciclo de vida do fork: enviar, pausar a conversa, parar, tentar de novo, retomar, integrar,
- * descartar, **Modo** (Plan/Build e trava de somente leitura), **Modelo** (troca do modelo do fork) e **Abrir fork** a partir deste fork (fork
+ * descartar, **Modo** (Plan/Build e trava de somente leitura), **Modelos** (texto do modelo em uso e o popover "Modelos por etapa", com "Este fork" e as etapas da mesa) e **Abrir fork** a partir deste fork (fork
  * de fork, com o fork em aberto). `extra` entra na linha de botões depois do Abrir fork (ex.: os botões
  * da integração).
  */
-export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }: { workbenchId: string; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void; extra?: ReactNode }) {
+export function ForkActionBar({ workbenchId, workbench, fork, onForkOpened, extra = null }: { workbenchId: string; workbench?: WorkbenchDto; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void; extra?: ReactNode }) {
     const mutation = useForkAction(workbenchId, fork)
     const discard = useDiscardFork(workbenchId)
-    const setModel = useSetForkModel(workbenchId, fork)
     const [text, setText] = useState("")
     const attachments = useFieldAttachments(`fork:${fork.id}`)
     const blocked = attachments.blockReason
@@ -96,7 +95,7 @@ export function ForkActionBar({ workbenchId, fork, onForkOpened, extra = null }:
                 {isOpenFork(fork.status) && (
                     <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
                         <ForkModeSelect fork={fork} disabled={pending} onChange={(mode) => mutation.mutate({ action: "set-mode", mode })} onLock={() => mutation.mutate({ action: "lock" })} />
-                        {fork.model && <ModelOverridePicker id={`fork-model-${fork.id}`} label="Modelo" choice={fork.model} disabled={pending || setModel.isPending} onChange={(input) => setModel.mutate(input)} />}
+                        {workbench && <ForkModelSettings workbench={workbench} fork={fork} buttonClassName="h-8 min-w-8 px-2" />}
                     </div>
                 )}
                 {canFork && (

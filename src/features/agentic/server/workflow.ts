@@ -115,16 +115,24 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
 }
 
+/** DTO completo da mesa: filas, modelos por papel, chat ao vivo, Agente Adversário (e o modelo dele) e Arquiteto. */
+async function workbenchDto(doc: IAgenticWorkbench): Promise<WorkbenchDto> {
+    const id = String(doc._id)
+    const adversary = await adversaryModule()
+    const adversarial = await adversary.adversaryApplies(doc.centralId)
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), adversarial, await (await architectModule()).workbenchArchitect(doc), adversarial ? await adversary.adversaryModel() : null)
+}
+
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     const doc = await reconcile(await loadWorkbench(id))
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
+    return workbenchDto(doc)
 }
 
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()
     if (!doc) return null
-    return toWorkbenchDto(await reconcile(doc), await buildQueuePosition(String(doc._id)), doc.pendingTurn ? await slotQueuePosition(String(doc._id)) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), await (await adversaryModule()).adversaryApplies(doc.centralId), await (await architectModule()).workbenchArchitect(doc))
+    return workbenchDto(await reconcile(doc))
 }
 
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
@@ -387,7 +395,7 @@ export async function setWorkbenchModel(id: string, input: WorkbenchModelInput):
     publishWorkbenchEvent(id, {
         type: "notice",
         level: "info",
-        message: override ? `${title} trocado para ${describeModel(after)}: vale a partir do próximo turno.` : `${title} voltou ao padrão (${describeModel(after)}): vale a partir do próximo turno.`,
+        message: `${override ? `${title} trocado para ${describeModel(after)}` : `${title} voltou ao padrão (${describeModel(after)})`}: ${input.role === "fork" ? "vale a partir da próxima mensagem dos forks desta mesa (exceto os que têm modelo próprio)" : "vale a partir do próximo turno"}.`,
     })
     centralLogger(doc.centralId, doc.taskCode).info(`${title}: ${describeModel(after)}${override ? " (trocado na mesa)" : " (padrão)"}`, { workbenchId: id })
     return getWorkbench(id)

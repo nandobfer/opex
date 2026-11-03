@@ -153,9 +153,19 @@ describe('trocar o modelo na mesa', () => {
     const dto = await setWorkbenchModel(wb._id, { role: 'planning', model: null, variant: null })
 
     expect(model.docs[0]!.modelOverrides).toEqual({ pr: { model: 'openai/o3', variant: null } })
-    expect(dto.models?.planning).toEqual({ model: 'anthropic/opus', variant: 'high', overridden: false })
+    expect(dto.models?.planning).toMatchObject({ model: 'anthropic/opus', variant: 'high', overridden: false, source: 'global' })
     expect(mocks.assertAgentConfigs).not.toHaveBeenCalled()
     expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ message: expect.stringContaining('Modelo do Plano voltou ao padrão (anthropic/opus (high))') }))
+  })
+
+  it('papel Fork da mesa: grava, audita e avisa que vale nas próximas mensagens dos forks; a conversa principal não muda', async () => {
+    const wb = await workbench()
+    const dto = await setWorkbenchModel(wb._id, { role: 'fork', model: 'openai/gpt-5', variant: null })
+    expect(model.docs[0]!.modelOverrides).toEqual({ fork: { model: 'openai/gpt-5', variant: null } })
+    expect(dto.models?.fork).toMatchObject({ model: 'openai/gpt-5', overridden: true, source: 'workbench' })
+    expect(dto.models?.planning).toMatchObject({ overridden: false })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ etapa: 'Fork da conversa', trocado: true }) }))
+    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ message: expect.stringContaining('Modelo do Fork trocado para openai/gpt-5: vale a partir da próxima mensagem dos forks desta mesa') }))
   })
 
   it('modelo inexistente no OpenCode não é gravado', async () => {

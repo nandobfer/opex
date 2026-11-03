@@ -58,6 +58,16 @@ export async function saveAdversarialSettings(input: AdversarialSettings, actorI
  * A mesa desta central passa pelo adversário ao fim da implementação? Agente Adversário ativo e a
  * central no escopo (todas ou as escolhidas). Nunca lança: na dúvida, o fluxo segue sem a revisão.
  */
+/** Modelo/variante do Agente Adversário para exibir na mesa (`null` se a configuração não puder ser lida). */
+export async function adversaryModel(): Promise<{ model: string | null; variant: string | null } | null> {
+    try {
+        const { agent } = (await loadAdversarialSettings()).settings
+        return { model: agent.model, variant: agent.model ? agent.variant : null }
+    } catch {
+        return null
+    }
+}
+
 export async function adversaryApplies(centralId: string): Promise<boolean> {
     try {
         const { settings } = await loadAdversarialSettings()

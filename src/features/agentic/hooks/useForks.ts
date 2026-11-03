@@ -7,6 +7,7 @@ import { withBasePath } from "@/lib/base-path"
 import type { ApiResponse } from "@/lib/types/api"
 import { FORK_INTEGRATION_TARGET_LABELS, type ForkIntegrationTarget, type ForkMode } from "../constants"
 import type { ForkAction } from "../fork-logic"
+import { optimisticModelChoice } from "../logic"
 import type { FormReplyInput, ModelOverrideInput, PermissionReplyInput } from "../schemas"
 import type { TimelineState } from "../timeline"
 import type { ForkDto, WorkbenchDto } from "../types"
@@ -144,7 +145,7 @@ export function useSetForkModel(workbenchId: string, fork: ForkDto) {
             const key = forksKey(workbenchId)
             await queryClient.cancelQueries({ queryKey: key })
             const previous = queryClient.getQueryData<ForkDto[]>(key)
-            if (fork.model) setFork({ ...fork, model: input.model ? { model: input.model, variant: input.variant, overridden: true } : { ...fork.model, overridden: false } })
+            if (fork.model) setFork({ ...fork, model: optimisticModelChoice(fork.model, input, "fork") })
             return { previous }
         },
         onError: (error, _input, context) => {
@@ -153,7 +154,7 @@ export function useSetForkModel(workbenchId: string, fork: ForkDto) {
         },
         onSuccess: (saved, input) => {
             setFork(saved)
-            toast.success(input.model ? "Modelo do fork trocado: vale a partir da próxima mensagem" : "Modelo do fork de volta ao padrão")
+            toast.success(input.model ? "Modelo do fork trocado: vale a partir da próxima mensagem" : "Modelo do fork de volta ao padrão: vale a partir da próxima mensagem")
         },
     })
 }
