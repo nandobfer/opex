@@ -171,6 +171,9 @@ export async function deleteClientOpexData(clientId: string): Promise<void> {
     await opexDb()
     await OpexJob.deleteMany({ clientId })
     const sessions = await OpexSession.find({ clientId }).select({ _id: 1, agent: 1, opencodeSessionId: 1 }).lean<Pick<SessionDoc, "_id" | "agent" | "opencodeSessionId">[]>()
+    // Métricas dos agentes: a estatística das conversas fica (OPE-122).
+    const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
+    await preserveConversations(sessions.map((session) => session._id.toString()))
     for (const session of sessions) {
         const id = session._id.toString()
         forgetSession(id)
@@ -201,6 +204,9 @@ export async function purgeSession(
 ): Promise<void> {
     const id = session._id.toString()
     forgetSession(id)
+    // Métricas dos agentes: a estatística da conversa fica, marcada como removida (OPE-122).
+    const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
+    await preserveConversations([id])
     // Arquivos primeiro (objetos no storage + metadados), depois o resto da sessão.
     const { deleteSessionFiles } = await import("./files")
     await deleteSessionFiles(id)
