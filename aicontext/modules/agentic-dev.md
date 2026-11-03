@@ -390,6 +390,17 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
+- **Tempo real (OPE-124)**: a Central se atualiza sozinha, sem recarregar e sem polling. `DevCenterPage`
+  monta `useAgenticRealtime` (`agentic-updated` → consultas `["agentic"]`: mesas, fila e mesa aberta;
+  `tasks-updated` → fila) e `useTasksRealtime` (`tasks-updated` → lista de tarefas e detalhe das
+  tarefas afetadas; `task-columns-updated` → quadro e lista), todos em `private-app`. Assim, uma
+  tarefa criada ou movida para a fila do Opencode (rotina, Agente Opex, API, outra aba) aparece na
+  lista, e abrir, avançar ou excluir uma mesa reflete na hora. Ao voltar de uma queda de conexão,
+  `useRealtimeConnection` (aviso `RealtimeStatusBanner`) refaz as consultas ativas. **Por que Pusher e
+  não SSE:** os eventos já são publicados pelo servidor em todos esses gatilhos, o canal privado tem
+  autenticação e contagem de referências e a reconexão com nova busca já existe; SSE exigiria um
+  endpoint e um barramento novos só para avisar "algo mudou" (o NDJSON fica para a saída ao vivo do
+  agente).
 - A coluna **Tarefas** tem **largura fixa de 340 px** a partir de `lg` (a mesa fica ao lado, no
   espaço restante); abaixo de `lg` as colunas ficam empilhadas e a coluna ocupa a linha inteira.
 - Tarefas: do quadro local filtradas pelo projeto da central (sem arquivadas), ordenadas pela
@@ -939,7 +950,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   não duplicam). A queda da conexão do navegador/Pusher é coberta pelo `RealtimeStatusBanner`,
   que invalida as consultas ativas ao reconectar — a pendência persistida reaparece sem clique.
 - Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
-  `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`.
+  `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`. Na Central de desenvolvimento, `useTasksRealtime` também
+  mantém a lista de tarefas atualizada (ver "Central de desenvolvimento", "Tempo real").
 - Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
   prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas
   **Descrição** e **Spec.** (as primeiras da barra: descrição e especificação técnica da tarefa em

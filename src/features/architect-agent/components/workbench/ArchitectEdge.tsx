@@ -3,12 +3,14 @@
 import { memo, useState } from "react"
 import { EdgeLabelRenderer, getBezierPath, type Edge, type EdgeProps } from "@xyflow/react"
 import { motion } from "framer-motion"
-import { cn } from "@/lib/utils"
 import { PathTraveler } from "@/components/flow/path-traveler"
 import type { ArchitectEdgeKind } from "../../constants"
 import { enterDelay, useDiagramHighlight } from "./diagram-context"
 
-/** Aresta do canvas: desenha-se na entrada (Framer Motion), destaca no foco e esmaece fora dele. */
+/**
+ * Aresta do canvas: desenha-se na entrada (Framer Motion), sempre na cor primária do tema (linha e seta).
+ * O foco se destaca pela espessura; fora dele a aresta esmaece (opacidade inalterada pela troca de cor).
+ */
 
 export type DiagramEdge = Edge<{ kind: ArchitectEdgeKind; label: string | null; count: number; edgeIds: string[]; secondary: boolean; rank: number }, "architect">
 
@@ -32,11 +34,11 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
                 fill="none"
                 data-testid={`architect-edge-${id}`}
                 data-dimmed={dimmed ? "true" : "false"}
-                className={cn("react-flow__edge-path", focused ? "stroke-primary" : "stroke-muted-foreground")}
+                className="react-flow__edge-path stroke-primary"
                 strokeWidth={focused ? 2.25 : kind === "flow" ? 1.75 : 1.25}
                 strokeDasharray={DASH[kind]}
                 initial={highlight.reducedMotion ? false : { pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: dimmed ? 0.12 : data?.secondary ? 0.35 : 0.8 }}
+                animate={{ pathLength: 1, opacity: edgeOpacity({ dimmed, secondary: Boolean(data?.secondary) }) }}
                 transition={{ duration: highlight.live ? 0.45 : 0.3, delay: highlight.live ? 0 : enterDelay((data?.rank ?? 0) + 1, highlight.reducedMotion) }}
                 markerEnd={arrow ? `url(#${arrow})` : undefined}
             />
@@ -57,6 +59,11 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
 
 export const ARCHITECT_EDGE_TYPES = { architect: memo(ArchitectEdgeView) }
 
+/** Opacidade da aresta: quase apagada fora do foco e mais leve nas secundárias. */
+export function edgeOpacity({ dimmed, secondary }: { dimmed: boolean; secondary: boolean }) {
+    return dimmed ? 0.12 : secondary ? 0.35 : 0.8
+}
+
 /** Id do marcador de seta da aresta (só caracteres válidos num `url(#…)`). */
 export const arrowIdFor = (edgeId: string) => `architect-arrow-${edgeId.replace(/[^\w-]/g, "_")}`
 
@@ -68,7 +75,7 @@ function ArrowMarker({ id }: { id: string }) {
     return (
         <defs>
             <marker id={id} data-testid={id} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" className="fill-muted-foreground" />
+                <path d="M 0 0 L 10 5 L 0 10 z" className="fill-primary" />
             </marker>
         </defs>
     )

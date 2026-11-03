@@ -52,7 +52,7 @@ vi.mock("@/lib/db/models/DevTask", async () => {
     return { DevTask: mocks.models.task }
 })
 
-import { createService, setServiceArchived, updateService } from "@/features/services/server/service"
+import { createService, listServiceAggregates, setServiceArchived, updateService } from "@/features/services/server/service"
 import type { ServiceWriteInput } from "@/features/services/schemas"
 
 const baseInput = (overrides: Partial<ServiceWriteInput> = {}): ServiceWriteInput => ({
@@ -83,7 +83,7 @@ describe("createService", () => {
         const service = await createService(baseInput({ clientId: String(client._id) }), "local")
 
         expect(service).toMatchObject({ code: "SRV-1", clientId: String(client._id), hours: 2, clientHours: 4, billingBrl: 400, factor: 2, hourlyRate: 100, aiStatus: "pending" })
-        expect(service.serviceDate).toBe("2026-10-08T00:00:00.000Z")
+        expect(service.serviceDate).toBe("2026-10-08T12:00:00.000Z")
         expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: "Servico", acao: "CRIAR" }))
         expect(mocks.publishToChannels).toHaveBeenCalled()
     })
@@ -173,5 +173,50 @@ describe("setServiceArchived", () => {
 
         expect((await setServiceArchived(String(service._id), true, "local")).archived).toBe(true)
         expect((await setServiceArchived(String(service._id), false, "local")).archived).toBe(false)
+    })
+})
+
+describe("data do serviço e período (OPE-125, fuso America/Sao_Paulo)", () => {
+    /** Período de novembro/2026 como o navegador em São Paulo (UTC−3) envia: início/fim do dia local. */
+    const NOVEMBER_SP = { from: "2026-11-01T03:00:00.000Z", to: "2026-12-01T02:59:59.999Z" }
+
+    it("grava o dia escolhido ao meio-dia UTC, inclusive o 1º dia do mês", async () => {
+        const client = await seedClient()
+        const service = await createService(baseInput({ clientId: String(client._id), serviceDate: "2026-11-01" }), "local")
+        expect(service.serviceDate).toBe("2026-11-01T12:00:00.000Z")
+    })
+
+    it("serviço do dia 01 e do último dia entram no período do mês; o do dia anterior fica de fora", async () => {
+        const client = await seedClient()
+        mocks.nextProjectCode.mockResolvedValue(null)
+        for (const serviceDate of ["2026-10-31", "2026-11-01", "2026-11-30", "2026-12-01"]) {
+            await createService(baseInput({ clientId: String(client._id), serviceDate }), "local")
+        }
+
+        const rows = await listServiceAggregates(NOVEMBER_SP)
+
+        expect(rows.map((row) => new Date(row.serviceDate).toISOString()).sort()).toEqual(["2026-11-01T12:00:00.000Z", "2026-11-30T12:00:00.000Z"])
+    })
+
+    it("período só com data (yyyy-MM-dd, como o Agente Opex envia) inclui o serviço do último dia", async () => {
+        const client = await seedClient()
+        mocks.nextProjectCode.mockResolvedValue(null)
+        for (const serviceDate of ["2026-10-31", "2026-11-01", "2026-11-30", "2026-12-01"]) {
+            await createService(baseInput({ clientId: String(client._id), serviceDate }), "local")
+        }
+
+        const rows = await listServiceAggregates({ from: "2026-11-01", to: "2026-11-30" })
+
+        expect(rows.map((row) => new Date(row.serviceDate).toISOString()).sort()).toEqual(["2026-11-01T12:00:00.000Z", "2026-11-30T12:00:00.000Z"])
+    })
+
+    it("editar a data também grava ao meio-dia UTC e recusa data inexistente", async () => {
+        const client = await seedClient()
+        const service = await createService(baseInput({ clientId: String(client._id) }), "local")
+
+        const updated = await updateService(service.id, baseInput({ clientId: String(client._id), serviceDate: "2026-11-30" }), "local")
+        expect(updated.serviceDate).toBe("2026-11-30T12:00:00.000Z")
+
+        await expect(updateService(service.id, baseInput({ clientId: String(client._id), serviceDate: "2026-02-30" }), "local")).rejects.toMatchObject({ code: "INVALID_DATE" })
     })
 })
