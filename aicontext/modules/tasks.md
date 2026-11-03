@@ -414,7 +414,8 @@ navegador recebe uma URL assinada de `PUT` e envia direto ao bucket.
   novo** (que reaproveita o arquivo já enviado) e **descartar**; a fila da página não repete o item. O
   texto digitado durante o envio é preservado e arquivo sem nome (colado) ganha nome padrão por tipo
   (`fallbackAttachmentName`, ex.: `imagem-colada.png`). Sem `uploads`, colar arquivo não interfere no
-  campo. O mesmo campo é usado no **formulário de comentários** da página da tarefa: enquanto há
+  campo. Vale também no **modo Vim** (colar no modo inserção ou arrastar no editor), pelo destino de
+  arquivos que o campo registra no editor (`modules/editor-mode.md`). O mesmo campo é usado no **formulário de comentários** da página da tarefa: enquanto há
   envio em andamento — ou uma mídia com falha/cancelada aguardando **tentar de novo**/**descartar** —
   o botão **Comentar** fica desabilitado, para a referência não entrar depois de o comentário ser
   publicado.

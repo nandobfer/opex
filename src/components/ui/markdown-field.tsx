@@ -8,6 +8,7 @@ import { Markdown } from "@/components/ui/markdown"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { registerFileTarget } from "@/components/ui/vim-editor/file-target"
 
 /**
  * Estado de um envio exibido inline no campo. A fila de anexos da feature satisfaz este contrato.
@@ -134,9 +135,19 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
         setTab("write")
     }, [])
 
-    /** Ref do campo de texto: aplica o foco pendente assim que a aba Escrever monta (troca animada). */
+    /** Arquivos entregues direto pelo editor Vim (que esconde o `<textarea>`): o envio mais recente. */
+    const filesTarget = useRef<(files: File[], position: number) => boolean>(() => false)
+    /** Desfaz o registro do destino de arquivos do `<textarea>` anterior. */
+    const releaseTarget = useRef<(() => void) | null>(null)
+
+    /**
+     * Ref do campo de texto: aplica o foco pendente assim que a aba Escrever monta (troca animada) e
+     * registra o campo como destino dos arquivos colados/soltos no editor Vim.
+     */
     const attachArea = useCallback((node: HTMLTextAreaElement | null) => {
         areaRef.current = node
+        releaseTarget.current?.()
+        releaseTarget.current = node ? registerFileTarget(node, (files, position) => filesTarget.current(files, position)) : null
         if (node && pendingFocus.current) {
             pendingFocus.current = false
             node.focus()
@@ -196,6 +207,14 @@ export const MarkdownField = forwardRef<MarkdownFieldHandle, MarkdownFieldProps>
                 .catch(() => undefined)
         }
     }
+
+    useEffect(() => {
+        filesTarget.current = (files, position) => {
+            if (!uploads || files.length === 0) return false
+            sendFiles(files, position)
+            return true
+        }
+    })
 
     const handleFiles = (event: { preventDefault: () => void }, files: File[], position: number) => {
         if (!uploads || files.length === 0) return
