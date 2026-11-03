@@ -123,8 +123,11 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
 
 ## Páginas `/agente-adversario` e `/agente-mentor` (OPE-99)
 
-Itens **Agente Adversário** (ícone `Swords`) e **Agente Mentor** (ícone `GraduationCap`) da seção
-**Agentes** da barra lateral, no padrão da página do Agente Revisor (`/agente-revisor`): cabeçalho
+Itens **Adversário** (ícone `Swords`) e **Mentor** (ícone `GraduationCap`) da categoria **Agentes** da
+barra lateral. Desde a OPE-122 as duas usam o `AgentPage` compartilhado: a primeira aba (padrão) é a
+**Visão geral** com as métricas do agente (`modules/agent-metrics.md`), seguida das abas atuais —
+**Revisões** (`?aba=revisoes`) e **Memórias** no Adversário, **Execuções** (`?aba=execucoes`) no
+Mentor —, no padrão da página do Agente Revisor (`/agente-revisor`): cabeçalho
 `AgentPageHeader` com **Configurar** (leva à aba da configuração), aviso de indisponibilidade
 (`AvailabilityNotice`), filtros `ListFilters` **na URL** (`useUrlFilters`, valores inválidos
 descartados), lista paginada pela API com rolagem infinita e "Carregar mais (x de y)" de reserva

@@ -127,22 +127,38 @@ e opções na própria aba da página "Inteligência Artificial".
   `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub), **Entender tarefas**, **Resumos de tarefas**,
-  **Orçamentos**, **Estimar prazos**, **Agente Refinador** e **Agente Desenvolvedor** (ícone `</>`, `CodeXml`; id `desenvolvimento-agentico`)
-  (`modules/agentic-dev.md`; centrais em `/integracoes/ia/centrais/[id]`).
-  A aba **Agente Desenvolvedor** tem abas internas **Agentes** (agentes padrão e as **colunas
-  globais** de fila e movimentação herdadas pelas centrais — OPE-79) e **Centrais de desenvolvimento**
-  (subaba endereçável por `abaAgentic`). Há também a aba **Agente Revisor** (id `revisao-pr`), só com a
-  configuração (as revisões ficam na página `/agente-revisor`) — ver `modules/pr-review.md` — e a aba **Agente Opex** (`agente-opex`):
-  configuração do assistente por chat com ferramentas do app (provedores Gemini, Anthropic, OpenAI e
-  DeepSeek) — ver `modules/opex-agent.md` —, a aba **Agente Adversário** (`agente-adversario`,
-  ícone `Swords`): revisor da implementação da mesa com contexto limpo — ver
-  `modules/adversarial-agent.md` —, a aba **Agente Mentor** (`agente-mentor`, ícone `GraduationCap`):
-  transforma lições das mesas em memórias do Agente Adversário — ver `modules/adversarial-agent.md`,
-  "Agente Mentor" —, a aba **Agente Arquiteto** (`agente-arquiteto`, ícone `Network`): diagrama da
-  arquitetura do plano aprovado da mesa, em paralelo ao desenvolvimento, com qualquer provedor de
-  texto (OpenCode, o padrão, com sessão somente leitura no repositório; Gemini, Anthropic, OpenAI e
-  DeepSeek por `streamAi`, só com o plano) — ver `modules/architect-agent.md`. O título das memórias é gerado pelo Redator do Engramind (não há aba própria).
+  link para a página; mais o card Geral do hub) e **uma aba por agente**, na ordem do fluxo de
+  trabalho e com o nome **sem a palavra "Agente"** — a mesma ordem, os mesmos nomes e os mesmos ícones
+  da categoria **Agentes** da sidebar, todos do catálogo `AGENT_CATALOG`
+  (`src/features/agent-metrics/catalog.ts`; lista das abas em `src/features/ai/tabs.ts`, OPE-122):
+
+  | Aba | Id (`?aba=`) | Conteúdo |
+  |---|---|---|
+  | Opex | `agente-opex` | Assistente por chat com ferramentas do app — `modules/opex-agent.md` |
+  | Maddox | `agente-maddox` | Agente de chat sobre o OpenCode — `modules/maddox-agent.md` |
+  | Orçamentista | `orcamentista` | Seções **Orçamentos** (prévia do portal) e **Estimar prazos** |
+  | Catalogador | `catalogador` | Seções **Resumos de tarefas** e **Tags de tarefas** |
+  | Refinador | `refinar-tarefa` | Refinar tarefa (texto ou skill) — `modules/refinement.md` |
+  | Desenvolvedor | `desenvolvimento-agentico` | Ícone `</>` (`CodeXml`); abas internas **Agentes** (agentes padrão e colunas globais, OPE-79) e **Centrais de desenvolvimento** (`abaAgentic`; centrais em `/integracoes/ia/centrais/[id]`) — `modules/agentic-dev.md` |
+  | Arquiteto | `agente-arquiteto` | Diagrama do plano aprovado (ícone `Network`) — `modules/architect-agent.md` |
+  | Adversário | `agente-adversario` | Revisor da implementação (ícone `Swords`) — `modules/adversarial-agent.md` |
+  | Revisor | `revisao-pr` | Só a configuração; as revisões ficam em `/agente-revisor` — `modules/pr-review.md` |
+  | Mentor | `agente-mentor` | Lições das mesas que viram memórias (ícone `GraduationCap`) — `modules/adversarial-agent.md`, "Agente Mentor" |
+
+  O título das memórias é gerado pelo Redator do Engramind (não há aba própria). Cada página de agente
+  (`/agente-<nome>`, `modules/agent-metrics.md`) tem o botão **Configurar**, que leva à aba acima.
+- **Abas fundidas** (Orçamentista e Catalogador): uma seção por feature (`MergedFeaturesTab`,
+  `src/features/ai/components/shared/`), cada uma com a **própria configuração** (ativar, provedor,
+  modelo, instruções e opções) e o mesmo comportamento de antes. A aba tem **um rodapé único**:
+  **Salvar** grava em sequência só as seções alteradas (ou ainda sem configuração salva) e, se uma
+  falhar, avisa por toast qual não foi salva (e quais foram); **Desfazer** volta todas; trocar de aba
+  com qualquer seção alterada pede descarte. Cada seção é um formulário próprio
+  (`BudgetPreviewSection`, `EstimateHoursSection`, `TaskSummarySection`, `TaskTagsSection`) ligado ao
+  rodapé por `useFeatureSection` (estado + `save()`/`undo()`).
+- **Links antigos** (`AI_TAB_ALIASES`, `useIntegrationTab(..., aliases)`): `?aba=orcamentos` e
+  `?aba=estimar-prazos` abrem **Orçamentista**; `?aba=resumos-tarefas` e `?aba=tags-tarefas` abrem
+  **Catalogador** — a URL vira a canônica com `?secao=<feature>` e a página rola até a seção;
+  `?aba=entender-tarefas` (feature removida) e qualquer id desconhecido abrem **Provedores**, sem erro.
 - Página do provedor (`AiProviderEditorForm`, `?aba=`): abas **Configuração** (campos, segredos e
   ações de salvar), **Controles** (só OpenCode: serviço, logs e backups — `modules/opencode-resources.md`),
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
@@ -225,33 +241,18 @@ Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@
 - Trocar a conta vale para as próximas chamadas do OpenCode (sessões já em andamento podem seguir com a
   anterior).
 
-## Feature "Entender tarefas"
+## Feature "Entender tarefas" (removida na OPE-122)
 
-- Configuração em `ai_feature_settings` (`feature: "understand-task"`), schema Zod
-  `understandTaskSettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente
-  (OpenCode), variante/raciocínio, temperatura e máximo de tokens (provedores com amostragem: Gemini, Anthropic, OpenAI e DeepSeek), formato (**Seções
-  fixas**: Resumo, O que precisa ser feito, Pontos de atenção e riscos, Dúvidas para o solicitante;
-  ou **Texto livre**), instruções (prompt de sistema, "Restaurar padrão") e o que enviar
-  (comentários, histórico, apontamentos).
-- Regras ao salvar (`server/settings.ts`): ativa exige provedor e modelo; o provedor escolhido
-  precisa estar **conectado** para ativar (409); modelo, variante e agente são conferidos no
-  catálogo do provedor (400). Campos que não se aplicam ao provedor são gravados vazios. Auditoria
-  `FeatureIA` e evento `ai-feature-updated` em `private-app` (o botão da tarefa recarrega).
-- Na tela, só provedores conectados podem ser escolhidos; trocar o provedor limpa modelo, variante e
-  agente. Com OpenCode aparece o aviso de que o texto da tarefa vem de terceiros (prefira agente só
-  de leitura; o agente é configurável).
-- **Entrada** (`src/features/ai/understand-task.ts`, puro): a tarefa é buscada no servidor
-  (`getTask`) e vira Markdown — código, tipo, prioridade, projeto, data de criação, issue do GitHub,
-  horas apontadas, descrição, especificação técnica e, conforme a configuração, comentários,
-  histórico e apontamentos. Textos longos são cortados.
-- **Execução**: `POST /api/tasks/[id]/understand` — feature indisponível (409) ou tarefa
-  inexistente (404) respondem JSON; senão NDJSON (`start`, eventos do `streamAi`, `done`/`error`).
-  Fechar a conexão cancela a geração. O texto gerado **não é salvo**; cada geração grava uma linha
-  em `ai_usage_logs` (tokens, custo, duração, erro; TTL 90 dias) e logs no debug do hub `ai`.
-- **Modal** (`UnderstandTaskDialog`): inicia ao abrir; Markdown progressivo com cursor animado,
-  "Pensando…", ferramentas do agente, avisos, erro (preservando o texto parcial); **Parar**,
-  **Gerar novamente**, **Copiar**; rodapé com tokens, custo e duração. Estado em
-  `understand-stream.ts` (redutor puro) + `useUnderstandTaskStream`.
+A feature saiu por completo: aba, botão e modal na tarefa, APIs (`/api/ai/features/understand-task` e
+`/api/tasks/[id]/understand`), a ferramenta `understand_task` do Agente Opex e a configuração gravada.
+A migração idempotente `remove-understand-task-feature` apaga a configuração (`ai_feature_settings`),
+os registros de uso (`ai_usage_logs`) e o consumo (`ai_consumption_logs`, origem `understand-task`)
+dela, então os totais de consumo deixam de contar esse histórico (a auditoria fica). O que era
+compartilhado continua com nome neutro: a tarefa em Markdown (`task-context-prompt.ts`,
+`buildTaskContextPrompt`, usada pela mesa e pelo Refinador), o redutor dos streams de texto
+(`ai-stream-state.ts`, usado pelos Resumos), o card de provedor e modelo
+(`components/shared/ProviderModelCard.tsx`) e a atividade/uso do stream
+(`components/shared/AiStreamStatus.tsx`).
 
 ## Feature "Resumos de tarefas"
 
@@ -259,8 +260,9 @@ Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@
   `taskSummarySettingsSchema` (mesmo na tela e na API): ativa, provedor, modelo, agente (OpenCode),
   variante/raciocínio, temperatura e máximo de tokens (provedores com amostragem: Gemini, Anthropic, OpenAI e DeepSeek), **tamanho máximo** do resumo
   (40–400 caracteres, padrão 140) e instruções (prompt de sistema, "Restaurar padrão").
-- Regras ao salvar iguais às de "Entender tarefas" (ativa exige provedor+modelo conectado; modelo,
-  variante e agente conferidos no catálogo; campos que não se aplicam ao provedor viram vazios).
+- Regras ao salvar (`server/settings.ts`): ativa exige provedor e modelo, e o provedor precisa estar
+  **conectado** para ativar (409); modelo, variante e agente são conferidos no catálogo (400); campos
+  que não se aplicam ao provedor viram vazios.
   **Ao ativar** (`enabled` de falso→verdadeiro), dispara em segundo plano a varredura das tarefas
   não concluídas sem resumo (`runTaskSummaryBackfill` via `runAfterResponse`). Auditoria `FeatureIA`
   e evento `ai-feature-updated` em `private-app`.
@@ -288,8 +290,8 @@ Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@
   a conexão cancela a geração.
 - **Modal** (`TaskSummaryDialog`): inicia ao abrir; texto progressivo com cursor animado,
   atividade do agente e uso; **Parar**, **Gerar novamente**, **Copiar**. O botão **Gerar resumo**
-  fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Reusa o redutor de
-  `understand-stream.ts`.
+  fica no cabeçalho da tarefa (desabilitado com o motivo quando indisponível). Estado no redutor de
+  `ai-stream-state.ts`.
 
 ## Serviços (título, resumo e tags)
 
@@ -379,7 +381,7 @@ com "Gerar novamente" (`POST /api/services/[id]/ai`).
   nunca no diretório da integração OpenCode; lista as centrais com seus diretórios.
 - Regras ao salvar iguais às demais features. Auditoria `FeatureIA` e evento `ai-feature-updated`.
 - **Entrada** (`src/features/refinement/prompt.ts`, puro): a tarefa inteira em Markdown
-  (`buildUnderstandTaskPrompt`); as instruções configuradas + um **protocolo fixo** são aplicadas como
+  (`buildTaskContextPrompt`); as instruções configuradas + um **protocolo fixo** são aplicadas como
   **entrada durável da sessão** do OpenCode (`session.instructions.entry.put`, chave `opex-refinement`;
   o prompt do turno reenvia o protocolo se o servidor não aceitar a entrada). O protocolo garante que a
   especificação cubra **critérios de aceite**, **localização da mudança** (rotas/URLs, telas, módulos,
@@ -485,7 +487,6 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `/api/ai/providers/opencode/service/**`, `/scopes`, `/resources/**`, `/backups/**` | Serviço e recursos do OpenCode (`modules/opencode-resources.md`, "APIs") |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
 | `GET /api/ai/skills` (`?refresh=1`) | Skills instaladas no OpenCode (`AiSkillDto`, sem o conteúdo; `empty` = vazia) |
-| `GET/PUT /api/ai/features/understand-task` | Configuração de "Entender tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-tags` | Configuração de "Tags de tarefas" (taxonomia) + disponibilidade |
 | `GET/PUT /api/ai/features/budget-preview` | Configuração de "Orçamentos" + disponibilidade |
@@ -496,15 +497,15 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `GET/POST /api/ai/agents/[agentId]/memories` | Memórias de uma lista; criar `{ texto, categoria?, fixada? }` → `{ memoria, duplicada?, similares? }` |
 | `GET/PATCH/DELETE /api/ai/agents/[agentId]/memories/[memoryId]` | Ler; editar `{ texto?, categoria?, versao?, fixada?, ativa? }`; excluir |
 | `…/agents/[agentId]/clients/[clientId]/memories[/memoryId]` | O mesmo nas listas por cliente |
-| `POST /api/tasks/[id]/understand` | Gera a explicação (NDJSON) |
 | `POST /api/tasks/[id]/summary` | Gera (ou regenera) o resumo de 1 linha (NDJSON) |
 | `POST /api/tasks/[id]/tags` | Gera (ou regenera) as tags da tarefa (JSON `{ tags }`) |
 
 ## Testes
 
-`__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (entrada e
-estado do modal, entrada de rascunhos, `prepareUnderstandTask`, configuração, rota NDJSON,
-`UnderstandTaskDialog` e `UnderstandTaskButton`; resumos: `task-summary` puro,
+`__tests__/lib/ai/` (catálogo dos provedores e `streamAi`), `__tests__/features/ai/` (`ai-settings`
+com a configuração de referência das features; `ai-tabs` com a ordem das abas, os links antigos e o
+rodapé único das abas fundidas; `remove-understand-task` com a migração e a ausência de referências;
+resumos: `task-summary` puro,
 `task-summary-settings`, `task-summary-job` e `task-summary-route`; `task-detail-sections` e
 `task-detail-tabs` cobrem as abas da página da tarefa — a Descrição (sem título próprio) não sendo
 substituída pelo resumo, a especificação técnica em aba própria e a troca de abas sem quebrar os

@@ -260,7 +260,7 @@ compartilhados de `server/drafts.ts`. No cliente: `src/features/tasks/preview/` 
 ## Página da tarefa `/tarefas/[id]` (`components/detail/`)
 
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
-  **Entender tarefa**, **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
+  **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e
   **Excluir**. **Editar** abre o `TaskForm` **inline** no lugar das abas (não é mais modal);
   salvar/cancelar voltam à visão.
 - Logo abaixo do título, **em linha inteira** (abaixo também da linha de botões, ocupando a largura da
@@ -339,7 +339,6 @@ preservar o escopo de hooks de cada aba.
   **cliente** (`estimateClientName`). **Sem cliente**, exibe só as horas reais. Salvar/gerar grava
   auditoria (`horasEstimadas`/`faturamentoEstimado`) e publica `tasks-updated`.
 - Estados: esqueleto, **Tarefa não encontrada**, erro com tentar novamente.
-- **Entender tarefa** (cabeçalho): modal com IA em streaming (ver `modules/ai.md`).
 - **Refinar tarefa** (cabeçalho): abre a aba **Especificação técnica** e **inicia** o refinamento,
 em que um agente do OpenCode faz perguntas (mesmo sistema da mesa) e **reescreve a especificação
 técnica** da tarefa a cada rodada até ela ficar clara; o painel fica **abaixo da especificação**, com

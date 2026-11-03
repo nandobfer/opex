@@ -4,6 +4,11 @@ Assistente por chat que executa as funcionalidades do app com ferramentas (tool 
 sem limite de passos nem de chamadas. Portado do My Tasks (OPE-81, bloco H) como recurso **nativo**
 (sem gate de Recursos beta).
 
+
+Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral das conversas, Histórico
+(conversas do dono e do portal, só leitura; a estatística de cada conversa sobrevive à retenção em
+`agent_conversations`) e Memórias — ver `modules/agent-metrics.md`.
+
 ## Onde fica e como abre
 
 - **Item único dos agentes de chat** (`AgentChatNavItem`, `components/agents/`), no rodapé da barra
@@ -244,7 +249,7 @@ risco (os catálogos são distintos).
 | Contexto (sempre ligado) | `get_app_overview` |
 | Documentação do app | `list_app_docs`, `read_app_doc`, `search_app_docs` — os `.md` de `aicontext/` para explicar como usar o app, regras e funcionalidades. Só no agente do **dono** (detalhes abaixo) |
 | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_task` e `create_preview` aceitam `chatFileIds` |
-| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue; ver "Criar tarefa"), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `understand_task`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
+| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue; ver "Criar tarefa"), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `complete_workbench`* (concluir sem PR, com motivo) e `set_workbench_stage` (definir etapa de espera, confirmação por padrão; ambas pela mesma `setWorkbenchStage` da tela — `get_workbench` traz `settableStages`), `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |

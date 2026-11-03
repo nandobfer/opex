@@ -193,6 +193,9 @@ sem pedido explícito.
 - Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
   (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
+- Métricas dos agentes: `agent-metrics-updated` (`{ agents }`) em `private-app` quando a rotina
+  `agent-usage-daily` grava execuções ou resumos; as páginas `/agente-<nome>` também reagem aos eventos
+  que já existem de cada agente (ver `aicontext/modules/agent-metrics.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
@@ -307,7 +310,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   (mapa mental radial) — só posições, a animação continua com Framer Motion — e exportação em PNG com
   `html-to-image` (`aicontext/modules/architect-agent.md`)
 - Gráficos: recharts pelo componente Chart do shadcn/ui (`src/components/ui/chart.tsx`), com
-  tooltip padronizado e cores por variáveis `--chart-1..6`
+  tooltip padronizado e cores por variáveis `--chart-1..6`; gráficos, KPIs e filtros de métricas
+  compartilhados em `src/components/metrics/` (Dashboards e páginas dos agentes)
 - Utilitários de estilo: `clsx` + `tailwind-merge` (`cn()`), `class-variance-authority`
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`

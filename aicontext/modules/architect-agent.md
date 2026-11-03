@@ -7,6 +7,10 @@ processos acontecem, quais estruturas e informações existem e como se ligam �
 como num quadro branco. **Nunca** traz nomes de arquivos, diretórios, funções, componentes, rotas,
 coleções nem variáveis. O diagrama aparece na aba **"Arquitetura (N)"** da mesa, em tempo real.
 
+
+Página `/agente-arquiteto` (categoria **Agentes** da sidebar, OPE-122): Visão geral (tamanho e duração
+da geração dos diagramas), Histórico das versões e Memórias — ver `modules/agent-metrics.md`.
+
 ## Diagrama de ideias (não de código)
 
 - **Fonte**: todos os planos da mesa, consolidados (ver "Fonte: os planos da tarefa"). O agente só lê o

@@ -50,7 +50,10 @@ GitHub vem de `GET /api/pr-reviews?limit=1`), **Mesas de trabalho** (replanejar 
 
 ### Página "Agente Revisor" (`/agente-revisor`, `PrReviewsPage`)
 
-Item **Agente Revisor** da barra lateral (seção Início, logo após Central de desenvolvimento).
+Item **Revisor** da categoria **Agentes** da barra lateral. Desde a OPE-122 a página usa o `AgentPage`
+compartilhado: a primeira aba (padrão) é a **Visão geral** com as métricas do Revisor (ver
+`modules/agent-metrics.md`) e a lista abaixo fica na aba **Revisões** (`?aba=revisoes`). O agente
+informa no bloco JSON final também o total de achados (`findings`, gravado em `pr_reviews.findings`).
 
 - Cabeçalho com **Configurar** (vai para a aba) e **Revisar PR** (pela URL; desabilitado com o motivo
   quando a feature está indisponível), e os repositórios acompanhados (com o projeto).

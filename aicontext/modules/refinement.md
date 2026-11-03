@@ -1,6 +1,6 @@
 # Módulo: Refinar tarefa (refinamento de tarefa pelo Agente Refinador)
 
-Na página da tarefa, ao lado de **Entender tarefa**, o botão de ícone **Refinar tarefa** seleciona a
+Na página da tarefa, no cabeçalho, o botão de ícone **Refinar tarefa** seleciona a
 aba **"Especificação técnica"** e **inicia** o refinamento (se ainda não houver): um agente do
 **OpenCode** lê a tarefa inteira, faz **perguntas de esclarecimento** (uma rodada por vez, usando o
 **mesmo sistema de perguntas da mesa de trabalho** — os formulários do OpenCode) e vai
@@ -16,6 +16,11 @@ Código: `src/features/refinement/` (domínio + servidor + UI). Reaproveita o cl
 `@opencode/client`, o **runner genérico de turno** `src/lib/ai/opencode-run.ts` (compartilhado com a
 mesa) e o **mesmo barramento de eventos** das mesas (`agentic/server/hub.ts` + `agentic_events`,
 chaveado pelo id do refinamento). Modelo em `src/lib/db/models/Refinement.ts`.
+
+
+Página `/agente-refinador` (categoria **Agentes** da sidebar, OPE-122): Visão geral (% concluídos,
+perguntas e tempo até a especificação, registrados pelos eventos `refinement-*`) e Histórico — ver
+`modules/agent-metrics.md`.
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Agente Refinador")
 
@@ -79,7 +84,7 @@ de texto). A entrada durável `opex-refinement` passa a levar só o
 
 1. O botão do cabeçalho abre a aba **já com a intenção de iniciar**; o painel **inicia** o refinamento
    (idempotente: se já existir, apenas devolve o estado) e dispara um **turno** com a tarefa em
-   Markdown — **inteira, sem cortes** (`buildUnderstandTaskPrompt` com `fullText`) — + o protocolo.
+   Markdown — **inteira, sem cortes** (`buildTaskContextPrompt` com `fullText`) — + o protocolo.
    Sem a intenção do botão (abrir a aba clicando nela), não inicia.
 2. O agente faz as perguntas pela **ferramenta nativa de perguntas do OpenCode, `question`** — a
    mesma que abre um formulário (mesmos campos da mesa: texto, número, sim/não, opções, múltipla
