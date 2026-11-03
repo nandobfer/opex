@@ -75,12 +75,11 @@ describe('ArchitectDiagramView', () => {
     expect(Number(focused.getAttribute('stroke-width'))).toBeGreaterThan(Number(dimmed.getAttribute('stroke-width')))
   })
 
-  it('opacidade da aresta: cheia no foco, esmaecida fora dele e mais leve nas secundárias', () => {
-    expect(edgeOpacity({ focused: true, dimmed: false, secondary: false })).toBe(1)
-    expect(edgeOpacity({ focused: true, dimmed: false, secondary: true })).toBe(1)
-    expect(edgeOpacity({ focused: false, dimmed: true, secondary: false })).toBe(0.12)
-    expect(edgeOpacity({ focused: false, dimmed: false, secondary: true })).toBe(0.35)
-    expect(edgeOpacity({ focused: false, dimmed: false, secondary: false })).toBe(0.8)
+  it('opacidade da aresta preservada: 0,8 normal, 0,35 secundária e 0,12 fora do foco', () => {
+    expect(edgeOpacity({ dimmed: false, secondary: false })).toBe(0.8)
+    expect(edgeOpacity({ dimmed: false, secondary: true })).toBe(0.35)
+    expect(edgeOpacity({ dimmed: true, secondary: false })).toBe(0.12)
+    expect(edgeOpacity({ dimmed: true, secondary: true })).toBe(0.12)
   })
 
   it('clique abre o painel lateral com descrição e vizinhos; clicar num vizinho troca o nó', () => {

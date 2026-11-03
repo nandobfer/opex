@@ -9,7 +9,7 @@ import { enterDelay, useDiagramHighlight } from "./diagram-context"
 
 /**
  * Aresta do canvas: desenha-se na entrada (Framer Motion), sempre na cor primária do tema (linha e seta).
- * O foco se destaca pela espessura e pela opacidade cheia; fora dele a aresta esmaece.
+ * O foco se destaca pela espessura; fora dele a aresta esmaece (opacidade inalterada pela troca de cor).
  */
 
 export type DiagramEdge = Edge<{ kind: ArchitectEdgeKind; label: string | null; count: number; edgeIds: string[]; secondary: boolean; rank: number }, "architect">
@@ -38,7 +38,7 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
                 strokeWidth={focused ? 2.25 : kind === "flow" ? 1.75 : 1.25}
                 strokeDasharray={DASH[kind]}
                 initial={highlight.reducedMotion ? false : { pathLength: 0, opacity: 0 }}
-                animate={{ pathLength: 1, opacity: edgeOpacity({ focused, dimmed, secondary: Boolean(data?.secondary) }) }}
+                animate={{ pathLength: 1, opacity: edgeOpacity({ dimmed, secondary: Boolean(data?.secondary) }) }}
                 transition={{ duration: highlight.live ? 0.45 : 0.3, delay: highlight.live ? 0 : enterDelay((data?.rank ?? 0) + 1, highlight.reducedMotion) }}
                 markerEnd={arrow ? `url(#${arrow})` : undefined}
             />
@@ -59,11 +59,9 @@ function ArchitectEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosit
 
 export const ARCHITECT_EDGE_TYPES = { architect: memo(ArchitectEdgeView) }
 
-/** Opacidade da aresta: cheia no foco, quase apagada fora dele e mais leve nas secundárias. */
-export function edgeOpacity({ focused, dimmed, secondary }: { focused: boolean; dimmed: boolean; secondary: boolean }) {
-    if (dimmed) return 0.12
-    if (focused) return 1
-    return secondary ? 0.35 : 0.8
+/** Opacidade da aresta: quase apagada fora do foco e mais leve nas secundárias. */
+export function edgeOpacity({ dimmed, secondary }: { dimmed: boolean; secondary: boolean }) {
+    return dimmed ? 0.12 : secondary ? 0.35 : 0.8
 }
 
 /** Id do marcador de seta da aresta (só caracteres válidos num `url(#…)`). */

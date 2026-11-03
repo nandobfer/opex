@@ -310,8 +310,8 @@ vale só para aquele pedido.
     caracteres pedidos pelo prompt; a linha de baixo traz o tipo, o começo da descrição (1 linha; a
     completa fica no painel) e o selo, que assim nunca cobre o título;
   - arestas e setas na **cor primária do tema** (`stroke-primary`/`fill-primary`, nunca cinza), em
-    qualquer estado: o foco se destaca pela espessura e pela opacidade cheia (`edgeOpacity`: 1 no foco,
-    0,8 normal, 0,35 secundária, 0,12 esmaecida); o rótulo da aresta segue discreto;
+    qualquer estado: o foco se destaca pela espessura e o resto esmaece pela opacidade (`edgeOpacity`:
+    0,8 normal, 0,35 secundária, 0,12 fora do foco); o rótulo da aresta segue discreto;
   - nós com ícone por tipo e selo **Novo**/**Alterado**; hover destaca o nó, os vizinhos e as arestas
     dele e esmaece o resto; clique abre o **painel lateral** (descrição, vizinhos
     clicáveis e "Recolher o grupo"), numa camada fora do viewport transformado; grupos recolhem pelo
