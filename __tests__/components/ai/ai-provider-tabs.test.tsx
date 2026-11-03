@@ -71,10 +71,10 @@ describe('TemperatureInput', () => {
   it('as telas de IA, dos agentes e do Engramind usam o campo compartilhado (sem Input de temperatura próprio)', () => {
     const files = [
       'src/features/opex-agent/components/settings/OpexModelCard.tsx',
-      'src/features/ai/components/task-tags/TaskTagsTab.tsx',
+      'src/features/ai/components/task-tags/TaskTagsSection.tsx',
       'src/features/ai/components/task-summary/SummaryPromptCard.tsx',
-      'src/features/ai/components/estimate-hours/EstimateHoursTab.tsx',
-      'src/features/ai/components/budget-preview/BudgetPreviewTab.tsx',
+      'src/features/ai/components/estimate-hours/EstimateHoursSection.tsx',
+      'src/features/ai/components/budget-preview/BudgetPreviewSection.tsx',
       'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx',
     ]
     for (const file of files) {

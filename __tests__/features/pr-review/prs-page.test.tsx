@@ -6,6 +6,12 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 import type { PrReviewDto, PrReviewListDto } from "@/features/pr-review/types"
 
 const mocks = vi.hoisted(() => ({ pages: vi.fn(), settings: vi.fn(), mutate: vi.fn(), refetch: vi.fn(), fetchNextPage: vi.fn() }))
+// OPE-122: a Visão geral (primeira aba) é da página compartilhada dos agentes; aqui o foco são as abas atuais.
+vi.mock("@/features/agent-metrics/hooks/useAgentMetrics", () => ({
+    useAgentMetrics: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }),
+    useAgentMetricsRealtime: vi.fn(),
+    useAgentHistoryPages: vi.fn(),
+}))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("@/features/pr-review/hooks/usePrReview", () => ({
     usePrReviewPages: mocks.pages,
@@ -64,7 +70,7 @@ const result = (data: PrReviewListDto | undefined, extra: Record<string, unknown
 
 beforeEach(() => {
     vi.clearAllMocks()
-    window.history.replaceState(null, "", "/agente-revisor")
+    window.history.replaceState(null, "", "/agente-revisor?aba=revisoes")
     mocks.settings.mockReturnValue({ data: { availability: { available: true, reason: null } } })
     mocks.pages.mockReturnValue(result(page([review({ id: "r1" }), review({ id: "r2", number: 13, state: "running", verdict: null, title: "Nova tela" })])))
 })
@@ -103,13 +109,13 @@ describe("página Agente Revisor", () => {
     })
 
     it("filtros da URL vão para a consulta; vazio com filtro oferece limpar", () => {
-        window.history.replaceState(null, "", "/agente-revisor?states=failed&q=login")
+        window.history.replaceState(null, "", "/agente-revisor?aba=revisoes&states=failed&q=login")
         mocks.pages.mockReturnValue(result(page([])))
         render(<PrReviewsPage />)
         expect(mocks.pages).toHaveBeenLastCalledWith({ q: "login", states: "failed" })
         expect(screen.getByText("Nenhuma revisão com estes filtros")).toBeTruthy()
         fireEvent.click(screen.getAllByRole("button", { name: "Limpar filtros" }).at(-1)!)
-        expect(window.location.search).toBe("")
+        expect(window.location.search).toBe("?aba=revisoes")
         expect(mocks.pages).toHaveBeenLastCalledWith({})
     })
 

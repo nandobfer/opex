@@ -46,10 +46,20 @@ function walk(dir: string): string[] {
 }
 
 describe('remoção de "Entender tarefas"', () => {
-  it('nenhum código do app referencia a feature (só a migração que a apaga)', () => {
+  // Só sobram a migração que apaga os dados (e o registro dela) e o redirecionamento do link antigo da aba.
+  const ALLOWED = ['remove-understand-task-feature.ts', 'migrations/registry.ts', 'features/ai/constants.ts']
+
+  it('nenhum código do app referencia a feature (só a migração que a apaga e o redirecionamento do link antigo)', () => {
     const offenders = walk(join(process.cwd(), 'src'))
-      .filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('remove-understand-task-feature.ts'))
+      .filter((file) => /\.(ts|tsx)$/.test(file) && !ALLOWED.some((allowed) => file.endsWith(allowed)))
       .filter((file) => /understand-task|UnderstandTask|entender-tarefas|understand_task|Entender tarefas/.test(readFileSync(file, 'utf8')))
     expect(offenders).toEqual([])
+  })
+})
+
+describe('link antigo da aba', () => {
+  it('?aba=entender-tarefas é o único resto e abre Provedores', async () => {
+    const { AI_TAB_ALIASES } = await import('@/features/ai/constants')
+    expect(AI_TAB_ALIASES['entender-tarefas']).toEqual({ tab: 'provedores' })
   })
 })
