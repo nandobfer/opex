@@ -18,6 +18,11 @@ interface ScheduleEditorProps {
     value: Schedule
     onChange: (value: Schedule) => void
     disabled?: boolean
+    /**
+     * Regra extra do destino (ex.: o cron UTC do Engramind, OPE-117): a mensagem aparece no lugar da
+     * descrição, como os erros do próprio agendamento. As Rotinas não passam (sem restrição a mais).
+     */
+    validate?: (value: Schedule) => string | null
 }
 
 type IntervalUnit = "minutes" | "hours"
@@ -49,8 +54,8 @@ const fieldMotion = {
 } as const
 
 /** Editor amigável de agendamento — sem expressão cron. Horários em Brasília. */
-export function ScheduleEditor({ value, onChange, disabled }: ScheduleEditorProps) {
-    const error = validateSchedule(value)
+export function ScheduleEditor({ value, onChange, disabled, validate }: ScheduleEditorProps) {
+    const error = validateSchedule(value) ?? validate?.(value) ?? null
     const intervalUnit: IntervalUnit = value.type === "interval" && value.minutes % 60 === 0 ? "hours" : "minutes"
 
     return (

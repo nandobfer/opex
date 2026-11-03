@@ -35,9 +35,9 @@ describe('ferramentas do Engramind', () => {
     expect(new Set(engramindTools.map((tool) => tool.group))).toEqual(new Set(['engramind']))
   })
 
-  it('confirmação só em excluir, arquivar e revogar', () => {
+  it('confirmação só em excluir, arquivar, revogar e rotacionar', () => {
     expect(engramindTools.filter((tool) => tool.risk === 'destructive').map((tool) => tool.name).sort()).toEqual(
-      ['archive_engramind_channel', 'archive_engramind_memory', 'delete_engramind_agent', 'delete_engramind_app', 'delete_engramind_channel', 'delete_engramind_memory', 'revoke_engramind_token'].sort(),
+      ['archive_engramind_channel', 'archive_engramind_memory', 'delete_engramind_agent', 'delete_engramind_app', 'delete_engramind_channel', 'delete_engramind_memory', 'revoke_engramind_token', 'rotate_engramind_token'].sort(),
     )
     for (const tool of engramindTools.filter((item) => item.risk === 'destructive')) expect(typeof tool.summarize).toBe('function')
   })

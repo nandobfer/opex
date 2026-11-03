@@ -436,6 +436,20 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         summarize: (input) => `Revogar o token ${input.token} do Engramind (deixa de autenticar na hora)`,
         event: "identities.updated",
     }),
+    op({
+        id: "rotate_token",
+        method: "POST",
+        route: "tokens/:token/rotate",
+        area: "tokens",
+        risk: "destructive",
+        tool: "rotate_engramind_token",
+        label: "Rotacionar token do Engramind",
+        description: "Emite um token igual (mesmo app, agente, tipo, escopos, rótulo e validade) e revoga o antigo na mesma transação. O consumidor precisa receber o novo segredo; o dos tokens do próprio Opex é gravado sozinho.",
+        input: z.object({ token: tokenRef }),
+        request: (input) => ({ path: `/v1/tokens/${enc(input.token)}/rotate`, body: {} }),
+        summarize: (input) => `Rotacionar o token ${input.token} do Engramind (o antigo deixa de autenticar na hora)`,
+        event: "identities.updated",
+    }),
     // --- Canais ------------------------------------------------------------------------------
     op({
         id: "list_channels",
@@ -802,6 +816,25 @@ export const ENGRAMIND_OPERATIONS: readonly EngramindOperation[] = [
         description: "Recoloca na fila um job failed, com as tentativas zeradas.",
         input: z.object({ job: z.string().trim().min(1).max(40) }),
         request: (input) => ({ path: `/v1/jobs/${enc(input.job)}/retry`, body: {} }),
+        event: "jobs.updated",
+    }),
+    op({
+        id: "run_consolidation",
+        method: "POST",
+        route: "consolidation/run",
+        area: "operation",
+        risk: "write",
+        tool: "run_engramind_consolidation",
+        label: "Executar a consolidação do Engramind",
+        description:
+            "Roda a consolidação com a configuração salva: sem channel, todos os canais com consolidation.enabled; com channel, só ele. dry_run: true devolve o plano (duplicatas, classificação, desatualizadas) sem gravar nem chamar o LLM; sem dry_run, enfileira um job por canal (already_queued quando já havia).",
+        input: z.object({
+            channel: z.string().trim().min(1).max(160).optional(),
+            dry_run: z.boolean().optional(),
+            tasks: z.array(z.enum(["duplicates", "importance", "stale"])).min(1).max(3).optional(),
+        }),
+        request: (input) => ({ path: "/v1/consolidation/run", body: input }),
+        summarize: (input) => `${input.dry_run ? "Ver o plano da" : "Executar a"} consolidação ${input.channel ? `do canal ${input.channel}` : "de todos os canais com consolidação ativa"}`,
         event: "jobs.updated",
     }),
     op({

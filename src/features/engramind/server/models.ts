@@ -53,6 +53,11 @@ export interface IEngramindState {
     sources?: { redator?: IEngramindAiSource | null; embedding?: IEngramindAiSource | null } | null
     agentTokens?: Partial<Record<MemoryIdentity, IEngramindAgentToken>> | null
     memoryContext?: IEngramindMemoryContextState | null
+    /**
+     * Token `kind: app` do app opex (OPE-117) que provisiona agentes, assinaturas e tokens de agente: só o
+     * id e o prefixo (o segredo é o campo privado `appToken` da integração).
+     */
+    appToken?: { tokenId: string; prefix: string; issuedAt: Date } | null
 }
 
 /** Último contexto de memórias recebido por agente e combinação de canais (reserva com o Engramind fora do ar). */
@@ -109,6 +114,7 @@ const stateSchema = new Schema<IEngramindState>(
         sources: { type: Schema.Types.Mixed, default: null },
         agentTokens: { type: Schema.Types.Mixed, default: null },
         memoryContext: { type: Schema.Types.Mixed, default: null },
+        appToken: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false },
 )

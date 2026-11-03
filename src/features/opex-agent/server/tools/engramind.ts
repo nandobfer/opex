@@ -30,10 +30,11 @@ type AnyTool = OpexToolDef<unknown>
 const tool = <I>(def: Omit<OpexToolDef<I>, "group">) => defineTool<I>({ ...def, group: "engramind" }) as unknown as AnyTool
 
 /** Token emitido: o modelo recebe só o prefixo; o segredo fica para o botão "Ver token". */
-async function issueToken(input: unknown, actorId: string): Promise<unknown> {
-    const issued = (await (await runner()).runEngramindOperation("issue_token", input, actorId)) as IssuedToken
+async function issueToken(input: unknown, actorId: string, operationId: "issue_token" | "rotate_token" = "issue_token"): Promise<unknown> {
+    const issued = (await (await runner()).runEngramindOperation(operationId, input, actorId)) as IssuedToken & { savedOwn?: boolean }
     const { token } = issued
-    const view = { id: token.id, prefix: token.prefix, kind: token.kind, scopes: token.scopes, app: token.app.slug, agent: token.agent?.slug ?? null, label: token.label, expiresAt: token.expires_at }
+    const view = { id: token.id, prefix: token.prefix, kind: token.kind, scopes: token.scopes, app: token.app?.slug ?? null, agent: token.agent?.slug ?? null, label: token.label, expiresAt: token.expires_at }
+    if (issued.savedOwn) return { token: view, note: "Token do próprio Opex rotacionado: o novo segredo já foi gravado na integração (o antigo deixou de autenticar)." }
     if (!issued.secret) return { token: view, note: "Emissão repetida: o Engramind não devolve o segredo de novo. Revogue e emita outro se ele se perdeu." }
     let resultAction: Awaited<ReturnType<Awaited<ReturnType<typeof reveals>>["createSecretReveal"]>>
     try {
@@ -101,7 +102,7 @@ function operationTool(operation: EngramindOperation): AnyTool {
         input: operation.input,
         ...(operation.summarize ? { summarize: operation.summarize } : {}),
         ...(operation.redact ? { redact: operation.redact } : {}),
-        execute: (input, context) => (operation.id === "issue_token" ? issueToken(input, context.actorId) : runOperation(operation, input, context)),
+        execute: (input, context) => (operation.id === "issue_token" || operation.id === "rotate_token" ? issueToken(input, context.actorId, operation.id) : runOperation(operation, input, context)),
     })
 }
 

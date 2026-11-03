@@ -341,6 +341,8 @@ export interface EngramindConnectionDto {
     /** Token admin com `read+write+delete`. */
     tokenSufficient: boolean
     webhook: { url: string | null; secretConfigured: boolean; updatedAt: string | null; matches: boolean } | null
+    /** Token `kind: app` do provisionamento (OPE-117), também "Este Opex" e protegido. */
+    appTokenId?: string | null
 }
 
 export interface BootstrapStepDto {

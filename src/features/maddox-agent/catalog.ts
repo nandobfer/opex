@@ -17,7 +17,7 @@ export const MADDOX_EXCLUDED_GROUPS: readonly string[] = ["jobs"]
  * Ferramentas do dono fora do Maddox: dependem de um botão do card do Agente Opex que o MCP não tem
  * (`issue_engramind_token` guarda o segredo para o "Ver token"; pelo MCP o token ficaria inalcançável).
  */
-export const MADDOX_EXCLUDED_TOOLS: readonly string[] = ["issue_engramind_token"]
+export const MADDOX_EXCLUDED_TOOLS: readonly string[] = ["issue_engramind_token", "rotate_engramind_token"]
 
 const included = (group: string) => !MADDOX_EXCLUDED_GROUPS.includes(group)
 
