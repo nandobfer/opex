@@ -10,7 +10,7 @@ import type { MentorRunDto, MentorRunMemoryDto } from '@/features/adversarial-ag
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
-  memory: { data: undefined as MentorRunMemoryDto | undefined, isLoading: false, isError: false, refetch: vi.fn() },
+  memory: { data: undefined as MentorRunMemoryDto | undefined, isLoading: false, isError: false, expired: false, refetch: vi.fn() },
   memoryArg: vi.fn(),
 }))
 
@@ -29,7 +29,7 @@ import { MentorRunDialog } from '@/features/adversarial-agent/components/mentor/
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
-  mocks.memory = { data: undefined, isLoading: false, isError: false, refetch: vi.fn() }
+  mocks.memory = { data: undefined, isLoading: false, isError: false, expired: false, refetch: vi.fn() }
 })
 
 const LONG = 'Ao revisar telas com provedores, confira se cada provider é montado acima do consumidor. '.repeat(12)
@@ -106,6 +106,14 @@ describe('MentorRunDialog (OPE-128)', () => {
     mocks.memory = { ...mocks.memory, data: { state: 'ok', resumo: 'Ao revisar telas', resumoPendente: true, atualizadaEm: null } }
     render(<MentorRunDialog run={run()} onClose={vi.fn()} />)
     expect(screen.getByText(/Resumo sendo gerado pelo Engramind/)).toBeTruthy()
+  })
+
+  it('limite da releitura estourado com o resumo pendente: deixa de dizer que está gerando', () => {
+    mocks.memory = { ...mocks.memory, expired: true, data: { state: 'ok', resumo: 'Ao revisar telas', resumoPendente: true, atualizadaEm: null } }
+    render(<MentorRunDialog run={run()} onClose={vi.fn()} />)
+    expect(screen.queryByText(/Resumo sendo gerado/)).toBeNull()
+    expect(screen.getByText(/O resumo ainda não ficou pronto/)).toBeTruthy()
+    expect(screen.getByText('Ao revisar telas')).toBeTruthy()
   })
 
   it('sem memória gravada: estado vazio discreto do resumo; memória excluída: aviso', () => {

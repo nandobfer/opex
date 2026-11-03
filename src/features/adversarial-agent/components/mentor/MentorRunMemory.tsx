@@ -39,7 +39,9 @@ function MemorySummary({ run }: { run: MentorRunDto }) {
                     {view === "ok" && data && (
                         <div className="space-y-1">
                             <p className="break-words text-base font-medium leading-snug">{data.resumo}</p>
-                            {data.resumoPendente ? (
+                            {data.resumoPendente && query.expired ? (
+                                <p className="text-xs text-muted-foreground">O resumo ainda não ficou pronto: este é o texto provisório.</p>
+                            ) : data.resumoPendente ? (
                                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Resumo sendo gerado pelo Engramind…
                                 </p>

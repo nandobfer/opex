@@ -153,7 +153,9 @@ real (`adversarial-review-updated` / `adversarial-mentor-updated` invalidam as p
   - **Memória** (`MentorRunMemory`): primeiro o **resumo** em destaque, que é o título do Engramind lido
     na hora por `GET /api/adversarial/mentor/runs/[id]/memory` (`useMentorRunMemory`, só com
     `memoryId`). Enquanto o resumo está pendente, mostra o texto provisório com "Resumo sendo gerado
-    pelo Engramind…" e relê a cada 5 s por até 2 min. Sem memória gravada (sugestão, não gravou,
+    pelo Engramind…" e relê a cada 5 s por até 2 min, contados a cada abertura do detalhe
+    (não pelo cache). Se o limite estourar com o resumo ainda pendente, a releitura para e o aviso troca
+    para "O resumo ainda não ficou pronto: este é o texto provisório." Sem memória gravada (sugestão, não gravou,
     falhou), mostra um estado vazio discreto. Com a memória excluída ou movida, mostra um aviso; com
     erro, "Tentar novamente". Depois vem o texto completo gravado pelo Mentor, numa área de leitura
     (`max-w-prose`, `leading-relaxed`, rolagem interna até 40vh). Numa sugestão, o destino

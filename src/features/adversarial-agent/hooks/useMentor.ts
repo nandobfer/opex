@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
@@ -51,23 +51,39 @@ export function useMentorRunPages(params: MentorRunListParams) {
     })
 }
 
-/** Enquanto o Engramind gera o resumo, relê a cada 5 s por até 2 min. */
-const MEMORY_POLL_MS = 5_000
-const MEMORY_POLL_MAX_MS = 120_000
+/** Enquanto o Engramind gera o resumo, relê a cada 5 s por até 2 min (contados a cada abertura do detalhe). */
+export const MENTOR_MEMORY_POLL_MS = 5_000
+export const MENTOR_MEMORY_POLL_MAX_MS = 120_000
+
+/** Intervalo da releitura do resumo: só com o resumo pendente e antes de estourar o limite da abertura. */
+export const mentorMemoryPollInterval = (data: Pick<MentorRunMemoryDto, "resumoPendente"> | undefined, expired: boolean): number | false =>
+    data?.resumoPendente && !expired ? MENTOR_MEMORY_POLL_MS : false
 
 /**
  * Resumo da memória gravada pela execução aberta (só com `memoryId`). Fica sob `MENTOR_RUNS_KEY`:
- * a aprovação e o `adversarial-mentor-updated` também o invalidam.
+ * a aprovação e o `adversarial-mentor-updated` também o invalidam. `expired`: o limite da releitura
+ * estourou nesta abertura com o resumo ainda pendente (a tela para de dizer que está gerando).
  */
 export function useMentorRunMemory(run: Pick<MentorRunDto, "id" | "memoryId"> | null) {
     const id = run?.id ?? null
     const memoryId = run?.memoryId ?? null
-    return useQuery({
+    const key = id && memoryId ? `${id}:${memoryId}` : null
+    const [expiredKey, setExpiredKey] = useState<string | null>(null)
+    const expired = key !== null && expiredKey === key
+    const query = useQuery({
         queryKey: [...MENTOR_RUNS_KEY, "memory", id, memoryId],
         queryFn: () => get<MentorRunMemoryDto>(`/adversarial/mentor/runs/${id}/memory`),
-        enabled: Boolean(id && memoryId),
-        refetchInterval: (query) => (query.state.data?.resumoPendente && query.state.dataUpdateCount < MEMORY_POLL_MAX_MS / MEMORY_POLL_MS ? MEMORY_POLL_MS : false),
+        enabled: key !== null,
+        refetchInterval: (current) => mentorMemoryPollInterval(current.state.data, expired),
     })
+    const pending = Boolean(query.data?.resumoPendente)
+    // O relógio do limite começa quando o detalhe abre (o hook monta) ou troca de execução, não no cache.
+    useEffect(() => {
+        if (!key || !pending || expiredKey === key) return
+        const timer = setTimeout(() => setExpiredKey(key), MENTOR_MEMORY_POLL_MAX_MS)
+        return () => clearTimeout(timer)
+    }, [key, pending, expiredKey])
+    return { ...query, expired }
 }
 
 /** Aprovar (com o texto opcionalmente editado) ou descartar uma sugestão do Mentor. */
