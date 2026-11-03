@@ -2,11 +2,11 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import type { ChartConfig } from "@/components/ui/chart"
-import { BarsChart } from "./charts/BarsChart"
-import { ChartCard } from "./charts/ChartCard"
-import { EmptyChart } from "./charts/EmptyChart"
-import { RankedBarsCard } from "./charts/RankedBarsCard"
-import { colorAt } from "./charts/palette"
+import { BarsChart } from "@/components/metrics/charts/BarsChart"
+import { ChartCard } from "@/components/metrics/charts/ChartCard"
+import { EmptyChart } from "@/components/metrics/charts/EmptyChart"
+import { RankedBarsCard } from "@/components/metrics/charts/RankedBarsCard"
+import { colorAt } from "@/components/metrics/charts/palette"
 import { formatCount } from "../format"
 import type { DashboardDto } from "../types"
 
