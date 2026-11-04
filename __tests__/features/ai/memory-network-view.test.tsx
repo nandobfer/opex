@@ -71,7 +71,6 @@ beforeEach(() => {
     if (url === '/ai/memories/meta') return { data: { data: meta } }
     if (url === '/ai/features/agent-self-memory') return { data: { data: { settings: { opex: true, maddox: true, adversario: true, desenvolvedor: true }, updatedAt: null } } }
     if (url === '/engramind/settings') return { data: { data: { settings: [{ key: 'consolidation.stale_after_days', value: 30 }] } } }
-    if (url === '/engramind/memory-usage') return { data: { data: {} } }
     return { data: { data: rows } }
   })
 })
@@ -267,10 +266,16 @@ describe('seção Memórias do Agente Opex', () => {
   })
 })
 
+/** O que o Opex mantém em volta da rede de `@engramind/client` (OPE-116). */
+const OPEX_NETWORK_ADAPTERS = ['src/features/engramind/components/OpexEngramindProvider.tsx', 'src/features/engramind/components/page/AboutCard.tsx', 'src/features/engramind/components/network']
+
 describe('controles do design system', () => {
   it('cards de memórias e a aba de migração não usam select nem checkbox nativos nem primitivos sem tema', () => {
-    const roots = ['src/features/ai/components/memories', 'src/features/engramind/components/integration/migration', 'src/features/engramind/components/network']
+    // OPE-116: os componentes da rede vêm de `@engramind/client` (a garantia sobre eles está no teste estático
+    // do repositório da lib); aqui ficam o que o Opex mantém: os adaptadores e o card do fim da rede.
+    const roots = ['src/features/ai/components/memories', 'src/features/engramind/components/integration/migration', ...OPEX_NETWORK_ADAPTERS]
     const files = roots.flatMap(function walk(dir: string): string[] {
+      if (!statSync(dir).isDirectory()) return dir.endsWith('.tsx') ? [dir] : []
       return readdirSync(dir).flatMap((name) => {
         const path = join(dir, name)
         return statSync(path).isDirectory() ? walk(path) : path.endsWith('.tsx') ? [path] : []
@@ -285,11 +290,12 @@ describe('controles do design system', () => {
     }
   })
 
-  it('a rede não tem cor fixa: só tokens do tema (hex/rgb fora)', () => {
-    const dir = 'src/features/engramind/components/network'
-    for (const name of readdirSync(dir)) {
-      const source = readFileSync(join(dir, name), 'utf8')
-      expect(source, name).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/)
+  it('os adaptadores da rede no Opex não têm cor fixa: só tokens do tema (hex/rgb/hsl(var) fora)', () => {
+    const files = OPEX_NETWORK_ADAPTERS.flatMap((path) => (statSync(path).isDirectory() ? readdirSync(path).map((name) => join(path, name)) : [path]))
+    expect(files).toEqual(expect.arrayContaining(['src/features/engramind/components/OpexEngramindProvider.tsx', 'src/features/engramind/components/page/AboutCard.tsx', 'src/features/engramind/components/network/agent-icons.ts']))
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8')
+      expect(source, file).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsl\(var\(/)
     }
   })
 })

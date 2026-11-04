@@ -55,7 +55,8 @@ async function issueToken(input: unknown, actorId: string, operationId: "issue_t
  * Agente do Opex dono da chamada (`app/agente`): o Agente Maddox (`scope.agent === "maddox"`, sessão dele pelo
  * MCP) é `opex/maddox`; o chat do Agente Opex, `opex/opex`. Chamada por **token de sistema** (`origin`
  * `api-token`: outro sistema ou o dono pelo MCP) não é um agente do Opex (`null`). O consumo ao vivo da rede
- * vem do webhook `memory.consumed` do Engramind (OPE-116): só leituras com o token do agente animam a rede.
+ * vem do webhook `memory.consumed` do Engramind (OPE-116): só leituras com o token do agente animam a rede,
+ * por isso as dicas e a busca do Agente Opex e do Maddox usam o token do agente (`agentRead`).
  */
 export function searchConsumer(context: Pick<OpexToolContext, "origin" | "scope">): "opex/opex" | "opex/maddox" | null {
     if (context.origin?.kind === "api-token") return null
@@ -63,11 +64,13 @@ export function searchConsumer(context: Pick<OpexToolContext, "origin" | "scope"
 }
 
 /**
- * Dicas pelo próprio agente (OPE-117, decisão do dono): o Agente Opex e o Maddox do dono pedem as dicas com o
- * token do agente (`opex/opex`, `opex/maddox`), como os outros agentes — o Engramind exclui o que já está em
- * texto completo no contexto desse token. Sem token do agente, ou por token de sistema, segue pelo admin.
+ * Leituras pelo próprio agente: o Agente Opex e o Maddox do dono pedem as dicas (OPE-117, decisão do dono) e a
+ * busca (OPE-116) com o token do agente (`opex/opex`, `opex/maddox`), como os outros agentes. Nas dicas, o
+ * Engramind exclui o que já está em texto completo no contexto desse token. Na busca, o `memory.consumed`
+ * chega com o agente e a rede pulsa como antes da OPE-116. Sem token do agente, ou por token de sistema,
+ * segue pelo admin.
  */
-async function agentHints(input: unknown, context: OpexToolContext): Promise<unknown | undefined> {
+async function agentRead(operationId: "get_hints" | "search_memories", input: unknown, context: OpexToolContext): Promise<unknown | undefined> {
     const agent = searchConsumer(context)
     if (!agent) return undefined
     const { agentTokenFor } = await import("@/features/engramind/server/memory-network")
@@ -75,13 +78,35 @@ async function agentHints(input: unknown, context: OpexToolContext): Promise<unk
     if (!token) return undefined
     const { engramindCall, engramindTarget } = await import("@/features/engramind/server/client")
     const { baseUrl } = await engramindTarget()
-    const operation = ENGRAMIND_OPERATIONS.find((item) => item.id === "get_hints")!
+    const operation = ENGRAMIND_OPERATIONS.find((item) => item.id === operationId)!
     return engramindCall("POST", operation.request(operation.input.parse(input)), { target: { baseUrl, token } })
+}
+
+/**
+ * Busca pelo agente sem perder o alcance do gestor: o token do agente só enxerga os canais que ele assina.
+ * Canal pedido fora do alcance (`403`) ou busca sem canais e sem resultado caem na busca do admin, que alcança
+ * a rede inteira (sem pulso, porque o `memory.consumed` vem sem agente).
+ */
+async function agentSearch(input: unknown, context: OpexToolContext): Promise<unknown | undefined> {
+    try {
+        const result = (await agentRead("search_memories", input, context)) as { results?: unknown[] } | undefined
+        if (result === undefined) return undefined
+        const explicit = Array.isArray((input as { channels?: unknown } | null)?.channels) && ((input as { channels: unknown[] }).channels.length > 0)
+        if (!explicit && Array.isArray(result?.results) && result.results.length === 0) return undefined
+        return result
+    } catch (error) {
+        if (error instanceof DomainError && error.status === 403) return undefined
+        throw error
+    }
 }
 
 async function runOperation(operation: EngramindOperation, input: unknown, context: OpexToolContext): Promise<unknown> {
     if (operation.id === "get_hints") {
-        const own = await agentHints(input, context)
+        const own = await agentRead("get_hints", input, context)
+        if (own !== undefined) return own
+    }
+    if (operation.id === "search_memories") {
+        const own = await agentSearch(input, context)
         if (own !== undefined) return own
     }
     return (await runner()).runEngramindOperation(operation.id, input, context.actorId)

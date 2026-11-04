@@ -246,12 +246,19 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
 
 ### Visões
 
+> Desde a OPE-116 os componentes, hooks e funções puras citados nesta seção e nas seguintes (Partículas,
+> Card da memória, Estatísticas, Barra e gestão, Celular, Dados) estão na lib `@engramind/client`
+> (`src/react/engramind/components/network/` e `src/react/engramind/network/` do repositório dela), com os
+> testes no próprio repositório da lib (`__tests__/network/`, `__tests__/react/`). Os caminhos `network/*.ts`
+> abaixo são relativos a `src/react/engramind/` da lib. No Opex ficam só os adaptadores (seção anterior):
+> `OpexEngramindProvider`, `AboutCard`, `components/network/agent-icons.ts` e `network/channel-labels.ts`.
+
 - **Inicial: Apps x canais** (`AppsOverviewView`, OPE-129): um card por **app ativo** do Engramind
   (`AppNode`, tipo `app`, com as mesmas dimensões do card do agente: ícone, nome, slug e "N agentes · M
   acessíveis") e os canais, no mesmo canvas, com as mesmas distribuições, escala e enquadramento da
   visão de agentes (o `layoutOverview` recebe os apps no lugar dos agentes). O link app → canal agrega
   as assinaturas de todos os agentes ativos do app naquele canal (`appLinks` em
-  `network/app-network.ts`, puro: um link por par, aresta `app:<app>→<canal>`); a dica do link mostra
+  `network/app-network.ts` da lib, puro: um link por par, aresta `app:<app>→<canal>`); a dica do link mostra
   "N agentes · modos". O tamanho do app é o **alcance** (`appReach`: memórias ativas dos canais que os
   agentes dele assinam). Estatísticas: apps, canais, memórias ativas/inativas, consumos ao vivo, "Por
   canal" e "Por app (alcance)". O consumo ao vivo e a partícula verde de criação de um agente pulsam o
@@ -276,7 +283,7 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   ícone e nome sem o prefixo "Agente" (`agentDisplayName`; agentes do Opex com o ícone das abas de
   `/integracoes/ia`, os demais com o robô genérico — `agent-icons.ts`) e os canais ativos, numa das
   **duas distribuições** escolhidas no card "O que é o Engramind" (`OptionTabs` "Distribuição da rede";
-  `layoutOverview` em `network/overview-layout.ts`, OPE-113, puro e determinístico):
+  `layoutOverview` em `network/overview-layout.ts` da lib, OPE-113, puro e determinístico):
   - **Órbita** (`by-agent`, padrão): o canal usado por **um agente só** orbita esse agente numa órbita
     **justa pela caixa** (`clearDistance`: a menor distância que separa os dois cards naquela direção,
     então perto em cima e embaixo e mais afastado dos lados), em leque virado para fora (volta inteira
@@ -369,7 +376,7 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   histórico, e o voltar do navegador não fica preso nele).
   A troca de visão anima (escala/opacidade + `fitView` com duração; 0 com movimento reduzido).
 
-### Partículas (`network/network-math.ts` + `network/particles.ts`, puros)
+### Partículas (`network/network-math.ts` + `network/particles.ts` da lib, puros)
 
 | Atributo | Regra |
 |---|---|
@@ -418,7 +425,7 @@ partícula sai animada (`useLeavingItems`: um timer por item que sai, independen
 lista, então o node e o link somem depois de `LEAVE_MS` mesmo com a lista relida no meio). Excluir ou
 mover **daqui** não avisa: a remoção é marcada só na confirmação do diálogo (`useLocalRemovals`; cancelar
 não marca, falha desmarca, a marca é esquecida quando o item sai). As listas do Engramind
-(`useEngramindList().items`) e os dados da rede (`useEngramindNetwork`) mantêm a referência enquanto os
+(`useEngramindList().items`) e os dados da rede (`useEngramindNetwork` da lib) mantêm a referência enquanto os
 dados não mudam, para o layout e os nodes não recalcularem a cada render.
 
 **Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
@@ -453,7 +460,7 @@ linha e **Status**, **Autor**, **Período** (`PresetDateRangeFilter`, pela últi
 Categoria e Autor são `CadastroMultiSelect` com várias escolhas (pesquisáveis, menos Status; Autor
 lista os autores que aparecem nas memórias). O **Limpar** zera busca e filtros, mas não a distribuição.
 Filtros, busca, Arquivados e a distribuição ficam **no navegador** (`usePersistentState`, chave
-`opex.engramind.network-filters.v1`, schema `networkFiltersSchema` em `network/filters.ts`; valor
+`opex.engramind.network-filters.v1`, schema `networkFiltersSchema` em `network/filters.ts` da lib; valor
 inválido cai no padrão campo a campo).
 
 **Busca automática** (`useNetworkSearch`): roda sozinha 500 ms depois de parar de digitar (a espera é
@@ -552,8 +559,10 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
   a busca e o `get_memory`. O Opex **não publica mais o próprio consumo** (`publishConsumption` saiu):
   - **Rede**: o evento vai pelo SSE e a lib agrupa pelo `consumption`, animando **uma vez** por leitura
     (pulso no agente, partícula até os canais e de volta dos que entregaram, brilho cheio e +tamanho até a
-    releitura de 6 s). Leitura sem agente (token admin ou de app, como as buscas do dono na tela e a
-    ferramenta `search_engramind_memories`, que roda com o token admin) não anima. Id de memória que a
+    releitura de 6 s). Leitura sem agente (token admin ou de app, como as buscas do dono na tela) não anima.
+    As dicas e a busca do Agente Opex e do Maddox do dono (`get_engramind_hints`,
+    `search_engramind_memories`) usam o token do agente (`opex/opex`, `opex/maddox`) e pulsam como esse
+    agente. Id de memória que a
     tela não carregou é ignorado. Agente de outro app que lê um canal visível pulsa só o canal.
   - **Atividade dos agentes** (fora da rede): `forwardWebhookLive` agrupa os eventos pelo `consumption` e
     publica **um** `engramind-consumption` em `private-app` com
@@ -811,8 +820,11 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
   padrão; entrada objeto `applyAiSourceToolSchema`, a chave nunca passa pelo modelo) e
   `resend_engramind_ai_key`. Também no MCP do Maddox.
 - Memórias brutas (OPE-109): `create_engramind_memory` e `update_engramind_memory` (texto/categoria com
-  `expected_version`), `write`. A busca `search_engramind_memories` roda com o token admin e não
-  anima a rede (o consumo ao vivo vem do `memory.consumed` com agente, OPE-116).
+  `expected_version`), `write`. A busca `search_engramind_memories` roda com o token do agente da sessão
+  (`opex/opex` no Agente Opex, `opex/maddox` no Maddox; `agentRead`), então o `memory.consumed` chega com o
+  agente e a rede pulsa (OPE-116). O token do agente só alcança os canais que ele assina: canal pedido fora
+  desse alcance (`403`), ou busca sem canais e sem resultado, cai na busca do admin, com a rede inteira e sem
+  pulso. Por token de sistema (MCP do dono), ou sem token do agente, vai direto pelo admin.
 - `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
   memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.
 - Segredos fora do histórico e dos cards (`redact` em `set_engramind_secret`, webhooks, propostas de
@@ -853,32 +865,29 @@ segredos) e logada (Pino, `feature: "engramind"`).
 
 ## Testes
 
-Rede (OPE-109): `__tests__/features/engramind/network-math.test.ts` (cor, tamanho, brilho, cores dos
-canais, links, layout, filtros, estatísticas e o parser `tagged`), `consumption.test.ts`,
-`memory-context.test.ts` (formato `tagged`, ids no cache e consumo), `agent-tools.test.ts` (busca
-publica o consumo), `__tests__/components/engramind/network.test.tsx` e
-`__tests__/features/ai/memory-network-view.test.tsx` (React Flow mockado por
-`__tests__/helpers/xyflow.tsx`: o happy-dom não mede o canvas). OPE-113:
-`overview-layout.test.ts` (as duas distribuições: nenhum card sobreposto em vários cenários,
-determinismo, enquadramento, canal exclusivo perto do agente, compartilhado entre os seus, escala),
-`channel-labels.test.ts` (canal legível), `network-filters.test.ts` (filtros em lista, período, chips, schema do
-navegador e lotes de canais da busca), os casos novos de `network-math.test.ts` (cor do link,
-criação por agente e relevância da busca híbrida) e o bloco `OPE-113` de `network.test.tsx` (links
-roxos/verdes, regressão da busca no universo do agente, partícula verde de criação, filtros recolhíveis
-e guardados no navegador) e o bloco `OPE-113 (rodada 2)` (**regressão do piscar**: o mock do React Flow
-guarda o último `nodes`/`edges` e passar o mouse, abrir e trocar o card reaproveitam os mesmos objetos;
-trilha com os botões; chip do autor; canal de central legível; distribuição Órbita/Radial no card do
-fim da página, sumindo nos universos; escala); `engramind-page.test.tsx` (card depois da rede,
-Configurar e Saiba mais) e o bloco "rodada 3" de `overview-layout.test.ts` (rótulos, Radial abaixo de
-3.900 px, Órbita até 1,3× a Radial com vizinho mais próximo em até 400 px, compartilhados no mesmo
-centroide sem fazer o círculo crescer, órbita justa pela caixa).
-OPE-129: `app-network.test.ts` (canais vazios fora das redes com inativas contando, agregação por app,
-canais e alcance do app) e o bloco `OPE-129: Apps x canais` de `network.test.tsx` (cards de app e
-links agregados, seleção do app por `?app=`, Voltar/Esc por nível, app inexistente, clique no canal,
-canais vazios escondidos e aparecendo/sumindo ao vivo, Novo canal abrindo o universo, estados vazio e
-carregando); os testes da visão de agentes abrem o app (`inApp`). Acesso aos canais sem memória: o
-card lista só os do app e abre o painel (Editar/Arquivar), e no universo **Ações do canal** abre o
-mesmo painel.
+Rede e universos (OPE-109, OPE-113, OPE-129; desde a OPE-116 na lib): as funções puras (cor, tamanho,
+brilho, links, layout das duas distribuições, filtros, estatísticas, Apps x canais) e os componentes (rede,
+card, filtros, painel do canal, Assinantes, Importar, regressão do piscar) têm os testes no repositório de
+`@engramind/client` (`__tests__/network/*.test.ts` e `__tests__/react/*.test.tsx`, inclusive o teste estático
+de cor fixa do pacote). No Opex ficam os testes da integração, com a lib real e o React Flow mockado por
+`__tests__/helpers/xyflow.tsx` (o happy-dom não mede o canvas) e o SSE pelo `EventSource` falso de
+`__tests__/helpers/engramind-live.ts`:
+
+- `__tests__/components/engramind/network.test.tsx`: a rede pelo `OpexEngramindProvider` (visões, Apps x
+  canais por `?app=`, card da memória, filtros no navegador, "N gravadas", rótulos das centrais, consumo ao
+  vivo e eventos pelo SSE).
+- `__tests__/components/engramind/opex-engramind-provider.test.tsx`: o detalhe do canal com as Configurações
+  do canal do Opex (`slots.channelDetail`), o link de volta, o "Configurar" e o `toLibError`.
+- `__tests__/components/engramind/engramind-page.test.tsx`: card "O que é o Engramind" depois da rede,
+  Configurar e Saiba mais.
+- `__tests__/features/ai/memory-network-view.test.tsx`: universos de `/integracoes/ia` e o teste estático dos
+  adaptadores do Opex (sem cor fixa nem controles nativos).
+- `__tests__/features/engramind/live.test.ts`, `events-route.test.ts` e `publish-engramind.test.ts`: o SSE da
+  rede, o `memory.consumed` agrupado em `engramind-consumption` e as mutações do Opex no SSE (`{ live: false }`
+  no webhook).
+- `channel-labels.test.ts` (rótulos das centrais), `memory-context.test.ts` (formato `tagged`, ids no cache,
+  última entrega) e `agent-tools.test.ts` (dicas e busca do Agente Opex e do Maddox com o token do agente,
+  com queda para o admin).
 Demais: `__tests__/features/engramind/*` (catálogo e schemas, cliente, bootstrap, tester, webhook, serviço das
 operações, `.env` com bash/awk reais, host-env, ferramentas do agente, cobertura dos tooltips, IA do
 Opex: `ai-source-mapping` e `ai-source-service`), `__tests__/components/engramind/engramind-ui.test.tsx`,
