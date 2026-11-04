@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { MessageSquarePlus, X } from "lucide-react"
+import { useHorizontalWheelScroll } from "@/hooks/useHorizontalWheelScroll"
 import { cn } from "@/lib/utils"
 import { OPEX_DEFAULT_TITLE } from "../constants"
 import { OPEX_DRAFT_TAB } from "../hooks/useOpexTabs"
@@ -17,10 +18,11 @@ interface OpexSessionTabsProps {
     onClose: (id: string) => void
 }
 
-/** Abas das sessões abertas (rolagem horizontal); fechar a aba não exclui a sessão. */
+/** Abas das sessões abertas (a roda vertical rola a faixa); fechar a aba não exclui a sessão. */
 export function OpexSessionTabs({ open, active, sessions, onActivate, onClose }: OpexSessionTabsProps) {
     const reduceMotion = useReducedMotion() ?? false
     const stripRef = useRef<HTMLDivElement>(null)
+    useHorizontalWheelScroll(stripRef)
 
     useEffect(() => {
         const selected = stripRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
