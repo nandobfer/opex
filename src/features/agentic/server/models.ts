@@ -1,6 +1,6 @@
 import type { IAgenticFork, IAgenticWorkbench } from "@/lib/db/models/Agentic"
-import { WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "../constants"
-import { applyModelOverride, asModelOverride, modelSource, resolveAgent, type ModelOverride } from "../logic"
+import { WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "../constants"
+import { applyModelOverride, asModelOverride, modelSource, resolveAgent, toModelChoice, type ModelOverride } from "../logic"
 import type { AgentConfig, AgenticSettings, CentralConfig, ModelOverrideInput } from "../schemas"
 import type { ModelChoiceDto, ModelSourceDto } from "../types"
 import { loadCentral } from "./centrals"
@@ -11,22 +11,8 @@ import { assertAgentConfigs, loadAgenticSettings } from "./settings"
  * (configuração do papel + troca gravada) e valida a troca no OpenCode.
  */
 
-/** Modelo/variante para a tela (variante só com modelo definido). */
-const choiceOf = (agent: AgentConfig) => ({ model: agent.model, variant: agent.model ? agent.variant : null })
-
-/**
- * Modelo efetivo de um papel para a tela: o do papel ou o trocado, com o valor herdado (sem a troca)
- * e a origem. `source`/`overrideSource` seguem a precedência fork > mesa > central > global.
- */
-export function toModelChoice(base: AgentConfig, override: ModelOverride | null, baseSource?: ModelSourceDto, overrideSource: ModelSourceDto = "workbench"): ModelChoiceDto {
-    const effective = applyModelOverride(base, override)
-    return {
-        ...choiceOf(effective),
-        overridden: Boolean(override),
-        inherited: choiceOf(base),
-        ...(baseSource ? { source: override ? overrideSource : baseSource, inheritedSource: baseSource } : {}),
-    }
-}
+/** A escolha da tela (`toModelChoice`) também é usada pelo cliente na etapa inicial da mesa; mantida aqui por compatibilidade. */
+export { toModelChoice }
 
 /** Trocas da mesa, por papel, já validadas. */
 export function workbenchOverrides(doc: Pick<IAgenticWorkbench, "modelOverrides">): Partial<Record<WorkbenchModelRole, ModelOverride>> {
@@ -90,6 +76,24 @@ export async function validatedModelOverride(input: ModelOverrideInput, label: s
     const override: ModelOverride = { model: input.model, variant: input.variant ?? null }
     await assertAgentConfigs([{ label, config: { agent: null, ...override } }], false)
     return override
+}
+
+/**
+ * Trocas escolhidas na etapa inicial da mesa (OPE-134): confere todos os modelos numa única chamada
+ * ao OpenCode (modelo/variante inexistente → 400) e devolve o que será gravado em `modelOverrides`.
+ */
+export async function validatedStartOverrides(input: Partial<Record<WorkbenchModelRole, ModelOverrideInput>> | null | undefined): Promise<Partial<Record<WorkbenchModelRole, ModelOverride>>> {
+    const entries: { role: WorkbenchModelRole; model: string; variant: string | null }[] = []
+    for (const role of WORKBENCH_MODEL_ROLES) {
+        const value = input?.[role]
+        if (value?.model) entries.push({ role, model: value.model, variant: value.variant ?? null })
+    }
+    if (!entries.length) return {}
+    await assertAgentConfigs(
+        entries.map((entry) => ({ label: WORKBENCH_MODEL_ROLE_LABELS[entry.role], config: { agent: null, model: entry.model, variant: entry.variant } })),
+        false,
+    )
+    return Object.fromEntries(entries.map((entry) => [entry.role, { model: entry.model, variant: entry.variant }])) as Partial<Record<WorkbenchModelRole, ModelOverride>>
 }
 
 /** Texto do modelo para avisos e auditoria ("anthropic/claude (high)" ou "modelo padrão do agente"). */

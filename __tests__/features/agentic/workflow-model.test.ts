@@ -74,7 +74,7 @@ vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
-import { getWorkbench, implement, setWorkbenchModel } from '@/features/agentic/server/workflow'
+import { getWorkbench, implement, setWorkbenchModel, startWorkbench } from '@/features/agentic/server/workflow'
 
 /**
  * Troca do modelo na mesa: vale só para o papel escolhido, a partir do próximo turno, mantendo o
@@ -248,3 +248,36 @@ describe('modelos de fallback na mesa', () => {
   })
 })
 
+describe('modelos escolhidos na abertura da mesa (OPE-134)', () => {
+  const task = { id: 't1', code: 'OPE-134', title: 'Modelos na abertura', columnId: 'col', project: { id: 'p1' }, agenticFlow: 'preview' }
+
+  it('grava as trocas, audita e o primeiro turno (planejamento) já usa o modelo escolhido', async () => {
+    mocks.getTask.mockResolvedValue(task)
+    const dto = await startWorkbench('c1', 't1', undefined, undefined, { planning: { model: 'openai/gpt-5', variant: 'medium' } })
+
+    expect(model.docs[0]!.modelOverrides).toEqual({ planning: { model: 'openai/gpt-5', variant: 'medium' } })
+    expect(mocks.assertAgentConfigs).toHaveBeenCalledWith([{ label: 'Modelo do Plano', config: { agent: null, model: 'openai/gpt-5', variant: 'medium' } }], false)
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ modelos: { Planejamento: 'openai/gpt-5 (medium)' } }) }))
+    expect(dto.models?.planning).toMatchObject({ model: 'openai/gpt-5', variant: 'medium', overridden: true, source: 'workbench' })
+
+    await vi.waitFor(() => expect(model.docs[0]!.stage).toBe('plan_review'))
+    expect(agentOf('planning')).toEqual({ agent: 'plan', model: 'openai/gpt-5', variant: 'medium' })
+  })
+
+  it('modelo inválido recusa a abertura antes de criar a mesa', async () => {
+    mocks.getTask.mockResolvedValue(task)
+    mocks.assertAgentConfigs.mockRejectedValueOnce(Object.assign(new Error('Modelo do Plano: modelo x/y não está disponível no OpenCode'), { status: 400 }))
+    await expect(startWorkbench('c1', 't1', undefined, undefined, { planning: { model: 'x/y', variant: null } })).rejects.toMatchObject({ status: 400 })
+    expect(model.docs).toHaveLength(0)
+  })
+
+  it('sem trocas não grava modelOverrides nem audita modelos', async () => {
+    mocks.getTask.mockResolvedValue(task)
+    await startWorkbench('c1', 't1')
+
+    expect(model.docs[0]!.modelOverrides ?? null).toBeNull()
+    expect(mocks.assertAgentConfigs).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: { tarefa: 'OPE-134', central: 'App' } }))
+    await vi.waitFor(() => expect(model.docs[0]!.stage).toBe('plan_review'))
+  })
+})

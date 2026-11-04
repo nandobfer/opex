@@ -1,4 +1,4 @@
-import { LEGACY_PREVIEW_PORT_MAX, LEGACY_PREVIEW_PORT_MIN, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchStage } from "./constants"
+import { LEGACY_PREVIEW_PORT_MAX, LEGACY_PREVIEW_PORT_MIN, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_MODEL_ROLES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchModelRole, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import { COLUMN_COLORS } from "@/features/tasks/board"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
@@ -77,6 +77,32 @@ export function optimisticModelChoice(current: ModelChoiceDto, input: { model: s
 /** Agente do turno com a troca de modelo aplicada: substitui modelo e variante e mantém o agente. */
 export function applyModelOverride(agent: AgentConfig, override: ModelOverride | null | undefined): AgentConfig {
     return override?.model ? { ...agent, model: override.model, variant: override.variant } : agent
+}
+
+/** Modelo/variante para a tela (variante só com modelo definido). */
+const choiceOf = (agent: AgentConfig) => ({ model: agent.model, variant: agent.model ? agent.variant : null })
+
+/**
+ * Modelo efetivo de um papel para a tela: o do papel ou o trocado, com o valor herdado (sem a troca)
+ * e a origem. `source`/`overrideSource` seguem a precedência fork > mesa > central > global.
+ */
+export function toModelChoice(base: AgentConfig, override: ModelOverride | null, baseSource?: ModelSourceDto, overrideSource: ModelSourceDto = "workbench"): ModelChoiceDto {
+    const effective = applyModelOverride(base, override)
+    return {
+        ...choiceOf(effective),
+        overridden: Boolean(override),
+        inherited: choiceOf(base),
+        ...(baseSource ? { source: override ? overrideSource : baseSource, inheritedSource: baseSource } : {}),
+    }
+}
+
+/**
+ * Modelos da etapa inicial da mesa (antes de ela existir): central/global com as trocas escolhidas
+ * na tela. Usa a mesma regra do servidor (`toModelChoice`) para o texto e o popover; `overrides` é o
+ * rascunho local, que só é gravado quando a mesa abre (OPE-134).
+ */
+export function draftWorkbenchModels(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, overrides: Partial<Record<WorkbenchModelRole, ModelOverride>>): Record<WorkbenchModelRole, ModelChoiceDto> {
+    return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, toModelChoice(resolveAgent(settings, config, role), overrides[role] ?? null, modelSource(config, role))])) as Record<WorkbenchModelRole, ModelChoiceDto>
 }
 
 /**

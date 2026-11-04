@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { COLUMN_COLORS } from "@/features/tasks/board"
-import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole } from "./constants"
+import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "./constants"
 import { AGENTIC_FILES_PER_MESSAGE } from "./files"
 
 /** Máximo de modelos de fallback por papel. */
@@ -352,6 +352,22 @@ export const setWorkbenchStageSchema = z.object({
 })
 export type SetWorkbenchStageInput = z.infer<typeof setWorkbenchStageSchema>
 
+/** Troca de modelo escolhida na etapa inicial da mesa: sempre um modelo próprio (sem "voltar ao padrão"). */
+const startWorkbenchModelEntrySchema = z.object({
+    model: z.string().trim().min(1, "Informe o modelo").max(200),
+    variant: z.string().trim().min(1).max(50).nullable().default(null),
+})
+
+const startWorkbenchModelsShape = Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, startWorkbenchModelEntrySchema.optional()])) as Record<WorkbenchModelRole, z.ZodOptional<typeof startWorkbenchModelEntrySchema>>
+
+/**
+ * Trocas de modelo escolhidas na etapa inicial (OPE-134), por papel: a mesa nasce com elas e o
+ * primeiro turno (planejamento) já usa o modelo escolhido. Papel fora da lista é recusado.
+ */
+export const startWorkbenchModelsSchema = z.object(startWorkbenchModelsShape).strict().optional()
+export type StartWorkbenchModelsInput = z.infer<typeof startWorkbenchModelsSchema>
+export type StartWorkbenchModelEntry = z.infer<typeof startWorkbenchModelEntrySchema>
+
 export const startWorkbenchSchema = z.object({
     centralId: z.string().regex(/^[a-f0-9]{24}$/i),
     taskId: z.string().regex(/^[a-f0-9]{24}$/i),
@@ -359,6 +375,8 @@ export const startWorkbenchSchema = z.object({
     text: optionalUserText,
     /** Anexos das informações adicionais (vão no primeiro prompt). */
     fileIds: fileIdsSchema,
+    /** Trocas de modelo escolhidas na etapa inicial da mesa (opcionais). */
+    modelOverrides: startWorkbenchModelsSchema,
 })
 
 export const permissionReplySchema = z.object({

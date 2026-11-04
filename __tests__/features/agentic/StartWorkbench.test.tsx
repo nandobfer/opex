@@ -1,18 +1,63 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { defaultCentralConfig } from '@/features/agentic/schemas'
+import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
 const mocks = vi.hoisted(() => ({ mutate: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn() }))
 
+/** Modelos do catálogo do OpenCode (o popover usa a busca e a variante). */
+const MODELS = [
+  { id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: ['low', 'high'] },
+  { id: 'openai/gpt-5', name: 'GPT-5', group: 'OpenAI', variants: [] },
+]
+
+/** Configuração geral com modelo no Planejamento (origem "do padrão global"). */
+const AGENTIC_SETTINGS = {
+  ...DEFAULT_AGENTIC_SETTINGS,
+  agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } },
+}
+
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
+vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
+/** Busca simplificada: um botão por modelo (o popover da busca não interessa aqui). */
+vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+  ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void }) => (
+    <div>
+      {trigger}
+      {models.data.map((model) => (
+        <button key={model.id} type="button" onClick={() => onPick(model)}>
+          escolher {model.name}
+        </button>
+      ))}
+    </div>
+  ),
+}))
+/** Select simplificado: um botão por opção (o portal do Radix Select não abre no DOM de teste). */
+vi.mock('@/components/ui/select', async () => {
+  const React = await import('react')
+  const Ctx = React.createContext<(value: string) => void>(() => undefined)
+  return {
+    Select: ({ onValueChange, children }: { onValueChange: (value: string) => void; children: React.ReactNode }) => <Ctx.Provider value={onValueChange}>{children}</Ctx.Provider>,
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => {
+      const change = React.useContext(Ctx)
+      return (
+        <button type="button" onClick={() => change(value)}>
+          variante {children}
+        </button>
+      )
+    },
+  }
+})
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useStartWorkbench: () => ({ mutate: mocks.mutate, isPending: false }),
-  useAgenticSettings: () => ({ data: { availability: { available: true, reason: null } } }),
+  useAgenticSettings: () => ({ data: { settings: AGENTIC_SETTINGS, availability: { available: true, reason: null } } }),
   useCentralQueue: () => ({ data: [] }),
 }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail, useUpdateTask: () => ({ mutate: mocks.updateTask, isPending: false }) }))
@@ -163,5 +208,79 @@ describe('StartWorkbench · Gerar prévia', () => {
       body: { agenticFlow: null },
       patch: { agenticFlow: null },
     })
+  })
+})
+
+describe('StartWorkbench · modelos (OPE-134)', () => {
+  const startButton = () => screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ })
+  const openModels = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Configurar modelos por etapa' }))
+    return screen.getByRole('dialog', { name: 'Modelos por etapa' })
+  }
+  const section = (dialog: HTMLElement, title: string) => within(dialog).getByRole('region', { name: title })
+
+  it('mostra o controle à esquerda do botão, com o modelo do Plano e a origem', () => {
+    renderStart()
+    const control = screen.getByTestId('start-workbench-model-settings')
+    const button = startButton()
+
+    expect(within(control).getByRole('status', { name: 'Modelo do Plano: Claude Opus (high), do padrão global' })).toBeTruthy()
+    expect(within(control).getByRole('button', { name: 'Configurar modelos por etapa' })).toBeTruthy()
+    // Mesma posição relativa da mesa em andamento: controle no início da linha, botão alinhado à direita.
+    expect(control.closest('.mr-auto')).toBeTruthy()
+    expect(button.closest('.ml-auto')).toBeTruthy()
+    expect(control.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('popover lista as cinco etapas, marca o Planejamento como atual e mostra o padrão herdado', () => {
+    renderStart()
+    const dialog = openModels()
+    const titles = within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
+    expect(titles).toEqual(['Planejamento', 'Implementação', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
+    expect(within(section(dialog, 'Planejamento')).getByText('Etapa atual')).toBeTruthy()
+    expect(within(dialog).getAllByText('Etapa atual')).toHaveLength(1)
+    expect(within(section(dialog, 'Planejamento')).getByText('Claude Opus (high) · do padrão global')).toBeTruthy()
+  })
+
+  it('a troca feita no controle vai junto do clique em abrir a mesa', () => {
+    renderStart()
+    const dialog = openModels()
+    const implementation = section(dialog, 'Implementação')
+    fireEvent.click(within(implementation).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    fireEvent.click(within(implementation).getByRole('button', { name: 'escolher GPT-5' }))
+
+    fireEvent.click(startButton())
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { centralId: 'c1', taskId: 't1', text: undefined, modelOverrides: { implementation: { model: 'openai/gpt-5', variant: null } } },
+      expect.anything(),
+    )
+  })
+
+  it('sem troca, abrir não envia modelOverrides', () => {
+    renderStart()
+    fireEvent.click(startButton())
+    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: undefined }, expect.anything())
+  })
+
+  it('voltar uma etapa ao padrão da central tira a troca do envio', () => {
+    renderStart()
+    const planning = section(openModels(), 'Planejamento')
+    fireEvent.click(within(planning).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    fireEvent.click(within(planning).getByRole('button', { name: 'escolher GPT-5' }))
+    expect(screen.getByRole('status', { name: 'Modelo do Plano: GPT-5, definido nesta mesa' })).toBeTruthy()
+
+    fireEvent.click(within(planning).getByRole('radio', { name: 'Padrão da central' }))
+    expect(screen.getByRole('status', { name: 'Modelo do Plano: Claude Opus (high), do padrão global' })).toBeTruthy()
+
+    fireEvent.click(startButton())
+    expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: undefined }, expect.anything())
+  })
+
+  it('a escolha é só desta tela: trocar o modelo não grava nada na tarefa', () => {
+    renderStart()
+    const implementation = section(openModels(), 'Implementação')
+    fireEvent.click(within(implementation).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    fireEvent.click(within(implementation).getByRole('button', { name: 'escolher GPT-5' }))
+    expect(mocks.updateTask).not.toHaveBeenCalled()
   })
 })

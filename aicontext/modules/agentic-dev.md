@@ -916,6 +916,23 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   - **Qual etapa é afetada**: badge **Etapa atual** na seção do papel da etapa em que a mesa está; a seção em
     gravação ganha borda/fundo primário e "Alterando" (texto ao vivo "Alterando: <etapa>" para leitores de
     tela); o toast nomeia o papel ("Modelo da Implementação trocado: vale a partir do próximo turno").
+- **Na etapa inicial da mesa** (`StartWorkbench`, antes de **"Abrir mesa e gerar o plano"** — OPE-134): o
+  mesmo controle (`StartWorkbenchModelSettings` sobre `ModelSettingsControl` + `WorkbenchModelSections`), com o
+  texto do modelo do **Plano** e o popover das cinco etapas, **"Etapa atual"** no Planejamento. O controle fica
+  no início da linha (`mr-auto`) e o botão de abrir à direita (`ml-auto`), na mesma posição relativa da barra
+  da mesa.
+  - **A escolha é só da tela** (estado local, sem gravar na tarefa): vai como `modelOverrides` no
+    `POST /api/agentic/workbenches` e a mesa nasce com ela, então o **primeiro turno** (planejamento) já usa o
+    modelo escolhido. Abrir pela fila da central (`startWorkbenchInCentral` chamado pelo motor, sem o
+    parâmetro) ou recarregar a página volta aos padrões da central/global — decisão do dono na OPE-134.
+  - O servidor confere **todos** os modelos no OpenCode numa única chamada (`assertAgentConfigs` via
+    `validatedStartOverrides`, `server/models.ts`) **antes** de criar a mesa: modelo/variante inexistente →
+    400 sem mesa aberta. A criação grava `modelOverrides`, audita os modelos escolhidos (`depois.modelos`) e
+    avisa na mesa ("Modelos escolhidos na abertura: …").
+  - Os modelos da tela saem de `draftWorkbenchModels` (`logic.ts`), a mesma regra de `toModelChoice` usada pelo
+    servidor: a cada troca local o texto em uso, o herdado e a origem são recalculados.
+  - Payload (`startWorkbenchSchema`): `modelOverrides?: { planning?|implementation?|build?|pr?|fork?:
+    { model, variant } }` — só modelo próprio (`model` não nulo); papel fora da lista é recusado (400).
 - **Precedência por etapa**: troca da mesa > central (só quando a central personaliza o **modelo** do papel)
   > Configurações Padrão (`resolveAgent` + `applyModelOverride`; origem em `modelSource`, `logic.ts`).
 - **Troca modelo e variante; o agente não muda** (o da etapa na mesa; no fork, o do modo Plan/Build).
@@ -957,11 +974,12 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 - DTO: `WorkbenchDto.models` (5 papéis: `planning`, `implementation`, `build`, `pr`, `fork`) e `ForkDto.model`,
   cada um `{ model, variant, overridden, inherited, source, inheritedSource }` já resolvido (`source`: `fork` |
   `workbench` | `central` | `global`); `null` quando a central não pôde ser lida. `WorkbenchDto.adversarialModel`
-  quando o adversário se aplica à mesa. Regras: `applyModelOverride`/`asModelOverride`/`modelSource`
-  (`logic.ts`) e `server/models.ts`.
+  quando o adversário se aplica à mesa. Regras: `applyModelOverride`/`asModelOverride`/`modelSource`/
+  `toModelChoice`/`draftWorkbenchModels` (`logic.ts`) e `server/models.ts`.
 - Rotas: `PUT /api/agentic/workbenches/[id]/model` `{ role, model, variant }` (papéis `planning`,
   `implementation`, `build`, `pr`, `fork`; mesma regra na ferramenta `set_workbench_model` do Agente Opex) e
   `PUT /api/agentic/workbenches/[id]/forks/[forkId]/model` `{ model, variant }`; `model: null` volta ao padrão.
+  `POST /api/agentic/workbenches` aceita `modelOverrides` (etapa inicial, OPE-134).
 
 ## Filtros avançados e builder Docker
 
