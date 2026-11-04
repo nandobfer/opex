@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ArrowLeft, CheckCheck, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { VirtualStack } from "@/components/list/VirtualStack"
@@ -43,6 +44,7 @@ export function MentorReorgPlan({ id, onBack }: { id: string; onBack: () => void
     const decision = useMentorReorgDecision()
     const [filter, setFilter] = useState<Filter>("all")
     const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+    const [confirmOwnerBatch, setConfirmOwnerBatch] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const items = useMemo(() => query.data?.items ?? [], [query.data])
     const visible = useMemo(() => (filter === "all" ? items : items.filter((item) => item.action === filter)), [items, filter])
@@ -59,6 +61,8 @@ export function MentorReorgPlan({ id, onBack }: { id: string; onBack: () => void
     const plan = query.data
     const merges = pending.filter((item) => item.action === "merge").length
     const moves = pending.filter((item) => item.action === "move").length
+    // Fusões que arquivam memória do dono exigem confirmação explícita (no item ou no lote).
+    const ownerMerges = pending.filter((item) => item.action === "merge" && item.ownerMemory)
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -99,32 +103,56 @@ export function MentorReorgPlan({ id, onBack }: { id: string; onBack: () => void
                         <Button type="button" variant="outline" className="gap-1.5" disabled={decision.isPending || !allPending.length} onClick={() => setConfirmation("discard")}>
                             <Trash2 className="h-4 w-4" aria-hidden /> Descartar tudo
                         </Button>
-                        <Button type="button" className="gap-1.5" disabled={decision.isPending} onClick={() => setConfirmation("apply")}>
+                        <Button
+                            type="button"
+                            className="gap-1.5"
+                            disabled={decision.isPending}
+                            onClick={() => {
+                                setConfirmOwnerBatch(false)
+                                setConfirmation("apply")
+                            }}
+                        >
                             {decision.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCheck className="h-4 w-4" aria-hidden />} Aprovar tudo
                         </Button>
                     </motion.div>
                 )}
             </AnimatePresence>
-            <AlertDialog open={confirmation !== null} onOpenChange={(open) => !open && setConfirmation(null)}>
+            <AlertDialog
+                open={confirmation !== null}
+                onOpenChange={(open) => {
+                    if (open) return
+                    setConfirmation(null)
+                    setConfirmOwnerBatch(false)
+                }}
+            >
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>{confirmation === "apply" ? "Aplicar o plano de reorganização?" : confirmation === "discard" ? "Descartar o plano?" : "Cancelar a revisão?"}</AlertDialogTitle>
                         <AlertDialogDescription>
                             {confirmation === "apply"
-                                ? `${allPending.length} memórias serão aplicadas com a auditoria do Mentor (${moves} movidas, ${merges} fundidas com a origem arquivada, ${pending.length - moves - merges} reescritas).`
+                                ? `${allPending.length} memórias serão aplicadas com a auditoria do Mentor (${moves} movidas, ${merges} fundidas com a origem arquivada, ${pending.length - moves - merges} reescritas).${ownerMerges.length ? ` ${ownerMerges.length} fusão(ões) arquivam memória do dono e precisam da confirmação abaixo.` : ""}`
                                 : confirmation === "discard"
                                   ? "Nada será alterado no Engramind; o plano fica no histórico como descartado."
                                   : "A revisão para onde está; o que já foi revisado fica no plano, sem aprovação."}
                         </AlertDialogDescription>
+                        {confirmation === "apply" && ownerMerges.length > 0 && (
+                            <span className="flex items-start gap-2 text-sm">
+                                <Checkbox id="reorg-owner-batch" className="mt-0.5" checked={confirmOwnerBatch} onCheckedChange={(value) => setConfirmOwnerBatch(value)} />
+                                <label htmlFor="reorg-owner-batch">Confirmo arquivar {ownerMerges.length} memória(s) do dono (ficam arquivadas, não são excluídas)</label>
+                            </span>
+                        )}
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Voltar</AlertDialogCancel>
                         <Button
                             variant={confirmation === "apply" ? "default" : "destructive"}
+                            disabled={confirmation === "apply" && ownerMerges.length > 0 && !confirmOwnerBatch}
                             onClick={() => {
                                 const kind = confirmation!
+                                const overrides = Object.fromEntries(ownerMerges.map((item) => [item.id, { confirmOwner: true }]))
                                 setConfirmation(null)
-                                if (kind === "apply") decide({ id: plan.id, decision: "apply" })
+                                setConfirmOwnerBatch(false)
+                                if (kind === "apply") decide({ id: plan.id, decision: "apply", ...(ownerMerges.length ? { overrides } : {}) })
                                 else if (kind === "discard") decide({ id: plan.id, decision: "discard" })
                                 else decide({ id: plan.id, decision: "cancel" })
                             }}

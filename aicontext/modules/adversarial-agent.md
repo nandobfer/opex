@@ -260,16 +260,19 @@ na tela e na API; `withMentorDefaults`).
     só vale citando o id de uma memória **da própria lista de destino** (`checkWriterSkip`); sem esse
     id — ou citando uma memória de outra lista —, a resposta volta ao redator com o motivo para
     **generalizar** a lição ou **separar**. Insistir duas vezes termina em `discarded` com o motivo
-    (`skipRejection`), nunca em `skipped` sem justificativa de mesma lição. `kind: "no_lesson"` dispensa
-    (resposta antiga sem `kind` é lida assim).
+    (`skipRejection`), nunca em `skipped` sem justificativa de mesma lição. O `kind` é obrigatório: sem
+    ele, a resposta volta ao redator para dizer o motivo. `kind: "no_lesson"` dispensa, mas não pode
+    citar memória (nem no campo, nem no motivo); ids citados no motivo valem como cobertura quando são
+    da própria lista de destino.
   - **Parte separada (`split`)**: quando a lição tem uma parte global e uma só do projeto, o redator
     devolve a regra principal e a outra em `split` (`target`, `action` e `text`), no máximo uma memória
     por lista. Só vale entre `developer-global` e `developer-central`, com as duas ligadas e destinos
     diferentes; fora disso é ignorada e a recusa fica em `splitRejection`. Cada parte passa pelo
     sanitizador com o contexto da própria lista (`allowPaths` e `text_max` do canal do destino); a
     parte separada recusada não derruba a principal.
-  - `update` com id inexistente ou de outra lista vira `create` (o mesmo na parte separada). Uma
-    execução grava **uma ou duas** memórias (as duas listas do desenvolvedor).
+  - `update` com id inexistente ou de outra lista vira `create` (o mesmo na parte separada, conferido
+    também na aprovação da sugestão). Uma execução grava **uma ou duas** memórias (as duas listas do
+    desenvolvedor).
 - **Sanitizador** (`sanitizeMemoryText`, determinístico): recusa código de tarefa, `#N`, URL, rota
   (`/api/…`, `/app/…`; aceita caminhos e rotas na lista da central — `allowPaths`, convenções do
   projeto), nome do projeto, do repositório e o título da tarefa (termos de 4+ caracteres),
@@ -331,7 +334,8 @@ na tela e na API; `withMentorDefaults`).
 
 Na seção **Reorganização** da aba, o botão **"Reorganizar memórias"** revisa **todas as memórias que o
 Mentor enxerga** — as listas ligadas em `targets` (Adversário, globais do desenvolvedor e as centrais do
-escopo do Mentor) — e monta um **Plano de reorganização**. É só uma prévia: **nada é gravado** até o
+escopo do Mentor), só as memórias **ativas** (as arquivadas ficam de fora da revisão, da estimativa e
+das candidatas a fusão) — e monta um **Plano de reorganização**. É só uma prévia: **nada é gravado** até o
 dono aprovar (tudo ou item a item). Não exige o Mentor ativo: exige o Triador (quando há mais de uma
 lista) e o redator configurados.
 
@@ -351,9 +355,15 @@ lista) e o redator configurados.
      tentativa; recusada de novo → o item vira `keep` com o motivo.
   3. **Ação final** (`planItemAction`, puro): manter na mesma lista = `keep`; reescrever noutra lista =
      `move` (com o texto novo); fundir = `merge` (a memória absorvida é **arquivada**, nunca excluída).
-  4. **Conciliação** (`reconcileReorgPlan`, puro): sem fusão cruzada (A→B e B→A), em cadeia (A→B e B→C)
-     nem duas fusões no mesmo destino; a primeira vence e a outra vira `keep` com o motivo. Quem recebe
-     uma fusão também fica na lista.
+  4. **Conciliação** (`reconcileReorgPlan`, puro): sem fusão cruzada (A→B e B→A), em cadeia (A→B e B→C),
+     duas fusões no mesmo destino nem fusão da memória nela mesma; a primeira vence e a outra vira
+     `keep` com o motivo. Quem recebe uma fusão também fica na lista.
+  5. **Mover sem texto novo**: o texto atual também passa pelo sanitizador do destino (nome do projeto
+     da central de origem, caminhos quando o destino é global/Adversário, limite do canal). Se for
+     recusado, o item vira `keep` com o motivo, em vez de levar a regra específica para a outra lista.
+  6. **Falha por memória**: resposta inválida do modelo numa memória não invalida o plano — ela vira um
+     item `keep` com o erro registrado e a revisão segue. `failed` fica para configuração ausente ou
+     falha de infraestrutura antes/depois do laço.
 - **Plano** (`adversarial_mentor_reorganizations` + `adversarial_mentor_reorg_items`): a execução
   guarda status (`queued → running → ready | failed | cancelled`; depois `applying → applied |
   partial | discarded`), recorte, total/revisadas, custo e duração; cada item guarda a memória de
@@ -361,8 +371,10 @@ lista) e o redator configurados.
   fusão, o motivo, a confiança do Triador, o motivo do sanitizador, os avisos (`moveBlocked` — o token
   do Mentor não alcança origem/destino; `ownerMemory`) e a decisão (`pending | approved | applied |
   failed | discarded`) com o erro. Ler o plano **não** grava nada.
-- **Fila** (`reorg-queue.ts`): uma reorganização por vez (`globalThis.__opexMentorReorg`); a segunda
-  recebe 409 `MENTOR_REORG_RUNNING`. Cancelar (`AbortController`) interrompe a revisão e mantém o que já
+- **Fila** (`reorg-queue.ts`): uma reorganização por vez (`globalThis.__opexMentorReorg`), com o slot
+  reservado de forma síncrona antes de qualquer `await` (dois cliques/abas não iniciam duas); a segunda
+  recebe 409 `MENTOR_REORG_RUNNING`. Todas as chamadas de IA da revisão (inclusive o JEV do Triador)
+  respeitam o tempo máximo configurado. Cancelar (`AbortController`) interrompe a revisão e mantém o que já
   foi revisado, sem aprovação. Reinício do app marca a execução em andamento como `failed`. Cada item
   revisado publica `adversarial-mentor-reorg-updated` (`{ reorgId }`) em `private-app`; a aba também
   relê a cada 2 s enquanto a execução está ativa.
@@ -373,8 +385,11 @@ lista) e o redator configurados.
   /v1/memories/{id}/move` do Engramind, que exige `write` nos dois canais) e, se houver texto novo,
   reescreve depois. `merge` atualiza a memória que fica (com a versão dela) e **arquiva** a absorvida;
   se a absorvida for **do dono**, o item exige `confirmOwner` (`MENTOR_OWNER_CONFIRM_REQUIRED`) e o
-  arquivamento é gravado como o dono (sem o token do agente). Falha num item não derruba os outros:
-  `applied` (tudo resolvido), `partial` (algo falhou ou falta decidir) ou `discarded`.
+  arquivamento é gravado como o dono (sem o token do agente). **Aprovar tudo** não arquiva memória do
+  dono sem confirmação: o diálogo do lote pede a confirmação explícita (com a contagem) e a envia por
+  item; um item de fusão do dono aprovado sem ela fica **pendente** (não vira falha definitiva) e pode
+  ser decidido depois. Falha num item não derruba os outros: `applied` (tudo resolvido), `partial`
+  (algo falhou ou falta decidir) ou `discarded`.
   - **Sem fallback para o token admin** no mover: o token do Mentor não alcança o canal → 403
     `MEMORY_MOVE_FORBIDDEN`, identificado pelo **código** do Engramind, com a orientação de ajustar as
     assinaturas do agente `opex/mentor` (decisão da OPE-132; exceção consciente à regra de credencial
@@ -392,7 +407,7 @@ lista) e o redator configurados.
   pela `versao` no reescrever e no mover, mas uma edição concorrente no meio da aplicação de outro item
   não é revalidada; (2) reiniciar o processo durante a revisão perde o trabalho em andamento (o que já
   foi revisado fica, mas a execução vira `failed` e não pode ser aprovada); (3) o custo é o das
-  chamadas de IA (triagem + redação por memória).
+  chamadas de IA (triagem + redação por memória, e uma nova tentativa quando o sanitizador recusa).
 
 ## APIs (só o dono; sem OpenAPI)
 

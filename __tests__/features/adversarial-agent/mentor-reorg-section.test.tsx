@@ -154,4 +154,17 @@ describe('plano de reorganização', () => {
     render(<MentorReorgPlan id="r1" onBack={vi.fn()} />)
     expect(screen.getByText(/não alcança esta lista/)).toBeTruthy()
   })
+
+  it('aprovar tudo com fusão de memória do dono exige a confirmação no lote e a envia', () => {
+    mocks.plan = { ...mocks.plan, data: plan({ items: [item({ id: 'i1', action: 'merge', mergeInto: 'm2', mergeIntoResumo: 'Regra que fica', ownerMemory: true, text: 'Regra fundida' })] }) }
+    render(<MentorReorgPlan id="r1" onBack={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Aprovar tudo/ }))
+    const apply = screen.getByRole('button', { name: 'Aplicar' }) as HTMLButtonElement
+    expect(apply.disabled).toBe(true)
+    expect(screen.getByText(/1 fusão\(ões\) arquivam memória do dono/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox'))
+    expect(apply.disabled).toBe(false)
+    fireEvent.click(apply)
+    expect(mocks.mutate).toHaveBeenCalledWith({ id: 'r1', decision: 'apply', overrides: { i1: { confirmOwner: true } } })
+  })
 })

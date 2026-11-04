@@ -38,8 +38,8 @@ export type WriterSplitAnswer = z.infer<typeof splitSchema>
 const writerSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("create"), text: z.string().trim().min(3), reason: z.string().trim().max(2000).optional().default(""), split: splitSchema.optional() }),
     z.object({ action: z.literal("update"), memoryId: z.string().trim().min(1), text: z.string().trim().min(3), reason: z.string().trim().max(2000).optional().default(""), split: splitSchema.optional() }),
-    // `kind` ausente (resposta antiga do modelo) é tratado como `no_lesson`.
-    z.object({ action: z.literal("skip"), kind: z.enum(MENTOR_SKIP_KINDS).optional().default("no_lesson"), memoryId: z.string().trim().min(1).optional(), reason: z.string().trim().max(2000).optional().default("") }),
+    // `kind` ausente (resposta antiga do modelo) não é aceito: o redator é chamado de novo para dizê-lo.
+    z.object({ action: z.literal("skip"), kind: z.enum(MENTOR_SKIP_KINDS).optional(), memoryId: z.string().trim().min(1).optional(), reason: z.string().trim().max(2000).optional().default("") }),
 ])
 export type WriterAnswer = z.infer<typeof writerSchema>
 
@@ -70,16 +70,24 @@ export function parseWriterAnswer(text: string): WriterAnswer | null {
 }
 
 /**
- * O `skip` por cobertura só vale com uma memória da PRÓPRIA lista de destino (OPE-132). Cobertura em
- * outra lista nunca descarta a lição: a resposta volta ao redator para generalizar ou separar.
- * `null` = aceito; senão, o motivo (pt-BR) para a nova tentativa.
+ * O `skip` só é aceito com motivo verificável (OPE-132): `kind` presente, e a cobertura citando uma
+ * memória da PRÓPRIA lista de destino. Sem `kind`, o redator é chamado de novo para dizê-lo; `no_lesson`
+ * não pode citar memória; cobertura em outra lista nunca descarta a lição. `null` = aceito; senão, o
+ * motivo (pt-BR) para a nova tentativa.
  */
-export function checkWriterSkip(answer: { kind: MentorSkipKind; memoryId?: string | null }, destinationIds: readonly string[], otherIds: readonly string[] = []): string | null {
-    if (answer.kind === "no_lesson") return null
-    const id = answer.memoryId?.trim()
-    if (id && destinationIds.includes(id)) return null
-    if (id && otherIds.includes(id)) {
-        return `A memória ${id} citada é de outra lista. Cobertura em outra lista não dispensa gravar a lição: generalize-a para a lista de destino ou separe a parte que pertence à outra lista (split).`
+export function checkWriterSkip(answer: { kind?: MentorSkipKind | null; memoryId?: string | null; reason?: string | null }, destinationIds: readonly string[], otherIds: readonly string[] = []): string | null {
+    if (!answer.kind) return 'Diga o motivo de não gravar: "kind": "covered" com o id de uma memória DESTA lista, ou "kind": "no_lesson" se não há lição.'
+    const cited = answer.memoryId?.trim() || null
+    const mentioned = answer.reason?.match(/\bm_[A-Za-z0-9]+\b/g) ?? []
+    const ids = cited ? [cited] : mentioned
+    if (answer.kind === "no_lesson") {
+        if (ids.length) return 'Um skip sem lição não deve citar memória: use "kind": "covered" com o id de uma memória DESTA lista que já cobre a lição.'
+        return null
+    }
+    if (ids.some((id) => destinationIds.includes(id))) return null
+    const other = ids.find((id) => otherIds.includes(id))
+    if (other) {
+        return `A memória ${other} citada é de outra lista. Cobertura em outra lista não dispensa gravar a lição: generalize-a para a lista de destino ou separe a parte que pertence à outra lista (split).`
     }
     return 'Para não gravar por cobertura, cite em "memoryId" o id de uma memória DESTA lista que já cobre a lição. Cobertura em outra lista não é motivo para não gravar.'
 }

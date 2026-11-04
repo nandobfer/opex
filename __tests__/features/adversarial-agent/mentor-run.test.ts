@@ -122,8 +122,8 @@ describe('pipeline do Agente Mentor', () => {
   })
 
   it('o redator pode concluir que não há lição (skip)', async () => {
-    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'skip', reason: 'já coberta pela m1' }))
-    expect(await run(settings())).toMatchObject({ status: 'skipped', writerAction: 'skip', writerReason: 'já coberta pela m1' })
+    mocks.streamAi.mockReturnValueOnce(reply({ score: 0.9 })).mockReturnValueOnce(reply({ action: 'skip', kind: 'no_lesson', reason: 'nada a aprender' }))
+    expect(await run(settings())).toMatchObject({ status: 'skipped', writerAction: 'skip', writerSkipKind: 'no_lesson', writerReason: 'nada a aprender' })
   })
 
   it('sanitizador: reescreve uma vez com o motivo; recusado de novo, descarta', async () => {
@@ -501,5 +501,30 @@ describe('OPE-132: cobertura em outra lista não descarta a lição', () => {
     expect(mocks.create).toHaveBeenCalledTimes(3)
     expect(mocks.create).toHaveBeenNthCalledWith(2, 'developer-central', CENTRAL_RULE, 'local', expect.objectContaining({ centralId: 'c1' }))
     expect(mocks.create).toHaveBeenNthCalledWith(3, 'developer-global', GLOBAL_RULE, 'local', expect.objectContaining({ centralId: null }))
+  })
+
+  it('skip sem kind não é aceito: o redator é chamado de novo para dizer o motivo', async () => {
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-global' }))
+      .mockReturnValueOnce(reply({ action: 'skip', reason: 'já coberta' }))
+      .mockReturnValueOnce(reply({ action: 'skip', kind: 'covered', memoryId: 'g1', reason: 'já coberta' }))
+    const doc = await run(routed())
+    expect(doc).toMatchObject({ status: 'skipped', writerSkipKind: 'covered', writerCoveredBy: { memoryId: 'g1', target: 'developer-global' } })
+    expect(mocks.streamAi.mock.calls[3]![0].prompt).toContain('kind')
+  })
+
+  it('sugestão com split update: se a memória alvo foi excluída, a aprovação cria uma nova', async () => {
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-global' }))
+      .mockReturnValueOnce(reply({ action: 'create', text: GLOBAL_RULE, split: { target: 'developer-central', action: 'update', memoryId: 'm_ba153a21', text: CENTRAL_RULE } }))
+    const doc = await run(routed({ saveMode: 'suggest' }))
+    // A memória alvo do split foi excluída antes da aprovação.
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'developer-central' ? [] : agent === 'developer-global' ? [memory('g1', 'Escreva testes')] : [memory('a1', 'Providers')]))
+    await approveMentorRun(String(doc._id), undefined, 'local')
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+    expect(mocks.create).toHaveBeenNthCalledWith(1, 'developer-central', CENTRAL_RULE, 'local', expect.objectContaining({ centralId: 'c1' }))
   })
 })

@@ -91,7 +91,7 @@ const optionOf = (list: ReorgList): ReorgTargetOption => ({
 export async function previewMentorReorg(input: { targets?: MentorTarget[]; centralIds?: string[] }, settings: MentorSettings): Promise<MentorReorgPreviewDto> {
     const scope = await resolveReorgScope(input, settings)
     await reorgDb()
-    const counts = await Promise.all(scope.lists.map((list) => listAgentMemories(list.target, list.centralId)))
+    const counts = await Promise.all(scope.lists.map(async (list) => (await listAgentMemories(list.target, list.centralId)).filter((memory) => memory.ativa !== false)))
     const memories = counts.reduce((sum, list) => sum + list.length, 0)
     const past = (await MentorReorg.find({ status: { $in: ["ready", "applied", "partial"] }, done: { $gt: 0 } }).sort({ createdAt: -1 }).limit(10).lean()) as IMentorReorg[]
     const average = past.length ? past.reduce((sum, run) => sum + (run.costUsd ?? 0) / Math.max(1, run.done), 0) / past.length : null
@@ -137,7 +137,8 @@ async function routeMemory(input: ReviewInput): Promise<{ destination: ReorgList
     let reason: string | null
     if (provider === "jev") {
         const { askJevSystemOne } = await import("@/lib/ai/jev")
-        const response = await askJevSystemOne({ model, state, questions: buildJevReorgRouterQuestions(options, instructions), signal: input.signal, tracking })
+        const signal = AbortSignal.any([input.signal, AbortSignal.timeout(settings.timeoutSeconds * 1000)])
+        const response = await askJevSystemOne({ model, state, questions: buildJevReorgRouterQuestions(options, instructions), signal, tracking })
         const answer = response.answers?.target
         if (!answer || answer.type !== "choice") throw new Error("O JEV não respondeu a pergunta do Triador da reorganização")
         value = answer.choice
@@ -188,14 +189,24 @@ async function writeMemory(input: ReviewInput, destination: ReorgList): Promise<
 async function reviewMemory(input: ReviewInput): Promise<ReorgPlanItem> {
     const routed = await routeMemory(input)
     const written = await writeMemory(input, routed.destination)
-    const destinationMemories = input.acervo.get(reorgTargetValue(routed.destination.target, routed.destination.centralId)) ?? []
+    // A própria memória nunca é candidata a fusão (o prompt já a exclui; a resolução confere de novo).
+    const destinationMemories = (input.acervo.get(reorgTargetValue(routed.destination.target, routed.destination.centralId)) ?? []).filter((item) => item.id !== input.memory.id)
     const mergeTarget = written.writer.memoryId ? destinationMemories.find((item) => item.id === written.writer.memoryId) : undefined
-    const action = planItemAction({
+    let action = planItemAction({
         origin: { target: input.origin.target, centralId: input.origin.centralId },
         destination: { target: routed.destination.target, centralId: routed.destination.centralId },
         writer: written.writer,
         mergeExists: Boolean(mergeTarget),
     })
+    let sanitizerReason = written.rejection
+    // Mover sem texto novo levaria o texto atual para outra lista: ele também passa pelo sanitizador do destino.
+    if (action.action === "move" && !action.text) {
+        const issue = sanitizeMemoryText(input.memory.texto, await sanitizeContextOf(routed.destination, input.origin))
+        if (issue) {
+            action = { action: "keep", target: input.origin.target, centralId: input.origin.centralId, text: null, mergeInto: null, note: `O texto atual não pode ser levado para ${routed.destination.label}: ${issue}` }
+            sanitizerReason = issue
+        }
+    }
     const origin: ReorgMemorySnapshot = {
         target: input.origin.target,
         centralId: input.origin.centralId,
@@ -213,7 +224,7 @@ async function reviewMemory(input: ReviewInput): Promise<ReorgPlanItem> {
         reason: written.writer.reason ?? routed.reason ?? "",
         routerConfidence: routed.confidence,
         routerReason: routed.reason,
-        sanitizerReason: written.rejection,
+        sanitizerReason,
         moveBlocked: !moveAllowed(origin, { target: action.target, centralId: action.centralId }),
         ownerMemory: origin.owner || Boolean(mergeTarget?.doDono),
     }
@@ -238,8 +249,12 @@ export async function processMentorReorg(reorgId: string, scope: ResolvedReorgSc
         if (signal.aborted) throw abortError()
         await MentorReorg.updateOne({ _id: reorgId }, { $set: { status: "running", startedAt: new Date() } })
         await publishReorg(reorgId)
+        // Configuração ausente é falha da execução (não de uma memória).
+        if (scope.lists.length > 1 && (!settings.router.provider || !settings.router.model)) throw new DomainError(400, "Configure o provedor e o modelo do Triador para revisar mais de uma lista", "MENTOR_REORG_ROUTER_MISSING")
+        if (!settings.writer.provider || !settings.writer.model) throw new DomainError(400, "Configure o provedor e o modelo do redator para revisar o acervo", "MENTOR_REORG_WRITER_MISSING")
         const acervo = new Map<string, MemoryDto[]>()
-        for (const list of scope.lists) acervo.set(reorgTargetValue(list.target, list.centralId), await listAgentMemories(list.target, list.centralId))
+        // Memórias arquivadas não entram na revisão nem são candidatas a fusão.
+        for (const list of scope.lists) acervo.set(reorgTargetValue(list.target, list.centralId), (await listAgentMemories(list.target, list.centralId)).filter((memory) => memory.ativa !== false))
         const total = [...acervo.values()].reduce((sum, memories) => sum + memories.length, 0)
         await MentorReorg.updateOne({ _id: reorgId }, { $set: { total } })
         const options = scope.lists.map(optionOf)
@@ -248,9 +263,35 @@ export async function processMentorReorg(reorgId: string, scope: ResolvedReorgSc
         for (const list of scope.lists) {
             for (const memory of acervo.get(reorgTargetValue(list.target, list.centralId)) ?? []) {
                 if (signal.aborted) throw abortError()
-                const item = await reviewMemory({ memory, origin: list, scope, acervo, options, settings, usage, subject: `reorganizacao-${reorgId}`, signal })
+                let item: ReorgPlanItem
+                let error: string | null = null
+                try {
+                    item = await reviewMemory({ memory, origin: list, scope, acervo, options, settings, usage, subject: `reorganizacao-${reorgId}`, signal })
+                } catch (failure) {
+                    // Uma memória com resposta inválida não invalida o plano inteiro: ela fica para decisão com o erro.
+                    if (signal.aborted) throw abortError()
+                    error = failure instanceof Error ? failure.message : String(failure)
+                    log.warn({ err: failure, reorgId, memoryId: memory.id }, "[adversarial-agent] Memória não revisada na reorganização")
+                    item = {
+                        memoryId: memory.id,
+                        origin: { target: list.target, centralId: list.centralId, memoryId: memory.id, resumo: memory.resumo, texto: memory.texto, versao: memory.versao, owner: memory.doDono },
+                        action: "keep",
+                        target: list.target,
+                        centralId: list.centralId,
+                        text: null,
+                        mergeInto: null,
+                        mergeIntoResumo: null,
+                        reason: "Não foi possível revisar esta memória",
+                        note: "A revisão falhou: a memória fica como está. Gere outro plano para tentar de novo.",
+                        routerConfidence: null,
+                        routerReason: null,
+                        sanitizerReason: null,
+                        moveBlocked: false,
+                        ownerMemory: memory.doDono,
+                    }
+                }
                 planned.push(item)
-                await MentorReorgItem.create({ reorgId, memoryId: item.memoryId, origin: item.origin, action: item.action, target: item.target, centralId: item.centralId, text: item.text, mergeInto: item.mergeInto, mergeIntoResumo: item.mergeIntoResumo, reason: item.reason, note: item.note, routerConfidence: item.routerConfidence, routerReason: item.routerReason, sanitizerReason: item.sanitizerReason, moveBlocked: item.moveBlocked, ownerMemory: item.ownerMemory, status: "pending", error: null })
+                await MentorReorgItem.create({ reorgId, memoryId: item.memoryId, origin: item.origin, action: item.action, target: item.target, centralId: item.centralId, text: item.text, mergeInto: item.mergeInto, mergeIntoResumo: item.mergeIntoResumo, reason: item.reason, note: item.note, routerConfidence: item.routerConfidence, routerReason: item.routerReason, sanitizerReason: item.sanitizerReason, moveBlocked: item.moveBlocked, ownerMemory: item.ownerMemory, status: "pending", error })
                 done++
                 await MentorReorg.updateOne({ _id: reorgId }, { $set: { done, costUsd: usage.costUsd, durationMs: Date.now() - startedAt } })
                 await publishReorg(reorgId)
@@ -427,11 +468,17 @@ export async function applyMentorReorg(id: string, input: MentorReorgApplyInput,
     const selected = input.itemIds?.length ? all.filter((item) => input.itemIds!.includes(String(item._id))) : all
     let applied = 0
     let failed = 0
+    let needsOwner = 0
     for (const item of selected) {
         if (item.status !== "pending") continue
+        const override = input.overrides?.[String(item._id)]
+        // Aprovar em lote não arquiva memória do dono sem a confirmação explícita: o item fica pendente.
+        if (item.action === "merge" && item.origin.owner && !override?.confirmOwner) {
+            needsOwner++
+            continue
+        }
         const claimed = await MentorReorgItem.findOneAndUpdate({ _id: item._id, status: "pending" }, { $set: { status: "approved" } })
         if (!claimed) continue
-        const override = input.overrides?.[String(item._id)]
         try {
             await applyItem(run, item, override, actorId)
             await MentorReorgItem.updateOne({ _id: item._id }, { $set: { status: "applied", error: null, ...(override?.text?.trim() ? { text: override.text.trim() } : {}) } })
@@ -448,7 +495,7 @@ export async function applyMentorReorg(id: string, input: MentorReorgApplyInput,
     // Um item que falhou numa decisão anterior continua pesando no resultado.
     const status: MentorReorgStatus = pending > 0 || failedTotal > 0 ? "partial" : "applied"
     await MentorReorg.updateOne({ _id: id }, { $set: { status, error: null } })
-    await recordAudit({ userId: actorId, entidade: MENTOR_REORG_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { status, aplicados: applied, falhas: failed, pendentes: pending } })
+    await recordAudit({ userId: actorId, entidade: MENTOR_REORG_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { status, aplicados: applied, falhas: failed, pendentes: pending, aguardandoConfirmacao: needsOwner } })
     await publishReorg(id)
     return getMentorReorg(id)
 }

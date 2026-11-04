@@ -45,25 +45,38 @@ export function recoverOrphanMentorReorgs(): Promise<void> {
 
 /** Registra e inicia a revisão do acervo no recorte pedido (409 com outra em andamento). */
 export async function startMentorReorg(input: MentorReorgScopeInput, settings: MentorSettings, actorId: string): Promise<MentorReorgDto> {
-    await recoverOrphanMentorReorgs()
     if (state.chain) throw new DomainError(409, "Já existe uma reorganização em andamento: aguarde terminar ou cancele.", "MENTOR_REORG_RUNNING")
-    const scope = await resolveReorgScope(input, settings)
-    if (scope.lists.length > 1 && (!settings.router.provider || !settings.router.model)) {
-        throw new DomainError(400, "Configure o provedor e o modelo do Triador para revisar mais de uma lista", "MENTOR_REORG_ROUTER_MISSING")
-    }
-    if (!settings.writer.provider || !settings.writer.model) throw new DomainError(400, "Configure o provedor e o modelo do redator para revisar o acervo", "MENTOR_REORG_WRITER_MISSING")
-    const created = await MentorReorg.create({ status: "queued", targets: scope.targets, centralIds: scope.centralIds, total: 0, done: 0, costUsd: 0, durationMs: null, error: null, startedAt: null, finishedAt: null })
-    const id = String(created._id)
-    const controller = new AbortController()
-    state.current = { id, controller }
-    const next = processMentorReorg(id, scope, settings, controller.signal).finally(() => {
-        if (state.chain === next) state.chain = null
-        if (state.current?.id === id) state.current = null
+    // Reserva síncrona do slot (antes de qualquer await): dois cliques/abas não iniciam duas revisões.
+    let releaseReservation!: () => void
+    const reservation = new Promise<void>((resolve) => {
+        releaseReservation = resolve
     })
-    state.chain = next
-    await recordAudit({ userId: actorId, entidade: MENTOR_REORG_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXECUTAR, depois: { status: "queued", listas: scope.targets, centrais: scope.centralIds } })
-    await publishAppEvent(MENTOR_REORG_UPDATED_EVENT, { reorgId: id }).catch(() => undefined)
-    return getMentorReorg(id)
+    state.chain = reservation
+    try {
+        await recoverOrphanMentorReorgs()
+        const scope = await resolveReorgScope(input, settings)
+        if (scope.lists.length > 1 && (!settings.router.provider || !settings.router.model)) {
+            throw new DomainError(400, "Configure o provedor e o modelo do Triador para revisar mais de uma lista", "MENTOR_REORG_ROUTER_MISSING")
+        }
+        if (!settings.writer.provider || !settings.writer.model) throw new DomainError(400, "Configure o provedor e o modelo do redator para revisar o acervo", "MENTOR_REORG_WRITER_MISSING")
+        const created = await MentorReorg.create({ status: "queued", targets: scope.targets, centralIds: scope.centralIds, total: 0, done: 0, costUsd: 0, durationMs: null, error: null, startedAt: null, finishedAt: null })
+        const id = String(created._id)
+        const controller = new AbortController()
+        state.current = { id, controller }
+        const next = processMentorReorg(id, scope, settings, controller.signal).finally(() => {
+            if (state.chain === next || state.chain === reservation) state.chain = null
+            if (state.current?.id === id) state.current = null
+        })
+        state.chain = next
+        releaseReservation()
+        await recordAudit({ userId: actorId, entidade: MENTOR_REORG_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXECUTAR, depois: { status: "queued", listas: scope.targets, centrais: scope.centralIds } })
+        await publishAppEvent(MENTOR_REORG_UPDATED_EVENT, { reorgId: id }).catch(() => undefined)
+        return getMentorReorg(id)
+    } catch (error) {
+        if (state.chain === reservation) state.chain = null
+        releaseReservation()
+        throw error
+    }
 }
 
 /** Cancela a revisão em andamento: o que já foi revisado fica visível, sem aprovação. */

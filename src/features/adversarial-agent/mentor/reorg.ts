@@ -133,8 +133,8 @@ export function reconcileReorgPlan(items: readonly ReorgPlanItem[]): ReorgPlanIt
     const rejected = new Map<string, string>()
     for (const item of items) {
         if (item.action !== "merge") continue
-        if (!item.mergeInto) {
-            rejected.set(item.memoryId, "Fusão sem memória de destino: nada será alterado.")
+        if (!item.mergeInto || item.mergeInto === item.memoryId) {
+            rejected.set(item.memoryId, "Fusão sem memória de destino válida: nada será alterado.")
             continue
         }
         if (targets.has(item.memoryId)) {

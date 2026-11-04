@@ -36,6 +36,14 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
   }),
 }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
+vi.mock('@/features/adversarial-agent/hooks/useMentorReorg', () => ({
+  useMentorReorgs: () => ({ data: { items: [], centrals: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useMentorReorg: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
+  useMentorReorgDecision: () => ({ mutate: vi.fn(), isPending: false }),
+  useMentorReorgRealtime: vi.fn(),
+  useMentorReorgPreview: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
+  useStartMentorReorg: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
 vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
   useMentorSettings: () => mocks.settingsQuery,
   useSaveMentorSettings: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
@@ -107,6 +115,12 @@ afterEach(() => {
 })
 
 describe('aba Agente Mentor com a configuração salva', () => {
+  it('a seção Reorganização fica acessível pela aba e mostra o botão "Reorganizar memórias"', () => {
+    renderTab()
+    fireEvent.click(screen.getByRole('radio', { name: 'Reorganização' }))
+    expect(screen.getByRole('button', { name: /Reorganizar memórias/ })).toBeTruthy()
+  })
+
   it('monta a tela inteira com provedor, modelo e variante salvos, sem nascer alterada', () => {
     const { onDirtyChange } = renderTab()
     expectSavedValuesShown()

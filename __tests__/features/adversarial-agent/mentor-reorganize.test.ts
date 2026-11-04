@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(async () => undefined),
   publishAppEvent: vi.fn(async () => undefined),
   streamAi: vi.fn(),
+  askJev: vi.fn(),
   list: vi.fn(),
   get: vi.fn(),
   create: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined, recordAudit: mock
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
 vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
+vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limits }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, getAgentMemory: mocks.get, createAgentMemory: mocks.create, updateAgentMemory: mocks.update, moveAgentMemory: mocks.move }))
 vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: async () => [{ id: 'c1', projectName: 'App' }] }))
@@ -168,7 +170,9 @@ describe('Plano de reorganização', () => {
     const mergeItem = (reorg.items as { id: string; action: string; ownerMemory: boolean }[]).find((item) => item.action === 'merge')!
     expect(mergeItem.ownerMemory).toBe(true)
     const applied = await applyMentorReorg(reorg.id, { itemIds: [mergeItem.id] }, 'local')
-    expect(applied.items.find((item) => item.id === mergeItem.id)).toMatchObject({ status: 'failed', error: expect.stringContaining('escrita pelo dono') })
+    // Sem a confirmação, o item não falha de forma definitiva: fica pendente para a decisão explícita.
+    expect(applied.status).toBe('partial')
+    expect(applied.items.find((item) => item.id === mergeItem.id)).toMatchObject({ status: 'pending' })
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
@@ -248,5 +252,95 @@ describe('Fila da reorganização', () => {
     release()
     await mentorReorgChain()
     expect(await getMentorReorg(first.id)).toMatchObject({ status: 'cancelled' })
+  })
+})
+
+describe('correções da rodada 1 do adversário (OPE-132)', () => {
+  it('F4: uma memória com resposta inválida não derruba o plano; ela fica para decisão com o erro', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Primeira'), memory('m_b', 'Segunda')] : []))
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ target: 'adversarial' }))
+      .mockReturnValueOnce(reply({ action: 'keep' }))
+      .mockReturnValueOnce(reply({ target: 'destino-que-nao-existe' }))
+    const reorg = await plan()
+    expect(reorg).toMatchObject({ status: 'ready', total: 2, done: 2 })
+    const items = reorg.items as { action: string; error: string | null }[]
+    expect(items[0]).toMatchObject({ action: 'keep', error: null })
+    expect(items[1]).toMatchObject({ action: 'keep', error: expect.stringContaining('destino inválido') })
+  })
+
+  it('F5: mover sem texto novo confere o texto atual no sanitizador do destino', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'developer-central' ? [memory('m_c', 'Neste projeto, a rota /api/tasks devolve as tarefas.')] : []))
+    mocks.streamAi.mockReturnValueOnce(reply({ target: 'developer-global' })).mockReturnValueOnce(reply({ action: 'keep' }))
+    const reorg = await plan()
+    const item = (reorg.items as { action: string; note: string | null; sanitizerReason: string | null }[])[0]!
+    expect(item.action).toBe('keep')
+    expect(item.note).toContain('texto atual não pode ser levado')
+    expect(item.sanitizerReason).toContain('rota')
+  })
+
+  it('F6: memórias arquivadas não entram na revisão nem na estimativa', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Ativa'), memory('m_b', 'Arquivada', { ativa: false })] : []))
+    mocks.streamAi.mockReturnValueOnce(reply({ target: 'adversarial' })).mockReturnValueOnce(reply({ action: 'keep' }))
+    const reorg = await plan()
+    expect(reorg).toMatchObject({ total: 1, done: 1 })
+    expect((reorg.items as { origin: { memoryId: string } }[]).map((item) => item.origin.memoryId)).toEqual(['m_a'])
+    expect(await previewMentorReorg({ targets: ['adversarial'] }, settings())).toMatchObject({ memories: 1 })
+  })
+
+  it('F10: fusão na própria memória vira manter, sem arquivar a regra', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Regra única')] : []))
+    mocks.streamAi.mockReturnValueOnce(reply({ target: 'adversarial' })).mockReturnValueOnce(reply({ action: 'merge', memoryId: 'm_a', text: 'Regra fundida' }))
+    const reorg = await plan()
+    expect(reorg.items[0]).toMatchObject({ action: 'keep', mergeInto: null })
+    expect((reorg.items[0] as { note: string }).note).toContain('não está mais')
+  })
+
+  it('F2: aprovar tudo não arquiva memória do dono sem confirmação; o item fica pendente e depois é aprovado', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Regra do dono', { doDono: true }), memory('m_b', 'Regra que fica')] : []))
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ target: 'adversarial' }))
+      .mockReturnValueOnce(reply({ action: 'merge', memoryId: 'm_b', text: 'Regra fundida' }))
+      .mockReturnValueOnce(reply({ target: 'adversarial' }))
+      .mockReturnValueOnce(reply({ action: 'keep' }))
+    const reorg = await plan()
+    const ownerMerge = (reorg.items as { id: string; action: string; ownerMemory: boolean }[]).find((item) => item.action === 'merge')!
+    expect(ownerMerge.ownerMemory).toBe(true)
+    const first = await applyMentorReorg(reorg.id, {}, 'local')
+    expect(first.status).toBe('partial')
+    expect(first.items.find((item) => item.id === ownerMerge.id)).toMatchObject({ status: 'pending' })
+    expect(mocks.update).not.toHaveBeenCalled()
+    mocks.get.mockResolvedValueOnce(memory('m_b', 'Regra que fica', { versao: 1 }))
+    const second = await applyMentorReorg(reorg.id, { itemIds: [ownerMerge.id], overrides: { [ownerMerge.id]: { confirmOwner: true } } }, 'local')
+    expect(second.status).toBe('applied')
+    expect(second.items.find((item) => item.id === ownerMerge.id)).toMatchObject({ status: 'applied' })
+    expect(mocks.update).toHaveBeenCalled()
+  })
+
+  it('F3: JEV que não responde respeita o tempo máximo da chamada e libera a fila', async () => {
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Regra')] : []))
+    mocks.askJev.mockImplementation(({ signal }: { signal: AbortSignal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error('O JEV não respondeu no tempo máximo'), { name: 'AbortError' })))))
+    const reorg = await plan(settings({ timeoutSeconds: 0.01, router: { provider: 'jev', model: 'jev-latest', variant: null, instructions: '' } }))
+    expect(reorg.status).toBe('ready')
+    expect((reorg.items[0] as { error: string | null }).error).toContain('tempo máximo')
+    expect(await startMentorReorg({}, settings(), 'local')).toMatchObject({ status: expect.any(String) })
+    await mentorReorgChain()
+  })
+
+  it('F7: dois inícios simultâneos reservam a fila; só um executa', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    mocks.streamAi.mockImplementation(async function* () {
+      await gate
+      yield { type: 'done', finishReason: 'stop', usage: { costUsd: 0 }, durationMs: 1 }
+    })
+    mocks.list.mockImplementation(async (agent: string) => (agent === 'adversarial' ? [memory('m_a', 'Regra')] : []))
+    const [first, second] = await Promise.allSettled([startMentorReorg({}, settings(), 'local'), startMentorReorg({}, settings(), 'local')])
+    expect(first.status).toBe('fulfilled')
+    expect(second).toMatchObject({ status: 'rejected', reason: { code: 'MENTOR_REORG_RUNNING' } })
+    release()
+    await mentorReorgChain()
   })
 })

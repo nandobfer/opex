@@ -288,11 +288,11 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
             if (!answer) throw new Error("O redator do Agente Mentor respondeu sem o JSON esperado")
             if (answer.action === "skip") {
                 const refused = checkWriterSkip(answer, destinationIds, otherIds)
-                const covered = answer.kind === "covered" && answer.memoryId && destinationIds.includes(answer.memoryId) ? { memoryId: answer.memoryId, target } : null
-                if (!refused) return await finish("skipped", { writerAction: "skip", writerReason: answer.reason || null, writerSkipKind: answer.kind, writerCoveredBy: covered, skipRejection })
-                // Cobertura em outra lista: devolve ao redator para generalizar ou separar.
+                const citedId = answer.memoryId ?? answer.reason?.match(/\bm_[A-Za-z0-9]+\b/)?.[0] ?? null
+                const covered = answer.kind === "covered" && citedId && destinationIds.includes(citedId) ? { memoryId: citedId, target } : null
+                if (!refused) return await finish("skipped", { writerAction: "skip", writerReason: answer.reason || null, writerSkipKind: answer.kind ?? null, writerCoveredBy: covered, skipRejection })
                 skipRejection = refused
-                await setRun(runId, { writerAction: "skip", writerReason: answer.reason || null, writerSkipKind: answer.kind, writerCoveredBy: null, skipRejection })
+                await setRun(runId, { writerAction: "skip", writerReason: answer.reason || null, writerSkipKind: answer.kind ?? null, writerCoveredBy: null, skipRejection })
                 continue
             }
             rejection = sanitizeMemoryText(answer.text, sanitizeContext)
@@ -430,7 +430,9 @@ export async function approveMentorRun(id: string, text: string | undefined, act
     let extraApplied: Awaited<ReturnType<typeof applyProposal>> | null = null
     try {
         if (extraProposal && !run.extraMemoryId) {
-            extraApplied = await applyProposal(run, extraProposal, actorId)
+            // Como na principal: a memória da fusão pode ter sido excluída depois da sugestão.
+            const extraExists = extraProposal.action === "update" && extraProposal.memoryId ? (await listTargetMemories(extraProposal.target, extraProposal.centralId)).some((memory) => memory.id === extraProposal.memoryId) : false
+            extraApplied = await applyProposal(run, extraExists ? extraProposal : { ...extraProposal, action: "create", memoryId: null }, actorId)
             await MentorRun.updateOne({ _id: run._id }, { $set: { extraMemoryId: extraApplied.memoryId } })
         }
         if (!run.memoryId) {
