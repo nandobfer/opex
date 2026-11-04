@@ -82,10 +82,16 @@ async function agentRead(operationId: "get_hints" | "search_memories", input: un
     return engramindCall("POST", operation.request(operation.input.parse(input)), { target: { baseUrl, token } })
 }
 
+/** Aviso ao modelo quando a busca rodou só no alcance do agente (os canais que ele assina). */
+export const AGENT_REACH_NOTICE =
+    "Busca restrita aos canais que este agente assina. Para procurar em outros canais da rede, liste-os (list_engramind_channels) e informe-os em `channels`."
+
 /**
- * Busca pelo agente sem perder o alcance do gestor: o token do agente só enxerga os canais que ele assina.
- * Canal pedido fora do alcance (`403`) ou busca sem canais e sem resultado caem na busca do admin, que alcança
- * a rede inteira (sem pulso, porque o `memory.consumed` vem sem agente).
+ * Busca pelo agente sem perder o alcance do gestor: o token do agente só enxerga os canais que ele assina, e a
+ * resposta diz isso ao modelo (`reach: "agent"` + `notice`). Caem na busca do admin, que alcança a rede
+ * inteira (sem pulso, porque o `memory.consumed` vem sem agente): canal pedido fora do alcance (`403`), token
+ * do agente recusado (`AUTH_INVALID`: revogado, rotacionado ou vencido; log `warn`) e busca sem canais e sem
+ * resultado. Os outros erros sobem.
  */
 async function agentSearch(input: unknown, context: OpexToolContext): Promise<unknown | undefined> {
     try {
@@ -93,9 +99,15 @@ async function agentSearch(input: unknown, context: OpexToolContext): Promise<un
         if (result === undefined) return undefined
         const explicit = Array.isArray((input as { channels?: unknown } | null)?.channels) && ((input as { channels: unknown[] }).channels.length > 0)
         if (!explicit && Array.isArray(result?.results) && result.results.length === 0) return undefined
-        return result
+        return explicit ? result : { ...result, reach: "agent", notice: AGENT_REACH_NOTICE }
     } catch (error) {
-        if (error instanceof DomainError && error.status === 403) return undefined
+        if (!(error instanceof DomainError)) throw error
+        if (error.status === 403) return undefined
+        if (error.code === "ENGRAMIND_AUTH_INVALID") {
+            const { engramindLog } = await import("@/features/engramind/server/shared")
+            engramindLog.warn({ agent: searchConsumer(context), operation: "search_memories" }, "token do agente recusado na busca; seguindo pelo admin")
+            return undefined
+        }
         throw error
     }
 }

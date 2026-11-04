@@ -822,9 +822,10 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
 - Memórias brutas (OPE-109): `create_engramind_memory` e `update_engramind_memory` (texto/categoria com
   `expected_version`), `write`. A busca `search_engramind_memories` roda com o token do agente da sessão
   (`opex/opex` no Agente Opex, `opex/maddox` no Maddox; `agentRead`), então o `memory.consumed` chega com o
-  agente e a rede pulsa (OPE-116). O token do agente só alcança os canais que ele assina: canal pedido fora
-  desse alcance (`403`), ou busca sem canais e sem resultado, cai na busca do admin, com a rede inteira e sem
-  pulso. Por token de sistema (MCP do dono), ou sem token do agente, vai direto pelo admin.
+  agente e a rede pulsa (OPE-116). O token do agente só alcança os canais que ele assina: busca sem canais
+  devolve o resultado com `reach: "agent"` e um `notice` dizendo ao modelo que ficou restrita e como pedir
+  outros canais. Caem na busca do admin, com a rede inteira e sem pulso: canal pedido fora desse alcance
+  (`403`), token do agente recusado (`AUTH_INVALID`, log `warn`) e busca sem canais e sem resultado. Por token de sistema (MCP do dono), ou sem token do agente, vai direto pelo admin.
 - `destructive` (confirmação por padrão; o dono troca ferramenta a ferramenta): excluir canal,
   memória, app e agente; arquivar canal e memória; revogar token. O resto roda direto.
 - Segredos fora do histórico e dos cards (`redact` em `set_engramind_secret`, webhooks, propostas de

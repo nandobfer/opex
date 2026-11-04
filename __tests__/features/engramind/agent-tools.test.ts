@@ -16,7 +16,7 @@ vi.mock('@/features/engramind/server/memory-network', () => ({ agentTokenFor: as
 vi.mock('@/features/engramind/server/client', () => ({ engramindCall: hints.call, engramindTarget: async () => ({ baseUrl: 'http://engramind', token: 'admin' }) }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ applyOpexAiSource: mocks.apply, getOpexAiSourceState: vi.fn(), resendOpexAiKey: vi.fn() }))
 
-import { engramindTools } from '@/features/opex-agent/server/tools/engramind'
+import { AGENT_REACH_NOTICE, engramindTools } from '@/features/opex-agent/server/tools/engramind'
 import { OPEX_CLIENT_SERVER_TOOLS } from '@/features/opex-agent/server/client-tools/registry'
 import { resultActionOf } from '@/features/opex-agent/result-actions'
 
@@ -135,7 +135,7 @@ describe('busca de memórias pelo agente (OPE-109, OPE-116)', () => {
 
   it('OPE-116: o Agente Opex e o Maddox buscam com o próprio token de agente (o memory.consumed traz o agente e a rede pulsa); o Opex não publica consumo', async () => {
     hints.call.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'opex'), hit('m_2', 'agentes/opex/global')] })
-    await expect(find('search_engramind_memories').execute({ query: 'pnpm' }, context)).resolves.toMatchObject({ results: [expect.anything(), expect.anything()] })
+    await expect(find('search_engramind_memories').execute({ query: 'pnpm' }, context)).resolves.toMatchObject({ results: [expect.anything(), expect.anything()], reach: 'agent', notice: AGENT_REACH_NOTICE })
     await find('search_engramind_memories').execute({ query: 'pnpm' }, { ...context, scope: { kind: 'owner', agent: 'maddox' } as never })
     expect([tokenOf(0), tokenOf(1)]).toEqual(['eng.tk_opex.s', 'eng.tk_maddox.s'])
     expect(hints.call.mock.calls[0]![1]).toMatchObject({ path: '/v1/memories/search', body: expect.objectContaining({ query: 'pnpm' }) })
@@ -149,6 +149,23 @@ describe('busca de memórias pelo agente (OPE-109, OPE-116)', () => {
     mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_9', 'agentes/desenvolvedor/global')] })
     await expect(find('search_engramind_memories').execute({ query: 'x', channels: ['agentes/desenvolvedor/global'] }, context)).resolves.toMatchObject({ results: [expect.anything()] })
     expect(mocks.run).toHaveBeenCalledWith('search_memories', expect.objectContaining({ channels: ['agentes/desenvolvedor/global'] }), 'local')
+  })
+
+  it('token do agente recusado (AUTH_INVALID: revogado ou rotacionado) cai na busca do admin', async () => {
+    const { DomainError } = await import('@/lib/api/route')
+    hints.call.mockRejectedValue(new DomainError(409, 'O Engramind recusou o token.', 'ENGRAMIND_AUTH_INVALID'))
+    mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_3', 'opex')] })
+    const output = await find('search_engramind_memories').execute({ query: 'x' }, context)
+    expect(output).toMatchObject({ results: [expect.anything()] })
+    expect(output).not.toHaveProperty('reach')
+    expect(mocks.run).toHaveBeenCalledWith('search_memories', expect.objectContaining({ query: 'x' }), 'local')
+  })
+
+  it('com canais pedidos no alcance do agente, sem o aviso de alcance restrito', async () => {
+    hints.call.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'opex')] })
+    const output = await find('search_engramind_memories').execute({ query: 'x', channels: ['opex'] }, context)
+    expect(output).toMatchObject({ results: [expect.anything()] })
+    expect(output).not.toHaveProperty('notice')
   })
 
   it('sem canais e sem resultado no alcance do agente, repete pelo admin; com canais pedidos, o vazio fica', async () => {
