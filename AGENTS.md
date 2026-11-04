@@ -204,6 +204,8 @@ sem pedido explícito.
 - Métricas dos agentes: `agent-metrics-updated` (`{ agents }`) em `private-app` quando a rotina
   `agent-usage-daily` grava execuções ou resumos; as páginas `/agente-<nome>` também reagem aos eventos
   que já existem de cada agente (ver `aicontext/modules/agent-metrics.md`).
+- Cores favoritas (Configurações › Aparência): `color-palette-updated` (`{ color, action, previousColor? }`)
+  em `private-app` ao adicionar, editar ou remover uma favorita (ver `aicontext/modules/settings.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { attachmentIdsSchema } from "./attachments/schemas"
-import { COLUMN_COLORS, COLUMN_ICON_KEYS, COLUMN_KEY_PATTERN } from "./board"
+import { colorValueSchema } from "@/lib/colors"
+import { COLUMN_ICON_KEYS, COLUMN_KEY_PATTERN } from "./board"
 import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "./constants"
 
 const columnKey = z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida")
@@ -95,7 +96,8 @@ export type SetTaskClientInput = z.infer<typeof setTaskClientSchema>
 /** Coluna (criar/editar). Mesmo schema no formulário e na API. */
 export const columnInputSchema = z.object({
     name: z.string().trim().min(1, "Informe o nome").max(40, "Máximo de 40 caracteres"),
-    color: z.enum(COLUMN_COLORS),
+    /** Hex `#RRGGBB`; os nomes antigos da paleta (`violet`…) ainda são aceitos e viram hex. */
+    color: colorValueSchema,
     icon: z.enum(COLUMN_ICON_KEYS),
     description: z.string().trim().max(200, "Máximo de 200 caracteres"),
     wipLimit: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(1, "Mínimo 1").max(999, "Máximo 999").nullable(),

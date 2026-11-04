@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/field"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { Switch } from "@/components/ui/switch"
+import { columnDotStyle } from "@/features/tasks/board"
 import { ColumnIconView } from "@/features/tasks/components/column-icons"
 import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { repoLinkInputSchema, type RepoLinkInput, type RepoLinkValues } from "../../schemas"
@@ -108,7 +109,7 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
                                 searchKeys={["label"]}
                                 renderItem={(item) => (
                                     <span className="flex items-center gap-2">
-                                        <span className={`h-2 w-2 rounded-full ${item.dot}`} aria-hidden />
+                                        <span className="h-2 w-2 rounded-full" style={columnDotStyle(item)} aria-hidden />
                                         <ColumnIconView icon={item.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
                                         {item.label}
                                     </span>
@@ -145,7 +146,7 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
                                 searchKeys={["label"]}
                                 renderItem={(item) => (
                                     <span className="flex items-center gap-2">
-                                        <span className={`h-2 w-2 rounded-full ${item.dot}`} aria-hidden />
+                                        <span className="h-2 w-2 rounded-full" style={columnDotStyle(item)} aria-hidden />
                                         <ColumnIconView icon={item.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
                                         {item.label}
                                     </span>

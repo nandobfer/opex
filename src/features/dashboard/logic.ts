@@ -2,8 +2,8 @@ import { bucketKeyFor, bucketKeys, type BucketMode } from "@/lib/time/buckets"
 import { WORKBENCH_STEPS, WORKBENCH_STAGE_LABELS } from "@/features/agentic/constants"
 import { financeItemTimestamp } from "@/features/finance/logic"
 import type { FinanceItemDto } from "@/features/finance/types"
-import type { ColumnColor } from "@/features/tasks/board"
 import { TASK_TYPES, type TaskType } from "@/features/tasks/constants"
+import { UNKNOWN_COLUMN_CHART_COLOR } from "./components/column-colors"
 import type {
     DashboardColumnSlice,
     DashboardCostProject,
@@ -46,7 +46,8 @@ export interface TaskAggInput {
 export interface ColumnInfo {
     key: string
     name: string
-    color: ColumnColor
+    /** Cor `#RRGGBB` da coluna (desconhecida = cinza). */
+    color: string
 }
 
 export interface ProjectInfo {
@@ -91,7 +92,7 @@ export function aggregateTasks(
         if (count) tasksByColumn.push({ key: column.key, label: column.name, color: column.color, count })
     }
     for (const [key, count] of columnCounts) {
-        if (!knownColumns.has(key)) tasksByColumn.push({ key, label: key, color: "zinc", count })
+        if (!knownColumns.has(key)) tasksByColumn.push({ key, label: key, color: UNKNOWN_COLUMN_CHART_COLOR, count })
     }
 
     const tasksByType: DashboardTypeSlice[] = []

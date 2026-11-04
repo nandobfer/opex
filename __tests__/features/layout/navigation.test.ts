@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { Bot, CodeXml, GraduationCap, Landmark, Plug, Settings, Swords } from "lucide-react"
+import { Bot, CodeXml, GraduationCap, Landmark, Palette, Plug, Settings, Swords } from "lucide-react"
 import { activeNavHref, APP_NAV, APP_NAV_ITEMS, HOME_HREF, badgeLabel, flattenNav, formatBadge, isActiveHref, navGroupActive, pageTransitionKey, PERSISTENT_PAGE_HREFS } from "@/features/layout/navigation"
 import { isNavGroup } from "@/features/layout/types"
 import { AGENT_CATALOG } from "@/features/agent-metrics/catalog"
@@ -44,7 +44,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
                 ],
             ],
             ["Integrações", "/integracoes"],
-            ["Configurações", [["Ambientes", "/ambientes"]]],
+            ["Configurações", [["Ambientes", "/ambientes"], ["Aparência", "/configuracoes/aparencia"]]],
         ])
     })
 
@@ -52,7 +52,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         const integracoes = APP_NAV[0]!.items.find((entry) => !isNavGroup(entry) && entry.href === "/integracoes")
         expect(integracoes && !isNavGroup(integracoes) ? [integracoes.label, integracoes.icon, integracoes.panel] : null).toEqual(["Integrações", Plug, "integrations"])
         const configuracoes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "configuracoes")
-        expect(configuracoes?.items.map((item) => item.href)).toEqual(["/ambientes"])
+        expect(configuracoes?.items.map((item) => item.href)).toEqual(["/ambientes", "/configuracoes/aparencia"])
         expect(activeNavHref("/integracoes/github", APP_NAV_ITEMS)).toBe("/integracoes")
     })
 
@@ -75,8 +75,15 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             "/financeiro",
             "/integracoes",
             "/ambientes",
+            "/configuracoes/aparencia",
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)
+    })
+
+    it("Configurações › Aparência (OPE-136) usa o ícone Palette e marca o grupo como ativo", () => {
+        const configuracoes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "configuracoes")!
+        expect(APP_NAV_ITEMS.find((item) => item.href === "/configuracoes/aparencia")?.icon).toBe(Palette)
+        expect(navGroupActive(configuracoes, activeNavHref("/configuracoes/aparencia", APP_NAV_ITEMS))).toBe(true)
     })
 
     it("grupos usam os ícones Bot, Landmark e Settings", () => {

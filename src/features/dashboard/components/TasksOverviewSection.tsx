@@ -9,7 +9,7 @@ import { DonutChart } from "@/components/metrics/charts/DonutChart"
 import { RankedBarsCard } from "@/components/metrics/charts/RankedBarsCard"
 import { TrendLineChart } from "@/components/metrics/charts/TrendLineChart"
 import { colorAt } from "@/components/metrics/charts/palette"
-import { COLUMN_CHART_COLORS } from "@/features/dashboard/components/column-colors"
+import { columnChartColor } from "@/features/dashboard/components/column-colors"
 import { formatBucketLabel, formatCount } from "../format"
 import type { DashboardDto } from "../types"
 
@@ -17,8 +17,8 @@ type Data = Pick<DashboardDto, "tasksByColumn" | "tasksByType" | "tasksByProject
 
 /** Bloco "Visão geral de tarefas": distribuição por coluna, tipo e projeto + criadas × concluídas. */
 export function TasksOverviewSection({ data }: { data: Data }) {
-    const columnRows = data.tasksByColumn.map((slice) => ({ name: slice.label, value: slice.count, fill: COLUMN_CHART_COLORS[slice.color] }))
-    const columnConfig: ChartConfig = Object.fromEntries(data.tasksByColumn.map((slice) => [slice.label, { label: slice.label, color: COLUMN_CHART_COLORS[slice.color] }]))
+    const columnRows = data.tasksByColumn.map((slice) => ({ name: slice.label, value: slice.count, fill: columnChartColor(slice.color) }))
+    const columnConfig: ChartConfig = Object.fromEntries(data.tasksByColumn.map((slice) => [slice.label, { label: slice.label, color: columnChartColor(slice.color) }]))
 
     const typeRows = data.tasksByType.map((slice) => ({ label: slice.type === "none" ? "Sem tipo" : TASK_TYPE_SHORT_LABELS[slice.type], count: slice.count }))
     const typeConfig: ChartConfig = { count: { label: "Tarefas", color: colorAt(0) } }

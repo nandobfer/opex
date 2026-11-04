@@ -1,11 +1,12 @@
-import { COLUMN_COLOR_STYLES, type ColumnColor } from "@/features/tasks/board"
+import type { CSSProperties } from "react"
+import { normalizeColor } from "@/lib/colors"
 import type { TaskDto } from "@/features/tasks/types"
 import type { CentralDto } from "./types"
 
 /** Classe neutra da linha do projeto quando a central não tem cor escolhida. */
 export const NEUTRAL_PRODUCT_COLOR_CLASS = "text-muted-foreground"
 
-type ProductCentral = Pick<CentralDto, "projectName" | "repo"> & { config?: { color?: ColumnColor | null } }
+type ProductCentral = Pick<CentralDto, "projectName" | "repo"> & { config?: { color?: string | null } }
 
 /**
  * Texto da linha do projeto nos cards da Central de desenvolvimento: o repositório (`org/repo`) da
@@ -16,9 +17,13 @@ export function taskProductLabel(task: Pick<TaskDto, "project">, central: Produc
     return candidates.map((value) => value?.trim()).find((value): value is string => Boolean(value)) ?? null
 }
 
-/** Classe de texto da cor cadastrada na central; sem cor (ou desconhecida) = neutra. */
-export function productColorClass(color: ColumnColor | null | undefined): string {
-    return (color && COLUMN_COLOR_STYLES[color]?.text) || NEUTRAL_PRODUCT_COLOR_CLASS
+/**
+ * Cor do texto do projeto pela cor cadastrada na central (hex, por `style`: é dado do usuário); sem
+ * cor (ou inválida) = classe neutra do tema.
+ */
+export function productColorProps(color: string | null | undefined): { className?: string; style?: CSSProperties } {
+    const hex = normalizeColor(color)
+    return hex ? { style: { color: hex } } : { className: NEUTRAL_PRODUCT_COLOR_CLASS }
 }
 
 /** Central de cada projeto (`projectId → central`), para ligar a tarefa à cor e ao repositório. */

@@ -104,8 +104,9 @@ describe("buildDashboard", () => {
             runningWorkbenches: 1,
         })
         expect(result.tasksByColumn).toEqual([
-            { key: "todo", label: "A Fazer", color: "zinc", count: 1 },
-            { key: "done", label: "Concluído", color: "emerald", count: 1 },
+            // Cores salvas com o nome antigo da paleta chegam ao gráfico em hex (OPE-136).
+            { key: "todo", label: "A Fazer", color: "#A1A1AA", count: 1 },
+            { key: "done", label: "Concluído", color: "#34D399", count: 1 },
         ])
         expect(result.tasksTimeline.find((point) => point.bucket === "2026-10-05")).toMatchObject({ created: 1 })
         expect(result.tasksTimeline.find((point) => point.bucket === "2026-10-10")).toMatchObject({ completed: 1 })

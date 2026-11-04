@@ -12,7 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { SelectionCheckbox } from "@/components/ui/selection-checkbox"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import type { BoardColumnView, TaskColumnDto } from "../board"
+import { columnBorderStyle, type BoardColumnView, type TaskColumnDto } from "../board"
 import type { TaskSelection } from "../hooks/useTaskSelection"
 import type { TaskDto } from "../types"
 import { ColumnIconView } from "./column-icons"
@@ -94,7 +94,8 @@ export function TaskColumn(props: TaskColumnProps) {
                 transition={{ duration: 0.2 }}
                 aria-label={column.label}
                 data-status={column.key}
-                className={cn(KANBAN_COLUMN_CLASS, "transition-colors", column.border, overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
+                style={columnBorderStyle(column)}
+                className={cn(KANBAN_COLUMN_CLASS, "transition-colors", overWip && "border-x-warning/60 border-b-warning/60", isOver && "bg-primary/10 ring-1 ring-primary/40")}
             >
                 <header className={cn("group/col", KANBAN_COLUMN_HEADER_CLASS)}>
                     <div className="flex items-center justify-between gap-2">

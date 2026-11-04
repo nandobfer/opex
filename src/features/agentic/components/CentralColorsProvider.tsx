@@ -1,16 +1,16 @@
 "use client"
 
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react"
-import type { ColumnColor } from "@/features/tasks/board"
+import { normalizeColor } from "@/lib/colors"
 import { centralsByProject } from "../dev-center-product"
 import { useCentrals, useCentralsRealtime } from "../hooks/useAgentic"
 
-type ColorOf = (projectId: string) => ColumnColor | null
+type ColorOf = (projectId: string) => string | null
 
 const CentralColorsContext = createContext<ColorOf | null>(null)
 
-/** Cor da central do projeto; sem central, sem cor, erro na consulta ou fora do provider = `null` (neutra). */
-export function useProjectColor(projectId: string | null | undefined): ColumnColor | null {
+/** Cor `#RRGGBB` da central do projeto; sem central, sem cor, erro na consulta ou fora do provider = `null` (neutra). */
+export function useProjectColor(projectId: string | null | undefined): string | null {
     const colorOf = useContext(CentralColorsContext)
     return projectId && colorOf ? colorOf(projectId) : null
 }
@@ -23,6 +23,6 @@ export function CentralColorsProvider({ children }: { children: ReactNode }) {
     const query = useCentrals()
     useCentralsRealtime()
     const byProject = useMemo(() => centralsByProject(query.data ?? []), [query.data])
-    const colorOf = useCallback<ColorOf>((projectId) => byProject.get(projectId)?.config?.color ?? null, [byProject])
+    const colorOf = useCallback<ColorOf>((projectId) => normalizeColor(byProject.get(projectId)?.config?.color), [byProject])
     return <CentralColorsContext.Provider value={colorOf}>{children}</CentralColorsContext.Provider>
 }

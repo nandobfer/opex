@@ -27,6 +27,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 
 import { TasksPane } from '@/features/agentic/components/dev-center/TasksPane'
 import { NEUTRAL_PRODUCT_COLOR_CLASS } from '@/features/agentic/dev-center-product'
+import { styleHasColor } from '../../helpers/colors'
 
 /** Linha do projeto colorida e dica da coluna nos cards da Central de desenvolvimento (OPE-100, port do MT-31). */
 
@@ -85,10 +86,11 @@ afterEach(() => cleanup())
 
 describe('linha do projeto nos cards da Central de desenvolvimento', () => {
   it('mostra o repositório da central em negrito, na cor da central', async () => {
-    await renderPane('emerald')
+    await renderPane('#34D399')
     const line = screen.getByTestId('task-product')
     expect(line.textContent).toBe('nandobfer/opex')
-    expect(line.classList.contains('text-emerald-400')).toBe(true)
+    expect(styleHasColor(line.getAttribute('style'), '#34D399')).toBe(true)
+    expect(line.classList.contains(NEUTRAL_PRODUCT_COLOR_CLASS)).toBe(false)
     expect(line.classList.contains('font-bold')).toBe(true)
   })
 
@@ -96,13 +98,20 @@ describe('linha do projeto nos cards da Central de desenvolvimento', () => {
     await renderPane(null)
     const line = screen.getByTestId('task-product')
     expect(line.classList.contains(NEUTRAL_PRODUCT_COLOR_CLASS)).toBe(true)
-    expect(line.classList.contains('text-emerald-400')).toBe(false)
+    expect(line.getAttribute('style')).toBeNull()
+  })
+
+  it('central salva com o nome antigo da paleta pinta com o hex equivalente', async () => {
+    await renderPane('emerald')
+    expect(styleHasColor(screen.getByTestId('task-product').getAttribute('style'), '#34D399')).toBe(true)
   })
 
   it('a coluna aparece só no bullet (com o nome no rótulo acessível), não em texto', async () => {
     await renderPane('sky')
     const dot = screen.getByTestId('task-column-dot')
     expect(dot.getAttribute('aria-label')).toBe('Em andamento')
+    // Coluna salva como `sky` (nome antigo) vira o hex do tom 400.
+    expect(styleHasColor(dot.getAttribute('style'), '#38BDF8')).toBe(true)
     expect(screen.queryByText('Em andamento')).toBeNull()
   })
 })

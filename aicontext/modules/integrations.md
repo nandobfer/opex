@@ -343,7 +343,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   | `api:v1:<recurso>` | Uma rota (declarada em `PUBLIC_TOKEN_ROUTES`) |
   | `mcp:owner` | O MCP do dono (`initialize`/`ping`/`tools/list`) e o grupo Contexto |
   | `mcp:owner:tool:*` | Todas as ferramentas do dono (dinâmico: ferramenta nova entra sozinha) |
-  | `mcp:owner:group:<grupo>` | Um grupo (dinâmico) |
+  | `mcp:owner:group:<grupo>` | Um grupo (dinâmico; ex.: `mcp:owner:group:appearance`, as cores favoritas — que não pedem confirmação, então não exigem `mcp:owner:destructive`) |
   | `mcp:owner:tool:<nome>` | Uma ferramenta (lista explícita, fixa) |
   | `mcp:owner:destructive` | Entre as concedidas, as destrutivas e as que pedem confirmação por padrão |
 

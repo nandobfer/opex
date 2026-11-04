@@ -1,6 +1,7 @@
 import type { OpexToolGroup } from "../../constants"
 import { isAlwaysOnGroup, toolConfirms, type OpexToolMetaDto } from "../../tool-tree"
 import type { OpexTool } from "./define"
+import { appearanceTools } from "./appearance"
 import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
@@ -47,6 +48,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...clientTools,
     ...hostTools,
     ...environmentTools,
+    ...appearanceTools,
     ...engramindTools,
     ...opencodeServiceTools,
     ...opencodeResourceTools,

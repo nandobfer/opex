@@ -8,13 +8,14 @@ import { KANBAN_CARD_CLASS, KANBAN_COLUMN_CLASS, KANBAN_COLUMN_HEADER_CLASS, COM
 import { TABLE_COLUMN_ORDER, TABLE_COLUMN_WIDTHS } from '@/features/tasks/components/table-columns'
 import { TASK_TABLE_RESPONSIVE, TASK_TABLE_ROW_HEIGHT } from '@/features/tasks/components/TaskTable'
 import type { BoardColumnView } from '@/features/tasks/board'
+import { styleHasColor } from '../../helpers/colors'
 
 /** Skeletons de Tarefas com as dimensões do resultado final (OPE-100, port do MT-32). */
 
 afterEach(() => cleanup())
 
-const column = (key: string, border: string): BoardColumnView => ({ key, label: key, border, dot: 'bg-sky-400', column: { key, name: key } } as unknown as BoardColumnView)
-const COLUMNS = [column('todo', 'border-t-sky-400'), column('doing', 'border-t-amber-400'), column('done', 'border-t-emerald-400')]
+const column = (key: string, accent: string): BoardColumnView => ({ key, label: key, accent, column: { key, name: key } } as unknown as BoardColumnView)
+const COLUMNS = [column('todo', '#38BDF8'), column('doing', '#FBBF24'), column('done', '#34D399')]
 
 const classesOf = (element: Element) => Array.from(element.classList)
 const hasAll = (element: Element, classes: string) => classes.split(' ').every((name) => element.classList.contains(name))
@@ -23,10 +24,10 @@ describe('TasksSkeleton › kanban', () => {
   it('uma coluna por coluna visível, com a borda dela e as classes da coluna real', () => {
     render(<TasksSkeleton kanban columns={COLUMNS} mobile={false} />)
     expect(screen.getByTestId('kanban-skeleton').getAttribute('aria-busy')).toBe('true')
-    for (const { key, border } of COLUMNS) {
+    for (const { key, accent } of COLUMNS) {
       const element = screen.getByTestId(`column-skeleton-${key}`)
       expect(hasAll(element, KANBAN_COLUMN_CLASS)).toBe(true)
-      expect(classesOf(element)).toContain(border)
+      expect(styleHasColor(element.getAttribute('style'), accent)).toBe(true)
       expect(hasAll(element.firstElementChild!, KANBAN_COLUMN_HEADER_CLASS)).toBe(true)
     }
   })

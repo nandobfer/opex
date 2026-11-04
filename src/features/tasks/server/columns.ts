@@ -8,7 +8,8 @@ import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { randomId } from "@/lib/random-id"
 import { parseCentralConfig, resolveCentralColumns } from "@/features/agentic/logic"
 import { loadAgenticSettings } from "@/features/agentic/server/settings"
-import { normalizeLayout, placeColumnAfter, type ColumnColor, type ColumnIcon, type TaskColumnDto, type TaskBoardDto } from "../board"
+import { DEFAULT_COLUMN_COLOR, LEGACY_COLOR_HEX, normalizeColor } from "@/lib/colors"
+import { normalizeLayout, placeColumnAfter, type ColumnIcon, type TaskColumnDto, type TaskBoardDto } from "../board"
 import { TASK_COLUMNS_UPDATED_EVENT } from "../constants"
 import type { ColumnInput, CreateColumnInput } from "../schemas"
 
@@ -21,15 +22,15 @@ const LAYOUT_KEY = "board"
 
 /** Quadro inicial (primeira execução): colunas genéricas, editáveis. */
 const DEFAULT_COLUMNS: Pick<ITaskBoardColumn, "key" | "name" | "color" | "icon" | "description" | "wipLimit">[] = [
-    { key: "todo", name: "A Fazer", color: "zinc", icon: "inbox", description: null, wipLimit: null },
-    { key: "doing", name: "Em Andamento", color: "sky", icon: "clock", description: null, wipLimit: null },
-    { key: "done", name: "Concluído", color: "emerald", icon: "check", description: null, wipLimit: null },
+    { key: "todo", name: "A Fazer", color: LEGACY_COLOR_HEX.zinc!, icon: "inbox", description: null, wipLimit: null },
+    { key: "doing", name: "Em Andamento", color: LEGACY_COLOR_HEX.sky!, icon: "clock", description: null, wipLimit: null },
+    { key: "done", name: "Concluído", color: LEGACY_COLOR_HEX.emerald!, icon: "check", description: null, wipLimit: null },
 ]
 
 const toDto = (doc: Pick<ITaskBoardColumn, "key" | "name" | "color" | "icon" | "description" | "wipLimit">): TaskColumnDto => ({
     key: doc.key,
     name: doc.name,
-    color: doc.color as ColumnColor,
+    color: normalizeColor(doc.color) ?? DEFAULT_COLUMN_COLOR,
     icon: doc.icon as ColumnIcon,
     description: doc.description || null,
     wipLimit: doc.wipLimit ?? null,

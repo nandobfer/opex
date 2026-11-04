@@ -1,23 +1,25 @@
 import type { CSSProperties } from "react"
-import type { ColumnColor } from "@/features/tasks/board"
+import { hexToHslTriplet, normalizeColor, readableTextOn } from "@/lib/colors"
 
 /**
- * Cor de um agente de chat (módulo PURO). A cor vem da paleta das colunas (`null` = primária do tema)
- * e é aplicada sobrescrevendo `--primary`/`--primary-foreground`/`--ring` no contêiner do agente com os
- * tokens do tema (`--agent-{cor}` e `--agent-{cor}-foreground`, em `globals.css`): as classes
- * `bg-primary`, `text-primary`, `ring-primary`… de dentro passam a usar a cor do agente sem mudar o
- * markup. O texto legível sobre cada cor (contraste) é definido no próprio token `-foreground`.
+ * Cor de um agente de chat (módulo PURO). A cor é um hex `#RRGGBB` escolhido pelo usuário (`null` =
+ * primária do tema) e é aplicada sobrescrevendo `--primary`/`--primary-foreground`/`--ring` no contêiner
+ * do agente com o triplet HSL calculado em tempo de execução: as classes `bg-primary`, `text-primary`,
+ * `ring-primary`… de dentro passam a usar a cor do agente sem mudar o markup. O texto sobre a cor fica
+ * claro ou escuro conforme a luminância (`readableTextOn`), para continuar legível.
  */
 
-/** Nome do token do tema de uma cor de agente. */
-export const agentColorToken = (color: ColumnColor) => `--agent-${color}`
+const DARK_TEXT = "240 10% 4%"
+const LIGHT_TEXT = "0 0% 100%"
 
 /**
- * Cor padrão (`null`) também é aplicada explicitamente: um contêiner sem estilo herdaria o `--primary`
- * de um agente de outra cor em volta (ex.: o botão do Opex dentro do popover do Maddox).
+ * Cor padrão (`null`) também é aplicada explicitamente, com a primária original guardada em `:root`
+ * (`--agent-primary`… em `globals.css`): um contêiner sem estilo herdaria o `--primary` de um agente de
+ * outra cor em volta (ex.: o botão do Opex dentro do popover do Maddox).
  */
-export function agentColorStyle(color: ColumnColor | null | undefined): CSSProperties {
-    if (!color) return { "--primary": "var(--agent-primary)", "--primary-foreground": "var(--agent-primary-foreground)", "--ring": "var(--agent-ring)" } as CSSProperties
-    const token = agentColorToken(color)
-    return { "--primary": `var(${token})`, "--primary-foreground": `var(${token}-foreground)`, "--ring": `var(${token})` } as CSSProperties
+export function agentColorStyle(color: string | null | undefined): CSSProperties {
+    const hex = normalizeColor(color)
+    if (!hex) return { "--primary": "var(--agent-primary)", "--primary-foreground": "var(--agent-primary-foreground)", "--ring": "var(--agent-ring)" } as CSSProperties
+    const triplet = hexToHslTriplet(hex)
+    return { "--primary": triplet, "--primary-foreground": readableTextOn(hex) === "dark" ? DARK_TEXT : LIGHT_TEXT, "--ring": triplet } as CSSProperties
 }

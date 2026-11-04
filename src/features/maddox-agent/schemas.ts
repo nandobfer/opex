@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { COLUMN_COLORS } from "@/features/tasks/board"
+import { colorValueSchema } from "@/lib/colors"
 import { DEFAULT_OPEX_TITLE_INSTRUCTIONS, OPEX_FILE_SIZE_MB_DEFAULT, OPEX_FILES_PER_MESSAGE_DEFAULT, OPEX_MESSAGE_MAX, OPEX_TITLE_MAX } from "@/features/opex-agent/constants"
 import { opexFilesSettingsSchema } from "@/features/opex-agent/schemas"
 import { DEFAULT_MADDOX_INSTRUCTIONS } from "./constants"
@@ -15,8 +15,8 @@ export type MaddoxModel = z.infer<typeof maddoxModelSchema>
 export const maddoxAgentSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        /** Cor da paleta das colunas; `null` = primária (padrão). */
-        color: z.enum(COLUMN_COLORS).nullable(),
+        /** Cor do agente (hex `#RRGGBB`; nomes antigos da paleta viram hex; `null` = primária do tema): ícone, ponto de atividade e popover. */
+        color: colorValueSchema.nullable(),
         main: maddoxModelSchema,
         /** Subagente de título e resumo (sem modelo = usa o do agente principal). */
         title: maddoxModelSchema,

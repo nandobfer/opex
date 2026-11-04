@@ -43,6 +43,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | Arquivo | Módulo | Quando consultar |
 |---|---|---|
 | `modules/layout.md` | Layout e navegação | Shell, sidebar, menu (`APP_NAV`), páginas e 404 |
+| `modules/settings.md` | Configurações e seletor de cores | Configurações › Aparência (`/configuracoes/aparencia`): cores favoritas, seletor de cores único (`ColorPicker`/`ColorPaletteField`), cores em hex (`src/lib/colors.ts`) e as ferramentas `appearance` do Agente Opex |
 | `modules/editor-mode.md` | Modo Vim nos campos de texto | Alternância (`Ctrl+Tab`/`Ctrl+Shift+Alt+V`), selo de modo, números de linha, Ctrl+J/Ctrl+E, comandos `:` e exclusões |
 | `modules/dashboard.md` | Dashboards | Página inicial (`/dashboard`, acima de Tarefas): KPIs e gráficos de tarefas, financeiro, horas agênticas e central de desenvolvimento, período global e tempo real |
 | `modules/auth.md` | Login, usuários e sessão | O dono (`ADMIN_*`), usuários de cliente (scrypt), cookie assinado com tipo de sessão, guarda do middleware, entrada do portal por URL e logout |
