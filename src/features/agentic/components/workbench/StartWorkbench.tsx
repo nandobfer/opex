@@ -6,12 +6,16 @@ import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleCard } from "@/components/ui/toggle-card"
+import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
 import { apiErrorMessage } from "@/lib/api"
 import { useTaskDetail, useUpdateTask } from "@/features/tasks/hooks/useTasks"
 import { TASK_AGENTIC_FLOW_LABELS, type TaskAgenticFlow } from "@/features/tasks/constants"
+import type { WorkbenchModelRole } from "../../constants"
 import { useAgenticSettings, useCentralQueue, useStartWorkbench } from "../../hooks/useAgentic"
 import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
+import type { ModelOverride } from "../../logic"
 import { AttachableTextarea } from "./AttachableTextarea"
+import { StartWorkbenchModelSettings } from "./StartWorkbenchModelSettings"
 import type { CentralDto } from "../../types"
 
 /**
@@ -19,6 +23,10 @@ import type { CentralDto } from "../../types"
  * tarefa, a chave **Gerar prévia** (desligada = fluxo PR automático) e um campo opcional de
  * **informações adicionais**. Ao abrir a mesa, essas informações são anexadas à tarefa e enviadas
  * ao planejador no primeiro prompt.
+ *
+ * O controle de modelos (OPE-134) fica à esquerda do botão, no mesmo lugar relativo da mesa em
+ * andamento. A escolha é **só desta tela** (não é gravada na tarefa) e vai junto do clique em
+ * "Abrir mesa e gerar o plano"; abrir pela fila da central ou recarregar volta aos padrões.
  */
 export function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: string }) {
     const task = useTaskDetail(taskId)
@@ -27,6 +35,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const start = useStartWorkbench()
     const update = useUpdateTask()
     const [text, setText] = useState("")
+    const [modelOverrides, setModelOverrides] = useState<Partial<Record<WorkbenchModelRole, ModelOverride>>>({})
     const attachments = useFieldAttachments(`start:${taskId}`)
     const uploadBlock = attachments.blockReason
     const availability = settings.data?.availability
@@ -49,6 +58,16 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const inheritFlow = () => {
         if (!task.data) return
         update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow: null }, patch: { agenticFlow: null } })
+    }
+
+    /** Troca local de um papel: com modelo vira a escolha da abertura; "Padrão da central" remove a troca. */
+    const setRoleModel = (role: WorkbenchModelRole, input: ModelVariantValue) => {
+        setModelOverrides((current) => {
+            const next = { ...current }
+            if (input.model) next[role] = { model: input.model, variant: input.variant }
+            else delete next[role]
+            return next
+        })
     }
 
     return (
@@ -120,22 +139,39 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                     <p className="text-xs text-muted-foreground">Essas informações (e os arquivos anexados) são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        type="button"
-                        data-ctrl-enter-submit
-                        className="gap-1.5"
-                        disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending || Boolean(uploadBlock)}
-                        title={uploadBlock ?? undefined}
-                        onClick={() => start.mutate({ centralId: central.id, taskId, text: text.trim() || undefined, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}) }, { onSuccess: () => attachments.clearSent() })}
-                    >
-                        {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
-                        Abrir mesa e gerar o plano
-                    </Button>
-                    {(blocked || otherProject) && (
-                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Info className="h-3.5 w-3.5" aria-hidden /> {otherProject ? `A tarefa não é do projeto ${central.projectName}` : blocked}
-                        </p>
-                    )}
+                    {/* Modelo da etapa inicial (à esquerda) e o botão de abrir (à direita), como na barra da mesa. */}
+                    <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
+                        <StartWorkbenchModelSettings central={central} settings={settings.data?.settings} overrides={modelOverrides} onChange={setRoleModel} />
+                    </div>
+                    <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
+                        <Button
+                            type="button"
+                            data-ctrl-enter-submit
+                            className="gap-1.5"
+                            disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending || Boolean(uploadBlock)}
+                            title={uploadBlock ?? undefined}
+                            onClick={() =>
+                                start.mutate(
+                                    {
+                                        centralId: central.id,
+                                        taskId,
+                                        text: text.trim() || undefined,
+                                        ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}),
+                                        ...(Object.keys(modelOverrides).length ? { modelOverrides } : {}),
+                                    },
+                                    { onSuccess: () => attachments.clearSent() },
+                                )
+                            }
+                        >
+                            {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
+                            Abrir mesa e gerar o plano
+                        </Button>
+                        {(blocked || otherProject) && (
+                            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Info className="h-3.5 w-3.5" aria-hidden /> {otherProject ? `A tarefa não é do projeto ${central.projectName}` : blocked}
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

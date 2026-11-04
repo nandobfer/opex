@@ -1,9 +1,9 @@
 "use client"
 
-import { AGENT_ROLE_LABELS, STAGE_MODEL_ROLE, WORKBENCH_MODEL_ROLES, type WorkbenchModelRole } from "../../constants"
-import { useSetWorkbenchModel } from "../../hooks/useAgentic"
-import type { WorkbenchDto } from "../../types"
+import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
 import type { AiModelDto } from "@/lib/ai/providers"
+import { AGENT_ROLE_LABELS, WORKBENCH_MODEL_ROLES, type WorkbenchModelRole } from "../../constants"
+import type { ModelChoiceDto } from "../../types"
 import { ModelRoleSection } from "./ModelRoleSection"
 
 /** Descrição da etapa Fork no popover da mesa (as demais usam a descrição do papel, como na central). */
@@ -18,29 +18,41 @@ export function pendingRoleOf(mutation: { isPending: boolean; variables?: { role
 
 export const pendingText = (role: WorkbenchModelRole | null) => (role ? `Alterando: ${AGENT_ROLE_LABELS[role].label}` : null)
 
+interface WorkbenchModelSectionsProps {
+    /** Modelos efetivos por papel (`null` = central ilegível: nenhuma seção). */
+    choices: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    models: Models
+    idPrefix: string
+    /** Papel da etapa atual (badge "Etapa atual"); `null` no popover do fork. */
+    currentRole?: WorkbenchModelRole | null
+    /** Papel em gravação (destaque + "Alterando"). */
+    pendingRole?: WorkbenchModelRole | null
+    /** Entrega a troca de uma etapa a quem guarda os modelos (servidor na mesa, estado local na abertura). */
+    onChange: (role: WorkbenchModelRole, input: ModelVariantValue) => void
+}
+
 /**
  * Seções das etapas da mesa no popover de modelos (Planejamento, Implementação, Build e ambiente,
- * Pull Request e Fork): cada troca grava na hora o papel daquela seção (`PUT .../model`).
+ * Pull Request e Fork): cada troca é entregue ao dono dos dados com o papel daquela seção. Usado pela
+ * mesa em andamento, pelo fork e pela etapa inicial (antes de a mesa existir — OPE-134).
  */
-export function WorkbenchModelSections({ workbench, models, mutation, idPrefix, markCurrent = true }: { workbench: WorkbenchDto; models: Models; mutation: ReturnType<typeof useSetWorkbenchModel>; idPrefix: string; markCurrent?: boolean }) {
-    if (!workbench.models) return null
-    const currentRole = markCurrent ? STAGE_MODEL_ROLE[workbench.stage] : null
-    const pending = pendingRoleOf(mutation)
+export function WorkbenchModelSections({ choices, models, idPrefix, currentRole = null, pendingRole = null, onChange }: WorkbenchModelSectionsProps) {
+    if (!choices) return null
     return (
         <>
-            {WORKBENCH_MODEL_ROLES.filter((role) => workbench.models![role]).map((role) => (
+            {WORKBENCH_MODEL_ROLES.filter((role) => choices[role]).map((role) => (
                 <ModelRoleSection
                     key={role}
                     id={`${idPrefix}-${role}`}
                     role={role}
                     description={role === "fork" ? FORK_ROLE_DESCRIPTION : undefined}
-                    choice={workbench.models![role]}
+                    choice={choices[role]}
                     current={role === currentRole}
-                    pending={pending === role}
+                    pending={pendingRole === role}
                     inheritLabel="Padrão da central"
                     customLabel="Personalizar nesta mesa"
                     models={models}
-                    onChange={(input) => mutation.mutate({ role, ...input })}
+                    onChange={(input) => onChange(role, input)}
                 />
             ))}
         </>
