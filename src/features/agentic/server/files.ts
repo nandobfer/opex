@@ -180,6 +180,15 @@ export async function claimAgenticFiles(files: readonly AgenticFileRef[], owner:
     )
 }
 
+/**
+ * Passa os anexos de um dono provisório (o "Refinar tarefa" que aguardou vaga — OPE-137) para a mesa
+ * que acabou de abrir: daí em diante são apagados junto com ela.
+ */
+export async function transferAgenticFiles(fromOwner: string, toWorkbenchId: string): Promise<void> {
+    await dbConnect()
+    await AgenticFile.updateMany({ workbenchId: fromOwner }, { $set: { workbenchId: toWorkbenchId, claimedAt: new Date() } })
+}
+
 /** `fileIds` do turno (vazio = sem a chave, para não gravar listas vazias). */
 export const fileIdsOf = (files: readonly AgenticFileRef[]): { fileIds?: string[] } => (files.length ? { fileIds: files.map((file) => file.id) } : {})
 

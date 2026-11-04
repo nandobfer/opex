@@ -8,6 +8,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import type { FormReplyInput, PermissionReplyInput } from "@/features/agentic/schemas"
+import { AGENTIC_UPDATED_EVENT } from "@/features/agentic/constants"
 import { REFINEMENT_UPDATED_EVENT, type RefinementAction } from "../constants"
 import type { TaskRefinementStateDto } from "../types"
 
@@ -67,7 +68,10 @@ export function useRefinementAction(taskId: string) {
 export function useSendRefinementMessage(taskId: string) {
     const set = useSetRefinement(taskId)
     return useMutation({
-        mutationFn: async (text: string) => unwrapApi((await api.post<ApiResponse<TaskRefinementStateDto>>(`/tasks/${taskId}/refinement/messages`, { text })).data),
+        mutationFn: async (input: string | { text: string; fileIds?: string[] }) => {
+            const body = typeof input === "string" ? { text: input } : input
+            return unwrapApi((await api.post<ApiResponse<TaskRefinementStateDto>>(`/tasks/${taskId}/refinement/messages`, body)).data)
+        },
         onSuccess: (state) => {
             set(state)
             toast.success("Mensagem enviada ao agente")
@@ -99,8 +103,14 @@ export function useRefinementRealtime(taskId: string): void {
             if (!event?.taskId || event.taskId === taskId) void queryClient.invalidateQueries({ queryKey: refinementKey(taskId) })
         }
         channel.bind(REFINEMENT_UPDATED_EVENT, handler)
+        // A mesa da tarefa mudou de etapa (OPE-137): o bloqueio "já em desenvolvimento" depende dela.
+        const workbenchHandler = (event: { taskId?: string }) => {
+            if (event?.taskId === taskId) void queryClient.invalidateQueries({ queryKey: refinementKey(taskId) })
+        }
+        channel.bind(AGENTIC_UPDATED_EVENT, workbenchHandler)
         return () => {
             channel.unbind(REFINEMENT_UPDATED_EVENT, handler)
+            channel.unbind(AGENTIC_UPDATED_EVENT, workbenchHandler)
             releaseChannel(name)
         }
     }, [queryClient, taskId])

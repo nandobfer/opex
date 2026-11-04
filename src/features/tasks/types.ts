@@ -50,6 +50,8 @@ export interface TaskDto {
     estimate: TaskEstimate | null
     /** Fluxo da mesa de trabalho escolhido na tela de desenvolvimento; `null` = segue o padrão da central (OPE-79). */
     agenticFlow: TaskAgenticFlow | null
+    /** "Gerar plano após refinar" só desta tarefa (OPE-137); `null` segue o padrão da central. */
+    planAfterRefinement: boolean | null
 }
 
 export interface TaskIssueRef {

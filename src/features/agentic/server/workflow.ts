@@ -3,6 +3,9 @@ import { METRIC_EVENT, type MetricEventType } from "@/features/agent-metrics/con
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWorkbenchPr } from "@/lib/db/models/Agentic"
+import { TaskRefinement } from "@/lib/db/models/Refinement"
+import { REFINEMENT_IN_PROGRESS_REASON, refinementFilesOwner } from "@/features/refinement/constants"
+import { refinementConcluded } from "@/features/refinement/logic"
 import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
@@ -10,8 +13,8 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchModelRole, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type ModelOverride, type WorkbenchAction } from "../logic"
+import { WORKBENCH_MODEL_ROLE_INFO, WORKBENCH_MODEL_ROLES, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchModelRole, type WorkbenchStage } from "../constants"
+import { activeRunId, asAgenticFlow, asModelOverride, canRun, isRefinementStage, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolvePlanAfterRefinement, roleBaseAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type ModelOverride, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildFixPrompt,
@@ -39,7 +42,7 @@ import {
 } from "../prompts"
 import type { CiFailure } from "../ci"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type StartWorkbenchModelsInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
-import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import type { RefineWorkbenchResultDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
 import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
@@ -53,7 +56,7 @@ import { asRunState, asStage, toWorkbenchDto, toWorkbenchSummary } from "./dto"
 import { probeReconnect } from "./reconnect"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "./hub"
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
-import { claimAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
+import { claimAgenticFiles, transferAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
@@ -62,7 +65,7 @@ import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
 import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories, type DeveloperMemoriesSync } from "./developer-memories"
-import { describeModel, toModelChoice, validatedModelOverride, validatedStartOverrides, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
+import { describeModel, refinerAgent, toModelChoice, validatedModelOverride, validatedStartOverrides, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { syncWorkbenchTimer } from "./timer-sync"
@@ -115,6 +118,14 @@ async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId
 /** Mesa "executando" sem turno vivo neste processo (o app reiniciou): vira interrompida. */
 async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     const id = String(doc._id)
+    // Refinamento (OPE-137): o turno vivo é o do refinamento da tarefa; o estado é o espelho dele.
+    if (isRefinementStage(asStage(doc.stage))) {
+        if (doc.runState !== "running" || isWorkbenchActive(activeRunId(doc))) return doc
+        const lost = "A execução do refinamento foi perdida neste app (o app reiniciou durante o turno). Use Reconectar para acompanhar o agente ou Continuar para retomar."
+        await AgenticWorkbench.updateOne({ _id: doc._id, runState: "running" }, { $set: { runState: "interrupted", error: lost } })
+        await syncWorkbenchTimer(id)
+        return { ...doc, runState: "interrupted", error: lost }
+    }
     if (doc.runState !== "running" || isWorkbenchActive(id)) return doc
     const adversarial = asStage(doc.stage) === "adversarial_review"
     const error = adversarial
@@ -150,12 +161,12 @@ export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto |
 export async function listCentralWorkbenches(centralId: string): Promise<WorkbenchSummaryDto[]> {
     await dbConnect()
     const [docs, positions, slots] = await Promise.all([
-        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, pendingTurn: 1, forksDonePrompt: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
+        AgenticWorkbench.find({ centralId }).select({ taskId: 1, taskCode: 1, taskTitle: 1, stage: 1, runState: 1, pendingPermissions: 1, pendingForms: 1, pendingTurn: 1, forksDonePrompt: 1, refinementId: 1, refinementPending: 1, updatedAt: 1 }).sort({ updatedAt: -1 }).lean(),
         buildQueuePositions(),
         slotQueuePositions(),
     ])
     return docs.map((doc) => {
-        const reconciled = doc.runState === "running" && !isWorkbenchActive(String(doc._id)) ? { ...doc, runState: "interrupted" } : doc
+        const reconciled = doc.runState === "running" && !isWorkbenchActive(activeRunId(doc)) ? { ...doc, runState: "interrupted" } : doc
         return toWorkbenchSummary(reconciled, positions.get(String(doc._id)) ?? null, slots.get(String(doc._id)) ?? null)
     })
 }
@@ -234,6 +245,18 @@ function pumpQueue(centralId: string): void {
     void import("./queue")
         .then((queue) => queue.pumpCentralQueue(centralId))
         .catch(() => undefined)
+}
+
+/** Refinamento de tarefa (import dinâmico: o serviço do refinamento chama este fluxo pela mesa — OPE-137). */
+const refinementModule = () => import("@/features/refinement/server/service")
+
+/** A mesa saiu do refinamento: a sessão do Agente Refinador é excluída (melhor esforço, com aviso no log). */
+async function releaseRefinementSession(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId" | "taskCode">): Promise<void> {
+    try {
+        await (await refinementModule()).releaseRefinementSession(doc.taskId)
+    } catch (error) {
+        centralLogger(doc.centralId, doc.taskCode).warn("Falha ao liberar a sessão do refinamento", { workbenchId: String(doc._id), error: errorText(error) })
+    }
 }
 
 /** Forks da conversa (import dinâmico: `forks.ts` usa as ações deste módulo para integrar). */
@@ -330,6 +353,12 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { pendingTurn: null } })
     let reopened = false
     try {
+        // Voltar a refinar (OPE-137) não é um turno da mesa: com a vaga, a mesa entra em "Refinando".
+        if (pending.action === "continue-refinement" || pending.action === "restart-refinement") {
+            await enterRefinement(doc, pending.action)
+            centralLogger(doc.centralId, doc.taskCode).info(`Vaga liberada: ${PENDING_TURN_LABELS[pending.action]}`, { workbenchId: id })
+            return "started"
+        }
         // "Gerar a prévia" não é um turno do agente: com a vaga, a mesa entra no build da prévia.
         if (pending.action === "generate-preview") {
             await enterBuildQueue(loaded)
@@ -383,10 +412,10 @@ export async function cancelWait(id: string): Promise<WorkbenchDto> {
 export async function setWorkbenchModel(id: string, input: WorkbenchModelInput): Promise<WorkbenchDto> {
     const doc = await loadWorkbench(id)
     const title = WORKBENCH_MODEL_ROLE_LABELS[input.role]
-    const roleLabel = AGENT_ROLE_LABELS[input.role].label
+    const roleLabel = WORKBENCH_MODEL_ROLE_INFO[input.role].label
     const override = await validatedModelOverride(input, title)
-    const [{ settings }, { config }] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId)])
-    const base = resolveAgent(settings, config, input.role)
+    const [{ settings }, { config }, refiner] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId), input.role === "refinement" ? refinerAgent() : Promise.resolve(null)])
+    const base = roleBaseAgent(settings, config, input.role, refiner)
     const current = workbenchOverrides(doc)
     const before = toModelChoice(base, current[input.role] ?? null)
     const after = toModelChoice(base, override)
@@ -670,6 +699,11 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     } catch (error) {
         clearWorkbenchActive(id, controller)
         throw error
+    }
+    // Saiu do refinamento para o planejamento (OPE-137): a conversa do Agente Refinador não é mais retomada.
+    if (isRefinementStage(asStage(loaded.doc.stage)) && turn.stage === "planning") {
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { refinementPending: null } })
+        void releaseRefinementSession(loaded.doc)
     }
     void executeTurns(id, turn, controller, mentorTurns)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
@@ -1264,6 +1298,8 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
         sessionId ? { $addToSet: { pendingSessionDeletions: sessionId } } : {},
     )
     publishWorkbenchEvent(String(doc._id), { type: "notice", level: "success", message: "Mesa de trabalho concluída" })
+    // Concluída direto de "Especificação pronta" ("Definir etapa"): a sessão do refinamento sai junto.
+    if (doc.refinementPhase) await releaseRefinementSession(doc)
     centralLogger(doc.centralId, doc.taskCode).success("Mesa concluída", { workbenchId: String(doc._id) })
     if (sessionId) {
         const removed = await deleteWorkbenchSession(String(doc._id), sessionId).catch(() => false)
@@ -1395,6 +1431,20 @@ export async function startWorkbench(centralId: string, taskId: string, text?: s
     return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text, fileIds, modelOverrides))
 }
 
+/**
+ * Abertura pela fila da central ou pela coluna Opencode (motor, já dentro de `runInCentral`): com um
+ * refinamento não concluído, a mesa nasce em "Refinando" e continua a mesma conversa (OPE-137, item
+ * 19); senão, vai ao planejamento como sempre.
+ */
+export async function startWorkbenchFromQueue(centralId: string, taskId: string): Promise<void> {
+    const refinement = await (await refinementModule()).refinementSnapshot(taskId)
+    if (refinement && !refinement.concluded) {
+        await openRefinementInCentral(centralId, taskId, {}, "queue")
+        return
+    }
+    await startWorkbenchInCentral(centralId, taskId)
+}
+
 /** Chamado pelo motor já dentro da decisão serializada de vagas da central (sem trocas de modelo: elas vêm da abertura pela tela). */
 export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string, fileIds?: string[], modelOverrides?: StartWorkbenchModelsInput): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
@@ -1404,6 +1454,9 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
     const task = await getTask(taskId)
     if (task.project?.id !== central.projectId) throw new DomainError(400, `A tarefa ${task.code} não é do projeto ${central.projectName}`, "TASK_OTHER_PROJECT")
+    // Refinamento não concluído (OPE-137, item 8): o plano só depois de continuá-lo ou encerrá-lo.
+    const refinement = await (await refinementModule()).refinementSnapshot(taskId)
+    if (refinement && !refinement.concluded) throw new DomainError(409, REFINEMENT_IN_PROGRESS_REASON, "REFINEMENT_IN_PROGRESS")
     await assertAvailable(centralId, null, config)
     if (await AgenticWorkbench.exists({ centralId, pendingTurn: { $ne: null } })) {
         throw new DomainError(409, "Há mesas aguardando retomada nesta central; elas têm prioridade", "CENTRAL_BUSY")
@@ -1413,10 +1466,11 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     const { settings } = await loadAgenticSettings()
     const columns = resolveCentralColumns(settings.columns, config.columns)
     const agenticFlow = resolveCentralFlow(config.environment.publishPreview, task.agenticFlow)
+    const planAfterRefinement = resolvePlanAfterRefinement(config.environment.planAfterRefinement, task.planAfterRefinement)
     // Trocas de modelo escolhidas na etapa inicial (OPE-134): conferidas no OpenCode ANTES de criar a
     // mesa; um modelo/variante inválido devolve 400 sem deixar mesa aberta.
     const overrides = await validatedStartOverrides(modelOverrides)
-    const chosenModels = Object.fromEntries((Object.entries(overrides) as [WorkbenchModelRole, ModelOverride][]).map(([role, value]) => [AGENT_ROLE_LABELS[role].label, describeModel(value)]))
+    const chosenModels = Object.fromEntries((Object.entries(overrides) as [WorkbenchModelRole, ModelOverride][]).map(([role, value]) => [WORKBENCH_MODEL_ROLE_INFO[role].label, describeModel(value)]))
     const hasModels = Object.keys(chosenModels).length > 0
 
     let doc: IAgenticWorkbench
@@ -1431,6 +1485,7 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
                 runState: "idle",
                 composeProject: composeProjectFor(central.projectName, task.code),
                 agenticFlow,
+                planAfterRefinement,
                 ...(hasModels ? { modelOverrides: overrides } : {}),
             })
         ).toObject()
@@ -1439,6 +1494,8 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
         throw error
     }
     const id = String(doc._id)
+    // Refinamento já concluído na página da tarefa: a sessão dele (se ainda houver) não será mais retomada.
+    if (refinement) void releaseRefinementSession(doc)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName, ...(hasModels ? { modelos: chosenModels } : {}) } })
     centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id, ...(hasModels ? { modelos: chosenModels } : {}) })
     await prepareHub(id)
@@ -1456,6 +1513,277 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
         { ...(additionalInfo ? { userText: additionalInfo } : files.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}) },
     )
     await claimAgenticFiles(files, { workbenchId: id })
+    return getWorkbench(id)
+}
+
+// ---------------------------------------------------------------------------
+// Refinamento na mesa (OPE-137)
+// ---------------------------------------------------------------------------
+
+/** Resultado do "Refinar tarefa": a mesa aberta ou, sem vaga, a posição na fila da central. */
+type RefineWorkbenchResult = RefineWorkbenchResultDto
+
+interface RefineInput {
+    text?: string
+    fileIds?: string[]
+    modelOverrides?: StartWorkbenchModelsInput
+}
+
+/** "Refinar tarefa" na tela inicial da mesa: abre a mesa em "Refinando" (ou "Especificação pronta"). */
+export async function refineWorkbench(centralId: string, taskId: string, input: RefineInput): Promise<RefineWorkbenchResult> {
+    return runInCentral(centralId, () => openRefinementInCentral(centralId, taskId, input, "manual"))
+}
+
+/**
+ * Abre a mesa no refinamento, dentro da decisão serializada de vagas da central:
+ * - refinamento concluído → mesa em "Especificação pronta" (não ocupa vaga);
+ * - sem vaga → o pedido fica no refinamento e a tarefa vai para a coluna da fila (`queue: { position }`);
+ * - com vaga → mesa em "Refinando": sem refinamento, começa um (texto e anexos no primeiro prompt); com
+ *   um não concluído, continua a MESMA conversa (rodando: o texto vai como mensagem do chat ao vivo).
+ * `origin: "queue"` é a abertura pelo motor da fila: usa o pedido guardado sem vaga.
+ */
+async function openRefinementInCentral(centralId: string, taskId: string, input: RefineInput, origin: "manual" | "queue"): Promise<RefineWorkbenchResult> {
+    const { doc: central, config } = await loadCentral(centralId)
+    await dbConnect()
+    const existing = await AgenticWorkbench.findOne({ taskId }).lean()
+    if (existing) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS", { workbenchId: String(existing._id) })
+    const task = await getTask(taskId)
+    if (task.project?.id !== central.projectId) throw new DomainError(400, `A tarefa ${task.code} não é do projeto ${central.projectName}`, "TASK_OTHER_PROJECT")
+    const refinement = await refinementModule()
+    const state = await refinement.getRefinementState(taskId)
+    if (!state.availability.available) throw new DomainError(409, state.availability.reason ?? "Refinar tarefa indisponível", "REFINEMENT_UNAVAILABLE")
+    await assertAgenticReady(config)
+    const snapshot = await refinement.refinementSnapshot(taskId)
+    // Pedido guardado sem vaga: o texto e os anexos dele vão junto (o clique novo vence no texto e nos modelos).
+    const queued = snapshot?.queuedStart ?? null
+    const files = await loadClaimableFiles(input.fileIds, null)
+    const text = input.text?.trim() || queued?.text || null
+    const fileIds = [...(queued?.fileIds ?? []), ...files.map((file) => file.id)]
+    // O texto com o agente rodando vai pelo chat ao vivo: desligado, recusa antes de abrir a mesa (na fila, segue sem ele).
+    const dropLive = Boolean(snapshot && !snapshot.concluded && snapshot.running && (text || fileIds.length) && !snapshot.liveChat)
+    if (dropLive && origin === "manual") {
+        throw new DomainError(409, "O agente está refinando e o chat durante a execução está desligado: limpe as informações adicionais ou aguarde o agente parar", "LIVE_CHAT_DISABLED")
+    }
+    const { settings } = await loadAgenticSettings()
+    const columns = resolveCentralColumns(settings.columns, config.columns)
+    const overrides = input.modelOverrides && Object.keys(input.modelOverrides).length ? await validatedStartOverrides(input.modelOverrides) : queuedOverrides(queued?.modelOverrides ?? null)
+    const concluded = Boolean(snapshot?.concluded)
+
+    if (!concluded) {
+        const [occupied, othersWaiting] = await Promise.all([occupiedSlots(centralId), AgenticWorkbench.exists({ centralId, pendingTurn: { $ne: null } })])
+        if (othersWaiting || occupied >= config.maxConcurrent) {
+            if (origin === "queue") throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) ocupando vaga ao mesmo tempo nesta central`, "CENTRAL_BUSY")
+            if (!columns.queue) throw new DomainError(409, `Limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central e sem coluna de fila configurada: aguarde uma vaga`, "CENTRAL_BUSY")
+            const saved = await refinement.queueRefinementStart(taskId, { text, fileIds, modelOverrides: overrides })
+            if (saved.refinement && files.length) await claimAgenticFiles(files, { workbenchId: refinementFilesOwner(saved.refinement.id) })
+            if (task.columnId !== columns.queue) await moveTask(task.id, { targetColumn: columns.queue }, actorId())
+            centralLogger(centralId, task.code).info("Refinar tarefa: sem vaga, na fila da central", { taskId })
+            const { listCentralQueue } = await import("./queue")
+            const position = (await listCentralQueue(centralId)).find((item) => item.taskId === taskId)?.position ?? null
+            return { workbench: null, queue: { position } }
+        }
+    }
+
+    const agenticFlow = resolveCentralFlow(config.environment.publishPreview, task.agenticFlow)
+    const planAfterRefinement = resolvePlanAfterRefinement(config.environment.planAfterRefinement, task.planAfterRefinement)
+    const hasModels = Object.keys(overrides).length > 0
+    let doc: IAgenticWorkbench
+    try {
+        doc = (
+            await AgenticWorkbench.create({
+                centralId,
+                taskId,
+                taskCode: task.code,
+                taskTitle: task.title,
+                stage: concluded ? "spec_ready" : "refining",
+                runState: concluded ? "idle" : "running",
+                composeProject: composeProjectFor(central.projectName, task.code),
+                agenticFlow,
+                refinementPhase: true,
+                planAfterRefinement,
+                refinementId: snapshot?.id ?? null,
+                ...(hasModels ? { modelOverrides: overrides } : {}),
+            })
+        ).toObject()
+    } catch (error) {
+        if ((error as { code?: number }).code === 11000) throw new DomainError(409, "Esta tarefa já tem uma mesa de trabalho", "WORKBENCH_EXISTS")
+        throw error
+    }
+    const id = String(doc._id)
+    const chosenModels = Object.fromEntries((Object.entries(overrides) as [WorkbenchModelRole, ModelOverride][]).map(([role, value]) => [WORKBENCH_MODEL_ROLE_INFO[role].label, describeModel(value)]))
+    if (!concluded) {
+        try {
+            if (!snapshot) await refinement.startRefinement(taskId, { text, fileIds, fromWorkbench: true })
+            else if (snapshot.running) {
+                if ((text || fileIds.length) && !dropLive) await refinement.sendRefinementMessage(taskId, text ?? "Arquivos anexados", fileIds)
+            } else await refinement.continueRefinement(taskId, { text, fileIds, fromWorkbench: true })
+        } catch (error) {
+            // A mesa só existe com o refinamento em andamento: sem ele, a abertura é desfeita.
+            await AgenticWorkbench.deleteOne({ _id: doc._id })
+            await publishAgentic({ centralId, workbenchId: id, taskId })
+            throw error
+        }
+    }
+    if (snapshot && queued) {
+        if (queued.fileIds.length) await transferAgenticFiles(refinementFilesOwner(snapshot.id), id)
+        await refinement.takeQueuedRefinementStart(taskId)
+    }
+    await claimAgenticFiles(files, { workbenchId: id })
+    await recordAudit({
+        userId: actorId(),
+        entidade: AGENTIC_AUDIT_WORKBENCH,
+        entidadeId: id,
+        acao: AcaoAuditoria.CRIAR,
+        depois: { tarefa: task.code, central: central.projectName, etapa: WORKBENCH_STAGE_LABELS[concluded ? "spec_ready" : "refining"], origem: origin === "queue" ? "fila da central" : "Refinar tarefa", gerarPlanoAposRefinar: planAfterRefinement, ...(hasModels ? { modelos: chosenModels } : {}) },
+    })
+    centralLogger(centralId, task.code).info(`Mesa de trabalho aberta no refinamento (${WORKBENCH_STAGE_LABELS[concluded ? "spec_ready" : "refining"]})`, { workbenchId: id, origem: origin })
+    await prepareHub(id)
+    if (hasModels) publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Modelos escolhidos na abertura: ${Object.entries(chosenModels).map(([role, model]) => `${role}: ${model}`).join("; ")}.` })
+    if (!concluded) await applyStartEffects(id, task, columns)
+    await publishAgentic({ centralId, workbenchId: id, taskId })
+    if (!concluded) void import("./refinement-stage").then((stage) => stage.syncWorkbenchFromRefinement(taskId)).catch(() => undefined)
+    return { workbench: await getWorkbench(id), queue: null }
+}
+
+/** Trocas de modelo guardadas com o pedido sem vaga (já conferidas no OpenCode quando foram escolhidas). */
+function queuedOverrides(raw: Record<string, unknown> | null): Partial<Record<WorkbenchModelRole, ModelOverride>> {
+    const result: Partial<Record<WorkbenchModelRole, ModelOverride>> = {}
+    for (const role of WORKBENCH_MODEL_ROLES) {
+        const override = asModelOverride(raw?.[role])
+        if (override) result[role] = override
+    }
+    return result
+}
+
+/**
+ * Reflete o refinamento da tarefa na mesa (chamado em série por central, depois de cada mudança do
+ * refinamento — `refinement-stage.ts`). A decisão olha o ESTADO FINAL do refinamento, não o gatilho: um
+ * turno recuperado pela reconexão também avança. "Refinando" concluído vai para "Especificação pronta" ou,
+ * com "Gerar plano após refinar" ligado (lido agora) e a especificação salva, direto ao planejamento.
+ */
+export async function applyRefinementState(id: string): Promise<void> {
+    const doc = await AgenticWorkbench.findById(id).lean()
+    if (!doc) return
+    const stage = asStage(doc.stage)
+    if (!isRefinementStage(stage)) return
+    const ref = await TaskRefinement.findOne({ taskId: doc.taskId }).lean()
+    // Recomeço em andamento (o refinamento antigo saiu e o novo ainda não existe): nada a refletir.
+    if (!ref) return
+    const refinementId = String(ref._id)
+    const refRun = asRunState(ref.runState)
+    const runState = refRun === "running" && !isWorkbenchActive(refinementId) ? "interrupted" : refRun
+    const refinementPending = { forms: ref.pendingForms?.length ?? 0, permissions: ref.pendingPermissions?.length ?? 0 }
+    const concluded = refinementConcluded({ resolved: ref.resolved === true, closed: Boolean(ref.closedAt) })
+    const log = centralLogger(doc.centralId, doc.taskCode)
+    if (stage === "refining" && runState !== "running" && concluded) {
+        if (ref.resolved && !ref.closedAt && ref.spec && doc.planAfterRefinement) {
+            log.info("Especificação pronta: gerando o plano (Gerar plano após refinar)", { workbenchId: id })
+            await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { refinementId, refinementPending: null, runState: "idle", error: null } })
+            await prepareHub(id)
+            publishWorkbenchEvent(id, { type: "notice", level: "success", message: "Especificação pronta: a mesa segue para o planejamento (Gerar plano após refinar)." })
+            try {
+                await launchPlanFromSpec(await loadAll(id), null, [])
+            } catch (error) {
+                log.warn("O planejamento automático não pôde começar", { workbenchId: id, error: errorText(error) })
+                publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `O planejamento não pôde começar (${errorText(error)}). Use Gerar plano.` })
+                await update(doc, { stage: "spec_ready", runState: "idle", error: null, refinementId, refinementPending: null })
+            }
+            return
+        }
+        log.info(ref.closedAt ? "Refinamento encerrado: especificação pronta" : "Refinamento concluído: especificação pronta", { workbenchId: id })
+        await prepareHub(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "success", message: ref.closedAt ? "Refinamento encerrado: a mesa aguarda você em Especificação pronta." : "Especificação técnica pronta e salva na tarefa." })
+        await update(doc, { stage: "spec_ready", runState: "idle", error: null, refinementId, refinementPending: null })
+        return
+    }
+    const next = stage === "spec_ready" ? { runState: "idle", error: null } : { runState, error: runState === "running" ? null : (ref.error ?? null) }
+    const pending = stage === "refining" ? refinementPending : null
+    const same = doc.refinementId === refinementId && doc.runState === next.runState && (doc.error ?? null) === next.error && JSON.stringify(doc.refinementPending ?? null) === JSON.stringify(pending)
+    if (same) return
+    await update(doc, { ...next, refinementId, refinementPending: pending })
+}
+
+/** Turno de planejamento a partir da especificação (a tarefa inteira já leva a especificação técnica). */
+async function launchPlanFromSpec(loaded: Loaded, text: string | null, fileIds: string[], queue = false): Promise<boolean> {
+    const task = await getTask(loaded.doc.taskId)
+    const turn: TurnPlan = { stage: "planning", text: planPrompt(loaded.config, contextOf(loaded), taskMarkdown(task, loaded.config), text), ...(fileIds.length ? { fileIds } : {}) }
+    const options: LaunchOptions = text ? { userText: text } : fileIds.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}
+    if (queue) return launchOrQueue(loaded, "generate-plan", turn, options)
+    await launchTurn(loaded, turn, { ...options, action: "generate-plan" })
+    return true
+}
+
+/** "Gerar plano" em "Especificação pronta": inicia o planejamento na mesma mesa (aguarda vaga se preciso). */
+export async function generatePlan(id: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    assertAction(loaded.doc, "generate-plan")
+    const files = await loadClaimableFiles(fileIds, id)
+    await launchPlanFromSpec(loaded, text?.trim() || null, files.map((file) => file.id), true)
+    await claimAgenticFiles(files, { workbenchId: id })
+    return getWorkbench(id)
+}
+
+/** "Continuar refinamento" em "Especificação pronta": volta a "Refinando" na mesma conversa. */
+export async function continueRefinementInWorkbench(id: string): Promise<WorkbenchDto> {
+    return resumeRefinement(id, "continue-refinement")
+}
+
+/** "Recomeçar" em "Especificação pronta": abre uma conversa nova do refinamento. */
+export async function restartRefinementInWorkbench(id: string): Promise<WorkbenchDto> {
+    return resumeRefinement(id, "restart-refinement")
+}
+
+/** Sair de "Especificação pronta" para refinar de novo: depende de vaga (senão, aguarda a vez). */
+async function resumeRefinement(id: string, action: "continue-refinement" | "restart-refinement"): Promise<WorkbenchDto> {
+    const loaded = await loadAll(id)
+    assertAction(loaded.doc, action)
+    const state = await (await refinementModule()).getRefinementState(loaded.doc.taskId)
+    if (!state.availability.available) throw new DomainError(409, state.availability.reason ?? "Refinar tarefa indisponível", "REFINEMENT_UNAVAILABLE")
+    await assertAgenticReady(loaded.config)
+    const { doc, config } = loaded
+    return runInCentral(doc.centralId, async () => {
+        const current = await loadWorkbench(id)
+        if (current.deletionRequestedAt || current.pendingTurn || current.stage !== "spec_ready") throw new DomainError(409, "A mesa mudou de estado; atualize antes de tentar novamente", "WORKBENCH_BUSY")
+        const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
+        if (!othersWaiting && occupied < config.maxConcurrent) {
+            await enterRefinement(current, action)
+            return getWorkbench(id)
+        }
+        const pendingTurn: IPendingTurn = { action, stage: "refining", text: "", userText: null, feedback: null, extraSet: null, reopen: false, fromStage: "spec_ready", queuedAt: new Date() }
+        await update(current, { pendingTurn })
+        const position = await slotQueuePosition(id)
+        await prepareHub(id)
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Limite de ${config.maxConcurrent} mesa(s) ocupando vaga nesta central: "${PENDING_TURN_LABELS[action]}" aguarda vaga${position ? ` (posição #${position})` : ""} e começa sozinho quando liberar.` })
+        centralLogger(doc.centralId, doc.taskCode).info(`Aguardando vaga na central: ${PENDING_TURN_LABELS[action]}`, { workbenchId: id, position })
+        return getWorkbench(id)
+    })
+}
+
+/** Com a vaga: a mesa entra em "Refinando" e o refinamento continua (ou recomeça). Falha devolve a etapa. */
+async function enterRefinement(doc: IAgenticWorkbench, action: "continue-refinement" | "restart-refinement"): Promise<void> {
+    const refinement = await refinementModule()
+    await update(doc, { stage: "refining", runState: "running", error: null })
+    try {
+        const restart = action === "restart-refinement" || !(await refinement.refinementSnapshot(doc.taskId))
+        if (restart) await refinement.restartRefinement(doc.taskId, { fromWorkbench: true })
+        else await refinement.continueRefinement(doc.taskId, { fromWorkbench: true })
+    } catch (error) {
+        await update(doc, { stage: "spec_ready", runState: "idle", error: null })
+        throw error
+    }
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: String(doc._id), acao: AcaoAuditoria.ATUALIZAR, antes: { tarefa: doc.taskCode, etapa: WORKBENCH_STAGE_LABELS.spec_ready }, depois: { tarefa: doc.taskCode, etapa: WORKBENCH_STAGE_LABELS.refining, acao: PENDING_TURN_LABELS[action] } })
+}
+
+/** Switch "Gerar plano após refinar" da mesa: vale até a especificação ficar pronta (lido na conclusão). */
+export async function setWorkbenchPlanAfterRefinement(id: string, enabled: boolean): Promise<WorkbenchDto> {
+    const doc = await loadWorkbench(id)
+    if (asStage(doc.stage) !== "refining") throw new DomainError(409, "Gerar plano após refinar só muda com a mesa em Refinando", "WORKBENCH_INVALID_STATE")
+    const before = doc.planAfterRefinement === true
+    if (before !== enabled) {
+        await update(doc, { planAfterRefinement: enabled })
+        await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { tarefa: doc.taskCode, gerarPlanoAposRefinar: before }, depois: { tarefa: doc.taskCode, gerarPlanoAposRefinar: enabled } })
+        centralLogger(doc.centralId, doc.taskCode).info(`Gerar plano após refinar: ${enabled ? "ligado" : "desligado"}`, { workbenchId: id })
+    }
     return getWorkbench(id)
 }
 
@@ -1933,6 +2261,8 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
 async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promise<boolean> {
     const id = String(loadedDoc._id)
     let doc = loadedDoc
+    // Mesa no refinamento (OPE-137): para o Agente Refinador e exclui a sessão dele antes da limpeza.
+    if (isRefinementStage(asStage(doc.stage))) await releaseRefinementSession(doc)
     // A intenção é gravada ANTES de qualquer operação externa: a retomada (retry/reinício) a mantém.
     if (!doc.deletionRequestedAt) {
         const requestedAt = new Date()

@@ -29,8 +29,20 @@ export const REFINEMENT_STAGE_LABEL = "Refinando"
 export const REFINEMENT_RUN_STATES = ["idle", "running", "failed", "interrupted"] as const
 export type RefinementRunState = (typeof REFINEMENT_RUN_STATES)[number]
 
-export const REFINEMENT_ACTIONS = ["interrupt", "restart", "continue", "reconnect"] as const
+export const REFINEMENT_ACTIONS = ["interrupt", "restart", "continue", "reconnect", "close"] as const
 export type RefinementAction = (typeof REFINEMENT_ACTIONS)[number]
+
+/** "Abrir mesa e gerar o plano" com um refinamento não concluído (OPE-137, item 8). */
+export const REFINEMENT_IN_PROGRESS_REASON = "Há um refinamento em andamento. Continue-o pelo Refinar tarefa ou encerre-o."
+
+/** Refinar com a mesa já do planejamento em diante (OPE-137, item 18). */
+export const REFINEMENT_WORKBENCH_ADVANCED_REASON = "A tarefa já está em desenvolvimento na mesa de trabalho"
+
+/** Confirmação do "Encerrar refinamento" (OPE-137, item 13). */
+export const REFINEMENT_CLOSE_CONFIRM = "Encerrar o refinamento? O agente para e a especificação já salva é mantida. Você pode refinar de novo depois."
+
+/** Dono do anexo enquanto o "Refinar tarefa" aguarda vaga (a mesa ainda não existe): fora da limpeza dos pendentes. */
+export const refinementFilesOwner = (refinementId: string) => `refinement:${refinementId}`
 
 /**
  * Protocolo do refinamento, sempre aplicado por cima das instruções configuráveis: garante que o

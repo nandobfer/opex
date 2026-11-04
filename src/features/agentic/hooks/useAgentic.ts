@@ -12,7 +12,7 @@ import { AGENTIC_UPDATED_EVENT, WORKBENCH_MODEL_ROLE_LABELS } from "../constants
 import type { DockerBuildersDto } from "../docker-builders"
 import { optimisticModelChoice, type WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, StartWorkbenchModelsInput, WorkbenchModelInput } from "../schemas"
-import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
+import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, RefineWorkbenchResultDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
 
@@ -151,7 +151,57 @@ export function useStartWorkbench() {
     })
 }
 
+/**
+ * "Refinar tarefa" na tela inicial (OPE-137): abre a mesa em "Refinando" (ou "Especificação pronta") ou,
+ * sem vaga, põe a tarefa na fila da central (`queue.position`).
+ */
+export function useRefineWorkbench() {
+    const setWorkbench = useSetWorkbench()
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: { centralId: string; taskId: string; text?: string; fileIds?: string[]; modelOverrides?: StartWorkbenchModelsInput }) =>
+            unwrapApi((await api.post<ApiResponse<RefineWorkbenchResultDto>>("/agentic/workbenches/refine", input)).data),
+        onSuccess: (result, input) => {
+            if (result.workbench) {
+                setWorkbench(result.workbench)
+                toast.success(result.workbench.stage === "spec_ready" ? "Mesa aberta: a especificação já está pronta" : "Mesa aberta: o refinamento começou")
+                return
+            }
+            void queryClient.invalidateQueries({ queryKey: agenticKey("queue", input.centralId) })
+            toast.info(`Sem vaga na central: a tarefa entrou na fila${result.queue?.position ? ` (posição ${result.queue.position})` : ""}. A mesa abre em Refinando quando uma vaga liberar.`)
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível refinar a tarefa")),
+    })
+}
+
+/** Switch "Gerar plano após refinar" da barra da mesa (resposta otimista com reversão). */
+export function useSetWorkbenchPlanAfterRefinement(workbench: WorkbenchDto) {
+    const queryClient = useQueryClient()
+    const setWorkbench = useSetWorkbench()
+    const key = agenticKey("workbench", workbench.taskId)
+    return useMutation({
+        mutationFn: async (enabled: boolean) => unwrapApi((await api.put<ApiResponse<WorkbenchDto>>(`/agentic/workbenches/${workbench.id}/refinement-plan`, { enabled })).data),
+        onMutate: async (enabled) => {
+            await queryClient.cancelQueries({ queryKey: key })
+            const previous = queryClient.getQueryData<WorkbenchDto | null>(key) ?? workbench
+            queryClient.setQueryData<WorkbenchDto | null>(key, (current) => (current ? { ...current, planAfterRefinement: enabled } : current))
+            return { previous }
+        },
+        onError: (error, _enabled, context) => {
+            if (context?.previous) queryClient.setQueryData(key, context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível trocar o Gerar plano após refinar"))
+        },
+        onSuccess: (saved, enabled) => {
+            setWorkbench(saved)
+            toast.success(enabled ? "A mesa vai gerar o plano quando a especificação ficar pronta" : "A mesa vai parar em Especificação pronta")
+        },
+    })
+}
+
 const ACTION_TOASTS: Partial<Record<WorkbenchAction, string>> = {
+    "generate-plan": "Planejamento iniciado",
+    "continue-refinement": "Refinamento retomado",
+    "restart-refinement": "Refinamento recomeçado",
     "revise-plan": "Correção enviada ao planejador",
     implement: "Implementação iniciada",
     "request-correction": "Correção enviada ao planejador",
@@ -179,7 +229,15 @@ export function useWorkbenchAction(workbench: WorkbenchDto | null | undefined) {
             await queryClient.cancelQueries({ queryKey: key })
             // Cancelar a espera só tira o aviso de vaga; as demais ações marcam "executando" (a resposta corrige se a mesa ficar aguardando vaga).
             queryClient.setQueryData<WorkbenchDto | null>(key, (current) =>
-                current ? (action === "cancel-wait" ? { ...current, slotQueue: null } : action === "rebuild-preview" ? { ...current, stage: "build_queued", error: null } : { ...current, runState: "running", error: null }) : current,
+                current
+                    ? action === "cancel-wait"
+                        ? { ...current, slotQueue: null }
+                        : action === "rebuild-preview"
+                          ? { ...current, stage: "build_queued", error: null }
+                          : action === "continue-refinement" || action === "restart-refinement"
+                            ? { ...current, stage: "refining", runState: "running", error: null }
+                            : { ...current, runState: "running", error: null }
+                    : current,
             )
             return { previous: workbench }
         },
@@ -250,6 +308,7 @@ export function useSetWorkbenchModel(workbench: WorkbenchDto) {
                 const models = (current ?? workbench).models
                 if (!models) return current
                 const previousChoice = models[input.role]
+                if (!previousChoice) return current
                 const choice = optimisticModelChoice(previousChoice, input, "workbench")
                 return { ...(current ?? workbench), models: { ...models, [input.role]: choice } }
             })

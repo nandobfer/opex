@@ -92,6 +92,9 @@ export const TASK_AGENTIC_FLOW_LABELS: Record<TaskAgenticFlow, string> = {
 /** Rótulo do fluxo herdado (a tarefa segue o padrão da central de desenvolvimento). */
 export const TASK_AGENTIC_FLOW_INHERIT_LABEL = "Padrão da central"
 
+/** "Gerar plano após refinar" da tarefa para a auditoria e os textos de herança (OPE-137). */
+export const planAfterRefinementLabel = (value: boolean | null | undefined): string => (value === true ? "Ligado" : value === false ? "Desligado" : TASK_AGENTIC_FLOW_INHERIT_LABEL)
+
 /** Evento Pusher (canal `private-app`) quando tarefas mudam. Payload: `{ ids: string[] }`. */
 export const TASKS_UPDATED_EVENT = "tasks-updated"
 

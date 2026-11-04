@@ -55,6 +55,8 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         previewUrl: doc.previewUrl ?? null,
         previewHealthy: doc.previewHealthy ?? null,
         agenticFlow: asAgenticFlow(doc.agenticFlow),
+        refinementPhase: doc.refinementPhase === true,
+        planAfterRefinement: doc.planAfterRefinement === true,
         deletionRequestedAt: iso(doc.deletionRequestedAt),
         buildQueuePosition,
         slotQueue: toSlotQueue(doc.pendingTurn, slotQueuePosition),
@@ -81,7 +83,7 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
 }
 
 export function toWorkbenchSummary(
-    doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "pendingPermissions" | "pendingForms" | "updatedAt"> & Partial<Pick<IAgenticWorkbench, "pendingTurn" | "forksDonePrompt">>,
+    doc: Pick<IAgenticWorkbench, "_id" | "taskId" | "taskCode" | "taskTitle" | "stage" | "runState" | "pendingPermissions" | "pendingForms" | "updatedAt"> & Partial<Pick<IAgenticWorkbench, "pendingTurn" | "forksDonePrompt" | "refinementPending">>,
     buildQueuePosition: number | null = null,
     slotQueuePosition: number | null = null,
 ): WorkbenchSummaryDto {
@@ -94,8 +96,9 @@ export function toWorkbenchSummary(
         runState: asRunState(doc.runState),
         buildQueuePosition,
         slotQueue: toSlotQueue(doc.pendingTurn, slotQueuePosition),
-        pendingPermissions: doc.pendingPermissions?.length ?? 0,
-        pendingForms: doc.pendingForms?.length ?? 0,
+        // Em "Refinando" as perguntas são as do refinamento (só as contagens ficam na mesa — OPE-137).
+        pendingPermissions: (doc.pendingPermissions?.length ?? 0) + (doc.refinementPending?.permissions ?? 0),
+        pendingForms: (doc.pendingForms?.length ?? 0) + (doc.refinementPending?.forms ?? 0),
         forksDonePrompt: Boolean(doc.forksDonePrompt),
         updatedAt: new Date(doc.updatedAt).toISOString(),
     }

@@ -1,6 +1,6 @@
 import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
-import { liveMessageSchema } from "@/features/agentic/schemas"
+import { workbenchLiveMessageSchema } from "@/features/agentic/schemas"
 import { sendRefinementMessage } from "@/features/refinement/server/service"
 
 export const runtime = "nodejs"
@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
  * trabalhando ou durante a consolidação da especificação.
  */
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
-    const body = await parseBody(req, liveMessageSchema)
+    const body = await parseBody(req, workbenchLiveMessageSchema)
     if (!body.ok) return body.response
-    return ok(await sendRefinementMessage(params.id, body.data.text))
+    return ok(await sendRefinementMessage(params.id, body.data.text, body.data.fileIds))
 })

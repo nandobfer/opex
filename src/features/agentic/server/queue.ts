@@ -9,7 +9,7 @@ import type { AgenticColumns, CentralConfig } from "../schemas"
 import type { QueueItemDto } from "../types"
 import { loadAgenticSettings } from "./settings"
 import { occupiedSlots, runInCentral, waitingResumes } from "./slots"
-import { startPendingTurn, startWorkbenchInCentral } from "./workflow"
+import { startPendingTurn, startWorkbenchFromQueue } from "./workflow"
 
 /**
  * Fila da central de desenvolvimento: uma **coluna configurável** da central (`columns.queue`). Ao
@@ -98,7 +98,7 @@ async function runPump(centralId: string): Promise<void> {
         for (const item of await waitingTasks(centralId, central.projectId, columnKey)) {
             if (open >= central.config.maxConcurrent) break
             try {
-                await startWorkbenchInCentral(centralId, item.taskId)
+                await startWorkbenchFromQueue(centralId, item.taskId)
                 open++
             } catch (error) {
                 const code = error instanceof DomainError ? error.code : undefined

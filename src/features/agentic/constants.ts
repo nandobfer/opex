@@ -17,6 +17,10 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, { label: string; description: 
  * usuário (ou o PR, em `pr_open`).
  */
 export const WORKBENCH_STAGES = [
+    /** Refinamento (OPE-137): o Agente Refinador esclarece a tarefa antes do plano (ocupa vaga). */
+    "refining",
+    /** Refinamento concluído ou encerrado, aguardando o dono (não ocupa vaga). */
+    "spec_ready",
     "planning",
     "plan_review",
     "implementing",
@@ -39,13 +43,13 @@ export const WORKBENCH_STAGES = [
 ] as const
 export type WorkbenchStage = (typeof WORKBENCH_STAGES)[number]
 
-export const RUNNING_STAGES: readonly WorkbenchStage[] = ["planning", "implementing", "adversarial_review", "building", "opening_pr", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"]
+export const RUNNING_STAGES: readonly WorkbenchStage[] = ["refining", "planning", "implementing", "adversarial_review", "building", "opening_pr", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"]
 
 /**
  * Etapas que NÃO ocupam vaga no limite de mesas da central (`maxConcurrent`): a mesa espera o
  * usuário (plano/prévia) ou o PR. Ao sair delas para executar, a mesa aguarda vaga se o limite estiver cheio.
  */
-export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["plan_review", "adversarial_blocked", "preview", "pr_open"]
+export const SLOT_EXEMPT_STAGES: readonly WorkbenchStage[] = ["spec_ready", "plan_review", "adversarial_blocked", "preview", "pr_open"]
 
 /**
  * Etapas que o usuário (ou o Agente Opex) pode definir diretamente na mesa ("Definir etapa"), com
@@ -71,6 +75,10 @@ export const PENDING_TURN_ACTIONS = [
     "adversarial-fix",
     "adversarial-skip",
     "adversarial-rerun",
+    /** Refinamento na mesa (OPE-137): saídas de "Especificação pronta". */
+    "generate-plan",
+    "continue-refinement",
+    "restart-refinement",
 ] as const
 export type PendingTurnAction = (typeof PENDING_TURN_ACTIONS)[number]
 
@@ -90,9 +98,14 @@ export const PENDING_TURN_LABELS: Record<PendingTurnAction, string> = {
     "adversarial-fix": "Corrigir os bloqueios do agente adversário",
     "adversarial-skip": "Seguir sem os bloqueios do agente adversário",
     "adversarial-rerun": "Revisar de novo (agente adversário)",
+    "generate-plan": "Gerar o plano",
+    "continue-refinement": "Continuar o refinamento",
+    "restart-refinement": "Recomeçar o refinamento",
 }
 
 export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
+    refining: "Refinando",
+    spec_ready: "Especificação pronta",
     planning: "Planejando",
     plan_review: "Plano pronto",
     implementing: "Implementando",
@@ -125,12 +138,31 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
     finishing: "build",
 }
 
-/** Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca). */
-export const WORKBENCH_MODEL_ROLES = ["planning", "implementation", "build", "pr", "fork"] as const satisfies readonly AgentRole[]
+/**
+ * Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca).
+ * `refinement` (OPE-137) é o Agente Refinador: o modelo base vem da aba "Agente Refinador" (não é um
+ * papel do Agente Desenvolvedor) e a troca vale só para a mesa.
+ */
+export const WORKBENCH_MODEL_ROLES = ["refinement", "planning", "implementation", "build", "pr", "fork"] as const
 export type WorkbenchModelRole = (typeof WORKBENCH_MODEL_ROLES)[number]
+
+/** Papel de modelo que não é do Agente Desenvolvedor (base: aba "Agente Refinador"). */
+export const REFINEMENT_MODEL_ROLE = "refinement" as const
+export const isAgentModelRole = (role: WorkbenchModelRole): role is Exclude<WorkbenchModelRole, "refinement"> => role !== REFINEMENT_MODEL_ROLE
+
+/** Título e descrição de cada papel no popover de modelos da mesa. */
+export const WORKBENCH_MODEL_ROLE_INFO: Record<WorkbenchModelRole, { label: string; description: string }> = {
+    refinement: { label: "Refinamento", description: "Agente Refinador: esclarece a tarefa e grava a especificação técnica. Instruções, skill e agente continuam os da aba Agente Refinador" },
+    planning: AGENT_ROLE_LABELS.planning,
+    implementation: AGENT_ROLE_LABELS.implementation,
+    build: AGENT_ROLE_LABELS.build,
+    pr: AGENT_ROLE_LABELS.pr,
+    fork: AGENT_ROLE_LABELS.fork,
+}
 
 /** Rótulo do seletor de modelo da mesa e dos avisos ("Modelo do Plano"). */
 export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
+    refinement: "Modelo do Refinamento",
     planning: "Modelo do Plano",
     implementation: "Modelo da Implementação",
     build: "Modelo da Prévia",
@@ -144,6 +176,9 @@ export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
  * vale a etapa em que a mesa parou. Etapa nova entra aqui (o `Record` é exaustivo).
  */
 export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null> = {
+    refining: "refinement",
+    // "Gerar plano" é a ação principal de Especificação pronta.
+    spec_ready: "planning",
     planning: "planning",
     plan_review: "planning",
     changes_requested: "planning",
@@ -165,6 +200,8 @@ export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null>
 
 /** Passos exibidos no topo da mesa (várias etapas caem no mesmo passo). */
 export const WORKBENCH_STEPS = [
+    /** Só aparece nas mesas que passaram pelo refinamento (`refinementPhase`). */
+    { id: "refine", label: "Refinamento", stages: ["refining", "spec_ready"] },
     { id: "plan", label: "Plano", stages: ["planning", "plan_review"] },
     { id: "implement", label: "Implementação", stages: ["implementing", "adversarial_review", "adversarial_blocked"] },
     { id: "preview", label: "Prévia", stages: ["build_queued", "building", "preview"] },

@@ -2,26 +2,17 @@
 
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CheckCircle2, Info, Loader2, RotateCcw, Square, Wand2 } from "lucide-react"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { CheckCircle2, CircleStop, Info, Loader2, RotateCcw, Square, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { Timeline } from "@/features/agentic/components/workbench/Timeline"
 import { ReconnectButton } from "@/features/agentic/components/workbench/ReconnectButton"
-import { useAutoReconnect } from "@/features/agentic/hooks/useAutoReconnect"
 import { apiErrorMessage } from "@/lib/api"
-import { useRefinementAction, useRefinementRealtime, useRefinementReconnect, useStartRefinement, useTaskRefinement } from "../hooks/useRefinement"
+import { useRefinementRealtime, useStartRefinement, useTaskRefinement } from "../hooks/useRefinement"
+import { useRefinementControls } from "../hooks/useRefinementControls"
 import { useRefinementStream } from "../hooks/useRefinementStream"
-import { refinementWaitingReason } from "../logic"
+import { refinementConcluded, refinementWaitingReason } from "../logic"
+import { RefinementCloseDialog, RefinementRestartDialog } from "./RefinementDialogs"
 import { RefinementLiveMessage } from "./RefinementLiveMessage"
 import { RefinementRequests } from "./RefinementRequests"
 
@@ -37,27 +28,20 @@ interface RefinementPanelProps {
 /**
  * Painel do refinamento dentro da aba "Especificação técnica": saída do agente ao vivo (área própria)
  * e perguntas logo abaixo, sem o limite de altura do antigo modal. O botão do cabeçalho abre a aba
- * com `autoStart`; abrir a aba pelo próprio clique apenas mostra o conteúdo.
+ * com `autoStart`; abrir a aba pelo próprio clique apenas mostra o conteúdo. É o MESMO refinamento da
+ * mesa de trabalho (OPE-137): com a mesa em "Refinando", aparece também **Encerrar refinamento**; com a
+ * mesa do planejamento em diante, o refinamento fica bloqueado com o motivo.
  */
 export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoStarted }: RefinementPanelProps) {
     useRefinementRealtime(taskId)
     const query = useTaskRefinement(taskId)
     const start = useStartRefinement(taskId)
-    const action = useRefinementAction(taskId)
-    const reconnect = useRefinementReconnect(taskId)
     const refinement = query.data?.refinement ?? null
     const availability = query.data?.availability ?? null
+    const workbenchStage = query.data?.workbench?.stage ?? null
     const { timeline } = useRefinementStream(refinement ? taskId : null)
-    const running = refinement?.runState === "running"
-    const reconnectable = Boolean(refinement && refinement.sessionId && (refinement.runState === "failed" || refinement.runState === "interrupted"))
-    // Ciclo automático de reconexão (mesmo comportamento da mesa): dispara ao oferecer Reconectar e
-    // nunca depois de um Parar do usuário; um ciclo por episódio de queda.
-    const autoReconnect = useAutoReconnect({
-        eligible: reconnectable && !refinement?.stoppedByUser,
-        episodeKey: `${refinement?.id ?? taskId}:${refinement?.turnStartedAt ?? ""}`,
-        attempt: () => reconnect.mutateAsync().then((state) => (state.refinement?.runState === "running" ? "attached" : (state.refinement?.reconnect?.outcome ?? null)), () => null),
-    })
-    const [confirmRestart, setConfirmRestart] = useState(false)
+    const { action, running, reconnectable, autoReconnect } = useRefinementControls(taskId, refinement)
+    const [confirm, setConfirm] = useState<"restart" | "close" | null>(null)
     const startedRef = useRef(false)
 
     // Consome a intenção de iniciar (vinda do botão do cabeçalho) uma única vez.
@@ -72,11 +56,16 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
         if (!query.data.refinement && query.data.availability.available) start.mutate()
     }, [autoStart, query.data, start, onAutoStarted])
 
-    const waiting = refinement ? refinementWaitingReason({ runState: refinement.runState, pendingPermissions: refinement.pendingPermissions.length, pendingForms: refinement.pendingForms.length, resolved: refinement.resolved }) : null
+    const waiting = refinement
+        ? refinementWaitingReason({ runState: refinement.runState, pendingPermissions: refinement.pendingPermissions.length, pendingForms: refinement.pendingForms.length, resolved: refinement.resolved, closed: refinement.closed, queued: refinement.queued })
+        : null
     const unavailable = Boolean(availability && !availability.available)
+    // Mesa do planejamento em diante (item 18): nada de continuar ou recomeçar por aqui.
+    const blockedReason = unavailable ? (availability?.reason ?? "Refinar tarefa indisponível") : null
+    const canClose = workbenchStage === "refining" && Boolean(refinement)
 
-    const description = unavailable && !refinement
-        ? (availability?.reason ?? "Refinar tarefa indisponível")
+    const description = unavailable && (!refinement || blockedReason)
+        ? (blockedReason ?? "Refinar tarefa indisponível")
         : running
           ? (refinement?.finalizing ? "Consolidando a especificação técnica…" : "O agente está lendo a tarefa e preparando as perguntas…")
           : (waiting ?? (refinement?.sessionDirectory ? `Sessão em ${refinement.sessionDirectory}` : "O agente fará perguntas até a especificação técnica ficar clara."))
@@ -98,7 +87,7 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                                     <Square className="h-3.5 w-3.5" aria-hidden /> Parar
                                 </Button>
                             </motion.span>
-                        ) : refinement && !refinement.resolved ? (
+                        ) : refinement && !refinementConcluded(refinement) && !blockedReason ? (
                             <motion.span key="continue" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.15 }}>
                                 <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending} onClick={() => action.mutate("continue")}>
                                     <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Continuar
@@ -113,8 +102,13 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                         ) : null}
                     </AnimatePresence>
                     {reconnectable && <ReconnectButton reconnecting={autoReconnect.reconnecting} size="default" onClick={autoReconnect.retryNow} />}
-                    {refinement && (
-                        <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending || running} onClick={() => setConfirmRestart(true)}>
+                    {canClose && (
+                        <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending} onClick={() => setConfirm("close")}>
+                            <CircleStop className="h-3.5 w-3.5" aria-hidden /> Encerrar refinamento
+                        </Button>
+                    )}
+                    {refinement && !blockedReason && (
+                        <Button type="button" variant="outline" className="gap-1.5" disabled={action.isPending || running} onClick={() => setConfirm("restart")}>
                             <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Recomeçar
                         </Button>
                     )}
@@ -129,11 +123,12 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                 )}
             </AnimatePresence>
 
-            {unavailable && !refinement ? (
+            {unavailable && (!refinement || blockedReason) && (
                 <p className="flex items-start gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
                     <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {availability?.reason}
                 </p>
-            ) : query.isLoading ? (
+            )}
+            {query.isLoading ? (
                 <p className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Carregando o refinamento…
                 </p>
@@ -158,18 +153,8 @@ export function RefinementPanel({ taskId, taskCode, autoStart = false, onAutoSta
                 )}
             </AnimatePresence>
 
-            <AlertDialog open={confirmRestart} onOpenChange={setConfirmRestart}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Recomeçar o refinamento?</AlertDialogTitle>
-                        <AlertDialogDescription>A conversa atual é descartada e uma nova sessão começa do zero. A especificação já salva na tarefa é mantida.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => { setConfirmRestart(false); action.mutate("restart") }}>Recomeçar</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <RefinementRestartDialog open={confirm === "restart"} onOpenChange={(open) => setConfirm(open ? "restart" : null)} onConfirm={() => action.mutate("restart")} />
+            <RefinementCloseDialog open={confirm === "close"} onOpenChange={(open) => setConfirm(open ? "close" : null)} onConfirm={() => action.mutate("close")} />
         </section>
     )
 }

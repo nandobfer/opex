@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => {
         deliverLive: vi.fn(async () => undefined),
         eventWrite: vi.fn(async () => ({})),
         runWrite: vi.fn(async () => ({})),
+        link: null as { id: string; centralId: string; stage: string; refinementModel: { model: string; variant: string | null } | null } | null,
+        sync: vi.fn(),
+        delegate: vi.fn(async () => undefined),
     }
 })
 
@@ -96,6 +99,14 @@ vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.pr
 vi.mock('@/features/agentic/server/live-chat', () => ({ liveChatEnabled: vi.fn(async () => mocks.liveChat), deliverLiveMessage: mocks.deliverLive }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+// Vínculo com a mesa de trabalho (OPE-137): sem mesa por padrão; cada caso define a etapa dela.
+vi.mock('@/features/refinement/server/workbench-link', () => ({
+    linkedWorkbench: vi.fn(async () => mocks.link),
+    inRefinementStage: (link: { stage: string } | null) => Boolean(link && (link.stage === 'refining' || link.stage === 'spec_ready')),
+    pastRefinement: (link: { stage: string } | null) => Boolean(link && link.stage !== 'refining' && link.stage !== 'spec_ready'),
+    syncLinkedWorkbench: mocks.sync,
+    delegateToWorkbench: mocks.delegate,
+}))
 
 import { continueRefinement, getRefinementState, interruptRefinement, reconnectRefinement, replyRefinementForm, sendRefinementMessage, startRefinement } from '@/features/refinement/server/service'
 
@@ -105,6 +116,7 @@ beforeEach(() => {
     mocks.updateTask.mockReset()
     mocks.updateTask.mockResolvedValue(undefined)
     mocks.doc = null
+    mocks.link = null
     mocks.settings = {}
     mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [] })
     mocks.fakeClient.session.skill.mockResolvedValue(undefined)

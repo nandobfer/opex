@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn(), setWorkbenchStage: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn(), setWorkbenchStage: vi.fn(), generatePlan: vi.fn(), continueRefinement: vi.fn(), restartRefinement: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
@@ -18,6 +18,10 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   adversarialSkip: mocks.adversarialSkip,
   adversarialRerun: mocks.adversarialRerun,
   setWorkbenchStage: mocks.setWorkbenchStage,
+  generatePlan: mocks.generatePlan,
+  continueRefinementInWorkbench: mocks.continueRefinement,
+  restartRefinementInWorkbench: mocks.restartRefinement,
+  rebuildPreview: vi.fn(),
 }))
 
 import { POST } from '@/app/api/agentic/workbenches/[id]/actions/[action]/route'

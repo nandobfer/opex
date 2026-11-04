@@ -1,22 +1,24 @@
 import { ok } from "@/lib/api/responses"
 import { DomainError, parseBody, withRoute } from "@/lib/api/route"
 import { feedbackSchema, optionalFeedbackSchema, setWorkbenchStageSchema } from "@/features/agentic/schemas"
-import { adversarialFix, adversarialRerun, adversarialSkip, approve, cancelWait, implement, interrupt, rebuildPreview, reconnect, reopen, requestCorrection, retry, revisePlan, setWorkbenchStage, submitPrFeedback } from "@/features/agentic/server/workflow"
+import { adversarialFix, adversarialRerun, adversarialSkip, approve, cancelWait, continueRefinementInWorkbench, generatePlan, implement, restartRefinementInWorkbench, interrupt, rebuildPreview, reconnect, reopen, requestCorrection, retry, revisePlan, setWorkbenchStage, submitPrFeedback } from "@/features/agentic/server/workflow"
 import { adversarialFixSchema } from "@/features/adversarial-agent/schemas"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const WITH_FEEDBACK = { "revise-plan": revisePlan, "request-correction": requestCorrection, "submit-pr-feedback": submitPrFeedback, reopen } as const
-const WITH_OPTIONAL_TEXT = { implement } as const
-const WITHOUT_BODY = { approve, retry, interrupt, reconnect, "cancel-wait": cancelWait, "adversarial-skip": adversarialSkip, "adversarial-rerun": adversarialRerun, "rebuild-preview": (id: string) => rebuildPreview(id) } as const
+const WITH_OPTIONAL_TEXT = { implement, "generate-plan": generatePlan } as const
+const WITHOUT_BODY = { approve, retry, interrupt, reconnect, "cancel-wait": cancelWait, "adversarial-skip": adversarialSkip, "adversarial-rerun": adversarialRerun, "rebuild-preview": (id: string) => rebuildPreview(id), "continue-refinement": continueRefinementInWorkbench, "restart-refinement": restartRefinementInWorkbench } as const
 
 /**
  * POST /api/agentic/workbenches/[id]/actions/[action] — ações da mesa. `revise-plan`,
  * `request-correction`, `submit-pr-feedback` e `reopen` exigem `{ text, fileIds? }` (vai para o planejador);
  * `implement` aceita `{ text?, fileIds? }` (informações adicionais anexadas ao prompt de implementação).
  * `fileIds`: anexos confirmados em `/api/agentic/files` (vão ao agente no prompt do turno);
- * `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait` e `rebuild-preview` (Gerar nova prévia) não têm corpo. Responde na hora com a mesa: a saída
+ * `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait` e `rebuild-preview` (Gerar nova prévia) não têm corpo.
+ * Refinamento (OPE-137), em "Especificação pronta": `generate-plan` aceita `{ text?, fileIds? }` (vai ao planejador);
+ * `continue-refinement` e `restart-refinement` não têm corpo (voltam a "Refinando", aguardando vaga se preciso). Responde na hora com a mesa: a saída
  * do agente chega pelo stream de eventos. Com o limite de mesas da central cheio, as ações que saem de Plano pronto,
  * Prévia pronta, PR aberto ou de uma mesa concluída deixam a mesa **aguardando vaga** (`slotQueue`); `cancel-wait`
  * desfaz a espera. Agente Adversário: `adversarial-fix` aceita `{ text?, excluded? }` (achados desmarcados);

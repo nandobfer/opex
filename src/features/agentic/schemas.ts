@@ -237,6 +237,12 @@ export const centralConfigSchema = z.object({
          */
         publishPreview: z.boolean().default(true),
         /**
+         * "Gerar plano após refinar" padrão das mesas desta central (OPE-137): ligado, a mesa passa sozinha
+         * do refinamento concluído ao planejamento. A escolha da tarefa (`DevTask.planAfterRefinement`)
+         * tem prioridade. Padrão **desligado** (centrais novas e existentes).
+         */
+        planAfterRefinement: z.boolean().default(false),
+        /**
          * Faixa de portas: `true` = usa a faixa padrão global ("Configurações Padrão"); `false` = a
          * própria (`previewPortMin`/`previewPortMax`), que também fica como ponto de partida ao personalizar.
          */
@@ -306,7 +312,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, inheritPorts: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, planAfterRefinement: false, inheritPorts: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         // Central nova herda os padrões globais de fila e movimentação (a personalização é explícita).
         columns: { inheritQueue: true, inheritMovement: true, queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
@@ -367,6 +373,22 @@ const startWorkbenchModelsShape = Object.fromEntries(WORKBENCH_MODEL_ROLES.map((
 export const startWorkbenchModelsSchema = z.object(startWorkbenchModelsShape).strict().optional()
 export type StartWorkbenchModelsInput = z.infer<typeof startWorkbenchModelsSchema>
 export type StartWorkbenchModelEntry = z.infer<typeof startWorkbenchModelEntrySchema>
+
+/**
+ * "Refinar tarefa" na tela inicial da mesa (OPE-137): o texto e os anexos vão no primeiro prompt do
+ * refinamento (ou na conversa já existente); os modelos valem para a mesa inteira.
+ */
+export const refineWorkbenchSchema = z.object({
+    centralId: z.string().regex(/^[a-f0-9]{24}$/i),
+    taskId: z.string().regex(/^[a-f0-9]{24}$/i),
+    text: optionalUserText,
+    fileIds: fileIdsSchema,
+    modelOverrides: startWorkbenchModelsSchema,
+})
+export type RefineWorkbenchInput = z.infer<typeof refineWorkbenchSchema>
+
+/** Switch "Gerar plano após refinar" da barra da mesa. */
+export const workbenchPlanAfterRefinementSchema = z.object({ enabled: z.boolean() })
 
 export const startWorkbenchSchema = z.object({
     centralId: z.string().regex(/^[a-f0-9]{24}$/i),

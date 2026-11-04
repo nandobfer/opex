@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), refine: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn(), refinement: vi.fn() }))
 
 /** Modelos do catálogo do OpenCode (o popover usa a busca e a variante). */
 const MODELS = [
@@ -57,9 +57,12 @@ vi.mock('@/components/ui/select', async () => {
 })
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useStartWorkbench: () => ({ mutate: mocks.mutate, isPending: false }),
+  useRefineWorkbench: () => ({ mutate: mocks.refine, isPending: false }),
   useAgenticSettings: () => ({ data: { settings: AGENTIC_SETTINGS, availability: { available: true, reason: null } } }),
   useCentralQueue: () => ({ data: [] }),
 }))
+// Agente Refinador (OPE-137): disponível e sem refinamento, salvo quando o caso define outro estado.
+vi.mock('@/features/refinement/hooks/useRefinement', () => ({ useTaskRefinement: mocks.refinement, useRefinementRealtime: vi.fn() }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail, useUpdateTask: () => ({ mutate: mocks.updateTask, isPending: false }) }))
 
 import { StartWorkbench } from '@/features/agentic/components/workbench/StartWorkbench'
@@ -109,7 +112,15 @@ const renderStart = (patch: Partial<CentralDto> = {}, taskPatch: Partial<TaskDet
   return render(<StartWorkbench central={central(patch)} taskId="t1" />)
 }
 
-beforeEach(() => vi.clearAllMocks())
+const REFINER = { agent: 'plan', model: 'openai/gpt-5', variant: null }
+const refinementState = (refinement: Record<string, unknown> | null = null, availability = { available: true, reason: null as string | null }) => ({
+  data: { refinement, availability: { ...availability, centralId: 'c1', sessionDirectory: '/home/u/app' }, workbench: null, refinerModel: REFINER },
+})
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.refinement.mockReturnValue(refinementState())
+})
 
 describe('StartWorkbench', () => {
   it('mostra a descrição da tarefa e envia as informações adicionais ao abrir', () => {
@@ -131,21 +142,21 @@ describe('StartWorkbench', () => {
 
   it('central desativada desabilita o botão com o motivo', () => {
     renderStart({ config: { ...defaultCentralConfig('/home/u/app'), enabled: false } })
-    const button = screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+    const button = screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ })
+    expect(button.getAttribute('aria-disabled')).toBe('true')
     expect(screen.getByText('A central está desativada')).toBeTruthy()
   })
 
   it('tarefa de outro projeto desabilita o botão com o motivo', () => {
     renderStart({}, { project: { id: 'p9', name: 'Outro', repo: 'org/x', sigla: 'OUT' } })
-    const button = screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+    const button = screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ })
+    expect(button.getAttribute('aria-disabled')).toBe('true')
     expect(screen.getByText(/A tarefa não é do projeto Portal/)).toBeTruthy()
   })
 })
 
 describe('StartWorkbench · Gerar prévia', () => {
-  const flow = () => screen.getByRole('switch') as HTMLButtonElement
+  const flow = () => document.getElementById('workbench-flow') as HTMLButtonElement
 
   it('chave "Gerar prévia" começa ligada (Publicar prévia, o padrão)', () => {
     renderStart()
@@ -184,7 +195,7 @@ describe('StartWorkbench · Gerar prévia', () => {
     renderStart({}, { agenticFlow: null })
     expect(flow().getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Ligada')
-    expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
+    expect(screen.getAllByText(/Seguindo o padrão da central/)).toHaveLength(2)
     expect(screen.queryByRole('button', { name: 'Usar padrão da central' })).toBeNull()
   })
 
@@ -193,14 +204,14 @@ describe('StartWorkbench · Gerar prévia', () => {
     renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: null })
     expect(flow().getAttribute('aria-checked')).toBe('false')
     expect(screen.getByTestId('workbench-flow-status').textContent).toBe('Desligada')
-    expect(screen.getByText(/Seguindo o padrão da central/)).toBeTruthy()
+    expect(screen.getAllByText(/Seguindo o padrão da central/).length).toBeGreaterThan(0)
   })
 
   it('a escolha da tarefa vence o padrão da central e pode voltar a herdar', () => {
     const base = defaultCentralConfig('/home/u/app')
     renderStart({ config: { ...base, environment: { ...base.environment, publishPreview: false } } }, { agenticFlow: 'preview' })
     expect(flow().getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByText(/Fluxo escolhido só para esta tarefa/)).toBeTruthy()
+    expect(screen.getByText(/Escolhido só para esta tarefa/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Usar padrão da central' }))
     expect(mocks.updateTask).toHaveBeenCalledWith({
@@ -232,11 +243,11 @@ describe('StartWorkbench · modelos (OPE-134)', () => {
     expect(control.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('popover lista as cinco etapas, marca o Planejamento como atual e mostra o padrão herdado', () => {
+  it('popover lista as seis etapas (com o Refinamento — OPE-137), marca o Planejamento como atual e mostra o padrão herdado', () => {
     renderStart()
     const dialog = openModels()
     const titles = within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
-    expect(titles).toEqual(['Planejamento', 'Implementação', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
+    expect(titles).toEqual(['Refinamento', 'Planejamento', 'Implementação', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
     expect(within(section(dialog, 'Planejamento')).getByText('Etapa atual')).toBeTruthy()
     expect(within(dialog).getAllByText('Etapa atual')).toHaveLength(1)
     expect(within(section(dialog, 'Planejamento')).getByText('Claude Opus (high) · do padrão global')).toBeTruthy()
