@@ -221,6 +221,29 @@ describe('citar linha da resposta', () => {
 })
 
 describe('abas de sessão', () => {
+  it('a roda vertical rola a faixa na horizontal, sem Shift (OPE-135)', () => {
+    const sessions = new Map<string, OpexSessionDto>([
+      ['s1', { id: 's1', title: 'Tarefa do CRM', summary: 'Resumo', status: 'running' } as OpexSessionDto],
+      ['s2', { id: 's2', title: 'Outra sessão', summary: 'Resumo', status: 'idle' } as OpexSessionDto],
+    ])
+    render(<OpexSessionTabs open={['s1', 's2']} active="s1" sessions={sessions} onActivate={vi.fn()} onClose={vi.fn()} />)
+    const strip = screen.getByRole('tablist', { name: 'Sessões abertas' })
+    let scrollLeft = 0
+    Object.defineProperties(strip, {
+      scrollWidth: { configurable: true, value: 800 },
+      clientWidth: { configurable: true, value: 200 },
+      scrollLeft: {
+        configurable: true,
+        get: () => scrollLeft,
+        set: (value: number) => {
+          scrollLeft = value
+        },
+      },
+    })
+    expect(fireEvent.wheel(strip, { deltaY: 120 })).toBe(false)
+    expect(scrollLeft).toBe(120)
+  })
+
   it('mostra o título de cada sessão aberta, ativa ao clicar e fecha sem excluir', () => {
     const sessions = new Map<string, OpexSessionDto>([['s1', { id: 's1', title: 'Tarefa do CRM', summary: 'Resumo', status: 'running' } as OpexSessionDto]])
     const onActivate = vi.fn()

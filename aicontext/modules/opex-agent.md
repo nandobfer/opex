@@ -36,6 +36,11 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
 ## Sessões
 
 - **Sessões em abas**, sem limite; cada aba tem o próprio contexto. Fechar a aba não exclui a sessão.
+- A faixa de abas rola na **horizontal com a roda vertical do mouse**, sem Shift
+  (`useHorizontalWheelScroll`, `src/hooks/useHorizontalWheelScroll.ts`): a decisão pura
+  `resolveHorizontalWheel` ignora Shift, Ctrl/zoom e o gesto horizontal do trackpad (o navegador já
+  os trata), não sequestra a roda quando as abas cabem e, no início/fim da faixa, devolve a rolagem
+  para a página.
 - As abas abertas ficam no `localStorage` (`opex:opex-agent:tabs:v1`, `usePersistentState` + Zod).
 - As sessões guardam o agente (`opex_sessions.agent`; ausente = Agente Opex): o Agente Opex nunca vê as
   sessões do Maddox (404) e os jobs não usam sessão do Maddox.
