@@ -32,8 +32,8 @@ import { RefinementPanel } from '@/features/refinement/components/RefinementPane
 
 const startMutate = vi.fn()
 
-const state = (overrides: { availability?: { available: boolean; reason: string | null }; refinement?: unknown }) => ({
-    data: { refinement: overrides.refinement ?? null, availability: overrides.availability ?? { available: true, reason: null } },
+const state = (overrides: { availability?: { available: boolean; reason: string | null }; refinement?: unknown; workbench?: { id: string; stage: string } | null }) => ({
+    data: { refinement: overrides.refinement ?? null, availability: overrides.availability ?? { available: true, reason: null }, workbench: overrides.workbench ?? null },
     isLoading: false,
     isError: false,
 })
@@ -122,5 +122,35 @@ describe('RefinementPanel', () => {
         mocks.refinement.mockReturnValue(state({ refinement: { id: 'r1', runState: 'interrupted', resolved: false, sessionId: null, sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] } }))
         render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
         expect(screen.queryByRole('button', { name: /Reconect/ })).toBeNull()
+    })
+})
+
+describe('RefinementPanel · mesa de trabalho (OPE-137)', () => {
+    const running = { id: 'r1', runState: 'running', resolved: false, closed: false, concluded: false, sessionId: 's1', sessionDirectory: '/repo/opex', pendingForms: [], pendingPermissions: [] }
+
+    it('com a mesa em Refinando oferece Encerrar refinamento com a confirmação do texto aprovado', () => {
+        const mutate = vi.fn()
+        mocks.action.mockReturnValue({ mutate, isPending: false })
+        mocks.refinement.mockReturnValue(state({ refinement: running, workbench: { id: 'w1', stage: 'refining' } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        fireEvent.click(screen.getByRole('button', { name: /Encerrar refinamento/ }))
+        expect(screen.getByText('Encerrar o refinamento? O agente para e a especificação já salva é mantida. Você pode refinar de novo depois.')).toBeTruthy()
+        fireEvent.click(screen.getAllByRole('button', { name: 'Encerrar refinamento' }).at(-1)!)
+        expect(mutate).toHaveBeenCalledWith('close')
+    })
+
+    it('sem mesa não oferece Encerrar (fica como antes)', () => {
+        mocks.refinement.mockReturnValue(state({ refinement: running }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.queryByRole('button', { name: /Encerrar refinamento/ })).toBeNull()
+    })
+
+    it('mesa já em desenvolvimento: mostra o motivo e não oferece Continuar nem Recomeçar (item 18)', () => {
+        const reason = 'A tarefa já está em desenvolvimento na mesa de trabalho'
+        mocks.refinement.mockReturnValue(state({ refinement: { ...running, runState: 'interrupted', sessionId: null }, availability: { available: false, reason }, workbench: { id: 'w1', stage: 'planning' } }))
+        render(<RefinementPanel taskId="t1" taskCode="OPX-1" />)
+        expect(screen.getAllByText(reason).length).toBeGreaterThan(0)
+        expect(screen.queryByRole('button', { name: /Continuar/ })).toBeNull()
+        expect(screen.queryByRole('button', { name: /Recomeçar/ })).toBeNull()
     })
 })

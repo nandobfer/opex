@@ -572,3 +572,19 @@ describe('fluxo da mesa da tarefa (agenticFlow)', () => {
     expect(updateTaskSchema.safeParse({ agenticFlow: 'turbo' }).success).toBe(false)
   })
 })
+
+describe('"Gerar plano após refinar" da tarefa (OPE-137)', () => {
+  it('nasce herdando a central (null), aceita ligar só nesta tarefa e voltar a herdar, com auditoria', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    expect((await getTask(a.id)).planAfterRefinement).toBeNull()
+
+    mocks.recordAudit.mockClear()
+    await updateTask(a.id, { planAfterRefinement: true }, 'local')
+    expect((await getTask(a.id)).planAfterRefinement).toBe(true)
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ antes: expect.objectContaining({ planoAposRefinar: 'Padrão da central' }), depois: expect.objectContaining({ planoAposRefinar: 'Ligado' }) }))
+
+    await updateTask(a.id, { planAfterRefinement: null }, 'local')
+    expect((await getTask(a.id)).planAfterRefinement).toBeNull()
+  })
+})

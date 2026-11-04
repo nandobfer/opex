@@ -85,4 +85,16 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     expect(res.status).toBe(200)
     expect(mocks.cancelWait).toHaveBeenCalledWith('w1')
   })
+
+  it('Especificação pronta (OPE-137): generate-plan aceita informações adicionais; continuar/recomeçar o refinamento sem corpo', async () => {
+    mocks.generatePlan.mockResolvedValue({ id: 'w1' })
+    mocks.continueRefinement.mockResolvedValue({ id: 'w1' })
+    mocks.restartRefinement.mockResolvedValue({ id: 'w1' })
+    expect((await call('generate-plan', { text: 'use X' })).status).toBe(200)
+    expect(mocks.generatePlan).toHaveBeenCalledWith('w1', 'use X', undefined)
+    expect((await call('continue-refinement')).status).toBe(200)
+    expect(mocks.continueRefinement).toHaveBeenCalledWith('w1')
+    expect((await call('restart-refinement')).status).toBe(200)
+    expect(mocks.restartRefinement).toHaveBeenCalledWith('w1')
+  })
 })

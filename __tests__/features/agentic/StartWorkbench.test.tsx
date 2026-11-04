@@ -295,3 +295,85 @@ describe('StartWorkbench · modelos (OPE-134)', () => {
     expect(mocks.updateTask).not.toHaveBeenCalled()
   })
 })
+
+describe('StartWorkbench · Refinar tarefa (OPE-137)', () => {
+  const refineButton = () => screen.getByRole('button', { name: /Refinar tarefa/ })
+  const openButton = () => screen.getByRole('button', { name: /Abrir mesa e gerar o plano/ })
+
+  it('abas Descrição e Especificação: a especificação salva ou o estado vazio', () => {
+    renderStart({}, { technicalSpec: null })
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Descrição', 'Especificação'])
+    fireEvent.click(screen.getByRole('tab', { name: 'Especificação' }))
+    expect(screen.getByText('Sem especificação técnica.')).toBeTruthy()
+  })
+
+  it('a aba Especificação mostra a especificação técnica salva', () => {
+    renderStart({}, { technicalSpec: '- critério de aceite salvo' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Especificação' }))
+    expect(screen.getByText('critério de aceite salvo')).toBeTruthy()
+  })
+
+  it('"Refinar tarefa" fica à esquerda de "Abrir mesa e gerar o plano", na mesma linha, e o Ctrl+Enter segue no Abrir mesa', () => {
+    renderStart()
+    const refine = refineButton()
+    const open = openButton()
+    expect(refine.parentElement).toBe(open.parentElement)
+    expect(refine.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(open.hasAttribute('data-ctrl-enter-submit')).toBe(true)
+    expect(refine.hasAttribute('data-ctrl-enter-submit')).toBe(false)
+  })
+
+  it('refinar envia o texto e os modelos da tela (e não abre o planejamento)', () => {
+    renderStart()
+    fireEvent.change(screen.getByLabelText('Informações adicionais (opcional)'), { target: { value: 'Regra X' } })
+    fireEvent.click(refineButton())
+    expect(mocks.refine).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: 'Regra X' }, expect.anything())
+    expect(mocks.mutate).not.toHaveBeenCalled()
+  })
+
+  it('refinamento já concluído: abre sem enviar o texto (ele vai para o Gerar plano)', () => {
+    mocks.refinement.mockReturnValue(refinementState({ concluded: true, runState: 'idle', liveChat: false }))
+    renderStart()
+    fireEvent.change(screen.getByLabelText('Informações adicionais (opcional)'), { target: { value: 'Para o planejador' } })
+    fireEvent.click(refineButton())
+    expect(mocks.refine).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1' }, expect.anything())
+  })
+
+  it('refinamento em andamento bloqueia "Abrir mesa e gerar o plano" com o motivo e libera o Refinar', () => {
+    mocks.refinement.mockReturnValue(refinementState({ concluded: false, runState: 'interrupted', liveChat: false }))
+    renderStart()
+    expect(openButton().getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(openButton())
+    expect(mocks.mutate).not.toHaveBeenCalled()
+    expect(refineButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('Agente Refinador indisponível bloqueia só o Refinar', () => {
+    mocks.refinement.mockReturnValue(refinementState(null, { available: false, reason: 'Ative o Agente Refinador em Integrações › Inteligência Artificial' }))
+    renderStart()
+    expect(refineButton().getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(refineButton())
+    expect(mocks.refine).not.toHaveBeenCalled()
+    expect(openButton().getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('tarefa de outro projeto também bloqueia o Refinar', () => {
+    renderStart({}, { project: { id: 'p9', name: 'Outro', repo: 'org/x', sigla: 'OUT' } })
+    expect(refineButton().getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('"Gerar plano após refinar" segue o padrão da central e aceita ajuste só desta tarefa', () => {
+    renderStart({}, { planAfterRefinement: null })
+    const toggle = document.getElementById('workbench-plan-after-refinement') as HTMLButtonElement
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(toggle)
+    expect(mocks.updateTask).toHaveBeenCalledWith({ task: { id: 't1', code: 'OPE-10' }, body: { planAfterRefinement: true }, patch: { planAfterRefinement: true } })
+  })
+
+  it('a escolha da tarefa mostra o texto da escolha própria e volta a herdar', () => {
+    renderStart({}, { planAfterRefinement: true, agenticFlow: null })
+    expect(screen.getByText(/Escolhido só para esta tarefa \(a central está em Desligado\)/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Usar padrão da central' }))
+    expect(mocks.updateTask).toHaveBeenCalledWith({ task: { id: 't1', code: 'OPE-10' }, body: { planAfterRefinement: null }, patch: { planAfterRefinement: null } })
+  })
+})

@@ -22,6 +22,39 @@ Página `/agente-refinador` (categoria **Agentes** da sidebar, OPE-122): Visão 
 perguntas e tempo até a especificação, registrados pelos eventos `refinement-*`) e Histórico — ver
 `modules/agent-metrics.md`.
 
+## Refinamento na mesa de trabalho (OPE-137)
+
+O mesmo refinamento também roda **na mesa de trabalho** (`/desenvolvimento`): o botão **Refinar tarefa**
+da tela inicial abre a mesa na etapa **Refinamento** ("Refinando" / "Especificação pronta" — regras e
+fluxo em `modules/agentic-dev.md`, "Refinamento na mesa"). Continua sendo **um único refinamento por
+tarefa**: a mesa e a aba "Especificação técnica" mostram a mesma conversa e o mesmo estado, e responder
+ou agir num lado reflete no outro em tempo real (`refinement-updated` e `agentic-updated` em
+`private-app`; `useRefinementRealtime` também escuta o `agentic-updated` da tarefa).
+
+- Vínculo pelo `taskId` (`server/workbench-link.ts`): cada mudança do refinamento (`publishRefinement`)
+  dispara, em segundo plano, a sincronização da mesa (`syncLinkedWorkbench` → `agentic/server/refinement-stage.ts`).
+- **Concluído** = `resolved` ou **encerrado** (`closedAt`, `refinementConcluded`). **Encerrar refinamento**
+  (`POST .../actions/close`, só com a mesa em "Refinando"; 409 `REFINEMENT_CLOSE_UNAVAILABLE`) para o
+  agente, dispensa as perguntas abertas e mantém a especificação salva. Um turno novo limpa `closedAt`.
+- **Primeiro prompt com informações adicionais**: o texto e os anexos do campo da tela inicial vão numa
+  seção "Informações adicionais do dono" (`withAdditionalInfo`) e aparecem como mensagem do usuário.
+- **Continuar** escolhe o prompt pelo estado: pedido que aguardou vaga (nenhum turno) → primeiro prompt;
+  concluído/encerrado → "O dono quer continuar o refinamento…" na mesma sessão; sem a sessão anterior
+  (excluída ao concluir sem mesa) → a tarefa inteira com a especificação atual
+  (`buildRefinementFreshContinuePrompt`); interrompido/falho → retomada; parado sem especificação → consolidação.
+- **Sessão**: com a mesa no refinamento, concluir **não** exclui a sessão (o "Continuar refinamento" a
+  retoma); `releaseRefinementSession` a exclui quando a mesa sai do refinamento. **Recomeçar** agora
+  também manda a sessão atual para a exclusão pendente.
+- **Mesa do planejamento em diante** (item 18): a disponibilidade fica bloqueada com o motivo **"A tarefa
+  já está em desenvolvimento na mesa de trabalho"** (dica do botão e painel da aba); iniciar, continuar e
+  recomeçar respondem 409 `REFINEMENT_WORKBENCH_ADVANCED`. Com a mesa em "Especificação pronta",
+  Continuar e Recomeçar pela página passam pela mesa (respeitam a vaga da central).
+- **Modelo do Refinamento** trocado na mesa vale para os turnos enquanto a mesa refina; o DTO do estado
+  traz `workbench: { id, stage }` e `refinerModel` (modelo da aba Agente Refinador).
+- O painel da aba mostra **Encerrar refinamento** só com a mesa em "Refinando"; os controles (Parar,
+  Continuar, Reconectar, Recomeçar, Encerrar) são compartilhados com a barra da mesa
+  (`useRefinementControls`, `RefinementDialogs`).
+
 ## Configuração (Integrações › Inteligência Artificial › aba "Agente Refinador")
 
 - `ai_feature_settings` (`feature: "task-refinement"`), schema `taskRefinementSettingsSchema`:
@@ -168,7 +201,7 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
 ## Estado e ações
 
 - Documento `task_refinements` (um por tarefa): `runState` (`idle`|`running`|`failed`|`interrupted`),
-  `resolved`, `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
+  `resolved`, `closedAt` (Encerrar na mesa), `queuedStart` (pedido do "Refinar tarefa" sem vaga), `finalizing` (turno de consolidação em andamento), `error`, `spec` (última especificação
   gravada), `pendingForms`/`pendingPermissions`, `pendingSessionDeletions` (sessões do OpenCode ainda
   pendentes de exclusão), `activeSkill` (skill já ativada na sessão: `{sessionId, skillId}`), `turnStartedAt` (marco do turno; episódio do ciclo de reconexão),
   `stopRequestedAt` (Parar do usuário; desliga a reconexão automática), `reconnect` (`{outcome,
@@ -229,8 +262,8 @@ hora e reinicia a contagem). Não há ciclo automático depois de um **Parar** d
 | `GET /api/tasks/[id]/refinement/events` | Stream NDJSON da saída |
 | `POST /api/tasks/[id]/refinement/forms/[formId]` `{answer}` ou `{cancel:true}` | Responde a pergunta |
 | `POST /api/tasks/[id]/refinement/permissions/[requestId]` `{decision, message?}` | Responde permissão |
-| `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart`, `reconnect` |
-| `POST /api/tasks/[id]/refinement/messages` `{text}` | Chat durante a execução: mensagem que entra no turno em andamento |
+| `POST /api/tasks/[id]/refinement/actions/[action]` | `interrupt`, `continue`, `restart`, `reconnect`, `close` (Encerrar, só com a mesa em Refinando) |
+| `POST /api/tasks/[id]/refinement/messages` `{text, fileIds?}` | Chat durante a execução: mensagem que entra no turno em andamento |
 | `GET/PUT /api/ai/features/task-refinement` | Configuração da feature + disponibilidade + situação da skill |
 | `GET /api/ai/skills` | Skills instaladas no OpenCode (para a origem "Skill do OpenCode") |
 
@@ -240,6 +273,12 @@ auditoria normal da tarefa (`updateTask`, entidade `Tarefa`, `especificacao: "al
 nada para a issue.
 
 ## Testes
+
+Refinamento na mesa (OPE-137): `refinement-service.test.ts` ("refinamento na mesa de trabalho": bloqueio
+da mesa já em desenvolvimento, informações adicionais no primeiro prompt, pedido sem vaga, modelo trocado
+na mesa, sessão mantida com a mesa e liberada ao sair, Encerrar, prompts do Continuar e delegação à mesa
+em Especificação pronta), `refinement-route.test.ts` (`close`) e `RefinementPanel.test.tsx` (Encerrar só
+com a mesa em Refinando e o motivo do item 18).
 
 `__tests__/features/refinement/`: `logic` (extração da especificação, protocolo e prompts de
 consolidação/retomada), `refinement-service` (disponibilidade sem central / desativada / feature off,

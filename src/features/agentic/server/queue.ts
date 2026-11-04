@@ -21,7 +21,7 @@ import { startPendingTurn, startWorkbenchFromQueue } from "./workflow"
  */
 
 /** Erros que não devem travar a fila (a tarefa não é mais candidata: segue para a próxima). */
-const SKIP_CODES = new Set(["WORKBENCH_EXISTS", "TASK_OTHER_PROJECT", "TASK_NOT_FOUND", "CENTRAL_NOT_FOUND"])
+const SKIP_CODES = new Set(["WORKBENCH_EXISTS", "TASK_OTHER_PROJECT", "TASK_NOT_FOUND", "CENTRAL_NOT_FOUND", "REFINEMENT_UNAVAILABLE"])
 
 interface LoadedCentral {
     projectId: string

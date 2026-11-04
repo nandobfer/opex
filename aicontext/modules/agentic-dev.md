@@ -428,16 +428,96 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   pendente do agente, falha/interrupção (regra `workbenchUserWaitReason`; o chip de etapa deixa de
   pulsar quando o agente não está executando). Mesa **na fila do build** mostra a fila e mesa
   **concluída** não gera warning.
-- Tarefa sem mesa: o estado inicial mostra o **código, o título e a descrição** da tarefa, a
-  chave **Gerar prévia** (ligada = Publicar prévia; desligada = PR automático, ver "Fluxo da mesa") — com a indicação
-  de que a tarefa **segue o padrão da central** e a ação **Usar padrão da central** quando há uma
-  escolha própria — e um campo
-  opcional de **Informações adicionais** (enviadas ao planejador no primeiro prompt, junto da tarefa,
-  e exibidas como mensagem do usuário na saída). O botão **Abrir mesa e gerar o plano** desabilita com
-  o motivo quando indisponível, com a central desativada ou com a tarefa de outro projeto; em fila,
-  mostra a posição e abre ao liberar a vaga.
+- Tarefa sem mesa: o estado inicial mostra o **código e o título** da tarefa e as abas **Descrição** e
+  **Especificação** (`StartTaskBlock`; a especificação técnica salva ou o estado vazio), as chaves
+  **Gerar prévia** (ligada = Publicar prévia; desligada = PR automático, ver "Fluxo da mesa") e **Gerar
+  plano após refinar** (OPE-137) — as duas com a herança da central (`InheritedToggleCard`: "Seguindo o
+  padrão da central: …" ou "Escolhido só para esta tarefa …" e **Usar padrão da central**) — e um campo
+  opcional de **Informações adicionais** (enviadas no primeiro prompt, junto da tarefa, e exibidas como
+  mensagem do usuário na saída). Na mesma linha, à esquerda do **Abrir mesa e gerar o plano**
+  (Ctrl+Enter), fica **Refinar tarefa** (ver "Refinamento na mesa"). Os dois botões ficam bloqueados com
+  o motivo na dica (`ReasonButton`; regras puras `openPlanBlockReason`/`startRefineBlockReason`) quando
+  indisponíveis, com a central desativada, com a tarefa de outro projeto ou com anexos enviando; o
+  **Abrir mesa** também com um refinamento não concluído, e o **Refinar** com o Agente Refinador
+  indisponível. Em fila, mostra a posição e abre ao liberar a vaga.
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
+
+## Refinamento na mesa (OPE-137)
+
+A mesa ganha a etapa **Refinamento** antes do **Plano**, com dois status: **Refinando** (`refining`,
+ocupa vaga como Planejando — `RUNNING_STAGES`) e **Especificação pronta** (`spec_ready`, não ocupa
+vaga como Plano pronto — `SLOT_EXEMPT_STAGES`). O passo "Refinamento" só aparece na trilha das mesas
+que passaram por ele (`refinementPhase`). A conversa é a do **Agente Refinador** da tarefa — **um único
+refinamento por tarefa**, o mesmo da aba "Especificação técnica" (`modules/refinement.md`): a mesa não
+copia nada, mostra e coordena o mesmo `task_refinements` (vínculo pelo `taskId`; `refinementId` e as
+contagens `refinementPending` são só espelhos para a lista e o apontamento).
+
+```
+(sem mesa) ─ Refinar tarefa ─┬─ refinamento concluído → spec_ready (sem precisar de vaga)
+                             ├─ sem vaga → fila da central (coluna da fila) → refining ao liberar
+                             └─ com vaga → refining
+refining ─┬─ concluído + "Gerar plano após refinar" desligado → spec_ready (visão troca para Especificação)
+          ├─ concluído + ligado (lido nesse momento) → planning (como "Gerar plano" sem informações)
+          ├─ Encerrar refinamento → spec_ready (mesmo sem especificação)
+          └─ terminou sem especificação (após as consolidações) → continua em refining com o aviso
+spec_ready ─┬─ Gerar plano (informações adicionais + anexos) → planning
+            ├─ Continuar refinamento → refining (mesma conversa)
+            └─ Recomeçar → refining (conversa nova)
+```
+
+- **Refinar tarefa** (`POST /api/agentic/workbenches/refine`, `refineWorkbench` → `openRefinementInCentral`,
+  serializado por central): sem refinamento, começa um com o texto e os anexos no primeiro prompt
+  (`buildRefinementPrompt` + seção "Informações adicionais do dono"); com um não concluído, continua a
+  **mesma conversa** (parado → turno de retomada com o texto; rodando → o texto vai pelo chat ao vivo e,
+  com o chat desligado, o botão fica bloqueado com o motivo). O campo é limpo. Com o refinamento já
+  concluído, abre em "Especificação pronta" e o texto passa para o campo do "Gerar plano" (rascunho só
+  da aba, `start-draft.ts`; os anexos seguem pela mesma fila `start:<tarefa>`). As escolhas de "Gerar
+  prévia", "Gerar plano após refinar" e dos modelos valem para a mesa inteira. Se o refinamento não
+  puder começar, a abertura é desfeita.
+- **Sem vaga** (decisão D1 do plano): a tarefa vai para a **coluna da fila** da central e o pedido
+  (texto, anexos e modelos) fica em `task_refinements.queuedStart` — nenhum turno começa. Os anexos
+  ficam com o dono provisório `refinement:<id>` (fora da limpeza dos pendentes) e passam para a mesa ao
+  abrir (`transferAgenticFiles`). Sem coluna de fila configurada, recusa com `CENTRAL_BUSY`.
+- **Abrir mesa e gerar o plano** com refinamento não concluído (inclusive o que aguarda vaga) é
+  recusado com `REFINEMENT_IN_PROGRESS` ("Há um refinamento em andamento. Continue-o pelo Refinar
+  tarefa ou encerre-o."), na tela, na rota e na ferramenta `start_workbench` do Agente Opex. Concluído
+  ou inexistente, segue o fluxo de sempre.
+- **Fila da central / coluna Opencode** (`startWorkbenchFromQueue`): tarefa com refinamento não
+  concluído abre em "Refinando" (consumindo `queuedStart`); sem ele, no planejamento.
+  `REFINEMENT_UNAVAILABLE` não trava a fila (a tarefa é pulada).
+- **Estado da mesa** (`applyRefinementState`, chamado por `refinement-stage.ts` em série por central a
+  cada mudança do refinamento — nunca aguardado, porque pode vir de dentro de um `runInCentral`): o
+  status espelha o do refinamento e a decisão olha o **estado final** (um turno recuperado pela
+  reconexão também avança). "Gerar plano após refinar" só dispara com a especificação salva
+  (`resolved`); encerrado vai sempre para "Especificação pronta".
+- **Barra em "Refinando"** (`RefinementActionBar`): Parar/Continuar, Reconectar (mesmo ciclo
+  automático), Recomeçar (confirmação), **Encerrar refinamento** (confirmação "Encerrar o refinamento?
+  O agente para e a especificação já salva é mantida. Você pode refinar de novo depois."), o switch
+  **Gerar plano após refinar** (`PUT /api/agentic/workbenches/[id]/refinement-plan`, só em Refinando) e
+  o seletor de modelos com o papel **Modelo do Refinamento**. Essas ações vão às rotas do refinamento
+  (a vaga já está ocupada). As perguntas e permissões ficam abaixo da saída; o chat ao vivo segue a
+  opção de hoje.
+- **Barra em "Especificação pronta"**: **Gerar plano** (`generate-plan`, com informações adicionais),
+  **Continuar refinamento** (`continue-refinement`) e **Recomeçar** (`restart-refinement`) — ações da
+  mesa que respeitam a vaga (`launchOrQueue`/`pendingTurn`, rótulos "Gerar o plano", "Continuar o
+  refinamento", "Recomeçar o refinamento"). Com o Agente Refinador indisponível, Continuar e Recomeçar
+  ficam bloqueados com o motivo; Gerar plano continua.
+- **Sessão do OpenCode**: enquanto a mesa está no refinamento, a sessão do refinamento **não** é
+  excluída ao concluir (o "Continuar refinamento" retoma a mesma conversa). Ela é excluída
+  (`releaseRefinementSession`, mesma regra de exclusão pendente/`agentic-queue-pump`) quando a mesa vai
+  para o planejamento, é concluída ou é excluída. Refinamento concluído só na página da tarefa, sem
+  mesa, mantém o comportamento de antes.
+- **Modelo do Refinamento**: papel `refinement` em `WORKBENCH_MODEL_ROLES` (`WORKBENCH_MODEL_ROLE_INFO`),
+  com base no modelo da aba **Agente Refinador** (origem `refiner`, "do Agente Refinador"); a troca vale
+  só para a mesa (`modelOverrides.refinement`, aplicada a cada turno do refinamento). Instruções, skill e
+  agente continuam os do Agente Refinador. O DTO só traz o papel enquanto a mesa está no refinamento.
+- **Central**: `environment.planAfterRefinement` (switch "Gerar plano após refinar" ao lado de
+  "Publicar prévia"), **desligado** nas centrais novas e existentes; a tarefa pode escolher
+  (`DevTask.planAfterRefinement`, `null` = herda; auditoria `planoAposRefinar`).
+- Apontamento de horas (decisão D2): "Refinando" com o agente rodando conta como o Planejando (o turno
+  vivo é o do refinamento — `activeRunId`). "Definir etapa" fica bloqueado em "Refinando". Filtro
+  **Refinamento** na lista da Central (`refining` + `spec_ready`).
 
 ## Mesa de trabalho (`agentic_workbenches`, uma por tarefa)
 
@@ -1121,24 +1201,34 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
 | `GET/POST /centrals`, `GET/PUT/DELETE /centrals/[id]`, `POST /centrals/[id]/test`, `GET /centrals/[id]/workbenches`, `GET /centrals/[id]/queue` | centrais |
 | `GET/POST /centrals/[id]/memories`, `GET/PATCH/DELETE /centrals/[id]/memories/[memoryId]` `{texto}` | memórias do agente desenvolvedor da central (lista `developer-central`; 404 `CENTRAL_NOT_FOUND`). As globais usam `/api/ai/agents/developer-global/memories` |
 | `POST /workbenches` `{centralId, taskId, text?, fileIds?}` | abre a mesa e inicia o plano; `text`/`fileIds` são as informações adicionais do primeiro prompt (409 se já existir) |
+| `POST /workbenches/refine` `{centralId, taskId, text?, fileIds?, modelOverrides?}` | "Refinar tarefa" (OPE-137): abre a mesa em Refinando (ou Especificação pronta) ou, sem vaga, põe a tarefa na fila e devolve `{ workbench: null, queue: { position } }` |
+| `PUT /workbenches/[id]/refinement-plan` `{enabled}` | switch "Gerar plano após refinar" da mesa em Refinando (409 fora dela) |
 | `POST /files` `{name, size, mediaType?}`, `POST /files/[id]/complete`, `GET/DELETE /files/[id]` | anexos dos campos da mesa: reserva + URL do PUT no S3, confirmação, conteúdo (`?download=1`) e remoção de um anexo ainda não enviado (409 se já foi) |
 | `GET /pr-watch` | agendamento do acompanhamento do PR (`{enabled, nextCheckAt, running}`) para a contagem |
 | `GET /workbenches/in-progress` | mesas em andamento (executando ou aguardando ação humana) |
 | `GET /workbenches/by-task/[taskId]`, `GET/DELETE /workbenches/[id]` | mesa (o `DELETE` limpa o ambiente e devolve `{ deleted }`) |
-| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text, fileIds?}`); `implement` (`{text?, fileIds?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
+| `POST /workbenches/[id]/actions/[action]` | `revise-plan`, `request-correction`, `submit-pr-feedback`, `reopen` (`{text, fileIds?}`); `implement` (`{text?, fileIds?}` — informações adicionais ao prompt de implementação); `approve`, `retry`, `interrupt`, `reconnect`, `cancel-wait`, `rebuild-preview` (Gerar nova prévia); em Especificação pronta, `generate-plan` (`{text?, fileIds?}`), `continue-refinement` e `restart-refinement`; `set-stage` (`{stage, reason}` — definir etapa de espera ou concluir sem PR) |
 | `POST /workbenches/[id]/messages` `{text, fileIds?}` | chat durante a execução: a mensagem entra no turno em andamento (409 com a opção desligada ou sem o agente trabalhando) |
 | `POST /workbenches/[id]/permissions/[requestId]` `{decision, message?}` | resposta à permissão |
 | `POST /workbenches/[id]/forms/[formId]` `{answer}` ou `{cancel: true}` | resposta à pergunta |
 | `GET /workbenches/[id]/events` | stream NDJSON |
 | `GET /workbenches/[id]/builds`, `GET /workbenches/[id]/builds/[buildId]/log` | builds da prévia (aba "Build (N)", sem o log) e o log de um build em NDJSON (`snapshot`/`append`/`status`/`ping`) |
 | `PUT /workbenches/[id]/preview` `{enabled}` | chave "Gerar prévia" da mesa (desligada = PR automático só nesta mesa; religada em PR aberto gera a prévia na hora) |
-| `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`planning`, `implementation`, `build`, `pr`, `fork` — base dos forks da mesa); `model: null` volta ao padrão |
+| `PUT /workbenches/[id]/model` `{role, model, variant}` | troca o modelo de um papel da mesa (`refinement` — Agente Refinador, OPE-137 —, `planning`, `implementation`, `build`, `pr`, `fork` — base dos forks da mesa); `model: null` volta ao padrão |
 | `PUT /workbenches/[id]/forks/[forkId]/model` `{model, variant}` | troca o modelo do fork; `model: null` volta ao padrão |
 
 Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (abrir, PR,
 merge, reabrir, definir etapa/concluir manualmente, excluir).
 
 ## Testes
+
+Refinamento na mesa (OPE-137): `workflow-refinement.test.ts` (abertura em Refinando/Especificação pronta,
+mesma conversa, chat ao vivo, fila sem vaga, bloqueio do "Abrir mesa", abertura pela fila, estado final do
+refinamento → Especificação pronta/planejamento, Gerar plano/Continuar refinamento com e sem vaga e o
+switch), `refinement-stage-logic.test.ts` (etapas, vagas, ações, bloqueios da tela inicial, modelo do
+Refinamento, trilha), `RefinementActionBar.test.tsx`, `StartWorkbench.test.tsx` ("Refinar tarefa"),
+`refine-workbench-route.test.ts`, `environment-section.test.tsx` (padrão da central) e
+`refinement-workbench-controls.test.ts` (sem controles nativos).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em
