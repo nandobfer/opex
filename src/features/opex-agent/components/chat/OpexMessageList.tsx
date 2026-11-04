@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { OpexLiveMessage, OpexMessageDto } from "../../types"
-import { VirtualStack } from "../VirtualStack"
+import { VirtualStack } from "@/components/list/VirtualStack"
 import { AssistantMessage, UserMessage } from "./OpexMessageItem"
 import { useOpexScope } from "../OpexScopeProvider"
 

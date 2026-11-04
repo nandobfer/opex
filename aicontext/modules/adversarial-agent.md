@@ -239,7 +239,10 @@ na tela e na API; `withMentorDefaults`).
   - `developer-central` — **Agente desenvolvedor — da central**: convenção, comando ou preferência do
     projeto (grava na lista da central da mesa).
 
-  Na dúvida entre revisor e desenvolvedor, prefere o desenvolvedor; nunca as duas. JEV (pergunta
+  O destino é escolhido pela **natureza da lição** (OPE-132): se ela só faz sentido neste projeto
+  (convenção, comando, caminho, pasta, componente ou preferência da central), é da central; se continua
+  útil num projeto diferente, é global. Uma **memória parecida em outra lista não muda o destino** e
+  não é motivo para deixar de gravar. Na dúvida entre revisor e desenvolvedor, prefere o desenvolvedor; nunca as duas. JEV (pergunta
   `choice` `target`, uma opção por destino ligado com o critério; registra a escolha, a `confidence` e
   as `probabilities`) ou qualquer provedor de texto (JSON `{target, confidence, reason}`,
   `parseRouterAnswer`), com **instruções adicionais** opcionais; recebe o caso e os **resumos** de cada
@@ -250,10 +253,26 @@ na tela e na API; `withMentorDefaults`).
 - **Redator** (`streamAi`, origem `adversarial-mentor-writer`, instruções adicionais configuráveis):
   escreve para a lista escolhida (ao revisor: classe de erro, como detectá-la e que teste a teria
   pegado; ao desenvolvedor: o que fazer ou evitar, quando e por quê). Recebe o caso, **todas as
-  memórias** da lista de destino (com ids) e só os **resumos** das outras listas ligadas, e responde
-  `create` / `update` (fundir com o id de uma da MESMA lista) / `skip` (inclusive quando outra lista já
-  cobre a lição). O caso é tratado como dado (nunca vira instrução nem é copiado). `update` com id
-  inexistente ou de outra lista vira `create`. Uma execução grava no máximo uma memória.
+  memórias** da lista de destino (com ids) e as outras listas ligadas: quando o destino e a outra lista
+  são as duas do **agente desenvolvedor**, os textos completos (ids, para fundir a parte separada); nas
+  demais, os resumos. O caso é tratado como dado (nunca vira instrução nem é copiado).
+  - **Cobertura em outra lista nunca é `skip`** (OPE-132): o `skip` por cobertura (`kind: "covered"`)
+    só vale citando o id de uma memória **da própria lista de destino** (`checkWriterSkip`); sem esse
+    id — ou citando uma memória de outra lista —, a resposta volta ao redator com o motivo para
+    **generalizar** a lição ou **separar**. Insistir duas vezes termina em `discarded` com o motivo
+    (`skipRejection`), nunca em `skipped` sem justificativa de mesma lição. O `kind` é obrigatório: sem
+    ele, a resposta volta ao redator para dizer o motivo. `kind: "no_lesson"` dispensa, mas não pode
+    citar memória (nem no campo, nem no motivo); ids citados no motivo valem como cobertura quando são
+    da própria lista de destino.
+  - **Parte separada (`split`)**: quando a lição tem uma parte global e uma só do projeto, o redator
+    devolve a regra principal e a outra em `split` (`target`, `action` e `text`), no máximo uma memória
+    por lista. Só vale entre `developer-global` e `developer-central`, com as duas ligadas e destinos
+    diferentes; fora disso é ignorada e a recusa fica em `splitRejection`. Cada parte passa pelo
+    sanitizador com o contexto da própria lista (`allowPaths` e `text_max` do canal do destino); a
+    parte separada recusada não derruba a principal.
+  - `update` com id inexistente ou de outra lista vira `create` (o mesmo na parte separada, conferido
+    também na aprovação da sugestão). Uma execução grava **uma ou duas** memórias (as duas listas do
+    desenvolvedor).
 - **Sanitizador** (`sanitizeMemoryText`, determinístico): recusa código de tarefa, `#N`, URL, rota
   (`/api/…`, `/app/…`; aceita caminhos e rotas na lista da central — `allowPaths`, convenções do
   projeto), nome do projeto, do repositório e o título da tarefa (termos de 4+ caracteres),
@@ -262,6 +281,7 @@ na tela e na API; `withMentorDefaults`).
   "reescreva em até <limite>"), e a regra que **copia um trecho do caso**: 6 palavras seguidas iguais (minúsculas, sem acento nem
   pontuação, `copiedExcerpt`) à mensagem do usuário, às respostas do agente ou aos pedidos do
   desenvolvedor. Recusa → nova tentativa do redator com o motivo; recusada de novo → `discarded`.
+  Na parte separada (`split`), a recusa é registrada e a memória principal segue.
 - **Gravação**: **Gravar direto** (padrão) ou **Sugerir e aguardar aprovação**. Gravar usa o serviço
   de memórias dos agentes (`createAgentMemory`/`updateAgentMemory(<destino>, …)`, com o `centralId` da
   mesa em `developer-central`; o Redator do Engramind gera o título), com
@@ -269,15 +289,20 @@ na tela e na API; `withMentorDefaults`).
   agente `opex/mentor` no Engramind (`read+write`, sem `delete`; sem token ainda, cai no token admin),
   origem `{ source: "mentor", label: "Mentor · <tarefa>" }` (selo do card inalterado) e a auditoria
   `MemoriaAgente` com `ator: agente:mentor`, origem, execução, mesa, tarefa e destino. Pode editar uma
-  memória do dono (fusão), nunca excluir nem inativar. As gravações do Mentor **não** contam como
+  memória do dono (fusão), nunca excluir nem inativar. A parte separada é gravada na lista dela na
+  mesma aprovação; em **Sugerir**, o detalhe mostra as duas e permite gravar só a principal
+  (`includeExtra: false`) ou editar a parte separada (`extraText`). Se uma das gravações falhar, a
+  sugestão volta a aguardar e a nova tentativa **não repete** o que já foi gravado (`memoryId`/
+  `extraMemoryId`). As gravações do Mentor **não** contam como
   aprendizado do agente (`selfLearned` lê só `agente:desenvolvedor` e `agente:adversario`). A mesa recebe um aviso discreto (`notice` info) na Saída da IA,
   citando a lista. O desenvolvedor segue a memória nova a partir do próximo turno.
 - **Execução** (`adversarial_mentor_runs`, `server/mentor/models.ts`): fila em memória por mesa
   (`globalThis.__opexMentorQueue`, uma por vez), status
   `queued → running → skipped | discarded | suggested | created | updated | failed`, com nota/limiar,
   destino do Triador (`target`, `routerConfidence`, `routerReason`, `routerProbabilities`), motivos do
-  decisor/redator/sanitizador, proposta (com `target` e `centralId`; antigas sem destino são do
-  adversário), memória, erro, custo e duração. Execuções de antes
+  decisor/redator/sanitizador, motivo do skip (`writerSkipKind`, `writerCoveredBy`, `skipRejection`),
+  parte separada (`extraProposal`, `extraMemoryId`, `splitRejection`), proposta (com `target` e
+  `centralId`; antigas sem destino são do adversário), memória, erro, custo e duração. Execuções de antes
   de um reinício viram `failed` ("interrompida") no primeiro uso. Auditoria `MentorAgenteAdversario`
   (EXECUTAR em cada fim; APROVAR/DEVOLVER nas decisões) e evento `adversarial-mentor-updated`
   (`{ runId }`) em `private-app`.
@@ -296,12 +321,93 @@ na tela e na API; `withMentorDefaults`).
   `OptionTabs` (trocar de lista transforma a fusão em memória nova), Aprovar com texto editável ou
   Descartar com confirmação). Central excluída antes da aprovação → 409 `MENTOR_CENTRAL_GONE` (a
   sugestão volta a aguardar e pode ir para outra lista). Provedor/modelo/variante usam os campos
-  compartilhados `ModelPickerField`/`VariantSelectField` (`src/features/ai/components/ModelFields.tsx`).
+  compartilhados `ModelPickerField`/`VariantSelectField` (`src/features/ai/components/ModelFields.tsx`) e
+  **Reorganização** (o botão "Reorganizar memórias", o progresso/custo, o plano aberto e o histórico —
+  ver a seção seguinte).
 - **Decisão da sugestão** atômica: aprovar/descartar reivindica a execução (`suggested` → `running`
   num `findOneAndUpdate` filtrado pelo status); a decisão concorrente (duplo clique, outra aba) recebe
   409 `MENTOR_RUN_NOT_SUGGESTED`, e uma falha ao gravar devolve a execução a `suggested`.
 - **Chat ao vivo** de uma cadeia que não vai ao Mentor (reconexão, limpeza) é descartado
   (`mentorDiscardLiveMessages`), para não entrar na avaliação da próxima cadeia.
+
+## Reorganização do acervo (OPE-132)
+
+Na seção **Reorganização** da aba, o botão **"Reorganizar memórias"** revisa **todas as memórias que o
+Mentor enxerga** — as listas ligadas em `targets` (Adversário, globais do desenvolvedor e as centrais do
+escopo do Mentor), só as memórias **ativas** (as arquivadas ficam de fora da revisão, da estimativa e
+das candidatas a fusão) — e monta um **Plano de reorganização**. É só uma prévia: **nada é gravado** até o
+dono aprovar (tudo ou item a item). Não exige o Mentor ativo: exige o Triador (quando há mais de uma
+lista) e o redator configurados.
+
+- **Confirmação do recorte** (`MentorReorgStartDialog`): listas e centrais marcáveis (sem central
+  marcada, todas as do escopo), número de memórias, chamadas de IA (`memórias × (2 com mais de uma
+  lista, 1 com uma)`) e o custo médio por memória das últimas revisões (`preview-count`). Só habilita
+  com ao menos uma memória.
+- **Pipeline por memória** (`server/mentor/reorganize.ts`, o mesmo `generate`/limites do Mentor):
+  1. **Triagem** (`routeMemory`): o Triador em modo revisão escolhe a lista de destino; as opções
+     incluem cada central pelo id e nome do projeto (`developer-central:<centralId>`). Com uma opção
+     só, o Triador não é chamado. Origem de consumo `adversarial-mentor-reorg-router`.
+  2. **Redação** (`writeMemory`): o redator recebe a memória e as memórias da lista de destino e
+     responde `keep` (manter), `rewrite` (mesma lista, texto novo) ou `merge` (fundir numa memória da
+     lista de destino). Origem `adversarial-mentor-reorg-writer`. Texto proposto passa pelo
+     sanitizador com o contexto do destino (recusa o nome do projeto da central de origem quando o
+     destino é global/Adversário; aceita caminhos só na lista de uma central); recusa → uma nova
+     tentativa; recusada de novo → o item vira `keep` com o motivo.
+  3. **Ação final** (`planItemAction`, puro): manter na mesma lista = `keep`; reescrever noutra lista =
+     `move` (com o texto novo); fundir = `merge` (a memória absorvida é **arquivada**, nunca excluída).
+  4. **Conciliação** (`reconcileReorgPlan`, puro): sem fusão cruzada (A→B e B→A), em cadeia (A→B e B→C),
+     duas fusões no mesmo destino nem fusão da memória nela mesma; a primeira vence e a outra vira
+     `keep` com o motivo. Quem recebe uma fusão também fica na lista.
+  5. **Mover sem texto novo**: o texto atual também passa pelo sanitizador do destino (nome do projeto
+     da central de origem, caminhos quando o destino é global/Adversário, limite do canal). Se for
+     recusado, o item vira `keep` com o motivo, em vez de levar a regra específica para a outra lista.
+  6. **Falha por memória**: resposta inválida do modelo numa memória não invalida o plano — ela vira um
+     item `keep` com o erro registrado e a revisão segue. `failed` fica para configuração ausente ou
+     falha de infraestrutura antes/depois do laço.
+- **Plano** (`adversarial_mentor_reorganizations` + `adversarial_mentor_reorg_items`): a execução
+  guarda status (`queued → running → ready | failed | cancelled`; depois `applying → applied |
+  partial | discarded`), recorte, total/revisadas, custo e duração; cada item guarda a memória de
+  origem (`resumo`, `texto`, `versao`, `owner`), a ação, o destino, o texto proposto, a memória da
+  fusão, o motivo, a confiança do Triador, o motivo do sanitizador, os avisos (`moveBlocked` — o token
+  do Mentor não alcança origem/destino; `ownerMemory`) e a decisão (`pending | approved | applied |
+  failed | discarded`) com o erro. Ler o plano **não** grava nada.
+- **Fila** (`reorg-queue.ts`): uma reorganização por vez (`globalThis.__opexMentorReorg`), com o slot
+  reservado de forma síncrona antes de qualquer `await` (dois cliques/abas não iniciam duas); a segunda
+  recebe 409 `MENTOR_REORG_RUNNING`. Todas as chamadas de IA da revisão (inclusive o JEV do Triador)
+  respeitam o tempo máximo configurado. Cancelar (`AbortController`) interrompe a revisão e mantém o que já
+  foi revisado, sem aprovação. Reinício do app marca a execução em andamento como `failed`. Cada item
+  revisado publica `adversarial-mentor-reorg-updated` (`{ reorgId }`) em `private-app`; a aba também
+  relê a cada 2 s enquanto a execução está ativa.
+- **Aplicar** (`applyMentorReorg`): item a item, com reivindicação atômica (`pending → approved`), para
+  duplo clique/duas abas não aplicarem duas vezes. `keep` só muda o status. `rewrite` usa
+  `updateAgentMemory` com a `versao` lida no plano (`MEMORY_VERSION_CONFLICT` → item `failed` com
+  "gere outro plano"). `move` confere a versão, usa `moveAgentMemory` (o `POST
+  /v1/memories/{id}/move` do Engramind, que exige `write` nos dois canais) e, se houver texto novo,
+  reescreve depois. `merge` atualiza a memória que fica (com a versão dela) e **arquiva** a absorvida;
+  se a absorvida for **do dono**, o item exige `confirmOwner` (`MENTOR_OWNER_CONFIRM_REQUIRED`) e o
+  arquivamento é gravado como o dono (sem o token do agente). **Aprovar tudo** não arquiva memória do
+  dono sem confirmação: o diálogo do lote pede a confirmação explícita (com a contagem) e a envia por
+  item; um item de fusão do dono aprovado sem ela fica **pendente** (não vira falha definitiva) e pode
+  ser decidido depois. Falha num item não derruba os outros: `applied` (tudo resolvido), `partial`
+  (algo falhou ou falta decidir) ou `discarded`.
+  - **Sem fallback para o token admin** no mover: o token do Mentor não alcança o canal → 403
+    `MEMORY_MOVE_FORBIDDEN`, identificado pelo **código** do Engramind, com a orientação de ajustar as
+    assinaturas do agente `opex/mentor` (decisão da OPE-132; exceção consciente à regra de credencial
+    restrita, porque a tarefa pede sinalizar em vez de ampliar o alcance).
+- **Auditoria** `MentorReorganizacao` (EXECUTAR ao iniciar, APROVAR ao aplicar, DEVOLVER ao descartar)
+  e, nas memórias, `MemoriaAgente` com `origem: "Reorganização do Mentor"`, `reorganizacao` e
+  `ator: agente:mentor` (no arquivamento confirmado do dono, `confirmadoPeloDono: true`).
+- **Interface** (`components/mentor/reorg/`): `MentorReorgSection` (botão + histórico), `MentorReorgStartDialog`,
+  `MentorReorgProgress` (situação, "x de N", custo animado, duração, cancelar), `MentorReorgPlan`
+  (**Plano de reorganização**: progresso, filtros por ação, lista virtualizada acima de 50 itens,
+  Aprovar/Descartar por item e em lote com confirmação) e `MentorReorgItem` (origem, ação, destino,
+  texto editável, motivo, avisos de escopo e de memória do dono, decisão). Skeleton com a estrutura do
+  plano e animações em Framer Motion.
+- **Limitações registradas**: (1) o plano é um retrato — uma memória editada depois dele é protegida
+  pela `versao` no reescrever e no mover, mas uma edição concorrente no meio da aplicação de outro item
+  não é revalidada; (2) reiniciar o processo durante a revisão perde o trabalho em andamento (o que já
+  foi revisado fica, mas a execução vira `failed` e não pode ser aprovada); (3) o custo é o das
+  chamadas de IA (triagem + redação por memória, e uma nova tentativa quando o sanitizador recusa).
 
 ## APIs (só o dono; sem OpenAPI)
 
@@ -318,16 +424,22 @@ na tela e na API; `withMentorDefaults`).
 | `GET/PUT /api/ai/features/adversarial-mentor` | Configuração do Agente Mentor |
 | `GET /api/adversarial/mentor/runs?q&statuses&sources&triggers&centrals&from&to&page&limit` | Execuções paginadas no recorte (mesmo envelope; marca as órfãs como falhas antes de listar) |
 | `GET /api/adversarial/mentor/runs/[id]/memory` | Resumo (Engramind) da memória gravada pela execução: `{ state: "none" \| "ok" \| "missing", resumo, resumoPendente, atualizadaEm }` (`getMentorRunMemory`) |
-| `POST /api/adversarial/mentor/runs/[id]/approve` `{ text?, target? }`, `POST …/discard` | Aprovar (texto editável) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
+| `POST /api/adversarial/mentor/runs/[id]/approve` `{ text?, target?, extraText?, includeExtra? }`, `POST …/discard` | Aprovar (texto editável; a parte separada também) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
+| `GET/POST /api/adversarial/mentor/reorganizations` | Histórico (20 mais recentes + centrais) / inicia a revisão `{ targets?, centralIds? }` (409 `MENTOR_REORG_RUNNING`) |
+| `GET /api/adversarial/mentor/reorganizations/preview-count?targets&centralIds` | Estimativa do recorte: `{ memories, calls, averageCostUsdPerMemory }` |
+| `GET /api/adversarial/mentor/reorganizations/[id]` | Plano de reorganização com os itens e os totais |
+| `POST …/reorganizations/[id]/apply` `{ itemIds?, overrides? }` | Aprova tudo ou os itens escolhidos (`overrides[id] = { text?, confirmOwner? }`) |
+| `POST …/reorganizations/[id]/discard` `{ itemIds? }`, `POST …/cancel` | Descarta (sem gravar) / cancela a revisão em andamento |
 
 ## Dados
 
 - Coleção `adversarial_reviews` (índices no primeiro uso, `adversarialDb`).
 - Documentos `{ feature: "adversarial-agent" }` e `{ feature: "adversarial-mentor" }` em
-  `ai_feature_settings`; coleção `adversarial_mentor_runs` (`mentorDb`).
+  `ai_feature_settings`; coleções `adversarial_mentor_runs` (`mentorDb`),
+  `adversarial_mentor_reorganizations` e `adversarial_mentor_reorg_items` (`reorgDb`).
 - Consumo `adversarial-agent`/`adversarial-mentor-decision`/`adversarial-mentor-router`/
-  `adversarial-mentor-writer` (o JEV registra o uso com a feature `adversarial-mentor-decision` ou
-  `adversarial-mentor-router`).
+  `adversarial-mentor-writer`/`adversarial-mentor-reorg-router`/`adversarial-mentor-reorg-writer` (o JEV
+  registra o uso com a feature `adversarial-mentor-decision` ou `adversarial-mentor-router`).
 - Memórias em `agent_memories` com `agentId: "adversarial"`.
 - Mesas com `stage` `adversarial_review`/`adversarial_blocked` e `pendingTurn.action`
   `adversarial-*`; eventos `adversarial-verdict` em `agentic_events`.
@@ -347,11 +459,15 @@ na tela e na API; `withMentorDefaults`).
   `attachments.ts`, `workflow-hook.ts` (único ponto que o fluxo da mesa importa, import dinâmico e
   memorizado; também reexporta os pontos do Mentor).
 - Agente Mentor: `mentor/` (puros: `constants.ts`, `schemas.ts`, `types.ts`,
-  `sanitize.ts`, `decision.ts`, `prompt.ts`), `server/mentor/` (`models.ts`, `settings.ts`, `queue.ts`,
-  `run.ts`, `hooks.ts`), `hooks/useMentor.ts` e `components/mentor/` (`MentorAgentTab`,
+  `sanitize.ts`, `decision.ts`, `prompt.ts`, `reorg.ts`), `server/mentor/` (`models.ts`, `settings.ts`, `queue.ts`,
+  `run.ts`, `steps.ts`, `hooks.ts`, `reorg-models.ts`, `reorganize.ts`, `reorg-queue.ts`), `hooks/useMentor.ts`,
+  `hooks/useMentorReorg.ts` e `components/mentor/` (`MentorAgentTab`,
   `MentorTriggersCard`, `MentorDeciderCard`, `MentorRouterCard`, `MentorWriterCard`, `MentorModelFields`, `MentorCheckbox`,
   `MentorContextSection`, `MentorRunsSection`, `MentorRunDialog`, `MentorRunHeader`, `MentorRunDetails`,
-  `MentorRunMemory`, `MentorRunSection`, `MentorRunBadge`).
+  `MentorRunMemory`, `MentorRunSection`, `MentorRunBadge` e `reorg/` com `MentorReorgSection`,
+  `MentorReorgStartDialog`, `MentorReorgProgress`, `MentorReorgPlan`, `MentorReorgItem`, `MentorReorgHistory`
+  e `format.ts`).
+- Lista virtualizada compartilhada: `src/components/list/VirtualStack.tsx` (movida do Agente Opex).
 - `hooks/useAdversarial.ts`; `components/` (`FindingList`, `ReviewBadges`, `ReviewDetailDialog`,
   `ReviewFindingsBody`, `VerdictCard`, `settings/*`, `workbench/*`).
 - `src/lib/ai/opencode-run.ts`: campo opcional `files` (`{ uri, name }[]`) em `TurnRequest`.
@@ -361,8 +477,9 @@ na tela e na API; `withMentorDefaults`).
 `__tests__/features/adversarial-agent/` (`verdict`, `rounds`, `permission-policy`, `context-prompt`,
 `review`, `reviews`, `workflow` (inclui "Agente Mentor no fluxo da mesa"), `adversarial-ui`,
 `rounds-tab`, `list-query`, `filters`, `adversarial-reviews-page`, `mentor-runs-page`, `mentor-sanitize`, `mentor-decision`, `mentor-prompt`,
-`mentor-run`, `mentor-hooks`, `mentor-ui`, `mentor-tab`) e casos em
+`mentor-run`, `mentor-hooks`, `mentor-ui`, `mentor-tab`, `mentor-reorg`, `mentor-reorganize`,
+`mentor-reorg-section`, `mentor-reorg-routes`) e casos em
 `__tests__/features/agentic/{actions-route,dev-center-filters,logic,stage-steps,timeline,ActionBar,WorkbenchView}`
-e `__tests__/features/ai/memories.test.ts`. `__tests__/setup.ts` deixa o adversário de fora por
+e `__tests__/features/ai/memories.test.ts` e `__tests__/features/ai/agent-memory-move.test.ts`. `__tests__/setup.ts` deixa o adversário de fora por
 padrão (mock de `server/workflow-hook` com `adversaryApplies` → `false` e o Mentor inativo:
 `mentorPrepareTurn`/`mentorTakeLesson` devolvem o texto igual).

@@ -18,7 +18,7 @@ import { OPEX_TITLE_MAX } from "../constants"
 import { useDeleteOpexSession, useOpexSessions, useUpdateOpexSession } from "../hooks/useOpexSessions"
 import type { OpexSessionDto } from "../types"
 import { OPEX_STATUS_LABELS, OpexStatusDot } from "./OpexStatusDot"
-import { VirtualStack } from "./VirtualStack"
+import { VirtualStack } from "@/components/list/VirtualStack"
 import { useOpexScope } from "./OpexScopeProvider"
 
 /** Busca tolerante a erro de digitação por título e resumo. */

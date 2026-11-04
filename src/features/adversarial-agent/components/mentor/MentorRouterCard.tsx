@@ -24,7 +24,7 @@ export function MentorRouterCard({ form, providers }: { form: UseFormReturn<Ment
             <CardHeader>
                 <CardTitle className="text-base">Triador e destinos</CardTitle>
                 <CardDescription>
-                    Depois do decisor, o Triador escolhe UMA lista para a memória: o que o revisor deve verificar vai para o Agente Adversário; como fazer o trabalho vai para o agente desenvolvedor (globais, em qualquer projeto, ou desta central, convenções do projeto). Com o JEV, é a opção mais provável; com um provedor de texto, a lista que ele devolve. Nunca grava a mesma lição em duas listas.
+                    Depois do decisor, o Triador escolhe UMA lista para a memória: o que o revisor deve verificar vai para o Agente Adversário; como fazer o trabalho vai para o agente desenvolvedor (globais, em qualquer projeto, ou desta central, convenções do projeto). Com o JEV, é a opção mais provável; com um provedor de texto, a lista que ele devolve. O destino é escolhido pela natureza da lição: uma memória parecida em outra lista não muda a escolha.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">

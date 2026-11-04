@@ -144,16 +144,81 @@ export const MENTOR_TARGET_LABELS: Record<MentorTarget, { label: string; short: 
     "developer-global": {
         label: "Agente desenvolvedor — globais",
         short: "Desenvolvedor · global",
-        criteria: "A lição é sobre COMO FAZER o trabalho de desenvolvimento e vale em QUALQUER projeto (processo, hábito, cuidado recorrente).",
+        criteria:
+            "A lição é sobre COMO FAZER o trabalho de desenvolvimento e continuaria útil num projeto diferente (processo, hábito, cuidado recorrente). Teste: sem os nomes deste projeto, a orientação continua valendo.",
     },
     "developer-central": {
         label: "Agente desenvolvedor — da central",
         short: "Desenvolvedor · central",
-        criteria: "A lição é uma convenção, comando, padrão ou preferência do dono DESTE projeto (vale só nesta central).",
+        criteria:
+            "A lição SÓ faz sentido NESTE projeto: convenção, comando, caminho, pasta, componente, serviço ou preferência do dono desta central. Teste: aplicá-la em outro projeto exigiria reescrevê-la.",
     },
 }
 /** Origem gravada nas memórias criadas ou atualizadas pelo Mentor. */
 export const MENTOR_MEMORY_SOURCE = "mentor" as const
+
+/**
+ * Motivo do `skip` do redator (OPE-132): `covered` exige o id de uma memória DA LISTA DE DESTINO;
+ * `no_lesson` dispensa (o redator reavaliou e não há lição). Cobertura em outra lista nunca é skip.
+ */
+export const MENTOR_SKIP_KINDS = ["covered", "no_lesson"] as const
+export type MentorSkipKind = (typeof MENTOR_SKIP_KINDS)[number]
+
+/** Tentativas do redator por execução (a segunda recebe o motivo da recusa). */
+export const MENTOR_WRITER_ATTEMPTS = 2
+
+// ── Reorganização do acervo (OPE-132) ──────────────────────────────────────
+
+export const MENTOR_REORG_PAGE = "/integracoes/ia?aba=agente-mentor"
+/** Seção da aba Agente Mentor com o botão "Reorganizar memórias". */
+export const MENTOR_REORG_SECTION = "reorganizacao" as const
+export const MENTOR_REORG_UPDATED_EVENT = "adversarial-mentor-reorg-updated"
+export const MENTOR_REORG_AUDIT_ENTITY = "MentorReorganizacao"
+export const MENTOR_REORG_ROUTER_CONSUMPTION_ORIGIN = "adversarial-mentor-reorg-router"
+export const MENTOR_REORG_WRITER_CONSUMPTION_ORIGIN = "adversarial-mentor-reorg-writer"
+/** Reorganizações exibidas no histórico da seção. */
+export const MENTOR_REORG_HISTORY_LIMIT = 20
+/** Tentativas do redator por memória revisada na reorganização. */
+export const MENTOR_REORG_WRITER_ATTEMPTS = 2
+
+export const MENTOR_REORG_STATUSES = ["queued", "running", "ready", "applying", "applied", "partial", "failed", "cancelled", "discarded"] as const
+export type MentorReorgStatus = (typeof MENTOR_REORG_STATUSES)[number]
+
+export const MENTOR_REORG_STATUS_LABELS: Record<MentorReorgStatus, string> = {
+    queued: "Na fila",
+    running: "Revisando",
+    ready: "Plano pronto",
+    applying: "Aplicando",
+    applied: "Aplicado",
+    partial: "Aplicado em parte",
+    failed: "Falhou",
+    cancelled: "Cancelada",
+    discarded: "Descartada",
+}
+
+/** `ready`/`partial` ainda aceitam itens pendentes; `running` pode ser cancelada. */
+export const MENTOR_REORG_ACTIVE_STATUSES: MentorReorgStatus[] = ["queued", "running", "applying"]
+export const MENTOR_REORG_DECIDABLE_STATUSES: MentorReorgStatus[] = ["ready", "partial"]
+
+export const MENTOR_REORG_ACTIONS = ["keep", "rewrite", "move", "merge"] as const
+export type MentorReorgAction = (typeof MENTOR_REORG_ACTIONS)[number]
+
+export const MENTOR_REORG_ACTION_LABELS: Record<MentorReorgAction, string> = {
+    keep: "Manter",
+    rewrite: "Reescrever",
+    move: "Mover",
+    merge: "Fundir",
+}
+
+export const MENTOR_REORG_ITEM_STATUSES = ["pending", "approved", "discarded", "applied", "failed"] as const
+export type MentorReorgItemStatus = (typeof MENTOR_REORG_ITEM_STATUSES)[number]
+export const MENTOR_REORG_ITEM_STATUS_LABELS: Record<MentorReorgItemStatus, string> = {
+    pending: "Aguardando decisão",
+    approved: "Aprovada",
+    discarded: "Descartada",
+    applied: "Aplicada",
+    failed: "Falhou",
+}
 
 export const DEFAULT_MENTOR_WRITER_INSTRUCTIONS = [
     "Prefira regras curtas e acionáveis, escritas como instrução direta ao revisor.",

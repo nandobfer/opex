@@ -198,6 +198,9 @@ sem pedido explícito.
 - Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
   (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
+- Agente Mentor: `adversarial-mentor-updated` (`{ runId }`) e `adversarial-mentor-reorg-updated`
+  (`{ reorgId }`) em `private-app` — execuções e reorganização do acervo (ver
+  `aicontext/modules/adversarial-agent.md`, "Agente Mentor" e "Reorganização do acervo").
 - Métricas dos agentes: `agent-metrics-updated` (`{ agents }`) em `private-app` quando a rotina
   `agent-usage-daily` grava execuções ou resumos; as páginas `/agente-<nome>` também reagem aos eventos
   que já existem de cada agente (ver `aicontext/modules/agent-metrics.md`).

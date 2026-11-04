@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { BookOpen, Loader2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field } from "@/components/ui/field"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -74,10 +75,15 @@ export interface MentorRunMemoryProps {
     target: MentorTarget
     onTextChange: (text: string) => void
     onTargetChange: (target: MentorTarget) => void
+    /** Parte separada (global + central): texto e se ela será gravada junto. */
+    extraText?: string
+    onExtraTextChange?: (text: string) => void
+    includeExtra?: boolean
+    onIncludeExtraChange?: (include: boolean) => void
 }
 
 /** Seção Memória: resumo em destaque acima do texto completo (ou dos campos da sugestão). */
-export function MentorRunMemory({ run, editable, text, target, onTextChange, onTargetChange }: MentorRunMemoryProps) {
+export function MentorRunMemory({ run, editable, text, target, onTextChange, onTargetChange, extraText, onExtraTextChange, includeExtra = true, onIncludeExtraChange }: MentorRunMemoryProps) {
     const proposal = run.proposal
     if (!proposal) return null
     const moved = target !== proposal.target
@@ -109,6 +115,25 @@ export function MentorRunMemory({ run, editable, text, target, onTextChange, onT
             ) : (
                 <div aria-label="Texto completo da memória" className={MENTOR_MEMORY_TEXT_CLASS}>
                     {proposal.text}
+                </div>
+            )}
+            {run.extraProposal && (
+                <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Parte separada · {MENTOR_TARGET_LABELS[run.extraProposal.target].short}</p>
+                    {editable && onIncludeExtraChange && (
+                        <span className="flex items-center gap-1.5 text-sm">
+                            <Checkbox id={`mentor-extra-${run.id}`} checked={includeExtra} onCheckedChange={(value) => onIncludeExtraChange(value)} />
+                            <label htmlFor={`mentor-extra-${run.id}`}>Gravar também nesta lista</label>
+                        </span>
+                    )}
+                    {editable && onExtraTextChange ? (
+                        <Textarea aria-label="Parte separada da memória" rows={5} className="leading-relaxed" value={extraText ?? run.extraProposal.text} disabled={!includeExtra} onChange={(event) => onExtraTextChange(event.target.value)} />
+                    ) : (
+                        <div aria-label="Texto da parte separada" className="max-h-[30vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed">
+                            {run.extraProposal.text}
+                        </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">{run.extraProposal.action === "update" ? "Fusão com uma memória existente desta lista." : "Memória nova nesta lista."}</p>
                 </div>
             )}
         </MentorRunSection>

@@ -49,7 +49,25 @@ export function MentorRunDetails({ run }: { run: MentorRunDto }) {
             {run.writerAction && (
                 <MentorRunSection icon={PenLine} title="Redator">
                     <p className="font-medium">{WRITER_ACTION_LABELS[run.writerAction]}</p>
+                    {run.writerAction === "skip" && run.writerSkipKind && (
+                        <p className="text-muted-foreground">
+                            {run.writerSkipKind === "covered"
+                                ? `Já coberta na lista de destino${run.writerCoveredBy ? ` (memória ${run.writerCoveredBy.memoryId})` : ""}.`
+                                : "Sem lição reaproveitável nesta execução."}
+                        </p>
+                    )}
                     {run.writerReason && <MentorRunReason>{run.writerReason}</MentorRunReason>}
+                    {run.skipRejection && (
+                        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-muted-foreground">
+                            Pedido de skip recusado: {run.skipRejection}
+                        </p>
+                    )}
+                    {run.splitRejection && <p className="text-muted-foreground">Parte separada não gravada: {run.splitRejection}</p>}
+                    {run.extraProposal && (
+                        <p className="text-muted-foreground">
+                            Parte separada: {MENTOR_TARGET_LABELS[run.extraProposal.target].label} ({run.extraProposal.action === "update" ? "fusão" : "nova"}).
+                        </p>
+                    )}
                 </MentorRunSection>
             )}
             {run.sanitizerReason && (

@@ -430,6 +430,11 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   `centralId?`/`clientId?` e `uso` (OPE-109: `consultas` = `retrieval_count`, `injecoes` =
   `injected_count`, `ultimaConsulta`, `verificadaEm`, `esquecida` = `stale_candidate`). Limites (`text_min`/`text_max`) e categorias vêm do Engramind
   (`memoryInputSchemaFor`, a mesma regra na tela, nas rotas e nas ferramentas).
+- **Mover de lista** (`moveAgentMemory`, OPE-132): `POST /v1/memories/{id}/move` do Engramind (exige
+  `write` na origem e no destino), com auditoria `MemoriaAgente` (`acoes: ["mover"]`, canais antes/depois)
+  e aviso nas duas listas. É o que a reorganização do Agente Mentor usa para levar uma memória de uma
+  central às globais (ou o inverso). Destino fora do alcance do token → 403 `MEMORY_MOVE_FORBIDDEN`,
+  identificado pelo código do Engramind, sem cair para o token admin.
 - **Prompt**: `agentMemoryContext(consumer, turn)` (`server/agent-memory-context.ts`) devolve o bloco
   do Engramind em `format=tagged` (desde a OPE-109: `<memories>`/`<channel slug>`/`<CATEGORIA>` com uma
   linha `#<id>: <texto>` por memória, para o Opex saber quais foram entregues), que entra sem alteração depois do cabeçalho de `memoriesSection`
