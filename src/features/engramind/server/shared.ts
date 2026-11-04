@@ -14,11 +14,16 @@ export async function auditEngramind(actorId: string, entidadeId: string, acao: 
 }
 
 /** Repasse às telas (`private-app`): payload mínimo, sem textos nem valores. */
-export async function publishEngramind(payload: { type: string; channel?: string | null; keys?: string[] }): Promise<void> {
+export async function publishEngramind(payload: { type: string; channel?: string | null; keys?: string[] }, options: { live?: boolean } = {}): Promise<void> {
     const clean: Record<string, unknown> = { type: payload.type }
     if (payload.channel) clean.channel = payload.channel
     if (payload.keys?.length) clean.keys = payload.keys
     await publishAppEvent(ENGRAMIND_UPDATED_EVENT, clean)
+    // A rede (SSE da lib, OPE-116) também relê nas mutações do próprio Opex; o webhook publica no SSE por conta própria.
+    if (options.live !== false) {
+        const { publishLive } = await import("./live")
+        await publishLive({ type: payload.type, channel: payload.channel ?? null, ...(payload.keys?.length ? { keys: payload.keys } : {}) })
+    }
 }
 
 export { AcaoAuditoria }

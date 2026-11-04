@@ -9,19 +9,26 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: ()
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/engramind/hooks/useEngramindConnection', () => ({ useEngramindConnection: () => ({ isLoading: false, isError: false, data: { configured: true } }) }))
 // A rede de verdade é coberta em network.test.tsx: aqui só a ordem e o card.
-vi.mock('@/features/engramind/components/network/EngramindNetwork', async () => {
-  const { AboutCard } = await import('@/features/engramind/components/page/AboutCard')
-  return {
-    EngramindNetwork: ({ onConfigure }: { onConfigure: () => void }) => (
+// OPE-116: a rede vem de `@engramind/client` dentro do `OpexEngramindProvider` (coberto em network.test.tsx).
+vi.mock('@/features/engramind/components/OpexEngramindProvider', () => ({ OpexEngramindProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
+const holder = vi.hoisted(() => ({ About: null as null | ((props: { onConfigure: () => void }) => React.ReactNode) }))
+vi.mock('@engramind/client/react', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  EngramindNetwork: ({ onConfigure }: { onConfigure: () => void }) => {
+    const About = holder.About!
+    return (
       <div>
         <div data-testid="network-area" />
-        <AboutCard onConfigure={onConfigure} />
+        <About onConfigure={onConfigure} />
       </div>
-    ),
-  }
-})
+    )
+  },
+}))
 
 import { EngramindPage } from '@/features/engramind/components/page/EngramindPage'
+import { AboutCard } from '@/features/engramind/components/page/AboutCard'
+
+holder.About = AboutCard
 
 afterEach(() => {
   cleanup()

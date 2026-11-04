@@ -21,8 +21,6 @@ vi.mock('@/features/engramind/server/client', () => ({
 vi.mock('@/features/engramind/server/memory-network', () => ({ agentTarget: async () => (holder.token ? { baseUrl: 'http://e', token: holder.token } : null) }))
 const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn() }))
 vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: log, publishEngramind: vi.fn(async () => undefined) }))
-const consumption = vi.hoisted(() => ({ publishConsumption: vi.fn(async () => undefined) }))
-vi.mock('@/features/engramind/server/consumption', () => consumption)
 vi.mock('@/features/engramind/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   store.cache = memoryModel()
@@ -38,7 +36,6 @@ const channels = ['opex', 'agentes/desenvolvedor/global']
 beforeEach(() => {
   holder.fake = createFakeEngramind()
   holder.fake.state.context = { content: TAGGED, version: 'cv_1', counts: { full: 2, titles: 1, overflow: 0 } }
-  consumption.publishConsumption.mockClear()
   holder.token = 'agent-token'
   holder.headers = []
   store.cache.docs.length = 0
@@ -59,21 +56,21 @@ describe('contexto das memórias', () => {
     expect(store.cache.docs[0]).toMatchObject({ format: 'tagged', memoryIds: ['m_1', 'm_2'], delivered: ['opex', 'agentes/desenvolvedor/global'] })
   })
 
-  it('publica o consumo do contexto só com ids e slugs (a faixa de títulos não conta)', async () => {
+  it('OPE-116: o consumo ao vivo não é publicado pelo Opex (vem do webhook memory.consumed); a última entrega fica registrada só com ids e slugs', async () => {
     await getAgentMemoryContext('desenvolvedor', channels)
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
-    const event = consumption.publishConsumption.mock.calls[0]![0] as Record<string, unknown>
-    expect(event).toEqual({ agent: 'opex/desenvolvedor', kind: 'context', channels, delivered: ['opex', 'agentes/desenvolvedor/global'], memoryIds: ['m_1', 'm_2'], titleIds: ['m_3'], version: 'cv_1' })
-    expect(JSON.stringify(event)).not.toContain('Use pnpm')
+    await vi.waitFor(() => expect(store.delivery.docs).toHaveLength(1))
+    const delivery = store.delivery.docs[0] as Record<string, unknown>
+    expect(delivery).toMatchObject({ fullIds: ['m_1', 'm_2'], titleIds: ['m_3'], channels, delivered: ['opex', 'agentes/desenvolvedor/global'], version: 'cv_1', source: 'live' })
+    expect(JSON.stringify(delivery)).not.toContain('Use pnpm')
+    await expect(import('@/features/engramind/server/consumption' as string)).rejects.toThrow()
   })
 
-  it('segundo turno manda If-None-Match; 304 reaproveita o bloco do cache e anima do mesmo jeito', async () => {
+  it('segundo turno manda If-None-Match; 304 reaproveita o bloco do cache e registra a entrega como not-modified', async () => {
     await getAgentMemoryContext('desenvolvedor', channels)
     const again = await getAgentMemoryContext('desenvolvedor', channels)
     expect(holder.headers.at(-1)).toEqual({ 'If-None-Match': 'cv_1' })
     expect(again).toMatchObject({ block: TAGGED, source: 'live' })
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(2))
-    expect((consumption.publishConsumption.mock.calls[1]![0] as { memoryIds: string[] }).memoryIds).toEqual(['m_1', 'm_2'])
+    await vi.waitFor(() => expect(store.delivery.docs[0]).toMatchObject({ source: 'not-modified', fullIds: ['m_1', 'm_2'] }))
   })
 
   it('cache antigo em markdown (antes da OPE-109) não manda If-None-Match: relê o bloco tagged', async () => {
@@ -84,24 +81,6 @@ describe('contexto das memórias', () => {
     await getAgentMemoryContext('desenvolvedor', channels)
     expect(holder.headers.at(-1)).toBeUndefined()
     expect(store.cache.docs[0]).toMatchObject({ format: 'tagged', memoryIds: ['m_1', 'm_2'] })
-  })
-
-  it('cache por indisponibilidade e turno sem memórias não publicam consumo', async () => {
-    await getAgentMemoryContext('desenvolvedor', channels)
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
-    holder.fake.state.contextFails = true
-    expect((await getAgentMemoryContext('desenvolvedor', channels)).source).toBe('cache')
-    holder.fake.state.contextFails = false
-    holder.fake.state.context = { content: '<memories version="cv_2">\n</memories>', version: 'cv_2', counts: { full: 0, titles: 0, overflow: 0 } }
-    await getAgentMemoryContext('adversario', ['opex', 'agentes/adversario'])
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    expect(consumption.publishConsumption).toHaveBeenCalledTimes(1)
-  })
-
-  it('falha ao publicar o consumo não derruba o turno', async () => {
-    consumption.publishConsumption.mockRejectedValueOnce(new Error('pusher fora'))
-    const result = await getAgentMemoryContext('desenvolvedor', channels)
-    expect(result.source).toBe('live')
   })
 
   it('Engramind fora do ar: usa o último cache e registra a indisponibilidade; sem cache, roda sem memórias', async () => {
@@ -143,11 +122,11 @@ describe('contexto das memórias', () => {
   it('OPE-117: o texto do foco nunca vai para log, cache nem evento', async () => {
     holder.fake.state.contextRejectsFocus = true
     await getAgentMemoryContext('desenvolvedor', channels, { focus: 'SEGREDO-DO-FOCO detalhe' })
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(store.delivery.docs).toHaveLength(1))
     const logged = JSON.stringify([...log.info.mock.calls, ...log.warn.mock.calls])
     expect(logged).not.toContain('SEGREDO-DO-FOCO')
     expect(JSON.stringify(store.cache.docs)).not.toContain('SEGREDO-DO-FOCO')
-    expect(JSON.stringify(consumption.publishConsumption.mock.calls)).not.toContain('SEGREDO-DO-FOCO')
+    expect(JSON.stringify(store.delivery.docs)).not.toContain('SEGREDO-DO-FOCO')
   })
 
   it('OPE-117: bloco com foco degradado (focus_mode text/none) não entra no cache', async () => {

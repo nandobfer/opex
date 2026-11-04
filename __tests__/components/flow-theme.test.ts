@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FLOW_SURFACE_CLASS, FLOW_THEME_STYLE } from '@/components/flow/flow-theme'
-import { NETWORK_CANVAS_CLASS, NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
+import { NETWORK_CANVAS_CLASS, NETWORK_FLOW_THEME } from '@engramind/client/react'
 import { ARCHITECT_CANVAS_CLASS } from '@/features/architect-agent/components/workbench/ArchitectStates'
 
 /**
- * Tema compartilhado dos canvas React Flow: o fundo das páginas com o brilho violeta (nunca o cinza
+ * Tema compartilhado dos canvas React Flow: o fundo das páginas com o brilho da primária (nunca o cinza
  * neutro do `colorMode="dark"`), o mesmo na rede do Engramind e nos diagramas do Agente Arquiteto.
+ * OPE-116: o tema vem de `@engramind/client`, só com tokens (`var(--color-*)` e `color-mix`).
  */
 
 const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
@@ -15,7 +16,8 @@ const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8')
 describe('tema dos canvas React Flow', () => {
   it('a superfície é o fundo do app com o brilho da primária', () => {
     expect(FLOW_SURFACE_CLASS).toContain('bg-background')
-    expect(FLOW_SURFACE_CLASS).toContain('hsl(var(--primary)/0.08)')
+    expect(FLOW_SURFACE_CLASS).toContain('color-mix(in_oklab,var(--color-primary)_8%,transparent)')
+    expect(FLOW_SURFACE_CLASS).not.toContain('hsl(')
     expect(FLOW_SURFACE_CLASS).not.toMatch(/bg-muted|bg-card\b/)
   })
 

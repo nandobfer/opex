@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { CENTRAL_CHANNEL_PREFIX, centralChannelLabels, channelDisplayHint, channelDisplayName } from '@/features/engramind/network/channel-labels'
+import { channelDisplayHint, channelDisplayName, channelNameParts } from '@engramind/client/react'
+import { CENTRAL_CHANNEL_PREFIX, centralChannelLabels, isCentralChannel } from '@/features/engramind/network/channel-labels'
 
-/** OPE-113: nome legível do canal numa linha (helper único para chips, legendas, trilha e filtros). */
+/**
+ * OPE-113: nome legível do canal numa linha (helper único para chips, legendas, trilha e filtros).
+ * OPE-116: os helpers vêm de `@engramind/client`; os rótulos das centrais são do Opex (`channelLabels` do provider).
+ */
 
 const labels = centralChannelLabels([
   { id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' },
@@ -23,5 +27,13 @@ describe('channelDisplayName', () => {
   it('a dica traz o repositório e o slug inteiro; sem rótulo, o slug', () => {
     expect(channelDisplayHint(`${CENTRAL_CHANNEL_PREFIX}c1`, labels)).toBe(`Opex · nandobfer/opex · ${CENTRAL_CHANNEL_PREFIX}c1`)
     expect(channelDisplayHint('opex', labels)).toBe('opex')
+  })
+})
+
+describe('rótulos das centrais (Opex)', () => {
+  it('a sigla vira o título do nó e o nome vai na dica; só os canais de central', () => {
+    expect(channelNameParts(`${CENTRAL_CHANNEL_PREFIX}c1`, labels)).toEqual({ prefix: CENTRAL_CHANNEL_PREFIX, title: 'OPE', hint: 'Opex · nandobfer/opex' })
+    expect(isCentralChannel(`${CENTRAL_CHANNEL_PREFIX}c1`)).toBe(true)
+    expect(isCentralChannel('agentes/desenvolvedor/global')).toBe(false)
   })
 })

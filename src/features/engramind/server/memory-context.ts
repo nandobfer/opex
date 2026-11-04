@@ -66,22 +66,15 @@ interface DeliveryMeta {
     source: "live" | "not-modified"
 }
 
-/** Fora do caminho do turno: não atrasa a resposta do agente nem lança. */
-async function publishContextConsumption(consumer: MemoryConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[], meta: DeliveryMeta): Promise<void> {
-    // Rastreio por turno em paralelo ao consumo (nunca lança).
+/**
+ * Última entrega do contexto por agente (aba Engramind e adoção, OPE-117), fora do caminho do turno: não
+ * atrasa a resposta nem lança. O consumo ao vivo da rede vem do webhook `memory.consumed` do Engramind
+ * (OPE-116), emitido pelo próprio `get_context` com o token do agente (inclusive o `304`).
+ */
+function recordContextDelivery(consumer: MemoryConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[], meta: DeliveryMeta): void {
     void import("./deliveries")
         .then(({ recordDelivery }) => recordDelivery(consumer, { fullIds: memoryIds, titleIds: meta.titleIds, counts: meta.counts, channels, delivered, version: meta.version, focusMode: meta.focusMode, source: meta.source }))
         .catch((error: unknown) => engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] última entrega do contexto não registrada"))
-    if (!memoryIds.length) {
-        engramindLog.info({ consumer, channels }, "[engramind] turno sem memórias entregues: consumo não publicado")
-        return
-    }
-    try {
-        const { publishConsumption } = await import("./consumption")
-        await publishConsumption({ agent: `opex/${consumer}`, kind: "context", channels: [...channels], delivered: [...delivered], memoryIds: [...memoryIds], titleIds: [...meta.titleIds], version: meta.version })
-    } catch (error) {
-        engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] consumo do contexto não publicado")
-    }
 }
 
 /** Registra a saúde do contexto; publica quando muda (cards e aba Engramind mostram o aviso). */
@@ -131,7 +124,7 @@ export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: 
             await markHealth(true, null)
             const counts = cached.counts ?? EMPTY_COUNTS
             const focusMode = focus ? (cached.focusMode ?? null) : null
-            void publishContextConsumption(consumer, channels, cached.memoryIds ?? [], cached.delivered ?? [], { titleIds: cached.titleIds ?? [], version: cached.version, counts, focusMode, source: "not-modified" })
+            recordContextDelivery(consumer, channels, cached.memoryIds ?? [], cached.delivered ?? [], { titleIds: cached.titleIds ?? [], version: cached.version, counts, focusMode, source: "not-modified" })
             return { block: cached.content, source: "live", cachedAt: now.toISOString(), counts, reason: null, focusMode }
         }
         if (!view) throw new Error("o Engramind respondeu sem o contexto")
@@ -151,7 +144,7 @@ export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: 
             )
         }
         await markHealth(true, null)
-        void publishContextConsumption(consumer, channels, memoryIds, delivered, { titleIds: ids.titles, version, counts, focusMode, source: "live" })
+        recordContextDelivery(consumer, channels, memoryIds, delivered, { titleIds: ids.titles, version, counts, focusMode, source: "live" })
         return { block: content, source: "live", cachedAt: now.toISOString(), counts, reason: null, focusMode }
     } catch (error) {
         const reason = error instanceof Error ? error.message : String(error)

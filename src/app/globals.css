@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Componentes do @engramind/client (rede do Engramind, OPE-116): o Tailwind gera as classes que ele usa. */
+@source "../../node_modules/@engramind/client/dist";
 
 /* Dark mode apenas por classe (ignora prefers-color-scheme). */
 @variant dark (&:where(.dark, .dark *));

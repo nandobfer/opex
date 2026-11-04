@@ -22,6 +22,9 @@ export default defineConfig({
         // Sem package.json: todo commit sobe a versão, e o gatilho padrão faria `vitest --changed`
         // rodar a suíte inteira (AGENTS.md, seção 6, "Rodando os testes").
         forceRerunTriggers: ["**/{vitest,vite}.config.*/**"],
+        // `@engramind/client` (OPE-116) passa pelo Vite: os `vi.mock` de `@xyflow/react`, `framer-motion` e
+        // `next/*` dos testes valem também dentro dos componentes da lib.
+        server: { deps: { inline: ["@engramind/client"] } },
         coverage: {
             provider: "v8",
             include: ["src/features/**/*.ts", "src/lib/**/*.ts"],

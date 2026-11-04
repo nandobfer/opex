@@ -5,7 +5,7 @@ import { integrationChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import { ENGRAMIND_INTEGRATION_ID, WEBHOOK_TOLERANCE_SECONDS } from "../constants"
-import type { EngramindWebhookEvent as WebhookEvent } from "../types"
+import type { WebhookEvent } from "@engramind/client"
 import { EngramindWebhookEvent, engramindDb } from "./models"
 import { engramindLog, publishEngramind } from "./shared"
 
@@ -77,13 +77,21 @@ export async function authenticateWebhook(rawBody: string, header: string | null
     return { ok: true, event }
 }
 
-/** Descarta id repetido e repassa `engramind-updated` (sem textos nem valores). */
+/**
+ * Descarta id repetido e repassa às telas, sem textos nem valores: o SSE da rede (lib `@engramind/client`,
+ * todos os tipos) e o `engramind-updated` das abas de gestor. `memory.consumed` (OPE-116) só avisa que
+ * memórias foram entregues: vai ao SSE (pulso da rede) e, agrupado, ao `engramind-consumption` da
+ * atividade dos agentes; nunca invalida as listas nem o contexto.
+ */
 export async function processWebhookEvent(event: WebhookEvent): Promise<boolean> {
     if (!(await markEventSeen(event.id, event.type))) {
         engramindLog.info({ eventId: event.id, type: event.type }, "[engramind] webhook repetido descartado")
         return false
     }
-    await publishEngramind({ type: event.type, channel: event.channel ?? null, keys: Array.isArray(event.keys) ? event.keys.slice(0, 50) : undefined })
+    const { forwardWebhookLive } = await import("./live")
+    await forwardWebhookLive(event)
+    if (event.type === "memory.consumed") return true
+    await publishEngramind({ type: event.type, channel: event.channel ?? null, keys: Array.isArray(event.keys) ? event.keys.slice(0, 50) : undefined }, { live: false })
     await publishMemoryList(event)
     return true
 }

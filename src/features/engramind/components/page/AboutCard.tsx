@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { ENGRAMIND_SUMMARY } from "../../help/about"
-import { OVERVIEW_LAYOUT_LABEL, OVERVIEW_LAYOUT_MODES, type OverviewLayoutMode } from "../../network/overview-layout"
+import { OVERVIEW_LAYOUT_LABEL, OVERVIEW_LAYOUT_MODES, type OverviewLayoutMode } from "@engramind/client/react"
 import { AboutContent } from "../shared/AboutContent"
 import { Section } from "../shared/Section"
 
