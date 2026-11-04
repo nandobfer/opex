@@ -167,7 +167,8 @@ export interface PreviewBuildCommands {
 /**
  * Comandos do build da prévia Local. `docker.prefix` (Builder Machine) manda todo comando docker para
  * outra máquina (`DOCKER_CONTEXT=… BUILDX_BUILDER=…`) no lugar do builder da central; `docker.files`
- * são os arquivos do compose do build (o último é o override com as CAs do PC).
+ * são os arquivos do compose do build (o último é o override com as CAs do PC). `environment.composeServices`
+ * limita o `up` aos serviços listados (e às dependências deles); vazio sobe o compose inteiro.
  */
 export function previewBuildCommands(config: CentralConfig, ctx: WorkbenchContext, port: number, docker?: PreviewDocker): PreviewBuildCommands {
     const env = config.environment
@@ -176,7 +177,8 @@ export function previewBuildCommands(config: CentralConfig, ctx: WorkbenchContex
     const file = files ? files.map((item) => ` -f ${item}`).join("") : composeFile ? ` -f ${composeFile}` : ""
     const builder = docker ? "" : env.dockerBuilder.trim()
     const prefix = docker ? `${docker.prefix} ` : builder ? `BUILDX_BUILDER=${builder} ` : ""
-    const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build`
+    const services = env.composeServices.map((service) => ` ${service}`).join("")
+    const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build${services}`
     return {
         command,
         run: `cd ${shellQuote(ctx.worktreePath)} && BUILDKIT_PROGRESS=plain ${command}`,
@@ -253,6 +255,10 @@ export function buildFixPrompt(
         `Você agora é o agente de BUILD. O Opex rodou o build da prévia${remote ? " (GitHub Action)" : ""} no worktree e ele FALHOU (exit ${failure.exitCode}; correção ${failure.round}).`,
         `- Diretório: ${ctx.worktreePath} (confirme que esta sessão está nele; se não estiver, mova-a com session_move).`,
         `- Comando executado pelo Opex: \`${failure.command}\``,
+        // Só no Local: o GitHub Action publica apenas o "Serviço da prévia", então a lista não vale lá.
+        ...(!remote && env.composeServices.length
+            ? [`- A central sobe só os serviços ${env.composeServices.map((service) => `\`${service}\``).join(", ")} do compose (e as dependências deles): serviços fora dessa lista não entram no build e não precisam ser corrigidos.`]
+            : []),
         "- Final da saída do build:",
         "```text",
         failure.tail.trim() || "(sem saída)",

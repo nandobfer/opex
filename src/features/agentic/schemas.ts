@@ -178,6 +178,18 @@ const optionalText = (max: number) => z.string().trim().max(max, `Até ${max.toL
 
 const nameList = z.array(z.string().trim().min(1).max(100)).max(20)
 
+/** Serviços do docker compose (vão para o shell, daí o formato restrito do nome). */
+const composeServiceList = z
+    .array(
+        z
+            .string()
+            .trim()
+            .min(1)
+            .max(100, "Máximo 100 caracteres")
+            .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, "Nome de serviço inválido (letras, números, ponto, hífen e sublinhado)"),
+    )
+    .max(20, "Máximo 20 serviços")
+
 /** Configuração editável de uma central (mesmo schema na tela e na API). */
 export const centralConfigSchema = z.object({
     enabled: z.boolean(),
@@ -214,6 +226,12 @@ export const centralConfigSchema = z.object({
         githubWorkflow: z.string().trim().min(1, "Informe o workflow").max(100).regex(/^[A-Za-z0-9_.-]+\.ya?ml$/, "Informe um arquivo YAML").default("preview.yml"),
         previewService: z.string().trim().min(1, "Informe o serviço").max(80).regex(/^[A-Za-z0-9_-]+$/, "Serviço inválido").default("app"),
         composeFile: optionalText(300),
+        /**
+         * Serviços do compose que o build Local da prévia sobe (`up -d --build <serviços>`); vazio = todos os
+         * serviços do compose. As dependências (`depends_on`) de cada serviço sobem junto. O GitHub Action
+         * ignora a lista (publica só o `previewService`), mas o valor fica salvo.
+         */
+        composeServices: composeServiceList,
         /** Builder do Docker (buildx) usado no build da prévia; vazio = o builder padrão do host. Vai para o shell, daí o formato restrito. */
         dockerBuilder: z
             .string()
@@ -306,7 +324,7 @@ export function defaultCentralConfig(sessionDirectory: string): CentralConfig {
             setupCommands: "",
             validateCommands: "",
         },
-        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, inheritPorts: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
+        environment: { previewMethod: "local", githubWorkflow: "preview.yml", previewService: "app", composeFile: "", composeServices: [], dockerBuilder: "", portEnvVar: "PORT", previewHost: "localhost", healthPath: "/", buildTimeoutMinutes: 20, backupDatabase: true, publishPreview: true, inheritPorts: true, previewPortMin: PREVIEW_PORT_MIN, previewPortMax: PREVIEW_PORT_MAX },
         // Central nova herda os padrões globais de fila e movimentação (a personalização é explícita).
         columns: { inheritQueue: true, inheritMovement: true, queue: null, onStart: null, onPr: null, onDone: null },
         cleanup: { teardownEnvironment: true, removeWorktree: true, deleteBranch: true },
