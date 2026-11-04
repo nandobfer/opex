@@ -6,7 +6,8 @@ import { STAGE_ROLE, WORKBENCH_STAGE_LABELS, type WorkbenchStage } from "../cons
 import { loadCentral } from "./centrals"
 import { isWorkbenchActive } from "./hub"
 import { centralLogger } from "./log"
-import { workbenchTurnAgent } from "./models"
+import { activeRunId } from "../logic"
+import { refinementTurnAgent, workbenchTurnAgent } from "./models"
 import { loadAgenticSettings } from "./settings"
 
 /**
@@ -35,16 +36,16 @@ export async function syncWorkbenchTimer(workbenchId: string): Promise<void> {
         }
         centralId = doc.centralId
         taskCode = doc.taskCode
-        const running = doc.runState === "running" && isWorkbenchActive(workbenchId)
-        const waiting = (doc.pendingPermissions?.length ?? 0) > 0 || (doc.pendingForms?.length ?? 0) > 0
+        // Em "Refinando" (OPE-137) o turno vivo é o do refinamento da tarefa (outro id no barramento).
+        const refining = doc.stage === "refining"
+        const running = doc.runState === "running" && isWorkbenchActive(activeRunId(doc))
+        const waiting = (doc.pendingPermissions?.length ?? 0) > 0 || (doc.pendingForms?.length ?? 0) > 0 || (doc.refinementPending?.forms ?? 0) > 0 || (doc.refinementPending?.permissions ?? 0) > 0
         if (!running || waiting) {
             await endWorkPeriod(workbenchId, actorId(), { description: doc.stage === "done" ? "Desenvolvimento agêntico · Concluída" : undefined })
             return
         }
         const role = STAGE_ROLE[doc.stage as WorkbenchStage] ?? "planning"
-        const { settings } = await loadAgenticSettings()
-        const { config } = await loadCentral(doc.centralId)
-        const agent = workbenchTurnAgent(settings, config, doc, role)
+        const agent = refining ? await refinementTurnAgent(doc) : workbenchTurnAgent((await loadAgenticSettings()).settings, (await loadCentral(doc.centralId)).config, doc, role)
         await beginWorkPeriod({ taskId: doc.taskId, workbenchId, stage: doc.stage, agent: agent.agent, model: agent.model, description: descriptionFor(doc.stage) }, actorId())
         await touchWorkPeriod(workbenchId, { stage: doc.stage, agent: agent.agent, model: agent.model, description: descriptionFor(doc.stage) })
     } catch (error) {
@@ -66,8 +67,8 @@ export async function closeOrphanWorkPeriods(): Promise<number> {
             closed++
             continue
         }
-        const doc = await AgenticWorkbench.findById(ref.workbenchId).select({ runState: 1 }).lean().catch(() => null)
-        if (!doc || doc.runState !== "running" || !isWorkbenchActive(ref.workbenchId)) {
+        const doc = await AgenticWorkbench.findById(ref.workbenchId).select({ runState: 1, stage: 1, refinementId: 1 }).lean().catch(() => null)
+        if (!doc || doc.runState !== "running" || !isWorkbenchActive(activeRunId({ _id: ref.workbenchId, stage: doc.stage, refinementId: doc.refinementId }))) {
             await endWorkPeriodById(ref.id, actorId(), "Encerrado (execução perdida)")
             closed++
         }

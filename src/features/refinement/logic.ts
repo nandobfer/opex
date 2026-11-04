@@ -35,14 +35,25 @@ export function extractTechnicalSpec(text: string): string | null {
 }
 
 /** Motivo (pt-BR) quando o refinamento não está executando; `null` quando o agente trabalha. */
-export function refinementWaitingReason(input: { runState: TaskRefinementRunState; pendingPermissions: number; pendingForms: number; resolved: boolean }): string | null {
+export function refinementWaitingReason(input: { runState: TaskRefinementRunState; pendingPermissions: number; pendingForms: number; resolved: boolean; closed?: boolean; queued?: boolean }): string | null {
     if (input.runState === "running") return null
     if (input.runState === "failed") return "O refinamento falhou — use Continuar"
     if (input.runState === "interrupted") return "Refinamento interrompido — use Continuar"
     if (input.pendingPermissions > 0) return "Aguardando você permitir uma ação"
     if (input.pendingForms > 0) return "Aguardando você responder uma pergunta"
     if (input.resolved) return "Especificação técnica esclarecida"
+    if (input.closed) return "Refinamento encerrado"
+    if (input.queued) return "Na fila da central: o refinamento começa quando a mesa abrir"
     return "O agente parou sem concluir a especificação — use Continuar"
 }
 
 export type TaskRefinementRunState = "idle" | "running" | "failed" | "interrupted"
+
+/**
+ * Refinamento concluído (OPE-137): especificação esclarecida e salva (`resolved`) ou encerrado pelo dono
+ * na mesa (`closed`). É a mesma regra da abertura da mesa ("Abrir mesa e gerar o plano" bloqueado) e da
+ * passagem de "Refinando" para "Especificação pronta".
+ */
+export function refinementConcluded(input: { resolved: boolean; closed: boolean } | null | undefined): boolean {
+    return Boolean(input && (input.resolved || input.closed))
+}

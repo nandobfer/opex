@@ -1,17 +1,21 @@
 import { ok } from "@/lib/api/responses"
 import { DomainError, withRoute } from "@/lib/api/route"
 import { REFINEMENT_ACTIONS } from "@/features/refinement/constants"
-import { continueRefinement, interruptRefinement, reconnectRefinement, restartRefinement } from "@/features/refinement/server/service"
+import { closeRefinement, continueRefinement, interruptRefinement, reconnectRefinement, restartRefinement } from "@/features/refinement/server/service"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** POST /api/tasks/[id]/refinement/actions/[action] — interromper, recomeçar, continuar ou reconectar. */
+/**
+ * POST /api/tasks/[id]/refinement/actions/[action] — interromper, recomeçar, continuar, reconectar ou
+ * encerrar (`close`, só com a mesa de trabalho em "Refinando": a mesa vai para "Especificação pronta").
+ */
 export const POST = withRoute<{ id: string; action: string }>(async ({ params }) => {
     const action = params.action
     if (!(REFINEMENT_ACTIONS as readonly string[]).includes(action)) throw new DomainError(400, "Ação inválida", "REFINEMENT_INVALID_ACTION")
     if (action === "interrupt") return ok(await interruptRefinement(params.id))
     if (action === "restart") return ok(await restartRefinement(params.id))
     if (action === "reconnect") return ok(await reconnectRefinement(params.id))
+    if (action === "close") return ok(await closeRefinement(params.id))
     return ok(await continueRefinement(params.id))
 })

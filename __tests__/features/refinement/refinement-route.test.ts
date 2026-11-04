@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     restart: vi.fn(),
     continueRun: vi.fn(),
     reconnectRun: vi.fn(),
+    close: vi.fn(),
 }))
 
 vi.mock('@/features/refinement/server/service', () => ({
@@ -21,6 +22,7 @@ vi.mock('@/features/refinement/server/service', () => ({
     restartRefinement: mocks.restart,
     continueRefinement: mocks.continueRun,
     reconnectRefinement: mocks.reconnectRun,
+    closeRefinement: mocks.close,
 }))
 
 import { GET, POST as START, DELETE } from '@/app/api/tasks/[id]/refinement/route'
@@ -80,5 +82,13 @@ describe('rotas do refinamento', () => {
         const res = await ACTION(req('http://localhost/api/tasks/t1/refinement/actions/reconnect'), params({ id: 't1', action: 'reconnect' }))
         expect(res.status).toBe(200)
         expect(mocks.reconnectRun).toHaveBeenCalledWith('t1')
+    })
+
+    it('ação close encerra o refinamento (mesa em Refinando — OPE-137)', async () => {
+        mocks.close.mockResolvedValue({ refinement: { closed: true }, availability: { available: true, reason: null } })
+        const res = await ACTION(req('http://localhost/api/tasks/t1/refinement/actions/close'), params({ id: 't1', action: 'close' }))
+        expect(res.status).toBe(200)
+        expect(mocks.close).toHaveBeenCalledWith('t1')
+        expect(mocks.continueRun).not.toHaveBeenCalled()
     })
 })

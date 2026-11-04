@@ -216,6 +216,35 @@ describe('builder do Docker', () => {
   })
 })
 
+describe('gerar plano após refinar (OPE-137)', () => {
+  function PlanHarness() {
+    const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: defaultCentralConfig('/home/u/app') })
+    const value = useWatch({ control: form.control, name: 'environment.planAfterRefinement' })
+    return (
+      <>
+        <EnvironmentSection form={form} centralId="c1" />
+        <output data-testid="plan-value">{String(value)}</output>
+      </>
+    )
+  }
+
+  it('fica ao lado de Publicar prévia, nasce desligado e o ligar chega ao formulário', () => {
+    render(<PlanHarness />)
+    const toggle = screen.getByLabelText('Gerar plano após refinar')
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByLabelText('Publicar prévia').compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('plan-value').textContent).toBe('true')
+  })
+
+  it('configuração existente (sem o campo) começa desligada', () => {
+    const old = defaultCentralConfig('/home/u/app')
+    const environment: Partial<typeof old.environment> = { ...old.environment }
+    delete environment.planAfterRefinement
+    expect(centralConfigSchema.parse({ ...old, environment }).environment.planAfterRefinement).toBe(false)
+  })
+})
+
 function ServicesHarness({ composeServices = [] }: { composeServices?: string[] }) {
   const base = defaultCentralConfig('/home/u/app')
   const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, composeServices } } })

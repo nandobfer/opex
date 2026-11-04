@@ -7,6 +7,8 @@ import { WORKBENCH_STAGE_LABELS, type RunState, type WorkbenchStage } from "../c
 type ToneName = "primary" | "sky" | "amber" | "emerald" | "destructive" | "muted"
 
 const STAGE_TONE: Record<WorkbenchStage, ToneName> = {
+    refining: "primary",
+    spec_ready: "sky",
     planning: "primary",
     plan_review: "sky",
     implementing: "primary",

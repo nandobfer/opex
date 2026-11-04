@@ -2,7 +2,7 @@
 
 import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
 import type { AiModelDto } from "@/lib/ai/providers"
-import { AGENT_ROLE_LABELS, WORKBENCH_MODEL_ROLES, type WorkbenchModelRole } from "../../constants"
+import { WORKBENCH_MODEL_ROLE_INFO, WORKBENCH_MODEL_ROLES, type WorkbenchModelRole } from "../../constants"
 import type { ModelChoiceDto } from "../../types"
 import { ModelRoleSection } from "./ModelRoleSection"
 
@@ -16,11 +16,11 @@ export function pendingRoleOf(mutation: { isPending: boolean; variables?: { role
     return mutation.isPending ? (mutation.variables?.role ?? null) : null
 }
 
-export const pendingText = (role: WorkbenchModelRole | null) => (role ? `Alterando: ${AGENT_ROLE_LABELS[role].label}` : null)
+export const pendingText = (role: WorkbenchModelRole | null) => (role ? `Alterando: ${WORKBENCH_MODEL_ROLE_INFO[role].label}` : null)
 
 interface WorkbenchModelSectionsProps {
     /** Modelos efetivos por papel (`null` = central ilegível: nenhuma seção). */
-    choices: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    choices: Partial<Record<WorkbenchModelRole, ModelChoiceDto>> | null
     models: Models
     idPrefix: string
     /** Papel da etapa atual (badge "Etapa atual"); `null` no popover do fork. */
@@ -32,24 +32,27 @@ interface WorkbenchModelSectionsProps {
 }
 
 /**
- * Seções das etapas da mesa no popover de modelos (Planejamento, Implementação, Build e ambiente,
- * Pull Request e Fork): cada troca é entregue ao dono dos dados com o papel daquela seção. Usado pela
+ * Seções das etapas da mesa no popover de modelos (Refinamento, Planejamento, Implementação, Build e
+ * ambiente, Pull Request e Fork): cada troca é entregue ao dono dos dados com o papel daquela seção. Usado pela
  * mesa em andamento, pelo fork e pela etapa inicial (antes de a mesa existir — OPE-134).
  */
 export function WorkbenchModelSections({ choices, models, idPrefix, currentRole = null, pendingRole = null, onChange }: WorkbenchModelSectionsProps) {
     if (!choices) return null
     return (
         <>
-            {WORKBENCH_MODEL_ROLES.filter((role) => choices[role]).map((role) => (
+            {WORKBENCH_MODEL_ROLES.flatMap((role) => {
+                const choice = choices[role]
+                return choice ? [{ role, choice }] : []
+            }).map(({ role, choice }) => (
                 <ModelRoleSection
                     key={role}
                     id={`${idPrefix}-${role}`}
                     role={role}
                     description={role === "fork" ? FORK_ROLE_DESCRIPTION : undefined}
-                    choice={choices[role]}
+                    choice={choice}
                     current={role === currentRole}
                     pending={pendingRole === role}
-                    inheritLabel="Padrão da central"
+                    inheritLabel={role === "refinement" ? "Padrão do Agente Refinador" : "Padrão da central"}
                     customLabel="Personalizar nesta mesa"
                     models={models}
                     onChange={(input) => onChange(role, input)}

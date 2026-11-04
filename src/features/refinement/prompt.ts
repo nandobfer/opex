@@ -31,9 +31,32 @@ export function buildRefinementInstructions(settings: Pick<TaskRefinementSetting
     return `${settings.instructions.trim()}\n\n${REFINEMENT_PROTOCOL}`
 }
 
-export function buildRefinementPrompt(task: TaskDetailDto, include: TaskRefinementSettings["include"]): string {
+/** Informações adicionais do dono (campo da tela inicial da mesa ou da retomada), anexadas ao prompt. */
+export function withAdditionalInfo(prompt: string, info: string | null | undefined): string {
+    const text = info?.trim()
+    return text ? `${prompt}\n\n## Informações adicionais do dono\n\n${text}` : prompt
+}
+
+export function buildRefinementPrompt(task: TaskDetailDto, include: TaskRefinementSettings["include"], additionalInfo?: string | null): string {
     const taskMarkdown = buildTaskContextPrompt(task, { comments: include.comments, history: include.history, timeLogs: false }, { fullText: true })
-    return `${taskMarkdown}\n\n---\nComece lendo a tarefa e faça a primeira rodada de perguntas usando a ferramenta de perguntas do OpenCode ("question").`
+    return `${withAdditionalInfo(taskMarkdown, additionalInfo)}\n\n---\nComece lendo a tarefa e faça a primeira rodada de perguntas usando a ferramenta de perguntas do OpenCode ("question").`
+}
+
+/**
+ * "Continuar refinamento" depois de concluído ou encerrado (OPE-137) na MESMA sessão: o dono quer
+ * refinar mais; o agente revisa a especificação atual e volta a perguntar o que faltar.
+ */
+export function buildRefinementReopenPrompt(): string {
+    return `O dono quer continuar o refinamento desta tarefa. Revise a especificação técnica atual, faça as perguntas que ainda faltarem com a ferramenta \`question\` e termine com a especificação técnica completa sob o título "${REFINEMENT_SPEC_HEADING}".`
+}
+
+/**
+ * Retomada sem a sessão anterior (excluída ao concluir na página da tarefa): reenvia a tarefa inteira e a
+ * especificação já salva, para o agente seguir de onde o refinamento parou.
+ */
+export function buildRefinementFreshContinuePrompt(task: TaskDetailDto, include: TaskRefinementSettings["include"]): string {
+    const taskMarkdown = buildTaskContextPrompt(task, { comments: include.comments, history: include.history, timeLogs: false }, { fullText: true })
+    return `${taskMarkdown}\n\n---\nEsta tarefa já foi refinada antes (a especificação técnica atual está acima). Continue o refinamento: faça as perguntas que ainda faltarem com a ferramenta \`question\` e termine com a especificação técnica completa sob o título "${REFINEMENT_SPEC_HEADING}".`
 }
 
 /**

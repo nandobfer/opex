@@ -85,7 +85,7 @@ export interface SlotQueueDto {
 }
 
 /** De onde vem o modelo efetivo: troca do fork, troca da mesa, central ou Configurações Padrão (global). */
-export type ModelSourceDto = "fork" | "workbench" | "central" | "global"
+export type ModelSourceDto = "fork" | "workbench" | "central" | "global" | "refiner"
 
 /** Modelo efetivo de um papel na mesa ou no fork: o do papel (`overridden: false`) ou o trocado. */
 export interface ModelChoiceDto {
@@ -100,6 +100,9 @@ export interface ModelChoiceDto {
     /** Origem do valor herdado (o que vale ao voltar ao padrão). */
     inheritedSource?: ModelSourceDto
 }
+
+/** Modelos da mesa por papel; o "Refinamento" só existe enquanto a mesa está no refinamento (OPE-137). */
+export type WorkbenchModelsDto = Omit<Record<WorkbenchModelRole, ModelChoiceDto>, "refinement"> & { refinement?: ModelChoiceDto }
 
 export interface WorkbenchDto {
     id: string
@@ -119,6 +122,10 @@ export interface WorkbenchDto {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa: `preview` (padrão) sobe a prévia; `auto_pr` vai direto ao PR. */
     agenticFlow: TaskAgenticFlow
+    /** A mesa passou pelo refinamento (OPE-137): passo "Refinamento" na trilha. */
+    refinementPhase: boolean
+    /** "Gerar plano após refinar" desta mesa (vale o valor no momento em que a especificação fica pronta). */
+    planAfterRefinement: boolean
     /** Pedido de exclusão em andamento (a limpeza do ambiente roda antes de a mesa ser removida). */
     deletionRequestedAt: string | null
     /** Posição 1-based na fila global do build quando a mesa aguarda a vez (`null` caso contrário). */
@@ -142,7 +149,7 @@ export interface WorkbenchDto {
     manualCompletion: { reason: string; fromStage: WorkbenchStage; at: string } | null
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
-    models: Record<WorkbenchModelRole, ModelChoiceDto> | null
+    models: WorkbenchModelsDto | null
     /** Modelo do Agente Adversário (aba própria; só leitura na mesa), quando ele se aplica à mesa. */
     adversarialModel: { model: string | null; variant: string | null } | null
     /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
@@ -154,6 +161,12 @@ export interface WorkbenchDto {
     startedAt: string
     completedAt: string | null
     updatedAt: string
+}
+
+/** Resposta do "Refinar tarefa" (OPE-137): a mesa aberta ou, sem vaga, a posição na fila da central. */
+export interface RefineWorkbenchResultDto {
+    workbench: WorkbenchDto | null
+    queue: { position: number | null } | null
 }
 
 /** Resumo da mesa na lista de tarefas da central. */

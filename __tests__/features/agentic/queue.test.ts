@@ -31,7 +31,7 @@ vi.mock('@/lib/db/models/DevTask', async () => {
   mocks.models.task = memoryModel()
   return { DevTask: mocks.models.task, TaskComment: memoryModel() }
 })
-vi.mock('@/features/agentic/server/workflow', () => ({ startWorkbenchInCentral: mocks.start, startPendingTurn: mocks.startPending }))
+vi.mock('@/features/agentic/server/workflow', () => ({ startWorkbenchFromQueue: mocks.start, startPendingTurn: mocks.startPending }))
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: async () => ({ settings: { columns: mocks.settingsColumns } }) }))
 
 import { listCentralQueue, notifyTasksColumnChanged, pumpAllCentralQueues, pumpCentralQueue } from '@/features/agentic/server/queue'

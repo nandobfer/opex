@@ -35,8 +35,8 @@ atalhos globais”).
   `costUsd`; agrupa por dia/semana, por projeto (via `taskId → projectId`), por etapa
   (`WORKBENCH_STAGE_LABELS`) e por modelo. Custo em **USD** (sem conversão cambial).
 - **Central de desenvolvimento**: `activeWorkbenches` = mesas com `stage != "done"`;
-  `runningWorkbenches` = ativas com `runState === "running"`; funil por `WORKBENCH_STEPS` (Plano →
-  Implementação → Prévia → PR → Concluída). Distribuição e **custo acumulado** das mesas
+  `runningWorkbenches` = ativas com `runState === "running"`; funil por `WORKBENCH_STEPS` (Refinamento —
+  OPE-137 → Plano → Implementação → Prévia → PR → Concluída). Distribuição e **custo acumulado** das mesas
   (`usage.costUsd`) são **instantâneos** — não filtram pelo período.
 - **Custo por projeto aparece só em Horas agênticas** (TimeLog no período), evitando a sobreposição
   com o custo acumulado das mesas da Central.

@@ -1,64 +1,63 @@
 "use client"
 
 import { useState } from "react"
-import { Info, ListOrdered, Loader2, Play } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Markdown } from "@/components/ui/markdown"
-import { Skeleton } from "@/components/ui/skeleton"
-import { ToggleCard } from "@/components/ui/toggle-card"
+import { Info, ListOrdered, Loader2, Play, Wand2 } from "lucide-react"
+import { ReasonButton } from "@/components/ui/reason-button"
 import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
-import { apiErrorMessage } from "@/lib/api"
-import { useTaskDetail, useUpdateTask } from "@/features/tasks/hooks/useTasks"
-import { TASK_AGENTIC_FLOW_LABELS, type TaskAgenticFlow } from "@/features/tasks/constants"
+import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
+import { useRefinementRealtime, useTaskRefinement } from "@/features/refinement/hooks/useRefinement"
 import type { WorkbenchModelRole } from "../../constants"
-import { useAgenticSettings, useCentralQueue, useStartWorkbench } from "../../hooks/useAgentic"
+import { useAgenticSettings, useCentralQueue, useRefineWorkbench, useStartWorkbench } from "../../hooks/useAgentic"
 import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
-import type { ModelOverride } from "../../logic"
+import { openPlanBlockReason, startRefineBlockReason, type ModelOverride } from "../../logic"
+import { saveStartDraft, startFieldKey } from "../../start-draft"
 import { AttachableTextarea } from "./AttachableTextarea"
+import { StartTaskBlock } from "./StartTaskBlock"
 import { StartWorkbenchModelSettings } from "./StartWorkbenchModelSettings"
+import { StartWorkbenchSwitches } from "./StartWorkbenchSwitches"
 import type { CentralDto } from "../../types"
 
 /**
- * Estado inicial da mesa (tarefa ainda sem mesa): mostra o código, o título e a **descrição** da
- * tarefa, a chave **Gerar prévia** (desligada = fluxo PR automático) e um campo opcional de
- * **informações adicionais**. Ao abrir a mesa, essas informações são anexadas à tarefa e enviadas
- * ao planejador no primeiro prompt.
+ * Estado inicial da mesa (tarefa ainda sem mesa): o código, o título e as abas **Descrição** e
+ * **Especificação** da tarefa, as chaves **Gerar prévia** e **Gerar plano após refinar** (com herança da
+ * central) e um campo opcional de **informações adicionais**. Duas saídas, na mesma linha:
+ * - **Refinar tarefa** (OPE-137): abre a mesa em "Refinando" com o Agente Refinador (o texto e os anexos
+ *   vão no primeiro prompt do refinamento) — ou em "Especificação pronta" com o refinamento já concluído,
+ *   quando o texto passa para o campo do "Gerar plano";
+ * - **Abrir mesa e gerar o plano** (Ctrl+Enter): o planejamento direto, bloqueado com um refinamento em andamento.
  *
- * O controle de modelos (OPE-134) fica à esquerda do botão, no mesmo lugar relativo da mesa em
- * andamento. A escolha é **só desta tela** (não é gravada na tarefa) e vai junto do clique em
- * "Abrir mesa e gerar o plano"; abrir pela fila da central ou recarregar volta aos padrões.
+ * O controle de modelos (OPE-134) fica à esquerda dos botões. A escolha é **só desta tela** (não é
+ * gravada na tarefa) e vai junto do clique; abrir pela fila da central ou recarregar volta aos padrões.
  */
 export function StartWorkbench({ central, taskId }: { central: CentralDto; taskId: string }) {
+    useRefinementRealtime(taskId)
     const task = useTaskDetail(taskId)
     const settings = useAgenticSettings()
+    const refinementState = useTaskRefinement(taskId)
     const queue = useCentralQueue(central.id)
     const start = useStartWorkbench()
-    const update = useUpdateTask()
+    const refine = useRefineWorkbench()
     const [text, setText] = useState("")
     const [modelOverrides, setModelOverrides] = useState<Partial<Record<WorkbenchModelRole, ModelOverride>>>({})
-    const attachments = useFieldAttachments(`start:${taskId}`)
-    const uploadBlock = attachments.blockReason
+    const attachments = useFieldAttachments(startFieldKey(taskId))
     const availability = settings.data?.availability
-    const blocked = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
-    const otherProject = task.data && task.data.project?.id !== central.projectId
+    const agentic = !central.config.enabled ? "A central está desativada" : availability && !availability.available ? availability.reason : null
+    const otherProject = task.data && task.data.project?.id !== central.projectId ? `A tarefa não é do projeto ${central.projectName}` : null
     const queueItem = queue.data?.find((item) => item.taskId === taskId) ?? null
-    // O fluxo da mesa segue a escolha da tarefa e, sem ela (`null`), o padrão da central (OPE-79).
-    const taskFlow = task.data?.agenticFlow ?? null
-    const centralFlow: TaskAgenticFlow = central.config.environment.publishPreview ? "preview" : "auto_pr"
-    const flow: TaskAgenticFlow = taskFlow ?? centralFlow
-
-    /** Salva o fluxo na tarefa na hora (otimista): a mesa nova nasce com a escolha já persistida. */
-    const setPreview = (enabled: boolean) => {
-        if (!task.data) return
-        const agenticFlow: TaskAgenticFlow = enabled ? "preview" : "auto_pr"
-        update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow }, patch: { agenticFlow } })
+    const existing = refinementState.data?.refinement ?? null
+    const blockInput = {
+        agentic: agentic ?? null,
+        otherProject,
+        upload: attachments.blockReason ?? null,
+        refinement: refinementState.data
+            ? { available: refinementState.data.availability.available, reason: refinementState.data.availability.reason, existing: existing ? { concluded: existing.concluded, running: existing.runState === "running", liveChat: existing.liveChat } : null }
+            : undefined,
+        hasInput: Boolean(text.trim()) || attachments.fileIds.length > 0,
     }
-
-    /** Volta a seguir o padrão da central (`agenticFlow: null`). */
-    const inheritFlow = () => {
-        if (!task.data) return
-        update.mutate({ task: { id: task.data.id, code: task.data.code }, body: { agenticFlow: null }, patch: { agenticFlow: null } })
-    }
+    const pending = start.isPending || refine.isPending || !task.data
+    const planBlock = openPlanBlockReason(blockInput)
+    const refineBlock = startRefineBlockReason(blockInput)
+    const notice = agentic ?? otherProject
 
     /** Troca local de um papel: com modelo vira a escolha da abertura; "Padrão da central" remove a troca. */
     const setRoleModel = (role: WorkbenchModelRole, input: ModelVariantValue) => {
@@ -69,109 +68,74 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
             return next
         })
     }
+    const models = Object.keys(modelOverrides).length ? { modelOverrides } : {}
+
+    const onRefine = () => {
+        // Refinamento já concluído: a mesa abre em "Especificação pronta" e o texto vai para o "Gerar plano".
+        const concluded = Boolean(existing?.concluded)
+        if (concluded) saveStartDraft(taskId, text)
+        refine.mutate(
+            { centralId: central.id, taskId, ...(concluded ? {} : { text: text.trim() || undefined, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}) }), ...models },
+            {
+                onSuccess: () => {
+                    if (concluded) return
+                    setText("")
+                    attachments.clearSent()
+                },
+            },
+        )
+    }
 
     return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
             <div className="my-auto flex w-full flex-col gap-4" data-ctrl-enter-scope>
-                {task.isLoading ? (
-                    <Skeleton className="h-20 w-full" />
-                ) : task.data ? (
-                    <div className="space-y-3">
-                        <div className="space-y-1">
-                            <p className="font-mono text-sm font-semibold text-primary">{task.data.code}</p>
-                            <h2 className="text-lg font-semibold">{task.data.title}</h2>
-                        </div>
-                        {task.data.description && (
-                            <div className="rounded-lg border bg-muted/30 p-3">
-                                <p className="mb-1 text-xs font-medium text-muted-foreground">Descrição da tarefa</p>
-                                <Markdown>{task.data.description}</Markdown>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <p className="text-sm text-muted-foreground">{apiErrorMessage(task.error, "Não foi possível carregar a tarefa")}</p>
-                )}
+                <StartTaskBlock query={task} />
                 <p className="text-sm text-muted-foreground">
-                    A mesa começa gerando o plano com o agente de planejamento, no diretório <span className="font-mono text-foreground">{central.config.sessionDirectory}</span>. Você revisa o plano antes de qualquer alteração no código.
+                    A mesa trabalha no diretório <span className="font-mono text-foreground">{central.config.sessionDirectory}</span>: refine a tarefa com o Agente Refinador ou comece direto pelo plano. Você revisa o plano antes de qualquer alteração no código.
                 </p>
                 {queueItem && (
                     <p className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary">
-                        <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Na fila da central — posição {queueItem.position}. A mesa abre quando uma vaga liberar.
+                        <ListOrdered className="h-3.5 w-3.5" aria-hidden /> Na fila da central — posição {queueItem.position}. A mesa abre {existing && !existing.concluded ? "em Refinando " : ""}quando uma vaga liberar.
                     </p>
                 )}
-                {task.data && (
-                    <div className="space-y-1.5">
-                        <ToggleCard
-                            id="workbench-flow"
-                            checked={flow !== "auto_pr"}
-                            onCheckedChange={setPreview}
-                            disabled={update.isPending}
-                            label="Gerar prévia"
-                            description={flow === "auto_pr" ? "O agente pula a prévia e abre o Pull Request assim que a implementação terminar. A revisão do plano continua obrigatória." : "O agente sobe a prévia depois da implementação e espera a sua aprovação antes de abrir o Pull Request."}
-                            onLabel="Ligada"
-                            offLabel="Desligada"
-                        />
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span>
-                                {taskFlow === null ? (
-                                    <>
-                                        Seguindo o padrão da central: <span className="font-medium text-foreground">{TASK_AGENTIC_FLOW_LABELS[centralFlow]}</span>.
-                                    </>
-                                ) : (
-                                    <>
-                                        Fluxo escolhido só para esta tarefa (a central está em {TASK_AGENTIC_FLOW_LABELS[centralFlow]}).
-                                    </>
-                                )}
-                            </span>
-                            {taskFlow !== null && (
-                                <Button type="button" variant="ghost" size="sm" className="h-auto px-2 py-1 text-xs" disabled={update.isPending} onClick={inheritFlow}>
-                                    Usar padrão da central
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-                )}
+                {task.data && <StartWorkbenchSwitches central={central} task={task.data} />}
                 <div className="space-y-1.5">
                     <label htmlFor="workbench-start-context" className="text-sm font-medium">
                         Informações adicionais (opcional)
                     </label>
                     <AttachableTextarea id="workbench-start-context" rows={5} value={text} onValueChange={setText} replyEnabled={false} placeholder="Ex.: regras de negócio, decisões, links, o que evitar…" attachments={attachments} />
-                    <p className="text-xs text-muted-foreground">Essas informações (e os arquivos anexados) são enviadas ao agente junto da tarefa, no primeiro prompt.</p>
+                    <p className="text-xs text-muted-foreground">Essas informações (e os arquivos anexados) vão junto da tarefa no primeiro prompt: do refinamento ou do plano.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* Modelo da etapa inicial (à esquerda) e o botão de abrir (à direita), como na barra da mesa. */}
+                    {/* Modelos (à esquerda) e os botões (à direita), como na barra da mesa. */}
                     <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
-                        <StartWorkbenchModelSettings central={central} settings={settings.data?.settings} overrides={modelOverrides} onChange={setRoleModel} />
+                        <StartWorkbenchModelSettings central={central} settings={settings.data?.settings} overrides={modelOverrides} refiner={refinementState.data?.refinerModel ?? null} onChange={setRoleModel} />
                     </div>
-                    <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            data-ctrl-enter-submit
-                            className="gap-1.5"
-                            disabled={Boolean(blocked) || Boolean(otherProject) || !task.data || start.isPending || update.isPending || Boolean(uploadBlock)}
-                            title={uploadBlock ?? undefined}
+                    <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+                        <ReasonButton variant="outline" disabled={pending} disabledReason={refineBlock} onClick={onRefine}>
+                            {refine.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Wand2 className="h-4 w-4" aria-hidden />}
+                            Refinar tarefa
+                        </ReasonButton>
+                        <ReasonButton
+                            disabled={pending}
+                            disabledReason={planBlock}
+                            buttonProps={{ "data-ctrl-enter-submit": true }}
                             onClick={() =>
                                 start.mutate(
-                                    {
-                                        centralId: central.id,
-                                        taskId,
-                                        text: text.trim() || undefined,
-                                        ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}),
-                                        ...(Object.keys(modelOverrides).length ? { modelOverrides } : {}),
-                                    },
+                                    { centralId: central.id, taskId, text: text.trim() || undefined, ...(attachments.fileIds.length ? { fileIds: attachments.fileIds } : {}), ...models },
                                     { onSuccess: () => attachments.clearSent() },
                                 )
                             }
                         >
                             {start.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
                             Abrir mesa e gerar o plano
-                        </Button>
-                        {(blocked || otherProject) && (
-                            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Info className="h-3.5 w-3.5" aria-hidden /> {otherProject ? `A tarefa não é do projeto ${central.projectName}` : blocked}
-                            </p>
-                        )}
+                        </ReasonButton>
                     </div>
+                    {notice && (
+                        <p className="flex w-full items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                            <Info className="h-3.5 w-3.5" aria-hidden /> {notice}
+                        </p>
+                    )}
                 </div>
             </div>
         </div>

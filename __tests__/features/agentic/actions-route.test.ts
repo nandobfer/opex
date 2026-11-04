@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn(), setWorkbenchStage: vi.fn() }))
+const mocks = vi.hoisted(() => ({ revisePlan: vi.fn(), implement: vi.fn(), reconnect: vi.fn(), cancelWait: vi.fn(), adversarialFix: vi.fn(), adversarialSkip: vi.fn(), adversarialRerun: vi.fn(), setWorkbenchStage: vi.fn(), generatePlan: vi.fn(), continueRefinement: vi.fn(), restartRefinement: vi.fn() }))
 
 vi.mock('@/features/agentic/server/workflow', () => ({
   revisePlan: mocks.revisePlan,
@@ -18,6 +18,10 @@ vi.mock('@/features/agentic/server/workflow', () => ({
   adversarialSkip: mocks.adversarialSkip,
   adversarialRerun: mocks.adversarialRerun,
   setWorkbenchStage: mocks.setWorkbenchStage,
+  generatePlan: mocks.generatePlan,
+  continueRefinementInWorkbench: mocks.continueRefinement,
+  restartRefinementInWorkbench: mocks.restartRefinement,
+  rebuildPreview: vi.fn(),
 }))
 
 import { POST } from '@/app/api/agentic/workbenches/[id]/actions/[action]/route'
@@ -80,5 +84,17 @@ describe('POST /api/agentic/workbenches/[id]/actions/[action]', () => {
     const res = await call('cancel-wait')
     expect(res.status).toBe(200)
     expect(mocks.cancelWait).toHaveBeenCalledWith('w1')
+  })
+
+  it('Especificação pronta (OPE-137): generate-plan aceita informações adicionais; continuar/recomeçar o refinamento sem corpo', async () => {
+    mocks.generatePlan.mockResolvedValue({ id: 'w1' })
+    mocks.continueRefinement.mockResolvedValue({ id: 'w1' })
+    mocks.restartRefinement.mockResolvedValue({ id: 'w1' })
+    expect((await call('generate-plan', { text: 'use X' })).status).toBe(200)
+    expect(mocks.generatePlan).toHaveBeenCalledWith('w1', 'use X', undefined)
+    expect((await call('continue-refinement')).status).toBe(200)
+    expect(mocks.continueRefinement).toHaveBeenCalledWith('w1')
+    expect((await call('restart-refinement')).status).toBe(200)
+    expect(mocks.restartRefinement).toHaveBeenCalledWith('w1')
   })
 })

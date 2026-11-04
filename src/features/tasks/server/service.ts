@@ -9,7 +9,7 @@ import { getLocalUser } from "@/lib/local-user"
 import { runAfterResponse } from "@/lib/after-response"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { clientChannel } from "@/lib/pusher/channel-names"
-import { TASK_AGENTIC_FLOW_INHERIT_LABEL, TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
+import { planAfterRefinementLabel, TASK_AGENTIC_FLOW_INHERIT_LABEL, TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
 import { formatLineComment, parseLineComment, TASK_COMMENT_MAX } from "../line-comments/format"
 import type { BulkTaskResult, BulkTasksInput, CommentInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
@@ -64,6 +64,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         project: projectRef(project),
         estimate: task.estimate ? toEstimateDto(task.estimate) : null,
         agenticFlow: (task.agenticFlow as TaskAgenticFlow | null) ?? null,
+        planAfterRefinement: typeof task.planAfterRefinement === "boolean" ? task.planAfterRefinement : null,
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
     }
@@ -419,6 +420,11 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
         set.agenticFlow = input.agenticFlow
         before.fluxo = task.agenticFlow ? TASK_AGENTIC_FLOW_LABELS[task.agenticFlow as TaskAgenticFlow] : TASK_AGENTIC_FLOW_INHERIT_LABEL
         after.fluxo = input.agenticFlow ? TASK_AGENTIC_FLOW_LABELS[input.agenticFlow] : TASK_AGENTIC_FLOW_INHERIT_LABEL
+    }
+    if (input.planAfterRefinement !== undefined) {
+        set.planAfterRefinement = input.planAfterRefinement
+        before.planoAposRefinar = planAfterRefinementLabel(task.planAfterRefinement)
+        after.planoAposRefinar = planAfterRefinementLabel(input.planAfterRefinement)
     }
 
     if (Object.keys(set).length === 0) return

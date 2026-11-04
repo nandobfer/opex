@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { AiModelDto } from "@/lib/ai/providers"
 import { cn } from "@/lib/utils"
-import type { AgentRole } from "../../constants"
+import type { WorkbenchModelRole } from "../../constants"
 import type { ModelChoiceDto } from "../../types"
 import { AgentRoleSection } from "../settings/AgentRoleSection"
 import { RoleModelOverrideFields } from "./RoleModelOverrideFields"
@@ -13,7 +13,7 @@ import type { ModelVariantValue } from "@/features/ai/components/model-picker/Mo
 
 interface ModelRoleSectionProps {
     id: string
-    role: AgentRole
+    role: WorkbenchModelRole
     /** Título no lugar do rótulo do papel (ex.: "Este fork"). */
     title?: string
     description?: string

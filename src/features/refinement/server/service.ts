@@ -30,10 +30,21 @@ import {
 import { getTask } from "@/features/tasks/server/service"
 import { updateTask } from "@/features/tasks/server/service"
 import { availabilityOfTaskRefinement, loadTaskRefinementSettings } from "@/features/ai/server/settings"
-import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT } from "../constants"
-import { extractTechnicalSpec } from "../logic"
-import { buildRefinementFinalizePrompt, buildRefinementInstructions, buildRefinementPrompt, buildRefinementResumePrompt, planRefinementInstructions, type RefinementInstructionsPlan } from "../prompt"
+import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT, REFINEMENT_WORKBENCH_ADVANCED_REASON, refinementFilesOwner } from "../constants"
+import { extractTechnicalSpec, refinementConcluded } from "../logic"
+import {
+    buildRefinementFinalizePrompt,
+    buildRefinementFreshContinuePrompt,
+    buildRefinementInstructions,
+    buildRefinementPrompt,
+    buildRefinementReopenPrompt,
+    buildRefinementResumePrompt,
+    planRefinementInstructions,
+    withAdditionalInfo,
+    type RefinementInstructionsPlan,
+} from "../prompt"
 import { deleteRefinementSession, flushRefinementSessionDeletions } from "./session-cleanup"
+import { delegateToWorkbench, inRefinementStage, linkedWorkbench, pastRefinement, syncLinkedWorkbench, type LinkedWorkbench } from "./workbench-link"
 import type { RefinementAvailability, TaskRefinementDto, TaskRefinementStateDto } from "../types"
 
 /**
@@ -124,6 +135,9 @@ function toRefinementDto(doc: ITaskRefinement, liveChat = false): TaskRefinement
         sessionDirectory: doc.sessionDirectory ?? null,
         runState: (doc.runState as TaskRefinementDto["runState"]) ?? "idle",
         resolved: doc.resolved === true,
+        closed: Boolean(doc.closedAt),
+        concluded: refinementConcluded({ resolved: doc.resolved === true, closed: Boolean(doc.closedAt) }),
+        queued: Boolean(doc.queuedStart),
         finalizing: doc.finalizing === true,
         error: doc.error ?? null,
         spec: doc.spec ?? null,
@@ -141,6 +155,13 @@ function toRefinementDto(doc: ITaskRefinement, liveChat = false): TaskRefinement
 
 async function publishRefinement(taskId: string): Promise<void> {
     await publishAppEvent(REFINEMENT_UPDATED_EVENT, { taskId }).catch(() => undefined)
+    // A mesa da tarefa (em "Refinando"/"Especificação pronta") acompanha o mesmo estado (OPE-137).
+    syncLinkedWorkbench(taskId)
+}
+
+/** Refinar com a mesa já do planejamento em diante: recusado com o motivo da tela (item 18). */
+function assertNotPastRefinement(link: LinkedWorkbench | null): void {
+    if (pastRefinement(link)) throw new DomainError(409, REFINEMENT_WORKBENCH_ADVANCED_REASON, "REFINEMENT_WORKBENCH_ADVANCED")
 }
 
 interface ResolvedCentral {
@@ -161,7 +182,8 @@ async function resolveCentral(task: Awaited<ReturnType<typeof getTask>>): Promis
     return { centralId: String(central._id), projectId: central.projectId, projectName: central.projectName, directory: config.sessionDirectory }
 }
 
-async function availabilityFor(task: Awaited<ReturnType<typeof getTask>>): Promise<RefinementAvailability> {
+async function availabilityFor(task: Awaited<ReturnType<typeof getTask>>, link: LinkedWorkbench | null = null): Promise<RefinementAvailability> {
+    if (pastRefinement(link)) return { available: false, reason: REFINEMENT_WORKBENCH_ADVANCED_REASON, centralId: link.centralId, sessionDirectory: null }
     const { settings } = await loadTaskRefinementSettings()
     const feature = await availabilityOfTaskRefinement(settings)
     if (!feature.available) return { ...feature, centralId: null, sessionDirectory: null }
@@ -179,7 +201,14 @@ export async function getRefinementState(taskId: string): Promise<TaskRefinement
     const task = await getTask(taskId)
     const raw = await findByTask(taskId)
     const doc = raw ? await reconcile(raw) : null
-    return { refinement: doc ? toRefinementDto(doc, await liveChatEnabled(doc.centralId)) : null, availability: await availabilityFor(task) }
+    const link = await linkedWorkbench(taskId)
+    const { settings } = await loadTaskRefinementSettings()
+    return {
+        refinement: doc ? toRefinementDto(doc, await liveChatEnabled(doc.centralId)) : null,
+        availability: await availabilityFor(task, link),
+        workbench: link ? { id: link.id, stage: link.stage } : null,
+        refinerModel: { agent: settings.agent ?? null, model: settings.model ?? null, variant: settings.variant ?? null },
+    }
 }
 
 /**
@@ -330,6 +359,22 @@ async function finishRefinementSession(refinementId: string, sessionId: string):
  */
 interface TurnExecutionOptions {
     attach?: boolean
+    /** Anexos do primeiro prompt (campo "Informações adicionais" da mesa, OPE-137). */
+    fileIds?: string[]
+}
+
+/** Anexos do turno em `data:` URI + a seção que os descreve no prompt (módulo de arquivos sob demanda). */
+async function turnAttachments(taskCode: string, fileIds: string[] | undefined, signal: AbortSignal): Promise<{ files: { uri: string; name: string }[]; section: string }> {
+    if (!fileIds?.length) return { files: [], section: "" }
+    const [{ promptFilesFor }, { agenticDownloadDir }] = await Promise.all([import("@/features/agentic/server/files"), import("@/features/agentic/files")])
+    return promptFilesFor(fileIds, { downloadDir: agenticDownloadDir(taskCode), signal })
+}
+
+/** Mensagem do dono na saída do refinamento (texto e anexos do "Informações adicionais"). */
+async function publishUserInput(id: string, userText: string | null | undefined, fileIds: string[] | undefined): Promise<void> {
+    const shown = fileIds?.length ? await (await import("@/features/agentic/server/files")).fileDtosFor(fileIds) : []
+    if (!userText && !shown.length) return
+    publishWorkbenchEvent(id, { type: "user", text: userText || "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
 }
 
 async function executeTurn(id: string, text: string, controller: AbortController, options: TurnExecutionOptions = {}): Promise<void> {
@@ -339,6 +384,10 @@ async function executeTurn(id: string, text: string, controller: AbortController
     const central = await resolveCentral(task)
     const client = await getOpencodeClient()
     const attach = options.attach === true
+    // "Modelo do Refinamento" trocado na mesa (OPE-137): vale para os turnos enquanto a mesa refina.
+    const link = await linkedWorkbench(doc.taskId)
+    const override = inRefinementStage(link) ? link.refinementModel : null
+    const agent = { agent: settings.agent, model: override?.model ?? settings.model, variant: override ? override.variant : settings.variant }
     // Reconectar acompanha a sessão existente; um turno normal (re)usa a gravada ou cria uma nova.
     const directory = doc.sessionDirectory ?? central.directory
     const sessionId = attach ? (doc.sessionId as string) : await ensureSession(client, doc, directory)
@@ -356,7 +405,8 @@ async function executeTurn(id: string, text: string, controller: AbortController
     // Marco do turno acompanhado (reconexão): delimita o resultado recuperado do histórico.
     const startedAt = doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0
 
-    let prompt = withProtocol(text)
+    const attachments = attach ? { files: [], section: "" } : await turnAttachments(doc.taskCode, options.fileIds, controller.signal)
+    let prompt = withProtocol(attachments.section ? `${text}\n\n${attachments.section}` : text)
     let result: Awaited<ReturnType<typeof runAgentTurn>> = { outcome: "failed", text: "", message: null, costUsd: 0, durationMs: 0 }
     let textOut = ""
     let specSaved = false
@@ -364,7 +414,7 @@ async function executeTurn(id: string, text: string, controller: AbortController
         const { hooks, accumulated } = turnHooks(doc)
         // O attach vale só para o primeiro turno: as consolidações são turnos novos normais.
         const attachThisTurn = attach && attempt === 0
-        log.info({ refinementId: id, agent: settings.agent, model: settings.model, attempt, attach: attachThisTurn }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
+        log.info({ refinementId: id, agent: agent.agent, model: agent.model, attempt, attach: attachThisTurn }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
         result = await runAgentTurn(
             client,
             {
@@ -372,8 +422,9 @@ async function executeTurn(id: string, text: string, controller: AbortController
                 sessionId,
                 stage: REFINEMENT_STAGE_LABEL,
                 title: REFINEMENT_STAGE_LABEL,
-                agent: { agent: settings.agent, model: settings.model, variant: settings.variant },
+                agent,
                 text: attachThisTurn ? "" : prompt,
+                ...(attempt === 0 && attachments.files.length ? { files: attachments.files } : {}),
                 timeoutMs: TURN_TIMEOUT_MS,
                 signal: controller.signal,
                 attach: attachThisTurn,
@@ -405,8 +456,11 @@ async function executeTurn(id: string, text: string, controller: AbortController
 
     const succeeded = result.outcome === "succeeded"
     const resolved = succeeded && specSaved
-    const runState = succeeded ? "idle" : result.outcome === "interrupted" ? "interrupted" : "failed"
-    const error = resolved
+    // "Encerrar refinamento" durante o turno (OPE-137): o agente parou a pedido do dono; o refinamento fica
+    // parado sem erro (conta como concluído pela marca `closedAt`).
+    const closed = Boolean(((await TaskRefinement.findById(id).lean()) as { closedAt?: Date | null } | null)?.closedAt)
+    const runState = succeeded || closed ? "idle" : result.outcome === "interrupted" ? "interrupted" : "failed"
+    const error = resolved || closed
         ? null
         : succeeded
             ? extractTechnicalSpec(textOut)
@@ -418,30 +472,40 @@ async function executeTurn(id: string, text: string, controller: AbortController
     if (resolved) refinementMetric(doc, "refinement-completed", { dedupKey: `refinement-completed:${id}`, data: { durationMs: Date.now() - new Date(doc.startedAt ?? doc.createdAt ?? Date.now()).getTime() } })
     if (resolved) {
         log.info({ refinementId: id, costUsd: result.costUsd }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: concluído`)
-        await finishRefinementSession(id, sessionId)
+        // Com a mesa no refinamento, a sessão fica para o "Continuar refinamento" (sai ao ir para o plano ou
+        // ao excluir a mesa — `releaseRefinementSession`). Sem mesa, é excluída ao concluir, como antes.
+        if (inRefinementStage(await linkedWorkbench(doc.taskId))) log.info({ refinementId: id }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: sessão mantida para a mesa de trabalho`)
+        else await finishRefinementSession(id, sessionId)
     } else {
         log.warn({ refinementId: id, outcome: result.outcome, resolved }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: ${result.outcome}`)
     }
     await publishRefinement(doc.taskId)
 }
 
+interface LaunchOptions {
+    fileIds?: string[]
+    /** Texto do dono mostrado na saída (informações adicionais). */
+    userText?: string | null
+}
+
 /** Dispara um turno em segundo plano (a rota responde na hora; a saída chega pelo stream). */
-async function launchTurn(id: string, text: string): Promise<void> {
+async function launchTurn(id: string, text: string, options: LaunchOptions = {}): Promise<void> {
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está refinando esta tarefa", "REFINEMENT_BUSY")
     const doc = await loadRefinement(id)
     await prepareHub(id)
+    await publishUserInput(id, options.userText, options.fileIds)
     const controller = new AbortController()
     markWorkbenchActive(id, controller)
     try {
         // Turno novo começa um episódio novo: marca o início do turno e limpa a causa da parada e o
         // desfecho da reconexão anterior (o ciclo automático do cliente reinicia do zero).
-        await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "running", resolved: false, finalizing: false, error: null, lastPrompt: { text }, heartbeatAt: new Date(), turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null, pendingForms: [], pendingPermissions: [] } })
+        await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "running", resolved: false, closedAt: null, queuedStart: null, finalizing: false, error: null, lastPrompt: { text }, heartbeatAt: new Date(), turnStartedAt: new Date(), stopRequestedAt: null, reconnect: null, pendingForms: [], pendingPermissions: [] } })
     } catch (error) {
         clearWorkbenchActive(id, controller)
         throw error
     }
     await publishRefinement(doc.taskId)
-    void executeTurn(id, text, controller)
+    void executeTurn(id, text, controller, { fileIds: options.fileIds })
         .catch(async (error) => {
             log.error({ err: errorText(error), refinementId: id }, "[refinement] falha inesperada no turno")
             await TaskRefinement.updateOne({ _id: id }, { $set: { runState: "failed", error: errorText(error), pendingForms: [], pendingPermissions: [] } }).catch(() => undefined)
@@ -452,29 +516,117 @@ async function launchTurn(id: string, text: string): Promise<void> {
         })
 }
 
+export interface StartRefinementOptions {
+    /** Sessões do refinamento anterior ainda pendentes de exclusão (Recomeçar). */
+    carriedPending?: string[]
+    /** Informações adicionais do dono (tela inicial da mesa): vão no primeiro prompt. */
+    text?: string | null
+    fileIds?: string[]
+    /** Chamado pelo fluxo da mesa (OPE-137): a vaga e a etapa já foram decididas lá. */
+    fromWorkbench?: boolean
+    /**
+     * "Refinar tarefa" sem vaga na central: grava o pedido e NÃO inicia o turno (a mesa abre pela fila).
+     * `modelOverrides` são as trocas de modelo da tela inicial, aplicadas quando a mesa abrir.
+     */
+    queue?: { modelOverrides: Record<string, unknown> | null } | null
+}
+
 /** Inicia o refinamento da tarefa (idempotente: se já existir, devolve o estado). */
-export async function startRefinement(taskId: string, carriedPending: string[] = []): Promise<TaskRefinementStateDto> {
+export async function startRefinement(taskId: string, options: StartRefinementOptions = {}): Promise<TaskRefinementStateDto> {
     const { settings } = await loadTaskRefinementSettings()
     const feature = await availabilityOfTaskRefinement(settings)
     if (!feature.available || !settings.model) throw new DomainError(409, feature.reason ?? "Refinar tarefa indisponível", "REFINEMENT_UNAVAILABLE")
     const task = await getTask(taskId)
     const central = await resolveCentral(task)
+    if (!options.fromWorkbench) {
+        const link = await linkedWorkbench(taskId)
+        assertNotPastRefinement(link)
+        // Mesa em "Especificação pronta" sem refinamento (excluído): recomeça pela mesa, que respeita a vaga.
+        if (link?.stage === "spec_ready" && !(await findByTask(taskId))) {
+            await delegateToWorkbench(link.id, "restart-refinement")
+            return getRefinementState(taskId)
+        }
+    }
     const existing = await findByTask(taskId)
     if (existing) return getRefinementState(taskId)
+    const carriedPending = options.carriedPending ?? []
+    const text = options.text?.trim() || null
+    const fileIds = options.fileIds ?? []
 
     let doc: ITaskRefinement
     try {
-        doc = (await TaskRefinement.create({ taskId, taskCode: task.code, taskTitle: task.title, projectId: central.projectId, centralId: central.centralId, sessionDirectory: central.directory, runState: "idle", resolved: false, pendingSessionDeletions: [...new Set(carriedPending)] })).toObject() as unknown as ITaskRefinement
+        doc = (
+            await TaskRefinement.create({
+                taskId,
+                taskCode: task.code,
+                taskTitle: task.title,
+                projectId: central.projectId,
+                centralId: central.centralId,
+                sessionDirectory: central.directory,
+                runState: "idle",
+                resolved: false,
+                pendingSessionDeletions: [...new Set(carriedPending)],
+                ...(options.queue ? { queuedStart: { text, fileIds, modelOverrides: options.queue.modelOverrides, queuedAt: new Date() } } : {}),
+            })
+        ).toObject() as unknown as ITaskRefinement
     } catch (error) {
         if ((error as { code?: number }).code === 11000) return getRefinementState(taskId)
         throw error
     }
-    await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: String(doc._id), acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, projeto: central.projectName } })
+    await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: String(doc._id), acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, projeto: central.projectName, ...(options.queue ? { aguardandoVaga: true } : {}) } })
     refinementMetric(doc, "refinement-started", { dedupKey: `refinement-started:${String(doc._id)}`, data: { taskTitle: task.title } })
     // Pendências herdadas de um recomeço: tenta excluí-las já (nunca tocam a sessão nova).
     if (carriedPending.length) await flushRefinementSessionDeletions(String(doc._id), carriedPending).catch(() => undefined)
-    await launchTurn(String(doc._id), buildRefinementPrompt(task, settings.include))
+    if (options.queue) await publishRefinement(taskId)
+    else await launchTurn(String(doc._id), buildRefinementPrompt(task, settings.include, text), { fileIds, userText: text })
     return getRefinementState(taskId)
+}
+
+/**
+ * "Refinar tarefa" sem vaga (OPE-137): guarda o pedido no refinamento (cria um, se ainda não houver),
+ * sem iniciar turno. A mesa abre em "Refinando" pela fila da central e consome o pedido.
+ */
+export async function queueRefinementStart(taskId: string, input: { text?: string | null; fileIds?: string[]; modelOverrides?: Record<string, unknown> | null }): Promise<TaskRefinementStateDto> {
+    const existing = await findByTask(taskId)
+    if (!existing) return startRefinement(taskId, { text: input.text, fileIds: input.fileIds, fromWorkbench: true, queue: { modelOverrides: input.modelOverrides ?? null } })
+    await TaskRefinement.updateOne({ _id: existing._id }, { $set: { queuedStart: { text: input.text?.trim() || null, fileIds: input.fileIds ?? [], modelOverrides: input.modelOverrides ?? null, queuedAt: new Date() } } })
+    await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: String(existing._id), acao: AcaoAuditoria.ATUALIZAR, depois: { tarefa: existing.taskCode, aguardandoVaga: true } })
+    await publishRefinement(taskId)
+    return getRefinementState(taskId)
+}
+
+/** Lê e limpa o pedido guardado sem vaga (a mesa acabou de abrir pela fila). */
+export async function takeQueuedRefinementStart(taskId: string): Promise<{ text: string | null; fileIds: string[]; modelOverrides: Record<string, unknown> | null } | null> {
+    const doc = await findByTask(taskId)
+    const queued = doc?.queuedStart ?? null
+    if (!doc || !queued) return null
+    await TaskRefinement.updateOne({ _id: doc._id }, { $set: { queuedStart: null } })
+    return { text: queued.text ?? null, fileIds: queued.fileIds ?? [], modelOverrides: queued.modelOverrides ?? null }
+}
+
+/** Estado essencial do refinamento para o fluxo da mesa (sem DTO). */
+export interface RefinementSnapshot {
+    id: string
+    concluded: boolean
+    running: boolean
+    liveChat: boolean
+    /** Pedido guardado sem vaga (texto, anexos e modelos), consumido quando a mesa abre. */
+    queuedStart: { text: string | null; fileIds: string[]; modelOverrides: Record<string, unknown> | null } | null
+}
+
+export async function refinementSnapshot(taskId: string): Promise<RefinementSnapshot | null> {
+    const raw = await findByTask(taskId)
+    if (!raw) return null
+    const doc = await reconcile(raw)
+    const id = String(doc._id)
+    const queued = doc.queuedStart ?? null
+    return {
+        id,
+        concluded: refinementConcluded({ resolved: doc.resolved === true, closed: Boolean(doc.closedAt) }),
+        running: isWorkbenchActive(id),
+        liveChat: await liveChatEnabled(doc.centralId),
+        queuedStart: queued ? { text: queued.text ?? null, fileIds: queued.fileIds ?? [], modelOverrides: queued.modelOverrides ?? null } : null,
+    }
 }
 
 /** Responde (`answer`) ou dispensa (`cancel`) a pergunta do agente. */
@@ -515,15 +667,24 @@ export async function replyRefinementPermission(taskId: string, requestId: strin
 }
 
 /** Chat durante a execução: mensagem do usuário que entra no turno de refinamento em andamento (sem interromper). */
-export async function sendRefinementMessage(taskId: string, text: string): Promise<TaskRefinementStateDto> {
+export async function sendRefinementMessage(taskId: string, text: string, fileIds?: string[]): Promise<TaskRefinementStateDto> {
     const doc = await findByTask(taskId)
     if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
     const id = String(doc._id)
     if (!isWorkbenchActive(id)) throw new DomainError(409, "O agente não está refinando agora: use Continuar", "REFINEMENT_NOT_RUNNING")
     // Consolidando a especificação final: a mensagem se misturaria ao resultado.
     if (doc.finalizing) throw new DomainError(409, "O agente está consolidando a especificação: aguarde terminar", "REFINEMENT_FINALIZING")
-    await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "o refinamento", audit: { entidade: REFINEMENT_AUDIT_ENTITY, contexto: { tarefa: doc.taskCode } } }, text)
+    const attachments = fileIds?.length ? await liveFiles(doc.taskCode, fileIds) : undefined
+    const target = { runId: id, centralId: doc.centralId, label: "o refinamento", audit: { entidade: REFINEMENT_AUDIT_ENTITY, contexto: { tarefa: doc.taskCode } } }
+    if (attachments) await deliverLiveMessage(target, text, attachments)
+    else await deliverLiveMessage(target, text)
     return getRefinementState(taskId)
+}
+
+/** Anexos de uma mensagem do chat ao vivo (módulo de arquivos sob demanda). */
+async function liveFiles(taskCode: string, fileIds: string[]) {
+    const [{ liveAttachments, loadClaimableFiles }, { agenticDownloadDir }] = await Promise.all([import("@/features/agentic/server/files"), import("@/features/agentic/files")])
+    return liveAttachments(await loadClaimableFiles(fileIds, null), agenticDownloadDir(taskCode))
 }
 
 /** Interrompe o turno em andamento (botão Parar). */
@@ -596,15 +757,99 @@ async function launchAttachTurn(id: string, doc: ITaskRefinement): Promise<void>
         })
 }
 
-/** Retoma um refinamento interrompido/falho ou encerrado sem a especificação (mesma sessão). */
-export async function continueRefinement(taskId: string): Promise<TaskRefinementStateDto> {
+export interface ContinueRefinementOptions {
+    /** Informações adicionais do dono que entram no prompt da retomada. */
+    text?: string | null
+    fileIds?: string[]
+    /** Chamado pelo fluxo da mesa (OPE-137): a vaga e a etapa já foram decididas lá. */
+    fromWorkbench?: boolean
+}
+
+/**
+ * Retoma o refinamento na mesma conversa: interrompido/falho retoma o esclarecimento; encerrado sem a
+ * especificação apenas consolida; concluído ou encerrado na mesa volta a refinar (OPE-137); sem a sessão
+ * anterior (excluída ao concluir na página da tarefa), reenvia a tarefa com a especificação atual; e um
+ * pedido que aguardava vaga (nenhum turno ainda) começa pelo primeiro prompt.
+ */
+export async function continueRefinement(taskId: string, options: ContinueRefinementOptions = {}): Promise<TaskRefinementStateDto> {
     const doc = await findByTask(taskId)
     if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
     if (isWorkbenchActive(String(doc._id))) throw new DomainError(409, "O agente já está refinando esta tarefa", "REFINEMENT_BUSY")
-    // Encerrou sem a especificação (idle): apenas consolida. Interrompido/falho: retoma o esclarecimento.
-    const finalize = doc.runState === "idle" && !doc.resolved
-    await launchTurn(String(doc._id), finalize ? buildRefinementFinalizePrompt() : buildRefinementResumePrompt())
+    if (!options.fromWorkbench) {
+        const link = await linkedWorkbench(taskId)
+        assertNotPastRefinement(link)
+        // "Especificação pronta" não ocupa vaga: voltar a refinar passa pela mesa (fila da central).
+        if (link?.stage === "spec_ready") {
+            await delegateToWorkbench(link.id, "continue-refinement")
+            return getRefinementState(taskId)
+        }
+    }
+    const { settings } = await loadTaskRefinementSettings()
+    const task = await getTask(taskId)
+    const text = options.text?.trim() || null
+    let prompt: string
+    // Nenhum turno ainda (o pedido aguardou vaga): começa pelo primeiro prompt.
+    const neverRan = !doc.turnStartedAt && !doc.lastPrompt && !doc.sessionId
+    if (neverRan) prompt = buildRefinementPrompt(task, settings.include, text)
+    else {
+        const concluded = refinementConcluded({ resolved: doc.resolved === true, closed: Boolean(doc.closedAt) })
+        const base = !doc.sessionId ? buildRefinementFreshContinuePrompt(task, settings.include) : concluded ? buildRefinementReopenPrompt() : doc.runState === "idle" ? buildRefinementFinalizePrompt() : buildRefinementResumePrompt()
+        prompt = withAdditionalInfo(base, text)
+    }
+    await launchTurn(String(doc._id), prompt, { fileIds: options.fileIds, userText: text })
     return getRefinementState(taskId)
+}
+
+/**
+ * "Encerrar refinamento" (OPE-137, só com a mesa em "Refinando"): para o agente, dispensa as perguntas
+ * abertas e marca o refinamento como encerrado — a mesa vai para "Especificação pronta", mesmo sem
+ * especificação. A especificação já salva na tarefa é mantida.
+ */
+export async function closeRefinement(taskId: string): Promise<TaskRefinementStateDto> {
+    const doc = await findByTask(taskId)
+    if (!doc) throw new DomainError(404, "Refinamento não encontrado", "REFINEMENT_NOT_FOUND")
+    const link = await linkedWorkbench(taskId)
+    if (link?.stage !== "refining") throw new DomainError(409, "Encerrar o refinamento só vale com a mesa de trabalho em Refinando", "REFINEMENT_CLOSE_UNAVAILABLE")
+    const id = String(doc._id)
+    const now = new Date()
+    // A marca vem ANTES de abortar: o fim do turno lê `closedAt` e fecha sem erro.
+    await TaskRefinement.updateOne({ _id: doc._id }, { $set: { closedAt: now, stopRequestedAt: now } })
+    if (doc.sessionId) {
+        const client = await getOpencodeClient().catch(() => null)
+        const sessionId = doc.sessionId
+        for (const form of (doc.pendingForms ?? []) as { id?: string }[]) {
+            if (form.id) await client?.session.form.cancel({ sessionID: sessionId, formID: form.id }).catch(() => undefined)
+        }
+        if (isWorkbenchActive(id)) await client?.session.interrupt({ sessionID: sessionId }).catch(() => undefined)
+    }
+    if (isWorkbenchActive(id)) abortWorkbenchRun(id, "Refinamento encerrado pelo usuário")
+    else await TaskRefinement.updateOne({ _id: doc._id }, { $set: { runState: "idle", finalizing: false, error: null, pendingForms: [], pendingPermissions: [] } })
+    await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { tarefa: doc.taskCode, encerrado: false }, depois: { tarefa: doc.taskCode, encerrado: true } })
+    log.info({ refinementId: id }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: encerrado pelo usuário`)
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: "Refinamento encerrado. A especificação já salva foi mantida." })
+    await publishRefinement(taskId)
+    return getRefinementState(taskId)
+}
+
+/**
+ * A mesa saiu do refinamento (foi para o planejamento, foi concluída ou excluída — OPE-137): a sessão do
+ * OpenCode do refinamento é desvinculada e excluída, com a mesma regra de exclusão pendente de hoje.
+ */
+export async function releaseRefinementSession(taskId: string): Promise<void> {
+    const doc = await findByTask(taskId)
+    if (!doc) return
+    if (!doc.sessionId) {
+        await publishRefinement(taskId)
+        return
+    }
+    const id = String(doc._id)
+    if (isWorkbenchActive(id)) {
+        await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
+        abortWorkbenchRun(id, "A mesa de trabalho saiu do refinamento")
+    }
+    await finishRefinementSession(id, doc.sessionId)
+    await publishRefinement(taskId)
 }
 
 /**
@@ -617,9 +862,12 @@ async function destroyRefinement(doc: ITaskRefinement): Promise<string[]> {
         if (doc.sessionId) await (await getOpencodeClient()).session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
         abortWorkbenchRun(id, "Refinamento recomeçado")
     }
-    const pending = [...new Set((doc.pendingSessionDeletions ?? []).filter((value) => typeof value === "string" && value))]
+    // A sessão atual também sai (Recomeçar abre outra conversa; com a mesa, ela não é mais excluída ao concluir).
+    const pending = [...new Set([...(doc.pendingSessionDeletions ?? []), doc.sessionId].filter((value): value is string => typeof value === "string" && Boolean(value)))]
     const remaining = pending.length ? await flushRefinementSessionDeletions(id, pending).catch(() => pending) : []
     await dropWorkbenchEvents(id)
+    // Anexos de um pedido que aguardava vaga (dono provisório do refinamento).
+    if (doc.queuedStart?.fileIds?.length) await import("@/features/agentic/server/files").then((files) => files.deleteWorkbenchFiles(refinementFilesOwner(id))).catch(() => undefined)
     await TaskRefinement.deleteOne({ _id: doc._id })
     // Refinamento apagado antes da especificação final: abandonado (Agente Refinador: % concluídos).
     if (!doc.resolved) refinementMetric(doc, "refinement-abandoned", { dedupKey: `refinement-abandoned:${id}`, data: { runState: doc.runState } })
@@ -627,7 +875,15 @@ async function destroyRefinement(doc: ITaskRefinement): Promise<string[]> {
 }
 
 /** Recomeça do zero: apaga o refinamento e abre uma nova sessão (levando as exclusões pendentes). */
-export async function restartRefinement(taskId: string): Promise<TaskRefinementStateDto> {
+export async function restartRefinement(taskId: string, options: { fromWorkbench?: boolean } = {}): Promise<TaskRefinementStateDto> {
+    if (!options.fromWorkbench) {
+        const link = await linkedWorkbench(taskId)
+        assertNotPastRefinement(link)
+        if (link?.stage === "spec_ready") {
+            await delegateToWorkbench(link.id, "restart-refinement")
+            return getRefinementState(taskId)
+        }
+    }
     const doc = await findByTask(taskId)
     let carried: string[] = []
     if (doc) {
@@ -635,7 +891,7 @@ export async function restartRefinement(taskId: string): Promise<TaskRefinementS
         await recordAudit({ userId: actorId(), entidade: REFINEMENT_AUDIT_ENTITY, entidadeId: String(doc._id), acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, motivo: "recomeço" } })
         await publishRefinement(taskId)
     }
-    return startRefinement(taskId, carried)
+    return startRefinement(taskId, { carriedPending: carried, fromWorkbench: options.fromWorkbench })
 }
 
 /** Exclui o refinamento da tarefa (botão Excluir). */

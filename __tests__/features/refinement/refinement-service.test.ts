@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => {
         deliverLive: vi.fn(async () => undefined),
         eventWrite: vi.fn(async () => ({})),
         runWrite: vi.fn(async () => ({})),
+        link: null as { id: string; centralId: string; stage: string; refinementModel: { model: string; variant: string | null } | null } | null,
+        sync: vi.fn(),
+        delegate: vi.fn(async () => undefined),
     }
 })
 
@@ -96,8 +99,16 @@ vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.pr
 vi.mock('@/features/agentic/server/live-chat', () => ({ liveChatEnabled: vi.fn(async () => mocks.liveChat), deliverLiveMessage: mocks.deliverLive }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+// Vínculo com a mesa de trabalho (OPE-137): sem mesa por padrão; cada caso define a etapa dela.
+vi.mock('@/features/refinement/server/workbench-link', () => ({
+    linkedWorkbench: vi.fn(async () => mocks.link),
+    inRefinementStage: (link: { stage: string } | null) => Boolean(link && (link.stage === 'refining' || link.stage === 'spec_ready')),
+    pastRefinement: (link: { stage: string } | null) => Boolean(link && link.stage !== 'refining' && link.stage !== 'spec_ready'),
+    syncLinkedWorkbench: mocks.sync,
+    delegateToWorkbench: mocks.delegate,
+}))
 
-import { continueRefinement, getRefinementState, interruptRefinement, reconnectRefinement, replyRefinementForm, sendRefinementMessage, startRefinement } from '@/features/refinement/server/service'
+import { closeRefinement, continueRefinement, getRefinementState, interruptRefinement, queueRefinementStart, reconnectRefinement, releaseRefinementSession, replyRefinementForm, sendRefinementMessage, startRefinement } from '@/features/refinement/server/service'
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -105,6 +116,7 @@ beforeEach(() => {
     mocks.updateTask.mockReset()
     mocks.updateTask.mockResolvedValue(undefined)
     mocks.doc = null
+    mocks.link = null
     mocks.settings = {}
     mocks.fakeClient.skill.list.mockResolvedValue({ location: {}, data: [] })
     mocks.fakeClient.session.skill.mockResolvedValue(undefined)
@@ -459,6 +471,124 @@ describe('reconectar', () => {
         mocks.isActive.mockReturnValue(true)
         await reconnectRefinement('t1')
         expect(mocks.probe).not.toHaveBeenCalled()
+        expect(mocks.run).not.toHaveBeenCalled()
+    })
+})
+
+describe('refinamento na mesa de trabalho (OPE-137)', () => {
+    const existing = (patch: Record<string, unknown> = {}) => ({ _id: 'c'.repeat(24), taskId: 't1', taskCode: 'OPX-1', taskTitle: 'x', projectId: 'p1', centralId: 'a'.repeat(24), sessionId: 'sess-1', runState: 'idle', resolved: false, usage: {}, pendingForms: [], pendingPermissions: [], startedAt: new Date(), updatedAt: new Date(), turnStartedAt: new Date(), ...patch })
+    const promptOf = (index = 0) => (mocks.run.mock.calls[index]![1] as { text: string }).text
+
+    it('mesa do planejamento em diante bloqueia com o motivo (item 18) e recusa iniciar', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'planning', refinementModel: null }
+        const state = await getRefinementState('t1')
+        expect(state.availability).toMatchObject({ available: false, reason: 'A tarefa já está em desenvolvimento na mesa de trabalho' })
+        expect(state.workbench).toEqual({ id: 'w1', stage: 'planning' })
+        await expect(startRefinement('t1')).rejects.toMatchObject({ code: 'REFINEMENT_WORKBENCH_ADVANCED' })
+        expect(mocks.create).not.toHaveBeenCalled()
+    })
+
+    it('o estado traz o modelo do Agente Refinador (base do Modelo do Refinamento)', async () => {
+        const state = await getRefinementState('t1')
+        expect(state.refinerModel).toEqual({ agent: null, model: 'anthropic/claude', variant: null })
+    })
+
+    it('as informações adicionais da tela inicial vão no primeiro prompt', async () => {
+        mocks.run.mockReturnValue(new Promise(() => undefined))
+        await startRefinement('t1', { text: 'Use o componente X', fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect(promptOf()).toContain('## Informações adicionais do dono')
+        expect(promptOf()).toContain('Use o componente X')
+        expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), { type: 'user', text: 'Use o componente X' })
+    })
+
+    it('sem vaga: guarda o pedido e não inicia o turno', async () => {
+        await queueRefinementStart('t1', { text: 'pedido', fileIds: [], modelOverrides: null })
+        expect(mocks.doc).toMatchObject({ queuedStart: expect.objectContaining({ text: 'pedido', fileIds: [] }) })
+        expect(mocks.run).not.toHaveBeenCalled()
+        expect(mocks.sync).toHaveBeenCalledWith('t1')
+    })
+
+    it('o turno usa o "Modelo do Refinamento" trocado na mesa (mesmo agente)', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'refining', refinementModel: { model: 'openai/gpt-5', variant: 'high' } }
+        mocks.run.mockReturnValue(new Promise(() => undefined))
+        await startRefinement('t1', { fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect((mocks.run.mock.calls[0]![1] as { agent: unknown }).agent).toEqual({ agent: null, model: 'openai/gpt-5', variant: 'high' })
+    })
+
+    it('concluído com a mesa em Refinando: a sessão fica para o Continuar refinamento', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'refining', refinementModel: null }
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1', { fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.doc).toMatchObject({ resolved: true, runState: 'idle' }))
+        expect(mocks.fakeClient.session.remove).not.toHaveBeenCalled()
+    })
+
+    it('a mesa saiu do refinamento: a sessão é desvinculada e excluída', async () => {
+        mocks.doc = existing({ resolved: true })
+        await releaseRefinementSession('t1')
+        expect(mocks.fakeClient.session.remove).toHaveBeenCalledWith({ sessionID: 'sess-1' }, expect.anything())
+    })
+
+    it('Encerrar refinamento só com a mesa em Refinando', async () => {
+        mocks.doc = existing()
+        await expect(closeRefinement('t1')).rejects.toMatchObject({ code: 'REFINEMENT_CLOSE_UNAVAILABLE' })
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'spec_ready', refinementModel: null }
+        await expect(closeRefinement('t1')).rejects.toMatchObject({ code: 'REFINEMENT_CLOSE_UNAVAILABLE' })
+    })
+
+    it('Encerrar refinamento para o agente, dispensa a pergunta aberta e marca encerrado (mesa sincroniza)', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'refining', refinementModel: null }
+        mocks.doc = existing({ runState: 'running', pendingForms: [{ id: 'f1' }] })
+        mocks.isActive.mockReturnValue(true)
+        const state = await closeRefinement('t1')
+        expect(mocks.fakeClient.session.form.cancel).toHaveBeenCalledWith({ sessionID: 'sess-1', formID: 'f1' })
+        expect(mocks.fakeClient.session.interrupt).toHaveBeenCalledWith({ sessionID: 'sess-1' })
+        expect(mocks.abort).toHaveBeenCalledWith('c'.repeat(24), 'Refinamento encerrado pelo usuário')
+        expect(mocks.doc!.closedAt).toBeInstanceOf(Date)
+        expect(state.refinement).toMatchObject({ closed: true, concluded: true })
+        expect(mocks.sync).toHaveBeenCalledWith('t1')
+    })
+
+    it('Encerrar com o agente parado fica parado sem erro', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'refining', refinementModel: null }
+        mocks.doc = existing({ runState: 'failed', error: 'caiu' })
+        await closeRefinement('t1')
+        expect(mocks.doc).toMatchObject({ runState: 'idle', error: null })
+    })
+
+    it('Continuar sem turno anterior (pedido que aguardou vaga) começa pelo primeiro prompt', async () => {
+        mocks.doc = existing({ sessionId: null, turnStartedAt: null, lastPrompt: null })
+        mocks.run.mockReturnValue(new Promise(() => undefined))
+        await continueRefinement('t1', { text: 'guardado', fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect(promptOf()).toContain('Comece lendo a tarefa')
+        expect(promptOf()).toContain('guardado')
+    })
+
+    it('Continuar refinamento concluído retoma a mesma conversa pedindo o que faltar', async () => {
+        mocks.doc = existing({ resolved: true })
+        mocks.run.mockReturnValue(new Promise(() => undefined))
+        await continueRefinement('t1', { fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect(promptOf()).toContain('O dono quer continuar o refinamento')
+        expect((mocks.run.mock.calls[0]![1] as { sessionId: string }).sessionId).toBe('sess-1')
+    })
+
+    it('Continuar sem a sessão anterior (excluída ao concluir na página) reenvia a tarefa com a especificação', async () => {
+        mocks.doc = existing({ resolved: true, sessionId: null })
+        mocks.run.mockReturnValue(new Promise(() => undefined))
+        await continueRefinement('t1', { fromWorkbench: true })
+        await vi.waitFor(() => expect(mocks.run).toHaveBeenCalled())
+        expect(promptOf()).toContain('já foi refinada antes')
+    })
+
+    it('Continuar pela página com a mesa em Especificação pronta passa pela mesa (vaga da central)', async () => {
+        mocks.link = { id: 'w1', centralId: 'a'.repeat(24), stage: 'spec_ready', refinementModel: null }
+        mocks.doc = existing({ resolved: true })
+        await continueRefinement('t1')
+        expect(mocks.delegate).toHaveBeenCalledWith('w1', 'continue-refinement')
         expect(mocks.run).not.toHaveBeenCalled()
     })
 })

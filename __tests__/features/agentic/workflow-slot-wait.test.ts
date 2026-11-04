@@ -36,6 +36,8 @@ vi.mock('@/lib/ai/opencode-client', () => ({
     },
   })),
 }))
+// Refinamento na mesa (OPE-137): a tarefa não tem refinamento (abre direto no planejamento).
+vi.mock('@/features/refinement/server/service', () => ({ refinementSnapshot: vi.fn(async () => null), releaseRefinementSession: vi.fn(async () => undefined) }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   const workbenches = memoryModel()

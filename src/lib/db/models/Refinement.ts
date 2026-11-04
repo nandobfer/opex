@@ -39,6 +39,16 @@ export interface ITaskRefinement {
     /** Última especificação técnica gravada na tarefa. */
     spec: string | null
     lastPrompt: { text: string } | null
+    /**
+     * "Encerrar refinamento" na mesa (OPE-137): o agente parou e o refinamento conta como concluído
+     * (a mesa vai para "Especificação pronta"), mesmo sem especificação. Um turno novo limpa.
+     */
+    closedAt: Date | null
+    /**
+     * "Refinar tarefa" sem vaga na central (OPE-137): o pedido (texto, anexos e modelos) fica aqui até a
+     * mesa abrir pela fila; nenhum turno começa antes disso.
+     */
+    queuedStart: { text: string | null; fileIds: string[]; modelOverrides: Record<string, unknown> | null; queuedAt: Date } | null
     pendingForms: unknown[]
     pendingPermissions: unknown[]
     usage: { costUsd: number; inputTokens: number; outputTokens: number; reasoningTokens: number }
@@ -69,6 +79,8 @@ const TaskRefinementSchema = new Schema<ITaskRefinement>(
         lastText: { type: String, default: "" },
         spec: { type: String, default: null },
         lastPrompt: { type: Schema.Types.Mixed, default: null },
+        closedAt: { type: Date, default: null },
+        queuedStart: { type: Schema.Types.Mixed, default: null },
         pendingForms: { type: [Schema.Types.Mixed], default: [] },
         pendingPermissions: { type: [Schema.Types.Mixed], default: [] },
         usage: { type: Schema.Types.Mixed, default: () => ({ costUsd: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0 }) },

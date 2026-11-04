@@ -1,5 +1,6 @@
 import { LEGACY_PREVIEW_PORT_MAX, LEGACY_PREVIEW_PORT_MIN, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, RUNNING_STAGES, WORKBENCH_MODEL_ROLES, WORKBENCH_STAGE_LABELS, type AgentRole, type ManualStage, type RunState, type WorkbenchModelRole, type WorkbenchStage } from "./constants"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
+import { REFINEMENT_IN_PROGRESS_REASON } from "@/features/refinement/constants"
 import { normalizeColor } from "@/lib/colors"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
@@ -101,8 +102,25 @@ export function toModelChoice(base: AgentConfig, override: ModelOverride | null,
  * na tela. Usa a mesma regra do servidor (`toModelChoice`) para o texto e o popover; `overrides` é o
  * rascunho local, que só é gravado quando a mesa abre (OPE-134).
  */
-export function draftWorkbenchModels(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, overrides: Partial<Record<WorkbenchModelRole, ModelOverride>>): Record<WorkbenchModelRole, ModelChoiceDto> {
-    return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, toModelChoice(resolveAgent(settings, config, role), overrides[role] ?? null, modelSource(config, role))])) as Record<WorkbenchModelRole, ModelChoiceDto>
+export function draftWorkbenchModels(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, overrides: Partial<Record<WorkbenchModelRole, ModelOverride>>, refiner: RefinerAgent | null = null): Record<WorkbenchModelRole, ModelChoiceDto> {
+    return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, toModelChoice(roleBaseAgent(settings, config, role, refiner), overrides[role] ?? null, roleModelSource(config, role))])) as Record<WorkbenchModelRole, ModelChoiceDto>
+}
+
+/** Modelo do Agente Refinador (aba própria em Integrações › IA): base do papel "Refinamento" da mesa. */
+export type RefinerAgent = Pick<AgentConfig, "agent" | "model" | "variant">
+
+/**
+ * Agente base de um papel da mesa: os papéis do Agente Desenvolvedor seguem central/global; o
+ * "Refinamento" (OPE-137) usa o Agente Refinador (`null` = ainda não carregado: modelo padrão do agente).
+ */
+export function roleBaseAgent(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole, refiner: RefinerAgent | null): AgentConfig {
+    if (role === "refinement") return { agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.model ? (refiner.variant ?? null) : null, fallbacks: [] }
+    return resolveAgent(settings, config, role)
+}
+
+/** Origem do modelo de um papel sem troca na mesa (o Refinamento vem sempre do Agente Refinador). */
+export function roleModelSource(config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole): ModelSourceDto {
+    return role === "refinement" ? "refiner" : modelSource(config, role)
 }
 
 /**
@@ -226,6 +244,14 @@ export function resolveCentralFlow(publishPreview: boolean, taskFlow: TaskAgenti
     return taskFlow ?? (publishPreview ? "preview" : "auto_pr")
 }
 
+/**
+ * "Gerar plano após refinar" efetivo da mesa nova (OPE-137): a escolha da tarefa vence; sem ela, o padrão
+ * da central (`environment.planAfterRefinement`, desligado por padrão).
+ */
+export function resolvePlanAfterRefinement(centralDefault: boolean | undefined, taskValue: boolean | null | undefined): boolean {
+    return typeof taskValue === "boolean" ? taskValue : centralDefault === true
+}
+
 /** Menor porta livre da faixa (`null` = faixa esgotada). */
 export function pickPreviewPort(used: Iterable<number>, min = PREVIEW_PORT_MIN, max = PREVIEW_PORT_MAX): number | null {
     const taken = new Set(used)
@@ -272,6 +298,14 @@ export type WorkbenchAction =
     | "adversarial-fix"
     | "adversarial-skip"
     | "adversarial-rerun"
+    /** Refinamento na mesa (OPE-137), em "Especificação pronta". */
+    | "generate-plan"
+    | "continue-refinement"
+    | "restart-refinement"
+
+/** Etapas do refinamento na mesa: as ações de execução (Parar, Continuar…) são as do refinamento. */
+export const REFINEMENT_STAGES: readonly WorkbenchStage[] = ["refining", "spec_ready"]
+export const isRefinementStage = (stage: WorkbenchStage): boolean => REFINEMENT_STAGES.includes(stage)
 
 /**
  * Ações disponíveis na mesa (os botões da tela e a guarda das rotas usam a mesma regra).
@@ -280,6 +314,9 @@ export type WorkbenchAction =
  */
 export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true, waitingSlot = false): WorkbenchAction[] {
     if (waitingSlot) return ["cancel-wait"]
+    // Refinando: Parar/Continuar/Reconectar/Recomeçar/Encerrar são as ações do refinamento (rotas próprias).
+    if (stage === "refining") return []
+    if (stage === "spec_ready") return ["generate-plan", "continue-refinement", "restart-refinement"]
     if (runState === "running") return ["interrupt"]
     if (runState === "failed" || runState === "interrupted") {
         if (!RUNNING_STAGES.includes(stage)) return []
@@ -326,6 +363,7 @@ export function manualStageBlock(target: ManualStage, state: ManualStageState): 
     if (state.deleting) return "A mesa está sendo excluída: a limpeza do ambiente precisa terminar antes"
     if (state.stage === "done") return "A mesa já está concluída: use Reabrir mesa para continuar o trabalho"
     if (state.stage === target) return `A mesa já está em "${WORKBENCH_STAGE_LABELS[target]}"`
+    if (state.stage === "refining") return "O refinamento está em andamento: encerre-o antes de definir a etapa"
     switch (target) {
         case "plan_review":
             return state.hasPlan ? null : "A mesa ainda não tem um plano para revisar"
@@ -379,11 +417,16 @@ export function workbenchWaitingReason(input: { stage: WorkbenchStage; runState:
     const { stage, runState, pendingPermissions, pendingForms } = input
     if (input.waitingSlot) return `Aguardando vaga na central${input.slotQueuePosition ? ` (#${input.slotQueuePosition})` : ""}`
     if (runState === "running" && pendingPermissions === 0 && pendingForms === 0) return null
+    if (stage === "refining" && (runState === "failed" || runState === "interrupted")) return "Refinamento interrompido — use Continuar ou Reconectar"
     if (runState === "failed") return "A etapa falhou — use Tentar novamente"
     if (runState === "interrupted") return "Execução interrompida — use Tentar novamente"
     if (pendingPermissions > 0) return "Aguardando você permitir uma ação"
     if (pendingForms > 0) return "Aguardando você responder uma pergunta"
     switch (stage) {
+        case "refining":
+            return "Refinamento parado — use Continuar"
+        case "spec_ready":
+            return "Especificação pronta: gere o plano ou continue o refinamento"
         case "plan_review":
             return "Aguardando revisão do plano"
         case "adversarial_blocked":
@@ -408,4 +451,43 @@ export function workbenchUserWaitReason(input: { stage: WorkbenchStage; runState
     if (input.waitingSlot) return null
     if (input.stage === "done" || input.stage === "build_queued") return null
     return workbenchWaitingReason(input)
+}
+
+/** Estado da tela inicial da mesa para os bloqueios de "Abrir mesa e gerar o plano" e "Refinar tarefa" (OPE-137). */
+export interface StartBlockInput {
+    /** Central desativada ou desenvolvimento agêntico indisponível. */
+    agentic: string | null
+    /** A tarefa é de outro projeto. */
+    otherProject: string | null
+    /** Anexos das informações adicionais ainda enviando. */
+    upload: string | null
+    /** Agente Refinador (`undefined` enquanto carrega): disponibilidade e o refinamento existente. */
+    refinement?: { available: boolean; reason: string | null; existing: { concluded: boolean; running: boolean; liveChat: boolean } | null }
+    /** Há texto ou anexos nas informações adicionais. */
+    hasInput: boolean
+}
+
+/** Motivo do bloqueio de "Abrir mesa e gerar o plano": refinamento não concluído bloqueia (item 8). */
+export function openPlanBlockReason(input: StartBlockInput): string | null {
+    const existing = input.refinement?.existing
+    return input.agentic ?? input.otherProject ?? input.upload ?? (existing && !existing.concluded ? REFINEMENT_IN_PROGRESS_REASON : null)
+}
+
+/**
+ * Motivo do bloqueio de "Refinar tarefa" (itens 3 e 6): mesmo bloqueio do "Abrir mesa", a disponibilidade do
+ * Agente Refinador e, com o agente refinando e o chat durante a execução desligado, texto/anexos pendentes.
+ */
+export function startRefineBlockReason(input: StartBlockInput): string | null {
+    if (input.agentic ?? input.otherProject) return input.agentic ?? input.otherProject
+    if (!input.refinement) return "Verificando o Agente Refinador…"
+    if (!input.refinement.available) return input.refinement.reason ?? "Refinar tarefa indisponível"
+    if (input.upload) return input.upload
+    const existing = input.refinement.existing
+    if (existing && !existing.concluded && existing.running && input.hasInput && !existing.liveChat) return "O agente está refinando e o chat durante a execução está desligado: limpe as informações adicionais ou aguarde o agente parar"
+    return null
+}
+
+/** Id do turno vivo da mesa no barramento: o do refinamento em "Refinando" (OPE-137), senão o da própria mesa. */
+export function activeRunId(doc: { _id: unknown; stage: string; refinementId?: string | null }): string {
+    return doc.stage === "refining" && doc.refinementId ? doc.refinementId : String(doc._id)
 }

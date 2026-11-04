@@ -18,7 +18,8 @@ import { useBuilderMachineActive } from "@/features/local-docker/hooks/useLocalD
 import type { CentralForm } from "./form"
 
 /**
- * Aba Ambiente: o **fluxo padrão da mesa** (publicar a prévia ou abrir o PR direto — OPE-79) e a
+ * Aba Ambiente: o **fluxo padrão da mesa** (publicar a prévia ou abrir o PR direto — OPE-79; gerar o plano
+ * sozinho depois do refinamento — OPE-137) e a
  * prévia em si (docker compose, faixa de portas — herdada do padrão global ou personalizada —, variável da porta, endereço, teste de saúde,
  * serviços do compose que o build Local sobe e backup do banco). Sem publicar a prévia, os ajustes ficam guardados e só o switch aparece. Com a
  * integração Builder Machine ativa e a prévia Local, o card da Builder Machine escolhe se a central usa o PC.
@@ -51,6 +52,18 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                         onLabel="Publicar prévia"
                         offLabel="PR automático"
                     />
+                    <div className="mt-4">
+                        <FormToggleCard
+                            bare
+                            control={form.control}
+                            name="environment.planAfterRefinement"
+                            id="central-env-plan-after-refinement"
+                            label="Gerar plano após refinar"
+                            description="Quando a mesa refina a tarefa com o Agente Refinador, ao concluir a especificação ela segue sozinha para o planejamento. Desligado, a mesa para em Especificação pronta e espera você. A escolha feita na tarefa tem prioridade sobre este padrão."
+                            onLabel="Ligado"
+                            offLabel="Desligado"
+                        />
+                    </div>
                     <AnimatePresence initial={false}>
                         {publishPreview ? (
                             <motion.div key="preview-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>

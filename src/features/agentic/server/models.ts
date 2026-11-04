@@ -1,8 +1,9 @@
 import type { IAgenticFork, IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "../constants"
-import { applyModelOverride, asModelOverride, modelSource, resolveAgent, toModelChoice, type ModelOverride } from "../logic"
+import { loadTaskRefinementSettings } from "@/features/ai/server/settings"
+import { applyModelOverride, asModelOverride, modelSource, resolveAgent, roleBaseAgent, roleModelSource, toModelChoice, type ModelOverride, type RefinerAgent } from "../logic"
 import type { AgentConfig, AgenticSettings, CentralConfig, ModelOverrideInput } from "../schemas"
-import type { ModelChoiceDto, ModelSourceDto } from "../types"
+import type { ModelChoiceDto, ModelSourceDto, WorkbenchModelsDto } from "../types"
 import { loadCentral } from "./centrals"
 import { assertAgentConfigs, loadAgenticSettings } from "./settings"
 
@@ -31,16 +32,37 @@ export function workbenchTurnAgent(settings: AgenticSettings, config: Pick<Centr
     return role === "fork" ? base : applyModelOverride(base, workbenchOverrides(doc)[role] ?? null)
 }
 
-/** Modelo de um papel da mesa para a tela (central/global + troca da mesa). */
-export function workbenchModelChoice(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, doc: Pick<IAgenticWorkbench, "modelOverrides">, role: WorkbenchModelRole): ModelChoiceDto {
-    return toModelChoice(resolveAgent(settings, config, role), workbenchOverrides(doc)[role] ?? null, modelSource(config, role))
+/** Modelo de um papel da mesa para a tela (central/global ou Agente Refinador + troca da mesa). */
+export function workbenchModelChoice(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, doc: Pick<IAgenticWorkbench, "modelOverrides">, role: WorkbenchModelRole, refiner: RefinerAgent | null = null): ModelChoiceDto {
+    return toModelChoice(roleBaseAgent(settings, config, role, refiner), workbenchOverrides(doc)[role] ?? null, roleModelSource(config, role))
 }
 
-/** Modelos efetivos dos papéis da mesa (`null` se a central não puder ser lida). */
-export async function workbenchModels(doc: Pick<IAgenticWorkbench, "centralId" | "modelOverrides">): Promise<Record<WorkbenchModelRole, ModelChoiceDto> | null> {
+/** Modelo configurado no Agente Refinador (base do papel "Refinamento"); `null` se não puder ser lido. */
+export async function refinerAgent(): Promise<RefinerAgent | null> {
     try {
-        const [{ settings }, { config }] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId)])
-        return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, workbenchModelChoice(settings, config, doc, role)])) as Record<WorkbenchModelRole, ModelChoiceDto>
+        const { settings } = await loadTaskRefinementSettings()
+        return { agent: settings.agent ?? null, model: settings.model ?? null, variant: settings.variant ?? null }
+    } catch {
+        return null
+    }
+}
+
+/** Agente do turno do refinamento na mesa: o do Agente Refinador com a troca "Refinamento" da mesa. */
+export async function refinementTurnAgent(doc: Pick<IAgenticWorkbench, "modelOverrides">): Promise<AgentConfig> {
+    const refiner = await refinerAgent()
+    return applyModelOverride({ agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.variant ?? null, fallbacks: [] }, workbenchOverrides(doc).refinement ?? null)
+}
+
+/**
+ * Modelos efetivos dos papéis da mesa (`null` se a central não puder ser lida). O "Refinamento" só entra
+ * enquanto a mesa está no refinamento (OPE-137): depois dele não há mais turno do Agente Refinador.
+ */
+export async function workbenchModels(doc: Pick<IAgenticWorkbench, "centralId" | "modelOverrides"> & Partial<Pick<IAgenticWorkbench, "stage">>): Promise<WorkbenchModelsDto | null> {
+    try {
+        const refining = doc.stage === "refining" || doc.stage === "spec_ready"
+        const [{ settings }, { config }, refiner] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId), refining ? refinerAgent() : Promise.resolve(null)])
+        const roles = WORKBENCH_MODEL_ROLES.filter((role) => refining || role !== "refinement")
+        return Object.fromEntries(roles.map((role) => [role, workbenchModelChoice(settings, config, doc, role, refiner)])) as WorkbenchModelsDto
     } catch {
         return null
     }

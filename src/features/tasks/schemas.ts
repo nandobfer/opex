@@ -65,7 +65,11 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>
  */
 export const updateTaskSchema = taskInputSchema
     .partial()
-    .extend({ agenticFlow: z.enum(TASK_AGENTIC_FLOWS).nullable().optional() })
+    .extend({
+        agenticFlow: z.enum(TASK_AGENTIC_FLOWS).nullable().optional(),
+        /** "Gerar plano após refinar" só desta tarefa (OPE-137); `null` segue o padrão da central. */
+        planAfterRefinement: z.boolean().nullable().optional(),
+    })
     .refine((value) => Object.values(value).some((item) => item !== undefined), "Nada para atualizar")
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>
 

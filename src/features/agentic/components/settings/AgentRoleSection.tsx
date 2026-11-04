@@ -2,11 +2,12 @@
 
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
-import { AGENT_ROLE_LABELS, type AgentRole } from "../../constants"
+import { WORKBENCH_MODEL_ROLE_INFO, type WorkbenchModelRole } from "../../constants"
 
 interface AgentRoleSectionProps {
     id: string
-    role: AgentRole
+    /** Papel do Agente Desenvolvedor ou o "Refinamento" (Agente Refinador) da mesa. */
+    role: WorkbenchModelRole
     /** Título no lugar do rótulo do papel (ex.: "Este fork"). */
     title?: string
     /** Ao lado do título (ex.: "Etapa atual", indicador de gravação). */
@@ -27,11 +28,11 @@ export function AgentRoleSection({ id, role, title, badge, description, classNam
             <div>
                 <div className="flex min-w-0 items-center gap-2">
                     <h3 id={`${id}-title`} className="text-sm font-medium">
-                        {title ?? AGENT_ROLE_LABELS[role].label}
+                        {title ?? WORKBENCH_MODEL_ROLE_INFO[role].label}
                     </h3>
                     {badge}
                 </div>
-                <p className="text-xs text-muted-foreground">{description ?? AGENT_ROLE_LABELS[role].description}</p>
+                <p className="text-xs text-muted-foreground">{description ?? WORKBENCH_MODEL_ROLE_INFO[role].description}</p>
             </div>
             {children}
         </section>

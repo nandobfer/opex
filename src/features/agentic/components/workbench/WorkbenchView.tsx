@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { FileCode2, FileText } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { ReplyTargetProvider } from "@/components/agent-reply/ReplyTargetProvider"
 import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
 import { usePrWatchSchedule } from "../../hooks/useAgentic"
@@ -22,6 +21,9 @@ import { StageSteps } from "./StageSteps"
 import { TaskTextView } from "./TaskTextView"
 import { Timeline } from "./Timeline"
 import { WorkbenchHeader } from "./WorkbenchHeader"
+import { WorkbenchTabs, type WorkbenchTab } from "./WorkbenchTabs"
+import { RefinementWorkbenchView } from "./RefinementWorkbenchView"
+import { isRefinementStage } from "../../logic"
 import { AdversarialRoundsView, AdversarialTabNavProvider, useAdversarialTab } from "@/features/adversarial-agent/components/workbench/AdversarialRoundsView"
 import { ArchitectTab, useArchitectTab } from "@/features/architect-agent/components/workbench/ArchitectTab"
 
@@ -32,6 +34,11 @@ type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial"
  * plano, as rodadas do agente adversário ou os forks), pedidos do agente e ações. A mesa abre na saída da IA. Cada linha da saída e do plano tem "Citar no campo de resposta" (`ReplyTargetProvider`).
  */
 export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto; central: CentralDto }) {
+    // Refinamento (OPE-137): a conversa é a do Agente Refinador (a mesma da aba da página da tarefa).
+    return isRefinementStage(workbench.stage) ? <RefinementWorkbenchView workbench={workbench} central={central} /> : <WorkbenchMainView workbench={workbench} central={central} />
+}
+
+function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; central: CentralDto }) {
     const { timeline, connected } = useWorkbenchStream(workbench.id)
     const task = useTaskDetail(workbench.taskId)
     const [selected, setView] = useState<View>("output")
@@ -57,9 +64,9 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
     const prWatch = watchingPr && schedule ? { enabled: schedule.enabled, nextCheckAt: nextPrWatchAt(schedule.nextCheckAt, lastCheck?.nextCheckAt), checking: lastCheck?.outcome === null } : null
     // Sem forks (todos descartados) ou sem rodadas do adversário, a aba some e a visão volta para a saída.
     const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "architect" && !architectTab.visible) || (selected === "build" && !buildCount) ? "output" : selected
-    const tabs: { id: View; label: string; disabled?: boolean; hidden?: boolean }[] = [
+    const tabs: WorkbenchTab<View>[] = [
         { id: "description", label: "Descrição" },
-        { id: "spec", label: "Spec." },
+        { id: "spec", label: "Especificação" },
         { id: "output", label: "Saída da IA" },
         { id: "plan", label: plans.length ? `Plano v${plans.length}` : "Plano", disabled: !plans.length },
         { id: "build", label: `Build (${buildCount})`, hidden: !buildCount },
@@ -73,23 +80,8 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
         <AdversarialTabNavProvider value={adversarialTab.visible ? openAdversarialRound : null}>
         <div className="flex min-h-0 flex-1 flex-col">
             <WorkbenchHeader workbench={workbench} central={central} connected={connected} />
-            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} />
-            <div role="tablist" aria-label="Visão da mesa" className="flex gap-1 overflow-x-auto border-b px-4">
-                {tabs.filter((tab) => !tab.hidden).map((tab) => (
-                    <button
-                        key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={view === tab.id}
-                        disabled={tab.disabled}
-                        onClick={() => setView(tab.id)}
-                        className={cn("relative shrink-0 whitespace-nowrap px-3 pb-2 pt-1 text-sm transition-colors disabled:opacity-40", view === tab.id ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-                    >
-                        {tab.label}
-                        {view === tab.id && <motion.span layoutId="workbench-view-tab" className="absolute inset-x-0 bottom-0 h-0.5 rounded bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
-                    </button>
-                ))}
-            </div>
+            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} refinement={workbench.refinementPhase} />
+            <WorkbenchTabs tabs={tabs} value={view} onChange={setView} label="Visão da mesa" indicatorId="workbench-view-tab" />
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} role="tabpanel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "description" ? (

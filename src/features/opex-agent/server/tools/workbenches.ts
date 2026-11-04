@@ -137,7 +137,7 @@ export const workbenchTools: OpexTool[] = [
         group: "workbenches",
         label: "Abrir mesa",
         risk: "write",
-        description: "Abre a mesa de trabalho de uma tarefa numa central (o agente começa planejando). `text` são instruções extras.",
+        description: "Abre a mesa de trabalho de uma tarefa numa central (o agente começa planejando). `text` são instruções extras. Recusa (REFINEMENT_IN_PROGRESS) quando a tarefa tem um refinamento não concluído: ele precisa ser continuado pelo Refinar tarefa da mesa ou encerrado.",
         input: z.object({ centralId: z.string(), task: taskRefSchema, text: z.string().optional() }),
         summarize: (input) => `Abrir a mesa de trabalho da tarefa ${input.task}`,
         execute: async (input) => {

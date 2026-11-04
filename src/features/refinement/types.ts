@@ -1,5 +1,6 @@
 import type { OpencodeFormDto, OpencodePermissionDto, WorkbenchStreamLine } from "@/features/agentic/types"
 import type { ReconnectInfoDto } from "@/features/agentic/reconnect"
+import type { WorkbenchStage } from "@/features/agentic/constants"
 
 /** Tipos do refinamento de tarefa (cliente e servidor). */
 
@@ -33,6 +34,12 @@ export interface TaskRefinementDto {
     runState: "idle" | "running" | "failed" | "interrupted"
     /** O agente julgou a especificação totalmente esclarecida. */
     resolved: boolean
+    /** Encerrado pelo dono na mesa (OPE-137): conta como concluído, mesmo sem especificação. */
+    closed: boolean
+    /** Concluído: `resolved` ou `closed` (`refinementConcluded`). */
+    concluded: boolean
+    /** "Refinar tarefa" aguardando vaga na central: nenhum turno começou ainda. */
+    queued: boolean
     /** Turno de consolidação da especificação em andamento. */
     finalizing: boolean
     error: string | null
@@ -57,4 +64,8 @@ export interface TaskRefinementDto {
 export interface TaskRefinementStateDto {
     refinement: TaskRefinementDto | null
     availability: RefinementAvailability
+    /** Mesa de trabalho da tarefa (OPE-137): a mesma conversa aparece na mesa enquanto ela está no refinamento. */
+    workbench: { id: string; stage: WorkbenchStage } | null
+    /** Modelo configurado no Agente Refinador (base do "Modelo do Refinamento" da mesa). */
+    refinerModel: { agent: string | null; model: string | null; variant: string | null } | null
 }

@@ -59,6 +59,11 @@ export interface IDevTask {
      * explícito (a migração `backfill-task-agentic-flow` preenche quem ainda não tinha o campo).
      */
     agenticFlow: string | null
+    /**
+     * "Gerar plano após refinar" (OPE-137): `true`/`false` escolhido só para esta tarefa ou `null` —
+     * segue o padrão da central (`environment.planAfterRefinement`).
+     */
+    planAfterRefinement: boolean | null
     createdAt: Date
     updatedAt: Date
 }
@@ -97,6 +102,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         tagsUpdatedAt: { type: Date, default: null },
         estimate: { type: TaskEstimateSchema, default: null },
         agenticFlow: { type: String, default: null },
+        planAfterRefinement: { type: Boolean, default: null },
     },
     { collection: "dev_tasks", versionKey: false, timestamps: true },
 )

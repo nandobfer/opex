@@ -165,6 +165,14 @@ export interface IAgenticWorkbench {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
     agenticFlow: string
+    /** A mesa passou pelo refinamento (OPE-137): passo "Refinamento" na trilha. */
+    refinementPhase?: boolean
+    /** "Gerar plano após refinar" desta mesa (tarefa > central na abertura; o switch da barra muda). */
+    planAfterRefinement?: boolean
+    /** Id do refinamento da tarefa espelhado pela sincronização (turno vivo do Agente Refinador). */
+    refinementId?: string | null
+    /** Perguntas/permissões pendentes do refinamento (só contagens: o conteúdo fica no refinamento). */
+    refinementPending?: { forms: number; permissions: number } | null
     /** Backup do MongoDB da prévia (reservado no build); `null` quando a mesa não tem backup. */
     previewBackup: IPreviewBackup | null
     /**
@@ -228,6 +236,10 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
         agenticFlow: { type: String, default: "preview" },
+        refinementPhase: { type: Boolean, default: false },
+        planAfterRefinement: { type: Boolean, default: false },
+        refinementId: { type: String, default: null },
+        refinementPending: { type: Schema.Types.Mixed, default: null },
         previewBackup: { type: Schema.Types.Mixed, default: null },
         deletionRequestedAt: { type: Date, default: null },
         plans: { type: [Schema.Types.Mixed] as unknown as IPlanVersion[], default: [] },

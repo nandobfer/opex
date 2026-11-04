@@ -64,10 +64,10 @@ beforeEach(() => {
   mocks.useTaskDetail.mockReturnValue(taskQuery())
 })
 
-describe('WorkbenchView — abas Descrição e Spec.', () => {
-  it('mostra Descrição e Spec. antes da Saída da IA e abre na saída', () => {
+describe('WorkbenchView — abas Descrição e Especificação', () => {
+  it('mostra Descrição e Especificação antes da Saída da IA e abre na saída', () => {
     render(<WorkbenchView workbench={workbench()} central={central} />)
-    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano'])
+    expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano'])
     expect(tab('Saída da IA').getAttribute('aria-selected')).toBe('true')
     expect(screen.getByText('saída ao vivo')).toBeTruthy()
     expect(mocks.useTaskDetail).toHaveBeenCalledWith('t1')
@@ -81,16 +81,16 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
     expect(screen.queryByText('Critérios da spec')).toBeNull()
   })
 
-  it('a aba Spec. exibe a especificação técnica', () => {
+  it('a aba Especificação exibe a especificação técnica', () => {
     render(<WorkbenchView workbench={workbench()} central={central} />)
-    fireEvent.click(tab('Spec.'))
+    fireEvent.click(tab('Especificação'))
     expect(screen.getByText('Critérios da spec')).toBeTruthy()
   })
 
   it('sem especificação mostra o estado vazio com o atalho para a tarefa', () => {
     mocks.useTaskDetail.mockReturnValue(taskQuery({ data: { id: 't1', description: 'x', technicalSpec: null } }))
     render(<WorkbenchView workbench={workbench()} central={central} />)
-    fireEvent.click(tab('Spec.'))
+    fireEvent.click(tab('Especificação'))
     expect(screen.getByText('Sem especificação técnica.')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Abrir a tarefa' }).getAttribute('href')).toBe('/tarefas/t1')
   })
@@ -107,7 +107,7 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
   it('mantém as abas existentes: Plano desabilitado sem planos e Forks só com forks', () => {
     mocks.forks = [{ id: 'f1' }]
     render(<WorkbenchView workbench={workbench({ plans: [{ version: 1, text: 'p', feedback: null, createdAt: '2026-01-01T00:00:00.000Z' }] as WorkbenchDto['plans'] })} central={central} />)
-    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano v1', 'Forks (1)'])
+    expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano v1', 'Forks (1)'])
     fireEvent.click(tab('Plano v1'))
     expect(screen.getByText('plano')).toBeTruthy()
     fireEvent.click(tab('Forks (1)'))
@@ -117,7 +117,7 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
   it('Build (N): a aba aparece depois do primeiro build da prévia, depois do plano, e abre o log', () => {
     mocks.builds = [{ id: 'b1' }, { id: 'b2' }]
     render(<WorkbenchView workbench={workbench({ plans: [{ version: 1, text: 'p', feedback: null, createdAt: '2026-01-01T00:00:00.000Z' }] as WorkbenchDto['plans'] })} central={central} />)
-    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano v1', 'Build (2)'])
+    expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano v1', 'Build (2)'])
     fireEvent.click(tab('Build (2)'))
     expect(screen.getByText('log do build')).toBeTruthy()
   })
@@ -125,7 +125,7 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
   it('Agente Adversário: a aba "Adversário (N)" aparece com rodadas, depois do plano', () => {
     mocks.rounds = 2
     render(<WorkbenchView workbench={workbench()} central={central} />)
-    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano', 'Adversário (2)'])
+    expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano', 'Adversário (2)'])
     fireEvent.click(tab('Adversário (2)'))
     expect(screen.getByText('rodadas do adversário')).toBeTruthy()
   })
@@ -134,7 +134,7 @@ describe('WorkbenchView — abas Descrição e Spec.', () => {
     mocks.rounds = 1
     mocks.diagrams = 3
     render(<WorkbenchView workbench={workbench()} central={central} />)
-    expect(tabNames()).toEqual(['Descrição', 'Spec.', 'Saída da IA', 'Plano', 'Adversário (1)', 'Arquitetura (3)'])
+    expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano', 'Adversário (1)', 'Arquitetura (3)'])
     fireEvent.click(tab('Arquitetura (3)'))
     expect(screen.getByText('diagrama do arquiteto')).toBeTruthy()
   })

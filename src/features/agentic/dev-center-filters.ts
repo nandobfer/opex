@@ -7,15 +7,15 @@ import { workbenchUserWaitReason } from "./logic"
 
 export const DEV_CENTER_FILTERS_KEY = "opex:dev-center-filters:v1"
 
-export const DEV_CENTER_STATES = ["needs_interaction", "failed", "running", "no_workbench", "central_queue", "planning", "plan_review", "implementing", "preview", "opening_pr", "pr_open", "github_actions"] as const
+export const DEV_CENTER_STATES = ["needs_interaction", "failed", "running", "no_workbench", "central_queue", "refinement", "planning", "plan_review", "implementing", "preview", "opening_pr", "pr_open", "github_actions"] as const
 export type DevCenterState = (typeof DEV_CENTER_STATES)[number]
 export const DEV_CENTER_STATE_LABELS: Record<DevCenterState, string> = {
     needs_interaction: "Requer interação", failed: "Falhou / interrompida", running: "Agente trabalhando",
-    no_workbench: "Sem mesa", central_queue: "Na fila da central", planning: "Planejando", plan_review: "Plano pronto (revisar)",
+    no_workbench: "Sem mesa", central_queue: "Na fila da central", refinement: "Refinamento", planning: "Planejando", plan_review: "Plano pronto (revisar)",
     implementing: "Implementando", preview: "Prévia pronta (aprovar)", opening_pr: "Abrindo o PR", pr_open: "PR aberto", github_actions: "Ações do GitHub",
 }
 const STATE_STAGES: Partial<Record<DevCenterState, readonly WorkbenchStage[]>> = {
-    planning: ["planning"], plan_review: ["plan_review"], implementing: ["implementing", "adversarial_review", "adversarial_blocked", "build_queued", "building"],
+    refinement: ["refining", "spec_ready"], planning: ["planning"], plan_review: ["plan_review"], implementing: ["implementing", "adversarial_review", "adversarial_blocked", "build_queued", "building"],
     preview: ["preview"], opening_pr: ["opening_pr"], pr_open: ["pr_open"],
     github_actions: ["changes_requested", "resolving_conflicts", "fixing_ci", "merging_pr", "deleting_pr_branch", "finishing"],
 }
