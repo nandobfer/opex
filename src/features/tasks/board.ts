@@ -1,3 +1,6 @@
+import type { CSSProperties } from "react"
+import { DEFAULT_COLUMN_COLOR, normalizeColor } from "@/lib/colors"
+
 /**
  * Quadro de Tarefas dO Opex: colunas 100% configuráveis (o Opex é a fonte de verdade). Cada
  * tarefa pertence a UMA coluna. Módulo PURO (cliente e servidor).
@@ -5,23 +8,6 @@
 
 /** Chave de coluna: minúsculas, dígitos e hífen (ex.: `todo`, `col-3f8a1b2c`). */
 export const COLUMN_KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/
-
-export const COLUMN_COLORS = ["violet", "sky", "emerald", "amber", "rose", "cyan", "orange", "pink", "lime", "zinc"] as const
-export type ColumnColor = (typeof COLUMN_COLORS)[number]
-
-/** Classes completas (o Tailwind só gera o que aparece literal no código). */
-export const COLUMN_COLOR_STYLES: Record<ColumnColor, { label: string; border: string; dot: string; swatch: string; text: string }> = {
-    violet: { label: "Violeta", border: "border-t-violet-400", dot: "bg-violet-400", swatch: "bg-violet-500", text: "text-violet-400" },
-    sky: { label: "Azul", border: "border-t-sky-400", dot: "bg-sky-400", swatch: "bg-sky-500", text: "text-sky-400" },
-    emerald: { label: "Verde", border: "border-t-emerald-400", dot: "bg-emerald-400", swatch: "bg-emerald-500", text: "text-emerald-400" },
-    amber: { label: "Âmbar", border: "border-t-amber-400", dot: "bg-amber-400", swatch: "bg-amber-500", text: "text-amber-400" },
-    rose: { label: "Rosa", border: "border-t-rose-400", dot: "bg-rose-400", swatch: "bg-rose-500", text: "text-rose-400" },
-    cyan: { label: "Ciano", border: "border-t-cyan-400", dot: "bg-cyan-400", swatch: "bg-cyan-500", text: "text-cyan-400" },
-    orange: { label: "Laranja", border: "border-t-orange-400", dot: "bg-orange-400", swatch: "bg-orange-500", text: "text-orange-400" },
-    pink: { label: "Pink", border: "border-t-pink-400", dot: "bg-pink-400", swatch: "bg-pink-500", text: "text-pink-400" },
-    lime: { label: "Lima", border: "border-t-lime-400", dot: "bg-lime-400", swatch: "bg-lime-500", text: "text-lime-400" },
-    zinc: { label: "Cinza", border: "border-t-zinc-400", dot: "bg-zinc-400", swatch: "bg-zinc-500", text: "text-zinc-400" },
-}
 
 /** Ícones disponíveis para colunas (componentes em `components/column-icons.tsx`). */
 export const COLUMN_ICON_KEYS = [
@@ -63,7 +49,8 @@ export type ColumnIcon = (typeof COLUMN_ICON_KEYS)[number]
 export interface TaskColumnDto {
     key: string
     name: string
-    color: ColumnColor
+    /** Cor `#RRGGBB` (seletor de cores; nomes antigos da paleta são convertidos na leitura). */
+    color: string
     icon: ColumnIcon
     description: string | null
     /** Limite de cards (WIP); `null` = sem limite. */
@@ -80,10 +67,16 @@ export interface TaskBoardDto {
 export interface BoardColumnView {
     key: string
     label: string
-    border: string
-    dot: string
+    /** Cor `#RRGGBB` da coluna (aplicada por `style`: é dado do usuário). */
+    accent: string
     column: TaskColumnDto
 }
+
+/** Borda superior na cor da coluna. */
+export const columnBorderStyle = (column: Pick<BoardColumnView, "accent">): CSSProperties => ({ borderTopColor: column.accent })
+
+/** Bullet na cor da coluna. */
+export const columnDotStyle = (column: Pick<BoardColumnView, "accent">): CSSProperties => ({ backgroundColor: column.accent })
 
 /**
  * Normaliza a ordem salva: tira chaves desconhecidas/repetidas e completa com as colunas que
@@ -128,8 +121,7 @@ export function mergeVisibleOrder(layout: readonly string[], visibleNewOrder: re
 }
 
 export function columnView(column: TaskColumnDto): BoardColumnView {
-    const style = COLUMN_COLOR_STYLES[column.color] ?? COLUMN_COLOR_STYLES.violet
-    return { key: column.key, label: column.name, border: style.border, dot: style.dot, column }
+    return { key: column.key, label: column.name, accent: normalizeColor(column.color) ?? DEFAULT_COLUMN_COLOR, column }
 }
 
 /** Colunas na ordem do quadro. */

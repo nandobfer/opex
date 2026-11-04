@@ -21,7 +21,7 @@ import {
 import { arrayMove, horizontalListSortingStrategy, SortableContext, sortableKeyboardCoordinates } from "@dnd-kit/sortable"
 import { Plus } from "lucide-react"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { columnKeyOf, type BoardColumnView } from "../board"
+import { columnBorderStyle, columnKeyOf, type BoardColumnView } from "../board"
 import type { TaskSortKey } from "../constants"
 import { boardOrderOf, finalDropPosition, moveBetweenColumns, type ColumnItems } from "../drop-target"
 import type { TaskSelection } from "../hooks/useTaskSelection"
@@ -249,7 +249,7 @@ export function TaskBoard({ tasks, columns, rawCounts, sort, movingId, selection
                             )}
                         </div>
                     ) : activeColumn ? (
-                        <div className={`pointer-events-none w-[290px] rotate-1 rounded-lg border border-t-4 bg-card p-3 shadow-2xl shadow-primary/20 ${activeColumn.border}`}>
+                        <div className={`pointer-events-none w-[290px] rotate-1 rounded-lg border border-t-4 bg-card p-3 shadow-2xl shadow-primary/20`} style={columnBorderStyle(activeColumn)}>
                             <div className="flex items-center gap-2">
                                 <ColumnIconView icon={activeColumn.column.icon} className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-xs font-semibold uppercase tracking-wide">{activeColumn.label}</span>

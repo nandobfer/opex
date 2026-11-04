@@ -2,6 +2,7 @@ import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { DomainError } from "@/lib/api/route"
+import { normalizeColor } from "@/lib/colors"
 import { loggerFor } from "@/lib/logger"
 import type { OpexToolMetaDto } from "@/features/opex-agent/tool-tree"
 import { maddoxOwnerToolMetas } from "../catalog"
@@ -24,6 +25,8 @@ export function withMaddoxDefaults(saved: unknown): unknown {
     return {
         ...DEFAULT_MADDOX_AGENT_SETTINGS,
         ...value,
+        // Salva antes do campo (ou cor ilegível) = primária; nome antigo da paleta ou hex sai normalizado.
+        color: normalizeColor(value.color),
         main: { ...DEFAULT_MADDOX_AGENT_SETTINGS.main, ...(value.main ?? {}) },
         title: { ...DEFAULT_MADDOX_AGENT_SETTINGS.title, ...(value.title ?? {}) },
         files: { ...DEFAULT_MADDOX_AGENT_SETTINGS.files, ...(value.files ?? {}) },

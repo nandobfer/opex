@@ -171,14 +171,16 @@ describe('workbenchActions', () => {
 })
 
 describe('parseCentralConfig', () => {
-  it('cor do projeto (OPE-100): válida fica; fora da paleta ou ausente vira neutra sem descartar o resto', () => {
-    expect(parseCentralConfig({ sessionDirectory: '/repo', color: 'emerald' }).color).toBe('emerald')
+  it('cor do projeto (OPE-136): hex fica em maiúsculas; nome antigo da paleta vira hex; inválida ou ausente vira neutra sem descartar o resto', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', color: '#8000ff' }).color).toBe('#8000FF')
+    expect(parseCentralConfig({ sessionDirectory: '/repo', color: 'emerald' }).color).toBe('#34D399')
     const invalid = parseCentralConfig({ sessionDirectory: '/repo', color: 'magenta', git: { baseBranch: 'dev' } })
     expect(invalid.color).toBeNull()
     expect(invalid.git.baseBranch).toBe('dev')
     expect(parseCentralConfig({ sessionDirectory: '/repo' }).color).toBeNull()
     expect(defaultCentralConfig('/repo').color).toBeNull()
-    expect(centralConfigSchema.safeParse({ ...defaultCentralConfig('/repo'), color: 'magenta' }).error?.issues[0]?.message).toBe('Escolha uma cor da paleta')
+    expect(centralConfigSchema.parse({ ...defaultCentralConfig('/repo'), color: 'rose' }).color).toBe('#FB7185')
+    expect(centralConfigSchema.safeParse({ ...defaultCentralConfig('/repo'), color: 'magenta' }).error?.issues[0]?.message).toBe('Use o formato #RRGGBB (ex.: #8000FF)')
   })
 
   it('completa configurações antigas com os padrões', () => {

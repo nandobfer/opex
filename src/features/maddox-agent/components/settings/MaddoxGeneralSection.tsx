@@ -1,6 +1,6 @@
 "use client"
 
-import { Controller, type UseFormReturn } from "react-hook-form"
+import type { UseFormReturn } from "react-hook-form"
 import { AnimatePresence, motion } from "framer-motion"
 import { Info, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -9,11 +9,11 @@ import { Field } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import { ColumnColorPicker } from "@/features/tasks/components/ColumnColorPicker"
 import { DEFAULT_OPEX_TITLE_INSTRUCTIONS } from "@/features/opex-agent/constants"
 import { OpexFilesCard } from "@/features/opex-agent/components/settings/OpexFilesCard"
 import { DEFAULT_MADDOX_INSTRUCTIONS } from "../../constants"
 import type { MaddoxAgentSettings } from "../../schemas"
+import { MaddoxColorField } from "./MaddoxColorField"
 import { MaddoxMcpCard } from "./MaddoxMcpCard"
 import { MaddoxModelCard } from "./MaddoxModelCard"
 
@@ -42,19 +42,7 @@ export function MaddoxGeneralSection({ form, availability, dirty }: { form: UseF
                             </motion.p>
                         )}
                     </AnimatePresence>
-                    <div className="space-y-1.5">
-                        <p id="maddox-color" className="text-sm font-medium">
-                            Cor do agente
-                        </p>
-                        <Controller
-                            control={form.control}
-                            name="color"
-                            render={({ field }) => (
-                                <ColumnColorPicker allowNone noneOption={{ label: "Primária (padrão)", swatch: "bg-primary" }} aria-labelledby="maddox-color" value={field.value ?? null} onChange={field.onChange} />
-                            )}
-                        />
-                        <p className="text-xs text-muted-foreground">Pinta o ícone da barra lateral, o ponto de atividade, o cabeçalho, os destaques e as bolhas do chat, no app e no portal.</p>
-                    </div>
+                    <MaddoxColorField form={form} />
                 </CardContent>
             </Card>
 

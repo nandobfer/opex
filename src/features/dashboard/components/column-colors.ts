@@ -1,15 +1,9 @@
-import type { ColumnColor } from "@/features/tasks/board"
+import { LEGACY_COLOR_HEX, normalizeColor } from "@/lib/colors"
 
-/** Cor da coluna do quadro (token do tema) para a rosca de distribuição. */
-export const COLUMN_CHART_COLORS: Record<ColumnColor, string> = {
-    violet: "var(--color-violet-400)",
-    sky: "var(--color-sky-400)",
-    emerald: "var(--color-emerald-400)",
-    amber: "var(--color-amber-400)",
-    rose: "var(--color-rose-400)",
-    cyan: "var(--color-cyan-400)",
-    orange: "var(--color-orange-400)",
-    pink: "var(--color-pink-400)",
-    lime: "var(--color-lime-400)",
-    zinc: "var(--color-zinc-400)",
+/** Cinza das fatias de coluna sem cor reconhecível (coluna órfã ou cor inválida). */
+export const UNKNOWN_COLUMN_CHART_COLOR = LEGACY_COLOR_HEX.zinc!
+
+/** Cor da fatia da coluna na rosca de distribuição: o hex da coluna (nome antigo vira hex; desconhecida = cinza). */
+export function columnChartColor(color: string | null | undefined): string {
+    return normalizeColor(color) ?? UNKNOWN_COLUMN_CHART_COLOR
 }

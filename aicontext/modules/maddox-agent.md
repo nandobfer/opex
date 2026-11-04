@@ -47,15 +47,20 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
   (`GET /api/maddox/models` ou `/api/cliente/maddox/models`). A troca vale **só para a sessão atual**
   (`opex_sessions.modelOverride`, conferido no catálogo); na "Nova sessão", a escolha vai na criação.
   Sessões novas começam no modelo padrão. O modelo usado aparece no rodapé de cada resposta.
-- **Cor** (configuração): paleta das colunas (`ColumnColorPicker` com a opção "Primária (padrão)" =
-  `null`). `agentColorStyle` (`colors.ts`) sobrescreve `--primary`, `--primary-foreground` e `--ring` no
-  contêiner do agente com os tokens do tema `--agent-{cor}` e `--agent-{cor}-foreground`
-  (`globals.css`), então ícone, ponto, cabeçalho, destaques e bolhas usam a cor sem markup novo nem
-  valor fixo em código; o token `-foreground` traz o texto legível (contraste) de cada cor.
-  A cor padrão (`null`) também é aplicada explicitamente, com `--agent-primary`/`--agent-primary-foreground`/
-  `--agent-ring` (a primária do tema resolvida no `:root`): sem isso, um elemento do Agente Opex dentro
-  do contêiner do Maddox (o botão de troca no cabeçalho, o ponto da barra lateral) herdaria a cor do
-  Maddox.
+- **Cor** (configuração, `MaddoxColorField`): seletor de cores único (`ColorPaletteField`, com as
+  favoritas de Configurações › Aparência — `modules/settings.md`) com a opção **"Primária (padrão)"** =
+  `null` e a prévia do ícone do Maddox na cor escolhida. A cor é hex `#RRGGBB`; os nomes antigos da
+  paleta (`sky`…) continuam aceitos (`colorValueSchema`, inclusive pela ferramenta
+  `update_ai_feature_settings`) e a configuração salva com eles é convertida na leitura
+  (`withMaddoxDefaults` com `normalizeColor`; cor ilegível = primária). `agentColorStyle` (`colors.ts`)
+  calcula a cor a partir do hex: sobrescreve `--primary` e `--ring` no contêiner do agente com o
+  triplet HSL (`hexToHslTriplet`) e `--primary-foreground` com texto escuro ou claro conforme a cor
+  (`readableTextOn`), então ícone, ponto, cabeçalho, destaques e bolhas usam a cor sem markup novo.
+  É a exceção documentada do `style` inline (cor escolhida pelo usuário). A cor padrão (`null`)
+  também é aplicada explicitamente, com `--agent-primary`/`--agent-primary-foreground`/`--agent-ring`
+  (a primária do tema resolvida no `:root`): sem isso, um elemento do Agente Opex dentro do contêiner
+  do Maddox (o botão de troca no cabeçalho, o ponto da barra lateral) herdaria a cor do Maddox. O
+  Agente Opex continua sempre na primária.
 - **Ferramentas** viram cards como no Agente Opex: as do Opex (`opex_app_*` no dono, `opex_portal_*`
   no portal) com o rótulo e o ícone do grupo do catálogo; as nativas do OpenCode com o próprio nome e o
   ícone de terminal (grupo `opencode-native`).

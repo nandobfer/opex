@@ -3,7 +3,7 @@
 import { AlertTriangle, Archive, ArrowDown, ArrowUp, ChevronsUp, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TASK_PRIORITY_ICON_STYLES, TASK_PRIORITY_LABELS, TASK_PRIORITY_STYLES, TASK_TYPE_LABELS, TASK_TYPE_SHORT_LABELS, TASK_TYPE_STYLES, type TaskPriority, type TaskType } from "../constants"
-import type { BoardColumnView } from "../board"
+import { columnDotStyle, type BoardColumnView } from "../board"
 import { ColumnIconView } from "./column-icons"
 
 const chip = "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium leading-none"
@@ -67,7 +67,7 @@ export function ArchivedBadge() {
 export function ColumnBadge({ column, className }: { column: BoardColumnView; className?: string }) {
     return (
         <span className={cn("inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap text-xs", className)}>
-            <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} aria-hidden />
+            <span className="h-2 w-2 shrink-0 rounded-full" style={columnDotStyle(column)} aria-hidden />
             <ColumnIconView icon={column.column.icon} className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="truncate">{column.label}</span>
         </span>

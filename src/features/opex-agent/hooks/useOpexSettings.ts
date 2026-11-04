@@ -12,7 +12,6 @@ import { useOpexScope } from "../components/OpexScopeProvider"
 import type { OpexAgentSettings } from "../schemas"
 import type { OpexAgentSettingsDto, OpexClientStatusDto } from "../types"
 import type { OpexFilesSettings } from "../schemas"
-import type { ColumnColor } from "@/features/tasks/board"
 import { useMaddoxSettings } from "@/features/maddox-agent/hooks/useMaddoxSettings"
 import type { MaddoxClientStatusDto } from "@/features/maddox-agent/types"
 
@@ -43,8 +42,8 @@ export interface OpexView {
     availability: AiFeatureAvailability
     files: OpexFilesSettings
     modelLabel: string | null
-    /** Cor do agente (Maddox; `null` = primária). */
-    color: ColumnColor | null
+    /** Cor `#RRGGBB` do agente (Maddox; `null` = primária). */
+    color: string | null
     /** Modelo padrão do agente (Maddox: as sessões novas começam nele). */
     defaultModel: { model: string; variant: string | null } | null
 }

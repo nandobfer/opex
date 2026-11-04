@@ -36,6 +36,7 @@ vi.mock('@/features/maddox-agent/hooks/useClientMaddoxAgentConfig', () => ({
   useClientMaddoxAgentConfig: () => ({ data: mocks.clientConfig, isLoading: false, isError: false, refetch: vi.fn() }),
   useSaveClientMaddoxAgentConfig: () => ({ mutateAsync: mocks.saveClient, isPending: false }),
 }))
+vi.mock('@/features/color-palette/hooks', () => ({ useColorPalette: () => ({ favorites: [{ color: '#38BDF8', name: 'Azul' }], addFavorite: vi.fn() }) }))
 vi.mock('@/features/opex-agent/hooks/useOpexSessions', () => ({ useReplyAgentForm: () => ({ mutate: mocks.formReply, isPending: false }) }))
 
 import { MaddoxAgentTab } from '@/features/maddox-agent/components/settings/MaddoxAgentTab'
@@ -88,11 +89,17 @@ describe('aba "Agente Maddox" da integração de IA', () => {
     await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ instructions: DEFAULT_MADDOX_INSTRUCTIONS, enabled: true })))
   })
 
-  it('a cor usa a paleta com "Primária (padrão)" e mostra a situação do MCP do Opex', () => {
+  it('a cor usa o seletor de cores com "Primária (padrão)", prévia do ícone na cor e a situação do MCP do Opex', () => {
     render(<MaddoxAgentTab onDirtyChange={() => {}} />)
+    const trigger = document.getElementById('maddox-color-picker')!
+    expect(trigger.textContent).toContain('Primária (padrão)')
+    expect(screen.getByTestId('maddox-color-preview').style.getPropertyValue('--primary')).toBe('var(--agent-primary)')
+    fireEvent.click(trigger)
     expect(screen.getByRole('radio', { name: 'Primária (padrão)' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('radio', { name: 'Azul' }))
     expect(screen.getByRole('radio', { name: 'Azul' }).getAttribute('aria-checked')).toBe('true')
+    expect(trigger.textContent).toContain('#38BDF8')
+    expect(screen.getByTestId('maddox-color-preview').style.getPropertyValue('--primary')).toBe('198 93% 60%')
     expect(screen.getByTestId('maddox-mcp-owner').textContent).toContain('Conectado')
     expect(screen.getByText('http://opex.local')).toBeTruthy()
   })

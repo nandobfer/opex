@@ -1,7 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { CONTENT_BLEED_X } from "@/features/layout/content-padding"
 import { cn } from "@/lib/utils"
-import type { BoardColumnView } from "../board"
+import { columnBorderStyle, type BoardColumnView } from "../board"
 import type { TaskTableColumn } from "../filters"
 import { COMPACT_CARD_CLASS, KANBAN_BOARD_CLASS, KANBAN_CARD_CLASS, KANBAN_COLUMN_CARDS_CLASS, KANBAN_COLUMN_CLASS, KANBAN_COLUMN_HEADER_CLASS, KANBAN_COLUMN_META_CLASS } from "./board-layout"
 import { TABLE_COLUMN_ORDER, TABLE_COLUMN_WIDTHS } from "./table-columns"
@@ -33,12 +33,12 @@ export function TasksSkeleton({ kanban, columns, mobile }: TasksSkeletonProps) {
 }
 
 function KanbanSkeleton({ columns }: { columns: readonly BoardColumnView[] }) {
-    const shown = columns.length > 0 ? columns.map((column) => ({ key: column.key, border: column.border })) : Array.from({ length: PLACEHOLDER_COLUMNS }, (_, index) => ({ key: `placeholder-${index}`, border: "border-t-border" }))
+    const shown = columns.length > 0 ? columns.map((column) => ({ key: column.key, border: "", style: columnBorderStyle(column) })) : Array.from({ length: PLACEHOLDER_COLUMNS }, (_, index) => ({ key: `placeholder-${index}`, border: "border-t-border", style: undefined }))
     return (
         <div className={cn(KANBAN_BOARD_CLASS, "overflow-x-hidden", CONTENT_BLEED_X)} aria-label="Carregando tarefas" aria-busy="true" data-testid="kanban-skeleton">
             {shown.map((column, index) => (
                 <div key={column.key} className="flex shrink-0">
-                    <div className={cn(KANBAN_COLUMN_CLASS, column.border)} data-testid={`column-skeleton-${column.key}`}>
+                    <div className={cn(KANBAN_COLUMN_CLASS, column.border)} style={column.style} data-testid={`column-skeleton-${column.key}`}>
                         <div className={KANBAN_COLUMN_HEADER_CLASS}>
                             <div className="flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5">

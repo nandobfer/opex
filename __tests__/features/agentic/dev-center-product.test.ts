@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { centralsByProject, NEUTRAL_PRODUCT_COLOR_CLASS, productColorClass, taskProductLabel } from '@/features/agentic/dev-center-product'
-import type { ColumnColor } from '@/features/tasks/board'
+import { centralsByProject, NEUTRAL_PRODUCT_COLOR_CLASS, productColorProps, taskProductLabel } from '@/features/agentic/dev-center-product'
 
 /** Linha do projeto nos cards da Central de desenvolvimento e cor da central (OPE-100, port do MT-31). */
 
@@ -19,12 +18,16 @@ describe('taskProductLabel', () => {
   })
 })
 
-describe('productColorClass', () => {
-  it('usa o texto da cor da paleta; sem cor ou cor desconhecida = neutra', () => {
-    expect(productColorClass('emerald')).toBe('text-emerald-400')
-    expect(productColorClass(null)).toBe(NEUTRAL_PRODUCT_COLOR_CLASS)
-    expect(productColorClass(undefined)).toBe(NEUTRAL_PRODUCT_COLOR_CLASS)
-    expect(productColorClass('magenta' as ColumnColor)).toBe(NEUTRAL_PRODUCT_COLOR_CLASS)
+describe('productColorProps', () => {
+  it('cor hex da central vai por style; nome antigo da paleta vira o hex equivalente', () => {
+    expect(productColorProps('#8000FF')).toEqual({ style: { color: '#8000FF' } })
+    expect(productColorProps('sky')).toEqual({ style: { color: '#38BDF8' } })
+  })
+
+  it('sem cor (ou inválida) fica neutra', () => {
+    expect(productColorProps(null)).toEqual({ className: NEUTRAL_PRODUCT_COLOR_CLASS })
+    expect(productColorProps(undefined)).toEqual({ className: NEUTRAL_PRODUCT_COLOR_CLASS })
+    expect(productColorProps('magenta')).toEqual({ className: NEUTRAL_PRODUCT_COLOR_CLASS })
   })
 })
 

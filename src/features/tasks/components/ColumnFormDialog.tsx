@@ -12,9 +12,10 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { COLUMN_COLOR_STYLES, COLUMN_ICON_KEYS, type TaskColumnDto } from "../board"
+import { DEFAULT_COLUMN_COLOR, normalizeColor } from "@/lib/colors"
+import { ColorPaletteField } from "@/features/color-palette/components/ColorPaletteField"
+import { COLUMN_ICON_KEYS, type TaskColumnDto } from "../board"
 import { columnInputSchema, type ColumnInput } from "../schemas"
-import { ColumnColorPicker } from "./ColumnColorPicker"
 import { COLUMN_ICONS, ColumnIconView } from "./column-icons"
 
 interface ColumnFormDialogProps {
@@ -26,7 +27,7 @@ interface ColumnFormDialogProps {
     onClose: () => void
 }
 
-const EMPTY: ColumnInput = { name: "", color: "violet", icon: "star", description: "", wipLimit: null }
+const EMPTY: ColumnInput = { name: "", color: DEFAULT_COLUMN_COLOR, icon: "star", description: "", wipLimit: null }
 
 const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 
@@ -37,7 +38,7 @@ export function ColumnFormDialog({ open, column, submitting, onSubmit, onClose }
 
     useEffect(() => {
         if (!open) return
-        form.reset(column ? { name: column.name, color: column.color, icon: column.icon, description: column.description ?? "", wipLimit: column.wipLimit } : EMPTY)
+        form.reset(column ? { name: column.name, color: normalizeColor(column.color) ?? DEFAULT_COLUMN_COLOR, icon: column.icon, description: column.description ?? "", wipLimit: column.wipLimit } : EMPTY)
     }, [open, column, form])
 
     const close = () => {
@@ -68,7 +69,7 @@ export function ColumnFormDialog({ open, column, submitting, onSubmit, onClose }
                         <DialogDescription>Coluna do quadro: organiza suas tarefas. Mover uma tarefa para cá é só uma mudança de coluna.</DialogDescription>
                     </DialogHeader>
 
-                    <motion.div layout className={cn("flex items-center gap-2 rounded-lg border border-t-4 bg-muted/40 px-3 py-2", COLUMN_COLOR_STYLES[color].border)} aria-hidden>
+                    <motion.div layout className="flex items-center gap-2 rounded-lg border border-t-4 bg-muted/40 px-3 py-2" style={{ borderTopColor: color }} aria-hidden>
                         <ColumnIconView icon={icon} className="h-4 w-4 text-muted-foreground" />
                         <span className="truncate text-xs font-semibold uppercase tracking-wide">{name.trim() || "Nome da coluna"}</span>
                         <span className="ml-auto rounded border px-1 py-px text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Coluna</span>
@@ -91,11 +92,11 @@ export function ColumnFormDialog({ open, column, submitting, onSubmit, onClose }
                         </Field>
                     </div>
 
-                    <Field id="column-color" label="Cor">
+                    <Field id="column-color" label="Cor" error={errors.color?.message}>
                         <Controller
                             control={form.control}
                             name="color"
-                            render={({ field }) => <ColumnColorPicker aria-label="Cor" value={field.value} onChange={field.onChange} />}
+                            render={({ field }) => <ColorPaletteField id="column-color" value={field.value || null} onChange={(next) => next && field.onChange(next)} />}
                         />
                     </Field>
 
