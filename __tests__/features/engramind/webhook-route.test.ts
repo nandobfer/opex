@@ -52,7 +52,7 @@ describe('POST /api/engramind/webhook', () => {
     const first = await POST(request(body, signed()))
     expect(first.status).toBe(204)
     await flush()
-    expect(mocks.publish).toHaveBeenCalledWith({ type: 'channel.updated', channel: 'eng/global', keys: undefined })
+    expect(mocks.publish).toHaveBeenCalledWith({ type: 'channel.updated', channel: 'eng/global', keys: undefined }, { live: false })
     const again = await POST(request(body, signed()))
     expect(again.status).toBe(204)
     await flush()

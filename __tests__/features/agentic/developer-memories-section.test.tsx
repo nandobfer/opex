@@ -8,6 +8,8 @@ import { xyflowMock } from '../../helpers/xyflow'
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@xyflow/react', () => xyflowMock())
+// OPE-116: o universo vem da lib dentro do `OpexEngramindProvider`, que usa o roteador do Next.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }))
 vi.mock('@/lib/api', () => ({

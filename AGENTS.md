@@ -187,9 +187,14 @@ sem pedido explícito.
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
-- Engramind: `engramind-updated` (`{ type, channel?, keys? }`) e o consumo de memórias pelos agentes do
-  Opex `engramind-consumption` (`{ agent, kind, channels, delivered, memoryIds, titleIds?, version? }`, só ids e slugs) em
-  `private-app` (ver `aicontext/modules/engramind.md`, "Webhook e tempo real").
+- Engramind: `engramind-updated` (`{ type, channel?, keys? }`, abas de gestor de `/integracoes/engramind`)
+  e o consumo de memórias pelos agentes `engramind-consumption`
+  (`{ agent, kind, channels, delivered, memoryIds, titleIds?, version? }`, só ids e slugs) em `private-app`.
+  O `engramind-consumption` é montado pelo servidor a partir do webhook `memory.consumed` do Engramind,
+  agrupado por `consumption` (o Opex não publica o próprio consumo). **Exceção ao Pusher:** a rede
+  `/engramind` e os universos de `/integracoes/ia` recebem o tempo real pelo SSE da lib `@engramind/client`
+  (`GET /api/engramind/events`, só o dono, um processo), e não pelo Pusher (ver
+  `aicontext/modules/engramind.md`, "Lib `@engramind/client` no modo gestor" e "Webhook e tempo real").
 - Agente Arquiteto: `architect-diagram-updated` (`{ workbenchId, diagramId }`) em `private-app` ao criar,
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
   (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
@@ -303,6 +308,9 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Busca local: fuse.js
 - Markdown: `react-markdown` + `remark-gfm` (componente `src/components/ui/markdown.tsx`)
 - Preferências/filtros persistentes no navegador: `usePersistentState` (`src/hooks/`, Zod)
+- Engramind no app: `@engramind/client` (repositório `nandobfer/engramind-client`; tarball em `vendor/` até
+  sair no npm), no modo gestor pelo `OpexEngramindProvider`: rede, universos, painel do canal e tema dos
+  canvas React Flow (`aicontext/modules/engramind.md`, "Lib `@engramind/client` no modo gestor")
 - Redes de nodes (rede de agentes, canais e memórias do Engramind): React Flow (`@xyflow/react`),
   com nodes não arrastáveis e pulsos/partículas pelas arestas animados com Framer Motion
   (`aicontext/modules/engramind.md`, "Página `/engramind`"); diagramas do Agente Arquiteto também em

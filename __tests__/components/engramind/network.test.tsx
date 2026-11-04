@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { fitBounds, flowItems, flowState, setCenter, xyflowMock } from '../../helpers/xyflow'
 import { MOBILE_MEDIA_QUERY } from '@/hooks/useMediaQuery'
+import { emitConsumption, emitLive, installFakeEventSource, liveConnections } from '../../helpers/engramind-live'
 
 /**
  * OPE-109: rede do Engramind em `/engramind` (visão inicial, universos, card, busca e consumo ao vivo).
  * OPE-113: card só por clique, links roxos/verdes, partícula de criação, busca automática e filtros no
  * padrão de `/tarefas`.
+ * OPE-116: a rede vem de `@engramind/client` no modo gestor (`OpexEngramindProvider`), com o tempo real
+ * pelo SSE da lib (`EventSource` falso) e o consumo ao vivo pelo `memory.consumed` do webhook.
  */
 
 const motionPrefs = vi.hoisted(() => ({ reduced: true }))
@@ -39,11 +42,8 @@ vi.mock('@/lib/pusher/client', () => ({
   releaseChannel: vi.fn(),
 }))
 
-import { EngramindNetwork } from '@/features/engramind/components/network/EngramindNetwork'
-import { NETWORK_FLOW_THEME } from '@/features/engramind/components/network/layout-classes'
-import { MEMORY_CARD_HEIGHT, MEMORY_CARD_WIDTH } from '@/features/engramind/components/network/MemoryCardLayer'
-import { ORBIT_STROKE_WIDTH } from '@/features/engramind/components/network/edges'
-import { channelColors, PRIMARY_CHANNEL_COLOR } from '@/features/engramind/network/network-math'
+import { channelColors, EngramindNetwork, MEMORY_CARD_HEIGHT, MEMORY_CARD_WIDTH, NETWORK_FLOW_THEME, ORBIT_STROKE_WIDTH, PRIMARY_CHANNEL_COLOR } from '@engramind/client/react'
+import { OpexEngramindProvider } from '@/features/engramind/components/OpexEngramindProvider'
 
 const now = new Date().toISOString()
 const ref = (id: string, slug: string) => ({ id, slug })
@@ -82,7 +82,6 @@ const respond = (url: string) => {
   if (url === '/engramind/subscriptions') return { subscriptions, next_cursor: null }
   if (url === '/engramind/memories') return { memories, next_cursor: null }
   if (url === '/engramind/settings') return { settings: [{ key: 'consolidation.stale_after_days', value: 30 }, { key: 'categories.list', value: [{ key: 'PROJECT_RULES', label: 'Regras', priority: 1 }] }, { key: 'memory.text_min', value: 3 }, { key: 'memory.text_max', value: 200 }] }
-  if (url === '/engramind/memory-usage') return {}
   if (url === '/engramind/agent-activity') return activity.map((row) => ({ lastWriteAt: null, delivery: null, selfMemory: true, stale: false, ...row }))
   if (url === '/agentic/centrals') return centrals
   if (url.startsWith('/engramind/memories/')) return memories.find((item) => item.id === decodeURIComponent(url.slice('/engramind/memories/'.length)))
@@ -92,7 +91,9 @@ const respond = (url: string) => {
 const mount = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <EngramindNetwork onConfigure={vi.fn()} />
+      <OpexEngramindProvider>
+        <EngramindNetwork onConfigure={vi.fn()} />
+      </OpexEngramindProvider>
     </QueryClientProvider>,
   )
 /** Mais que qualquer atraso de fechamento: o card não pode fechar sozinho. */
@@ -113,13 +114,15 @@ const pickOption = async (trigger: string, option: string) => {
 const inApp = (slug: string) => {
   nav.params = new URLSearchParams(`app=${slug}`)
 }
-const emit = (event: string, payload: unknown) => act(() => (pusher.handlers.get(event) ?? []).forEach((handler) => handler(payload)))
+/** `engramind-updated` agora chega pelo SSE da lib (mesmo `type`/`channel`). */
+const emit = (_event: 'engramind-updated', payload: { type: string; channel?: string | null }) => emitLive(payload)
 
 beforeEach(() => {
   vi.clearAllMocks()
   window.localStorage.clear()
   motionPrefs.reduced = true
   pusher.handlers.clear()
+  installFakeEventSource()
   nav.params = new URLSearchParams()
   memories = [memory('m_1', 'opex'), memory('m_2', 'agentes/opex/global'), memory('m_3', 'opex', { status: 'archived' })]
   activity = []
@@ -233,7 +236,7 @@ describe('visão inicial', () => {
     const style = JSON.parse(screen.getByTestId('react-flow').getAttribute('data-style')!)
     expect(style).toEqual(NETWORK_FLOW_THEME)
     expect(style['--xy-background-color']).toBe('transparent')
-    expect(style['--xy-background-pattern-color']).toContain('var(--muted-foreground)')
+    expect(style['--xy-background-pattern-color']).toContain('var(--color-muted-foreground)')
   })
 
   it('o modo da assinatura aparece no hover do link', async () => {
@@ -267,12 +270,24 @@ describe('visão inicial', () => {
     expect(nav.push).toHaveBeenCalledWith('/engramind?app=opex&universo=agente%3Aopex%2Fopex', { scroll: false })
   })
 
-  it('consumo ao vivo de um agente conta na estatística; agente desconhecido é ignorado', async () => {
+  it('consumo ao vivo de um agente conta uma vez por leitura; canal fora da tela, memória não carregada ou leitura sem agente são ignorados', async () => {
     inApp('opex')
     mount()
     await screen.findByTestId('agent-node-opex/opex')
-    emit('engramind-consumption', { agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
-    emit('engramind-consumption', { agent: 'x/y', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
+    expect(liveConnections()[0]?.url).toBe('/api/engramind/events')
+    // Um consumo de dois canais (dois eventos `memory.consumed` com o mesmo `consumption`) é um pulso só.
+    await emitConsumption({ agent: 'opex/opex', kind: 'context', channels: ['opex', 'agentes/opex/global'], memoryIds: ['m_1', 'm_2'] })
+    expect(screen.getByTestId('stat-live').getAttribute('data-value')).toBe('1')
+    await emitConsumption({ agent: 'x/y', kind: 'context', channels: ['canal/fora'], memoryIds: ['m_x'] })
+    await emitConsumption({ agent: null, kind: 'context', channels: ['opex'], memoryIds: ['m_1'] })
+    expect(screen.getByTestId('stat-live').getAttribute('data-value')).toBe('1')
+  })
+
+  it('OPE-116: agente de outro app que lê um canal visível pulsa o canal (conta na estatística)', async () => {
+    inApp('opex')
+    mount()
+    await screen.findByTestId('agent-node-opex/opex')
+    await emitConsumption({ agent: 'x/y', kind: 'search', channels: ['opex'], memoryIds: ['m_1'] })
     expect(screen.getByTestId('stat-live').getAttribute('data-value')).toBe('1')
   })
 })
@@ -535,7 +550,7 @@ describe('universos', () => {
     const node = await screen.findByTestId('memory-node-m_1')
     const size = () => parseFloat((node.querySelector('span') as HTMLElement).style.width)
     const before = size()
-    emit('engramind-consumption', { agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1', 'm_nao_carregada'] })
+    await emitConsumption({ agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1', 'm_nao_carregada'] })
     await waitFor(() => expect(size()).toBeGreaterThan(before))
     expect(screen.queryByTestId('memory-node-m_nao_carregada')).toBeNull()
     expect(screen.getByTestId('stat-live').textContent).toBe('1')
@@ -547,7 +562,7 @@ describe('universos', () => {
     mount()
     const node = await screen.findByTestId('memory-node-m_1')
     expect(node.getAttribute('data-brightness')).toBe('0')
-    emit('engramind-consumption', { agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
+    await emitConsumption({ agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1'] })
     await waitFor(() => expect(screen.getByTestId('memory-node-m_1').getAttribute('data-brightness')).toBe('1'))
   })
 

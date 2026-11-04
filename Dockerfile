@@ -12,6 +12,8 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
+# Tarball do @engramind/client até a versão sair no npm (OPE-116).
+COPY vendor ./vendor
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --ignore-scripts
 

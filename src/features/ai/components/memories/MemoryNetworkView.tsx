@@ -5,22 +5,13 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorCode } from "@/lib/api"
 import { cn } from "@/lib/utils"
-import type { MemoryCardActions } from "@/features/engramind/components/network/MemoryCard"
-import { MemoryEditorDialog, type MemoryEditorTarget } from "@/features/engramind/components/network/MemoryEditorDialog"
-import { MemoryUniverse } from "@/features/engramind/components/network/MemoryUniverse"
-import { NetworkSkeleton } from "@/features/engramind/components/network/NetworkSkeleton"
-import { NETWORK_CANVAS_COMPACT_CLASS } from "@/features/engramind/components/network/layout-classes"
-import { useEngramindQuery } from "@/features/engramind/hooks/useEngramind"
-import { STALE_AFTER_DAYS_KEY, useMemoryUsage } from "@/features/engramind/hooks/useEngramindNetwork"
-import { DEFAULT_STALE_AFTER_DAYS } from "@/features/engramind/network/network-math"
-import type { NetworkMemory } from "@/features/engramind/network/types"
+import { DEFAULT_STALE_AFTER_DAYS, MemoryEditorDialog, MemoryUniverse, NETWORK_CANVAS_COMPACT_CLASS, NetworkSkeleton, STALE_AFTER_DAYS_KEY, useEngramindQuery, useLocalRemovals, type MemoryCardActions, type MemoryEditorTarget, type NetworkMemory } from "@engramind/client/react"
 import type { SettingMeta } from "@/features/engramind/types"
 import { useMemories, useMemoriesMeta, type MemorySource } from "../../hooks/useMemories"
 import type { MemoryDto } from "../../types"
 import { PENDING_PREFIX } from "../../memory-list"
 import { MemoriesNotices } from "./MemoriesNotices"
-import { ChannelLabelsProvider } from "@/features/engramind/components/network/ChannelName"
-import { useLocalRemovals } from "@/features/engramind/components/network/useLocalRemovals"
+import { OpexEngramindProvider } from "@/features/engramind/components/OpexEngramindProvider"
 import { isCentralChannel } from "@/features/engramind/network/channel-labels"
 
 /** Memória provisória da criação otimista (`useMemories`). */
@@ -53,11 +44,19 @@ export function memoryDtoToNetwork(memory: MemoryDto, channel: string): NetworkM
  * Universo de uma lista de memórias de um agente (`/integracoes/ia`, OPE-109): o canal da lista no
  * centro e uma partícula por memória, com o card de ações (ativar, fixar, editar, excluir). As ações
  * passam pelo serviço das memórias dos agentes (otimistas; conflito de versão com a mensagem exata).
+ * O universo vem de `@engramind/client` (OPE-116); o consumo ao vivo chega pelo SSE da lib.
  */
-export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, className }: { source: MemorySource; channel: string; canEdit: boolean; canCreate?: boolean; className?: string }) {
+export function MemoryNetworkView(props: { source: MemorySource; channel: string; canEdit: boolean; canCreate?: boolean; className?: string }) {
+    return (
+        <OpexEngramindProvider channelLabels={isCentralChannel(props.channel)}>
+            <MemoryNetworkContent {...props} />
+        </OpexEngramindProvider>
+    )
+}
+
+function MemoryNetworkContent({ source, channel, canEdit, canCreate = true, className }: { source: MemorySource; channel: string; canEdit: boolean; canCreate?: boolean; className?: string }) {
     const { query, memories, mutate } = useMemories(source)
     const meta = useMemoriesMeta()
-    const usage = useMemoryUsage()
     const settings = useEngramindQuery<{ settings: SettingMeta[] }>("settings")
     const [editor, setEditor] = useState<(MemoryEditorTarget & { memory?: MemoryDto }) | null>(null)
     const [deleting, setDeleting] = useState<MemoryDto | null>(null)
@@ -83,7 +82,7 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
     )
 
     return (
-        <ChannelLabelsProvider enabled={isCentralChannel(channel)}>
+        <>
             <div className={cn("flex flex-col gap-3", className)} data-testid="memory-network-view">
                 <MemoriesNotices meta={meta.data} channel={channel} />
                 {query.isLoading ? (
@@ -96,7 +95,6 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
                         isProvisional={isProvisionalMemory}
                         localRemovals={localRemovals}
                         memories={network}
-                        usage={usage.data}
                         staleAfterDays={typeof staleDays === "number" && staleDays > 0 ? staleDays : DEFAULT_STALE_AFTER_DAYS}
                         actions={actions}
                         dataVersion={query.dataUpdatedAt}
@@ -156,6 +154,6 @@ export function MemoryNetworkView({ source, channel, canEdit, canCreate = true, 
                     }}
                 />
             </div>
-        </ChannelLabelsProvider>
+        </>
     )
 }

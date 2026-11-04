@@ -11,8 +11,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/engramind/server/operations-runner', () => ({ runEngramindOperation: mocks.run, importEngramindMemories: vi.fn() }))
 vi.mock('@/features/opex-agent/server/secret-reveals', () => ({ createSecretReveal: mocks.reveal }))
 vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-const consumption = vi.hoisted(() => ({ publishConsumption: vi.fn(async () => undefined) }))
-vi.mock('@/features/engramind/server/consumption', () => consumption)
 const hints = vi.hoisted(() => ({ call: vi.fn(async (..._args: unknown[]) => ({ hints: [{ id: 'm_1', title: 'Deploy', channel: 'opex', score: 0.8 }] })), tokens: { opex: 'eng.tk_opex.s', maddox: 'eng.tk_maddox.s' } as Record<string, string | null> }))
 vi.mock('@/features/engramind/server/memory-network', () => ({ agentTokenFor: async (consumer: string) => hints.tokens[consumer] ?? null }))
 vi.mock('@/features/engramind/server/client', () => ({ engramindCall: hints.call, engramindTarget: async () => ({ baseUrl: 'http://engramind', token: 'admin' }) }))
@@ -122,54 +120,15 @@ describe('ferramentas do Engramind', () => {
   })
 })
 
-describe('busca de memórias pelo agente (OPE-109)', () => {
+describe('busca de memórias pelo agente (OPE-109, OPE-116)', () => {
   const hit = (id: string, channel: string) => ({ memory: { id, channel, text: 'segredo do texto', title: 'Título' }, rank: 1, score: 0.9 })
-  beforeEach(() => {
-    mocks.run.mockReset()
-    consumption.publishConsumption.mockClear()
-  })
+  beforeEach(() => mocks.run.mockReset())
 
-  it('publica o consumo com o agente do chat, os canais e só os ids', async () => {
+  it('OPE-116: a busca roda pelo serviço e devolve o resultado; o consumo ao vivo vem do webhook memory.consumed (o Opex não publica)', async () => {
     mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'opex'), hit('m_2', 'agentes/opex/global')] })
-    await find('search_engramind_memories').execute({ query: 'pnpm' }, context)
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
-    const event = consumption.publishConsumption.mock.calls[0]![0] as Record<string, unknown>
-    expect(event).toEqual({ agent: 'opex/opex', kind: 'search', channels: ['opex', 'agentes/opex/global'], delivered: ['opex', 'agentes/opex/global'], memoryIds: ['m_1', 'm_2'] })
-    expect(JSON.stringify(event)).not.toContain('segredo')
-  })
-
-  it('pela sessão do Agente Maddox (escopo maddox) o consumidor é opex/maddox; canais pedidos entram como consultados', async () => {
-    mocks.run.mockResolvedValue({ mode: 'text', results: [hit('m_1', 'opex')] })
-    await find('search_engramind_memories').execute({ query: 'x', channels: ['opex', 'agentes/maddox/dono'] }, { ...context, scope: { kind: 'owner', agent: 'maddox' } as never })
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
-    expect(consumption.publishConsumption.mock.calls[0]![0]).toMatchObject({ agent: 'opex/maddox', channels: ['opex', 'agentes/maddox/dono'], delivered: ['opex'] })
-  })
-
-  it('regressão: busca por token de sistema (MCP do dono) não anima nenhum agente', async () => {
-    mocks.run.mockResolvedValue({ mode: 'text', results: [hit('m_1', 'opex')] })
-    const output = await find('search_engramind_memories').execute({ query: 'x' }, { ...context, sessionId: '', scope: { kind: 'owner', agent: 'maddox' } as never, origin: { kind: 'api-token', tokenId: 't', nome: 'Sistema externo', prefixo: 'opx_' } })
-    expect(output).toBeTruthy()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(consumption.publishConsumption).not.toHaveBeenCalled()
-  })
-
-  it('regressão: busca por prefixo publica os slugs entregues, não o prefixo', async () => {
-    mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'agentes/opex/global'), hit('m_2', 'agentes/opex/dono')] })
-    await find('search_engramind_memories').execute({ query: 'x', channels: ['agentes/opex/*', 'opex'] }, context)
-    await vi.waitFor(() => expect(consumption.publishConsumption).toHaveBeenCalledTimes(1))
-    expect((consumption.publishConsumption.mock.calls[0]![0] as { channels: string[] }).channels).toEqual(['opex', 'agentes/opex/global', 'agentes/opex/dono'])
-  })
-
-  it('sem resultados não publica; outras operações também não; falha na publicação não derruba a ferramenta', async () => {
-    mocks.run.mockResolvedValue({ mode: 'hybrid', results: [] })
-    await find('search_engramind_memories').execute({ query: 'nada' }, context)
-    mocks.run.mockResolvedValue({ memories: [] })
-    await find('list_engramind_memories').execute({}, context)
-    await new Promise((resolve) => setTimeout(resolve, 5))
-    expect(consumption.publishConsumption).not.toHaveBeenCalled()
-    consumption.publishConsumption.mockRejectedValueOnce(new Error('pusher fora'))
-    mocks.run.mockResolvedValue({ mode: 'hybrid', results: [hit('m_1', 'opex')] })
-    await expect(find('search_engramind_memories').execute({ query: 'x' }, context)).resolves.toMatchObject({ results: [expect.anything()] })
+    await expect(find('search_engramind_memories').execute({ query: 'pnpm' }, context)).resolves.toMatchObject({ results: [expect.anything(), expect.anything()] })
+    expect(mocks.run).toHaveBeenCalledWith('search_memories', expect.objectContaining({ query: 'pnpm' }), 'local')
+    await expect(import('@/features/engramind/server/consumption' as string)).rejects.toThrow()
   })
 })
 

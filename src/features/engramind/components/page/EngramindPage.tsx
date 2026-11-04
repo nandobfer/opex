@@ -11,8 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/lib/api"
 import { ENGRAMIND_INTEGRATION_HREF } from "../../constants"
 import { useEngramindConnection } from "../../hooks/useEngramindConnection"
-import { EngramindNetwork } from "../network/EngramindNetwork"
-import { NetworkSkeleton } from "../network/NetworkSkeleton"
+import { EngramindNetwork, NetworkSkeleton } from "@engramind/client/react"
+import { OpexEngramindProvider } from "../OpexEngramindProvider"
 
 /** Esqueleto da página: trilha, barra da rede, a área da rede e o card "O que é" no fim (OPE-113). */
 function PageSkeleton() {
@@ -26,7 +26,10 @@ function PageSkeleton() {
     )
 }
 
-/** `/engramind`: a rede de agentes, canais e memórias (OPE-109), com a gestão dentro dela. */
+/**
+ * `/engramind`: a rede de agentes, canais e memórias (OPE-109), com a gestão dentro dela. A rede vem de
+ * `@engramind/client` no modo gestor (OPE-116), pelo `OpexEngramindProvider`.
+ */
 export function EngramindPage() {
     const router = useRouter()
     const connection = useEngramindConnection()
@@ -43,7 +46,9 @@ export function EngramindPage() {
             ) : (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col gap-6">
                     <Suspense fallback={<PageSkeleton />}>
-                        <EngramindNetwork onConfigure={configure} />
+                        <OpexEngramindProvider>
+                            <EngramindNetwork onConfigure={configure} />
+                        </OpexEngramindProvider>
                     </Suspense>
                 </motion.div>
             )}

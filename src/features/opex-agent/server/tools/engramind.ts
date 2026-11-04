@@ -6,10 +6,7 @@ import { TOKEN_REVEAL_TTL_MS } from "@/features/engramind/constants"
 import { importInputSchema } from "@/features/engramind/schemas/import"
 import { envUpdateSchema } from "@/features/engramind/schemas/env"
 import { applyAiSourceToolSchema, resendAiKeySchema } from "@/features/engramind/schemas/ai-source"
-import type { IssuedToken, SearchResults } from "@/features/engramind/types"
-import { loggerFor } from "@/lib/logger"
-
-const log = loggerFor({ module: "opex-agent" })
+import type { IssuedToken } from "@/features/engramind/types"
 
 /**
  * Ferramentas do Agente Opex do dono para o Engramind (só no catálogo do dono; nada no portal). Uma por
@@ -55,36 +52,14 @@ async function issueToken(input: unknown, actorId: string, operationId: "issue_t
 }
 
 /**
- * Busca de memórias pelo agente (OPE-109): publica o consumo na rede (`engramind-consumption`, só ids).
- * O consumidor vem do escopo da sessão: o Agente Maddox (`scope.agent === "maddox"`, sessão dele pelo
+ * Agente do Opex dono da chamada (`app/agente`): o Agente Maddox (`scope.agent === "maddox"`, sessão dele pelo
  * MCP) é `opex/maddox`; o chat do Agente Opex, `opex/opex`. Chamada por **token de sistema** (`origin`
- * `api-token`: outro sistema ou o dono pelo MCP) não é um agente do Opex: não anima a rede (o consumo de
- * fora só atualiza os números na releitura). Nunca derruba a ferramenta.
+ * `api-token`: outro sistema ou o dono pelo MCP) não é um agente do Opex (`null`). O consumo ao vivo da rede
+ * vem do webhook `memory.consumed` do Engramind (OPE-116): só leituras com o token do agente animam a rede.
  */
 export function searchConsumer(context: Pick<OpexToolContext, "origin" | "scope">): "opex/opex" | "opex/maddox" | null {
     if (context.origin?.kind === "api-token") return null
     return context.scope?.agent === "maddox" ? "opex/maddox" : "opex/opex"
-}
-
-export async function publishSearchConsumption(input: unknown, result: unknown, context: Pick<OpexToolContext, "origin" | "scope">): Promise<void> {
-    const hits = (result as Partial<SearchResults> | null)?.results ?? []
-    const requested = ((input as { channels?: unknown } | null)?.channels as string[] | undefined) ?? []
-    const delivered = [...new Set(hits.map((hit) => hit.memory.channel))]
-    const agent = searchConsumer(context)
-    if (!hits.length) return
-    if (!agent) {
-        log.info({ tokenId: context.origin?.tokenId, results: hits.length }, "[engramind] busca por token de sistema: consumo não animado na rede")
-        return
-    }
-    const { publishConsumption } = await import("@/features/engramind/server/consumption")
-    await publishConsumption({
-        agent,
-        kind: "search",
-        // Só slugs reais: prefixos (`agentes/opex/*`) não casam com nenhum link da rede.
-        channels: [...new Set([...requested.filter((slug) => typeof slug === "string" && !slug.endsWith("*")), ...delivered])],
-        delivered,
-        memoryIds: hits.map((hit) => hit.memory.id),
-    })
 }
 
 /**
@@ -109,9 +84,7 @@ async function runOperation(operation: EngramindOperation, input: unknown, conte
         const own = await agentHints(input, context)
         if (own !== undefined) return own
     }
-    const result = await (await runner()).runEngramindOperation(operation.id, input, context.actorId)
-    if (operation.id === "search_memories") void publishSearchConsumption(input, result, context).catch(() => undefined)
-    return result
+    return (await runner()).runEngramindOperation(operation.id, input, context.actorId)
 }
 
 function operationTool(operation: EngramindOperation): AnyTool {

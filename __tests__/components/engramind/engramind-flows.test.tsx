@@ -9,8 +9,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 /**
  * Fluxos de tela do Engramind: invalidação por evento do webhook, base estável dos formulários
  * (refetch não apaga o rascunho), aba Configurações (só o alterado, reindexação, padrão = null),
- * listas com erro e "Tentar novamente", conexão (passos do bootstrap), importação (bloqueios),
- * variáveis de ambiente e "Aplicar e reiniciar".
+ * listas com erro e "Tentar novamente", conexão (passos do bootstrap), variáveis de ambiente e "Aplicar e reiniciar".
  */
 
 type Query = { data?: unknown; isLoading: boolean; error: unknown; refetch: () => void }
@@ -81,10 +80,8 @@ import { areasForEvent } from '@/features/engramind/hooks/useEngramind'
 import { useFormSnapshot } from '@/features/engramind/components/shared/useFormSnapshot'
 import { SettingsTab } from '@/features/engramind/components/integration/settings/SettingsTab'
 import { JobsCard } from '@/features/engramind/components/integration/operation/JobsCard'
-import { SubscribersCard } from '@/features/engramind/components/page/channels/SubscribersCard'
 import { ChannelSettingsCard } from '@/features/engramind/components/page/channels/ChannelSettingsCard'
 import { ConnectionTab } from '@/features/engramind/components/integration/ConnectionTab'
-import { ImportMemoriesDialog } from '@/features/engramind/components/page/memories/ImportMemoriesDialog'
 import { EnvTab } from '@/features/engramind/components/integration/env/EnvTab'
 import { ApplyRestartDialog } from '@/features/engramind/components/integration/env/ApplyRestartDialog'
 
@@ -257,13 +254,7 @@ describe('listas com erro', () => {
     render(<JobsCard />)
     expect(screen.getByTestId('list-skeleton')).toBeTruthy()
   })
-
-  it('Assinantes: erro não vira "Nenhum assinante"', () => {
-    mocks.lists.subscriptions = { items: [], isLoading: false, error: new Error('429'), refetch: vi.fn() }
-    render(<SubscribersCard channel="eng/global" />)
-    expect(screen.queryByText('Nenhum assinante')).toBeNull()
-    expect(screen.getByRole('button', { name: /Tentar novamente/ })).toBeTruthy()
-  })
+  // OPE-116: Assinantes e Importar memórias saíram para `@engramind/client` (testes no repositório da lib).
 })
 
 describe('ConnectionTab', () => {
@@ -307,39 +298,6 @@ describe('ConnectionTab', () => {
     await waitFor(() => expect(save.hasAttribute('disabled')).toBe(false))
     fireEvent.click(save)
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalled())
-  })
-})
-
-describe('ImportMemoriesDialog', () => {
-  const channels = [{ id: 'ch_1', slug: 'eng/global', name: 'Global', description: null, priority: 0, version: 1, created_at: '2026-10-01T00:00:00Z', archived_at: null }]
-  const pick = async (content: string, name = 'm.json') => {
-    fireEvent.change(document.getElementById('import-file')!, { target: { files: [new File([content], name, { type: 'application/json' })] } })
-    await screen.findByText(new RegExp(`${name.replace('.', '\\.')}|inválido|limite`))
-  }
-  const importButton = () => screen.getByRole('button', { name: /Importar$/ })
-
-  it('item inválido bloqueia o envio e aponta o índice', async () => {
-    render(<ImportMemoriesDialog channels={channels} maxBatch={100} onOpenChange={vi.fn()} />)
-    await pick('[{"text":"ok"},{"texto":"x"}]')
-    expect(await screen.findByText(/Item 2:/)).toBeTruthy()
-    expect(importButton().hasAttribute('disabled')).toBe(true)
-  })
-
-  it('acima de limits.max_batch bloqueia antes do envio', async () => {
-    render(<ImportMemoriesDialog channels={channels} maxBatch={1} onOpenChange={vi.fn()} />)
-    await pick('[{"text":"a"},{"text":"b"}]')
-    expect(await screen.findByText(/limite por lote é 1/)).toBeTruthy()
-    expect(importButton().hasAttribute('disabled')).toBe(true)
-  })
-
-  it('arquivo válido (inclusive JSONL de uma linha) envia canal e itens', async () => {
-    mocks.mutateAsync = async () => ({ created: [{ index: 0, id: 'mem_1' }], duplicates: [] })
-    render(<ImportMemoriesDialog channels={channels} maxBatch={10} onOpenChange={vi.fn()} />)
-    await pick('{"text":"Rode só os testes afetados."}\n', 'm.jsonl')
-    await waitFor(() => expect(importButton().hasAttribute('disabled')).toBe(false))
-    fireEvent.click(importButton())
-    await waitFor(() => expect(mocks.calls).toEqual([{ channel: 'eng/global', memories: [expect.objectContaining({ text: 'Rode só os testes afetados.' })] }]))
-    expect(await screen.findByText(/1 memória\(s\) criada\(s\)/)).toBeTruthy()
   })
 })
 

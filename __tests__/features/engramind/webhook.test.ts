@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-/** Webhook do Engramind: assinatura HMAC, janela de 5 min, id repetido descartado e repasse mínimo. */
+/**
+ * Webhook do Engramind: assinatura HMAC, janela de 5 min, id repetido descartado e repasse mínimo.
+ * OPE-116: todo evento vai ao SSE da rede (`forwardWebhookLive`); `memory.consumed` não invalida nada.
+ */
 
 const mocks = vi.hoisted(() => ({
   config: { webhookSecret: 'segredo-do-webhook-com-mais-de-32-caracteres' } as Record<string, string | undefined>,
   seen: new Set<string>(),
   publish: vi.fn(async () => {}),
+  forward: vi.fn(async () => {}),
+  channels: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
@@ -19,6 +24,8 @@ vi.mock('@/features/engramind/server/models', () => ({
   },
 }))
 vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }, publishEngramind: mocks.publish }))
+vi.mock('@/features/engramind/server/live', () => ({ forwardWebhookLive: mocks.forward }))
+vi.mock('@/lib/pusher/channels', () => ({ publishToChannels: mocks.channels }))
 
 import { authenticateWebhook, processWebhookEvent, signPayload, verifySignature } from '@/features/engramind/server/webhook'
 
@@ -59,13 +66,26 @@ describe('processamento', () => {
     expect(auth.ok).toBe(true)
     if (!auth.ok) return
     expect(await processWebhookEvent(auth.event)).toBe(true)
-    expect(mocks.publish).toHaveBeenCalledWith({ type: 'memory.created', channel: 'eng/global', keys: undefined })
+    expect(mocks.publish).toHaveBeenCalledWith({ type: 'memory.created', channel: 'eng/global', keys: undefined }, { live: false })
+    expect(mocks.forward).toHaveBeenCalledWith(expect.objectContaining({ id: 'evt_1', type: 'memory.created' }))
     expect(await processWebhookEvent(auth.event)).toBe(false)
     expect(mocks.publish).toHaveBeenCalledTimes(1)
+    expect(mocks.forward).toHaveBeenCalledTimes(1)
   })
 
   it('settings.updated repassa as chaves alteradas', async () => {
     await processWebhookEvent({ id: 'evt_2', type: 'settings.updated', channel: null, keys: ['limits.max_batch'], at: '2026-10-31T12:00:00Z' })
-    expect(mocks.publish).toHaveBeenCalledWith({ type: 'settings.updated', channel: null, keys: ['limits.max_batch'] })
+    expect(mocks.publish).toHaveBeenCalledWith({ type: 'settings.updated', channel: null, keys: ['limits.max_batch'] }, { live: false })
+  })
+
+  it('OPE-116: memory.consumed vai só ao SSE (e ao Pusher da atividade, agrupado): sem engramind-updated nem ai-memories-updated', async () => {
+    mocks.publish.mockClear()
+    mocks.channels.mockClear()
+    mocks.forward.mockClear()
+    const event = { id: 'evt_c1', type: 'memory.consumed', channel: 'agentes/opex/global', memory_ids: ['m_1'], consumption: 'cns_1', operation: 'get_context', app: 'opex', agent: 'opex/opex', at: '2026-10-31T12:00:00Z' }
+    expect(await processWebhookEvent(event)).toBe(true)
+    expect(mocks.forward).toHaveBeenCalledWith(event)
+    expect(mocks.publish).not.toHaveBeenCalled()
+    expect(mocks.channels).not.toHaveBeenCalled()
   })
 })

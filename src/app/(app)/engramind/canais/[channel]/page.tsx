@@ -1,4 +1,4 @@
-import { ChannelDetail } from "@/features/engramind/components/page/channels/ChannelDetail"
+import { EngramindChannelPage } from "@/features/engramind/components/page/channels/EngramindChannelPage"
 
 const decode = (value: string) => {
     try {
@@ -11,5 +11,5 @@ const decode = (value: string) => {
 /** `/engramind/canais/[channel]`: assinantes e configurações por canal (slug com `/` codificada). */
 export default async function EngramindChannelRoute({ params }: { params: Promise<{ channel: string }> }) {
     const { channel } = await params
-    return <ChannelDetail slug={decode(channel)} />
+    return <EngramindChannelPage slug={decode(channel)} />
 }
