@@ -23,6 +23,8 @@ const summary = {
     ],
     total: { requests: 168, inputTokens: 1200000, outputTokens: 300000, totalTokens: 1545000, costUsd: null },
     coverageFrom: "2026-10-12T12:00:00.000Z",
+    missingInputRequests: 2,
+    missingOutputRequests: 0,
     missingTokenRequests: 1,
     missingCostRequests: 168,
 }
@@ -60,11 +62,11 @@ describe("ProviderUsageCard", () => {
         expect(screen.getByText(/Medição iniciada em/)).toBeTruthy()
     })
 
-    it("sinaliza métricas desconhecidas como — e avisa que o total é parcial", () => {
+    it("sinaliza métricas desconhecidas como — e avisa quando entrada ou saída somam apenas parte do período", () => {
         render(card())
         expect(screen.getAllByTitle("Métrica não informada").length).toBeGreaterThan(0)
         const note = screen.getByRole("note")
-        expect(note.textContent).toContain("Totais parciais: 1 sem tokens totais")
+        expect(note.textContent).toContain("Totais parciais: 2 sem tokens de entrada e 1 sem tokens totais")
         expect(note.textContent).not.toContain("sem custo")
     })
 

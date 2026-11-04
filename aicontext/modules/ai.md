@@ -201,7 +201,9 @@ e opções na própria aba da página "Inteligência Artificial".
   recurso** (feature de IA ou agente que consumiu o provedor, ex.: "Agente Opex", "Resumos de
   tarefas", "Orçamentos") com chamadas, entrada, saída e total, mais a linha **Total**. Essas APIs
   não informam custo por requisição (`costUsd` fica `null`), então a coluna **Custo (USD) não
-  aparece** e a tela mostra só tokens; a ausência também não entra no aviso de totais parciais.
+  aparece** e a tela mostra só tokens; a ausência de custo também não entra no aviso de totais
+  parciais. Entrada ou saída informadas só em parte dos registros do período aparecem como soma dos
+  conhecidos e entram no aviso ("N sem tokens de entrada/saída"), nunca como medição completa.
   Mesmo filtro de período, agregado no servidor em `GET /api/ai/providers/[provider]/usage` (só os
   quatro provedores diretos; OpenCode e JEV têm rotas próprias). O painel informa desde quando há
   medição do provedor.
@@ -518,8 +520,8 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 |---|---|
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
-| `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
-| `GET /api/ai/providers/[provider]/usage` | Consumo de Gemini, Anthropic, OpenAI ou DeepSeek por recurso (`from`/`to` ISO opcionais, sessão interna) com `rows`, `total`, `coverageFrom` e as contagens `missingTokenRequests`/`missingCostRequests`; outro provedor → 404; intervalo inválido → 400 |
+| `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna) no mesmo contrato dos provedores diretos: `rows` por origem (`key`), `total`, `coverageFrom` e as contagens de métricas ausentes; métricas ausentes ficam `null` |
+| `GET /api/ai/providers/[provider]/usage` | Consumo de Gemini, Anthropic, OpenAI ou DeepSeek por recurso (`from`/`to` ISO opcionais, sessão interna) com `rows`, `total`, `coverageFrom` e as contagens `missingInputRequests`, `missingOutputRequests`, `missingTokenRequests` e `missingCostRequests`; outro provedor → 404; intervalo inválido → 400 |
 | `GET /api/ai/providers/opencode/accounts` | Providers do OpenCode com as contas (sem segredos) |
 | `POST /api/ai/providers/opencode/accounts/[integrationId]/key` | Adiciona conta por chave `{ key, label?, answer? }` |
 | `POST /api/ai/providers/opencode/accounts/[integrationId]/oauth` | Inicia login OAuth `{ methodId, label?, answer? }` |
@@ -570,8 +572,9 @@ Uso JEV: `__tests__/lib/ai/jev-usage.test.ts` (normalização/custo/rateio),
 (tabela compartilhada entre JEV, OpenCode e provedores diretos) e `jev-usage-hook.test.tsx`
 (consulta/tempo real/cleanup). Consumo dos provedores diretos: `provider-usage.test.ts` (agregação
 por recurso, métricas desconhecidas e formato abreviado), `provider-usage-route.test.ts` (API interna,
-404 para OpenCode/JEV/desconhecido e período inválido), `provider-usage-card.test.tsx` (painel sem
-coluna de custo, estados e totais parciais) e `provider-usage-hook.test.tsx` (consulta/tempo real
+404 para OpenCode/JEV/desconhecido e período inválido), `opencode-usage-route.test.ts` (contrato real
+da rota do OpenCode: `rows`, não `origins`), `provider-usage-card.test.tsx` (painel sem
+coluna de custo, estados e totais parciais de entrada/saída) e `provider-usage-hook.test.tsx` (consulta/tempo real
 filtrando o provedor e cleanup); `opencode-usage-card.test.tsx` cobre o painel do OpenCode sobre o
 mesmo card. Os testes de tags e estimativas verificam referências e ausência de
 logs JEV duplicados, inclusive tags avulsas e falha de negócio posterior à resposta.

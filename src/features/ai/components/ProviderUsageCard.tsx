@@ -44,10 +44,14 @@ export function ProviderUsageCard({ provider, title, description, firstColumnLab
     const view = query === null ? "invalid" : usage.isLoading ? "loading" : usage.isError ? "error" : !data?.rows.length ? "empty" : "data"
     const missing = data
         ? [
+              data.missingInputRequests > 0 ? `${data.missingInputRequests.toLocaleString("pt-BR")} sem tokens de entrada` : null,
+              data.missingOutputRequests > 0 ? `${data.missingOutputRequests.toLocaleString("pt-BR")} sem tokens de saída` : null,
               data.missingTokenRequests > 0 ? `${data.missingTokenRequests.toLocaleString("pt-BR")} sem tokens totais` : null,
               showCost && data.missingCostRequests > 0 ? `${data.missingCostRequests.toLocaleString("pt-BR")} sem custo` : null,
           ].filter((part): part is string => part !== null)
         : []
+    // "1 sem X, 2 sem Y e 3 sem Z" — vírgulas entre as partes e "e" antes da última.
+    const missingText = missing.length > 1 ? `${missing.slice(0, -1).join(", ")} e ${missing[missing.length - 1]}` : missing[0]
 
     return (
         <Card>
@@ -71,7 +75,7 @@ export function ProviderUsageCard({ provider, title, description, firstColumnLab
                         {view === "data" && data && (
                             <div className="space-y-3">
                                 <UsageBreakdownTable firstColumnLabel={firstColumnLabel} rows={data.rows} total={data.total} showCost={showCost} />
-                                {missing.length > 0 && <p role="note" className="text-xs text-muted-foreground">Totais parciais: {missing.join(" e ")}. Métricas desconhecidas não são consideradas zero.</p>}
+                                {missing.length > 0 && <p role="note" className="text-xs text-muted-foreground">Totais parciais: {missingText}. Métricas desconhecidas não são consideradas zero.</p>}
                                 {showCoverage && data.coverageFrom && <p className="text-xs text-muted-foreground">Medição iniciada em {formatLogTimestamp(data.coverageFrom).slice(0, 16)}.</p>}
                             </div>
                         )}

@@ -23,6 +23,8 @@ const summary = {
     ],
     total: { requests: 4, inputTokens: 300, outputTokens: 100, totalTokens: 510, costUsd: 0.01 },
     coverageFrom: "2026-10-12T12:00:00.000Z",
+    missingInputRequests: 0,
+    missingOutputRequests: 0,
     missingTokenRequests: 0,
     missingCostRequests: 1,
 }
@@ -56,7 +58,7 @@ describe("Consumo do OpenCode", () => {
     })
 
     it("mostra vazio quando não há uso no período", () => {
-        mocks.usage.mockReturnValue({ data: { rows: [], total: { requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null }, coverageFrom: null, missingTokenRequests: 0, missingCostRequests: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
+        mocks.usage.mockReturnValue({ data: { rows: [], total: { requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null }, coverageFrom: null, missingInputRequests: 0, missingOutputRequests: 0, missingTokenRequests: 0, missingCostRequests: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
         render(<OpencodeUsageCard />)
         expect(screen.getByText("Nenhum uso do OpenCode neste período")).toBeTruthy()
     })

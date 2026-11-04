@@ -93,6 +93,8 @@ export async function getProviderUsage(provider: string, query: UsageQuery): Pro
             costUsd: sumOrNull(resources.map((row) => row.costUsd)),
         },
         coverageFrom: first ? new Date(first.createdAt).toISOString() : null,
+        missingInputRequests: rows.reduce((sum, row) => sum + row.missingInput, 0),
+        missingOutputRequests: rows.reduce((sum, row) => sum + row.missingOutput, 0),
         missingTokenRequests: rows.reduce((sum, row) => sum + row.missingTotal, 0),
         missingCostRequests: rows.reduce((sum, row) => sum + row.missingCost, 0),
     }

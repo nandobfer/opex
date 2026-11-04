@@ -27,6 +27,8 @@ describe("consumo dos provedores diretos por recurso", () => {
         expect(result.rows.map((row) => row.key)).toEqual(["task-summary", "budget-preview"])
         expect(result.rows[0]).toMatchObject({ label: "Resumos de tarefas", requests: 3, totalTokens: 4500 })
         expect(result.total).toMatchObject({ requests: 4, inputTokens: 3500, outputTokens: 1100, totalTokens: 5100, costUsd: null })
+        expect(result.missingInputRequests).toBe(0)
+        expect(result.missingOutputRequests).toBe(0)
         expect(result.missingTokenRequests).toBe(0)
         expect(result.missingCostRequests).toBe(4)
         expect(mocks.aggregate.mock.calls[0]![0][0]).toEqual({ $match: { provider: "gemini", createdAt: { $gte: new Date(query.from), $lte: new Date(query.to) } } })
@@ -41,7 +43,20 @@ describe("consumo dos provedores diretos por recurso", () => {
         const result = await getProviderUsage("anthropic", {})
         expect(result.rows[0]).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: 200, costUsd: null })
         expect(result.total).toMatchObject({ inputTokens: 30, outputTokens: 5, totalTokens: 235, costUsd: 0 })
+        expect(result.missingInputRequests).toBe(2)
+        expect(result.missingOutputRequests).toBe(2)
         expect(result.missingTokenRequests).toBe(0)
+    })
+
+    it("sinaliza somas parciais de entrada e saída quando só parte dos registros informa a métrica", async () => {
+        mocks.aggregate.mockResolvedValue([
+            { _id: "task-summary", requests: 10, inputTokens: 600, outputTokens: 600, totalTokens: 1200, costUsd: 0, missingInput: 3, missingOutput: 4, missingTotal: 0, missingCost: 10 },
+        ])
+        const result = await getProviderUsage("anthropic", {})
+        // A soma dos registros conhecidos não é apresentada como medição completa.
+        expect(result.rows[0]).toMatchObject({ inputTokens: 600, outputTokens: 600 })
+        expect(result.missingInputRequests).toBe(3)
+        expect(result.missingOutputRequests).toBe(4)
     })
 
     it("sem registros: lista vazia, total zerado e sem cobertura", async () => {
@@ -50,6 +65,8 @@ describe("consumo dos provedores diretos por recurso", () => {
         expect(result.rows).toEqual([])
         expect(result.total).toEqual({ requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null })
         expect(result.coverageFrom).toBeNull()
+        expect(result.missingInputRequests).toBe(0)
+        expect(result.missingOutputRequests).toBe(0)
         expect(result.missingTokenRequests).toBe(0)
         expect(result.missingCostRequests).toBe(0)
     })

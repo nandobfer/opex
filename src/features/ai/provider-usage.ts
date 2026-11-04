@@ -56,6 +56,10 @@ export interface ProviderUsageSummary {
     total: ProviderUsageTotals
     /** Início da cobertura: instante do registro mais antigo do provedor, independente do período. */
     coverageFrom: string | null
+    /** Registros do período sem tokens de entrada (0 = medição completa da coluna). */
+    missingInputRequests: number
+    /** Registros do período sem tokens de saída (0 = medição completa da coluna). */
+    missingOutputRequests: number
     /** Registros do período sem tokens totais (0 = medição completa). */
     missingTokenRequests: number
     /** Registros do período sem custo (0 = medição completa). */
