@@ -64,7 +64,8 @@ Configurações do menu.
   - Sem mudança, devolve a lista sem gravar, sem auditoria e sem evento.
   - `name` ausente (`undefined`) mantém o nome atual; `null` ou vazio limpa o nome (a tela sempre envia
     o nome; a ferramenta `update_favorite_color` sem `name` muda só a cor).
-- As mutações são **serializadas** por uma fila em memória do processo (ler → validar → gravar): duas
+- As mutações são **serializadas** por uma fila em memória do processo (`globalThis.__colorPaletteQueue`,
+  única entre as rotas e resistente ao recarregamento do módulo; ler → validar → gravar): duas
   ao mesmo tempo (tela e Agente Opex, ou ferramentas em paralelo) não perdem uma das mudanças. Basta
   porque o app roda num processo só (sem filas nem workers); uma mutação recusada não trava as seguintes.
 - Toda mutação grava, registra auditoria (`CoresFavoritas`, antes/depois), gera log com Pino e

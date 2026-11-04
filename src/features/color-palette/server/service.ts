@@ -12,13 +12,15 @@ import type { ColorPaletteDto, FavoriteColorDto } from "../schemas"
 /**
  * As mutações leem a lista inteira e gravam a lista nova: duas ao mesmo tempo (a tela e o Agente Opex,
  * ou várias ferramentas em paralelo) perderiam uma das mudanças. O app roda num processo só (sem
- * filas nem workers), então uma fila em memória serializa ler → validar → gravar.
+ * filas nem workers), então uma fila em memória serializa ler → validar → gravar. A fila fica em
+ * `globalThis`, como os outros locks do app: é única entre as rotas (tela, stream do Agente Opex, MCP)
+ * e sobrevive ao recarregamento do módulo (HMR).
  */
-let mutationQueue: Promise<unknown> = Promise.resolve()
+const globalQueue = globalThis as unknown as { __colorPaletteQueue?: Promise<unknown> }
 
 function serialized<T>(task: () => Promise<T>): Promise<T> {
-    const run = mutationQueue.then(task, task)
-    mutationQueue = run.catch(() => undefined)
+    const run = (globalQueue.__colorPaletteQueue ?? Promise.resolve()).then(task, task)
+    globalQueue.__colorPaletteQueue = run.catch(() => undefined)
     return run
 }
 

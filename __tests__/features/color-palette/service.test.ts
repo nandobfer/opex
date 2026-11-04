@@ -35,6 +35,21 @@ describe('cores favoritas', () => {
     expect(colors).toHaveLength(13)
   })
 
+  it('a fila é única no processo (globalThis): outra cópia do módulo espera a mutação em andamento', async () => {
+    const queue = globalThis as unknown as { __colorPaletteQueue?: Promise<unknown> }
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => (release = resolve))
+    // Simula a mutação de outra cópia do módulo (HMR ou outra rota) ainda em andamento.
+    queue.__colorPaletteQueue = pending
+    let done = false
+    const add = addFavoriteColor({ color: '#444444', name: null }, 'local').then(() => (done = true))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(done).toBe(false)
+    release()
+    await add
+    expect((await getColorPalette()).favorites.some((item) => item.color === '#444444')).toBe(true)
+  })
+
   it('uma mutação recusada não trava a fila das seguintes', async () => {
     const results = await Promise.allSettled([
       addFavoriteColor({ color: '#38BDF8', name: null }, 'local'),
