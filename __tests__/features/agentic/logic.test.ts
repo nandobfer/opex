@@ -171,14 +171,16 @@ describe('workbenchActions', () => {
 })
 
 describe('parseCentralConfig', () => {
-  it('cor do projeto (OPE-100): válida fica; fora da paleta ou ausente vira neutra sem descartar o resto', () => {
-    expect(parseCentralConfig({ sessionDirectory: '/repo', color: 'emerald' }).color).toBe('emerald')
+  it('cor do projeto (OPE-136): hex fica em maiúsculas; nome antigo da paleta vira hex; inválida ou ausente vira neutra sem descartar o resto', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', color: '#8000ff' }).color).toBe('#8000FF')
+    expect(parseCentralConfig({ sessionDirectory: '/repo', color: 'emerald' }).color).toBe('#34D399')
     const invalid = parseCentralConfig({ sessionDirectory: '/repo', color: 'magenta', git: { baseBranch: 'dev' } })
     expect(invalid.color).toBeNull()
     expect(invalid.git.baseBranch).toBe('dev')
     expect(parseCentralConfig({ sessionDirectory: '/repo' }).color).toBeNull()
     expect(defaultCentralConfig('/repo').color).toBeNull()
-    expect(centralConfigSchema.safeParse({ ...defaultCentralConfig('/repo'), color: 'magenta' }).error?.issues[0]?.message).toBe('Escolha uma cor da paleta')
+    expect(centralConfigSchema.parse({ ...defaultCentralConfig('/repo'), color: 'rose' }).color).toBe('#FB7185')
+    expect(centralConfigSchema.safeParse({ ...defaultCentralConfig('/repo'), color: 'magenta' }).error?.issues[0]?.message).toBe('Use o formato #RRGGBB (ex.: #8000FF)')
   })
 
   it('completa configurações antigas com os padrões', () => {
@@ -212,6 +214,27 @@ describe('parseCentralConfig', () => {
   it('central antiga sem builder do Docker usa o padrão do host; o salvo é preservado', () => {
     expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { composeFile: 'x.yml' } }).environment.dockerBuilder).toBe('')
     expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { dockerBuilder: 'limit-builder' } }).environment.dockerBuilder).toBe('limit-builder')
+  })
+
+  it('central antiga sem serviços do compose sobe o compose inteiro; os salvos são preservados', () => {
+    expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { composeFile: 'x.yml' } }).environment.composeServices).toEqual([])
+    expect(parseCentralConfig({ sessionDirectory: '/repo', environment: { composeServices: ['app'] } }).environment.composeServices).toEqual(['app'])
+  })
+
+  it('serviço do compose: formato restrito (vai para o shell), até 100 caracteres e até 20 serviços', () => {
+    const base = defaultCentralConfig('/repo')
+    const parse = (composeServices: string[]) => centralConfigSchema.safeParse({ ...base, environment: { ...base.environment, composeServices } })
+    expect(parse(['app; rm -rf /']).success).toBe(false)
+    expect(parse(['-app']).success).toBe(false)
+    expect(parse(['app', 'mcp-brasil', 'worker_1.v2']).success).toBe(true)
+    const trimmed = parse(['  app  '])
+    expect(trimmed.success && trimmed.data.environment.composeServices).toEqual(['app'])
+    const long = parse(['a'.repeat(101)])
+    expect(long.success ? null : long.error.issues[0]?.message).toBe('Máximo 100 caracteres')
+    const many = parse(Array.from({ length: 21 }, (_, i) => `s${i}`))
+    expect(many.success ? null : many.error.issues[0]?.message).toBe('Máximo 20 serviços')
+    const invalid = parse(['a b'])
+    expect(invalid.success ? null : invalid.error.issues[0]?.message).toBe('Nome de serviço inválido (letras, números, ponto, hífen e sublinhado)')
   })
 
   it('builder do Docker com caractere de shell é inválido', () => {

@@ -245,7 +245,7 @@ describe('colunas do quadro', () => {
 
     await updateColumn(created.key, { name: 'Extra 2', color: 'sky', icon: 'flag', description: 'desc', wipLimit: null }, 'local')
     const board = await getBoard()
-    expect(board.columns.find((c) => c.key === created.key)).toMatchObject({ name: 'Extra 2', color: 'sky', description: 'desc', wipLimit: null })
+    expect(board.columns.find((c) => c.key === created.key)).toMatchObject({ name: 'Extra 2', color: '#38BDF8', description: 'desc', wipLimit: null })
 
     const order = ['done', 'todo', created.key, 'doing']
     expect((await reorderColumns(order, 'local')).layout).toEqual(order)

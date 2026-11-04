@@ -1,7 +1,8 @@
 "use client"
 
-import { useWatch } from "react-hook-form"
+import { Controller, useWatch } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChipInput } from "@/components/ui/chip-input"
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
@@ -19,8 +20,8 @@ import type { CentralForm } from "./form"
 /**
  * Aba Ambiente: o **fluxo padrão da mesa** (publicar a prévia ou abrir o PR direto — OPE-79; gerar o plano
  * sozinho depois do refinamento — OPE-137) e a
- * prévia em si (docker compose, faixa de portas — herdada do padrão global ou personalizada —, variável da porta, endereço, teste de saúde e
- * backup do banco). Sem publicar a prévia, os ajustes ficam guardados e só o switch aparece. Com a
+ * prévia em si (docker compose, faixa de portas — herdada do padrão global ou personalizada —, variável da porta, endereço, teste de saúde,
+ * serviços do compose que o build Local sobe e backup do banco). Sem publicar a prévia, os ajustes ficam guardados e só o switch aparece. Com a
  * integração Builder Machine ativa e a prévia Local, o card da Builder Machine escolhe se a central usa o PC.
  */
 export function EnvironmentSection({ form, centralId }: { form: CentralForm; centralId: string }) {
@@ -30,6 +31,9 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
     const builderMachine = useBuilderMachineActive() && env.previewMethod !== "github"
     const globalPorts = useAgenticSettings().data?.settings.ports
     const ports = resolveCentralPorts(globalPorts, env)
+    const local = env.previewMethod !== "github"
+    const services = local ? (env.composeServices ?? []) : []
+    const servicesError = errors?.composeServices?.message ?? (Array.isArray(errors?.composeServices) ? errors.composeServices.find(Boolean)?.message : undefined)
     return (
         <>
             <Card>
@@ -67,7 +71,7 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                                     Cada mesa recebe uma porta livre entre {ports.min || "?"} e {ports.max || "?"}. {env.previewMethod === "github" ? "O GitHub constrói a imagem e o agente publica sem build local." : "O agente constrói no worktree."}{" "}
                                     <code className="font-mono text-foreground">
                                         {env.previewMethod !== "github" && env.dockerBuilder ? `BUILDX_BUILDER=${env.dockerBuilder} ` : ""}
-                                        {env.portEnvVar || "PORT"}={ports.min || "?"} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}
+                                        {env.portEnvVar || "PORT"}={ports.min || "?"} docker compose -p &lt;projeto&gt;{env.composeFile ? ` -f ${env.composeFile}` : ""} up -d {env.previewMethod === "github" ? "--no-build --pull never" : "--build"}{services.length ? ` ${services.join(" ")}` : ""}
                                     </code>{" "}
                                     no worktree.
                                 </p>
@@ -102,6 +106,11 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                                     <Field id="central-env-timeout" label="Tempo máximo do build (minutos)" error={errors?.buildTimeoutMinutes?.message}>
                                         <Input id="central-env-timeout" type="number" min={2} max={120} {...form.register("environment.buildTimeoutMinutes", { valueAsNumber: true })} aria-invalid={errors?.buildTimeoutMinutes ? true : undefined} />
                                     </Field>
+                                    {local && (
+                                        <Field id="central-env-services" label="Serviços do compose" error={servicesError}>
+                                            <Controller control={form.control} name="environment.composeServices" render={({ field }) => <ChipInput id="central-env-services" value={field.value ?? []} onChange={field.onChange} placeholder="nome do serviço e Enter (ex.: app)" max={20} />} />
+                                        </Field>
+                                    )}
                                 </div>
                                 <div className="mt-4">
                                     <FormToggleCard
@@ -115,7 +124,7 @@ export function EnvironmentSection({ form, centralId }: { form: CentralForm; cen
                                     />
                                 </div>
                                 <p className="mt-4 text-xs text-muted-foreground">
-                                    O botão &quot;Abrir prévia&quot; usa http://{env.previewHost || "localhost"}:&lt;porta&gt;. Abrindo o app de outra máquina, use o IP do servidor, não localhost.
+                                    O botão &quot;Abrir prévia&quot; usa http://{env.previewHost || "localhost"}:&lt;porta&gt;. Abrindo o app de outra máquina, use o IP do servidor, não localhost.{local ? " Sem serviços do compose, o build sobe todos; com serviços, sobe só eles e as dependências deles." : ""}
                                 </p>
                             </motion.div>
                         ) : (

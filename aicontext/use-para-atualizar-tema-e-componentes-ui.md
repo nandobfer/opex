@@ -20,6 +20,13 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
 - Componentes usam **apenas tokens** (`bg-primary`, `text-primary-foreground`, `ring-ring`,
   `bg-sidebar-accent`); nunca a cor primária hardcoded (`bg-[#8000ff]`). Para brilho/realce use a
   própria variável: `shadow-[0_0_18px_-4px_hsl(var(--primary))]`, `bg-primary/15`.
+- **Exceção — cor escolhida pelo usuário** (OPE-136): cores que são dados do usuário (cor da coluna do
+  quadro, cor do projeto da central, cor do Agente Maddox, favoritas) são hex `#RRGGBB` e vão por
+  `style` inline (`borderTopColor`, `backgroundColor`, `color`, ou `--primary` calculado em
+  `agentColorStyle`): o valor não existe em tempo de build e não pode virar classe do Tailwind. Fora
+  dessas cores, continua valendo só token. O controle para escolher uma cor é sempre o
+  `ColorPaletteField` (seletor único: favoritas, paleta 10×5, hex e aviso de contraste — ver
+  `modules/settings.md`); não crie paletas fixas.
 - Cores de estado (alerta, sucesso, erro) em fundo escuro: prefira translúcidos com texto claro
   (`bg-amber-500/15 text-amber-300 ring-amber-400/30`), nunca `bg-*-100 text-*-800` sem variante
   `dark:`.

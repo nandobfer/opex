@@ -22,8 +22,9 @@ import { TaskTable } from '@/features/tasks/components/TaskTable'
 import { TaskCompactCard } from '@/features/tasks/components/TaskCompactCard'
 import { useTaskSelection } from '@/features/tasks/hooks/useTaskSelection'
 import { buildBoardColumns } from '@/features/tasks/board'
+import { styleHasColor } from '../../helpers/colors'
 
-const board = { columns: [{ key: 'todo', name: 'A Fazer', color: 'zinc' as const, icon: 'inbox' as const, description: null, wipLimit: null }], layout: ['todo'] }
+const board = { columns: [{ key: 'todo', name: 'A Fazer', color: '#A1A1AA', icon: 'inbox' as const, description: null, wipLimit: null }], layout: ['todo'] }
 
 const task = (overrides: Partial<TaskDto> = {}): TaskDto => ({
   id: 'a'.repeat(24),
@@ -65,29 +66,29 @@ describe('repositório na cor da central em Tarefas', () => {
   it('card do kanban pinta o org/repo com a cor da central do projeto', () => {
     withColors(<TaskCardView task={task()} />)
     expect(repoName().textContent).toBe('nandobfer/opex')
-    expect(repoName().classList.contains('text-rose-400')).toBe(true)
+    expect(styleHasColor(repoName().getAttribute('style'), '#FB7185')).toBe(true)
   })
 
   it('tabela pinta o org/repo da coluna Repositório', () => {
     withColors(<Table tasks={[task()]} />)
-    expect(repoName().classList.contains('text-rose-400')).toBe(true)
+    expect(styleHasColor(repoName().getAttribute('style'), '#FB7185')).toBe(true)
   })
 
   it('card compacto (celular) pinta o org/repo', () => {
     withColors(<Compact item={task()} />)
-    expect(repoName().classList.contains('text-rose-400')).toBe(true)
+    expect(styleHasColor(repoName().getAttribute('style'), '#FB7185')).toBe(true)
   })
 
   it('central sem cor, projeto sem central ou fora do provider: o rótulo fica no padrão (sem cor)', () => {
     mocks.centrals = [central('p1', null)]
     const { unmount } = withColors(<TaskCardView task={task()} />)
-    expect(Array.from(repoName().classList).some((name) => /^text-\w+-400$/.test(name))).toBe(false)
+    expect(repoName().getAttribute('style')).toBeNull()
     unmount()
     mocks.centrals = [central('p2', 'rose')]
     const second = withColors(<TaskCardView task={task()} />)
-    expect(repoName().classList.contains('text-rose-400')).toBe(false)
+    expect(repoName().getAttribute('style')).toBeNull()
     second.unmount()
     render(<TaskCardView task={task()} />)
-    expect(repoName().classList.contains('text-rose-400')).toBe(false)
+    expect(repoName().getAttribute('style')).toBeNull()
   })
 })

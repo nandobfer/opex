@@ -1,4 +1,3 @@
-import type { ColumnColor } from "@/features/tasks/board"
 import type { TaskType } from "@/features/tasks/constants"
 
 /**
@@ -40,7 +39,8 @@ export interface DashboardKpis {
 export interface DashboardColumnSlice {
     key: string
     label: string
-    color: ColumnColor
+    /** Cor `#RRGGBB` da coluna (desconhecida = cinza). */
+    color: string
     count: number
 }
 

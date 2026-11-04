@@ -6,7 +6,8 @@ import { DevTask } from "@/lib/db/models/DevTask"
 import { Project } from "@/lib/db/models/Project"
 import { TaskBoardColumn, TaskBoardLayout } from "@/lib/db/models/TaskBoard"
 import { TimeLog } from "@/lib/db/models/TimeLog"
-import { COLUMN_COLORS, normalizeLayout, type ColumnColor } from "@/features/tasks/board"
+import { normalizeLayout } from "@/features/tasks/board"
+import { columnChartColor } from "@/features/dashboard/components/column-colors"
 import { TASK_TYPES, type TaskType } from "@/features/tasks/constants"
 import { concludedColumnKeys, TASK_AUDIT_ENTITY } from "@/features/tasks/server/service"
 import { completionTimestamps } from "@/features/finance/logic"
@@ -23,7 +24,6 @@ import type { DashboardDto, DashboardKpis } from "../types"
 const DAY_MS = 86_400_000
 const DEFAULT_WINDOW_DAYS = 30
 
-const colorOf = (value: string): ColumnColor => (COLUMN_COLORS as readonly string[]).includes(value) ? (value as ColumnColor) : "zinc"
 const typeOf = (value: string | null): TaskType | null => (value && (TASK_TYPES as readonly string[]).includes(value) ? (value as TaskType) : null)
 
 interface RawTask {
@@ -62,7 +62,7 @@ export async function buildDashboard(range: { from?: string; to?: string; timeZo
     const orderedKeys = normalizeLayout(layoutDoc?.order ?? [], columnDocs.map((column) => column.key))
     const columns: ColumnInfo[] = orderedKeys.map((key) => {
         const column = columnsByKey.get(key)
-        return { key, name: column?.name ?? key, color: colorOf(column?.color ?? "zinc") }
+        return { key, name: column?.name ?? key, color: columnChartColor(column?.color) }
     })
 
     // Conclusão derivada da auditoria (mesma regra do Financeiro).

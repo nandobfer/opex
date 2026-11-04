@@ -88,8 +88,10 @@ Nenhum evento ou `publishAppEvent` novo — o servidor já publica nesses pontos
 
 Base do shadcn (`src/components/ui/chart.tsx`) com componentes da feature em
 `src/components/metrics/charts/` (compartilhados com as páginas dos agentes, OPE-122; `BarsChart`, `TrendLineChart`, `DonutChart`, `RankedBarsCard`, `ChartCard`,
-`ChartDataTable`, `EmptyChart`, `useChartAnimation`, `palette`). Cores só por `var(--chart-n)` e
-`var(--color-*-400)`; cada gráfico tem `role="img"` + `aria-label` e uma **tabela oculta**
+`ChartDataTable`, `EmptyChart`, `useChartAnimation`, `palette`). Cores só por `var(--chart-n)`; as fatias
+da distribuição por coluna usam o hex da coluna (`columnChartColor`, `components/column-colors.ts`:
+nome antigo da paleta vira hex, cor desconhecida ou coluna órfã = cinza `#A1A1AA`), no dashboard do
+dono e no do portal; cada gráfico tem `role="img"` + `aria-label` e uma **tabela oculta**
 (`ChartDataTable`, linhas `data-barra`) com os mesmos números. A animação das séries usa a do
 recharts, desligada com movimento reduzido.
 

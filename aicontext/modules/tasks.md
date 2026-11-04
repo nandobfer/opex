@@ -75,8 +75,15 @@ semeado na primeira leitura (`ensureBoard`).
   central). Criar a tarefa e editar título/descrição disparam, em segundo plano, a geração do resumo
   e das tags de IA. `concludedColumnKeys` devolve as colunas de conclusão dos vínculos (usado pelos
   resumos e pelas tags de IA).
+- **Cor da coluna** (OPE-136): hex `#RRGGBB` (`TaskColumnDto.color`; `columnInputSchema.color` é o
+  `colorValueSchema`, que ainda aceita os nomes antigos `violet`…`zinc` na API e vira o hex do tom 400).
+  Colunas salvas com o nome antigo são convertidas **na leitura** (`toDto` com `normalizeColor`; sem
+  migração no banco — ao salvar de novo, grava hex); cor inválida cai na padrão (Violeta,
+  `DEFAULT_COLUMN_COLOR`). `BoardColumnView.accent` traz o hex e a borda/bullet vão por `style`
+  (`columnBorderStyle`/`columnDotStyle`): cabeçalho e borda das colunas no Opex e no portal, bullet
+  da coluna nos badges, na Central de desenvolvimento e no vínculo GitHub.
 - `columns.ts` (`COLUMN_AUDIT_ENTITY = "ColunaTarefas"`): `ensureBoard` (semeia o quadro padrão —
-  A Fazer / Em Andamento / Concluído — na primeira execução), `getBoard`, `createColumn`,
+  A Fazer / Em Andamento / Concluído — na primeira execução, já em hex), `getBoard`, `createColumn`,
   `updateColumn`, `deleteColumn` (só vazia, que não seja coluna de entrada de um projeto —
   `COLUMN_IN_USE` — nem coluna da fila de uma central — `COLUMN_QUEUE_IN_USE`), `reorderColumns`
   (409 `COLUMNS_CHANGED` se a ordem não bate). Publica `task-columns-updated`.
@@ -155,7 +162,8 @@ semeado na primeira leitura (`ensureBoard`).
 - **Kanban** (`TaskBoard`/`TaskColumn`/`TaskCard`, dnd-kit + Framer Motion): todas as colunas são
   editáveis (alça para arrastar, ícone, descrição em tooltip, contador `n/limite` com aviso de WIP,
   menu Editar / Mover para a esquerda/direita / Excluir). **"+"** entre colunas e **"Nova coluna"** no
-  fim abrem `ColumnFormDialog`. Arrastar coluna reordena (otimista); arrastar card move entre colunas
+  fim abrem `ColumnFormDialog` (nome, limite, **cor pelo seletor de cores único** — `ColorPaletteField`,
+  com as favoritas de Configurações › Aparência, ver `modules/settings.md` —, ícone e descrição). Arrastar coluna reordena (otimista); arrastar card move entre colunas
   (o card entra durante o arraste) e, na ordenação Manual, reordena. Colunas virtualizadas acima de
   50 cards; o card mostra no cabeçalho o código e, no rodapé, o ícone de prioridade (só o ícone
   colorido, sem rótulo), a **estimativa real** de horas e, **com cliente**, o **faturamento estimado**
@@ -165,7 +173,8 @@ semeado na primeira leitura (`ensureBoard`).
     Repositório da tabela e no card compacto do celular, o `org/repo` do `GithubRepoLabel` sai na
     **cor configurada na central de desenvolvimento** daquele projeto (`config.color`, a mesma da
     linha do projeto na Central — ver `modules/agentic-dev.md`). Componente `TaskProjectRepoLabel`
-    (`GithubRepoLabel` com `nameClassName` = `productColorClass` de `agentic/dev-center-product.ts`); as
+    (`GithubRepoLabel` com `nameStyle` = `{ color: <hex da central> }`; a cor é dado do usuário e vai por
+    `style`); as
     cores vêm do `CentralColorsProvider` (layout de `/tarefas`, `useCentrals` +
     `useProjectColor(projectId)`) e atualizam em tempo real (`useCentralsRealtime`:
     `AGENTIC_UPDATED_EVENT` em `private-app` recarrega só as centrais, e só nos eventos de configuração da central — payload `{ centralId }`, `isCentralConfigEvent`; os avanços de mesa, com `workbenchId`, e as configurações globais, com `scope`, não refazem a consulta). Sem central, sem cor, consulta

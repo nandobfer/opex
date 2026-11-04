@@ -102,7 +102,7 @@ describe("aggregateTasks", () => {
 
     it("inclui coluna desconhecida no fim e não conta colunas vazias", () => {
         const result = aggregateTasks([task({ columnId: "ghost" })], columns, projects, new Set())
-        expect(result.tasksByColumn).toEqual([{ key: "ghost", label: "ghost", color: "zinc", count: 1 }])
+        expect(result.tasksByColumn).toEqual([{ key: "ghost", label: "ghost", color: "#A1A1AA", count: 1 }])
     })
 })
 

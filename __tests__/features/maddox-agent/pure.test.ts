@@ -3,7 +3,6 @@ import { maddoxSessionPermissions } from '@/features/maddox-agent/permissions'
 import { MADDOX_CLIENT_TOOL_NAMES, buildMaddoxClientToolTree, enabledMaddoxClientToolNames, maddoxMcpToolName, maddoxOwnerToolMetas, parseMaddoxMcpToolName } from '@/features/maddox-agent/catalog'
 import { readFileSync } from 'node:fs'
 import { agentColorStyle } from '@/features/maddox-agent/colors'
-import { COLUMN_COLORS } from '@/features/tasks/board'
 import { isMaddoxShortcut } from '@/features/maddox-agent/constants'
 import { isOpexShortcut } from '@/features/opex-agent/constants'
 import { activeAgentStorageKey, otherAgent, resolveActiveAgent } from '@/features/opex-agent/agents'
@@ -72,17 +71,16 @@ describe('cor do agente', () => {
     expect(agentColorStyle(undefined)).toEqual(primary)
   })
 
-  it('a cor vira os tokens do tema (cor e texto legível), sem valores fixos', () => {
-    expect(agentColorStyle('sky')).toEqual({ '--primary': 'var(--agent-sky)', '--primary-foreground': 'var(--agent-sky-foreground)', '--ring': 'var(--agent-sky)' })
+  it('a cor hex vira --primary/--ring em HSL e o texto legível; o nome antigo da paleta vira o hex do tom 400', () => {
+    expect(agentColorStyle('#8000FF')).toEqual({ '--primary': '270 100% 50%', '--primary-foreground': '0 0% 100%', '--ring': '270 100% 50%' })
+    expect(agentColorStyle('sky')).toEqual(agentColorStyle('#38BDF8'))
+    expect(agentColorStyle('magenta')).toEqual(agentColorStyle(null))
   })
 
-  it('o tema declara a cor e o texto de cada cor da paleta', () => {
+  it('o tema guarda só a primária original (as cores fixas --agent-<cor> saíram com o seletor de cores)', () => {
     const css = readFileSync('src/app/globals.css', 'utf8')
     for (const token of ['--agent-primary: var(--primary)', '--agent-primary-foreground: var(--primary-foreground)', '--agent-ring: var(--ring)']) expect(css).toContain(token)
-    for (const color of COLUMN_COLORS) {
-      expect(css).toMatch(new RegExp(`--agent-${color}: [0-9]`))
-      expect(css).toMatch(new RegExp(`--agent-${color}-foreground: [0-9]`))
-    }
+    expect(css).not.toMatch(/--agent-(violet|sky|emerald|amber|rose|cyan|orange|pink|lime|zinc):/)
   })
 })
 

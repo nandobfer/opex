@@ -1,5 +1,6 @@
 "use client"
 
+import type { CSSProperties } from "react"
 import { Github, Lock } from "lucide-react"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { cn } from "@/lib/utils"
@@ -33,12 +34,22 @@ export function GithubUserLabel({ login, name, avatarUrl }: { login: string; nam
 export { FieldTrigger } from "@/components/ui/field-trigger"
 
 /** Item de repositório do GitHub (padrão único do app): avatar real (fallback inicial) + `owner/repo` + descrição + cadeado quando privado. */
-export function GithubRepoLabel({ repo, nameClassName }: { repo: GithubRepoLabelData; /** Classe extra do `org/repo` (ex.: cor da central em Tarefas). */ nameClassName?: string }) {
+export function GithubRepoLabel({
+    repo,
+    nameClassName,
+    nameStyle,
+}: {
+    repo: GithubRepoLabelData
+    /** Classe extra do `org/repo`. */
+    nameClassName?: string
+    /** Estilo do `org/repo` (ex.: cor `#RRGGBB` da central em Tarefas). */
+    nameStyle?: CSSProperties
+}) {
     return (
         <span className="flex min-w-0 flex-1 items-center gap-2">
             <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} />
             <span className="min-w-0 flex-1">
-                <span className={cn("block truncate font-medium", nameClassName)} data-testid="github-repo-name">
+                <span className={cn("block truncate font-medium", nameClassName)} style={nameStyle} data-testid="github-repo-name">
                     {repo.fullName}
                 </span>
                 {repo.description && <span className="block truncate text-xs text-muted-foreground">{repo.description}</span>}

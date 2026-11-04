@@ -6,7 +6,6 @@ import { z } from "zod"
 import { usePersistentState } from "@/hooks/usePersistentState"
 import { unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
-import type { ColumnColor } from "@/features/tasks/board"
 import { useMaddoxSettings } from "@/features/maddox-agent/hooks/useMaddoxSettings"
 import type { MaddoxClientStatusDto } from "@/features/maddox-agent/types"
 import { CHAT_AGENT_IDS, activeAgentStorageKey, otherAgent, resolveActiveAgent, type ChatAgentId } from "../../agents"
@@ -25,7 +24,7 @@ export interface AgentSwitchValue {
     other: ChatAgentId | null
     setActive: (id: ChatAgentId) => void
     scopes: Record<ChatAgentId, OpexUiScope>
-    colors: Record<ChatAgentId, ColumnColor | null>
+    colors: Record<ChatAgentId, string | null>
     busy: Record<ChatAgentId, boolean>
     reportBusy: (id: ChatAgentId, busy: boolean) => void
 }
@@ -36,7 +35,7 @@ const storedSchema = z.enum(CHAT_AGENT_IDS).nullable()
 
 interface StatusLike {
     enabled: boolean
-    color?: ColumnColor | null
+    color?: string | null
 }
 
 /** Situação do agente no portal (mesma chave de cache do `useOpexStatus`, invalidada pelo tempo real do portal). */
@@ -74,7 +73,7 @@ export function AgentSwitchProvider({ client, initial, children }: AgentSwitchPr
         return CHAT_AGENT_IDS.filter((id) => on[id])
     }, [portal, opexStatus.data?.enabled, maddoxStatus.data?.enabled, initial?.opex, initial?.maddox])
 
-    const colors = useMemo<Record<ChatAgentId, ColumnColor | null>>(
+    const colors = useMemo<Record<ChatAgentId, string | null>>(
         () => ({ opex: null, maddox: (portal ? maddoxStatus.data?.color : maddoxSettings.data?.settings.color) ?? null }),
         [portal, maddoxStatus.data?.color, maddoxSettings.data?.settings.color],
     )

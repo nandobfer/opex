@@ -1,7 +1,6 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import type { OpexFilesSettings } from "@/features/opex-agent/schemas"
 import type { OpexToolMetaDto } from "@/features/opex-agent/tool-tree"
-import type { ColumnColor } from "@/features/tasks/board"
 import type { MaddoxAgentSettings } from "./schemas"
 
 export interface MaddoxAgentSettingsDto {
@@ -21,7 +20,7 @@ export interface MaddoxClientStatusDto {
     modelLabel: string | null
     model: string | null
     variant: string | null
-    color: ColumnColor | null
+    color: string | null
     files: OpexFilesSettings
 }
 

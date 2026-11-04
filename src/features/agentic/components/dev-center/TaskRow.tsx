@@ -4,10 +4,10 @@ import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import type { BoardColumnView } from "@/features/tasks/board"
+import { columnDotStyle, type BoardColumnView } from "@/features/tasks/board"
 import type { TaskDto } from "@/features/tasks/types"
 import { workbenchPath } from "../../constants"
-import { productColorClass, taskProductLabel } from "../../dev-center-product"
+import { productColorProps, taskProductLabel } from "../../dev-center-product"
 import { workbenchUserWaitReason } from "../../logic"
 import type { CentralDto, QueueItemDto, WorkbenchSummaryDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
@@ -34,7 +34,7 @@ function ColumnDot({ column }: { column: BoardColumnView }) {
         <TooltipProvider>
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <span className={cn("h-2 w-2 shrink-0 rounded-full", column.dot)} aria-label={column.label} data-testid="task-column-dot" />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={columnDotStyle(column)} aria-label={column.label} data-testid="task-column-dot" />
                 </TooltipTrigger>
                 <TooltipContent>{column.label}</TooltipContent>
             </Tooltip>
@@ -52,6 +52,7 @@ export function TaskRow({ task, column, central, workbench, queueItem, active }:
         ? workbenchUserWaitReason({ stage: workbench.stage, runState: workbench.runState, pendingPermissions: workbench.pendingPermissions, pendingForms: workbench.pendingForms, waitingSlot: Boolean(workbench.slotQueue) })
         : null
     const product = taskProductLabel(task, central)
+    const productColor = productColorProps(central?.config?.color)
     return (
         <Link
             href={workbenchPath(task.id)}
@@ -76,7 +77,7 @@ export function TaskRow({ task, column, central, workbench, queueItem, active }:
                 )}
             </span>
             {product && (
-                <span data-testid="task-product" className={cn("truncate text-[11px] font-bold", productColorClass(central?.config?.color))}>
+                <span data-testid="task-product" className={cn("truncate text-[11px] font-bold", productColor.className)} style={productColor.style}>
                     {product}
                 </span>
             )}

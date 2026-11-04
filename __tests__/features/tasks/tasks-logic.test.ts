@@ -126,7 +126,7 @@ describe('quadro', () => {
     }
     const columns = buildBoardColumns(board)
     expect(columns.map((c) => c.key)).toEqual(['col-1', 'todo'])
-    expect(columns[0]).toMatchObject({ label: 'Custom', dot: 'bg-sky-400', column: { wipLimit: 2 } })
+    expect(columns[0]).toMatchObject({ label: 'Custom', accent: '#38BDF8', column: { wipLimit: 2 } })
     expect(buildBoardColumns(undefined)).toEqual([])
   })
 })

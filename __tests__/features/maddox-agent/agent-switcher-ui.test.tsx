@@ -116,7 +116,8 @@ describe('item único dos agentes de chat', () => {
     renderItem()
     fireEvent.click(screen.getByTestId('agent-nav-item'))
     const panel = await screen.findByTestId('agent-panel-maddox')
-    expect(panel.style.getPropertyValue('--primary')).toBe('var(--agent-sky)')
+    // Cor salva como `sky` (nome antigo) vira o HSL do hex #38BDF8.
+    expect(panel.style.getPropertyValue('--primary')).toBe('198 93% 60%')
     const other = within(panel).getByTestId('agent-switch-other')
     expect(other.getAttribute('data-agent')).toBe('opex')
     expect(other.style.getPropertyValue('--primary')).toBe('var(--agent-primary)')

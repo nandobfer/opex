@@ -35,9 +35,9 @@ const builderMachine = vi.hoisted(() => ({ active: false }))
 vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({ useBuilderMachineActive: () => builderMachine.active }))
 vi.mock('@/features/local-docker/components/LocalDockerCentralCard', () => ({ LocalDockerCentralCard: () => <div data-testid="builder-machine-card" /> }))
 
-function Harness({ dockerBuilder = '', inheritPorts = true }: { dockerBuilder?: string; inheritPorts?: boolean }) {
+function Harness({ dockerBuilder = '', inheritPorts = true, composeServices = [] }: { dockerBuilder?: string; inheritPorts?: boolean; composeServices?: string[] }) {
   const base = defaultCentralConfig('/home/u/app')
-  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, dockerBuilder, inheritPorts, previewPortMin: 7000, previewPortMax: 7005 } } })
+  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, dockerBuilder, inheritPorts, composeServices, previewPortMin: 7000, previewPortMax: 7005 } } })
   return <EnvironmentSection form={form} centralId="c1" />
 }
 function BackupHarness() {
@@ -242,5 +242,59 @@ describe('gerar plano após refinar (OPE-137)', () => {
     const environment: Partial<typeof old.environment> = { ...old.environment }
     delete environment.planAfterRefinement
     expect(centralConfigSchema.parse({ ...old, environment }).environment.planAfterRefinement).toBe(false)
+  })
+})
+
+function ServicesHarness({ composeServices = [] }: { composeServices?: string[] }) {
+  const base = defaultCentralConfig('/home/u/app')
+  const form = useForm<CentralConfigInput, unknown, CentralConfig>({ resolver: zodResolver(centralConfigSchema), mode: 'onChange', defaultValues: { ...base, environment: { ...base.environment, composeServices } } })
+  const services = useWatch({ control: form.control, name: 'environment.composeServices' })
+  return (
+    <>
+      <EnvironmentSection form={form} centralId="c1" />
+      <output data-testid="services-value">{JSON.stringify(services)}</output>
+      <output data-testid="form-valid">{String(form.formState.isValid)}</output>
+    </>
+  )
+}
+
+const composeCommand = () => Array.from(document.querySelectorAll('code')).find((node) => node.textContent?.includes('docker compose'))?.textContent?.trim() ?? ''
+
+describe('serviços do compose da prévia', () => {
+  it('serviços entram no fim do comando; adicionar um pelo campo atualiza o exemplo', () => {
+    render(<ServicesHarness composeServices={['app']} />)
+    expect(composeCommand().endsWith('up -d --build app')).toBe(true)
+    const input = screen.getByLabelText('Serviços do compose') as HTMLInputElement
+    expect(input.getAttribute('placeholder')).toBe('nome do serviço e Enter (ex.: app)')
+    fireEvent.change(input, { target: { value: 'worker' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(composeCommand().endsWith('up -d --build app worker')).toBe(true)
+    expect(screen.getByTestId('services-value').textContent).toBe('["app","worker"]')
+    expect(document.body.textContent).toContain('Sem serviços do compose, o build sobe todos; com serviços, sobe só eles e as dependências deles.')
+  })
+
+  it('sem serviços, o comando sobe o compose inteiro (igual ao de antes)', () => {
+    render(<ServicesHarness />)
+    expect(composeCommand().endsWith('up -d --build')).toBe(true)
+  })
+
+  it('GitHub Action oculta o campo e preserva a lista ao voltar para Local', () => {
+    render(<ServicesHarness composeServices={['app', 'worker']} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'GitHub Action' }))
+    expect(screen.queryByLabelText('Serviços do compose')).toBeNull()
+    expect(composeCommand()).not.toContain('worker')
+    expect(document.body.textContent).not.toContain('Sem serviços do compose')
+    expect(screen.getByTestId('services-value').textContent).toBe('["app","worker"]')
+    fireEvent.click(screen.getByRole('radio', { name: 'Local' }))
+    expect(screen.getByLabelText('Serviços do compose')).toBeTruthy()
+    expect(composeCommand().endsWith('up -d --build app worker')).toBe(true)
+  })
+
+  it('nome inválido mostra o erro no campo', async () => {
+    render(<ServicesHarness />)
+    const input = screen.getByLabelText('Serviços do compose') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '$(rm)' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(await screen.findByText('Nome de serviço inválido (letras, números, ponto, hífen e sublinhado)')).toBeTruthy()
   })
 })
