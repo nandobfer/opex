@@ -59,6 +59,7 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
   ['POST', '/v1/memories/{memory}/unpin'],
   ['POST', '/v1/memories/{memory}/archive'],
   ['POST', '/v1/memories/{memory}/restore'],
+  ['POST', '/v1/memories/{memory}/move'],
   ['POST', '/v1/agents'],
   ['GET', '/v1/agents/{agent}'],
   ['GET', '/v1/subscriptions'],
@@ -237,6 +238,17 @@ export function createFakeEngramind() {
       const memory = getMemory(decodeURIComponent(memoryAction[1]!))
       const next = { pin: 'permanent', unpin: 'active', archive: 'archived', restore: 'active' }[memoryAction[2] as 'pin'] as FakeMemory['status']
       return { ...bump(memory, { status: next, archived_at: next === 'archived' ? now() : null }) }
+    }
+    const memoryMove = /^\/v1\/memories\/([^/]+)\/move$/.exec(path)
+    if (method === 'POST' && memoryMove) {
+      const memory = getMemory(decodeURIComponent(memoryMove[1]!))
+      const channel = String(body.to)
+      const target = state.channels.get(channel)
+      if (!target) throw fail(404, 'CHANNEL_NOT_FOUND', { channel })
+      if (target.archived_at) throw fail(409, 'CHANNEL_ARCHIVED', { channel })
+      const duplicate = [...state.memories.values()].find((item) => item.id !== memory.id && item.channel === channel && item.text.trim().toLowerCase() === memory.text.trim().toLowerCase())
+      if (duplicate) throw fail(409, 'MEMORY_DUPLICATE', { existing_id: duplicate.id })
+      return { ...bump(memory, { channel, channel_id: `ch_${channel.replace(/\W/g, '')}` }) }
     }
     if (path.startsWith('/v1/memories/')) {
       const id = seg('/v1/memories/')

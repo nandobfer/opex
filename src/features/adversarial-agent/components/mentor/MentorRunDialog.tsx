@@ -23,13 +23,20 @@ export function MentorRunDialog({ run, onClose }: { run: MentorRunDto | null; on
     const [draft, setDraft] = useState<{ id: string; text: string } | null>(null)
     const [targetDraft, setTargetDraft] = useState<{ id: string; target: MentorTarget } | null>(null)
     const [confirmDiscard, setConfirmDiscard] = useState(false)
+    const [extraDraft, setExtraDraft] = useState<{ id: string; text: string } | null>(null)
+    const [excludeExtra, setExcludeExtra] = useState<{ id: string; value: boolean } | null>(null)
     const suggested = Boolean(run?.status === "suggested" && run.proposal)
     const text = run && draft?.id === run.id ? draft.text : (run?.proposal?.text ?? "")
     const target: MentorTarget = run && targetDraft?.id === run.id ? targetDraft.target : (run?.proposal?.target ?? "adversarial")
-    const tooLong = text.length > MEMORY_TEXT_MAX
+    const extraText = run && extraDraft?.id === run.id ? extraDraft.text : (run?.extraProposal?.text ?? "")
+    const includeExtra = !(run && excludeExtra?.id === run.id && excludeExtra.value)
+    const tooLong = text.length > MEMORY_TEXT_MAX || extraText.length > MEMORY_TEXT_MAX
     const decide = (kind: "approve" | "discard") => {
         if (!run) return
-        decision.mutate({ id: run.id, decision: kind, ...(kind === "approve" ? { text, target } : {}) }, { onSuccess: onClose })
+        decision.mutate(
+            { id: run.id, decision: kind, ...(kind === "approve" ? { text, target, ...(run.extraProposal ? { extraText, includeExtra } : {}) } : {}) },
+            { onSuccess: onClose },
+        )
     }
     return (
         <Dialog open={run !== null} onOpenChange={(open) => !open && onClose()}>
@@ -47,6 +54,14 @@ export function MentorRunDialog({ run, onClose }: { run: MentorRunDto | null; on
                             target={target}
                             onTextChange={(next) => setDraft({ id: run.id, text: next })}
                             onTargetChange={(next) => setTargetDraft({ id: run.id, target: next })}
+                            {...(run.extraProposal
+                                ? {
+                                      extraText,
+                                      onExtraTextChange: (next: string) => setExtraDraft({ id: run.id, text: next }),
+                                      includeExtra,
+                                      onIncludeExtraChange: (value: boolean) => setExcludeExtra({ id: run.id, value: !value }),
+                                  }
+                                : {})}
                         />
                     </div>
                 )}

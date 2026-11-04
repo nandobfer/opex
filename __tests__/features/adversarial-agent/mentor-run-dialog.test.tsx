@@ -56,9 +56,15 @@ const run = (overrides: Partial<MentorRunDto> = {}): MentorRunDto => ({
   routerProbabilities: null,
   writerAction: 'create',
   writerReason: 'nenhuma parecida',
+  writerSkipKind: null,
+  writerCoveredBy: null,
+  skipRejection: null,
+  splitRejection: null,
   sanitizerReason: null,
   proposal: { action: 'create', memoryId: null, text: LONG, target: 'adversarial', centralId: null },
+  extraProposal: null,
   memoryId: 'm_abc',
+  extraMemoryId: null,
   error: null,
   costUsd: 0.01,
   durationMs: 1200,
@@ -154,5 +160,43 @@ describe('MentorRunDialog (OPE-128)', () => {
     render(<MentorRunDialog run={run({ status: 'failed', error: 'Gemini fora do ar', proposal: null, memoryId: null })} onClose={vi.fn()} />)
     expect(screen.getByRole('alert').textContent).toContain('Gemini fora do ar')
     expect(screen.queryByRole('region', { name: 'Memória' })).toBeNull()
+  })
+
+  it('OPE-132: mostra o motivo do skip, o pedido recusado e a parte separada recusada', () => {
+    render(
+      <MentorRunDialog
+        run={run({
+          status: 'skipped',
+          writerAction: 'skip',
+          writerSkipKind: 'covered',
+          writerCoveredBy: { memoryId: 'g1', target: 'developer-global' },
+          skipRejection: 'A memória m1 citada é de outra lista.',
+          splitRejection: 'A parte separada só vale entre as duas listas do agente desenvolvedor.',
+          proposal: null,
+          memoryId: null,
+        })}
+        onClose={vi.fn()}
+      />,
+    )
+    const redator = screen.getByRole('region', { name: 'Redator' })
+    expect(within(redator).getByText(/Já coberta na lista de destino \(memória g1\)/)).toBeTruthy()
+    expect(within(redator).getByText(/Pedido de skip recusado: A memória m1/)).toBeTruthy()
+    expect(within(redator).getByText(/Parte separada não gravada/)).toBeTruthy()
+  })
+
+  it('OPE-132: sugestão com parte separada permite gravar as duas listas', () => {
+    render(
+      <MentorRunDialog
+        run={run({
+          status: 'suggested',
+          extraProposal: { action: 'create', memoryId: null, text: 'Neste projeto, use src/features.', target: 'developer-central', centralId: 'c1' },
+        })}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/Parte separada · Desenvolvedor · central/)).toBeTruthy()
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /Aprovar/ }))
+    expect(mocks.mutate).toHaveBeenCalledWith(expect.objectContaining({ decision: 'approve', extraText: 'Neste projeto, use src/features.', includeExtra: true }), expect.anything())
   })
 })

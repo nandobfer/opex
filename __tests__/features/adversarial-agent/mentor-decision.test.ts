@@ -22,7 +22,7 @@ describe('decisões do Agente Mentor', () => {
   it('lê create, update e skip do redator', () => {
     expect(parseWriterAnswer('{"action":"create","text":"Regra nova","reason":"novo"}')).toEqual({ action: 'create', text: 'Regra nova', reason: 'novo' })
     expect(parseWriterAnswer('{"action":"update","memoryId":"m1","text":"Regra fundida"}')).toMatchObject({ action: 'update', memoryId: 'm1' })
-    expect(parseWriterAnswer('{"action":"skip","reason":"já coberta"}')).toEqual({ action: 'skip', reason: 'já coberta' })
+    expect(parseWriterAnswer('{"action":"skip","reason":"já coberta"}')).toEqual({ action: 'skip', kind: 'no_lesson', reason: 'já coberta' })
     expect(parseWriterAnswer('{"action":"update","text":"sem id"}')).toBeNull()
     expect(parseWriterAnswer('{"action":"apagar"}')).toBeNull()
   })
@@ -48,5 +48,23 @@ describe('Triador do Agente Mentor (OPE-97)', () => {
 
   it('fusão com id de outra lista vira memória nova', () => {
     expect(resolveWriterAction({ action: 'update', memoryId: 'de-outra-lista', text: 'Regra fundida.', reason: '' }, ['g1'])).toEqual({ action: 'create', memoryId: null, text: 'Regra fundida.' })
+  })
+})
+
+describe('skip do redator por cobertura (OPE-132)', () => {
+  it('só aceita cobertura citando uma memória DA lista de destino', async () => {
+    const { checkWriterSkip } = await import('@/features/adversarial-agent/mentor/decision')
+    expect(checkWriterSkip({ kind: 'no_lesson' }, ['g1'], ['c1'])).toBeNull()
+    expect(checkWriterSkip({ kind: 'covered', memoryId: 'g1' }, ['g1'], ['c1'])).toBeNull()
+    const other = checkWriterSkip({ kind: 'covered', memoryId: 'c1' }, ['g1'], ['c1'])
+    expect(other).toContain('outra lista')
+    expect(other).toContain('split')
+    expect(checkWriterSkip({ kind: 'covered' }, ['g1'], [])).toContain('memoryId')
+    expect(checkWriterSkip({ kind: 'covered', memoryId: 'm_desconhecida' }, ['g1'], [])).toContain('memoryId')
+  })
+
+  it('skip antigo, sem kind, é tratado como ausência de lição', () => {
+    expect(parseWriterAnswer('{"action":"skip","reason":"nada a aprender"}')).toEqual({ action: 'skip', kind: 'no_lesson', reason: 'nada a aprender' })
+    expect(parseWriterAnswer('{"action":"skip","kind":"covered","memoryId":"m1","reason":"já coberta"}')).toMatchObject({ kind: 'covered', memoryId: 'm1' })
   })
 })

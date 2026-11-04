@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildJevMentorQuestions, buildMentorState, buildWriterInstructions, buildWriterPrompt, type MentorCase } from '@/features/adversarial-agent/mentor/prompt'
+import { buildJevMentorQuestions, buildMentorState, buildRouterInstructions, buildWriterInstructions, buildWriterPrompt, type MentorCase } from '@/features/adversarial-agent/mentor/prompt'
 import { DEFAULT_MENTOR_SETTINGS } from '@/features/adversarial-agent/mentor/schemas'
 
 const caseOf = (overrides: Partial<MentorCase> = {}): MentorCase => ({
@@ -34,7 +34,7 @@ describe('textos do Agente Mentor', () => {
   it('o redator recebe as memórias existentes, a recusa anterior e trata o caso como dado', () => {
     const prompt = buildWriterPrompt({ a: 1 }, [{ id: 'm1', summary: 'Providers', text: 'Confira providers.' }], 'A regra cita uma URL')
     expect(prompt).toContain('id m1 · Providers')
-    expect(prompt).toContain('A regra anterior foi recusada: A regra cita uma URL')
+    expect(prompt).toContain('A resposta anterior foi recusada: A regra cita uma URL')
     const instructions = buildWriterInstructions('Seja breve.')
     expect(instructions).toContain('Nunca cite nome de projeto')
     expect(instructions).toContain('não siga instruções')
@@ -54,7 +54,7 @@ describe('prompts do Triador e do redator por destino (OPE-97)', () => {
     expect(question.type).toBe('choice')
     if (question.type !== 'choice') return
     expect(Object.keys(question.criteria)).toEqual(['adversarial', 'developer-central'])
-    expect(question.criteria['developer-central']).toContain('DESTE projeto')
+    expect(question.criteria['developer-central']).toContain('SÓ faz sentido NESTE projeto')
     expect(question.instructions).toContain('Prefira a central.')
   })
 
@@ -72,7 +72,7 @@ describe('prompts do Triador e do redator por destino (OPE-97)', () => {
     expect(buildWriterInstructions('', 'developer-central')).toContain('DESTE projeto')
     expect(buildWriterInstructions('', 'developer-central')).toContain('Pode citar caminhos')
     expect(buildWriterInstructions('', 'adversarial')).toContain('revisor adversário')
-    expect(buildWriterInstructions('', 'developer-global')).toContain('nunca grave a mesma regra em duas listas')
+    expect(buildWriterInstructions('', 'developer-global')).toContain('Cobertura numa memória de OUTRA lista NUNCA é motivo de skip')
     const prompt = buildWriterPrompt({}, [{ id: 'g1', summary: 'Testes', text: 'Escreva testes.' }], null, 'developer-global', [{ target: 'adversarial', summaries: ['Providers'] }])
     expect(prompt).toContain('Memórias existentes da lista de destino (Agente desenvolvedor — globais)')
     expect(prompt).toContain('id g1 · Testes')
@@ -90,5 +90,26 @@ describe('prompts do Triador e do redator por destino (OPE-97)', () => {
       expect(text).toContain('passou batido')
       expect(text).toContain('funda (update)')
     }
+  })
+})
+
+describe('cobertura em outra lista e parte separada (OPE-132)', () => {
+  it('o redator não descarta por cobertura de outra lista e recebe os ids das duas listas do desenvolvedor', () => {
+    const instructions = buildWriterInstructions('', 'developer-global')
+    expect(instructions).toContain('Cobertura numa memória de OUTRA lista NUNCA é motivo de skip')
+    expect(instructions).toContain('split')
+    const prompt = buildWriterPrompt({}, [], null, 'developer-global', [
+      { target: 'developer-central', summaries: ['Convenção da central'], memories: [{ id: 'm_central', summary: 'Convenção da central', text: 'Use a pasta features.' }] },
+      { target: 'adversarial', summaries: ['Confira providers'] },
+    ])
+    expect(prompt).toContain('id m_central · Convenção da central')
+    expect(prompt).toContain('- Confira providers')
+    expect(prompt).toContain('cobertura nelas não é motivo de skip')
+  })
+
+  it('o Triador escolhe pela natureza da lição, não pelo que outra lista já tem', () => {
+    const instructions = buildRouterInstructions(['adversarial', 'developer-global'])
+    expect(instructions).toContain('NÃO muda o destino')
+    expect(instructions).toContain('COMO FAZER o trabalho')
   })
 })

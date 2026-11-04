@@ -1,6 +1,6 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 import { dbConnect } from "@/lib/db"
-import type { MentorLevel, MentorRunStatus, MentorSource, MentorTarget, MentorUserTrigger } from "../../mentor/constants"
+import type { MentorLevel, MentorRunStatus, MentorSkipKind, MentorSource, MentorTarget, MentorUserTrigger } from "../../mentor/constants"
 
 /** Uma execução do Agente Mentor — `adversarial_mentor_runs` (índices garantidos no primeiro uso). */
 export interface IMentorRun {
@@ -27,10 +27,20 @@ export interface IMentorRun {
     routerProbabilities?: Record<string, number> | null
     writerAction: "create" | "update" | "skip" | null
     writerReason: string | null
+    /** OPE-132: motivo do skip e a memória da lista de destino citada como cobertura. */
+    writerSkipKind?: MentorSkipKind | null
+    writerCoveredBy?: { memoryId: string; target: MentorTarget } | null
+    /** Pedido de skip recusado por citar cobertura em outra lista (fica visível no detalhe). */
+    skipRejection?: string | null
+    /** Parte separada recusada pelo sanitizador (a memória principal segue). */
+    splitRejection?: string | null
     sanitizerReason: string | null
     /** Proposta do redator (no modo Sugerir, aguarda Aprovar/Descartar). Antigas não têm `target` (= adversário). */
     proposal: { action: "create" | "update"; memoryId: string | null; text: string; target?: MentorTarget; centralId?: string | null } | null
+    /** Parte separada da lição (global + central), gravada na outra lista do desenvolvedor. */
+    extraProposal?: { action: "create" | "update"; memoryId: string | null; text: string; target: MentorTarget; centralId: string | null } | null
     memoryId: string | null
+    extraMemoryId?: string | null
     error: string | null
     costUsd: number
     durationMs: number | null
@@ -62,9 +72,15 @@ const MentorRunSchema = new Schema<IMentorRun>(
         routerProbabilities: { type: Schema.Types.Mixed, default: null },
         writerAction: { type: String, default: null },
         writerReason: { type: String, default: null },
+        writerSkipKind: { type: String, default: null },
+        writerCoveredBy: { type: Schema.Types.Mixed, default: null },
+        skipRejection: { type: String, default: null },
+        splitRejection: { type: String, default: null },
         sanitizerReason: { type: String, default: null },
         proposal: { type: Schema.Types.Mixed, default: null },
+        extraProposal: { type: Schema.Types.Mixed, default: null },
         memoryId: { type: String, default: null },
+        extraMemoryId: { type: String, default: null },
         error: { type: String, default: null },
         costUsd: { type: Number, default: 0 },
         durationMs: { type: Number, default: null },

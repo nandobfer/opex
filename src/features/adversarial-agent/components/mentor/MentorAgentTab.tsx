@@ -23,6 +23,7 @@ import { ScopeCard } from "@/features/ai/components/agent-settings/ScopeCard"
 import { MentorContextSection } from "./MentorContextSection"
 import { MentorDeciderCard } from "./MentorDeciderCard"
 import { MentorRouterCard } from "./MentorRouterCard"
+import { MentorReorgSection } from "./reorg/MentorReorgSection"
 import { MentorRunsSection } from "./MentorRunsSection"
 import { MentorTriggersCard } from "./MentorTriggersCard"
 import { MentorWriterCard } from "./MentorWriterCard"
@@ -30,11 +31,12 @@ import { MentorWriterCard } from "./MentorWriterCard"
 /** Aba "Agente Mentor" de `/integracoes/ia` (logo depois da aba Agente Adversário). */
 export const MENTOR_AI_TAB_DEF: IntegrationTabDef<AiTab> = { id: MENTOR_AI_TAB, label: "Mentor", icon: GraduationCap }
 
-type Section = "geral" | "contexto" | "execucoes"
+type Section = "geral" | "contexto" | "execucoes" | "reorganizacao"
 const SECTIONS: { value: Section; label: string }[] = [
     { value: "geral", label: "Geral" },
     { value: "contexto", label: "Contexto" },
     { value: "execucoes", label: "Execuções" },
+    { value: "reorganizacao", label: "Reorganização" },
 ]
 const sectionMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
@@ -110,6 +112,7 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                     )}
                     {section === "contexto" && <MentorContextSection form={form} />}
                     {section === "execucoes" && <MentorRunsSection />}
+                    {section === "reorganizacao" && <MentorReorgSection />}
                 </motion.div>
             </AnimatePresence>
 

@@ -90,8 +90,17 @@ export function useMentorRunMemory(run: Pick<MentorRunDto, "id" | "memoryId"> | 
 export function useMentorRunDecision() {
     const queryClient = useQueryClient()
     return useMutation({
-        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string; target?: MentorTarget }) =>
-            unwrapApi((await api.post<ApiResponse<MentorRunDto>>(`/adversarial/mentor/runs/${vars.id}/${vars.decision}`, vars.decision === "approve" ? { ...(vars.text ? { text: vars.text } : {}), ...(vars.target ? { target: vars.target } : {}) } : {})).data),
+        mutationFn: async (vars: { id: string; decision: "approve" | "discard"; text?: string; target?: MentorTarget; extraText?: string; includeExtra?: boolean }) =>
+            unwrapApi(
+                (
+                    await api.post<ApiResponse<MentorRunDto>>(
+                        `/adversarial/mentor/runs/${vars.id}/${vars.decision}`,
+                        vars.decision === "approve"
+                            ? { ...(vars.text ? { text: vars.text } : {}), ...(vars.target ? { target: vars.target } : {}), ...(vars.extraText ? { extraText: vars.extraText } : {}), ...(vars.includeExtra === false ? { includeExtra: false } : {}) }
+                            : {},
+                    )
+                ).data,
+            ),
         onSuccess: (_saved, vars) => {
             // A lista da aba e as páginas filtradas (a execução pode sair do recorte de Situação).
             void queryClient.invalidateQueries({ queryKey: MENTOR_RUNS_KEY })

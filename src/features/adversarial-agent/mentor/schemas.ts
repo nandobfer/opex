@@ -119,8 +119,41 @@ export const mentorApproveSchema = z.object({
     text: z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres`).optional(),
     /** Lista de destino (trocar antes de aprovar; ausente = a escolhida pelo Triador). */
     target: z.enum(MENTOR_TARGETS).optional(),
+    /** Texto da parte separada (quando a execução gravou as duas listas do desenvolvedor). */
+    extraText: z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres`).optional(),
+    /** `false` grava só a memória principal (a parte separada é descartada). Padrão: gravar as duas. */
+    includeExtra: z.boolean().optional(),
 })
 export type MentorApproveInput = z.infer<typeof mentorApproveSchema>
+
+// ── Reorganização do acervo (OPE-132) ──────────────────────────────────────
+
+/** Recorte do acervo revisado: listas (destinos) e centrais; vazio = o escopo do Mentor. */
+export const mentorReorgScopeSchema = z.object({
+    targets: z.array(z.enum(MENTOR_TARGETS)).max(MENTOR_TARGETS.length).optional(),
+    centralIds: z.array(z.string().trim().min(1).max(40)).max(200).optional(),
+})
+export type MentorReorgScopeInput = z.infer<typeof mentorReorgScopeSchema>
+
+/** Aprovar tudo (sem `itemIds`) ou só os itens escolhidos, com o texto e a confirmação do dono por item. */
+export const mentorReorgApplySchema = z.object({
+    itemIds: z.array(z.string().trim().min(1).max(120)).max(1000).optional(),
+    overrides: z
+        .record(
+            z.string(),
+            z.object({
+                text: z.string().trim().min(3, "Escreva a memória").max(MEMORY_TEXT_MAX, `Até ${MEMORY_TEXT_MAX.toLocaleString("pt-BR")} caracteres`).optional(),
+                /** Arquivar uma memória do dono numa fusão exige esta confirmação explícita. */
+                confirmOwner: z.boolean().optional(),
+            }),
+        )
+        .optional(),
+})
+export type MentorReorgApplyInput = z.infer<typeof mentorReorgApplySchema>
+
+/** Descartar tudo (sem `itemIds`) ou só os itens escolhidos. */
+export const mentorReorgDiscardSchema = z.object({ itemIds: z.array(z.string().trim().min(1).max(120)).max(1000).optional() })
+export type MentorReorgDiscardInput = z.infer<typeof mentorReorgDiscardSchema>
 
 /** `GET /api/adversarial/mentor/runs` — filtros e página das execuções (listas em CSV, datas ISO). */
 export const mentorRunListQuerySchema = z.object({

@@ -338,6 +338,49 @@ export async function updateAgentMemory(agentId: string, id: string, change: str
     return { memoria: toMemoryDto(updated, list), ...(similares?.length ? { similares } : {}) }
 }
 
+/**
+ * Move uma memória entre listas (`POST /v1/memories/{id}/move` do Engramind, que exige `write` na
+ * origem e no destino). A auditoria guarda os dois canais; as duas telas são avisadas. Memória do
+ * dono pode ser movida (não é exclusão nem inativação). Sem alcance no destino → 403
+ * `MEMORY_MOVE_FORBIDDEN`, identificado pelo código do Engramind (nunca pelo status HTTP).
+ */
+export async function moveAgentMemory(
+    fromAgentId: AiAgentId,
+    id: string,
+    toAgentId: AiAgentId,
+    actorId: string,
+    options: { from?: MemoryListScope | null; to?: MemoryListScope | null; agent?: MemoryAgentActor; auditContext?: Record<string, unknown> } = {},
+): Promise<MemoryDto> {
+    const from = await resolveList(fromAgentId, options.from)
+    const to = await resolveList(toAgentId, options.to)
+    const current = await findMemory(from, id)
+    try {
+        await engramindCall("POST", { path: `/v1/memories/${encodeURIComponent(id)}/move`, body: { to: to.channel } }, await targetFor(options.agent))
+    } catch (error) {
+        const code = engramindCodeOf(error)
+        if (code === "MEMORY_DUPLICATE") throw new DomainError(409, "Já existe uma memória igual na lista de destino.", "MEMORY_DUPLICATE")
+        if (code === "MEMORY_KEY_EXISTS") throw new DomainError(409, "A chave desta memória já existe na lista de destino.", "MEMORY_KEY_EXISTS")
+        // Alcance menor é esperado no token do Mentor: sinaliza em vez de cair para o token admin.
+        if (code === "CHANNEL_NOT_SUBSCRIBED" || code === "SCOPE_REQUIRED") {
+            throw new DomainError(403, "O token do Agente Mentor não alcança a lista de destino. Ajuste as assinaturas do agente opex/mentor no Engramind e repita.", "MEMORY_MOVE_FORBIDDEN")
+        }
+        throw error
+    }
+    const moved = await findMemory(to, id)
+    await recordAudit({
+        userId: actorId,
+        entidade: AI_MEMORY_AUDIT_ENTITY,
+        entidadeId: id,
+        acao: AcaoAuditoria.ATUALIZAR,
+        antes: { ...scopeAudit(from), texto: current.text, categoria: current.category },
+        depois: { ...scopeAudit(to), acoes: ["mover"], texto: moved.text, ...(options.agent ? { origem: originOf(options).label } : {}), ...actorAudit(options), ...options.auditContext },
+    })
+    log.info({ from: from.agent, to: to.agent, memoryId: id }, "[ai] Memória movida de lista")
+    await publish(from)
+    await publish(to)
+    return toMemoryDto(moved, to)
+}
+
 export async function deleteAgentMemory(agentId: string, id: string, actorId: string, scope?: string | MemoryListScope | null, options: Pick<AgentMemoryWriteOptions, "agent" | "auditContext"> = {}): Promise<MemoryDto> {
     const list = await resolveList(agentId, scope)
     const current = await findMemory(list, id)
