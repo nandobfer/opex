@@ -2,22 +2,20 @@
 
 import { useMemo } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { BarChart3, RefreshCw } from "lucide-react"
+import { BarChart3 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DATE_PRESET, PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
+import { PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { FilterGroup } from "@/components/list/FilterGroup"
-import { urlFilterCodecs, useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
 import { formatJevCost, jevUsageRangeQuery } from "../jev-usage"
 import { useJevUsage } from "../hooks/useJevUsage"
+import { useUsageRange } from "../hooks/useUsageRange"
 import { UsageBreakdownTable } from "./UsageBreakdownTable"
-
-const RANGE_SCHEMA = { usageFrom: urlFilterCodecs.string(), usageTo: urlFilterCodecs.string() }
+import { UsageRefreshButton } from "./UsageRefreshButton"
 
 function Metric({ label, value, cost = false }: { label: string; value: number | null; cost?: boolean }) {
     return <div className="rounded-lg border bg-muted/30 p-4">
@@ -30,11 +28,7 @@ function Metric({ label, value, cost = false }: { label: string; value: number |
 
 export function JevUsageCard() {
     const reducedMotion = useReducedMotion()
-    const defaults = useMemo(() => {
-        const period = DATE_PRESET.month.getRange()
-        return { usageFrom: period.startDate, usageTo: period.endDate }
-    }, [])
-    const [range, setRange] = useUrlFilters(defaults, RANGE_SCHEMA)
+    const { range, setRange, defaults } = useUsageRange()
     const query = useMemo(() => jevUsageRangeQuery(range.usageFrom, range.usageTo), [range.usageFrom, range.usageTo])
     const usage = useJevUsage(query)
     const data = usage.data
@@ -44,9 +38,7 @@ export function JevUsageCard() {
         <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle className="flex items-center gap-2 text-base"><BarChart3 className="h-4 w-4 text-primary" aria-hidden />Consumo do JEV</CardTitle>
-                <Button type="button" variant="outline" size="sm" disabled={usage.isFetching || query === null} onClick={() => void usage.refetch()}>
-                    <motion.span className="mr-2 inline-flex" animate={{ rotate: usage.isFetching && !reducedMotion ? 360 : 0 }} transition={usage.isFetching && !reducedMotion ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0 }}><RefreshCw className="h-4 w-4" aria-hidden /></motion.span>Atualizar
-                </Button>
+                <UsageRefreshButton fetching={usage.isFetching} disabled={query === null} onClick={() => void usage.refetch()} />
             </div>
             <p className="text-sm text-muted-foreground">Logs retidos por 90 dias. Entrada: US$ 0,042 por milhão de tokens; saída gratuita.</p>
         </CardHeader>

@@ -164,8 +164,9 @@ e opções na própria aba da página "Inteligência Artificial".
   **Modelos** (card Modelos disponíveis: somente leitura, busca fuse.js, lista
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
   (só OpenCode; seção abaixo), **Skills**, **Agentes**, **Comandos**, **Plugins** e **MCPs** (só
-  OpenCode — `modules/opencode-resources.md`) e **Consumo** (OpenCode e JEV; Gemini, Anthropic, OpenAI e DeepSeek não
-  têm essa aba). Trocar de aba com alterações pede descarte.
+  OpenCode — `modules/opencode-resources.md`) e **Consumo** (todos os provedores: OpenCode por
+  origem, JEV por feature e Gemini, Anthropic, OpenAI e DeepSeek por recurso). Trocar de aba com
+  alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
   OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Agente Desenvolvedor são
@@ -179,7 +180,8 @@ e opções na própria aba da página "Inteligência Artificial".
   custo acumulado USD (4–9 casas decimais), chamadas e falhas de requisição. Abaixo dos cards há uma
   **tabela por recurso** (feature de IA que consumiu o JEV: "Tags de tarefas", "Estimar prazos"…)
   com chamadas, entrada, saída, total e custo, mais a linha **Total** — as colunas seguem a tabela do
-  OpenCode (`UsageBreakdownTable`), com métricas ausentes como `—`. A linha Total usa os mesmos
+  OpenCode (`UsageBreakdownTable`), com métricas ausentes como `—` e tokens abreviados (ver
+  "Formatação do consumo"). A linha Total usa os mesmos
   totais do servidor, então não diverge dos cards quando um recurso não informa a métrica. Filtro na URL
   (`usageFrom`/`usageTo`) com `PresetDateRangeFilter`: padrão **Último mês** (um mês atrás até hoje),
   atalhos Hoje/Última semana/Último mês e intervalo personalizado. As datas são convertidas do
@@ -192,7 +194,23 @@ e opções na própria aba da página "Inteligência Artificial".
   tokens de entrada/saída/total e custo em USD, mais a linha **Total**. Mesmo filtro de período do
   JEV (`usageFrom`/`usageTo`, padrão Último mês). Métricas ausentes aparecem como `—` (nunca zero).
   O painel informa desde quando há medição e que o uso anterior não é somado (ver "Medição de
-  consumo").
+  consumo"). O card é o `ProviderUsageCard`, compartilhado com os provedores diretos
+  (`useUsageRange` + `useProviderUsage` + `UsageRefreshButton`).
+- Em `/integracoes/ia/gemini`, `/integracoes/ia/anthropic`, `/integracoes/ia/openai` e
+  `/integracoes/ia/deepseek`, a aba **Consumo** usa o mesmo `ProviderUsageCard`: uma **tabela por
+  recurso** (feature de IA ou agente que consumiu o provedor, ex.: "Agente Opex", "Resumos de
+  tarefas", "Orçamentos") com chamadas, entrada, saída e total, mais a linha **Total**. Essas APIs
+  não informam custo por requisição (`costUsd` fica `null`), então a coluna **Custo (USD) não
+  aparece** e a tela mostra só tokens; a ausência de custo também não entra no aviso de totais
+  parciais. Entrada ou saída informadas só em parte dos registros do período aparecem como soma dos
+  conhecidos e entram no aviso ("N sem tokens de entrada/saída"), nunca como medição completa.
+  Mesmo filtro de período, agregado no servidor em `GET /api/ai/providers/[provider]/usage` (só os
+  quatro provedores diretos; OpenCode e JEV têm rotas próprias). O painel informa desde quando há
+  medição do provedor.
+- **Formatação do consumo**: os tokens das tabelas de consumo são abreviados com sufixo (`k`, `M`,
+  `B`, `T`), até 3 casas decimais e sem zeros à direita, em pt-BR — `1000` → `1k`, `1234` →
+  `1,234k`, `2_500_000` → `2,5M`; abaixo de mil o número aparece inteiro. O número completo fica no
+  `title` da célula. Chamadas continuam completas e os cards de métrica do JEV não abreviaram.
 - **Reconstrução histórica JEV**: lote `jev-historical-2026-10-11-235088`, corte
   `2026-10-11T02:46:58.230Z`: 149 logs sem métricas (141 tags + 8 estimativas) receberam rateio
   uniforme de **235.088 tokens totais** e **US$ 0,0067** informados pelo dono a partir da plataforma.
@@ -502,7 +520,8 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 |---|---|
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
-| `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna); métricas ausentes ficam `null` |
+| `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna) no mesmo contrato dos provedores diretos: `rows` por origem (`key`), `total`, `coverageFrom` e as contagens de métricas ausentes; métricas ausentes ficam `null` |
+| `GET /api/ai/providers/[provider]/usage` | Consumo de Gemini, Anthropic, OpenAI ou DeepSeek por recurso (`from`/`to` ISO opcionais, sessão interna) com `rows`, `total`, `coverageFrom` e as contagens `missingInputRequests`, `missingOutputRequests`, `missingTokenRequests` e `missingCostRequests`; outro provedor → 404; intervalo inválido → 400 |
 | `GET /api/ai/providers/opencode/accounts` | Providers do OpenCode com as contas (sem segredos) |
 | `POST /api/ai/providers/opencode/accounts/[integrationId]/key` | Adiciona conta por chave `{ key, label?, answer? }` |
 | `POST /api/ai/providers/opencode/accounts/[integrationId]/oauth` | Inicia login OAuth `{ methodId, label?, answer? }` |
@@ -550,6 +569,12 @@ Uso JEV: `__tests__/lib/ai/jev-usage.test.ts` (normalização/custo/rateio),
 `jev-request-usage.test.ts` (persistência/auditoria/evento por requisição e falhas),
 `__tests__/features/ai/jev-usage.test.ts` (agregação/períodos e consumo por recurso), `jev-usage-route.test.ts`
 (API interna), `jev-usage-card.test.tsx` (painel/filtro/estados/tabela), `usage-breakdown-table.test.tsx`
-(tabela compartilhada entre JEV e OpenCode) e `jev-usage-hook.test.tsx`
-(consulta/tempo real/cleanup). Os testes de tags e estimativas verificam referências e ausência de
+(tabela compartilhada entre JEV, OpenCode e provedores diretos) e `jev-usage-hook.test.tsx`
+(consulta/tempo real/cleanup). Consumo dos provedores diretos: `provider-usage.test.ts` (agregação
+por recurso, métricas desconhecidas e formato abreviado), `provider-usage-route.test.ts` (API interna,
+404 para OpenCode/JEV/desconhecido e período inválido), `opencode-usage-route.test.ts` (contrato real
+da rota do OpenCode: `rows`, não `origins`), `provider-usage-card.test.tsx` (painel sem
+coluna de custo, estados e totais parciais de entrada/saída) e `provider-usage-hook.test.tsx` (consulta/tempo real
+filtrando o provedor e cleanup); `opencode-usage-card.test.tsx` cobre o painel do OpenCode sobre o
+mesmo card. Os testes de tags e estimativas verificam referências e ausência de
 logs JEV duplicados, inclusive tags avulsas e falha de negócio posterior à resposta.
