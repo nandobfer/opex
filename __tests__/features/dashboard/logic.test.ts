@@ -190,6 +190,8 @@ describe("aggregateWorkbenches", () => {
         expect(result.activeWorkbenches).toBe(2)
         expect(result.runningWorkbenches).toBe(1)
         expect(result.workbenchFunnel).toEqual([
+            // OPE-137: o refinamento na mesa é o primeiro passo do funil.
+            { step: "refine", label: "Refinamento", count: 0 },
             { step: "plan", label: "Plano", count: 0 },
             { step: "implement", label: "Implementação", count: 1 },
             { step: "preview", label: "Prévia", count: 1 },
