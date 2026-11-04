@@ -24,6 +24,34 @@ beforeEach(() => {
 })
 
 describe('cores favoritas', () => {
+  it('mutações em paralelo não se perdem (fila em memória serializa ler → gravar)', async () => {
+    await Promise.all([
+      addFavoriteColor({ color: '#111111', name: null }, 'local'),
+      addFavoriteColor({ color: '#222222', name: null }, 'local'),
+      addFavoriteColor({ color: '#333333', name: null }, 'local'),
+    ])
+    const colors = (await getColorPalette()).favorites.map((item) => item.color)
+    expect(colors.slice(-3)).toEqual(['#111111', '#222222', '#333333'])
+    expect(colors).toHaveLength(13)
+  })
+
+  it('uma mutação recusada não trava a fila das seguintes', async () => {
+    const results = await Promise.allSettled([
+      addFavoriteColor({ color: '#38BDF8', name: null }, 'local'),
+      removeFavoriteColor('#38BDF8', 'local'),
+    ])
+    expect(results[0]!.status).toBe('rejected')
+    expect(results[1]!.status).toBe('fulfilled')
+    expect((await getColorPalette()).favorites.some((item) => item.color === '#38BDF8')).toBe(false)
+  })
+
+  it('editar sem `name` mantém o nome atual; `null` limpa', async () => {
+    await updateFavoriteColor('#A78BFA', { color: '#8B5CF6' }, 'local')
+    expect((await getColorPalette()).favorites[0]).toEqual({ color: '#8B5CF6', name: 'Violeta' })
+    await updateFavoriteColor('#8B5CF6', { color: '#8B5CF6', name: null }, 'local')
+    expect((await getColorPalette()).favorites[0]).toEqual({ color: '#8B5CF6', name: null })
+  })
+
   it('sem nada salvo, devolve as padrão (nomeadas)', async () => {
     const { favorites } = await getColorPalette()
     expect(favorites).toHaveLength(10)

@@ -9,6 +9,19 @@ import type { ColorPaletteDto, FavoriteColorDto } from "../schemas"
 
 /** Cores favoritas do seletor de cores. Somente servidor. */
 
+/**
+ * As mutações leem a lista inteira e gravam a lista nova: duas ao mesmo tempo (a tela e o Agente Opex,
+ * ou várias ferramentas em paralelo) perderiam uma das mudanças. O app roda num processo só (sem
+ * filas nem workers), então uma fila em memória serializa ler → validar → gravar.
+ */
+let mutationQueue: Promise<unknown> = Promise.resolve()
+
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+    const run = mutationQueue.then(task, task)
+    mutationQueue = run.catch(() => undefined)
+    return run
+}
+
 const DEFAULTS: FavoriteColorDto[] = DEFAULT_FAVORITE_COLORS.map((item) => ({ color: item.color, name: item.name }))
 
 async function readFavorites(): Promise<FavoriteColorDto[]> {
@@ -45,31 +58,39 @@ export async function getColorPalette(): Promise<ColorPaletteDto> {
 }
 
 /** Adiciona uma favorita no fim da lista; a mesma cor não entra duas vezes. */
-export async function addFavoriteColor(input: FavoriteColorDto, actorId: string): Promise<ColorPaletteDto> {
-    const before = await readFavorites()
-    if (before.some((item) => item.color === input.color)) throw new DomainError(409, "Esta cor já está nas favoritas", "COLOR_FAVORITE_EXISTS")
-    if (before.length >= COLOR_FAVORITES_MAX) throw new DomainError(409, `Limite de ${COLOR_FAVORITES_MAX} cores favoritas: remova uma para adicionar outra`, "COLOR_FAVORITES_LIMIT")
-    return saveFavorites(before, [...before, { color: input.color, name: input.name }], actorId, input.color, "added")
+export function addFavoriteColor(input: FavoriteColorDto, actorId: string): Promise<ColorPaletteDto> {
+    return serialized(async () => {
+        const before = await readFavorites()
+        if (before.some((item) => item.color === input.color)) throw new DomainError(409, "Esta cor já está nas favoritas", "COLOR_FAVORITE_EXISTS")
+        if (before.length >= COLOR_FAVORITES_MAX) throw new DomainError(409, `Limite de ${COLOR_FAVORITES_MAX} cores favoritas: remova uma para adicionar outra`, "COLOR_FAVORITES_LIMIT")
+        return saveFavorites(before, [...before, { color: input.color, name: input.name }], actorId, input.color, "added")
+    })
 }
 
 /** Remove uma favorita. Quem já usa a cor (central, coluna, Maddox) continua com ela: guarda o próprio hex. */
-export async function removeFavoriteColor(color: string, actorId: string): Promise<ColorPaletteDto> {
-    const before = await readFavorites()
-    if (!before.some((item) => item.color === color)) throw new DomainError(404, "Cor favorita não encontrada", "COLOR_FAVORITE_NOT_FOUND")
-    return saveFavorites(before, before.filter((item) => item.color !== color), actorId, color, "removed")
+export function removeFavoriteColor(color: string, actorId: string): Promise<ColorPaletteDto> {
+    return serialized(async () => {
+        const before = await readFavorites()
+        if (!before.some((item) => item.color === color)) throw new DomainError(404, "Cor favorita não encontrada", "COLOR_FAVORITE_NOT_FOUND")
+        return saveFavorites(before, before.filter((item) => item.color !== color), actorId, color, "removed")
+    })
 }
 
 /**
  * Edita nome e cor de uma favorita, mantendo a posição na lista. Quem já usa a cor antiga (central,
- * coluna, Maddox) continua com ela: guarda o próprio hex.
+ * coluna, Maddox) continua com ela: guarda o próprio hex. `name` ausente (`undefined`) mantém o nome
+ * atual; `null` (ou vazio) limpa o nome.
  */
-export async function updateFavoriteColor(currentColor: string, input: FavoriteColorDto, actorId: string): Promise<ColorPaletteDto> {
-    const before = await readFavorites()
-    const index = before.findIndex((item) => item.color === currentColor)
-    if (index < 0) throw new DomainError(404, "Cor favorita não encontrada", "COLOR_FAVORITE_NOT_FOUND")
-    if (input.color !== currentColor && before.some((item) => item.color === input.color)) throw new DomainError(409, "Esta cor já está nas favoritas", "COLOR_FAVORITE_EXISTS")
-    const current = before[index]!
-    if (current.color === input.color && current.name === input.name) return { favorites: before }
-    const after = before.map((item, position) => (position === index ? { color: input.color, name: input.name } : item))
-    return saveFavorites(before, after, actorId, input.color, "updated", currentColor)
+export function updateFavoriteColor(currentColor: string, input: { color: string; name?: string | null }, actorId: string): Promise<ColorPaletteDto> {
+    return serialized(async () => {
+        const before = await readFavorites()
+        const index = before.findIndex((item) => item.color === currentColor)
+        if (index < 0) throw new DomainError(404, "Cor favorita não encontrada", "COLOR_FAVORITE_NOT_FOUND")
+        if (input.color !== currentColor && before.some((item) => item.color === input.color)) throw new DomainError(409, "Esta cor já está nas favoritas", "COLOR_FAVORITE_EXISTS")
+        const current = before[index]!
+        const name = input.name === undefined ? current.name : input.name || null
+        if (current.color === input.color && current.name === name) return { favorites: before }
+        const after = before.map((item, position) => (position === index ? { color: input.color, name } : item))
+        return saveFavorites(before, after, actorId, input.color, "updated", currentColor)
+    })
 }

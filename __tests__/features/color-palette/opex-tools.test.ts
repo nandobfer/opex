@@ -47,6 +47,9 @@ describe('ferramentas de Aparência', () => {
     expect(mocks.add).toHaveBeenCalledWith({ color: '#8000FF', name: 'Roxo' }, 'local')
     await tool('update_favorite_color').execute({ currentColor: '#a78bfa', color: '#7c3aed', name: null }, context)
     expect(mocks.update).toHaveBeenCalledWith('#A78BFA', { color: '#7C3AED', name: null }, 'local')
+    // Sem `name`, o nome atual é mantido (não vira null).
+    await tool('update_favorite_color').execute({ currentColor: '#a78bfa', color: '#8b5cf6' }, context)
+    expect(mocks.update).toHaveBeenLastCalledWith('#A78BFA', { color: '#8B5CF6', name: undefined }, 'local')
     await tool('remove_favorite_color').execute({ color: '#a78bfa' }, context)
     expect(mocks.remove).toHaveBeenCalledWith('#A78BFA', 'local')
   })

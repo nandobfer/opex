@@ -62,6 +62,11 @@ Configurações do menu.
   - Favorita inexistente dá 404.
   - Nova cor igual a outra favorita dá 409.
   - Sem mudança, devolve a lista sem gravar, sem auditoria e sem evento.
+  - `name` ausente (`undefined`) mantém o nome atual; `null` ou vazio limpa o nome (a tela sempre envia
+    o nome; a ferramenta `update_favorite_color` sem `name` muda só a cor).
+- As mutações são **serializadas** por uma fila em memória do processo (ler → validar → gravar): duas
+  ao mesmo tempo (tela e Agente Opex, ou ferramentas em paralelo) não perdem uma das mudanças. Basta
+  porque o app roda num processo só (sem filas nem workers); uma mutação recusada não trava as seguintes.
 - Toda mutação grava, registra auditoria (`CoresFavoritas`, antes/depois), gera log com Pino e
   publica `color-palette-updated` (`{ color, action }`, com `previousColor` na edição) em `private-app`.
 
@@ -107,7 +112,7 @@ São rotas internas (exigem a sessão do login) e ficam fora da OpenAPI pública
 |---|---|
 | `list_favorite_colors` | Lista as favoritas (`getColorPalette`) |
 | `add_favorite_color` | `{ color, name? }` no fim da lista (`addFavoriteColor`) |
-| `update_favorite_color` | `{ currentColor, color, name? }` na mesma posição (`updateFavoriteColor`) |
+| `update_favorite_color` | `{ currentColor, color, name? }` na mesma posição (`updateFavoriteColor`; sem `name` mantém o nome atual, `null` limpa) |
 | `remove_favorite_color` | `{ color }` (`removeFavoriteColor`) |
 
 - **Nenhuma pede confirmação nem é destrutiva**, por decisão do dono (OPE-136), inclusive remover:
