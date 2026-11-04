@@ -308,9 +308,9 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Busca local: fuse.js
 - Markdown: `react-markdown` + `remark-gfm` (componente `src/components/ui/markdown.tsx`)
 - Preferências/filtros persistentes no navegador: `usePersistentState` (`src/hooks/`, Zod)
-- Engramind no app: `@engramind/client` (repositório `nandobfer/engramind-client`; tarball em `vendor/` até
-  sair no npm), no modo gestor pelo `OpexEngramindProvider`: rede, universos, painel do canal e tema dos
-  canvas React Flow (`aicontext/modules/engramind.md`, "Lib `@engramind/client` no modo gestor")
+- Engramind no app: `@engramind/client` (npm; repositório `nandobfer/engramind-client`), no modo gestor
+  pelo `OpexEngramindProvider`: rede, universos, painel do canal e tema dos canvas React Flow
+  (`aicontext/modules/engramind.md`, "Lib `@engramind/client` no modo gestor")
 - Redes de nodes (rede de agentes, canais e memórias do Engramind): React Flow (`@xyflow/react`),
   com nodes não arrastáveis e pulsos/partículas pelas arestas animados com Framer Motion
   (`aicontext/modules/engramind.md`, "Página `/engramind`"); diagramas do Agente Arquiteto também em

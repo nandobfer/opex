@@ -229,14 +229,11 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   mesma chave do navegador de antes (`storagePrefix=""`).
 - **CSS**: a lib não importa CSS. O provider importa as folhas do React Flow e do `react-day-picker`, e o
   `globals.css` inclui `@source "../../node_modules/@engramind/client/dist"`.
-- **Instalação**: até a versão sair no npm, o Opex depende do tarball versionado em `vendor/`
-  (`"@engramind/client": "file:vendor/engramind-client-<versão>.tgz"`). O `Dockerfile` copia `vendor/`
-  antes do `pnpm install`.
-  **Pendência da OPE-116 (troca obrigatória antes do merge na `main`):** depende de o dono criar o repositório
-  `nandobfer/engramind-client`, a org `@engramind` no npm e o secret `NPM_TOKEN`, e publicar a tag `v0.1.0`
-  (a Action da lib publica). Depois disso, num commit desta tarefa: `"@engramind/client": "^0.1.0"` no
-  `package.json`, `@engramind/client@0.1.0` em `minimumReleaseAgeExclude` (`pnpm-workspace.yaml`),
-  `pnpm install`, remover o `COPY vendor ./vendor` do `Dockerfile` e apagar o `vendor/`.
+- **Instalação**: pelo npm, na versão do `package.json` (a lib publica pela tag `vX.Y.Z` do repositório
+  dela). Ao subir a versão, use `pnpm add @engramind/client@^<versão>`: o pnpm 11 acrescenta a entrada
+  `@engramind/client@<versão>` em `minimumReleaseAgeExclude` (`pnpm-workspace.yaml`). Sem essa entrada,
+  o `pnpm install --frozen-lockfile` do `Dockerfile` recusa uma versão recém-publicada. A edição de canal
+  pelo token de app (lib 0.2.0 com Engramind 0.13.0) não muda nada no Opex, que roda no modo gestor.
 - **Testes**: o `vitest.config.ts` coloca a lib em `server.deps.inline` (os `vi.mock` de `@xyflow/react`,
   `framer-motion` e `next/*` valem dentro dela). O SSE é simulado por um `EventSource` falso
   (`__tests__/helpers/engramind-live.ts`). As funções puras e os componentes que saíram do Opex (rede,
