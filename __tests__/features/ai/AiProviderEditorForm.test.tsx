@@ -12,6 +12,7 @@ vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: Reac
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
+vi.mock("@/features/ai/components/ProviderUsageCard", () => ({ ProviderUsageCard: ({ provider }: { provider: string }) => <div data-testid={`provider-usage-${provider}`} /> }))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
@@ -79,11 +80,20 @@ describe("AiProviderEditorForm", () => {
         expect(screen.getByTestId("jev-usage")).toBeTruthy()
     })
 
-    it("Gemini não tem a aba Consumo", () => {
-        window.history.replaceState(null, "", "/integracoes/ia/gemini")
-        renderForm("ai_gemini")
-        expect(screen.getByRole("tab", { name: "Modelos" })).toBeTruthy()
-        expect(screen.queryByRole("tab", { name: "Consumo" })).toBeNull()
-        expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
+    it("Gemini, Anthropic, OpenAI e DeepSeek têm Consumo com o painel genérico do provedor", () => {
+        const providers = [
+            { integration: "ai_gemini", id: "gemini" },
+            { integration: "ai_anthropic", id: "anthropic" },
+            { integration: "ai_openai", id: "openai" },
+            { integration: "ai_deepseek", id: "deepseek" },
+        ] as const
+        for (const provider of providers) {
+            window.history.replaceState(null, "", `/integracoes/ia/${provider.id}`)
+            cleanup()
+            renderForm(provider.integration)
+            expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
+            fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
+            expect(screen.getByTestId(`provider-usage-${provider.id}`)).toBeTruthy()
+        }
     })
 })

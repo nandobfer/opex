@@ -17,6 +17,7 @@ beforeEach(() => {
 })
 
 describe("consumo do OpenCode por origem", () => {
+    // O card compartilhado lê `rows`; o contrato da rota é o mesmo dos provedores diretos.
     it("agrupa por origem no período e devolve o total, com filtro só do OpenCode", async () => {
         mocks.aggregate.mockResolvedValue([
             { _id: "agentic", requests: 3, inputTokens: 300, outputTokens: 100, totalTokens: 450, costUsd: 0.01, missingInput: 0, missingOutput: 0, missingTotal: 0, missingCost: 0 },
@@ -24,8 +25,8 @@ describe("consumo do OpenCode por origem", () => {
         ])
         const query = { from: "2026-10-10T03:00:00.000Z", to: "2026-10-11T02:59:59.999Z" }
         const result = await getOpencodeUsage(query)
-        expect(result.origins.map((row) => row.origin)).toEqual(["agentic", "refinement"])
-        expect(result.origins[0]).toMatchObject({ label: "Desenvolvimento agêntico (mesas)", requests: 3, totalTokens: 450 })
+        expect(result.rows.map((row) => row.key)).toEqual(["agentic", "refinement"])
+        expect(result.rows[0]).toMatchObject({ key: "agentic", label: "Desenvolvimento agêntico (mesas)", requests: 3, totalTokens: 450 })
         expect(result.total).toMatchObject({ requests: 4, inputTokens: 350, outputTokens: 110, totalTokens: 510, costUsd: 0.012 })
         expect(mocks.aggregate.mock.calls[0]![0][0]).toEqual({ $match: { provider: "opencode", createdAt: { $gte: new Date(query.from), $lte: new Date(query.to) } } })
     })
@@ -36,14 +37,14 @@ describe("consumo do OpenCode por origem", () => {
             { _id: "agentic", requests: 1, inputTokens: 30, outputTokens: 5, totalTokens: 35, costUsd: 0.001, missingInput: 0, missingOutput: 0, missingTotal: 0, missingCost: 0 },
         ])
         const result = await getOpencodeUsage({})
-        expect(result.origins[0]).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: 200, costUsd: null })
+        expect(result.rows[0]).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: 200, costUsd: null })
         expect(result.total).toMatchObject({ inputTokens: 30, outputTokens: 5, totalTokens: 235, costUsd: 0.001 })
     })
 
     it("sem registros: listas vazias, total zerado e sem cobertura", async () => {
         mocks.aggregate.mockResolvedValue([])
         const result = await getOpencodeUsage({})
-        expect(result.origins).toEqual([])
+        expect(result.rows).toEqual([])
         expect(result.total).toEqual({ requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null })
         expect(result.coverageFrom).toBeNull()
     })

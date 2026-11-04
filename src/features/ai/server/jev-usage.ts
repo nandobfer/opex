@@ -1,6 +1,6 @@
 import { dbConnect } from "@/lib/db"
 import { AiUsageLog } from "@/lib/db/models/Ai"
-import { aiConsumptionOriginLabel } from "../opencode-usage"
+import { aiConsumptionOriginLabel } from "../provider-usage"
 import type { JevUsageFeatureRow, JevUsageQuery, JevUsageSummary } from "../jev-usage"
 
 const missing = (field: string) => ({ $eq: [{ $ifNull: [`$${field}`, null] }, null] })

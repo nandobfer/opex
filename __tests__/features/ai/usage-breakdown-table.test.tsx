@@ -24,8 +24,10 @@ describe("UsageBreakdownTable", () => {
         expect(screen.getByRole("columnheader", { name: "Custo (USD)" })).toBeTruthy()
         expect(screen.getByText("Tags de tarefas")).toBeTruthy()
         expect(screen.getByText("Estimar prazos")).toBeTruthy()
-        expect(screen.getAllByText("1.200")).toHaveLength(2)
-        expect(screen.getByText("1.350")).toBeTruthy()
+        expect(screen.getAllByText("1,2k")).toHaveLength(2)
+        expect(screen.getByText("1,35k")).toBeTruthy()
+        expect(screen.getAllByTitle("1.200")).toHaveLength(2)
+        expect(screen.getByTitle("1.350")).toBeTruthy()
         expect(screen.getAllByText(/0,0000042/).length).toBeGreaterThan(0)
     })
 
@@ -35,6 +37,13 @@ describe("UsageBreakdownTable", () => {
         const totalRow = screen.getAllByText("Total").map((element) => element.closest("tr")).find((row) => row?.className.includes("font-semibold"))!
         expect(totalRow.className).toContain("font-semibold")
         expect(totalRow.textContent).toContain("3")
-        expect(totalRow.textContent).toContain("1.400")
+        expect(totalRow.textContent).toContain("1,4k")
+    })
+
+    it("esconde a coluna de custo nos provedores que não informam custo", () => {
+        render(<UsageBreakdownTable firstColumnLabel="Recurso" rows={rows} total={total} showCost={false} />)
+        expect(screen.queryByRole("columnheader", { name: "Custo (USD)" })).toBeNull()
+        expect(screen.getByRole("columnheader", { name: "Total" })).toBeTruthy()
+        expect(screen.getAllByTitle("Métrica não informada")).toHaveLength(4)
     })
 })
