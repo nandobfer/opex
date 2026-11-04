@@ -38,7 +38,7 @@ export function WorkbenchPane({ central, taskId, scopeName }: { central: Central
                             </div>
                         )}
                         {view === "error" && <ErrorState title="Não foi possível carregar a mesa" description={apiErrorMessage(workbench.error, "Tente novamente.")} onRetry={() => void workbench.refetch()} />}
-                        {view === "start" && taskId && <StartWorkbench central={central} taskId={taskId} />}
+                        {view === "start" && taskId && <StartWorkbench key={taskId} central={central} taskId={taskId} />}
                         {view === "workbench" && workbench.data && <WorkbenchView workbench={workbench.data} central={central} />}
                     </motion.div>
                 </AnimatePresence>

@@ -11,7 +11,7 @@ import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT, WORKBENCH_MODEL_ROLE_LABELS } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
 import { optimisticModelChoice, type WorkbenchAction } from "../logic"
-import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, WorkbenchModelInput } from "../schemas"
+import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, StartWorkbenchModelsInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 
 /** Consultas e mutações do desenvolvimento agêntico. */
@@ -142,7 +142,7 @@ function useSetWorkbench() {
 export function useStartWorkbench() {
     const setWorkbench = useSetWorkbench()
     return useMutation({
-        mutationFn: async (input: { centralId: string; taskId: string; text?: string; fileIds?: string[] }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
+        mutationFn: async (input: { centralId: string; taskId: string; text?: string; fileIds?: string[]; modelOverrides?: StartWorkbenchModelsInput }) => unwrapApi((await api.post<ApiResponse<WorkbenchDto>>("/agentic/workbenches", input)).data),
         onSuccess: (workbench) => {
             setWorkbench(workbench)
             toast.success("Mesa aberta: o planejamento começou")

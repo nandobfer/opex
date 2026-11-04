@@ -10,8 +10,8 @@ import { getTask, moveTask } from "@/features/tasks/server/service"
 import { githubRequest } from "@/features/github/client"
 import { accumulateWorkPeriodUsage } from "@/features/time/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
-import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchStage } from "../constants"
-import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type WorkbenchAction } from "../logic"
+import { AGENT_ROLE_LABELS, AGENTIC_AUDIT_WORKBENCH, PENDING_TURN_LABELS, RUNNING_STAGES, STAGE_ROLE, WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_STAGE_LABELS, type PendingTurnAction, type WorkbenchModelRole, type WorkbenchStage } from "../constants"
+import { asAgenticFlow, canRun, manualStageBlock, reopenTargetColumn, inheritsGlobalPorts, resolveAgent, resolveCentralCi, resolveCentralColumns, resolveCentralFlow, resolveCentralPorts, type ModelOverride, type WorkbenchAction } from "../logic"
 import {
     branchNameFor,
     buildFixPrompt,
@@ -38,7 +38,7 @@ import {
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
-import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
+import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type StartWorkbenchModelsInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
 import { runAfterResponse } from "@/lib/after-response"
@@ -62,7 +62,7 @@ import { runAgentTurn, type TurnResult } from "./runner"
 import { deleteWorkbenchSession, flushPendingSessionDeletions } from "./session-cleanup"
 import { applyForkNotes, withUnsyncedForkNotes } from "./fork-notes"
 import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories, type DeveloperMemoriesSync } from "./developer-memories"
-import { describeModel, toModelChoice, validatedModelOverride, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
+import { describeModel, toModelChoice, validatedModelOverride, validatedStartOverrides, workbenchModels, workbenchOverrides, workbenchTurnAgent } from "./models"
 import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { syncWorkbenchTimer } from "./timer-sync"
@@ -1391,12 +1391,12 @@ async function localPreviewTornDown(loaded: Loaded): Promise<boolean> {
     return local ? local.teardownForCleanup(String(loaded.doc._id)) : false
 }
 
-export async function startWorkbench(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
-    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text, fileIds))
+export async function startWorkbench(centralId: string, taskId: string, text?: string, fileIds?: string[], modelOverrides?: StartWorkbenchModelsInput): Promise<WorkbenchDto> {
+    return runInCentral(centralId, () => startWorkbenchInCentral(centralId, taskId, text, fileIds, modelOverrides))
 }
 
-/** Chamado pelo motor já dentro da decisão serializada de vagas da central. */
-export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string, fileIds?: string[]): Promise<WorkbenchDto> {
+/** Chamado pelo motor já dentro da decisão serializada de vagas da central (sem trocas de modelo: elas vêm da abertura pela tela). */
+export async function startWorkbenchInCentral(centralId: string, taskId: string, text?: string, fileIds?: string[], modelOverrides?: StartWorkbenchModelsInput): Promise<WorkbenchDto> {
     const { doc: central, config } = await loadCentral(centralId)
     await dbConnect()
     const files = await loadClaimableFiles(fileIds, null)
@@ -1413,6 +1413,11 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     const { settings } = await loadAgenticSettings()
     const columns = resolveCentralColumns(settings.columns, config.columns)
     const agenticFlow = resolveCentralFlow(config.environment.publishPreview, task.agenticFlow)
+    // Trocas de modelo escolhidas na etapa inicial (OPE-134): conferidas no OpenCode ANTES de criar a
+    // mesa; um modelo/variante inválido devolve 400 sem deixar mesa aberta.
+    const overrides = await validatedStartOverrides(modelOverrides)
+    const chosenModels = Object.fromEntries((Object.entries(overrides) as [WorkbenchModelRole, ModelOverride][]).map(([role, value]) => [AGENT_ROLE_LABELS[role].label, describeModel(value)]))
+    const hasModels = Object.keys(chosenModels).length > 0
 
     let doc: IAgenticWorkbench
     try {
@@ -1426,6 +1431,7 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
                 runState: "idle",
                 composeProject: composeProjectFor(central.projectName, task.code),
                 agenticFlow,
+                ...(hasModels ? { modelOverrides: overrides } : {}),
             })
         ).toObject()
     } catch (error) {
@@ -1433,9 +1439,13 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
         throw error
     }
     const id = String(doc._id)
-    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName } })
-    centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id })
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: task.code, central: central.projectName, ...(hasModels ? { modelos: chosenModels } : {}) } })
+    centralLogger(centralId, task.code).info("Mesa de trabalho aberta", { workbenchId: id, ...(hasModels ? { modelos: chosenModels } : {}) })
     await prepareHub(id)
+    if (hasModels) {
+        const list = Object.entries(chosenModels).map(([role, model]) => `${role}: ${model}`).join("; ")
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Modelos escolhidos na abertura: ${list}.` })
+    }
     await applyStartEffects(id, task, columns)
     const loaded: Loaded = { doc, config, columns, ci: resolveCentralCi(settings.ci, config.git), projectName: central.projectName, projectId: central.projectId, repo: await repoForProject(central.projectId) }
     // Informações adicionais digitadas na abertura vão no primeiro prompt (junto da tarefa).

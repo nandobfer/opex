@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { STAGE_MODEL_ROLE, WORKBENCH_STAGES } from '@/features/agentic/constants'
-import { applyModelOverride, asModelOverride, modelSource, optimisticModelChoice } from '@/features/agentic/logic'
+import { applyModelOverride, asModelOverride, draftWorkbenchModels, modelSource, optimisticModelChoice } from '@/features/agentic/logic'
 import { describeModel, forkBaseAgent, forkModelChoice, toModelChoice, workbenchModelChoice, workbenchOverrides, workbenchTurnAgent } from '@/features/agentic/server/models'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
@@ -38,6 +38,29 @@ describe('troca de modelo: regras', () => {
     const config = defaultCentralConfig('/home/u/app')
     expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'pr')).toEqual({ agent: 'build', model: 'openai/o3', variant: null, fallbacks: [] })
     expect(workbenchTurnAgent(DEFAULT_AGENTIC_SETTINGS, config, doc, 'planning')).toEqual({ ...DEFAULT_AGENTIC_SETTINGS.agents.planning, fallbacks: [] })
+  })
+
+  it('etapa inicial: resolve os papéis como a mesa e aplica as trocas locais com o herdado e a origem', () => {
+    const config = defaultCentralConfig('/home/u/app')
+    const settings = { ...DEFAULT_AGENTIC_SETTINGS, agents: { ...DEFAULT_AGENTIC_SETTINGS.agents, planning: { agent: 'plan', model: 'anthropic/opus', variant: 'high' } } }
+    const central = { agents: { ...config.agents, implementation: { agent: null, model: 'openai/o3', variant: 'high' } } }
+
+    expect(draftWorkbenchModels(settings, config, {})).toMatchObject({
+      planning: { model: 'anthropic/opus', variant: 'high', overridden: false, source: 'global' },
+      implementation: { model: null, overridden: false, source: 'global' },
+      pr: { overridden: false, source: 'global' },
+    })
+    // A central personalizada já vale como herdado antes de qualquer troca na tela.
+    expect(draftWorkbenchModels(settings, central, {}).implementation).toMatchObject({ model: 'openai/o3', variant: 'high', overridden: false, source: 'central' })
+    // Troca local: mesma regra da mesa (`source: workbench`), com o valor e a origem herdados.
+    expect(draftWorkbenchModels(settings, central, { implementation: { model: 'openai/gpt-5', variant: null } }).implementation).toMatchObject({
+      model: 'openai/gpt-5',
+      variant: null,
+      overridden: true,
+      source: 'workbench',
+      inherited: { model: 'openai/o3', variant: 'high' },
+      inheritedSource: 'central',
+    })
   })
 
   it('descrição do modelo', () => {

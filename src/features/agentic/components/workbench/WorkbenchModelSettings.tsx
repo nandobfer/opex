@@ -4,8 +4,7 @@ import { useAiModels } from "@/features/ai/hooks/useAi"
 import { STAGE_MODEL_ROLE, WORKBENCH_MODEL_ROLE_LABELS } from "../../constants"
 import { useSetWorkbenchModel } from "../../hooks/useAgentic"
 import type { WorkbenchDto } from "../../types"
-import { ModelInUse } from "./ModelInUse"
-import { ModelSettingsPopover } from "./ModelSettingsPopover"
+import { ModelSettingsControl } from "./ModelSettingsControl"
 import { MODEL_SOURCE_LABELS } from "./model-settings"
 import { WorkbenchModelSections, pendingRoleOf, pendingText } from "./WorkbenchModelSections"
 
@@ -25,16 +24,30 @@ export function WorkbenchModelSettings({ workbench, buttonClassName }: { workben
     const role = STAGE_MODEL_ROLE[workbench.stage]
     const choice = role ? workbench.models[role] : null
     const adversarial = workbench.stage === "adversarial_review" ? workbench.adversarialModel : null
+    const inUse = choice && role
+        ? { label: WORKBENCH_MODEL_ROLE_LABELS[role], choice, sourceText: choice.source ? MODEL_SOURCE_LABELS[choice.source] : undefined, highlighted: choice.overridden }
+        : adversarial
+          ? { label: "Modelo do Agente Adversário", choice: adversarial, sourceText: "configurado na aba Agente Adversário" }
+          : null
+    const pendingRole = pendingRoleOf(mutation)
     return (
-        <div className="flex min-w-0 items-center gap-2" data-testid="workbench-model-settings">
-            {choice && role ? (
-                <ModelInUse label={WORKBENCH_MODEL_ROLE_LABELS[role]} choice={choice} sourceText={choice.source ? MODEL_SOURCE_LABELS[choice.source] : undefined} highlighted={choice.overridden} models={models.data} />
-            ) : adversarial ? (
-                <ModelInUse label="Modelo do Agente Adversário" choice={adversarial} sourceText="configurado na aba Agente Adversário" models={models.data} />
-            ) : null}
-            <ModelSettingsPopover id={`workbench-models-${workbench.id}`} label="Configurar modelos por etapa" liveText={pendingText(pendingRoleOf(mutation))} className={buttonClassName}>
-                <WorkbenchModelSections workbench={workbench} models={models} mutation={mutation} idPrefix={`workbench-models-${workbench.id}`} />
-            </ModelSettingsPopover>
-        </div>
+        <ModelSettingsControl
+            id={`workbench-models-${workbench.id}`}
+            testId="workbench-model-settings"
+            buttonLabel="Configurar modelos por etapa"
+            models={models}
+            inUse={inUse}
+            liveText={pendingText(pendingRole)}
+            className={buttonClassName}
+        >
+            <WorkbenchModelSections
+                choices={workbench.models}
+                models={models}
+                idPrefix={`workbench-models-${workbench.id}`}
+                currentRole={STAGE_MODEL_ROLE[workbench.stage]}
+                pendingRole={pendingRole}
+                onChange={(sectionRole, input) => mutation.mutate({ role: sectionRole, ...input })}
+            />
+        </ModelSettingsControl>
     )
 }
