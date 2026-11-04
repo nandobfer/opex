@@ -24,20 +24,21 @@ export const AI_TAB_ALIASES: Readonly<Record<string, { tab: AiTab; section?: str
 
 /**
  * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
- * (omitida da URL). Gemini, Anthropic, OpenAI e DeepSeek não têm consumo próprio medido aqui, então não
- * têm a aba Consumo. `contas` (contas dos providers do servidor), `controles` (serviço) e os recursos
- * (`skills`, `agentes`, `comandos`, `plugins`, `mcps`) são só do OpenCode.
+ * (omitida da URL). Todos os provedores têm Consumo: o OpenCode por origem, o JEV por feature e os
+ * provedores diretos (Gemini, Anthropic, OpenAI e DeepSeek) por recurso, só com tokens. `contas`
+ * (contas dos providers do servidor), `controles` (serviço) e os recursos (`skills`, `agentes`,
+ * `comandos`, `plugins`, `mcps`) são só do OpenCode.
  */
 export const AI_PROVIDER_TABS = ["configuracao", "controles", "modelos", "contas", "skills", "agentes", "comandos", "plugins", "mcps", "consumo"] as const
 export type AiProviderTab = (typeof AI_PROVIDER_TABS)[number]
 
-/** Abas mostradas em cada provedor. [`configuracao`, `modelos`] ou com `consumo`. */
+/** Abas mostradas em cada provedor: configuração e modelos, mais o que cada um oferece. */
 export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]> = {
     opencode: ["configuracao", "controles", "modelos", "contas", "skills", "agentes", "comandos", "plugins", "mcps", "consumo"],
-    gemini: ["configuracao", "modelos"],
-    anthropic: ["configuracao", "modelos"],
-    openai: ["configuracao", "modelos"],
-    deepseek: ["configuracao", "modelos"],
+    gemini: ["configuracao", "modelos", "consumo"],
+    anthropic: ["configuracao", "modelos", "consumo"],
+    openai: ["configuracao", "modelos", "consumo"],
+    deepseek: ["configuracao", "modelos", "consumo"],
     jev: ["configuracao", "modelos", "consumo"],
 }
 

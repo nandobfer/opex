@@ -6,7 +6,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("@/features/ai/hooks/useOpencodeUsage", () => ({ useOpencodeUsage: mocks.usage }))
+vi.mock("@/features/ai/hooks/useProviderUsage", () => ({ useProviderUsage: mocks.usage }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
     PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-10", endDate: "2026-10-11" })}>Selecionar período personalizado</button>,
@@ -17,12 +17,14 @@ import { DATE_PRESET } from "@/components/ui/preset-date-range-filter"
 import { opencodeUsageRangeQuery } from "@/features/ai/opencode-usage"
 
 const summary = {
-    origins: [
-        { origin: "agentic", label: "Desenvolvimento agêntico (mesas)", requests: 3, inputTokens: 300, outputTokens: 100, totalTokens: 450, costUsd: 0.01 },
-        { origin: "refinement", label: "Refinar tarefa", requests: 1, inputTokens: null, outputTokens: null, totalTokens: 60, costUsd: null },
+    rows: [
+        { key: "agentic", label: "Desenvolvimento agêntico (mesas)", requests: 3, inputTokens: 300, outputTokens: 100, totalTokens: 450, costUsd: 0.01 },
+        { key: "refinement", label: "Refinar tarefa", requests: 1, inputTokens: null, outputTokens: null, totalTokens: 60, costUsd: null },
     ],
     total: { requests: 4, inputTokens: 300, outputTokens: 100, totalTokens: 510, costUsd: 0.01 },
     coverageFrom: "2026-10-12T12:00:00.000Z",
+    missingTokenRequests: 0,
+    missingCostRequests: 1,
 }
 
 beforeEach(() => {
@@ -36,24 +38,25 @@ describe("Consumo do OpenCode", () => {
     it("abre no último mês e lista o uso por origem com o total", () => {
         render(<OpencodeUsageCard />)
         const period = DATE_PRESET.month.getRange()
-        expect(mocks.usage).toHaveBeenLastCalledWith(opencodeUsageRangeQuery(period.startDate, period.endDate))
+        expect(mocks.usage).toHaveBeenLastCalledWith("opencode", opencodeUsageRangeQuery(period.startDate, period.endDate))
         expect(screen.getByText("Desenvolvimento agêntico (mesas)")).toBeTruthy()
         expect(screen.getByText("Refinar tarefa")).toBeTruthy()
         expect(screen.getAllByText("Total").length).toBeGreaterThan(0)
         expect(screen.getByText(/Medição iniciada em/)).toBeTruthy()
+        expect(screen.getByRole("columnheader", { name: "Custo (USD)" })).toBeTruthy()
     })
 
     it("troca o período na URL e refaz a consulta", () => {
         render(<OpencodeUsageCard />)
         fireEvent.click(screen.getByRole("button", { name: "Selecionar período personalizado" }))
         expect(new URLSearchParams(window.location.search).get("usageFrom")).toBe("2026-10-10")
-        expect(mocks.usage).toHaveBeenLastCalledWith(opencodeUsageRangeQuery("2026-10-10", "2026-10-11"))
+        expect(mocks.usage).toHaveBeenLastCalledWith("opencode", opencodeUsageRangeQuery("2026-10-10", "2026-10-11"))
         fireEvent.click(screen.getByRole("button", { name: "Atualizar" }))
         expect(mocks.refetch).toHaveBeenCalledOnce()
     })
 
     it("mostra vazio quando não há uso no período", () => {
-        mocks.usage.mockReturnValue({ data: { origins: [], total: { requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null }, coverageFrom: null }, isLoading: false, isError: false, refetch: mocks.refetch })
+        mocks.usage.mockReturnValue({ data: { rows: [], total: { requests: 0, inputTokens: null, outputTokens: null, totalTokens: null, costUsd: null }, coverageFrom: null, missingTokenRequests: 0, missingCostRequests: 0 }, isLoading: false, isError: false, refetch: mocks.refetch })
         render(<OpencodeUsageCard />)
         expect(screen.getByText("Nenhum uso do OpenCode neste período")).toBeTruthy()
     })
@@ -61,7 +64,7 @@ describe("Consumo do OpenCode", () => {
     it("bloqueia período inválido", () => {
         window.history.replaceState(null, "", "/integracoes/ia/opencode?usageFrom=inválido")
         render(<OpencodeUsageCard />)
-        expect(mocks.usage).toHaveBeenLastCalledWith(null)
+        expect(mocks.usage).toHaveBeenLastCalledWith("opencode", null)
         expect(screen.getByText("Período inválido")).toBeTruthy()
     })
 })

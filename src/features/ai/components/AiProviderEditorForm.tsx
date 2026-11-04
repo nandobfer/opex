@@ -18,9 +18,11 @@ import { OpencodeAccountsCard } from "@/features/opencode-accounts/components/Op
 import { OpencodeResourceTab } from "@/features/opencode-resources/components/OpencodeResourceTab"
 import { OpencodeControlsTab } from "@/features/opencode-service/components/OpencodeControlsTab"
 import { AI_PROVIDER_TAB_IDS, type AiProviderTab } from "../constants"
+import { isUsageProviderId } from "../provider-usage"
 import { AiModelsCard } from "./AiModelsCard"
 import { JevUsageCard } from "./JevUsageCard"
 import { OpencodeUsageCard } from "./OpencodeUsageCard"
+import { ProviderUsageCard } from "./ProviderUsageCard"
 
 interface AiProviderEditorFormProps {
     def: IntegrationDef
@@ -49,7 +51,9 @@ const TAB_DEFS: Record<AiProviderTab, IntegrationTabDef<AiProviderTab>> = {
 /**
  * Página de um provedor de IA em abas: Configuração (campos e ações), Modelos (lista do provedor),
  * Contas (só OpenCode: contas dos providers do servidor), Controles e os recursos Skills, Agentes,
- * Comandos, Plugins e MCPs (só OpenCode) e Consumo (uso medido). O Gemini não tem a aba Consumo. Trocar de aba com alterações pede descarte.
+ * Comandos, Plugins e MCPs (só OpenCode) e Consumo (uso medido). O OpenCode tem o painel por origem e o
+ * JEV o painel por feature; Gemini, Anthropic, OpenAI e DeepSeek mostram só tokens (o custo não é
+ * informado por essas APIs). Trocar de aba com alterações pede descarte.
  */
 export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiProviderEditorFormProps) {
     const provider = aiProviderOfIntegration(def.id)
@@ -96,6 +100,17 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                 {tab === "mcps" && provider?.id === "opencode" && <OpencodeResourceTab key="mcp" kind="mcp" dirty={dirty} />}
                 {tab === "consumo" && provider?.id === "jev" && <JevUsageCard />}
                 {tab === "consumo" && provider?.id === "opencode" && <OpencodeUsageCard />}
+                {tab === "consumo" && provider && isUsageProviderId(provider.id) && (
+                    <ProviderUsageCard
+                        provider={provider.id}
+                        title={`Consumo do ${provider.name}`}
+                        description="Uso originado pelo Opex, separado por recurso (feature ou agente de IA). Este provedor não informa custo por requisição: a tela mostra apenas tokens. O histórico anterior ao início da medição não é somado."
+                        firstColumnLabel="Recurso"
+                        emptyTitle={`Nenhum uso do ${provider.name} neste período`}
+                        showCost={false}
+                        showCoverage
+                    />
+                )}
             </IntegrationTabs>
         </motion.form>
     )
