@@ -32,7 +32,7 @@ describe('buildPublicApiSpec', () => {
     expect(spec.openapi).toBe('3.1.0')
     expect(spec.info).toMatchObject({ title: 'API interna do Opex', version: packageJson.version })
     expect(spec.servers).toEqual(['/'])
-    expect(spec.operations.map((op) => op.key)).toEqual(['GET /api/v1/whoami'])
+    expect(spec.operations.map((op) => op.key)).toEqual(['GET /api/v1/whoami', 'POST /api/v1/routine-agents/{id}/runs'])
   })
 
   it('a versão pode ser sobrescrita', () => {
@@ -49,11 +49,15 @@ describe('buildPublicApiSpec', () => {
   })
 
   it('toda rota pública por token está documentada e existe no app', () => {
-    expect(PUBLIC_TOKEN_ROUTES).toEqual([{ method: 'GET', path: '/api/v1/whoami', scope: null, summary: 'Confere o token' }])
+    expect(PUBLIC_TOKEN_ROUTES).toEqual([
+      { method: 'GET', path: '/api/v1/whoami', scope: null, summary: 'Confere o token' },
+      { method: 'POST', path: '/api/v1/routine-agents/{id}/runs', scope: 'api:v1:routine-agents', summary: 'Dispara uma execução de um agente rotineiro' },
+    ])
     const paths = Object.keys((buildPublicApiSpec() as RawSpec).paths)
     for (const route of PUBLIC_TOKEN_ROUTES) {
       expect(paths).toContain(route.path)
-      expect(existsSync(join(process.cwd(), 'src/app', route.path, 'route.ts')), route.path).toBe(true)
+      // Parâmetro de caminho da OpenAPI (`{id}`) → segmento dinâmico do Next (`[id]`).
+      expect(existsSync(join(process.cwd(), 'src/app', route.path.replace(/\{(\w+)\}/g, '[$1]'), 'route.ts')), route.path).toBe(true)
     }
   })
 

@@ -17,7 +17,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('abas de Integrações › Inteligência Artificial (OPE-122)', () => {
   it('Provedores primeiro e depois os agentes, na ordem do fluxo e sem "Agente"', () => {
-    expect(AI_EDITOR_TABS.map((tab) => tab.label)).toEqual(['Provedores', 'Opex', 'Maddox', 'Orçamentista', 'Catalogador', 'Refinador', 'Desenvolvedor', 'Arquiteto', 'Adversário', 'Revisor', 'Mentor'])
+    expect(AI_EDITOR_TABS.map((tab) => tab.label)).toEqual(['Provedores', 'Opex', 'Maddox', 'Orçamentista', 'Catalogador', 'Refinador', 'Desenvolvedor', 'Arquiteto', 'Adversário', 'Revisor', 'Mentor', 'Rotineiros'])
     expect(AI_EDITOR_TABS.map((tab) => tab.id)).toEqual([...AI_TABS])
   })
 

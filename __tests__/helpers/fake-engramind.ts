@@ -44,6 +44,7 @@ const fail = (status: number, code: string, details?: Record<string, unknown>) =
 export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
   ['GET', '/v1/settings'],
   ['GET', '/v1/context'],
+  ['GET', '/v1/channels'],
   ['POST', '/v1/channels'],
   ['GET', '/v1/channels/{channel}'],
   ['GET', '/v1/channels/{channel}/settings'],
@@ -158,6 +159,10 @@ export function createFakeEngramind() {
       const slug = decodeURIComponent(path.slice('/v1/channels/'.length, -'/settings'.length))
       if (!state.channels.has(slug)) throw fail(404, 'CHANNEL_NOT_FOUND')
       return { channel: slug, settings: [] }
+    }
+    if (method === 'GET' && path === '/v1/channels') {
+      // Lista (agentes rotineiros, OPE-130: o subagente de provisionamento escolhe os canais extras).
+      return { channels: [...state.channels.values()].map((item) => ({ id: `ch_${item.slug}`, slug: item.slug, name: item.slug, description: null, archived_at: item.archived_at })), next_cursor: null }
     }
     if (method === 'POST' && path === '/v1/channels') {
       if (state.channels.has(String(body.slug))) throw fail(409, 'SLUG_ALREADY_EXISTS')

@@ -1,0 +1,165 @@
+/** @vitest-environment happy-dom */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { framerMotionMock } from '../../helpers/framer-motion'
+
+/** Telas dos agentes rotineiros (OPE-130): editor, lista da aba Rotineiros, Entradas e o toast de atenção. */
+
+const mocks = vi.hoisted(() => ({
+  save: vi.fn(),
+  status: vi.fn(),
+  provisioning: vi.fn(),
+  addEntry: vi.fn(),
+  listFilter: [] as string[],
+  agents: [] as unknown[],
+  opencode: { available: true, reason: null, mcps: [{ name: 'playwright', status: 'connected', browser: true }, { name: 'github', status: 'connected', browser: false }], browserAvailable: true },
+}))
+
+vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))
+vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
+  useRoutineAgent: () => ({ data: undefined, isLoading: false }),
+  useSaveRoutineAgent: () => ({ mutate: mocks.save, isPending: false }),
+  useRoutineOpencodeOptions: () => ({ data: mocks.opencode, isLoading: false }),
+  useRoutineProvisioning: () => ({ mutate: mocks.provisioning, isPending: false }),
+  useRoutineAgentStatus: () => ({ mutate: mocks.status, isPending: false }),
+  useRoutineAgents: (filter: string) => {
+    mocks.listFilter.push(filter)
+    return { data: mocks.agents, isLoading: false, isError: false, refetch: vi.fn() }
+  },
+}))
+vi.mock('@/features/routine-agents/hooks/useRoutineRuns', () => ({
+  useRoutineEntries: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useAddRoutineEntry: () => ({ mutate: mocks.addEntry, isPending: false }),
+}))
+vi.mock('@/features/ai/hooks/useAi', () => ({
+  useAiProviderStatuses: () => ({ providers: [] }),
+  useAiModels: () => ({ data: [], isLoading: false, isError: false }),
+  useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
+}))
+vi.mock('@/features/opex-agent/hooks/useOpexSettings', () => ({ useOpexSettings: () => ({ data: { tools: [] }, isLoading: false, isError: false }) }))
+vi.mock('@/features/opex-agent/hooks/useOpexMcpServers', () => ({ useOpexMcpServers: () => ({ data: [], isLoading: false, isError: false }), useOpexMcpRealtime: () => {} }))
+
+import { RoutineAgentEditor } from '@/features/routine-agents/components/editor/RoutineAgentEditor'
+import { RoutineAgentsSection } from '@/features/routine-agents/components/settings/RoutineAgentsSection'
+import { RoutineEntriesTab } from '@/features/routine-agents/components/page/RoutineEntriesTab'
+import { attentionToast } from '@/features/routine-agents/hooks/useRoutineRealtime'
+import { runDisabledReason } from '@/features/routine-agents/components/page/RoutineAgentPage'
+import type { RoutineAgentDto } from '@/features/routine-agents/types'
+import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
+
+const AGENT: RoutineAgentDto = {
+  id: 'a'.repeat(24),
+  name: 'Vagas',
+  slug: 'vagas',
+  objective: 'Candidatar-se',
+  instructions: '',
+  engine: 'opex',
+  opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: [], enabledMcpServers: [] },
+  opencode: { model: '', variant: null, agent: null, enabledMcps: [] },
+  confirmIrreversible: true,
+  limits: EMPTY_ROUTINE_LIMITS,
+  triggers: [],
+  schedule: [],
+  status: 'active',
+  provisioning: { status: 'ok', error: null, at: null, channels: [], extras: [], warnings: [], steps: { agent: true, token: true, channels: true, extras: true, workdir: true } },
+  webhookEnabled: false,
+  workdir: null,
+  engramindAgent: 'opex/rotineiro-vagas',
+  channel: 'agentes/rotineiros/vagas',
+  lastRun: null,
+  nextFireAt: null,
+  activeRuns: 0,
+  createdAt: '2026-11-01T00:00:00.000Z',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mocks.listFilter = []
+  mocks.agents = [AGENT]
+})
+afterEach(() => cleanup())
+
+describe('editor do agente rotineiro', () => {
+  it('valida em pt-BR com o mesmo schema da API e não salva', async () => {
+    render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Criar agente' }))
+    await waitFor(() => expect(screen.getByText('Informe o nome (mínimo de 2 caracteres)')).toBeTruthy())
+    expect(screen.getByText('Informe o objetivo')).toBeTruthy()
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+
+  it('as ferramentas internas aparecem sempre; no OpenCode, os MCPs do host com o navegador', async () => {
+    render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Ferramentas' }))
+    expect(screen.getByText('Sempre liberadas')).toBeTruthy()
+    for (const label of ['Gravar memória', 'Espera viva', 'Hibernar', 'Pedir confirmação', 'Concluir']) expect(screen.getByText(label)).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'Motor' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'OpenCode no host' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Ferramentas' }))
+    expect(screen.getByText('MCPs do host')).toBeTruthy()
+    expect(screen.getByLabelText('Liberar playwright')).toBeTruthy()
+    expect(screen.getByLabelText('Navegador')).toBeTruthy()
+  })
+
+  it('critério aprovado (OPE-130, limite por tokens): o limite de custo deu lugar ao máximo de tokens', () => {
+    render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Limites' }))
+    expect(screen.getByLabelText('Máximo de tokens por execução')).toBeTruthy()
+    expect(screen.queryByText(/Custo máximo/)).toBeNull()
+    expect((screen.getByLabelText('Espera viva máxima (min)') as HTMLInputElement).placeholder).toBe('10 (padrão)')
+  })
+})
+
+describe('aba Rotineiros', () => {
+  it('o filtro padrão esconde os arquivados; arquivar pede confirmação', async () => {
+    const view = render(<RoutineAgentsSection onEdit={() => {}} onNew={() => {}} />)
+    expect(mocks.listFilter[0]).toBe('current')
+    fireEvent.click(screen.getByRole('radio', { name: 'Arquivados' }))
+    expect(mocks.listFilter.at(-1)).toBe('archived')
+    view.unmount()
+    render(<RoutineAgentsSection onEdit={() => {}} onNew={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /^Arquivar$/ }))
+    expect(screen.getByText('Arquivar "Vagas"?')).toBeTruthy()
+    expect(mocks.status).not.toHaveBeenCalled()
+  })
+
+  it('pausar e reprovisionar chamam as ações', () => {
+    render(<RoutineAgentsSection onEdit={() => {}} onNew={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /Pausar/ }))
+    expect(mocks.status).toHaveBeenCalledWith({ id: AGENT.id, action: 'pause' })
+    fireEvent.click(screen.getByRole('button', { name: /Reprovisionar/ }))
+    expect(mocks.provisioning).toHaveBeenCalledWith({ id: AGENT.id, mode: 'reprovision' })
+  })
+})
+
+describe('entradas do dono', () => {
+  it('entrada vazia é recusada; com erro, o texto continua no campo', async () => {
+    render(<RoutineEntriesTab agentId={AGENT.id} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Gravar entrada' }))
+    await waitFor(() => expect(screen.getByText('Escreva a entrada')).toBeTruthy())
+    expect(mocks.addEntry).not.toHaveBeenCalled()
+    const field = screen.getByLabelText('Entrada') as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: 'Sem vagas presenciais' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Todos os rotineiros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Gravar entrada' }))
+    await waitFor(() => expect(mocks.addEntry).toHaveBeenCalledWith({ text: 'Sem vagas presenciais', target: 'global' }, expect.anything()))
+    expect(field.value).toBe('Sem vagas presenciais')
+  })
+})
+
+describe('toast e ações', () => {
+  it('confirmação pendente e fim viram toasts com o nome do agente', () => {
+    expect(attentionToast({ id: 'r', agentId: 'a', kind: 'confirmation', status: 'awaiting_confirmation', agentName: 'Vagas' })).toEqual({ kind: 'warning', message: 'O agente "Vagas" aguarda sua confirmação' })
+    expect(attentionToast({ id: 'r', agentId: 'a', kind: 'finished', status: 'completed', agentName: 'Vagas' }).kind).toBe('success')
+    expect(attentionToast({ id: 'r', agentId: 'a', kind: 'finished', status: 'error' }).kind).toBe('error')
+  })
+
+  it('"Executar agora" fica desabilitado com o agente pausado ou sem provisionamento', () => {
+    expect(runDisabledReason(AGENT)).toBeNull()
+    expect(runDisabledReason({ ...AGENT, status: 'paused' })).toContain('Retome')
+    expect(runDisabledReason({ ...AGENT, provisioning: { ...AGENT.provisioning, status: 'error' } })).toBe('Provisionamento com erro')
+  })
+})

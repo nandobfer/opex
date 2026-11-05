@@ -9,7 +9,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn() }))
 
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas" }))
+vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas", useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("next/link", () => ({
     default: React.forwardRef<HTMLAnchorElement, { children: React.ReactNode; href: string } & Record<string, unknown>>(function MockLink({ children, href, ...props }, ref) {
         return (
