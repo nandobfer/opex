@@ -215,6 +215,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 - Motor: `src/features/integrations/scheduler/cron-scheduler.ts` (`runSchedulerTick`). O
   `src/instrumentation.ts` inicia `startCronScheduler()` (tick por `setInterval` a cada minuto) —
   o app roda só em processo Node persistente (local ou Docker); **não há variante Vercel**.
+- No fim de cada tick, depois dos jobs do Agente Opex, da saúde do Docker local e dos ambientes, roda
+  `runDueRoutineAgents` (agentes rotineiros: disparos agendados, retomadas das hibernadas, fila, turnos
+  perdidos e expirações — `modules/routine-agents.md`).
 - `GET/POST /api/routines/scheduler-tick` executa o mesmo motor sob demanda (ex.: cron do
   sistema), com `Bearer` igual ao `CRON_SECRET` do ambiente **ou** ao cron secret da integração.
 - **Rotinas internas são do código** (`DEFAULT_CRON_JOBS`; `withBuiltInJobs` completa a lista
@@ -309,7 +312,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 - **Especificação gerada no código** (`src/features/public-api/openapi/spec.ts`,
   `buildPublicApiSpec`): OpenAPI 3.1, versão do `package.json`, `servers: ["/"]`, esquema
   `apiToken` (Bearer). Corpos/respostas vêm dos schemas Zod (`src/features/public-api/schemas.ts`).
-  Hoje documenta `GET /api/v1/whoami` (confere o token; 200/401) e o **servidor MCP do Opex usado
+  Hoje documenta `GET /api/v1/whoami` (confere o token; 200/401), `POST /api/v1/routine-agents/{id}/runs`
+  (webhook dos agentes rotineiros; parâmetro `id`, corpo `{ request?, payload? }`, 201/400/401/403/404/409 —
+  ver `modules/routine-agents.md`) e o **servidor MCP do Opex usado
   pelo Agente Maddox** (`POST /api/maddox/mcp/owner` e `/portal`, tags "MCP do Agente Maddox · dono/
   portal", esquema `maddoxMcpSecret`): métodos JSON-RPC, respostas (200/202/400/401/404 e 405 em
   GET/DELETE), as recusas reais de escopo e **todas as ferramentas** de cada servidor — lista na
@@ -341,6 +346,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   |---|---|
   | `api:v1:*` | Todas as rotas da v1 que exigem escopo (atuais e futuras) |
   | `api:v1:<recurso>` | Uma rota (declarada em `PUBLIC_TOKEN_ROUTES`) |
+  | `api:v1:routine-agents` | Webhook externo dos agentes rotineiros: `POST /api/v1/routine-agents/{id}/runs` (OPE-130, `ROUTINE_AGENTS_API_SCOPE`) |
   | `mcp:owner` | O MCP do dono (`initialize`/`ping`/`tools/list`) e o grupo Contexto |
   | `mcp:owner:tool:*` | Todas as ferramentas do dono (dinâmico: ferramenta nova entra sozinha) |
   | `mcp:owner:group:<grupo>` | Um grupo (dinâmico; ex.: `mcp:owner:group:appearance`, as cores favoritas — que não pedem confirmação, então não exigem `mcp:owner:destructive`) |

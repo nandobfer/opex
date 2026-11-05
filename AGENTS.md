@@ -208,6 +208,9 @@ sem pedido explícito.
   em `private-app` ao adicionar, editar ou remover uma favorita (ver `aicontext/modules/settings.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
+- Agentes rotineiros: `routine-agent-updated` (`{ id }`), `routine-run-updated` (`{ id, agentId, status }`) e
+  `routine-run-attention` (`{ id, agentId, kind: "confirmation" | "finished", status, agentName }`, que alimenta o
+  toast "Abrir execução" em qualquer tela) em `private-app` (ver `aicontext/modules/routine-agents.md`).
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.

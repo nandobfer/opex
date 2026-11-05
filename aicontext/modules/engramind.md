@@ -593,6 +593,8 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 | `architect` | `agentes/arquiteto` | `arquiteto` |
 | `developer-global` | `agentes/desenvolvedor/global` | `desenvolvedor` |
 | `developer-central` (por central) | `agentes/desenvolvedor/central/<centralId>` | `desenvolvedor` |
+| `routine-global` (Memórias dos rotineiros) | `agentes/rotineiros/global` | todos os agentes rotineiros (e o dono) |
+| `routine-specific` (por agente rotineiro, `scope: "routine"`) | `agentes/rotineiros/<slug>` | o agente rotineiro `opex/rotineiro-<slug>` |
 
 - `memoryChannelOf(agentId, scope)` e `listOfChannel(slug)` (canal desconhecido → `null`).
 - `contextChannelsFor(consumer, turn)`: sempre `opex` primeiro; Opex/Maddox com o dono → global e dono;
@@ -601,6 +603,14 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 - `writableListsFor(consumer, turn)`: com o dono, todas as listas do agente (e `app-global`); **no
   portal, só `*-client-specific` do cliente da sessão** (o cliente é forçado pelo servidor). O dono
   cria memórias globais, só dele, de todos os clientes ou de um cliente específico.
+
+- **Agentes rotineiros (OPE-130)**: cada rotineiro é uma identidade dinâmica `opex/rotineiro-<slug>`
+  (fora de `MEMORY_IDENTITIES` e do bootstrap), provisionada pela feature `routine-agents` com o token
+  de app; o token `agent` (`read`, `write`) fica cifrado no documento do agente. Assina `opex`, o
+  global dos rotineiros, o canal próprio e os extras que o subagente de provisionamento escolher.
+  `getAgentMemoryContext` e `createAgentMemory` aceitam o alvo explícito (`target`) com o token do
+  rotineiro; `isOpexMemoryAgent` e o ícone da rede reconhecem `rotineiro-*`. O fake dos testes ganhou
+  `GET /v1/channels` (lista). Ver `modules/routine-agents.md`.
 
 ### Rede (`server/memory-network.ts`)
 
