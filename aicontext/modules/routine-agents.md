@@ -28,6 +28,11 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D10 | A aba **Memórias** do rotineiro é **um card** com o **universo do agente igual ao de `/engramind`** (`AgentUniverse` da lib `@engramind/client`, o mesmo componente da rede): todas as memórias dos canais que ele assina. |
 | D11 | **"Nova memória"** no universo do agente escolhe o **canal** entre os assinados e não arquivados (inicial: o canal próprio do rotineiro), em `/engramind` e no rotineiro. |
 | D12 | Com o cursor sobre a partícula de uma memória, o nome aparece **completo e destacado** (antes sumia), em todos os universos. |
+| D13 | As ferramentas de memória do rotineiro funcionam em **qualquer canal assinado e não arquivado** (próprio, global dos rotineiros, `opex` e extras do provisionamento), com o token do agente. Sem `canal`, vale o próprio. |
+| D14 | **Gravação por chave**: `remember` aceita `canal`, `chave`, `titulo` e `tags`; com `chave` é idempotente (upsert do Engramind: a mesma chave atualiza a entrada, `criada: false`). `update_memory` edita por id com a versão lida. |
+| D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. |
+| D16 | O catálogo do Indexador fica em `experiencia/desenvolvimento` com chave `catalogo-<dono>-<repo>`; as 18 memórias de catálogo em prosa (sem chave) do canal próprio foram arquivadas (`scripts/routine-indexador-cleanup.ts`, reversível). |
+| D17 | Configuração do Indexador ajustada nesta tarefa: gatilho a cada **30 min**, lote de até 5, e as seções "Ordem do trabalho", "Receita 1", "Onde gravar" e "Idempotência" reescritas (catálogo primeiro, todas as páginas, chave fixa, pulados numa entrada `catalogo-pulados`). |
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
 
@@ -127,8 +132,24 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   `memory.consumed`).
 - Cada ativação lê o contexto com o token do agente (`getAgentMemoryContext(..., { target })`):
   `opex`, o global, o próprio e os extras. Engramind fora do ar sem cache → **Erro** acionável.
-- O agente grava (`remember`, no máximo 5 por turno) só no canal próprio e no global
-  (`createAgentMemory(..., { agent: { consumer: "rotineiro", target } })`).
+- O agente lê e grava em qualquer canal assinado e não arquivado (D13; lista de permissão conferida
+  antes de chamar o Engramind, `ROUTINE_CHANNEL_NOT_ALLOWED` com os canais válidos), por
+  `server/memory-channels.ts` com o token do agente:
+  - `remember` (`texto`, `canal?`, `chave?`, `titulo?`, `tags?`, `categoria?`; `lista` só por
+    compatibilidade): com `chave`, `POST /v1/memories` com `key` + `upsert: true` — uma entrada por item
+    (D14). Sem chave e com similar ≥ 0,9, a resposta orienta usar `update_memory` ou chave.
+  - `update_memory` (`id`, `texto?`, `titulo?`, `categoria?`, `tags?`, `versao?`): `PATCH` com
+    `expected_version`; versão diferente → 409 acionável; memória de canal fora da lista é recusada.
+  - `list_my_memories` (`canal?`, `chave?`, `formato`, `cursor?`, `limite`): texto inteiro (sem corte),
+    `titulos` com `fields=title` (até 200 por página; 50 no completo), `parcial` + `proximoCursor` + aviso
+    quando há mais páginas (D15).
+  - No máximo 5 gravações por turno (`remember` + `update_memory` juntos).
+  - Token do agente recusado (`AUTH_INVALID`, pelo código): repete com a credencial do Opex no mesmo
+    canal (já conferido na lista), com aviso no log e na execução. Escrita negada no canal
+    (`SCOPE_REQUIRED`/`CHANNEL_NOT_SUBSCRIBED`) → `ROUTINE_CHANNEL_FORBIDDEN` (reprovisionar); outros
+    erros sobem sem repetir. Auditoria na entidade das memórias (`canal`, `chave`, `execucao`, sem texto).
+  - As instruções da execução listam os canais graváveis e mandam consultar o canal (formato `titulos`)
+    antes de trabalhar e usar chave fixa por item.
 - Aba **Memórias** da página: `AgentMemoriesCard` de `routine-specific` (rotas
   `/api/routine-agents/[id]/memories`) e de `routine-global`.
 
@@ -145,7 +166,7 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 
 - Só Executando e Esperando ocupam vaga; a fila anda por ordem de chegada (`queuedAt`), com um lock
   em processo por agente e a reserva atômica `queued → running`.
-- Ferramentas internas (sempre, nos dois motores): `remember`, `list_my_memories`, `wait`
+- Ferramentas internas (sempre, nos dois motores): `remember`, `update_memory`, `list_my_memories`, `wait`
   (espera viva cancelável; soma por ativação; estourou → hiberna em 1 min), `hibernate` (mínimo
   1 min, com o motivo), `request_confirmation` (só com o switch ligado) e `finish` (relato final). As
   três últimas encerram o turno. Turno sem `finish` conclui com o último texto e um aviso.

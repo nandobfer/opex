@@ -238,6 +238,10 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `defaultCreateChannel`, `allowCreate`) — o mesmo `AgentUniverseView` da rede no `?universo=agente:…`. Usado
   na aba Memórias dos agentes rotineiros. **"Nova memória"** no universo do agente escolhe o canal entre os
   assinados e não arquivados (`MemoryEditorTarget.channels`).
+- **Agentes rotineiros e chaves** (OPE-130): as ferramentas de memória do rotineiro usam `key` +
+  `upsert`, `title` (travado) e `tags` do `POST /v1/memories`, `expected_version` no `PATCH` e os filtros
+  `key`/`fields=title` do `GET /v1/memories`, sempre com o token do agente e só nos canais que ele assina
+  (`src/features/routine-agents/server/memory-channels.ts`).
 - **Nome no hover da partícula** (lib 0.3.0): sem hover, o nome curto cortado; com o cursor, o **nome
   completo destacado** (borda na cor da partícula, fonte maior) no `MemoryHoverLabelLayer`, uma camada fora
   da área com zoom como o card (`clampLabelRect` o mantém inteiro no quadro; sem eventos de ponteiro). No

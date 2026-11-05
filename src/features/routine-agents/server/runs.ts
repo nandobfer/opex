@@ -10,7 +10,7 @@ import { encryptSecret } from "@/lib/crypto/secretBox"
 import { recordAiConsumption } from "@/lib/ai/consumption"
 import { routineIdentityOf } from "@/features/ai/agents"
 import { RoutineAgent, RoutineRun, type IRoutineRun } from "@/lib/db/models/RoutineAgent"
-import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
+import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN, routineChannelOf } from "../constants"
 import { ACTIVE_LIMIT_MESSAGE, ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TOKEN_LIMIT_MESSAGE, TURN_TIMEOUT_MESSAGE, remainingActiveMs } from "../limits"
 import { activationMessage, routineInstructions } from "../run-prompt"
 import { freeSlots } from "../slots"
@@ -145,6 +145,8 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const target = await routineAgentTarget(agent.engramindToken).catch(() => null)
         if (!target) throw new Error("Token do agente rotineiro indisponível no Engramind: use \"Reprovisionar\" na configuração do agente")
         const channels = [...baseRoutineChannels(agent.slug), ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
+        // Canais em que as ferramentas de memória leem e gravam (D13): o próprio primeiro.
+        const memoryChannels = [routineChannelOf(agent.slug), ...channels.filter((channel) => channel !== routineChannelOf(agent.slug))]
         const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
         const memory = await getAgentMemoryContext(routineIdentityOf(agent.slug), channels, { target, focus: [agent.objective, run.request ?? ""].join("\n").slice(0, 1_000) })
         if (memory.source === "none" && memory.reason) throw new Error(`Engramind indisponível (${memory.reason}). Confira a integração Engramind e dispare de novo.`)
@@ -167,7 +169,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const secretCatalog = httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
-            ...routineMemoryTools({ slug: agent.slug, label, target, runId }),
+            ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, warn: (message) => activation.warnings.push(message) }),
             // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
             ...opencodeHttp,
         ]
@@ -193,6 +195,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     confirmIrreversible: run.snapshot.confirmIrreversible,
                     maxLiveWaitMinutes: run.snapshot.limits.maxLiveWaitMinutes,
                     memoryBlock: memory.block,
+                    memoryChannels,
                     toolPrefix,
                     http: httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,

@@ -220,14 +220,14 @@ export async function getAgentMemory(agentId: string, id: string, scope?: string
     return toMemoryDto(await findMemory(list, id), list)
 }
 
-async function parseText(texto: string, channel: string): Promise<string> {
+export async function parseText(texto: string, channel: string): Promise<string> {
     const parsed = memoryTextSchema(await memoryLimitsFor(channel)).safeParse(texto)
     if (!parsed.success) throw new DomainError(400, parsed.error.issues[0]?.message ?? "Memória inválida", "VALIDATION_ERROR")
     return parsed.data
 }
 
 /** Categoria da lista `categories.list` (sem ela, a primeira). Fora da lista → 400 com as válidas. */
-async function resolveCategory(categoria: string | null | undefined): Promise<string | undefined> {
+export async function resolveCategory(categoria: string | null | undefined): Promise<string | undefined> {
     const { categories } = await memorySettings()
     if (!categoria) return categories[0]?.key
     if (categories.length && !categories.some((item) => item.key === categoria)) {

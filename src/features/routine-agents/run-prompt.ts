@@ -15,6 +15,8 @@ export interface RoutineInstructionInput {
     confirmIrreversible: boolean
     maxLiveWaitMinutes: number | null
     memoryBlock: string
+    /** Canais em que as ferramentas de memória leem e gravam (o próprio primeiro). */
+    memoryChannels?: readonly string[]
     /** Prefixo das ferramentas internas no OpenCode (`rotina_xxxx_`); vazio no motor Opex. */
     toolPrefix: string
     warnings: readonly string[]
@@ -52,7 +54,8 @@ export function routineInstructions(input: RoutineInstructionInput): string {
         "## Como trabalhar",
         "- Planeje em poucos passos e execute. Use as ferramentas liberadas; não invente resultados.",
         "- Antes de agir, consulte as memórias abaixo: não repita o que já foi feito e siga as correções do dono.",
-        `- Grave com ${t("remember")} o que precisa lembrar nas próximas execuções (o que já fez, o que aprendeu). Lista "agent" = só você; "global" = todos os rotineiros.`,
+        `- Grave com ${t("remember")} o que precisa lembrar nas próximas execuções (o que já fez, o que aprendeu)${input.memoryChannels?.length ? `, num destes canais: ${input.memoryChannels.join(", ")} (sem \`canal\`, o primeiro)` : ""}. O bloco "Memórias" abaixo é só um recorte: para consultar tudo de um canal, use ${t("list_my_memories")} (formato "titulos", seguindo o cursor) ANTES de trabalhar.`,
+        `- Para manter uma entrada por item (repositório, vaga, cliente), grave sempre com a mesma \`chave\`: a entrada existente é atualizada, nunca duplicada. Para editar uma memória sem chave, use ${t("update_memory")} com o id.`,
         `- Espera curta: ${t("wait")} (espera viva, no máximo ${live} min somados por turno). Espera longa ou condição externa: ${t("hibernate")} com o motivo; a execução volta sozinha no horário e você reagenda até a condição acontecer.`,
         input.confirmIrreversible
             ? `- OBRIGATÓRIO: antes de QUALQUER ação irreversível (enviar candidatura, formulário, mensagem, pagamento, exclusão, compra), chame ${t("request_confirmation")} com o resumo exato da ação e encerre a resposta. Só execute depois de receber "Confirmado". Recusado: siga sem a ação ou conclua.${input.engine === "opencode" ? " O OpenCode não intercepta cliques no navegador: a confirmação depende de você." : ""}`
