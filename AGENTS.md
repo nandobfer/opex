@@ -403,15 +403,15 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - `vitest.config.ts` fixa `maxWorkers: "100%"`: o default antigo (`numCPUs - 1`) virava 1 worker
   no runner de 2 vCPU do GitHub e a suíte rodava em série.
 - O CI roda a suíte em **4 shards paralelos** (`pnpm test --shard=i/4`, matriz em
-  `.github/workflows/ci-cd.yml`); o grupo de `concurrency` inclui o shard para um não cancelar o
-  outro, e o build/deploy (`needs: vitest`) espera todos os shards. Para mudar a quantidade, edite
-  só a lista `matrix.shard`. Os checks aparecem como "Vitest (1/4)"…"Vitest (4/4)": a proteção da
-  `main` deve exigir esses nomes.
+  `.github/workflows/ci-cd.yml`) **apenas em pull request**; o grupo de `concurrency` inclui o shard
+  para um não cancelar o outro. Na `main` o CD não repete a suíte: vai direto para build + deploy.
+  Para mudar a quantidade, edite só a lista `matrix.shard`. Os checks aparecem como "Vitest (1/4)" a
+  "Vitest (4/4)": a proteção da `main` deve exigir esses nomes.
 
 ### Rodando os testes
 
 - **Nunca rode a suíte completa** (`pnpm test`, `npx vitest run` sem arquivos) sem pedido
-  explícito do usuário: ela é lenta e roda no CI do GitHub em todo pull request e push na `main`.
+  explícito do usuário: ela é lenta e roda no CI do GitHub em todo pull request (não no push na `main`).
 - Rode só o que as mudanças afetam:
   - testes criados ou alterados: `npx vitest run <arquivos de teste>`;
   - testes que dependem do código alterado: `npx vitest related --run <arquivos de src alterados>`;
