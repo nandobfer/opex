@@ -22,6 +22,13 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
 
+- **Subagente de provisionamento** (`RoutineProvisioningModelCard`, `GET/PUT /api/routine-agents/settings`):
+  provedor, modelo, variante e agente do OpenCode, com **"Salvar modelo"** e **"Desfazer"** (ativos só
+  com alteração; toast "Modelo do provisionamento salvo"). Com provedor escolhido, o modelo é
+  obrigatório ("Escolha o modelo", na tela e na API pelo `routineAgentSettingsSchema`); sem provedor,
+  salvar desliga o provisionamento. O card **não tem `<form>` próprio**: as abas de `/integracoes/ia`
+  ficam dentro do formulário do `AiEditorForm`, e um formulário aninhado é descartado pelo HTML (o
+  botão enviaria o formulário de fora e recarregaria a página) — salva por botão `type="button"`.
 - Lista com status (**Ativo**, **Pausado**, **Arquivado**) e o selo de provisionamento. Filtro padrão
   "Ativos e pausados"; o filtro **"Arquivados"** mostra os arquivados.
 - Ações: **"Novo agente rotineiro"**, editar, **Pausar/Retomar**, **Arquivar/Desarquivar** (com

@@ -1,5 +1,5 @@
 import { RoutineAgentSettings } from "@/lib/db/models/RoutineAgent"
-import { DEFAULT_ROUTINE_AGENT_SETTINGS, routineAgentSettingsSchema, type RoutineAgentSettingsInput } from "../schemas"
+import { DEFAULT_ROUTINE_AGENT_SETTINGS, routineAgentSettingsShape, type RoutineAgentSettingsInput } from "../schemas"
 import { AcaoAuditoria, publishAgentUpdated, routineDb } from "./shared"
 import { recordAudit } from "@/lib/db"
 
@@ -14,7 +14,7 @@ export async function loadRoutineAgentSettings(): Promise<RoutineAgentSettingsIn
     await routineDb()
     const doc = await RoutineAgentSettings.findById(SETTINGS_ID).lean()
     if (!doc) return DEFAULT_ROUTINE_AGENT_SETTINGS
-    const parsed = routineAgentSettingsSchema.safeParse({ provider: doc.provider ?? null, model: doc.model ?? "", variant: doc.variant ?? null, agent: doc.agent ?? null })
+    const parsed = routineAgentSettingsShape.safeParse({ provider: doc.provider ?? null, model: doc.model ?? "", variant: doc.variant ?? null, agent: doc.agent ?? null })
     return parsed.success ? parsed.data : DEFAULT_ROUTINE_AGENT_SETTINGS
 }
 

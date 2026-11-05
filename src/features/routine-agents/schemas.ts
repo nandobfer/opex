@@ -130,13 +130,18 @@ export type RoutineEntryInput = z.infer<typeof routineEntryInputSchema>
 export const routineActionResolutionSchema = z.object({ note: z.string().trim().max(2_000).optional() })
 
 /** Modelo do subagente de provisionamento (decisão D2 da OPE-130). */
-export const routineAgentSettingsSchema = z.object({
+/** Forma gravada (leitura): aceita o que já estiver salvo, inclusive provedor sem modelo. */
+export const routineAgentSettingsShape = z.object({
     provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     agent: z.string().trim().max(120).nullable(),
 })
-export type RoutineAgentSettingsInput = z.infer<typeof routineAgentSettingsSchema>
+/** Gravação (tela e API): com provedor escolhido, o modelo é obrigatório; sem provedor, o provisionamento fica desligado. */
+export const routineAgentSettingsSchema = routineAgentSettingsShape.superRefine((value, ctx) => {
+    if (value.provider && !value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Escolha o modelo" })
+})
+export type RoutineAgentSettingsInput = z.infer<typeof routineAgentSettingsShape>
 export const DEFAULT_ROUTINE_AGENT_SETTINGS: RoutineAgentSettingsInput = { provider: null, model: "", variant: null, agent: null }
 
 /** Filtro da lista da aba Rotineiros. */
