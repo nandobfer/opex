@@ -103,6 +103,10 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 
 ## Subagente de provisionamento (`server/provisioning.ts`)
 
+- Cada chamada ao modelo do provisionamento tem teto de 3 min (`PLANNER_TIMEOUT_MS`, com `AbortSignal` e
+  corrida que fecha o passo mesmo que o provedor ignore o sinal): estourou → provisionamento "com erro"
+  com mensagem acionável, o registro em processo é liberado e "Tentar de novo" funciona.
+
 Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo sem aprovação:
 
 1. cadastra o agente `opex/rotineiro-<slug>` no Engramind (token de app; admin se não houver);
@@ -231,8 +235,8 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 - `/agentes-rotineiros` (item **"Rotineiros"** da categoria Agentes, entrada `rotineiros` do
   `AGENT_CATALOG`, D18): uma linha por agente não arquivado (`RoutineAgentRow`, grade de
   `routine-agents-layout.ts` compartilhada com o skeleton):
-  - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo em
-    2 linhas, motor e modelo, última execução e próximo disparo;
+  - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo inteiro
+    (quebra a linha, sem corte), motor e modelo, última execução e próximo disparo;
   - KPIs Execuções, Concluídas, Com erro e Tokens, e o gráfico "Execuções por dia" (`UsageByDateChart`
     compacto) do período escolhido; sem execuções → "Sem execuções no período.";
   - filtros (`RoutineAgentsFilters`, `ListFilters`; regras puras em `list-filters.ts`, estado na URL):
@@ -279,11 +283,18 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   `POST .../confirm|reject|cancel`, `GET/PUT /api/routine-agents/settings`,
   `GET /api/routine-agents/opencode-options`.
 - Pública: `POST /api/v1/routine-agents/{id}/runs` (escopo `api:v1:routine-agents`), corpo opcional
-  `{ request?, payload? }` (payload até 64 KB, senão 400 `PAYLOAD_TOO_LARGE`). Respostas: 201
+  `{ request?, payload? }` (POST sem corpo, inclusive `Content-Length: 0`, vale como `{}`; JSON inválido → 400
+  `INVALID_JSON`) (payload até 64 KB, senão 400 `PAYLOAD_TOO_LARGE`). Respostas: 201
   `{ runId, status }`, 404, 409 `ROUTINE_AGENT_PAUSED` / `ROUTINE_AGENT_WEBHOOK_DISABLED` /
   `ROUTINE_AGENT_NOT_PROVISIONED`, 401/403. Documentada na OpenAPI e em `PUBLIC_TOKEN_ROUTES`.
 
 ## Agente Opex
+
+- **Token de sistema não amplia o próprio alcance pelo rotineiro**: em `create_routine_agent` e
+  `update_routine_agent` chamados por token (`origin.kind = "api-token"`, com `origin.scopes`), cada
+  ferramenta NOVA em `opex.enabledTools` precisa da mesma decisão que o token teria para chamá-la
+  (`mcpOwnerToolDecision`: `http` e `files` nunca; destrutivas só com `mcp:owner:destructive`); MCPs novos
+  e a Chamada HTTP do motor OpenCode só pelo dono. O que o dono já liberou continua como está.
 
 Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_routine_agents`,
 `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`,

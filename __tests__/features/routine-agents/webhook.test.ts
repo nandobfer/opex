@@ -50,6 +50,19 @@ describe('POST /api/v1/routine-agents/{id}/runs', () => {
     expect(publicRouteScope('/api/v1/routine-agents/{id}/runs')).toBe(ROUTINE_AGENTS_API_SCOPE)
   })
 
+  it('corpo opcional: POST sem corpo (e com Content-Length: 0) dispara com 201; JSON inválido continua 400', async () => {
+    const raw = (body: string | undefined, headers: Record<string, string> = {}) =>
+      POST(new NextRequest(`http://app/api/v1/routine-agents/${ID}/runs`, { method: 'POST', ...(body !== undefined ? { body } : {}), headers: { authorization: 'Bearer mt_sys_x', ...headers } }), { params: Promise.resolve({ id: ID }) })
+    expect((await raw(undefined)).status).toBe(201)
+    expect((await raw('', { 'content-length': '0' })).status).toBe(201)
+    expect(mocks.triggerRoutineRun).toHaveBeenCalledTimes(2)
+    expect(mocks.triggerRoutineRun).toHaveBeenLastCalledWith(ID, expect.objectContaining({ origin: 'webhook' }), 'api-token:tok1')
+    const invalid = await raw('{nao-e-json', { 'content-type': 'application/json' })
+    expect(invalid.status).toBe(400)
+    expect((await invalid.json()).code).toBe('INVALID_JSON')
+    expect(mocks.triggerRoutineRun).toHaveBeenCalledTimes(2)
+  })
+
   it('403 INSUFFICIENT_SCOPE vem do token sem o escopo', async () => {
     mocks.requireApiToken.mockRejectedValueOnce(new DomainError(403, 'sem escopo', 'INSUFFICIENT_SCOPE'))
     const response = await send({})

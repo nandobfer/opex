@@ -50,26 +50,43 @@ async function save(agentId: string, provisioning: IRoutineProvisioning, extra: 
     await publishAgentUpdated(agentId)
 }
 
-/** Texto completo do subagente (uma chamada, resposta JSON). */
+/** Teto da chamada ao subagente: provedor que aceita a conexão e para de responder não prende o provisionamento. */
+export const PLANNER_TIMEOUT_MS = 3 * 60_000
+export const PLANNER_TIMEOUT_MESSAGE = `O modelo do provisionamento não respondeu em ${PLANNER_TIMEOUT_MS / 60_000} min. Confira o provedor em Integrações › Inteligência Artificial › Rotineiros (ou troque o modelo) e use "Tentar de novo".`
+
+/** Texto completo do subagente (uma chamada, resposta JSON), com teto de tempo que aborta a chamada. */
 async function askPlanner(doc: RoutineAgentDoc, prompt: string, instructions = EXTRA_CHANNELS_INSTRUCTIONS): Promise<string> {
     const settings = await loadRoutineAgentSettings()
     if (!settings.provider || !settings.model) throw new Error(NO_MODEL_MESSAGE)
     const { streamAi } = await import("@/lib/ai/stream")
-    let text = ""
-    for await (const event of streamAi({
-        provider: settings.provider,
-        model: settings.model,
-        variant: settings.variant,
-        agent: settings.agent,
-        instructions,
-        prompt,
-        title: `Provisionamento · ${routineAgentTitle(doc.name)}`,
-        consumption: { origin: ROUTINE_PROVISIONING_ORIGIN, subject: String(doc._id) },
-    })) {
-        if (event.type === "delta") text += event.text
-        if (event.type === "error") throw new Error(event.message)
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            controller.abort()
+            reject(new Error(PLANNER_TIMEOUT_MESSAGE))
+        }, PLANNER_TIMEOUT_MS)
+    })
+    const read = async () => {
+        let text = ""
+        for await (const event of streamAi({
+            provider: settings.provider!,
+            model: settings.model!,
+            variant: settings.variant,
+            agent: settings.agent,
+            instructions,
+            prompt,
+            title: `Provisionamento · ${routineAgentTitle(doc.name)}`,
+            consumption: { origin: ROUTINE_PROVISIONING_ORIGIN, subject: String(doc._id) },
+            signal: controller.signal,
+        })) {
+            if (event.type === "delta") text += event.text
+            if (event.type === "error") throw new Error(event.message)
+        }
+        return text
     }
-    return text
+    // A corrida fecha o passo mesmo que o provedor ignore o sinal de abortar.
+    return Promise.race([read(), timeout]).finally(() => clearTimeout(timer))
 }
 
 export const IDENTITY_FAILED_PREFIX = "Não foi possível gerar o nome do agente"
@@ -96,7 +113,7 @@ async function ensureIdentity(doc: RoutineAgentDoc, actorId: string): Promise<Ro
             generated = parseGeneratedIdentity(await askPlanner(doc, identityPrompt(context, needs, problem || undefined), IDENTITY_INSTRUCTIONS), needs, taken)
         } catch (error) {
             problem = messageOf(error)
-            if (problem.startsWith("Configure o modelo")) throw error
+            if (problem.startsWith("Configure o modelo") || problem === PLANNER_TIMEOUT_MESSAGE) throw error
         }
     }
     if (!generated) throw new Error(`${IDENTITY_FAILED_PREFIX}: ${problem}. Informe o nome e o objetivo e tente de novo.`)

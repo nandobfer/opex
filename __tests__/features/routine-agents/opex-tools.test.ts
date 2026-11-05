@@ -70,6 +70,31 @@ describe('ferramentas dos agentes rotineiros', () => {
     expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*', 'mcp:owner:destructive'], http)).toEqual({ ok: false, reason: 'not_grantable' })
   })
 
+  it('token de sistema não amplia o próprio alcance pelo rotineiro: sem o grupo, http_request (e o que ele não pode usar) é recusado', async () => {
+    const origin = { kind: 'api-token' as const, tokenId: 't', nome: 'n', prefixo: 'p', scopes: ['mcp:owner', 'mcp:owner:group:routine-agents', 'mcp:owner:group:tasks'] }
+    const tokenCtx = { ...ctx, origin }
+    const create = (opex: Record<string, unknown>) => tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Varredor', objective: 'x', opex: { provider: 'anthropic', model: 'claude', ...opex } }), tokenCtx)
+    await expect(create({ enabledTools: ['http_request'] })).rejects.toThrow(/http_request/)
+    await expect(create({ enabledTools: ['run_host_command'] })).rejects.toThrow(/run_host_command/)
+    await expect(create({ enabledMcpServers: ['m1'] })).rejects.toThrow(/MCPs/)
+    expect(mocks.service.createRoutineAgent).not.toHaveBeenCalled()
+    await create({ enabledTools: ['list_tasks'] })
+    expect(mocks.service.createRoutineAgent).toHaveBeenCalledTimes(1)
+    // O dono (sem origin) continua liberando qualquer ferramenta.
+    await tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Dono', objective: 'x', opex: { provider: 'anthropic', model: 'claude', enabledTools: ['http_request'] } }), ctx)
+    expect(mocks.service.createRoutineAgent).toHaveBeenCalledTimes(2)
+  })
+
+  it('pelo token, editar mantém o que o dono já liberou e recusa ferramenta nova fora do alcance', async () => {
+    const origin = { kind: 'api-token' as const, tokenId: 't', nome: 'n', prefixo: 'p', scopes: ['mcp:owner', 'mcp:owner:group:routine-agents'] }
+    mocks.service.getRoutineAgent.mockResolvedValue({ name: 'Varredor', objective: 'x', instructions: '', engine: 'opex', opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: ['http_request'], enabledMcpServers: [] }, opencode: { model: '', variant: null, agent: null, enabledMcps: [], httpRequests: false }, confirmIrreversible: false, limits: EMPTY_ROUTINE_LIMITS, triggers: [] })
+    const update = (patch: Record<string, unknown>) => tool('update_routine_agent').execute(tool('update_routine_agent').input.parse({ id: ID, ...patch }), { ...ctx, origin })
+    await update({ objective: 'novo objetivo' })
+    expect(mocks.service.updateRoutineAgent).toHaveBeenCalledTimes(1)
+    await expect(update({ opex: { enabledTools: ['http_request', 'delete_task'] } })).rejects.toThrow(/delete_task/)
+    expect(mocks.service.updateRoutineAgent).toHaveBeenCalledTimes(1)
+  })
+
   it('criar sem modelo é recusado pela validação do contrato', async () => {
     await expect(tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Vagas', objective: 'Candidatar' }), ctx)).rejects.toThrow()
     expect(mocks.service.createRoutineAgent).not.toHaveBeenCalled()

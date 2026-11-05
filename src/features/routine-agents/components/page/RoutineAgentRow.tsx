@@ -41,7 +41,8 @@ export function RoutineAgentRow({ agent, metrics }: { agent: RoutineAgentDto; me
                         <RoutineAgentStatusBadge status={agent.status} />
                         <RoutineProvisioningBadge status={agent.provisioning.status} />
                     </div>
-                    <p className="line-clamp-2 text-xs text-muted-foreground" title={agent.objective}>
+                    {/* Objetivo inteiro (pode ser gerado pelo subagente): quebra a linha, sem cortar. */}
+                    <p className="whitespace-pre-line break-words text-xs text-muted-foreground">
                         {agent.objective}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">

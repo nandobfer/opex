@@ -18,6 +18,8 @@ const holder = vi.hoisted(() => ({
   identity: [] as string[],
   prompts: [] as string[],
   failTokens: false,
+  hang: false,
+  signals: [] as (AbortSignal | undefined)[],
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined, recordAudit: async () => undefined, AcaoAuditoria: { EXECUTAR: 'EXECUTAR', ATUALIZAR: 'ATUALIZAR', CRIAR: 'CRIAR' } }))
@@ -44,15 +46,20 @@ vi.mock('@/features/engramind/server/memory-network', async (importOriginal) => 
   return { ...original, ensureAppToken: async () => null }
 })
 vi.mock('@/lib/ai/stream', () => ({
-  streamAi: async function* (input: { instructions: string; prompt: string }) {
+  streamAi: async function* (input: { instructions: string; prompt: string; signal?: AbortSignal }) {
     holder.plannerCalls++
+    if (holder.hang) {
+      holder.signals.push(input.signal)
+      await new Promise(() => undefined) // provedor que aceita e nunca responde
+    }
     holder.prompts.push(input.prompt)
     const identity = input.instructions.includes('Gere a identidade')
     yield { type: 'delta', text: identity ? (holder.identity.shift() ?? '{}') : holder.planner }
   },
 }))
 
-import { provisionRoutineAgent } from '@/features/routine-agents/server/provisioning'
+import { PLANNER_TIMEOUT_MESSAGE, PLANNER_TIMEOUT_MS, provisionRoutineAgent, startProvisioning } from '@/features/routine-agents/server/provisioning'
+import { isProvisioningInFlight } from '@/features/routine-agents/server/provisioning-registry'
 import { decryptRoutineToken } from '@/features/routine-agents/server/engramind'
 import { pendingRoutineNameKey, pendingRoutineSlug } from '@/features/routine-agents/slug'
 
@@ -70,6 +77,8 @@ beforeEach(() => {
   holder.planner = '{"subscribe":[{"channel":"vagas/empresa-x","reason":"vagas da empresa"}],"create":[{"slug":"curriculos/backend","name":"Currículos","reason":"modelos de currículo"}]}'
   holder.plannerCalls = 0
   holder.failTokens = false
+  holder.hang = false
+  holder.signals = []
   holder.identity = []
   holder.prompts = []
   holder.agents.insert({ name: 'Vagas', slug: 'vagas', objective: 'Candidatar-se', instructions: '', engine: 'opex', status: 'active', provisioning: { status: 'pending', steps: { agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] }, engramindToken: null })
@@ -118,6 +127,27 @@ describe('provisionamento do agente rotineiro', () => {
     const doc = agentDoc() as { provisioning: { extras: { channel: string }[]; channels: string[] } }
     expect(doc.provisioning.extras.map((item) => item.channel)).toEqual(['vagas/empresa-x', 'curriculos/backend', 'vagas/empresa-y'])
     expect(doc.provisioning.channels).toEqual(['opex', 'agentes/rotineiros/global', 'agentes/rotineiros/vagas'])
+  })
+
+  it('modelo que nunca responde: no teto o passo aborta, fica "com erro" acionável, libera o registro e "Tentar de novo" funciona', async () => {
+    vi.useFakeTimers()
+    try {
+      holder.hang = true
+      const id = String(agentDoc()._id)
+      const running = startProvisioning(id, 'create', 'local')
+      await vi.advanceTimersByTimeAsync(50)
+      expect(isProvisioningInFlight(id)).toBe(true)
+      await vi.advanceTimersByTimeAsync(PLANNER_TIMEOUT_MS + 1_000)
+      await running
+      expect(holder.signals[0]?.aborted).toBe(true)
+      expect(agentDoc()).toMatchObject({ provisioning: { status: 'error', error: PLANNER_TIMEOUT_MESSAGE } })
+      expect(isProvisioningInFlight(id)).toBe(false)
+      holder.hang = false
+      await startProvisioning(id, 'retry', 'local')
+      expect(agentDoc()).toMatchObject({ provisioning: { status: 'ok' } })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('sem o modelo do provisionamento, fica com erro acionável', async () => {

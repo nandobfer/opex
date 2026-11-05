@@ -10,7 +10,7 @@ import {
 } from "@/features/routine-agents/schemas"
 import { ROUTINE_RUN_STATUSES } from "@/features/routine-agents/status"
 import type { RoutineAgentDto } from "@/features/routine-agents/types"
-import { defineTool, type OpexTool } from "./define"
+import { defineTool, OpexToolError, type OpexTool, type OpexToolContext } from "./define"
 
 /**
  * Agentes rotineiros (OPE-130), só no dono: chamam os serviços reais (sem HTTP). Nenhuma saída traz o
@@ -54,6 +54,32 @@ const inputOf = (agent: RoutineAgentDto): RoutineAgentInput => ({
     triggers: agent.triggers,
 })
 
+/**
+ * Pelo token de sistema, o agente rotineiro não pode ganhar mais alcance que o próprio token (F2): cada
+ * ferramenta NOVA em `opex.enabledTools` precisa da mesma decisão que o token teria para chamá-la
+ * (grupos fora dos tokens, como `http` e `files`, nunca), e MCPs do app/host e a Chamada HTTP do motor
+ * OpenCode não são ligados por token. O que o dono já tinha configurado continua como está.
+ */
+export async function assertTokenRoutineReach(origin: OpexToolContext["origin"], next: RoutineAgentInput, current: RoutineAgentInput | null): Promise<void> {
+    if (origin?.kind !== "api-token") return
+    const scopes = origin.scopes ?? []
+    const { findOpexTool } = await import("./registry")
+    const { mcpOwnerToolDecision } = await import("@/features/integrations/api-tokens/scopes")
+    const { isAlwaysOnGroup } = await import("@/features/opex-agent/tool-tree")
+    const had = new Set(current?.opex.enabledTools ?? [])
+    const refused = next.opex.enabledTools.filter((name) => {
+        if (had.has(name)) return false
+        const tool = findOpexTool(name)
+        if (!tool) return true
+        return !mcpOwnerToolDecision(scopes, { name: tool.name, group: tool.group, risk: tool.risk, confirmByDefault: tool.confirmByDefault, alwaysOn: isAlwaysOnGroup(tool.group) }).ok
+    })
+    if (refused.length) throw new OpexToolError(`O token não pode liberar ao agente rotineiro ferramentas que ele mesmo não pode usar: ${refused.join(", ")}. Libere pela tela do agente (dono).`)
+    const hadMcps = new Set([...(current?.opex.enabledMcpServers ?? []), ...(current?.opencode.enabledMcps ?? [])])
+    const newMcps = [...next.opex.enabledMcpServers, ...next.opencode.enabledMcps].filter((name) => !hadMcps.has(name))
+    if (newMcps.length) throw new OpexToolError(`MCPs do agente rotineiro só são liberados pelo dono, na tela do agente: ${newMcps.join(", ")}.`)
+    if (next.opencode.httpRequests === true && current?.opencode.httpRequests !== true) throw new OpexToolError("A Chamada HTTP do motor OpenCode só é ligada pelo dono, na tela do agente.")
+}
+
 const service = () => import("@/features/routine-agents/server/service")
 const runs = () => import("@/features/routine-agents/server/runs")
 const actions = () => import("@/features/routine-agents/server/run-actions")
@@ -85,7 +111,11 @@ export const routineAgentTools: OpexTool[] = [
         description: "Cria um agente rotineiro. O subagente de provisionamento roda sozinho em seguida (Engramind, token e canais). Sem motor informado, usa o Opex.",
         input: z.object(agentFields),
         summarize: (input) => (input.name?.trim() ? `Criar o agente rotineiro "${input.name.trim()}"` : "Criar um agente rotineiro (nome gerado pelo provisionamento)"),
-        execute: async (input, ctx) => (await service()).createRoutineAgent(mergeInput(DEFAULT_ROUTINE_AGENT_INPUT, input), ctx.actorId),
+        execute: async (input, ctx) => {
+            const next = mergeInput(DEFAULT_ROUTINE_AGENT_INPUT, input)
+            await assertTokenRoutineReach(ctx.origin, next, null)
+            return (await service()).createRoutineAgent(next, ctx.actorId)
+        },
     }),
     defineTool({
         name: "update_routine_agent",
@@ -98,7 +128,10 @@ export const routineAgentTools: OpexTool[] = [
         execute: async (input, ctx) => {
             const { id: agentId, ...patch } = input
             const current = await (await service()).getRoutineAgent(agentId)
-            return (await service()).updateRoutineAgent(agentId, mergeInput(inputOf(current), patch), ctx.actorId)
+            const before = inputOf(current)
+            const next = mergeInput(before, patch)
+            await assertTokenRoutineReach(ctx.origin, next, before)
+            return (await service()).updateRoutineAgent(agentId, next, ctx.actorId)
         },
     }),
     defineTool({
