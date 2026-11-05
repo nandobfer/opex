@@ -7,12 +7,13 @@ via Compose. O pipeline vive em `.github/workflows/ci-cd.yml`; a etapa remota é
 
 ## Visão geral do pipeline
 
-Workflow `CI/CD` (`.github/workflows/ci-cd.yml`), com três jobs encadeados:
+Workflow `CI/CD` (`.github/workflows/ci-cd.yml`): o CI roda a suíte só em pull request e o CD roda
+na `main` sem repeti-la, com dois jobs encadeados.
 
 | Job | Nome exibido | Quando roda | O que faz |
 |---|---|---|---|
-| `vitest` | `Vitest` | todo `push` na `main`, todo `pull_request` e `workflow_dispatch` | instala com pnpm e roda `pnpm test` (suíte Vitest completa) |
-| `build` | `Build image` | só `push`/`workflow_dispatch` na `main`, após `vitest` passar | constrói a imagem com Buildx (com QEMU se a plataforma divergir), exporta `opex-image.tar.gz` + checksum e publica como artefato |
+| `vitest` | `Vitest` | só `pull_request` | instala com pnpm e roda `pnpm test` (suíte Vitest completa em 4 shards) |
+| `build` | `Build image` | só `push`/`workflow_dispatch` na `main`, sem esperar o `vitest` | constrói a imagem com Buildx (com QEMU se a plataforma divergir), exporta `opex-image.tar.gz` + checksum e publica como artefato |
 | `deploy` | `Deploy production` | só `push`/`workflow_dispatch` na `main`, após `build` | baixa o artefato, valida o checksum local, transfere por SCP e executa `scripts/deploy-production.ts` |
 
 - **CI bloqueante em PR:** o job `vitest` roda em todo pull request. Para impedir o merge com CI
@@ -20,6 +21,9 @@ Workflow `CI/CD` (`.github/workflows/ci-cd.yml`), com três jobs encadeados:
   `Vitest` (`CI/CD / Vitest`). Essa configuração é feita no GitHub, em
   **Settings → Branches → Branch protection rules** (ou Rulesets), marcando **Require status checks
   to pass before merging** e selecionando o check `Vitest`. O YAML sozinho não bloqueia o merge.
+- **CD sem repetir a suíte (OPE-140):** o `build` não depende do `vitest`, porque o merge na `main`
+  já entra com o CI verde do PR. Consequência aceita pelo dono: um commit direto na `main`, sem PR,
+  vai para produção sem passar pelos testes.
 - PRs nunca executam `build`/`deploy` nem recebem credenciais de produção.
 - `concurrency`: o CI de PR cancela execuções antigas do mesmo ref; o deploy usa o grupo
   `deploy-production` com `cancel-in-progress: false` (não cancela um deploy em andamento).
