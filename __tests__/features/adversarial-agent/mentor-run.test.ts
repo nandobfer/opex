@@ -39,7 +39,7 @@ vi.mock('@/features/adversarial-agent/server/mentor/models', async () => {
 
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
 import { enqueueMentorRun, mentorChainOf } from '@/features/adversarial-agent/server/mentor/queue'
-import { approveMentorRun, discardMentorRun, getMentorRunMemory, listMentorRuns, type MentorRunInput } from '@/features/adversarial-agent/server/mentor/run'
+import { approveMentorRun, discardMentorRun, getMentorRun, getMentorRunMemory, listMentorRuns, type MentorRunInput } from '@/features/adversarial-agent/server/mentor/run'
 
 type Model = { docs: Record<string, unknown>[] }
 const runs = () => store.runs as Model
@@ -106,6 +106,10 @@ describe('pipeline do Agente Mentor', () => {
     expect(mocks.streamAi.mock.calls[1]![0]).toMatchObject({ provider: 'anthropic', consumption: { origin: 'adversarial-mentor-writer', subject: 'OPE-746' } })
     expect(mocks.streamAi.mock.calls[1]![0].prompt).toContain('id m1 · Providers')
     expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'notice', message: expect.stringContaining('memória nova') }))
+    // OPE-139: o aviso leva só a referência da memória (o painel a lê do Engramind), nunca o texto.
+    const notice = mocks.publishWorkbenchEvent.mock.calls.find((call) => (call[1] as { type: string }).type === 'notice')![1]
+    expect(notice.memories).toEqual([{ kind: 'memory', agentId: 'adversarial', memoryId: 'new', action: 'created' }])
+    expect(JSON.stringify(notice.memories)).not.toContain(RULE)
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'MentorAgenteAdversario', acao: 'EXECUTAR', depois: expect.objectContaining({ status: 'created' }) }))
   })
 
@@ -213,6 +217,9 @@ describe('pipeline do Agente Mentor', () => {
     const doc = await run(settings({ saveMode: 'suggest' }))
     expect(doc).toMatchObject({ status: 'suggested', proposal: { action: 'create', memoryId: null, text: RULE } })
     expect(mocks.create).not.toHaveBeenCalled()
+    // OPE-139: a sugestão aponta a execução (o painel lê a proposta onde ela está gravada).
+    expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'notice', memories: [{ kind: 'suggestion', mentorRunId: String(doc._id), part: 'main' }] }))
+    expect(await getMentorRun(String(doc._id))).toMatchObject({ id: String(doc._id), status: 'suggested', proposal: { text: RULE } })
     const approved = await approveMentorRun(String(doc._id), 'Texto editado pelo usuário.', 'local')
     expect(approved).toMatchObject({ status: 'created', memoryId: 'new' })
     expect(mocks.create).toHaveBeenCalledWith('adversarial', 'Texto editado pelo usuário.', 'local', expect.any(Object))
@@ -346,6 +353,13 @@ describe('Triador e destinos do Agente Mentor (OPE-97)', () => {
     expect(mocks.create).toHaveBeenCalledWith('adversarial', RULE, 'local', expect.objectContaining({ centralId: null }))
   })
 
+  describe('OPE-139: uma execução (getMentorRun)', () => {
+    it('id inválido ou inexistente: 404', async () => {
+      await expect(getMentorRun('x')).rejects.toMatchObject({ status: 404, code: 'MENTOR_RUN_NOT_FOUND' })
+      await expect(getMentorRun('f'.repeat(24))).rejects.toMatchObject({ status: 404, code: 'MENTOR_RUN_NOT_FOUND' })
+    })
+  })
+
   describe('OPE-128: resumo da memória gravada (getMentorRunMemory)', () => {
     const seed = (overrides: Record<string, unknown>) =>
       (store.runs as { create: (doc: Record<string, unknown>) => Promise<{ _id: unknown }> }).create({
@@ -451,6 +465,15 @@ describe('OPE-132: cobertura em outra lista não descarta a lição', () => {
     expect(mocks.create).toHaveBeenNthCalledWith(1, 'developer-global', GLOBAL_RULE, 'local', expect.objectContaining({ centralId: null }))
     expect(mocks.create).toHaveBeenNthCalledWith(2, 'developer-central', CENTRAL_RULE, 'local', expect.objectContaining({ centralId: 'c1' }))
     expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('w1', expect.objectContaining({ message: expect.stringContaining('e do agente desenvolvedor (desta central)') }))
+    expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        memories: [
+          { kind: 'memory', agentId: 'developer-global', memoryId: 'main', action: 'created' },
+          { kind: 'memory', agentId: 'developer-central', memoryId: 'extra', centralId: 'c1', action: 'created' },
+        ],
+      }),
+    )
   })
 
   it('split com update usa os ids da outra lista; id inexistente vira memória nova', async () => {

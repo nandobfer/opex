@@ -73,7 +73,7 @@ export function selfMemorySessionPermissions(policy: { overrides: Readonly<Recor
     ]
 }
 
-type Resolver = (opencodeSessionId: string) => Promise<Omit<SelfMemoryContext, "onChange"> & { notify?: (message: string) => void } | null>
+type Resolver = (opencodeSessionId: string) => Promise<Omit<SelfMemoryContext, "onChange"> & { notify?: SelfMemoryContext["onChange"] } | null>
 
 /** Sessão do OpenCode → agente e turno. Ordem: mesa, fork, revisão do Adversário, diagrama do Arquiteto, Agente Maddox. */
 const resolvers: Resolver[] = [
@@ -89,7 +89,7 @@ const resolvers: Resolver[] = [
             turnKey: `wb:${workbenchId}:${doc.turnStartedAt ? new Date(doc.turnStartedAt).getTime() : 0}`,
             actorId: getLocalUser().id,
             auditContext: { mesa: workbenchId, tarefa: doc.taskCode },
-            notify: (message) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(workbenchId, { type: "notice", level: "info", message })),
+            notify: (message, memories) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(workbenchId, { type: "notice", level: "info", message, memories })),
         }
     },
     async (id) => {
@@ -104,7 +104,7 @@ const resolvers: Resolver[] = [
             turnKey: `fork:${forkId}:${Math.floor(Date.now() / 600_000)}`,
             actorId: getLocalUser().id,
             auditContext: { mesa: doc.workbenchId, fork: forkId, tarefa: doc.taskCode },
-            notify: (message) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(forkId, { type: "notice", level: "info", message })),
+            notify: (message, memories) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(forkId, { type: "notice", level: "info", message, memories })),
         }
     },
     async (id) => {
@@ -119,7 +119,7 @@ const resolvers: Resolver[] = [
             turnKey: `adv:${reviewId}`,
             actorId: getLocalUser().id,
             auditContext: { mesa: doc.workbenchId, revisao: reviewId, ...(doc.taskCode ? { tarefa: doc.taskCode } : {}) },
-            notify: (message) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(doc.workbenchId, { type: "notice", level: "info", message })),
+            notify: (message, memories) => void import("@/features/agentic/server/hub").then(({ publishWorkbenchEvent }) => publishWorkbenchEvent(doc.workbenchId, { type: "notice", level: "info", message, memories })),
         }
     },
     async (id) => {

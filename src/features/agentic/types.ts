@@ -1,4 +1,5 @@
 import type { WorkbenchArchitectDto } from "@/features/architect-agent/types"
+import type { AiAgentId } from "@/features/ai/agents"
 import type { TaskAgenticFlow } from "@/features/tasks/constants"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import type { ChatFileDto } from "@/lib/chat-files/kind"
@@ -290,6 +291,16 @@ export interface PrWatchScheduleDto {
     running: boolean
 }
 
+/**
+ * Memória citada por um aviso da mesa (OPE-139): só a referência — o título, a categoria e o texto ficam no
+ * Engramind e são lidos quando o painel abre. A sugestão do Mentor ainda não é memória: aponta a execução.
+ */
+export type WorkbenchNoticeMemoryRef =
+    | { kind: "memory"; agentId: AiAgentId; memoryId: string; centralId?: string; clientId?: string; action: NoticeMemoryAction }
+    | { kind: "suggestion"; mentorRunId: string; part: "main" | "extra" }
+
+export type NoticeMemoryAction = "created" | "updated" | "pinned" | "unpinned" | "activated" | "archived" | "deleted"
+
 export type WorkbenchEventPayload =
     | { type: "turn"; stage: string; title: string; agent: string | null; model: string | null }
     /** Mensagem do usuário; `files`: anexos enviados com ela (metadados e rota do app, nunca a URL assinada). */
@@ -298,7 +309,8 @@ export type WorkbenchEventPayload =
     | { type: "reasoning" }
     | { type: "tool"; id: string; name: string; state: "running" | "done" | "error"; input?: string | null; output?: string | null; error?: string | null }
     | { type: "tool-progress"; id: string; output: string }
-    | { type: "notice"; level: "info" | "warn" | "error" | "success"; message: string }
+    /** `memories`: referência das memórias citadas pelo aviso (OPE-139): o painel lê a memória ao abrir. */
+    | { type: "notice"; level: "info" | "warn" | "error" | "success"; message: string; memories?: WorkbenchNoticeMemoryRef[] }
     | { type: "permission"; permission: OpencodePermissionDto }
     | { type: "permission-replied"; id: string; decision: string }
     | { type: "form"; form: OpencodeFormDto }

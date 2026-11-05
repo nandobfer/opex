@@ -9,6 +9,7 @@ import { appChannel, integrationChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import type { AiAgentId } from "../agents"
 import { AI_MEMORIES_UPDATED_EVENT } from "../constants"
+import { memoryListBasePath } from "../memory-notice"
 import { PENDING_PREFIX, optimisticMemories, sortMemories, type MemoryAction } from "../memory-list"
 import type { MemoriesMetaDto, MemoryDto, MemoryMutationResult } from "../types"
 
@@ -22,13 +23,13 @@ export interface MemorySource {
 }
 
 /** Memórias de uma lista do catálogo `agents.ts`. */
-export const agentMemoriesSource = (agentId: AiAgentId, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId], basePath: `/ai/agents/${agentId}/memories`, enabled })
+export const agentMemoriesSource = (agentId: AiAgentId, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId], basePath: memoryListBasePath(agentId), enabled })
 
 /** Memórias do agente desenvolvedor de uma central (`developer-central`). */
-export const centralMemoriesSource = (centralId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "developer-central", centralId], basePath: `/agentic/centrals/${centralId}/memories`, enabled })
+export const centralMemoriesSource = (centralId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "developer-central", centralId], basePath: memoryListBasePath("developer-central", { centralId }), enabled })
 
 /** Memórias de um cliente específico (`*-client-specific`). */
-export const clientMemoriesSource = (agentId: AiAgentId, clientId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId, clientId], basePath: `/ai/agents/${agentId}/clients/${clientId}/memories`, enabled })
+export const clientMemoriesSource = (agentId: AiAgentId, clientId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId, clientId], basePath: memoryListBasePath(agentId, { clientId }), enabled })
 
 export const MEMORIES_META_KEY: QueryKey = ["ai", "memories-meta"]
 

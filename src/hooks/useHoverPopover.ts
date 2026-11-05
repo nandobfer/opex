@@ -17,9 +17,16 @@ type Part = "trigger" | "panel"
  *
  * `openedByHover` diz se a última abertura foi pelo cursor: nesse caso o painel não rouba o foco ao
  * abrir nem devolve o foco ao gatilho ao fechar.
+ *
+ * `pinOnClick` (detalhe de memória nos avisos da mesa, OPE-139): o clique **fixa** o painel — sair do
+ * gatilho e do painel deixa de fechar; fecha pelo `setOpen(false)` (Esc, clique fora, botão de fechar)
+ * ou por outro clique no gatilho. Sem a opção, o comportamento é o dos menus da barra lateral.
  */
-export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
+export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY, options: { pinOnClick?: boolean } = {}) {
+    const pinOnClick = options.pinOnClick === true
     const [open, setOpenState] = useState(false)
+    const [pinned, setPinnedState] = useState(false)
+    const pinnedRef = useRef(false)
     const presence = useRef<Record<Part, boolean>>({ trigger: false, panel: false })
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
     const openedByHover = useRef(false)
@@ -32,7 +39,11 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
     const setOpen = useCallback(
         (next: boolean) => {
             cancelClose()
-            if (!next) presence.current = { trigger: false, panel: false }
+            if (!next) {
+                presence.current = { trigger: false, panel: false }
+                pinnedRef.current = false
+                setPinnedState(false)
+            }
             setOpenState(next)
         },
         [cancelClose],
@@ -54,11 +65,11 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
             onPointerLeave: (event: PointerEvent) => {
                 if (event.pointerType === "touch") return
                 presence.current[part] = false
-                if (presence.current.trigger || presence.current.panel) return
+                if (pinnedRef.current || presence.current.trigger || presence.current.panel) return
                 cancelClose()
                 timer.current = setTimeout(() => {
                     timer.current = null
-                    if (!presence.current.trigger && !presence.current.panel) setOpenState(false)
+                    if (!pinnedRef.current && !presence.current.trigger && !presence.current.panel) setOpenState(false)
                 }, closeDelay)
             },
         }),
@@ -68,6 +79,15 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
     /** Clique, toque ou Enter/Espaço no gatilho: com o cursor em cima mantém aberto; senão alterna. */
     const toggle = useCallback(() => {
         cancelClose()
+        if (pinOnClick) {
+            // Fixado: o clique solta e fecha; senão fixa (abrindo, se o cursor ainda não tinha aberto).
+            const next = !pinnedRef.current
+            pinnedRef.current = next
+            setPinnedState(next)
+            openedByHover.current = false
+            setOpenState(next)
+            return
+        }
         if (presence.current.trigger) {
             openedByHover.current = false
             setOpenState(true)
@@ -77,7 +97,7 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
             if (!current) openedByHover.current = false
             return !current
         })
-    }, [cancelClose])
+    }, [cancelClose, pinOnClick])
 
     /**
      * Abre pelo teclado (ex.: seta → no gatilho): o painel recebe o foco no primeiro link e o devolve
@@ -94,5 +114,5 @@ export function useHoverPopover(closeDelay = HOVER_POPOVER_CLOSE_DELAY) {
 
     useEffect(() => cancelClose, [cancelClose])
 
-    return { open, setOpen, toggle, openFromKeyboard, triggerHandlers: pointerHandlers("trigger"), panelHandlers: pointerHandlers("panel"), openedByHover }
+    return { open, pinned, setOpen, toggle, openFromKeyboard, triggerHandlers: pointerHandlers("trigger"), panelHandlers: pointerHandlers("panel"), openedByHover }
 }

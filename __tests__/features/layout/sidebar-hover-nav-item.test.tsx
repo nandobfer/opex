@@ -21,7 +21,7 @@ vi.mock("next/link", () => ({
 }))
 
 import { SidebarHoverNavItem } from "@/features/layout/components/sidebar/SidebarHoverNavItem"
-import { HOVER_POPOVER_CLOSE_DELAY } from "@/features/layout/hooks/useHoverPopover"
+import { HOVER_POPOVER_CLOSE_DELAY } from "@/hooks/useHoverPopover"
 import type { NavItemDef } from "@/features/layout/types"
 
 const ITEM: NavItemDef = { href: "/integracoes", label: "Integrações", title: "Integrações", icon: Plug, panel: "integrations" }
