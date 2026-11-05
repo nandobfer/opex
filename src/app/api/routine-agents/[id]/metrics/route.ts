@@ -1,17 +1,18 @@
 import { ok } from "@/lib/api/responses"
-import { DomainError, withRoute } from "@/lib/api/route"
+import { withRoute } from "@/lib/api/route"
 import { requireAdminSession } from "@/features/auth/server/context"
+import { METRICS_PERIODS, resolveMetricsRange, type MetricsPeriod } from "@/features/agent-metrics/period"
 import { getRoutineAgentMetrics } from "@/features/routine-agents/server/run-queries"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** GET /api/routine-agents/[id]/metrics?from=ISO&to=ISO — KPIs e série por dia da Visão geral. */
+/** GET /api/routine-agents/[id]/metrics?periodo=30d&de=&ate= — KPIs e série por dia da Visão geral (filtro de período compartilhado). */
 export const GET = withRoute<{ id: string }>(async ({ req, params }) => {
     await requireAdminSession(req)
     const url = new URL(req.url)
-    const to = url.searchParams.get("to") ? new Date(url.searchParams.get("to")!) : new Date()
-    const from = url.searchParams.get("from") ? new Date(url.searchParams.get("from")!) : new Date(to.getTime() - 30 * 86_400_000)
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) throw new DomainError(400, "Período inválido", "VALIDATION_ERROR")
-    return ok(await getRoutineAgentMetrics(params.id, { from, to }))
+    const raw = url.searchParams.get("periodo") ?? "30d"
+    const periodo = ((METRICS_PERIODS as readonly string[]).includes(raw) ? raw : "30d") as MetricsPeriod
+    const range = resolveMetricsRange({ periodo, de: url.searchParams.get("de"), ate: url.searchParams.get("ate") })
+    return ok(await getRoutineAgentMetrics(params.id, { from: range.from, to: range.to }))
 })

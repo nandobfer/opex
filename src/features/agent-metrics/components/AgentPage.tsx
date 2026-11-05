@@ -1,10 +1,8 @@
 "use client"
 
 import { useMemo, type ReactNode } from "react"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AvailabilityNotice } from "@/components/feedback/AvailabilityNotice"
-import { AgentPageHeader } from "@/components/list/AgentPageHeader"
-import { OptionTabs } from "@/components/ui/option-tabs"
+import { AgentPageFrame } from "@/components/list/AgentPageFrame"
 import { urlFilterCodecs, useUrlFilters, type UrlFilterSchema } from "@/hooks/useUrlFilters"
 import { agentDef, agentSettingsHref, type AgentId } from "../catalog"
 import { AGENT_METRICS_FILTER_SCHEMA, DEFAULT_AGENT_METRICS_FILTERS } from "../filters"
@@ -34,7 +32,6 @@ interface AgentPageProps {
 }
 
 const TAB_DEFAULTS = { aba: OVERVIEW_TAB }
-const tabMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -6 }, transition: { duration: 0.18 } }
 
 /**
  * Página de um agente (OPE-122): cabeçalho do catálogo ("Agente X" + Configurar), aviso de
@@ -43,7 +40,6 @@ const tabMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }
  * para a Visão geral e o Histórico. Atualiza em tempo real.
  */
 export function AgentPage({ agent, tabs = [], availabilityReason, actions }: AgentPageProps) {
-    const reduceMotion = useReducedMotion()
     const def = agentDef(agent)
     useAgentMetricsRealtime(agent)
     const allTabs = useMemo<{ value: string; label: string }[]>(
@@ -62,24 +58,26 @@ export function AgentPage({ agent, tabs = [], availabilityReason, actions }: Age
     const filtering = filters.clientes.length > 0 || filters.repositorios.length > 0 || filters.periodo !== DEFAULT_AGENT_METRICS_FILTERS.periodo
 
     return (
-        <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <AgentPageHeader icon={def.icon} title={def.title} description={def.description} settingsHref={agentSettingsHref(agent)}>
-                {actions}
-            </AgentPageHeader>
-            <AvailabilityNotice reason={reason} />
-            <OptionTabs<string> id={`agent-page-tab-${agent}`} aria-label={`Abas do ${def.title}`} options={allTabs} value={aba} onChange={(value) => setTab({ aba: value })} className="w-full" />
-            {withFilters && <AgentFiltersBar agent={agent} filters={filters} setFilters={setFilters} onClear={resetFilters} clients={metrics.data?.clients ?? []} projects={metrics.data?.projects ?? []} />}
-            <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={aba} {...tabMotion}>
-                    {aba === OVERVIEW_TAB ? (
-                        <AgentOverviewTab agent={agent} query={metrics} />
-                    ) : aba === HISTORY_TAB ? (
-                        <AgentHistoryTab agent={agent} params={params} filtering={filtering} onClearFilters={resetFilters} />
-                    ) : (
-                        tabs.find((tab) => tab.value === aba)?.render()
-                    )}
-                </motion.div>
-            </AnimatePresence>
-        </motion.section>
+        <AgentPageFrame
+            id={agent}
+            icon={def.icon}
+            title={def.title}
+            description={def.description}
+            settingsHref={agentSettingsHref(agent)}
+            actions={actions}
+            notice={<AvailabilityNotice reason={reason} />}
+            tabs={allTabs}
+            tab={aba}
+            onTabChange={(value) => setTab({ aba: value })}
+            filters={withFilters && <AgentFiltersBar agent={agent} filters={filters} setFilters={setFilters} onClear={resetFilters} clients={metrics.data?.clients ?? []} projects={metrics.data?.projects ?? []} />}
+        >
+            {aba === OVERVIEW_TAB ? (
+                <AgentOverviewTab agent={agent} query={metrics} />
+            ) : aba === HISTORY_TAB ? (
+                <AgentHistoryTab agent={agent} params={params} filtering={filtering} onClearFilters={resetFilters} />
+            ) : (
+                tabs.find((tab) => tab.value === aba)?.render()
+            )}
+        </AgentPageFrame>
     )
 }

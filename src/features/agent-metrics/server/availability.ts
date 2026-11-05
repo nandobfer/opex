@@ -41,6 +41,8 @@ export async function agentAvailability(agent: AgentId): Promise<AgentAvailabili
                 return (await settings.getPrReviewSettings()).availability
             case "mentor":
                 return (await (await import("@/features/adversarial-agent/server/mentor/settings")).getMentorSettings()).availability
+            case "rotineiros":
+                return OK
         }
     } catch {
         return OK

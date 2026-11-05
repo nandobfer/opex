@@ -162,6 +162,31 @@ async function reviewerRuns(from: Date): Promise<RunDoc[]> {
     return out
 }
 
+/** Execuções terminadas dos agentes rotineiros (OPE-130). */
+async function routineRuns(from: Date): Promise<RunDoc[]> {
+    const { RoutineRun } = await import("@/lib/db/models/RoutineAgent")
+    const docs = await RoutineRun.find({ status: { $in: ["completed", "error", "expired", "canceled"] }, finishedAt: { $gte: from } })
+        .select({ status: 1, agentId: 1, seq: 1, startedAt: 1, finishedAt: 1, error: 1, costUsd: 1, activeMs: 1 })
+        .lean()
+    return docs
+        .filter((doc) => doc.finishedAt)
+        .map((doc) => ({
+            ...base,
+            dedupKey: `rotineiros:${String(doc._id)}`,
+            agent: "rotineiros" as const,
+            kind: "routine-run",
+            refId: String(doc._id),
+            title: `Execução #${doc.seq}`,
+            startedAt: asDate(doc.startedAt),
+            finishedAt: new Date(doc.finishedAt!),
+            ok: doc.status === "completed",
+            error: doc.status === "completed" ? null : (doc.error ?? doc.status),
+            costUsd: doc.costUsd ?? null,
+            durationMs: doc.activeMs ?? null,
+            data: { status: doc.status, agentId: String(doc.agentId) },
+        }))
+}
+
 async function mentorRuns(from: Date): Promise<RunDoc[]> {
     const { MentorRun, mentorDb } = await import("@/features/adversarial-agent/server/mentor/models")
     await mentorDb()
@@ -369,6 +394,7 @@ const SOURCES: Record<AgentId, (from: Date) => Promise<RunDoc[]>> = {
     adversario: adversarialRuns,
     revisor: reviewerRuns,
     mentor: mentorRuns,
+    rotineiros: routineRuns,
 }
 
 /** Sincroniza as execuções dos agentes a partir de `from` (padrão: tudo). Devolve quantas gravou. */

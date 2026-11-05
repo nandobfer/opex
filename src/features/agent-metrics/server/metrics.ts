@@ -2,7 +2,7 @@ import type { AgentId } from "../catalog"
 import type { AgentMetricsQuery } from "../period"
 import type { AgentMetricsDto, AgentMetricsPart } from "../types"
 import { finalizeLineChart } from "../logic/common"
-import { adversarialMetrics, architectMetrics, budgetMetrics, catalogMetrics, conversationMetrics, mentorMetrics, refinerMetrics, reviewerMetrics } from "./agents"
+import { adversarialMetrics, architectMetrics, budgetMetrics, catalogMetrics, conversationMetrics, mentorMetrics, routineMetrics, refinerMetrics, reviewerMetrics } from "./agents"
 import { createMetricsContext, filterOptions, lastUsedAt, usageOf, type MetricsContext } from "./context"
 import { developerMetrics } from "./developer"
 import { ensureFreshRuns } from "./usage-daily"
@@ -19,6 +19,7 @@ const USAGE_UNITS: Record<AgentId, string> = {
     adversario: "rodadas",
     revisor: "revisões",
     mentor: "execuções",
+    rotineiros: "execuções",
 }
 
 const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<AgentMetricsPart>> = {
@@ -32,6 +33,7 @@ const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<AgentMetricsPart
     adversario: adversarialMetrics,
     revisor: reviewerMetrics,
     mentor: mentorMetrics,
+    rotineiros: routineMetrics,
 }
 
 /**

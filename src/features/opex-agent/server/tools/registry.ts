@@ -20,6 +20,7 @@ import { memoryTools } from "./memories"
 import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { previewTools } from "./previews"
+import { routineAgentTools } from "./routine-agents"
 import { serviceTools } from "./services"
 import { taskTools } from "./tasks"
 import { timeTools } from "./time"
@@ -40,6 +41,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...issueTools,
     ...integrationTools,
     ...jobTools,
+    ...routineAgentTools,
     ...aiSettingsTools,
     ...prReviewTools,
     ...dashboardTools,
